@@ -27,8 +27,8 @@ public interface UserJpaRepository extends JpaRepository<UserEntity, Long> {
      * Find user by provider and provider-specific user ID.
      * This replaces separate findByKakaoId and findByGoogleId methods.
      */
-    Optional<UserEntity> findByAuthProviderAndProviderUserId(
-            AuthProvider authProvider,
+    Optional<UserEntity> findByProviderAndProviderUserId(
+            AuthProvider provider,
             String providerUserId
     );
     /**

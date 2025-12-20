@@ -48,7 +48,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     @Transactional(readOnly = true)
     public Optional<User> loadUserByKakaoId(String kakaoId) {
         log.debug("Loading user by Kakao ID: {}", kakaoId);
-        return userJpaRepository.findByAuthProviderAndProviderUserId(AuthProvider.KAKAO, kakaoId)
+        return userJpaRepository.findByProviderAndProviderUserId(AuthProvider.KAKAO, kakaoId)
                 .map(this::mapToDomain);
     }
 
@@ -56,7 +56,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     @Transactional(readOnly = true)
     public Optional<User> loadUserByGoogleId(String googleId) {
         log.debug("Loading user by Google ID: {}", googleId);
-        return userJpaRepository.findByAuthProviderAndProviderUserId(AuthProvider.GOOGLE, googleId)
+        return userJpaRepository.findByProviderAndProviderUserId(AuthProvider.GOOGLE, googleId)
                 .map(this::mapToDomain);
     }
 
