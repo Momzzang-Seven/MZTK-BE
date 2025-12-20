@@ -1,7 +1,6 @@
 spring:
-  config:
-    activate:
-      on-profile: dev
+  profiles:
+    active: dev
 
   datasource:
     url: ${DB_URL}

@@ -51,7 +51,7 @@ public class User {
      * @return New User instance
      * @throws IllegalArgumentException if validation fails
      */
-    public static User createLocal(
+    public static User createFromLocal(
             String email,
             String encodedPassword,
             String nickname
