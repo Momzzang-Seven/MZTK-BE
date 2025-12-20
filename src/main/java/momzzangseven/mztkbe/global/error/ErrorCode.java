@@ -1,4 +1,3 @@
 package momzzangseven.mztkbe.global.error;
 
-public class ErrorCode {
-}
+public class ErrorCode {}

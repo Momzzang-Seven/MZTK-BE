@@ -1,4 +1,8 @@
 package momzzangseven.mztkbe.modules.user.application.port.out;
 
-public class SaveUserPort {
+import momzzangseven.mztkbe.modules.user.domain.model.User;
+
+public interface SaveUserPort {
+
+  User save(User user);
 }

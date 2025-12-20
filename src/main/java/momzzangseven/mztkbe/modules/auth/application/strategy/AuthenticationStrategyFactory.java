@@ -1,0 +1,28 @@
+package momzzangseven.mztkbe.modules.auth.application.strategy;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import org.springframework.stereotype.Component;
+
+@Component
+public class AuthenticationStrategyFactory {
+
+  private final Map<AuthProvider, AuthenticationStrategy> strategies =
+      new EnumMap<>(AuthProvider.class);
+
+  public AuthenticationStrategyFactory(List<AuthenticationStrategy> strategyList) {
+    for (AuthenticationStrategy s : strategyList) {
+      strategies.put(s.supports(), s);
+    }
+  }
+
+  public AuthenticationStrategy getStrategy(AuthProvider provider) {
+    AuthenticationStrategy strategy = strategies.get(provider);
+    if (strategy == null) {
+      throw new IllegalArgumentException("Unsupported Provider: " + provider);
+    }
+    return strategy;
+  }
+}
