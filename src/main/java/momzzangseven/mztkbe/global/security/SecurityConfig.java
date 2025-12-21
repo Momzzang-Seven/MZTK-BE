@@ -12,7 +12,7 @@ import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * Spring Security Configuration
- * 
+ * <p>
  * Responsibilities:
  * - Configure authentication and authorization rules
  * - Set up JWT-based stateless authentication
@@ -44,6 +44,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/signup").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/swagger-resources/**"
+                        ).permitAll()
                         
                         // Health check and monitoring endpoints
                         .requestMatchers("/actuator/**").permitAll()
@@ -55,4 +60,3 @@ public class SecurityConfig {
         return http.build();
     }
 }
-
