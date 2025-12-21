@@ -259,12 +259,20 @@
             <property name="arrayInitIndent" value="2"/>
         </module>
         <module name="AbbreviationAsWordInName">
-            <property name="ignoreFinal" value="false"/>
-            <property name="allowedAbbreviationLength" value="0"/>
+            <!-- final 변수 이름은 굳이 검사 안 함 (원하면 true/false 조정 가능) -->
+            <property name="ignoreFinal" value="true"/>
+
+            <!-- DTO / API / JWT 같은 3글자 대문자 약어 허용 -->
+            <property name="allowedAbbreviationLength" value="3"/>
+
+            <!-- 완전히 허용할 약어 리스트 -->
+            <property name="allowedAbbreviations"
+                      value="DTO,API,JWT,JPA,URL,ID"/>
+
             <property name="tokens"
-                      value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, ANNOTATION_DEF, ANNOTATION_FIELD_DEF,
-                    PARAMETER_DEF, VARIABLE_DEF, METHOD_DEF, PATTERN_VARIABLE_DEF, RECORD_DEF,
-                    RECORD_COMPONENT_DEF"/>
+                      value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, ANNOTATION_DEF,
+                     ANNOTATION_FIELD_DEF, PARAMETER_DEF, VARIABLE_DEF, METHOD_DEF,
+                     PATTERN_VARIABLE_DEF, RECORD_DEF, RECORD_COMPONENT_DEF"/>
         </module>
         <module name="NoWhitespaceBeforeCaseDefaultColon"/>
         <module name="OverloadMethodsDeclarationOrder"/>
@@ -341,11 +349,17 @@
                                    COMPACT_CTOR_DEF"/>
         </module>
         <module name="MissingJavadocType">
-            <property name="scope" value="protected"/>
-            <property name="tokens"
-                      value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF,
-                      RECORD_DEF, ANNOTATION_DEF"/>
+            <!-- 🔹 public 클래스만 검사 -->
+            <property name="scope" value="public"/>
+
+            <!-- 🔹 어떤 scope도 자동 제외하지 않음 -->
             <property name="excludeScope" value="nothing"/>
+
+            <!-- 🔹 아래 애너테이션이 붙은 클래스는 검사 제외 -->
+            <property name="skipAnnotations"
+                      value="Entity,Embeddable,Mapper,Configuration,
+                     RestController,Controller,Repository,Service,
+                     Component"/>
         </module>
         <module name="MethodName">
             <property name="format" value="^[a-z][a-z0-9]\w*$"/>

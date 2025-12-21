@@ -1,7 +1,6 @@
 spring:
-  config:
-    activate:
-      on-profile: dev
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE}
 
   datasource:
     url: ${DB_URL}
@@ -35,3 +34,10 @@ management:
     web:
       exposure:
         include: health, info
+
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-here-must-be-at-least-32-characters-long}
+  access-token-expiration: 3600000      # 1 hour (in milliseconds)
+  refresh-token-expiration: 604800000   # 7 days (in milliseconds)
+  issuer: MZTK-BE
+  audience: MZTK-Client
