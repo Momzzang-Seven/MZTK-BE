@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "dev" ]   # 필요 시 브랜치 이름 수정
+    branches: [ "main", "dev" ]
   pull_request:
     branches: [ "main", "dev" ]
 
