@@ -63,5 +63,7 @@ tasks.named('test') {
 
 // ./gradlew check 한 방에 spotless 검사까지 강제
 tasks.named('check') {
-    dependsOn 'spotlessCheck'
+    dependsOn "spotlessCheck"
+    dependsOn "checkstyleMain"
+    dependsOn "checkstyleTest"
 }
