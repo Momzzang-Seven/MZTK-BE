@@ -6,25 +6,21 @@ import momzzangseven.mztkbe.modules.user.domain.model.User;
 /**
  * Result object from signup use case.
  *
- * Application Layer DTO that encapsulates signup result data.
+ * <p>Application Layer DTO that encapsulates signup result data.
  */
 @Builder
-public record SignupResult(
-        Long userId,
-        String email,
-        String nickname
-) {
-    /**
-     * Create SignupResult from User domain model.
-     *
-     * @param user Created user
-     * @return SignupResult
-     */
-    public static SignupResult from(User user) {
-        return SignupResult.builder()
-                .userId(user.getId())
-                .email(user.getEmail())
-                .nickname(user.getNickname())
-                .build();
-    }
+public record SignupResult(Long userId, String email, String nickname) {
+  /**
+   * Create SignupResult from User domain model.
+   *
+   * @param user Created user
+   * @return SignupResult
+   */
+  public static SignupResult from(User user) {
+    return SignupResult.builder()
+        .userId(user.getId())
+        .email(user.getEmail())
+        .nickname(user.getNickname())
+        .build();
+  }
 }

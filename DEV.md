@@ -24,6 +24,7 @@
   ```
   cp .env.example .env
   ```
+- `.env` 값은 디스코드를 통해 제공됩니다.
 - `SPRING_PROFILES_ACTIVE=dev`로 dev 설정을 활성화합니다.
 
 ## 실행/빌드/테스트
@@ -42,8 +43,8 @@
   `./gradlew spotlessApply`
 
 
-- 코드 스타일 및 테스트 검사:
-  `./gradlew check`
+- 코드 스타일 및 테스트 검사(필수):
+  `./gradlew check` (push 전 반드시 실행)
 
 
 - check가 통과되지 않으면
@@ -53,6 +54,16 @@
 
 ⚠️ CI에서 동일한 검사를 수행할 예정,
 로컬에서 check를 통과하지 못한 Commit은 Merge되지 않습니다.
+
+## Docker 실행
+
+- `docker-compose.yml`로 PostgreSQL, Redis를 올릴 수 있습니다.
+- 실행:
+  `docker compose up -d`
+- 종료:
+  `docker compose down`
+- 컨테이너 포트, 볼륨, 초기 계정/DB 이름 등 설정은 `.env`로 주입됩니다.
+- 컨테이너가 준비된 뒤 애플리케이션을 실행합니다.
 
 ## DB 마이그레이션 전략
 
