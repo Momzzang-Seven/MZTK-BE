@@ -16,43 +16,44 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class LocalAuthenticationStrategy implements AuthenticationStrategy {
 
-    private final LoadUserPort loadUserPort;
-    private final SaveUserPort saveUserPort;
-    private final PasswordEncoder passwordEncoder;
+  private final LoadUserPort loadUserPort;
+  private final SaveUserPort saveUserPort;
+  private final PasswordEncoder passwordEncoder;
 
-    @Override
-    public AuthProvider supports() {
-        return AuthProvider.LOCAL;
+  @Override
+  public AuthProvider supports() {
+    return AuthProvider.LOCAL;
+  }
+
+  @Override
+  public AuthenticatedUser authenticate(AuthenticationContext context) {
+    // Validate context for LOCAL
+    if (!context.isValidForLocal()) {
+      throw new InvalidCredentialsException(
+          "Email and password are required for local authentication");
     }
 
-    @Override
-    public AuthenticatedUser authenticate(AuthenticationContext context) {
-        // Validate context for LOCAL
-        if (!context.isValidForLocal()) {
-            throw new InvalidCredentialsException(
-                    "Email and password are required for local authentication"
-            );
-        }
+    // Use email and password from context
+    User user =
+        loadUserPort
+            .loadUserByEmail(context.email())
+            .orElseThrow(() -> new UserNotFoundException(context.email()));
 
-        // Use email and password from context
-        User user = loadUserPort.loadUserByEmail(context.email())
-                .orElseThrow(() -> new UserNotFoundException(context.email()));
+    // Validate password
+    boolean isValid =
+        user.validatePassword(
+            context.password(), // raw password
+            passwordEncoder);
 
-        // Validate password
-        boolean isValid = user.validatePassword(
-                context.password(), //raw password
-                passwordEncoder
-        );
-
-        if (!isValid) {
-            throw new InvalidCredentialsException("Invalid password");
-        }
-
-        // Update last login
-        user.updateLastLogin();
-        User updatedUser = saveUserPort.saveUser(user);
-
-        // Always existing user for LOCAL
-        return AuthenticatedUser.existing(updatedUser);
+    if (!isValid) {
+      throw new InvalidCredentialsException("Invalid password");
     }
+
+    // Update last login
+    user.updateLastLogin();
+    User updatedUser = saveUserPort.saveUser(user);
+
+    // Always existing user for LOCAL
+    return AuthenticatedUser.existing(updatedUser);
+  }
 }
