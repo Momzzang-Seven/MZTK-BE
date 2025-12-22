@@ -1,0 +1,22 @@
+name: Validate PR source for main
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate-main-pr-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Allow only dev -> main PR
+        run: |
+          echo "Base: ${{ github.base_ref }}"
+          echo "Head: ${{ github.head_ref }}"
+
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "❌ Only PRs from 'dev' can be merged into 'main'."
+            echo "Current source: ${{ github.head_ref }}"
+            exit 1
+          fi
+
+          echo "✅ Valid: dev -> main"
