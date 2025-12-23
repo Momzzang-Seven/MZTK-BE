@@ -34,16 +34,15 @@ public class KakaoAuthenticationStrategy implements AuthenticationStrategy {
 
     // ✅ 기존에 LoginService가 하던 “유저 조회/가입”을 여기서 수행
     UserService.SocialLoginOutcome outcome =
-            userService.loginOrRegisterSocial(
-                    AuthProvider.KAKAO,
-                    info.getProviderUserId(),
-                    info.getEmail(),
-                    info.getNickname(),
-                    info.getProfileImageUrl()
-            );
+        userService.loginOrRegisterSocial(
+            AuthProvider.KAKAO,
+            info.getProviderUserId(),
+            info.getEmail(),
+            info.getNickname(),
+            info.getProfileImageUrl());
 
     return outcome.isNewUser()
-            ? AuthenticatedUser.newUser(outcome.user())
-            : AuthenticatedUser.existing(outcome.user());
+        ? AuthenticatedUser.newUser(outcome.user())
+        : AuthenticatedUser.existing(outcome.user());
   }
 }

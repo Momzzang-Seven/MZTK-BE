@@ -32,44 +32,36 @@ public class LoginService implements LoginUseCase {
     command.validate();
 
     // Strategy 선택
-    AuthenticationStrategy strategy =
-            strategyFactory.getStrategy(command.provider());
+    AuthenticationStrategy strategy = strategyFactory.getStrategy(command.provider());
 
     //  Context 생성
-    AuthenticationContext context =
-            AuthenticationContext.from(command);
+    AuthenticationContext context = AuthenticationContext.from(command);
 
     //  인증 + 유저조회/가입까지 끝낸 최종 결과
     AuthenticatedUser authenticatedUser = strategy.authenticate(context);
 
-
     // JWT 발급
     String accessToken =
-            jwtTokenProvider.generateAccessToken(
-                    authenticatedUser.user().getId(),
-                    authenticatedUser.user().getEmail(),
-                    authenticatedUser.user().getRole()
-            );
+        jwtTokenProvider.generateAccessToken(
+            authenticatedUser.user().getId(),
+            authenticatedUser.user().getEmail(),
+            authenticatedUser.user().getRole());
 
-    String refreshToken =
-            jwtTokenProvider.generateRefreshToken(
-                    authenticatedUser.user().getId()
-            );
+    String refreshToken = jwtTokenProvider.generateRefreshToken(authenticatedUser.user().getId());
 
     log.info(
-            "Login successful for user: {}, isNewUser: {}",
-            authenticatedUser.user().getId(),
-            authenticatedUser.isNewUser()
-    );
+        "Login successful for user: {}, isNewUser: {}",
+        authenticatedUser.user().getId(),
+        authenticatedUser.isNewUser());
 
     // Response DTO 생성
     return LoginResult.builder()
-            .accessToken(accessToken)
-            .refreshToken(refreshToken)
-            .grantType("Bearer")
-            .expiresIn(1800)
-            .isNewUser(authenticatedUser.isNewUser())
-            .user(authenticatedUser.user())
-            .build();
+        .accessToken(accessToken)
+        .refreshToken(refreshToken)
+        .grantType("Bearer")
+        .expiresIn(1800)
+        .isNewUser(authenticatedUser.isNewUser())
+        .user(authenticatedUser.user())
+        .build();
   }
 }
