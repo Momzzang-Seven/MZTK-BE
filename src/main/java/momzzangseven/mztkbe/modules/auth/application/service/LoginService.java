@@ -10,7 +10,6 @@ import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
 import momzzangseven.mztkbe.modules.auth.application.port.in.LoginUseCase;
 import momzzangseven.mztkbe.modules.auth.application.strategy.AuthenticationStrategy;
 import momzzangseven.mztkbe.modules.auth.application.strategy.AuthenticationStrategyFactory;
-import momzzangseven.mztkbe.modules.user.application.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class LoginService implements LoginUseCase {
 
   private final AuthenticationStrategyFactory strategyFactory;
-  private final UserService userService;
   private final JwtTokenProvider jwtTokenProvider;
 
   @Override
@@ -31,16 +29,16 @@ public class LoginService implements LoginUseCase {
     // Validate command
     command.validate();
 
-    // Strategy 선택
+    // Strategy
     AuthenticationStrategy strategy = strategyFactory.getStrategy(command.provider());
 
-    //  Context 생성
+    //  Context
     AuthenticationContext context = AuthenticationContext.from(command);
 
-    //  인증 + 유저조회/가입까지 끝낸 최종 결과
+    // Complete authentication flow including user verification and user lookup/registration
     AuthenticatedUser authenticatedUser = strategy.authenticate(context);
 
-    // JWT 발급
+    // JWT
     String accessToken =
         jwtTokenProvider.generateAccessToken(
             authenticatedUser.user().getId(),
