@@ -17,60 +17,57 @@ import org.springframework.web.reactive.function.client.WebClient;
 @RequiredArgsConstructor
 public class KakaoApiAdapter implements KakaoAuthPort {
 
-  private final KakaoAuthProperties props;
-  private final WebClient webClient;
+    private final KakaoAuthProperties props;
+    private final WebClient webClient;
 
-  @Override
-  public KakaoUserInfo authenticate(String authorizationCode) {
+    @Override
+    public String getAccessToken(String authorizationCode) {
 
-    String redirectUri = props.getAuth().getRedirect();
-    // 1️⃣ 토큰 요청
-    MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-    form.add("grant_type", "authorization_code");
-    form.add("client_id", props.getAuth().getClient());
-    form.add("redirect_uri", redirectUri);
-    form.add("code", authorizationCode);
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "authorization_code");
+        form.add("client_id", props.getAuth().getClient());
+        form.add("redirect_uri", props.getAuth().getRedirect());
+        form.add("code", authorizationCode);
 
-    KakaoTokenResponse token =
-        webClient
-            .post()
-            .uri(props.getApi().getTokenUri())
-            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-            .bodyValue(form)
-            .retrieve()
-            .onStatus(
-                status -> status.is4xxClientError() || status.is5xxServerError(),
-                response ->
-                    response
-                        .bodyToMono(String.class)
-                        .flatMap(
-                            body -> {
-                              log.error("🔥 Kakao token request FAILED");
-                              log.error("status={}", response.statusCode());
-                              log.error("response body={}", body);
-                              return reactor.core.publisher.Mono.error(
-                                  new IllegalStateException("Kakao token error: " + body));
-                            }))
-            .bodyToMono(KakaoTokenResponse.class)
-            .block();
+        KakaoTokenResponse token =
+                webClient
+                        .post()
+                        .uri(props.getApi().getTokenUri())
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .bodyValue(form)
+                        .retrieve()
+                        .bodyToMono(KakaoTokenResponse.class)
+                        .block();
 
-    // 2️⃣ 사용자 정보 요청
-    KakaoUserResponse user =
-        webClient
-            .get()
-            .uri(props.getApi().getUserinfoUri())
-            .headers(h -> h.setBearerAuth(token.getAccessToken()))
-            .retrieve()
-            .bodyToMono(KakaoUserResponse.class)
-            .block();
+        if (token == null || token.getAccessToken() == null) {
+            throw new IllegalStateException("Failed to get Kakao access token");
+        }
 
-    // 3️⃣ Application DTO로 변환
-    return KakaoUserInfo.builder()
-        .providerUserId(String.valueOf(user.getId()))
-        .email(user.getKakaoAccount() != null ? user.getKakaoAccount().getEmail() : null)
-        .nickname(user.getProperties() != null ? user.getProperties().getNickname() : null)
-        .profileImageUrl(
-            user.getProperties() != null ? user.getProperties().getProfileImage() : null)
-        .build();
-  }
+        return token.getAccessToken();
+    }
+
+    @Override
+    public KakaoUserInfo getUserInfo(String accessToken) {
+
+        KakaoUserResponse user =
+                webClient
+                        .get()
+                        .uri(props.getApi().getUserinfoUri())
+                        .headers(h -> h.setBearerAuth(accessToken))
+                        .retrieve()
+                        .bodyToMono(KakaoUserResponse.class)
+                        .block();
+
+        if (user == null) {
+            throw new IllegalStateException("Failed to get Kakao user info");
+        }
+
+        return KakaoUserInfo.builder()
+                .providerUserId(String.valueOf(user.getId()))
+                .email(user.getKakaoAccount() != null ? user.getKakaoAccount().getEmail() : null)
+                .nickname(user.getProperties() != null ? user.getProperties().getNickname() : null)
+                .profileImageUrl(
+                        user.getProperties() != null ? user.getProperties().getProfileImage() : null)
+                .build();
+    }
 }
