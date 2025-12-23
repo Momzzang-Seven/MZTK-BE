@@ -28,7 +28,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     return userJpaRepository.findByEmail(email).map(this::mapToDomain);
   }
 
-  /** ✅ LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회 */
+  /** LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회 */
   @Override
   @Transactional(readOnly = true)
   public Optional<User> findByProviderAndProviderUserId(
@@ -37,38 +37,6 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     return userJpaRepository
         .findByProviderAndProviderUserId(provider, providerUserId)
         .map(this::mapToDomain);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<User> loadUserByKakaoId(String kakaoId) {
-    log.debug("Loading user by Kakao ID: {}", kakaoId);
-    return userJpaRepository
-        .findByProviderAndProviderUserId(AuthProvider.KAKAO, kakaoId)
-        .map(this::mapToDomain);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<User> loadUserByGoogleId(String googleId) {
-    log.debug("Loading user by Google ID: {}", googleId);
-    return userJpaRepository
-        .findByProviderAndProviderUserId(AuthProvider.GOOGLE, googleId)
-        .map(this::mapToDomain);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<User> loadUserByWalletAddress(String walletAddress) {
-    log.debug("Loading user by wallet address: {}", walletAddress);
-    return userJpaRepository.findByWalletAddress(walletAddress).map(this::mapToDomain);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<User> loadUserById(Long id) {
-    log.debug("Loading user by ID: {}", id);
-    return userJpaRepository.findById(id).map(this::mapToDomain);
   }
 
   @Override
@@ -95,7 +63,8 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
               .orElseThrow(
                   () -> new IllegalArgumentException("User not found with ID: " + user.getId()));
 
-      // ✅ 기존 entity에 값을 "세팅"해서 update (builder로 새로 만들면 JPA 관리상태 깨질 수 있음)
+      // Update by setting values on the existing entity (creating a new instance via builder may
+      // break JPA managed state)
       updateEntityFromDomain(entity, user);
     } else {
       // Create new user
@@ -152,7 +121,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .passwordHash(user.getPassword())
         .nickname(user.getNickname())
         .profileImageUrl(user.getProfileImageUrl())
-        .providerUserId(providerUserId) // ✅ 여기!
+        .providerUserId(providerUserId)
         .walletAddress(user.getWalletAddress())
         .provider(user.getAuthProvider())
         .role(user.getRole())
@@ -162,7 +131,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .build();
   }
 
-  /** ✅ 기존 영속 엔티티의 필드를 수정하는 방식으로 업데이트 (builder로 새 객체 만들지 말고, setter로 업데이트) */
+  /** 기존 영속 엔티티의 필드를 수정하는 방식으로 업데이트 (builder로 새 객체 만들지 말고, setter로 업데이트) */
   private void updateEntityFromDomain(UserEntity entity, User user) {
     entity.setEmail(user.getEmail());
     entity.setPasswordHash(user.getPassword());
