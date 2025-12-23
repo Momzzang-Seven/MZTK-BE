@@ -56,6 +56,9 @@ public class UserEntity {
   @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
 
+  @Column(name = "last_login_at")
+  private LocalDateTime lastLoginAt;
+
   @PrePersist
   protected void onCreate() {
     this.createdAt = LocalDateTime.now();
@@ -70,33 +73,33 @@ public class UserEntity {
   @Column(name = "password_hash")
   private String passwordHash;
 
-  public momzzangseven.mztkbe.modules.user.domain.model.User toDomain() {
-    return momzzangseven.mztkbe.modules.user.domain.model.User.builder()
-        .id(this.id)
-        .provider(this.provider)
-        .providerUserId(this.providerUserId)
-        .email(this.email)
-        .nickname(this.nickname)
-        .role(this.role)
-        .profileImageUrl(this.profileImageUrl)
-        .walletAddress(this.walletAddress)
-        .passwordHash(this.passwordHash)
-        .createdAt(this.createdAt)
-        .updatedAt(this.updatedAt)
-        .build();
-  }
+//  public momzzangseven.mztkbe.modules.user.domain.model.User toDomain() {
+//    return momzzangseven.mztkbe.modules.user.domain.model.User.builder()
+//        .id(this.id)
+//        .provider(this.provider)
+//        .providerUserId(this.providerUserId)
+//        .email(this.email)
+//        .nickname(this.nickname)
+//        .role(this.role)
+//        .profileImageUrl(this.profileImageUrl)
+//        .walletAddress(this.walletAddress)
+//        .passwordHash(this.passwordHash)
+//        .createdAt(this.createdAt)
+//        .updatedAt(this.updatedAt)
+//        .build();
+//  }
 
-  public static UserEntity fromDomain(momzzangseven.mztkbe.modules.user.domain.model.User user) {
-    return UserEntity.builder()
-        .id(user.getId())
-        .provider(user.getProvider())
-        .providerUserId(user.getProviderUserId())
-        .email(user.getEmail())
-        .nickname(user.getNickname())
-        .role(user.getRole())
-        .profileImageUrl(user.getProfileImageUrl())
-        .walletAddress(user.getWalletAddress())
-        .passwordHash(user.getPasswordHash())
-        .build();
-  }
+//  public static UserEntity fromDomain(momzzangseven.mztkbe.modules.user.domain.model.User user) {
+//    return UserEntity.builder()
+//        .id(user.getId())
+//        .provider(user.getProvider())
+//        .providerUserId(user.getProviderUserId())
+//        .email(user.getEmail())
+//        .nickname(user.getNickname())
+//        .role(user.getRole())
+//        .profileImageUrl(user.getProfileImageUrl())
+//        .walletAddress(user.getWalletAddress())
+//        .passwordHash(user.getPasswordHash())
+//        .build();
+//  }
 }
