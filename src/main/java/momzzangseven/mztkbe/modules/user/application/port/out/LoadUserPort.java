@@ -6,8 +6,17 @@ import momzzangseven.mztkbe.modules.user.domain.model.User;
 
 public interface LoadUserPort {
 
-  Optional<User> findByProviderAndProviderUserId(AuthProvider provider, String providerUserId);
+    Optional<User> loadUserByEmail(String email);
 
-  // ✅ 이 줄 추가 (에러 해결 포인트)
-  Optional<User> findByEmail(String email);
+    Optional<User> loadUserByKakaoId(String kakaoId);
+
+    Optional<User> loadUserByGoogleId(String googleId);
+
+    Optional<User> loadUserByWalletAddress(String walletAddress);
+
+    Optional<User> loadUserById(Long id);
+
+    boolean existsByEmail(String email);
+
+    Optional<User> findByProviderAndProviderUserId(AuthProvider provider, String providerUserId);
 }

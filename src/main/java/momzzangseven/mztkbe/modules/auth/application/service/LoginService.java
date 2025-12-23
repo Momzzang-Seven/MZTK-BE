@@ -3,42 +3,60 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticatedUser;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticationContext;
+import momzzangseven.mztkbe.modules.auth.application.dto.LoginCommand;
 import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
 import momzzangseven.mztkbe.modules.auth.application.port.in.LoginUseCase;
+import momzzangseven.mztkbe.modules.auth.application.strategy.AuthenticationStrategy;
 import momzzangseven.mztkbe.modules.auth.application.strategy.AuthenticationStrategyFactory;
-import momzzangseven.mztkbe.modules.user.application.service.UserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
+@Transactional
 @RequiredArgsConstructor
 public class LoginService implements LoginUseCase {
 
   private final AuthenticationStrategyFactory strategyFactory;
-  private final UserService userService;
-
-  // private final JwtTokenProvider jwtTokenProvider; // 있으면 나중에 연결
+  private final JwtTokenProvider jwtTokenProvider;
 
   @Override
-  @Transactional
-  public LoginResult login(AuthenticationContext context) {
-    var strategy = strategyFactory.getStrategy(context.getProvider());
+  public LoginResult execute(LoginCommand command) {
+    log.info("Login request received for provider: {}", command.provider());
 
-    AuthenticatedUser au = strategy.authenticate(context);
+    // Step 1: Validate command
+    command.validate();
 
-    // ✅ 여기서 user 생성/중복정책/저장 처리 (user 모듈로 위임)
-    UserService.SocialLoginOutcome outcome =
-        userService.loginOrRegisterSocial(
-            au.getProvider(),
-            au.getProviderUserId(),
-            au.getEmail(),
-            au.getNickname(),
-            au.getProfileImageUrl());
+    // Step 2: Get appropriate strategy
+    AuthenticationStrategy strategy = strategyFactory.getStrategy(command.provider());
 
-    // TODO: 토큰 붙이기
-    String accessToken = null;
-    String refreshToken = null;
+    // Step 3: Convert LoginCommand to AuthenticationContext
+    AuthenticationContext context = AuthenticationContext.from(command);
 
-    return LoginResult.of(outcome.user(), outcome.isNewUser(), accessToken, refreshToken);
+    // Step 4: Authenticate user via strategy
+    AuthenticatedUser authenticatedUser = strategy.authenticate(context);
+
+    // Step 5: Generate JWT tokens
+    String accessToken =
+        jwtTokenProvider.generateAccessToken(
+            authenticatedUser.user().getId(),
+            authenticatedUser.user().getEmail(),
+            authenticatedUser.user().getRole());
+    String refreshToken = jwtTokenProvider.generateRefreshToken(authenticatedUser.user().getId());
+
+    log.info(
+        "Login successful for user: {}, isNewUser: {}",
+        authenticatedUser.user().getId(),
+        authenticatedUser.isNewUser());
+
+    // Step 6: Build result
+    return LoginResult.builder()
+        .accessToken(accessToken)
+        .refreshToken(refreshToken)
+        .grantType("Bearer")
+        .expiresIn(1800) // 30 minutes
+        .isNewUser(authenticatedUser.isNewUser())
+        .user(authenticatedUser.user())
+        .build();
   }
 }
