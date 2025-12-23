@@ -18,11 +18,11 @@ public class UserService {
 
   @Transactional
   public SocialLoginOutcome loginOrRegisterSocial(
-          AuthProvider provider,
-          String providerUserId,
-          String email,
-          String nickname,
-          String profileImageUrl) {
+      AuthProvider provider,
+      String providerUserId,
+      String email,
+      String nickname,
+      String profileImageUrl) {
 
     if (provider == null) throw new IllegalArgumentException("provider is required");
     if (providerUserId == null || providerUserId.isBlank())
@@ -33,7 +33,7 @@ public class UserService {
 
     // 1) provider + providerUserId 로 먼저 조회 (우리가 추가할 메서드)
     Optional<User> byProvider =
-            loadUserPort.findByProviderAndProviderUserId(provider, providerUserId);
+        loadUserPort.findByProviderAndProviderUserId(provider, providerUserId);
 
     if (byProvider.isPresent()) {
       return SocialLoginOutcome.existing(byProvider.get());
@@ -47,7 +47,7 @@ public class UserService {
       // 계정 연동/통합 금지 정책
       if (existing.getAuthProvider() != provider) {
         throw new IllegalStateException(
-                "Account already exists with a different provider. Email=" + email);
+            "Account already exists with a different provider. Email=" + email);
       }
 
       throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
@@ -55,11 +55,11 @@ public class UserService {
 
     // 3) 완전 신규 생성
     User created =
-            switch (provider) {
-              case KAKAO -> User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
-              case GOOGLE -> User.createFromGoogle(providerUserId, email, nickname, profileImageUrl);
-              default -> throw new IllegalArgumentException("Unsupported social provider: " + provider);
-            };
+        switch (provider) {
+          case KAKAO -> User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
+          case GOOGLE -> User.createFromGoogle(providerUserId, email, nickname, profileImageUrl);
+          default -> throw new IllegalArgumentException("Unsupported social provider: " + provider);
+        };
 
     User saved = saveUserPort.saveUser(created);
     return SocialLoginOutcome.newUser(saved);
