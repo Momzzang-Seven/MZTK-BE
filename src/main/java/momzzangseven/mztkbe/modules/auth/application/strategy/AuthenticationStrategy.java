@@ -5,7 +5,9 @@ import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticationContext;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 
 public interface AuthenticationStrategy {
-  AuthProvider supports();
-
+  /** Authenticate user with given context. Returns authenticated user information. */
   AuthenticatedUser authenticate(AuthenticationContext context);
+
+  /** Return supporting provider. */
+  AuthProvider supports();
 }

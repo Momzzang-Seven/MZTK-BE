@@ -1,7 +1,6 @@
 spring:
-  config:
-    activate:
-      on-profile: dev
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE}
 
   datasource:
     url: ${DB_URL}
@@ -11,9 +10,9 @@ spring:
 
   jpa:
     open-in-view: false
-    show-sql: true
+    show-sql: true                  # dev에서는 SQL 확인
     hibernate:
-      ddl-auto: update
+      ddl-auto: update              # dev에서만 허용
     properties:
       hibernate:
         format_sql: true
@@ -42,4 +41,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, mappings
+        include: health, info
+
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-here-must-be-at-least-32-characters-long}
+  access-token-expiration: 3600000      # 1 hour (in milliseconds)
+  refresh-token-expiration: 604800000   # 7 days (in milliseconds)
+  issuer: MZTK-BE
+  audience: MZTK-Client

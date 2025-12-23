@@ -1,16 +1,38 @@
 package momzzangseven.mztkbe.modules.auth.application.dto;
 
-import lombok.Builder;
-import lombok.Getter;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.user.domain.model.User;
 
-@Getter
-@Builder
-public class AuthenticatedUser {
-  private AuthProvider provider;
-  private String providerUserId;
+/**
+ * Result of authentication process.
+ *
+ * <p>Returned by AuthenticationStrategy after successful authentication. Contains authenticated
+ * user and additional context.
+ */
+public record AuthenticatedUser(
 
-  private String email;
-  private String nickname;
-  private String profileImageUrl;
+    /** Authenticated user */
+    User user,
+
+    /** Whether this is a newly created user (auto-registered via social login) */
+    boolean isNewUser) {
+
+  /**
+   * Create AuthenticatedUser for existing user.
+   *
+   * @param user Existing user
+   * @return AuthenticatedUser with isNewUser=false
+   */
+  public static AuthenticatedUser existing(User user) {
+    return new AuthenticatedUser(user, false);
+  }
+
+  /**
+   * Create AuthenticatedUser for new user.
+   *
+   * @param user Newly created user
+   * @return AuthenticatedUser with isNewUser=true
+   */
+  public static AuthenticatedUser newUser(User user) {
+    return new AuthenticatedUser(user, true);
+  }
 }

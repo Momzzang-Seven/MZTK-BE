@@ -1,9 +1,7 @@
 package momzzangseven.mztkbe.modules.auth.application.dto;
 
 import lombok.Builder;
-import lombok.Getter;
 
-@Getter
 @Builder
 public class KakaoUserInfo {
   private String providerUserId;
