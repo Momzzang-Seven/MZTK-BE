@@ -22,6 +22,14 @@ spring:
       write-dates-as-timestamps: false
     time-zone: Asia/Seoul
 
+kakao:
+  auth:
+    client: ${KAKAO_CLIENT_ID}
+    redirect: http://localhost:3000/callback
+  api:
+    token-uri: https://kauth.kakao.com/oauth/token
+    userinfo-uri: https://kapi.kakao.com/v2/user/me
+
 logging:
   level:
     root: INFO

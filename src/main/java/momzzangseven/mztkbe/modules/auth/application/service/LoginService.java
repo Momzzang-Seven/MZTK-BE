@@ -26,24 +26,25 @@ public class LoginService implements LoginUseCase {
   public LoginResult execute(LoginCommand command) {
     log.info("Login request received for provider: {}", command.provider());
 
-    // Step 1: Validate command
+    // Validate command
     command.validate();
 
-    // Step 2: Get appropriate strategy
+    // Strategy
     AuthenticationStrategy strategy = strategyFactory.getStrategy(command.provider());
 
-    // Step 3: Convert LoginCommand to AuthenticationContext
+    //  Context
     AuthenticationContext context = AuthenticationContext.from(command);
 
-    // Step 4: Authenticate user via strategy
+    // Complete authentication flow including user verification and user lookup/registration
     AuthenticatedUser authenticatedUser = strategy.authenticate(context);
 
-    // Step 5: Generate JWT tokens
+    // JWT
     String accessToken =
         jwtTokenProvider.generateAccessToken(
             authenticatedUser.user().getId(),
             authenticatedUser.user().getEmail(),
             authenticatedUser.user().getRole());
+
     String refreshToken = jwtTokenProvider.generateRefreshToken(authenticatedUser.user().getId());
 
     log.info(
@@ -51,12 +52,12 @@ public class LoginService implements LoginUseCase {
         authenticatedUser.user().getId(),
         authenticatedUser.isNewUser());
 
-    // Step 6: Build result
+    // Response DTO 생성
     return LoginResult.builder()
         .accessToken(accessToken)
         .refreshToken(refreshToken)
         .grantType("Bearer")
-        .expiresIn(1800) // 30 minutes
+        .expiresIn(1800)
         .isNewUser(authenticatedUser.isNewUser())
         .user(authenticatedUser.user())
         .build();
