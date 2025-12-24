@@ -12,16 +12,6 @@ import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.U
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Adapter implementing LoadUserPort and SaveUserPort.
- *
- * <p>Hexagonal Architecture: - This is an ADAPTER in the infrastructure layer - Implements OUTPUT
- * PORTS defined by the application layer - Translates between Domain Model (User) and
- * Infrastructure Model (UserEntity)
- *
- * <p>Responsibilities: - Execute database operations via UserJpaRepository - Convert UserEntity ↔
- * User (Domain Model) - Handle transaction boundaries
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -38,36 +28,15 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     return userJpaRepository.findByEmail(email).map(this::mapToDomain);
   }
 
+  /** LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회 */
   @Override
   @Transactional(readOnly = true)
-  public Optional<User> loadUserByKakaoId(String kakaoId) {
-    log.debug("Loading user by Kakao ID: {}", kakaoId);
+  public Optional<User> findByProviderAndProviderUserId(
+      AuthProvider provider, String providerUserId) {
+    log.debug("Loading user by provider: {}, providerUserId: {}", provider, providerUserId);
     return userJpaRepository
-        .findByProviderAndProviderUserId(AuthProvider.KAKAO, kakaoId)
+        .findByProviderAndProviderUserId(provider, providerUserId)
         .map(this::mapToDomain);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<User> loadUserByGoogleId(String googleId) {
-    log.debug("Loading user by Google ID: {}", googleId);
-    return userJpaRepository
-        .findByProviderAndProviderUserId(AuthProvider.GOOGLE, googleId)
-        .map(this::mapToDomain);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<User> loadUserByWalletAddress(String walletAddress) {
-    log.debug("Loading user by wallet address: {}", walletAddress);
-    return userJpaRepository.findByWalletAddress(walletAddress).map(this::mapToDomain);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<User> loadUserById(Long id) {
-    log.debug("Loading user by ID: {}", id);
-    return userJpaRepository.findById(id).map(this::mapToDomain);
   }
 
   @Override
@@ -87,15 +56,16 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     UserEntity entity;
 
     if (user.getId() != null) {
-      // Update existing user
+      // Update existing user (영속 상태 유지)
       entity =
           userJpaRepository
               .findById(user.getId())
               .orElseThrow(
                   () -> new IllegalArgumentException("User not found with ID: " + user.getId()));
 
-      // Update mutable fields
-      entity = updateEntityFromDomain(entity, user);
+      // Update by setting values on the existing entity (creating a new instance via builder may
+      // break JPA managed state)
+      updateEntityFromDomain(entity, user);
     } else {
       // Create new user
       entity = mapToEntity(user);
@@ -136,13 +106,22 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
 
   /** Convert User (Domain) to UserEntity (Infrastructure). Used for creating new entities. */
   private UserEntity mapToEntity(User user) {
+    String providerUserId = user.getProvider_user_id();
+
+    // LOCAL은 providerUserId가 없으니 강제로 만들어 넣기
+    if (providerUserId == null || providerUserId.isBlank()) {
+      if (user.getAuthProvider() == AuthProvider.LOCAL) {
+        providerUserId = "LOCAL:" + user.getEmail();
+      }
+    }
+
     return UserEntity.builder()
         .id(user.getId())
         .email(user.getEmail())
         .passwordHash(user.getPassword())
         .nickname(user.getNickname())
         .profileImageUrl(user.getProfileImageUrl())
-        .providerUserId(user.getProvider_user_id())
+        .providerUserId(providerUserId)
         .walletAddress(user.getWalletAddress())
         .provider(user.getAuthProvider())
         .role(user.getRole())
@@ -152,24 +131,17 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .build();
   }
 
-  /**
-   * Update existing UserEntity from User (Domain). Used for updating entities to preserve JPA
-   * managed state.
-   */
-  private UserEntity updateEntityFromDomain(UserEntity entity, User user) {
-    return UserEntity.builder()
-        .id(entity.getId()) // Preserve existing ID
-        .email(user.getEmail())
-        .passwordHash(user.getPassword())
-        .nickname(user.getNickname())
-        .profileImageUrl(user.getProfileImageUrl())
-        .providerUserId(user.getProvider_user_id())
-        .walletAddress(user.getWalletAddress())
-        .provider(user.getAuthProvider())
-        .role(user.getRole())
-        .lastLoginAt(user.getLastLoginAt())
-        .createdAt(entity.getCreatedAt()) // Preserve original creation time
-        .updatedAt(user.getUpdatedAt())
-        .build();
+  /** 기존 영속 엔티티의 필드를 수정하는 방식으로 업데이트 (builder로 새 객체 만들지 말고, setter로 업데이트) */
+  private void updateEntityFromDomain(UserEntity entity, User user) {
+    entity.setEmail(user.getEmail());
+    entity.setPasswordHash(user.getPassword());
+    entity.setNickname(user.getNickname());
+    entity.setProfileImageUrl(user.getProfileImageUrl());
+    entity.setProviderUserId(user.getProvider_user_id());
+    entity.setWalletAddress(user.getWalletAddress());
+    entity.setProvider(user.getAuthProvider());
+    entity.setRole(user.getRole());
+    entity.setLastLoginAt(user.getLastLoginAt());
+    entity.setUpdatedAt(user.getUpdatedAt());
   }
 }
