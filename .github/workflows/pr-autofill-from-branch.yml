@@ -40,7 +40,7 @@ jobs:
               return;
             }
 
-            if (!branchName.startsWith("feature/")) {
+            if (!branchName.startsWith("feat/")) {
               console.log("Head branch is not feature/*. Skipping autofill.");
               return;
             }
