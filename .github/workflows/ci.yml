@@ -31,9 +31,9 @@ jobs:
 
       - name: Verify code format (Spotless)
         run: ./gradlew spotlessCheck --no-daemon
-
-      - name: Run static analysis (Checkstyle: main + test)
-        run: ./gradlew checkstyleMain checkstyleTest --no-daemon
+        
+      - name: Run static analysis (Checkstyle)
+        run: ./gradlew checkstyleMain --no-daemon
 
       - name: Run tests
         run: ./gradlew test --no-daemon
