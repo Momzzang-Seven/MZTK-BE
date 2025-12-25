@@ -1,9 +1,8 @@
 package momzzangseven.mztkbe.modules.auth.application.strategy;
 
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import momzzangseven.mztkbe.global.error.UnsupportedProviderException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.stereotype.Component;
@@ -14,17 +13,14 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AuthenticationStrategyFactory {
-  private final Map<AuthProvider, AuthenticationStrategy> strategies;
 
-  // Injected every strategies by constructor injection
+  private final Map<AuthProvider, AuthenticationStrategy> strategies =
+      new EnumMap<>(AuthProvider.class);
+
   public AuthenticationStrategyFactory(List<AuthenticationStrategy> strategyList) {
-    this.strategies =
-        strategyList.stream()
-            .collect(
-                Collectors.toMap( // Convert each element of List to Map Entry
-                    AuthenticationStrategy::supports, // set the Key. AuthProvider
-                    Function.identity() // set the Value. AuthenticationStrategy
-                    ));
+    for (AuthenticationStrategy s : strategyList) {
+      strategies.put(s.supports(), s);
+    }
   }
 
   public AuthenticationStrategy getStrategy(AuthProvider provider) {

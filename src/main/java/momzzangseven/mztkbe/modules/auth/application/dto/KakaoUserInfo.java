@@ -1,7 +1,13 @@
 package momzzangseven.mztkbe.modules.auth.application.dto;
 
 import lombok.Builder;
+import lombok.Getter;
 
+@Getter
 @Builder
-public record KakaoUserInfo(
-    String kakaoId, String email, String nickname, String profileImageUrl) {}
+public class KakaoUserInfo {
+  private String providerUserId;
+  private String email;
+  private String nickname;
+  private String profileImageUrl;
+}
