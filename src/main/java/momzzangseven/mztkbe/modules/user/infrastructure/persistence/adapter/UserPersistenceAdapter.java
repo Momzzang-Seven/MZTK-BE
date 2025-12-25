@@ -41,6 +41,14 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
 
   @Override
   @Transactional(readOnly = true)
+  public Optional<User> loadUserById(Long userId) {
+    log.debug("Loading user by id: {}", userId);
+    return userJpaRepository.findById(userId)
+            .map(this::mapToDomain);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public boolean existsByEmail(String email) {
     log.debug("Checking if email exists: {}", email);
     return userJpaRepository.existsByEmail(email);

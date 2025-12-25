@@ -60,7 +60,7 @@ public class ReissueTokenService implements ReissueTokenUseCase {
         // Step 2: Validate JWT format (delegated)
         validator.validateJwtFormat(tokenValue);
 
-        // Step 3: Extract userId from JWT
+        // Step 3: Extract userId(PK) from JWT
         Long jwtUserId = jwtTokenProvider.getUserIdFromToken(tokenValue);
 
         // Step 4: Load token from DB (delegated)

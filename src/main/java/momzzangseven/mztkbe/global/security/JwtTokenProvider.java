@@ -42,7 +42,7 @@ public class JwtTokenProvider {
         .header()
         .type("JWT")
         .and()
-        .subject(userId.toString())
+        .subject(userId.toString()) //User PK
         .claim("email", email)
         .claim("role", role.name())
         .claim("type", "access")

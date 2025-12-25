@@ -25,16 +25,6 @@ public interface LoadRefreshTokenPort {
     Optional<RefreshToken> findByTokenValue(String tokenValue);
 
     /**
-     * Find refresh token by user ID.
-     *
-     * <p>Note: Returns the most recent token if multiple exist.
-     *
-     * @param userId User's unique identifier
-     * @return Optional of RefreshToken domain model
-     */
-    Optional<RefreshToken> findByUserId(Long userId);
-
-    /**
      * Check if refresh token exists by token value.
      *
      * @param tokenValue JWT token string
