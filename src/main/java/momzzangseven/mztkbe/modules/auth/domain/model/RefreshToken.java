@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cglib.core.Local;
 
 import java.time.LocalDateTime;
 
@@ -38,8 +39,8 @@ public class RefreshToken {
     /** Token expiration timestamp */
     private LocalDateTime expiresAt;
 
-    /** Whether this token has been revoked (invalidated) */
-    private boolean revoked;
+    /** Token Revocation timestamp */
+    private LocalDateTime revokedAt;
 
     /** Token creation timestamp */
     private LocalDateTime createdAt;
@@ -71,7 +72,7 @@ public class RefreshToken {
                 .userId(userId)
                 .tokenValue(tokenValue)
                 .expiresAt(expiresAt)
-                .revoked(false)
+                .revokedAt(null)
                 .createdAt(now)
                 .usedAt(null)
                 .build();
@@ -91,13 +92,22 @@ public class RefreshToken {
      * @return true if token can be used, false otherwise
      */
     public boolean isValid() {
-        boolean valid = !isExpired() && !revoked;
+        boolean valid = !isExpired() && !isRevoked();
 
         if (!valid) {
-            log.debug("Token validation failed: expired={}, revoked={}", isExpired(), revoked);
+            log.debug("Token validation failed: expired={}, revoked={}", isExpired(), isRevoked());
         }
 
         return valid;
+    }
+
+    /**
+     * Check if token is revoked.
+     *
+     * @return true if revokedAt is not null
+     */
+    public boolean isRevoked() {
+        return revokedAt != null;
     }
 
     /**
@@ -126,7 +136,7 @@ public class RefreshToken {
     public void markAsUsed() {
         if (!isValid()) {
             log.error("Attempt to use invalid token: userId={}, expired={}, revoked={}",
-                    userId, isExpired(), revoked);
+                    userId, isExpired(), isRevoked());
             throw new IllegalStateException("Cannot mark invalid token as used");
         }
 
@@ -143,13 +153,13 @@ public class RefreshToken {
      * - Token rotation (old token replaced with new one)
      */
     public void revoke() {
-        if (this.revoked) {
-            log.warn("Token already revoked: userId={}", userId);
+        if (this.isRevoked()) {
+            log.warn("Token already revoked at {}: userId={}", revokedAt, userId);
             return;
         }
 
-        this.revoked = true;
-        log.info("Token revoked: userId={}, tokenId={}", userId, id);
+        this.revokedAt = LocalDateTime.now();
+        log.info("Token revoked: userId={}, tokenId={}, revokedAt={}", userId, id, revokedAt);
     }
 
     /**
@@ -175,7 +185,7 @@ public class RefreshToken {
      * @return Remaining seconds, or 0 if already expired
      */
     public long getRemainingSeconds() {
-        if (isExpired() || revoked) {
+        if (isExpired() || isRevoked()) {
             return 0;
         }
 
@@ -262,7 +272,8 @@ public class RefreshToken {
                 "id=" + id +
                 ", userId=" + userId +
                 ", expired=" + isExpired() +
-                ", revoked=" + revoked +
+                ", revoked=" + isRevoked() +
+                ", revokedAt=" + revokedAt +
                 ", expiresAt=" + expiresAt +
                 '}';
     }
