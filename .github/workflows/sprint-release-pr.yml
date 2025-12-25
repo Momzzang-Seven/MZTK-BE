@@ -59,7 +59,7 @@ jobs:
               "";
 
             // 2) main..dev 변경 내용 조회
-            const compare = await github.rest.repos.compareCommitsWithBasehead({
+            const compare = await github.rest.repos.compareCommits({
               owner,
               repo,
               base,
