@@ -17,57 +17,57 @@ import org.springframework.web.reactive.function.client.WebClient;
 @RequiredArgsConstructor
 public class GoogleApiAdapter implements GoogleAuthPort {
 
-    private final GoogleAuthProperties props;
-    private final WebClient webClient;
+  private final GoogleAuthProperties props;
+  private final WebClient webClient;
 
-    @Override
-    public String getAccessToken(String authorizationCode) {
+  @Override
+  public String getAccessToken(String authorizationCode) {
 
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "authorization_code");
-        form.add("client_id", props.getOauth().getClientId());
-        form.add("client_secret", props.getOauth().getClientSecret());
-        form.add("redirect_uri", props.getOauth().getRedirectUri());
-        form.add("code", authorizationCode);
+    MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+    form.add("grant_type", "authorization_code");
+    form.add("client_id", props.getOauth().getClientId());
+    form.add("client_secret", props.getOauth().getClientSecret());
+    form.add("redirect_uri", props.getOauth().getRedirectUri());
+    form.add("code", authorizationCode);
 
-        GoogleTokenResponse token =
-                webClient
-                        .post()
-                        .uri(props.getApi().getTokenUri())
-                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                        .bodyValue(form)
-                        .retrieve()
-                        .bodyToMono(GoogleTokenResponse.class)
-                        .block();
+    GoogleTokenResponse token =
+        webClient
+            .post()
+            .uri(props.getApi().getTokenUri())
+            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+            .bodyValue(form)
+            .retrieve()
+            .bodyToMono(GoogleTokenResponse.class)
+            .block();
 
-        if (token == null || token.getAccessToken() == null) {
-            throw new IllegalStateException("Failed to get Google access token");
-        }
-
-        return token.getAccessToken();
+    if (token == null || token.getAccessToken() == null) {
+      throw new IllegalStateException("Failed to get Google access token");
     }
 
-    @Override
-    public GoogleUserInfo getUserInfo(String accessToken) {
+    return token.getAccessToken();
+  }
 
-        GoogleUserResponse user =
-                webClient
-                        .get()
-                        .uri(props.getApi().getUserinfoUri())
-                        .headers(h -> h.setBearerAuth(accessToken))
-                        .retrieve()
-                        .bodyToMono(GoogleUserResponse.class)
-                        .block();
+  @Override
+  public GoogleUserInfo getUserInfo(String accessToken) {
 
-        if (user == null) {
-            throw new IllegalStateException("Failed to get Google user info");
-        }
+    GoogleUserResponse user =
+        webClient
+            .get()
+            .uri(props.getApi().getUserinfoUri())
+            .headers(h -> h.setBearerAuth(accessToken))
+            .retrieve()
+            .bodyToMono(GoogleUserResponse.class)
+            .block();
 
-        return GoogleUserInfo.builder()
-                .providerUserId(user.getSub())
-                .email(user.getEmail())
-                .nickname(user.getName())
-                .profileImageUrl(user.getPicture())
-                .build();
+    if (user == null) {
+      throw new IllegalStateException("Failed to get Google user info");
     }
+
+    return GoogleUserInfo.builder()
+        .providerUserId(user.getSub())
+        .email(user.getEmail())
+        .nickname(user.getName())
+        .profileImageUrl(user.getPicture())
+        .build();
+  }
 }

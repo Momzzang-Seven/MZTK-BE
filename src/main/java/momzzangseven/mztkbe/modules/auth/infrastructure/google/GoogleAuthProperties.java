@@ -11,21 +11,21 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "google")
 public class GoogleAuthProperties {
 
-    private OAuth oauth = new OAuth();
-    private Api api = new Api();
+  private OAuth oauth = new OAuth();
+  private Api api = new Api();
 
-    @Getter
-    @Setter
-    public static class OAuth {
-        private String clientId;
-        private String clientSecret;
-        private String redirectUri;
-    }
+  @Getter
+  @Setter
+  public static class OAuth {
+    private String clientId;
+    private String clientSecret;
+    private String redirectUri;
+  }
 
-    @Getter
-    @Setter
-    public static class Api {
-        private String tokenUri;
-        private String userinfoUri;
-    }
+  @Getter
+  @Setter
+  public static class Api {
+    private String tokenUri;
+    private String userinfoUri;
+  }
 }

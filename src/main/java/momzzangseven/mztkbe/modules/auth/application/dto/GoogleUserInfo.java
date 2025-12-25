@@ -6,8 +6,8 @@ import lombok.Getter;
 @Getter
 @Builder
 public class GoogleUserInfo {
-    private String providerUserId;
-    private String email;
-    private String nickname;
-    private String profileImageUrl;
+  private String providerUserId;
+  private String email;
+  private String nickname;
+  private String profileImageUrl;
 }

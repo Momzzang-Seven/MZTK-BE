@@ -8,16 +8,16 @@ import lombok.ToString;
 @ToString
 public class GoogleUserResponse {
 
-    private String sub;
+  private String sub;
 
-    private String email;
+  private String email;
 
-    private String name;
+  private String name;
 
-    private String picture;
+  private String picture;
 
-    @JsonProperty("email_verified")
-    private Boolean emailVerified;
+  @JsonProperty("email_verified")
+  private Boolean emailVerified;
 
-    private String locale;
+  private String locale;
 }
