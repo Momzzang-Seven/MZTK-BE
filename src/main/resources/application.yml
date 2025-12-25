@@ -22,6 +22,14 @@ spring:
       write-dates-as-timestamps: false
     time-zone: Asia/Seoul
 
+kakao:
+  auth:
+    client: ${KAKAO_CLIENT_ID}
+    redirect: http://localhost:3000/callback
+  api:
+    token-uri: https://kauth.kakao.com/oauth/token
+    userinfo-uri: https://kapi.kakao.com/v2/user/me
+
 logging:
   level:
     root: INFO
@@ -37,7 +45,7 @@ management:
 
 jwt:
   secret: ${JWT_SECRET:your-256-bit-secret-key-here-must-be-at-least-32-characters-long}
-  access-token-expiration: 3600000      # 1 hour (in milliseconds)
+  access-token-expiration: 900000      # 1 hour (in milliseconds)
   refresh-token-expiration: 604800000   # 7 days (in milliseconds)
   issuer: MZTK-BE
   audience: MZTK-Client

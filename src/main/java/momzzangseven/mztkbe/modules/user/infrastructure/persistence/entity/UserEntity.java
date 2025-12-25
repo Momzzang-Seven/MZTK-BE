@@ -2,89 +2,74 @@ package momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-/**
- * JPA Entity for User table.
- *
- * <p>Infrastructure Layer: - This is a PERSISTENCE MODEL, not a DOMAIN MODEL - Contains JPA
- * annotations and database-specific concerns - Should be converted to Domain Model (User) when
- * crossing layer boundaries
- */
 @Entity
 @Table(
     name = "users",
-    indexes = {
-      @Index(name = "idx_email", columnList = "email"),
-      @Index(name = "idx_kakao_id", columnList = "kakao_id"),
-      @Index(name = "idx_google_id", columnList = "google_id"),
-      @Index(name = "idx_wallet_address", columnList = "wallet_address")
-    },
     uniqueConstraints = {
-      @UniqueConstraint(name = "uk_email", columnNames = "email"),
-      @UniqueConstraint(
-          name = "uk_provider_user",
-          columnNames = {"provider", "provider_user_id"}),
-      @UniqueConstraint(name = "uk_wallet_address", columnNames = "wallet_address")
+      @UniqueConstraint(columnNames = {"provider", "provider_user_id"}),
+      @UniqueConstraint(columnNames = {"email"})
     })
-@EntityListeners(AuditingEntityListener.class)
 @Getter
-@Builder
-@NoArgsConstructor
+@Setter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
+@Builder
 public class UserEntity {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(name = "email", length = 255)
+  // 로그인 제공자 (LOCAL / KAKAO / GOOGLE)
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false)
+  private AuthProvider provider;
+
+  // 소셜 로그인 제공자 고유 ID
+  @Column(name = "provider_user_id", nullable = false)
+  private String providerUserId;
+
+  // 계정 식별자 (UNIQUE)
+  @Column(nullable = false, unique = true)
   private String email;
 
   @Enumerated(EnumType.STRING)
-  @Column(name = "provider", nullable = false, length = 20)
-  private AuthProvider provider;
+  @Column(nullable = false)
+  private UserRole role;
 
-  @Column(name = "provider_user_id", unique = true)
-  private String providerUserId;
-
-  @Column(name = "password_hash", length = 255)
-  private String passwordHash;
-
-  @Column(name = "nickname", nullable = false, length = 100)
   private String nickname;
 
-  @Column(name = "profile_image_url", length = 500)
+  @Column(name = "profile_image_url")
   private String profileImageUrl;
 
-  @Column(name = "wallet_address", length = 255, unique = true)
+  // 지갑 주소
+  @Column(name = "wallet_address", unique = true, length = 42)
   private String walletAddress;
 
-  @Enumerated(EnumType.STRING)
-  @Column(name = "status")
-  private UserStatus status;
+  @Column(name = "created_at", nullable = false)
+  private LocalDateTime createdAt;
 
-  @Enumerated(EnumType.STRING)
-  @Column(name = "role", nullable = false, length = 20)
-  private UserRole role;
+  @Column(name = "updated_at", nullable = false)
+  private LocalDateTime updatedAt;
 
   @Column(name = "last_login_at")
   private LocalDateTime lastLoginAt;
 
-  @CreatedDate
-  @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  @PrePersist
+  protected void onCreate() {
+    this.createdAt = LocalDateTime.now();
+    this.updatedAt = this.createdAt;
+  }
 
-  @LastModifiedDate
-  @Column(name = "updated_at", nullable = false)
-  private LocalDateTime updatedAt;
+  @PreUpdate
+  protected void onUpdate() {
+    this.updatedAt = LocalDateTime.now();
+  }
+
+  @Column(name = "password_hash")
+  private String passwordHash;
 }
