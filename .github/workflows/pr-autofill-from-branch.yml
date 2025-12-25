@@ -2,7 +2,6 @@ name: Autofill PR from branch
 
 on:
   pull_request:
-    # PR이 새로 열리거나, 수정되거나, 커밋이 추가될 때마다 실행
     types: [ opened, edited, synchronize, reopened ]
 
 permissions:
@@ -80,18 +79,9 @@ jobs:
             const generatedTitle = `[${jiraKey}] ${prefix}: ${formattedTitle}`;
             console.log("Generated title:", generatedTitle);
 
-            //
-            //  절충 모드 규칙
-            //  - 제목: 항상 덮어쓰기 (일관성 강제)
-            //  - 본문: 비었거나 자동 생성 마커가 있을 때만 덮어쓰기
-            //
             const body = pr.body || "";
-            const shouldUpdateBody =
-              !body.trim().length ||
-              body.includes("<!-- AUTO-GENERATED-PR-BODY -->");
 
-            console.log("Should update body?", shouldUpdateBody);
-
+            // 새로 만들 PR 본문 템플릿
             const generatedBodyLines = [
               "<!-- AUTO-GENERATED-PR-BODY -->",
               "",
@@ -109,8 +99,27 @@ jobs:
               "- [ ] 로컬 스모크 테스트 완료",
               ""
             ];
-
             const generatedBody = generatedBodyLines.join("\n");
+
+            //
+            //  절충 모드 규칙
+            //  - 제목: 항상 덮어쓰기 (일관성 강제)
+            //  - 본문: 비었거나 자동 생성 마커가 있을 때만 덮어쓰기
+            //
+            const shouldUpdateBody =
+              !body.trim().length ||
+              body.includes("<!-- AUTO-GENERATED-PR-BODY -->");
+
+            // 🔥 여기서 이미 같은 내용이면 더 이상 업데이트하지 않고 종료 → 무한루프 방지
+            const isTitleSame = pr.title === generatedTitle;
+            const isBodySame = body === generatedBody;
+
+            if (isTitleSame && (!shouldUpdateBody || isBodySame)) {
+              console.log("Title/body already generated. No changes needed. Skipping update.");
+              return;
+            }
+
+            console.log("Should update body?", shouldUpdateBody);
 
             try {
               await github.rest.pulls.update({
