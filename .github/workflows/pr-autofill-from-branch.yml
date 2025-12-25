@@ -2,7 +2,12 @@ name: Autofill PR from branch
 
 on:
   pull_request:
-    types: [opened, edited, synchronize]
+    # PR이 새로 열리거나, 수정되거나, 커밋이 추가될 때마다 실행
+    types: [ opened, edited, synchronize, reopened ]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   autofill-pr:
@@ -26,14 +31,14 @@ jobs:
 
             console.log("Base:", baseBranch, "Head:", branchName);
 
-            // 안전장치: 값이 없으면 바로 종료
+            // 값 없으면 안전하게 종료
             if (!branchName || !baseBranch) {
               console.log("Missing head or base branch. Skipping.");
               return;
             }
 
             //
-            // dev 로 가는 PR + feature/* 브랜치만 자동 처리
+            // dev 로 가는 PR + feat/* 브랜치만 자동 처리
             //
             if (baseBranch !== "dev") {
               console.log("Base branch is not dev. Skipping autofill.");
@@ -41,28 +46,36 @@ jobs:
             }
 
             if (!branchName.startsWith("feat/")) {
-              console.log("Head branch is not feature/*. Skipping autofill.");
+              console.log("Head branch is not feat/*. Skipping autofill.");
               return;
             }
 
+            //
+            // 브랜치 파싱
+            // 예: feat/MOM-144-사용자는-회원탈퇴를-할-수-있어야-한다
+            //
             const parts = branchName.split("/", 2);
             if (parts.length < 2) {
               console.log("Branch name does not contain '/'. Skipping.");
               return;
             }
 
-            const prefix = parts[0];   // e.g. "feature"
-            const rest = parts[1];     // e.g. "MZTK-123-add_login_api"
+            const prefix = parts[0];   // "feat"
+            const rest = parts[1];     // "MOM-144-사용자는-회원탈퇴를-할-수-있어야-한다"
 
-            const dashIndex = rest.indexOf("-");
-            if (dashIndex === -1) {
-              console.log("Branch name does not contain Jira key. Skipping.");
+            const restParts = rest.split("-");
+            if (restParts.length < 3) {
+              console.log("Branch name does not look like JIRA-123-some-title. Skipping.");
               return;
             }
 
-            const jiraKey = rest.substring(0, dashIndex);          // "MZTK-123"
-            const rawTitle = rest.substring(dashIndex + 1);        // "add_login_api"
-            const formattedTitle = rawTitle.replace(/_/g, " ");    // "add login api"
+            const jiraKeyPrefix = restParts[0];   // "MOM"
+            const jiraKeyNum    = restParts[1];   // "144"
+            const titleParts    = restParts.slice(2); // ["사용자는", "회원탈퇴를", "할", "수", "있어야", "한다"]
+
+            const jiraKey = `${jiraKeyPrefix}-${jiraKeyNum}`;          // "MOM-144"
+            const rawTitle = titleParts.join("-");                      // "사용자는-회원탈퇴를-할-수-있어야-한다"
+            const formattedTitle = rawTitle.replace(/_/g, " ");         // 언더스코어만 공백으로 치환
 
             const generatedTitle = `[${jiraKey}] ${prefix}: ${formattedTitle}`;
             console.log("Generated title:", generatedTitle);
@@ -99,12 +112,17 @@ jobs:
 
             const generatedBody = generatedBodyLines.join("\n");
 
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-              title: generatedTitle,
-              body: shouldUpdateBody ? generatedBody : pr.body
-            });
+            try {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                title: generatedTitle,
+                body: shouldUpdateBody ? generatedBody : pr.body
+              });
 
-            console.log("PR updated successfully");
+              console.log("PR updated successfully");
+            } catch (error) {
+              console.error("Failed to update PR:", error);
+              throw error;
+            }
