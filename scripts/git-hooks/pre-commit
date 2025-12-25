@@ -1,0 +1,4 @@
+#!/bin/sh
+echo "Running pre-commit checks..."
+./gradlew spotlessApply checkstyleMain --no-daemon || exit 1
+echo "✅ Passed"

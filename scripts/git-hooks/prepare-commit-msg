@@ -1,0 +1,36 @@
+#!/bin/sh
+
+MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+SHA1="$3"
+
+case "$COMMIT_SOURCE" in
+  merge|squash|commit)
+    exit 0
+    ;;
+esac
+
+STRIPPED_MSG=$(grep -vE '^\s*#' "$MSG_FILE" | tr -d '[:space:]')
+if [ -n "$STRIPPED_MSG" ]; then
+  exit 0
+fi
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+PREFIX=$(echo "$BRANCH" | cut -d'/' -f1)
+REST=$(echo "$BRANCH" | cut -d'/' -f2-)
+
+JIRA_KEY=$(echo "$REST" | cut -d'-' -f1)
+RAW_TITLE=$(echo "$REST" | cut -d'-' -f2-)
+
+if [ -z "$JIRA_KEY" ] || [ -z "$RAW_TITLE" ]; then
+  exit 0
+fi
+
+COMMIT_PREFIX="$PREFIX"
+[ "$PREFIX" = "bugfix" ] && COMMIT_PREFIX="fix"
+
+TITLE=$(echo "$RAW_TITLE" | tr '_' ' ')
+GENERATED_MSG="[$JIRA_KEY] $COMMIT_PREFIX: $TITLE"
+
+echo "$GENERATED_MSG" > "$MSG_FILE"
