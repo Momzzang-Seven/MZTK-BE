@@ -28,9 +28,19 @@ jobs:
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: |
+          set +e
           gitleaks detect \
             --source=. \
             --no-git \
             --redact \
-            --report-format sarif \
-            --report-path gitleaks.sarif
+            --report-format json \
+            --report-path gitleaks.json
+      
+          EXIT_CODE=$?
+          echo "gitleaks exit code: $EXIT_CODE"
+      
+          echo "===== gitleaks report (json) ====="
+          cat gitleaks.json || echo "no report file"
+      
+          exit $EXIT_CODE
+
