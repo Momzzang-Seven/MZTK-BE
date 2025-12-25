@@ -1,0 +1,72 @@
+name: Autofill PR from branch
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  autofill-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Autofill PR title & body
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const branchName = pr.head.ref;
+
+            console.log("Branch:", branchName);
+
+            const parts = branchName.split("/", 2);
+            if (parts.length < 2) return;
+
+            const prefix = parts[0];
+            const rest = parts[1];
+
+            const dashIndex = rest.indexOf("-");
+            if (dashIndex === -1) return;
+
+            const jiraKey = rest.substring(0, dashIndex);
+            const rawTitle = rest.substring(dashIndex + 1);
+            const formattedTitle = rawTitle.replace(/_/g, " ");
+
+            const generatedTitle = `[${jiraKey}] ${prefix}: ${formattedTitle}`;
+
+            //
+            //  절충 모드 규칙
+            //  - 제목: 항상 덮어쓰기 (일관성 강제)
+            //  - 본문: 비었거나 자동 생성 마커가 있을 때만 덮어쓰기
+            //
+
+            const shouldUpdateBody =
+              !pr.body ||
+              !pr.body.trim().length ||
+              pr.body.includes("<!-- AUTO-GENERATED-PR-BODY -->");
+
+            const generatedBody = `
+<!-- AUTO-GENERATED-PR-BODY -->
+## 관련 이슈
+- ${jiraKey}
+
+## 작업 내용
+-
+
+## 변경 범위
+-
+
+## 테스트
+- [ ] 테스트 코드 작성 및 통과
+- [ ] 로컬 스모크 테스트 완료
+`;
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              title: generatedTitle,
+              body: shouldUpdateBody ? generatedBody : pr.body
+            });
+
+            console.log("PR updated successfully");
