@@ -2,7 +2,6 @@ name: Autofill PR from branch
 
 on:
   pull_request:
-    # PR이 새로 열리거나, 수정되거나, 커밋이 추가될 때마다 실행
     types: [ opened, edited, synchronize, reopened ]
 
 permissions:
@@ -81,17 +80,11 @@ jobs:
             console.log("Generated title:", generatedTitle);
 
             //
-            //  절충 모드 규칙
-            //  - 제목: 항상 덮어쓰기 (일관성 강제)
-            //  - 본문: 비었거나 자동 생성 마커가 있을 때만 덮어쓰기
+            // 본문 처리
             //
-            const body = pr.body || "";
-            const shouldUpdateBody =
-              !body.trim().length ||
-              body.includes("<!-- AUTO-GENERATED-PR-BODY -->");
+            const originalBody = pr.body || "";
 
-            console.log("Should update body?", shouldUpdateBody);
-
+            // 완전히 비었을 때 사용할 기본 템플릿 (fallback 용)
             const generatedBodyLines = [
               "<!-- AUTO-GENERATED-PR-BODY -->",
               "",
@@ -109,16 +102,50 @@ jobs:
               "- [ ] 로컬 스모크 테스트 완료",
               ""
             ];
+            const templateBody = generatedBodyLines.join("\n");
 
-            const generatedBody = generatedBodyLines.join("\n");
+            let newBody = originalBody;
 
+            if (!originalBody.trim().length) {
+              // 1) 본문이 완전히 비어 있으면 템플릿 전체 생성
+              console.log("Body is empty. Using template body.");
+              newBody = templateBody;
+            } else if (originalBody.includes("<!-- AUTO-GENERATED-PR-BODY -->")) {
+              // 2) 템플릿 마커가 있으면, 관련 이슈 라인의 JIRA 키만 교체
+              console.log("Body has AUTO-GENERATED marker. Updating only Jira key in issue section.");
+
+              // "- [MOM-000]" / "- [MOM-123]" / "- [ABC-9]" 형태의 첫 번째 항목만 교체
+              const jiraLineRegex = /(- \[)[A-Z]+-\d+(\])/;
+              if (jiraLineRegex.test(originalBody)) {
+                newBody = originalBody.replace(jiraLineRegex, `$1${jiraKey}$2`);
+              } else {
+                console.log("No JIRA key pattern found in body. Keeping original body.");
+              }
+            } else {
+              // 3) 마커 없으면 사용자가 전적으로 관리하는 본문이라고 보고 건드리지 않음
+              console.log("Body has no AUTO-GENERATED marker. Keeping body as-is.");
+              newBody = originalBody;
+            }
+
+            //
+            // 변경 여부 체크 (무한 루프 방지)
+            //
+            const isTitleSame = pr.title === generatedTitle;
+            const isBodySame = originalBody === newBody;
+
+            if (isTitleSame && isBodySame) {
+              console.log("Title and body already up to date. Skipping update.");
+              return;
+            }
+
+            console.log("Updating PR…");
             try {
               await github.rest.pulls.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: pr.number,
                 title: generatedTitle,
-                body: shouldUpdateBody ? generatedBody : pr.body
+                body: newBody
               });
 
               console.log("PR updated successfully");
