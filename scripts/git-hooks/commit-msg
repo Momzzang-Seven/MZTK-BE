@@ -1,0 +1,39 @@
+#!/bin/sh
+
+MSG_FILE="$1"
+MSG_CONTENT=$(cat "$MSG_FILE")
+
+if echo "$MSG_CONTENT" | grep -Eq '^\[[A-Z][A-Z0-9_-]*-[0-9]+\]\s+(feat|fix|hotfix|refactor|docs|test|chore|rename|remove):\s+.+'; then
+  exit 0
+fi
+
+echo "⚠️ Commit message does not match convention. Trying auto-fix..."
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+PREFIX=$(echo "$BRANCH" | cut -d'/' -f1)
+REST=$(echo "$BRANCH" | cut -d'/' -f2-)
+JIRA_KEY=$(echo "$REST" | cut -d'-' -f1)
+RAW_TITLE=$(echo "$REST" | cut -d'-' -f2-)
+
+if [ -z "$JIRA_KEY" ] || [ -z "$RAW_TITLE" ]; then
+  echo "❌ Missing Jira key or title"
+  exit 1
+fi
+
+COMMIT_PREFIX="$PREFIX"
+[ "$PREFIX" = "bugfix" ] && COMMIT_PREFIX="fix"
+
+RAW_MSG=$(echo "$MSG_CONTENT" | grep -vE '^\s*#')
+
+if [ -n "$(echo "$RAW_MSG" | tr -d '[:space:]')" ]; then
+  SUMMARY="$RAW_MSG"
+else
+  SUMMARY=$(echo "$RAW_TITLE" | tr '_' ' ')
+fi
+
+NEW_MSG="[$JIRA_KEY] $COMMIT_PREFIX: $SUMMARY"
+
+echo "$NEW_MSG" > "$MSG_FILE"
+echo "✅ Fixed:"
+echo "   $NEW_MSG"
