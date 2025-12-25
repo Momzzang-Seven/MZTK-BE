@@ -1,0 +1,110 @@
+name: Autofill PR from branch
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  autofill-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Autofill PR title & body
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+
+            if (!pr) {
+              console.log("No pull_request in context. Skipping.");
+              return;
+            }
+
+            const branchName = pr.head?.ref;
+            const baseBranch = pr.base?.ref;
+
+            console.log("Base:", baseBranch, "Head:", branchName);
+
+            // 안전장치: 값이 없으면 바로 종료
+            if (!branchName || !baseBranch) {
+              console.log("Missing head or base branch. Skipping.");
+              return;
+            }
+
+            //
+            // dev 로 가는 PR + feature/* 브랜치만 자동 처리
+            //
+            if (baseBranch !== "dev") {
+              console.log("Base branch is not dev. Skipping autofill.");
+              return;
+            }
+
+            if (!branchName.startsWith("feat/")) {
+              console.log("Head branch is not feature/*. Skipping autofill.");
+              return;
+            }
+
+            const parts = branchName.split("/", 2);
+            if (parts.length < 2) {
+              console.log("Branch name does not contain '/'. Skipping.");
+              return;
+            }
+
+            const prefix = parts[0];   // e.g. "feature"
+            const rest = parts[1];     // e.g. "MZTK-123-add_login_api"
+
+            const dashIndex = rest.indexOf("-");
+            if (dashIndex === -1) {
+              console.log("Branch name does not contain Jira key. Skipping.");
+              return;
+            }
+
+            const jiraKey = rest.substring(0, dashIndex);          // "MZTK-123"
+            const rawTitle = rest.substring(dashIndex + 1);        // "add_login_api"
+            const formattedTitle = rawTitle.replace(/_/g, " ");    // "add login api"
+
+            const generatedTitle = `[${jiraKey}] ${prefix}: ${formattedTitle}`;
+            console.log("Generated title:", generatedTitle);
+
+            //
+            //  절충 모드 규칙
+            //  - 제목: 항상 덮어쓰기 (일관성 강제)
+            //  - 본문: 비었거나 자동 생성 마커가 있을 때만 덮어쓰기
+            //
+            const body = pr.body || "";
+            const shouldUpdateBody =
+              !body.trim().length ||
+              body.includes("<!-- AUTO-GENERATED-PR-BODY -->");
+
+            console.log("Should update body?", shouldUpdateBody);
+
+            const generatedBodyLines = [
+              "<!-- AUTO-GENERATED-PR-BODY -->",
+              "",
+              "## 관련 이슈",
+              `- [${jiraKey}]`,
+              "",
+              "## 작업 내용",
+              "- ",
+              "",
+              "## 변경 범위",
+              "- ",
+              "",
+              "## 테스트",
+              "- [ ] 테스트 코드 작성 및 통과",
+              "- [ ] 로컬 스모크 테스트 완료",
+              ""
+            ];
+
+            const generatedBody = generatedBodyLines.join("\n");
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              title: generatedTitle,
+              body: shouldUpdateBody ? generatedBody : pr.body
+            });
+
+            console.log("PR updated successfully");

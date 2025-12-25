@@ -1,0 +1,17 @@
+name: Semgrep Security Scan
+
+on:
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          auditOn: pull_request
+          publishToken: ""
