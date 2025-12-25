@@ -3,77 +3,168 @@
 ## 개요
 
 - Spring Boot 3.3.4, Java 21 기반 백엔드입니다.
-- PostgreSQL, Redis를 사용하며 `.env`로 환경 변수를 주입합니다 (`me.paulschwarz:spring-dotenv`).
-- 코드 포매터는 Spotless(Google Java Format), 스타일 검증은 Checkstyle을 사용합니다.
+- PostgreSQL / Redis는 **Docker 기반으로 실행**합니다.
+- 환경 변수는 `.env` 파일을 통해 주입됩니다 (`me.paulschwarz:spring-dotenv` 사용).
+- 코드 포맷터는 Spotless(Google Java Format), 스타일 검증은 Checkstyle을 사용합니다.
+- Git Hooks + GitHub Actions CI 로 코드 품질 및 컨벤션을 자동으로 관리합니다.
+
+---
 
 ## 디렉터리 구조(주요)
 
-- `build/` – 빌드 산출물(버전 관리 대상 아님).
-- `config/checkstyle/` – 체크스타일 설정(`google_checks.xml`).
-- `gradle/` – Gradle Wrapper 설정.
-- `src/main/java/momzzangseven/mztkbe/bootstrap/MztkBeApplication.java` – 애플리케이션 엔트리포인트.
-- `src/main/resources/application.yml` – dev 프로파일 기본 설정(JPA `ddl-auto=update`, SQL 로그 노출 등).
-- `src/main/resources/db/migration/` – Flyway 마이그레이션 스크립트 위치(현재 가이드만 포함).
-- `.env.example` – 필수 환경 변수 템플릿.
-- `build.gradle`, `settings.gradle`, `gradlew*` – 빌드/실행 스크립트.
+- `build/` – 빌드 산출물(버전 관리 대상 아님)
+- `config/checkstyle/` – Checkstyle 설정(`google_checks.xml`)
+- `gradle/` – Gradle Wrapper 설정
+- `src/main/java/momzzangseven/mztkbe/bootstrap/MztkBeApplication.java` – 엔트리포인트
+- `src/main/resources/application.yml` – dev 기본 설정
+- `.env.example` – 환경 변수 템플릿
+- `build.gradle`, `settings.gradle`, `gradlew*` – 빌드/실행 스크립트
+
+---
 
 ## 로컬 개발 준비
 
-- 필수: JDK 21, 로컬 PostgreSQL/Redis (또는 접근 가능한 인스턴스).
-- `.env.example`를 복사해 `.env` 생성 후 값 채우기:
-  ```
-  cp .env.example .env
-  ```
-- `.env` 값은 디스코드를 통해 제공됩니다.
-- `SPRING_PROFILES_ACTIVE=dev`로 dev 설정을 활성화합니다.
+1️⃣ `.env` 준비
+```bash
+cp .env.example .env
+````
 
-## 실행/빌드/테스트
+2️⃣ 필수 도구
 
-- 애플리케이션 실행: `./gradlew bootRun`
-- 빌드: `./gradlew build`
-- 단위/통합 테스트: `./gradlew test`
-- 코드 스타일 검사: `./gradlew check` (Spotless 포맷 검사 포함)
-- 자동 포맷 적용: `./gradlew spotlessApply`
+* JDK 21
+* Docker
 
-## Push 전 필수 체크 (중요)
+3️⃣ Spring Profile
 
-- 모든 커밋은 아래 순서를 지킨 뒤 push 하는 것을 원칙으로 합니다.
+```
+SPRING_PROFILES_ACTIVE=dev
+```
 
-- 코드 포맷 적용:
-  `./gradlew spotlessApply`
+4️⃣ Git Hooks 설치 (최초 1회)
 
+```bash
+sh scripts/git-hooks/install.sh
+```
 
-- 코드 스타일 및 테스트 검사(필수):
-  `./gradlew check` (push 전 반드시 실행)
+---
 
+## 실행 / 빌드 / 테스트
 
-- check가 통과되지 않으면
-  → 경고/에러를 수정한 후 다시 실행
+애플리케이션 실행
 
-- 모든 검사가 통과되면 그 상태 그대로 commit & push
+```bash
+./gradlew bootRun
+```
 
-⚠️ CI에서 동일한 검사를 수행할 예정,
-로컬에서 check를 통과하지 못한 Commit은 Merge되지 않습니다.
+빌드
 
-## Docker 실행
+```bash
+./gradlew build
+```
 
-- `docker-compose.yml`로 PostgreSQL, Redis를 올릴 수 있습니다.
-- 실행:
-  `docker compose up -d`
-- 종료:
-  `docker compose down`
-- 컨테이너 포트, 볼륨, 초기 계정/DB 이름 등 설정은 `.env`로 주입됩니다.
-- 컨테이너가 준비된 뒤 애플리케이션을 실행합니다.
+테스트
 
-## DB 마이그레이션 전략
+```bash
+./gradlew test
+```
 
-- 경로: `src/main/resources/db/migration/`
-- 초기 개발 단계는 JPA `ddl-auto=update`로 스키마를 빠르게 돌려보고, 첫 배포부터는 Flyway 스크립트를 작성합니다.
-- 이름 규칙 예시: `V1__init.sql`, `V2__add_user_table.sql` (버전 오름차순, 더블 언더스코어로 구분).
-- 마이그레이션을 추가하면 `./gradlew flywayMigrate`(플러그인 추가 시) 또는 애플리케이션 기동 시 자동 적용되도록 구성합니다.
+포맷 적용(선택)
 
-## 코드/패키지 가이드
+```bash
+./gradlew spotlessApply
+```
 
-- 루트 패키지: `momzzangseven.mztkbe`.
-- 새로운 모듈은 `src/main/java` 하위에 기능 단위 패키지로 나누고, `bootstrap` 패키지는 부트스트랩/설정 클래스만 둡니다.
-- `application.yml`에 운영/스테이징 등 프로파일을 분리할 계획이라면 `spring.config.activate.on-profile` 블록을 복수 프로파일에 맞춰 추가합니다.
+---
+
+## DB & Redis (Docker)
+
+DB / Redis 실행
+
+```bash
+docker compose up -d
+```
+
+중지
+
+```bash
+docker compose down
+```
+
+DB 설정은 `.env` 로 주입됩니다.
+
+---
+
+## 커밋 규칙
+
+일반 커밋 흐름
+
+```bash
+git add .
+git commit
+```
+
+자동 처리됨
+
+* 코드 포맷 검사
+* Checkstyle 검사
+* 커밋 메시지 규칙 검사 + 자동 보정
+
+자동 생성 형식
+
+```
+[MZTK-123] feat: add login api
+```
+
+실패 메시지가 나오면 안내에 따라 수정 후 다시 커밋하세요.
+
+---
+
+## PR 규칙
+
+### 🔹 feature → dev
+
+* Base: `dev`
+* Source: `feat/...`
+
+자동 처리됨
+
+* PR 제목 자동 생성
+* Jira Key 자동 적용
+* PR 템플릿 자동 생성
+
+개발자가 할 일
+- 1️⃣ PR 생성
+- 2️⃣ 자동 작성된 내용 확인 및 보완
+- 3️⃣ 리뷰 요청 및 반영
+- 4️⃣ CI 통과 확인
+
+---
+
+### 🔹 dev → main
+
+* 릴리즈 PR은 자동으로 생성됩니다.
+* 팀 확인 후 머지 진행합니다.
+
+---
+
+## CI (자동 검사)
+
+Push / Pull Request 시 자동 실행됩니다.
+
+* 빌드
+* 테스트
+* 코드 스타일 검사
+* 보안 / 시크릿 스캔
+
+통과하지 못하면 머지 불가합니다.
+
+---
+
+## ✅ 핵심 정리
+
+1. 브랜치는 `feat/MZTK-xxx-...`
+2. 그냥 commit — 규칙은 자동 처리
+3. PR은 `feat → dev`, 리뷰 후 머지
+4. `dev → main` 릴리즈는 자동 생성
+
+---
