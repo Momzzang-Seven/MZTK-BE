@@ -29,6 +29,14 @@ kakao:
   api:
     token-uri: https://kauth.kakao.com/oauth/token
     userinfo-uri: https://kapi.kakao.com/v2/user/me
+google:
+  oauth:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+    redirect-uri: http://localhost:3000/callback
+  api:
+    token-uri: https://oauth2.googleapis.com/token
+    userinfo-uri: https://openidconnect.googleapis.com/v1/userinfo
 
 logging:
   level:
