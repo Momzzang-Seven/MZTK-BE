@@ -57,7 +57,7 @@ public class RefreshTokenRotator {
         log.debug("New refresh token generated");
 
         // 3. Create new refresh token domain model
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(refreshTokenExpiration);
+        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(refreshTokenExpiration/1000); // millisecond to second
         RefreshToken newRefreshToken = RefreshToken.create(
                 user.getId(),
                 newRefreshTokenValue,
