@@ -57,6 +57,27 @@ public enum ErrorCode {
       "SIGNUP_003", "Invalid email format", HttpStatus.BAD_REQUEST // 400
       ),
 
+    // ========================================
+    // Token Errors (TOKEN_xxx)
+    // ========================================
+    REFRESH_TOKEN_NOT_FOUND(
+            "TOKEN_001",
+            "Refresh token not found",
+            HttpStatus.BAD_REQUEST  // 400
+    ),
+
+    REFRESH_TOKEN_INVALID(
+            "TOKEN_002",
+            "Invalid refresh token",
+            HttpStatus.UNAUTHORIZED  // 401
+    ),
+
+    TOKEN_SECURITY_THREAT(
+            "TOKEN_003",
+            "Security threat detected. Token has been revoked",
+            HttpStatus.FORBIDDEN  // 403
+    ),
+
   // ========================================
   // Wallet Errors (WALLET_xxx)
   // ========================================

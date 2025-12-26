@@ -19,10 +19,6 @@ public interface ReissueTokenUseCase {
      *
      * @param command Reissue token command containing refresh token
      * @return ReissueTokenResult with new tokens
-     * @throws RefreshTokenNotFoundException if token not found in DB
-     * @throws RefreshTokenExpiredException if token is expired
-     * @throws RefreshTokenRevokedException if token is revoked
-     * @throws InvalidJwtTokenException if JWT validation fails
      */
     public ReissueTokenResult execute(ReissueTokenCommand command);
 }
