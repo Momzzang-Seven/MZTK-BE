@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.auth.application.dto;
 
+import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
+
 /**
  * Command for token reissue operation.
  *
@@ -23,12 +25,12 @@ public record ReissueTokenCommand(String refreshToken) {
      */
     public void validate() {
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new IllegalArgumentException("Refresh token is required");
+            throw new RefreshTokenNotFoundException("Refresh token is required");
         }
 
         // Basic format check (optional)
         if (refreshToken.length() < 10 || refreshToken.length() > 500) {
-            throw new IllegalArgumentException("Invalid refresh token format");
+            throw new RefreshTokenNotFoundException("Invalid refresh token format");
         }
     }
 
