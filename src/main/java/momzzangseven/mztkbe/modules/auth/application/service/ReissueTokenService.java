@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.token.TokenSecurityException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenRotator;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenValidator;
@@ -80,7 +82,7 @@ public class ReissueTokenService implements ReissueTokenUseCase {
 
         // Step 9: Load user information
         User user = loadUserPort.loadUserById(jwtUserId)
-                .orElseThrow(() -> new IllegalStateException("User not found: " + jwtUserId));
+                .orElseThrow(() -> new UserNotFoundException(jwtUserId));
 
         // Step 10: Rotate tokens (delegated)
         TokenPair tokenPair = tokenRotator.rotateTokens(user, refreshToken);
@@ -127,6 +129,4 @@ public class ReissueTokenService implements ReissueTokenUseCase {
         saveRefreshTokenPort.save(refreshToken);
         log.debug("Token marked as used: userId={}", refreshToken.getUserId());
     }
-}
-
 }

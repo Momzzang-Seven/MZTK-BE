@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.auth.infrastructure.persistence.adapter;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
 import momzzangseven.mztkbe.modules.auth.application.port.out.LoadRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
@@ -68,7 +69,7 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
             log.debug("Updating existing token: id={}", refreshToken.getId());
 
             entity = repository.findById(refreshToken.getId())
-                    .orElseThrow(() -> new IllegalArgumentException(
+                    .orElseThrow(() -> new RefreshTokenNotFoundException(
                             "RefreshToken not found with ID: " + refreshToken.getId()));
 
             updateEntityFromDomain(entity, refreshToken, tokenHash);
@@ -95,6 +96,7 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
             log.debug("Deleted refresh token with ID: {}", refreshToken.getId());
         } else {
             log.warn("Attempted to delete token without ID");
+            throw new RefreshTokenNotFoundException("Refresh token not found with ID: " + refreshToken.getId());
         }
     }
 

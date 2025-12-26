@@ -3,9 +3,8 @@ package momzzangseven.mztkbe.modules.auth.domain.model;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cglib.core.Local;
-
 import java.time.LocalDateTime;
 
 /**
@@ -137,7 +136,7 @@ public class RefreshToken {
         if (!isValid()) {
             log.error("Attempt to use invalid token: userId={}, expired={}, revoked={}",
                     userId, isExpired(), isRevoked());
-            throw new IllegalStateException("Cannot mark invalid token as used");
+            throw new RefreshTokenInvalidException("Cannot mark invalid token as used");
         }
 
         this.usedAt = LocalDateTime.now();

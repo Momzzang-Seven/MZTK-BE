@@ -31,7 +31,6 @@ public interface SaveRefreshTokenPort {
      * Delete refresh token.
      *
      * @param refreshToken Domain model to delete
-     * @exception RefreshTokenNotFoundException if token not found in DB
      */
     void delete(RefreshToken refreshToken);
 

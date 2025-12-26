@@ -2,6 +2,9 @@ package momzzangseven.mztkbe.modules.auth.application.delegation;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
+import momzzangseven.mztkbe.global.error.token.TokenSecurityException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.port.out.LoadRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
@@ -32,12 +35,12 @@ public class RefreshTokenValidator {
     public void validateJwtFormat(String tokenValue) {
         if (!jwtTokenProvider.validateToken(tokenValue)) {
             log.warn("Invalid JWT token format or signature");
-            throw new RefreshTokenNotFoundException();
+            throw new RefreshTokenNotFoundException("invalid JWT token format or signature.");
         }
 
         if (!jwtTokenProvider.isRefreshToken(tokenValue)) {
             log.warn("Token is not a refresh token");
-            throw new RefreshTokenNotFoundException();
+            throw new RefreshTokenNotFoundException("sent token is not a refresh token.");
         }
 
         log.debug("JWT format validation passed");
@@ -55,7 +58,7 @@ public class RefreshTokenValidator {
                 .findByTokenValue(tokenValue)
                 .orElseThrow(() -> {
                     log.error("Refresh token not found in database");
-                    return new RefreshTokenNotFoundException();
+                    return new RefreshTokenNotFoundException("Refresh token not found in database.");
                 });
 
         log.debug("Token loaded from database: {}", token);
@@ -64,6 +67,7 @@ public class RefreshTokenValidator {
 
     /**
      * Validate userId consistency between JWT and DB.
+     * If user id of from the  token submitted is different with the one in DB, the exception occurs.
      *
      * @param jwtUserId UserId from JWT claim
      * @param refreshToken RefreshToken from DB
@@ -73,34 +77,33 @@ public class RefreshTokenValidator {
         if (!refreshToken.getUserId().equals(jwtUserId)) {
             log.error("SECURITY: Token userId mismatch! JWT={}, DB={}",
                     jwtUserId, refreshToken.getUserId());
-            throw new SecurityException("Token userId mismatch");
+
+            // Revoke suspicious token
+            refreshToken.revoke();
+            saveRefreshTokenPort.save(refreshToken);
+
+            throw new TokenSecurityException();
         }
 
         log.debug("UserId consistency validated");
-
-        // revoke suspicious token
-        refreshToken.revoke();
-        saveRefreshTokenPort.save(refreshToken);
-
-        throw new TokenSecurityException();
     }
 
     /**
      * Validate domain business rules (expiration, revocation).
      *
      * @param refreshToken RefreshToken to validate
-     * @throws RefreshTokenExpiredException if expired
-     * @throws RefreshTokenRevokedException if revoked
+     * @throws RefreshTokenInvalidException if expired
+     * @throws RefreshTokenInvalidException if revoked
      */
     public void validateDomainRules(RefreshToken refreshToken) {
         if (!refreshToken.isValid()) {
             if (refreshToken.isExpired()) {
                 log.warn("Refresh token expired: userId={}", refreshToken.getUserId());
-                throw new RefreshTokenExpiredException();
+                throw new RefreshTokenInvalidException("expired");
             }
             if (refreshToken.isRevoked()) {
                 log.warn("Refresh token revoked: userId={}", refreshToken.getUserId());
-                throw new RefreshTokenRevokedException();
+                throw new RefreshTokenInvalidException("revoked");
             }
         }
 
