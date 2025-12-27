@@ -1,13 +1,15 @@
 name: CI
 
 on:
-  push:
-    branches: [ "main", "dev" ]
   pull_request:
     branches: [ "main", "dev" ]
+  push:
+    branches-ignore:
+      - "main"
+      - "dev"
 
 jobs:
-  build:
+  ci:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,5 +26,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Run all checks (format + lint + test)
-        run: ./gradlew clean check --no-daemon
+      - name: Clean project
+        run: ./gradlew clean --no-daemon
+
+      - name: Verify code format (Spotless)
+        run: ./gradlew spotlessCheck --no-daemon
+        
+      - name: Run static analysis (Checkstyle)
+        run: ./gradlew checkstyleMain --no-daemon
+
+      - name: Run tests
+        run: ./gradlew test --no-daemon
