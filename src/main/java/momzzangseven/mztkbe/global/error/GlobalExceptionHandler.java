@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.global.error;
 
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.token.TokenException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -41,6 +42,18 @@ public class GlobalExceptionHandler {
     // Get HTTP status from ErrorCode
     return ResponseEntity.status(ex.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
+  }
+
+  @ExceptionHandler(TokenException.class)
+  public ResponseEntity<ApiResponse<Void>> handleTokenException(TokenException ex) {
+    log.warn("Token exception: {} (code: {}, status: {})",
+            ex.getMessage(),
+            ex.getCode(),
+            ex.getHttpStatus()
+    );
+    // Get HTTP status from ErrorCode
+    return ResponseEntity.status(ex.getHttpStatus())
+            .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
   }
 
   // ========================================
