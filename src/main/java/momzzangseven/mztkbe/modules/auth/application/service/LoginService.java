@@ -48,7 +48,8 @@ public class LoginService implements LoginUseCase {
             authenticatedUser.user().getRole());
 
     // Create and save refresh token
-    String refreshToken = refreshTokenManager.createAndSaveRefreshToken(authenticatedUser.user().getId());
+    String refreshToken =
+        refreshTokenManager.createAndSaveRefreshToken(authenticatedUser.user().getId());
 
     log.info(
         "Login successful for user: {}, isNewUser: {}",
