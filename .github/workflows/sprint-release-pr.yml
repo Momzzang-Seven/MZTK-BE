@@ -1,0 +1,208 @@
+name: Create Sprint Release PR (dev → main)
+
+on:
+  # Jira Automation에서 호출
+  repository_dispatch:
+    types: [jira-sprint-release]
+
+  # 수동 실행도 가능 (테스트용/예외 상황용)
+  workflow_dispatch:
+    inputs:
+      sprint_name:
+        description: "Sprint name"
+        required: false
+      sprint_period:
+        description: "Sprint period (e.g., 2025-01-01 ~ 2025-01-14)"
+        required: false
+      summary:
+        description: "Sprint goal / short summary"
+        required: false
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create dev → main Sprint Release PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const head = "dev";   // 병합할 소스 브랜치
+            const base = "main";  // 병합 대상 브랜치
+
+            // 1) Jira / workflow_dispatch 에서 넘어온 값 정리
+            const payload = context.payload.client_payload || {};
+            const inputs = context.payload.inputs || {};
+
+            const sprintName =
+              payload.sprintName ||
+              inputs?.sprint_name ||
+              "";
+
+            const sprintPeriod =
+              payload.sprintPeriod ||
+              inputs?.sprint_period ||
+              "";
+
+            const summary =
+              payload.summary ||
+              inputs?.summary ||
+              "";
+
+            // 2) main..dev 변경 내용 조회
+            const compare = await github.rest.repos.compareCommits({
+              owner,
+              repo,
+              base,
+              head,
+            });
+
+            const commits = compare.data.commits || [];
+            const files = compare.data.files || [];
+
+            if (commits.length === 0) {
+              console.log("main과 dev 사이에 커밋이 없습니다. PR을 생성하지 않습니다.");
+              return;
+            }
+
+            // 3) 커밋 메시지로 주요 변경 자동 요약
+            const features = [];
+            const fixes = [];
+            const others = [];
+
+            for (const c of commits) {
+              const msg = c.commit.message || "";
+              const firstLine = msg.split("\n")[0];
+
+              const lower = firstLine.toLowerCase();
+
+              if (lower.startsWith("feat") || lower.startsWith("feature")) {
+                features.push(`- ${firstLine}`);
+              } else if (lower.startsWith("fix")) {
+                fixes.push(`- ${firstLine}`);
+              } else {
+                others.push(`- ${firstLine}`);
+              }
+            }
+
+            // 4) 변경 파일로 영향 영역 자동 추정
+            const touchedTopDirs = new Set();
+            let hasMigrationLikeFile = false;
+
+            for (const f of files) {
+              if (!f.filename) continue;
+              const top = f.filename.split("/")[0];
+              touchedTopDirs.add(top);
+
+              const lowerPath = f.filename.toLowerCase();
+              if (
+                lowerPath.includes("migration") ||
+                lowerPath.includes("migrate") ||
+                lowerPath.includes("db/migration") ||
+                lowerPath.includes("schema")
+              ) {
+                hasMigrationLikeFile = true;
+              }
+            }
+
+            const impactedAreas = Array.from(touchedTopDirs);
+            const impactedLine =
+              impactedAreas.length > 0
+                ? `- 영향 영역(자동 추정): ${impactedAreas.join(", ")}`
+                : "- 영향 영역(자동 추정): 파악된 변경 파일 없음";
+
+            const migrationLine = hasMigrationLikeFile
+              ? "- DB Migration 관련 파일이 포함되어 있습니다. 배포 전에 스키마 변경을 꼭 확인하세요."
+              : "- DB Migration 관련 파일은 감지되지 않았습니다.";
+
+            // 5) PR 제목 생성
+            const titleParts = [];
+            titleParts.push("[RELEASE]");
+            if (sprintName) titleParts.push(sprintName);
+            if (summary) titleParts.push("-", summary);
+            if (!sprintName && !summary) {
+              titleParts.push("dev → main");
+            }
+
+            const prTitle = titleParts.join(" ");
+
+            // 6) PR 본문 자동 생성 (사람이 채워야 할 TODO 없이)
+            const bodyLines = [];
+
+            bodyLines.push("<!-- Sprint Release : dev → main (자동 생성) -->");
+            bodyLines.push("");
+            bodyLines.push("## 🚀 Sprint Summary");
+            bodyLines.push(`- Sprint: ${sprintName || "-"} `);
+            bodyLines.push(`- 기간: ${sprintPeriod || "-"} `);
+            bodyLines.push(`- 목적: ${summary || "-"} `);
+            bodyLines.push("");
+            bodyLines.push("## 📌 주요 변경 (커밋 메시지 기반 자동 요약)");
+            if (features.length > 0) {
+              bodyLines.push("");
+              bodyLines.push("### 기능 추가 / 변경");
+              bodyLines.push(...features);
+            }
+            if (fixes.length > 0) {
+              bodyLines.push("");
+              bodyLines.push("### 버그 수정");
+              bodyLines.push(...fixes);
+            }
+            if (others.length > 0) {
+              bodyLines.push("");
+              bodyLines.push("### 기타 변경");
+              bodyLines.push(...others);
+            }
+            if (
+              features.length === 0 &&
+              fixes.length === 0 &&
+              others.length === 0
+            ) {
+              bodyLines.push("- (커밋 메시지에서 변경 내역을 찾지 못했습니다.)");
+            }
+
+            bodyLines.push("");
+            bodyLines.push("## 🧪 검증 안내 (자동 생성 텍스트)");
+            bodyLines.push(
+              "- 이 릴리즈 PR의 품질 검증은 GitHub Checks(CI) 결과와 주요 기능 수동 테스트 결과를 기준으로 합니다."
+            );
+            bodyLines.push(
+              "- 머지 전, CI가 모두 통과했는지와 주요 사용자 흐름(로그인, 결제 등)을 반드시 확인해 주세요."
+            );
+
+            bodyLines.push("");
+            bodyLines.push("## ⚠️ 영향 / 리스크 (자동 추정)");
+            bodyLines.push(impactedLine);
+            bodyLines.push(migrationLine);
+
+            bodyLines.push("");
+            bodyLines.push("## 📦 배포 메모 (자동 생성 텍스트)");
+            bodyLines.push(
+              "- 배포 후 초기 트래픽 구간에서 에러 로그/알람 모니터링을 강화하는 것을 권장합니다."
+            );
+            bodyLines.push(
+              "- 필요 시 롤백 전략(main 이전 커밋으로의 되돌리기 또는 핫픽스 브랜치 활용)을 사전에 정리해 두세요."
+            );
+
+            const prBody = bodyLines.join("\n");
+
+            console.log("Creating PR with title:", prTitle);
+
+            const pr = await github.rest.pulls.create({
+              owner,
+              repo,
+              head,
+              base,
+              title: prTitle,
+              body: prBody,
+            });
+
+            console.log("Created PR #", pr.data.number);

@@ -1,0 +1,69 @@
+name: Gitleaks Scan (CLI)
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=8.24.3
+          TMP_DIR=$(mktemp -d)
+          cd "$TMP_DIR"
+
+          curl -sL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o gitleaks.tar.gz
+
+          # 바이너리만 꺼내오기 (README, LICENSE 등은 레포에 안 풀림)
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+
+          cd -
+          rm -rf "$TMP_DIR"
+
+      - name: Run gitleaks
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        run: |
+          set +e
+
+          # SARIF + JSON 둘 다 생성
+          gitleaks detect \
+            --source=. \
+            --no-git \
+            --redact \
+            --report-format sarif \
+            --report-path gitleaks.sarif \
+            --report-format json \
+            --report-path gitleaks.json
+
+          EXIT_CODE=$?
+          echo "gitleaks exit code: $EXIT_CODE"
+
+          echo "===== gitleaks report (json) ====="
+          cat gitleaks.json || echo "no report file"
+
+          # 여기서 최종적으로 성공/실패 반영
+          exit $EXIT_CODE
+
+      - name: Upload gitleaks reports
+        if: always() # 실패해도 아티팩트는 항상 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: |
+            gitleaks.sarif
+            gitleaks.json

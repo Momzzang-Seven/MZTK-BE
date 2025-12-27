@@ -1,0 +1,155 @@
+name: Autofill PR from branch
+
+on:
+  pull_request:
+    types: [ opened, edited, synchronize, reopened ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  autofill-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Autofill PR title & body
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+
+            if (!pr) {
+              console.log("No pull_request in context. Skipping.");
+              return;
+            }
+
+            const branchName = pr.head?.ref;
+            const baseBranch = pr.base?.ref;
+
+            console.log("Base:", baseBranch, "Head:", branchName);
+
+            // 값 없으면 안전하게 종료
+            if (!branchName || !baseBranch) {
+              console.log("Missing head or base branch. Skipping.");
+              return;
+            }
+
+            //
+            // dev 로 가는 PR + feat/* 브랜치만 자동 처리
+            //
+            if (baseBranch !== "dev") {
+              console.log("Base branch is not dev. Skipping autofill.");
+              return;
+            }
+
+            if (!branchName.startsWith("feat/")) {
+              console.log("Head branch is not feat/*. Skipping autofill.");
+              return;
+            }
+
+            //
+            // 브랜치 파싱
+            // 예: feat/MOM-144-사용자는-회원탈퇴를-할-수-있어야-한다
+            //
+            const parts = branchName.split("/", 2);
+            if (parts.length < 2) {
+              console.log("Branch name does not contain '/'. Skipping.");
+              return;
+            }
+
+            const prefix = parts[0];   // "feat"
+            const rest = parts[1];     // "MOM-144-사용자는-회원탈퇴를-할-수-있어야-한다"
+
+            const restParts = rest.split("-");
+            if (restParts.length < 3) {
+              console.log("Branch name does not look like JIRA-123-some-title. Skipping.");
+              return;
+            }
+
+            const jiraKeyPrefix = restParts[0];   // "MOM"
+            const jiraKeyNum    = restParts[1];   // "144"
+            const titleParts    = restParts.slice(2); // ["사용자는", "회원탈퇴를", "할", "수", "있어야", "한다"]
+
+            const jiraKey = `${jiraKeyPrefix}-${jiraKeyNum}`;          // "MOM-144"
+            const rawTitle = titleParts.join("-");                      // "사용자는-회원탈퇴를-할-수-있어야-한다"
+            const formattedTitle = rawTitle.replace(/_/g, " ");         // 언더스코어만 공백으로 치환
+
+            const generatedTitle = `[${jiraKey}] ${prefix}: ${formattedTitle}`;
+            console.log("Generated title:", generatedTitle);
+
+            //
+            // 본문 처리
+            //
+            const originalBody = pr.body || "";
+
+            // 완전히 비었을 때 사용할 기본 템플릿 (fallback 용)
+            const generatedBodyLines = [
+              "<!-- AUTO-GENERATED-PR-BODY -->",
+              "",
+              "## 관련 이슈",
+              `- [${jiraKey}]`,
+              "",
+              "## 작업 내용",
+              "- ",
+              "",
+              "## 변경 범위",
+              "- ",
+              "",
+              "## 테스트",
+              "- [ ] 테스트 코드 작성 및 통과",
+              "- [ ] 로컬 스모크 테스트 완료",
+              ""
+            ];
+            const templateBody = generatedBodyLines.join("\n");
+
+            let newBody = originalBody;
+
+            if (!originalBody.trim().length) {
+              // 1) 본문이 완전히 비어 있으면 템플릿 전체 생성
+              console.log("Body is empty. Using template body.");
+              newBody = templateBody;
+            } else if (originalBody.includes("<!-- AUTO-GENERATED-PR-BODY -->")) {
+              // 2) 템플릿 마커가 있으면, 관련 이슈 라인의 JIRA 키만 교체
+              console.log("Body has AUTO-GENERATED marker. Updating only Jira key in issue section.");
+
+              // "- [MOM-000]" / "- [MOM-123]" / "- [ABC-9]" 형태의 첫 번째 항목만 교체
+              const jiraLineRegex = /(- \[)[A-Z]+-\d+(\])/;
+              if (jiraLineRegex.test(originalBody)) {
+                newBody = originalBody.replace(jiraLineRegex, `$1${jiraKey}$2`);
+              } else {
+                console.log("No JIRA key pattern found in body. Keeping original body.");
+              }
+            } else {
+              // 3) 마커 없으면 사용자가 전적으로 관리하는 본문이라고 보고 건드리지 않음
+              console.log("Body has no AUTO-GENERATED marker. Keeping body as-is.");
+              newBody = originalBody;
+            }
+
+            //
+            // 변경 여부 체크 (무한 루프 방지)
+            //
+            const isTitleSame = pr.title === generatedTitle;
+            const isBodySame = originalBody === newBody;
+
+            if (isTitleSame && isBodySame) {
+              console.log("Title and body already up to date. Skipping update.");
+              return;
+            }
+
+            console.log("Updating PR…");
+            try {
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                title: generatedTitle,
+                body: newBody
+              });
+
+              console.log("PR updated successfully");
+            } catch (error) {
+              console.error("Failed to update PR:", error);
+              throw error;
+            }
