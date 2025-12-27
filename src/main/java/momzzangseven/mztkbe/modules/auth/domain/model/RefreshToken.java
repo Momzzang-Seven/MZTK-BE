@@ -4,7 +4,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
-import org.springframework.beans.factory.annotation.Value;
 import java.time.LocalDateTime;
 
 /**
@@ -46,6 +45,9 @@ public class RefreshToken {
 
     /** Last time this token was used for reissuing */
     private LocalDateTime usedAt;
+
+    /** Maximum allowed token validity period (in days) */
+    private static final int MAX_TOKEN_DAYS = 7;
 
     // ============================================
     // Factory Methods
@@ -237,9 +239,6 @@ public class RefreshToken {
         }
     }
 
-    @Value("${jwt.refresh-token-expiration}")
-    private static int MAX_TOKEN_DAYS;
-
     /** Validate expiration timestamp.
      * This method is used when a new Refresh Token is created.
      * This method checks whether the provided expiration date is valid or not.
@@ -254,10 +253,11 @@ public class RefreshToken {
             throw new IllegalArgumentException("Expiration time must be in the future");
         }
 
-        // Business Rule: Token should not be valid for more than max days.
+        // Business Rule: Token should not be valid for more than MAX_TOKEN_DAYS
         LocalDateTime maxExpiration = now.plusDays(MAX_TOKEN_DAYS);
         if (expiresAt.isAfter(maxExpiration)) {
-            throw new IllegalArgumentException("Token expiration cannot exceed 30 days");
+            throw new IllegalArgumentException(
+                "Token expiration cannot exceed " + MAX_TOKEN_DAYS + " days");
         }
     }
 
