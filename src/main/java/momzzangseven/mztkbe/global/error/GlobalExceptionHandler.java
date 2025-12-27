@@ -46,14 +46,14 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(TokenException.class)
   public ResponseEntity<ApiResponse<Void>> handleTokenException(TokenException ex) {
-    log.warn("Token exception: {} (code: {}, status: {})",
-            ex.getMessage(),
-            ex.getCode(),
-            ex.getHttpStatus()
-    );
+    log.warn(
+        "Token exception: {} (code: {}, status: {})",
+        ex.getMessage(),
+        ex.getCode(),
+        ex.getHttpStatus());
     // Get HTTP status from ErrorCode
     return ResponseEntity.status(ex.getHttpStatus())
-            .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
+        .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
   }
 
   // ========================================

@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.auth.api.controller;
 import jakarta.validation.Valid;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginResponseDTO;
@@ -82,7 +81,7 @@ public class AuthController {
 
   @PostMapping("/reissue")
   public ResponseEntity<ApiResponse<ReissueTokenResponseDTO>> reissue(
-          @CookieValue(value = "refreshToken", required = true) String refreshToken) {
+      @CookieValue(value = "refreshToken", required = true) String refreshToken) {
 
     // 1. Convert to Application Command
     ReissueTokenCommand command = ReissueTokenCommand.of(refreshToken);
@@ -95,13 +94,13 @@ public class AuthController {
 
     // 4. Set Response Cookie (New Refresh Token)
     ResponseCookie newRefreshTokenCookie =
-            ResponseCookie.from("refreshToken", result.refreshToken())
-                    .httpOnly(true)
-                    .secure(false)
-                    .path("/auth")
-                    .maxAge(Duration.ofDays(7))
-                    .sameSite("Strict")
-                    .build();
+        ResponseCookie.from("refreshToken", result.refreshToken())
+            .httpOnly(true)
+            .secure(false)
+            .path("/auth")
+            .maxAge(Duration.ofDays(7))
+            .sameSite("Strict")
+            .build();
 
     // 5. Set headers
     HttpHeaders headers = new HttpHeaders();
@@ -109,8 +108,8 @@ public class AuthController {
 
     // 6. Return Response
     return ResponseEntity.ok()
-            .contentType(MediaType.APPLICATION_JSON)
-            .headers(headers)
-            .body(ApiResponse.success("Token successfully reissued", response));
+        .contentType(MediaType.APPLICATION_JSON)
+        .headers(headers)
+        .body(ApiResponse.success("Token successfully reissued", response));
   }
 }

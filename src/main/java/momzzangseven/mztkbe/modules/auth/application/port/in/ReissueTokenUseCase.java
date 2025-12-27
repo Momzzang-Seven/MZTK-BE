@@ -6,19 +6,16 @@ import momzzangseven.mztkbe.modules.auth.application.dto.ReissueTokenResult;
 /**
  * Token Reissue Use Case (Input Port).
  *
- * - API layer depends on this interface
- * - Implemented by ReissueTokenService
+ * <p>- API layer depends on this interface - Implemented by ReissueTokenService
  *
- * <p>Responsibility:
- * - Accept refresh token from client
- * - Validate and issue new tokens
+ * <p>Responsibility: - Accept refresh token from client - Validate and issue new tokens
  */
 public interface ReissueTokenUseCase {
-    /**
-     * Reissue access token and refresh token.
-     *
-     * @param command Reissue token command containing refresh token
-     * @return ReissueTokenResult with new tokens
-     */
-    public ReissueTokenResult execute(ReissueTokenCommand command);
+  /**
+   * Reissue access token and refresh token.
+   *
+   * @param command Reissue token command containing refresh token
+   * @return ReissueTokenResult with new tokens
+   */
+  public ReissueTokenResult execute(ReissueTokenCommand command);
 }
