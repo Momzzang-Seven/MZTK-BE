@@ -47,12 +47,7 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshTokenEnt
    * @param userId User's unique identifier
    * @return Optional of RefreshTokenEntity
    */
-  @Query(
-      "SELECT rt FROM RefreshTokenEntity rt "
-          + "WHERE rt.userId = :userId "
-          + "ORDER BY rt.createdAt DESC "
-          + "LIMIT 1")
-  Optional<RefreshTokenEntity> findByUserId(@Param("userId") Long userId);
+  Optional<RefreshTokenEntity> findFirstByUserIdOrderByCreatedAtDesc(Long userId);
 
   /**
    * Find all refresh tokens for a user.

@@ -76,7 +76,8 @@ public class RefreshTokenManager {
         LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshTokenExpiresIn()));
 
     // 3. Create domain model
-    RefreshToken refreshToken = RefreshToken.create(userId, refreshTokenValue, expiresAt);
+    RefreshToken refreshToken =
+        RefreshToken.create(userId, refreshTokenValue, expiresAt, LocalDateTime.now());
 
     // 4. Persist to database
     saveRefreshTokenPort.save(refreshToken);
