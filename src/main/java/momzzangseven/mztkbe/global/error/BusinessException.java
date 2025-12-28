@@ -7,9 +7,7 @@ import org.springframework.http.HttpStatus;
  */
 public class BusinessException extends RuntimeException {
 
-  /**
-   * Error code enum containing code, message, and HTTP status.
-   */
+  /** Error code enum containing code, message, and HTTP status. */
   private final ErrorCode errorCode;
 
   /**

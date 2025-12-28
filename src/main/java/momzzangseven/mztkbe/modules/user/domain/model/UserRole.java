@@ -12,9 +12,7 @@ public enum UserRole {
    */
   USER("ROLE_USER", "Regular User", 1),
 
-  /**
-   * Administrator role with full permissions.
-   */
+  /** Administrator role with full permissions. */
   ADMIN("ROLE_ADMIN", "Administrator", 99);
 
   private final String authority;

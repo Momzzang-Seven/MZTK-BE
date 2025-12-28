@@ -7,9 +7,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
  */
 public class RefreshTokenInvalidException extends TokenException {
 
-    /**
-     * Create exception with contextual information.
-     */
+    /** Create exception with contextual information. */
   public RefreshTokenInvalidException(String detail) {
     super(
         ErrorCode.REFRESH_TOKEN_INVALID,

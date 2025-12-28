@@ -32,9 +32,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     return userJpaRepository.findByEmail(email).map(this::mapToDomain);
   }
 
-  /**
-   * LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회.
-   */
+  /** LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회. */
   @Override
   @Transactional(readOnly = true)
   public Optional<User> findByProviderAndProviderUserId(
