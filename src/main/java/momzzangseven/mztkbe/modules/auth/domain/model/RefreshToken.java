@@ -57,19 +57,18 @@ public class RefreshToken {
    * @return New RefreshToken instance
    * @throws IllegalArgumentException if validation fails
    */
-  public static RefreshToken create(Long userId, String tokenValue, LocalDateTime expiresAt) {
+  public static RefreshToken create(
+      Long userId, String tokenValue, LocalDateTime expiresAt, LocalDateTime createdAt) {
     validateUserId(userId);
     validateTokenValue(tokenValue);
     validateExpiresAt(expiresAt);
-
-    LocalDateTime now = LocalDateTime.now();
 
     return RefreshToken.builder()
         .userId(userId)
         .tokenValue(tokenValue)
         .expiresAt(expiresAt)
         .revokedAt(null)
-        .createdAt(now)
+        .createdAt(createdAt)
         .usedAt(null)
         .build();
   }

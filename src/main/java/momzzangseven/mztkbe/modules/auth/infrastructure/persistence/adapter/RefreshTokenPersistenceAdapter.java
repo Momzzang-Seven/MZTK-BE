@@ -36,9 +36,8 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
   @Override
   @Transactional(readOnly = true)
   public Optional<RefreshToken> findByTokenValue(String tokenValue) {
-    log.debug("Loading refresh token by value: " + tokenValue);
+    log.debug("Loading refresh token by value");
     String tokenHash = hashToken(tokenValue);
-    log.debug("Found refresh token hash: " + tokenHash);
 
     return repository.findByTokenHash(tokenHash).map(entity -> mapToDomain(entity, tokenValue));
   }
@@ -155,11 +154,7 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
   private void updateEntityFromDomain(
       RefreshTokenEntity entity, RefreshToken token, String tokenHash) {
 
-    entity.setTokenHash(tokenHash);
-    entity.setExpiresAt(token.getExpiresAt());
-    entity.setRevokedAt(token.getRevokedAt());
-    entity.setUsedAt(token.getUsedAt());
-    // Note: userId, createdAt should not be updated
+    entity.updateFrom(token, tokenHash);
   }
 
   // ========== Hash Utility ==========
