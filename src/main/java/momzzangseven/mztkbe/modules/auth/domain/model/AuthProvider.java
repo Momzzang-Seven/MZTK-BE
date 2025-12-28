@@ -15,9 +15,7 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum AuthProvider {
-    /**
-     * Local authentication (email/password) for direct sign-ups.
-     */
+  /** Local authentication (email/password) for direct sign-ups. */
   LOCAL("LOCAL", "Email/Password Authentication"),
 
   /** Kakao OAuth authentication for Kakao users. */
