@@ -1,11 +1,10 @@
 package momzzangseven.mztkbe.modules.auth.domain.model;
 
+import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
-
-import java.time.LocalDateTime;
 
 /**
  * Refresh Token Domain Model.
@@ -21,32 +20,28 @@ import java.time.LocalDateTime;
 @Builder
 public class RefreshToken {
 
-    /**
-     * Maximum allowed token validity period (in days).
-     */
-    private static final int MAX_TOKEN_DAYS = 7;
+  /** Maximum allowed token validity period (in days). */
+  private static final int MAX_TOKEN_DAYS = 7;
 
-    /**
-     * Unique identifier (database primary key).
-     */
-    private Long id;
+  /** Unique identifier (database primary key). */
+  private Long id;
 
-    /** User ID who owns this token. */
-    private Long userId;
+  /** User ID who owns this token. */
+  private Long userId;
 
-    /** Actual JWT token value (encrypted string). */
+  /** Actual JWT token value (encrypted string). */
   private String tokenValue;
 
-    /** Token expiration timestamp. */
+  /** Token expiration timestamp. */
   private LocalDateTime expiresAt;
 
-    /** Token Revocation timestamp. */
+  /** Token Revocation timestamp. */
   private LocalDateTime revokedAt;
 
-    /** Token creation timestamp. */
+  /** Token creation timestamp. */
   private LocalDateTime createdAt;
 
-    /** Last time this token was used for reissuing. */
+  /** Last time this token was used for reissuing. */
   private LocalDateTime usedAt;
 
   // ============================================
@@ -288,10 +283,10 @@ public class RefreshToken {
    */
   @Override
   public boolean equals(Object o) {
-      if (this == o) {
-          return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
       return false;
     }
 

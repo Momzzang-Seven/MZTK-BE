@@ -2,9 +2,7 @@ package momzzangseven.mztkbe.global.error;
 
 import org.springframework.http.HttpStatus;
 
-/**
- * Base class for business errors annotated with an ErrorCode.
- */
+/** Base class for business errors annotated with an ErrorCode. */
 public class BusinessException extends RuntimeException {
 
   /** Error code enum containing code, message, and HTTP status. */

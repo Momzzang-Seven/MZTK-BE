@@ -1,16 +1,13 @@
 package momzzangseven.mztkbe.modules.user.domain.model;
 
+import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.time.LocalDateTime;
-
-/**
- * Domain model representing an application user.
- */
+/** Domain model representing an application user. */
 @Slf4j
 @Getter
 @Builder
@@ -34,7 +31,7 @@ public class User {
    */
   private String providerUserId;
 
-    /** Connected Web3 wallet address. */
+  /** Connected Web3 wallet address. */
   private String walletAddress;
 
   private AuthProvider authProvider;
@@ -84,7 +81,7 @@ public class User {
 
     LocalDateTime now = LocalDateTime.now();
     return User.builder()
-            .providerUserId(kakaoId)
+        .providerUserId(kakaoId)
         .email(email)
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
@@ -110,7 +107,7 @@ public class User {
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
         .authProvider(AuthProvider.GOOGLE)
-            .providerUserId(googleId)
+        .providerUserId(googleId)
         .role(UserRole.USER)
         .lastLoginAt(now)
         .createdAt(now)

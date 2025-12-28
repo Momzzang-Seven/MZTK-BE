@@ -14,9 +14,7 @@ public class GoogleAuthProperties {
   private OAuth oauth = new OAuth();
   private Api api = new Api();
 
-  /**
-   * Google OAuth client configuration values.
-   */
+  /** Google OAuth client configuration values. */
   @Getter
   @Setter
   public static class OAuth {
