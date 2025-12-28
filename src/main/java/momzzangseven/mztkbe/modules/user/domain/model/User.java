@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -24,7 +26,7 @@ public class User {
    * Provider-specific user ID. - KAKAO: Kakao user ID (String) - GOOGLE: Google user ID (String) -
    * LOCAL: null
    */
-  private String provider_user_id;
+  private String providerUserId;
 
   /** Connected Web3 wallet address */
   private String walletAddress;
@@ -72,7 +74,7 @@ public class User {
    * @param provider AuthProvider (KAKAO, GOOGLE, etc.)
    * @param providerUserId Unique ID from the provider
    * @param email User's email
-   * @param nickname User's nickname
+   * @param nickname User's nickname (must not be null/blank)
    * @param profileImageUrl Profile image URL
    * @return New User instance
    */
@@ -82,17 +84,19 @@ public class User {
       String email,
       String nickname,
       String profileImageUrl) {
-    if (provider == null || AuthProvider.LOCAL.equals(provider)) {
+    if (provider == null || !provider.isSocialLogin()) {
       throw new IllegalArgumentException("Invalid social provider: " + provider);
     }
     if (providerUserId == null || providerUserId.isBlank()) {
       throw new IllegalArgumentException("Provider User ID is required");
     }
+    validateEmail(email);
+    validateNickname(nickname);
 
     LocalDateTime now = LocalDateTime.now();
     return User.builder()
         .authProvider(provider)
-        .provider_user_id(providerUserId)
+        .providerUserId(providerUserId)
         .email(email)
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
@@ -108,12 +112,13 @@ public class User {
   // ============================================
 
   /**
-   * Validate password for LOCAL authentication.
+   * Validates the password for LOCAL authentication.
    *
-   * @param rawPassword Plain text password from login request
+   * @param rawPassword plain text password from login request
    * @param encoder BCrypt password encoder
    * @return true if password matches, false otherwise
-   * @throws IllegalStateException if called on non-LOCAL user
+   * @throws IllegalStateException if called on a non-LOCAL user
+   * @throws BusinessException if a critical system error occurs during validation
    */
   public boolean validatePassword(String rawPassword, PasswordEncoder encoder) {
     // Business Rule 1: Only LOCAL users can validate passwords
@@ -150,8 +155,11 @@ public class User {
 
       return matches;
     } catch (Exception e) {
-      log.error("Error during password validation for user: {}", this.id, e);
-      return false;
+      log.error("Critical error during password validation for user: {}", this.id, e);
+      // We throw a generic BusinessException with INTERNAL_SERVER_ERROR or DATABASE_ERROR
+      // but here it's more like a system error.
+      throw new BusinessException(
+          ErrorCode.INTERNAL_SERVER_ERROR, "Error during password validation", e);
     }
   }
 

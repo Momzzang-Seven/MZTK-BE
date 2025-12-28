@@ -3,6 +3,9 @@ package momzzangseven.mztkbe.modules.user.application.service;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginOutcome;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginUseCase;
@@ -12,6 +15,7 @@ import momzzangseven.mztkbe.modules.user.domain.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService implements SocialLoginUseCase {
@@ -31,8 +35,7 @@ public class UserService implements SocialLoginUseCase {
    * @param nickname the user's nickname (optional, will be generated if null/blank)
    * @param profileImageUrl the user's profile image URL
    * @return the result of the social login, containing the user and new user flag
-   * @throws IllegalArgumentException if provider or providerUserId is invalid
-   * @throws IllegalStateException if email is missing or account exists with different provider
+   * @throws BusinessException if provider, email, or social ID state is invalid
    */
   @Override
   @Transactional
@@ -44,23 +47,30 @@ public class UserService implements SocialLoginUseCase {
       String profileImageUrl) {
 
     if (provider == null || provider.isBlank()) {
-      throw new IllegalArgumentException("provider is required");
+      throw new BusinessException(ErrorCode.MISSING_REQUIRED_FIELD, "provider is required");
     }
-    // Convert provider string to AuthProvider enum for internal use
+
+    // Convert provider string to AuthProvider enum (Case-insensitive)
     AuthProvider authProvider;
     try {
-      authProvider = AuthProvider.valueOf(provider);
+      authProvider = AuthProvider.valueOf(provider.toUpperCase());
     } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException("Unsupported social provider: " + provider, e);
+      log.error("Unsupported social provider requested: {}", provider);
+      throw new BusinessException(
+          ErrorCode.UNSUPPORTED_PROVIDER, "Unsupported social provider: " + provider);
     }
 
     if (providerUserId == null || providerUserId.isBlank()) {
-      throw new IllegalArgumentException("providerUserId is required");
+      throw new BusinessException(ErrorCode.MISSING_REQUIRED_FIELD, "providerUserId is required");
     }
 
     if (email == null || email.isBlank()) {
-      throw new IllegalStateException("email is required for social login");
+      throw new BusinessException(
+          ErrorCode.MISSING_REQUIRED_FIELD, "email is required for social login");
     }
+
+    // Standardize email to lowercase for consistent lookup
+    String normalizedEmail = email.toLowerCase();
 
     Optional<User> byProvider =
         loadUserPort.findByProviderAndProviderUserId(authProvider, providerUserId);
@@ -72,29 +82,51 @@ public class UserService implements SocialLoginUseCase {
       return SocialLoginOutcome.existing(updatedUser);
     }
 
-    Optional<User> byEmail = loadUserPort.loadUserByEmail(email);
+    // Check if email already exists with different provider or same provider but different ID
+    Optional<User> byEmail = loadUserPort.loadUserByEmail(normalizedEmail);
     if (byEmail.isPresent()) {
       User existing = byEmail.get();
 
       if (existing.getAuthProvider() != authProvider) {
-        throw new IllegalStateException(
-            "Account already exists with a different provider. Email=" + email);
+        log.warn(
+            "Social login conflict: Email {} is already registered with provider {}",
+            normalizedEmail,
+            existing.getAuthProvider());
+        throw new BusinessException(
+            ErrorCode.DUPLICATE_EMAIL,
+            String.format(
+                "The email %s is already associated with a %s account. Please use that to login.",
+                normalizedEmail, existing.getAuthProvider()));
       }
 
-      throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
+      log.error(
+          "Social login ID mismatch: Email {} exists for {} but providerUserId differs. Existing={}, Attempted={}",
+          normalizedEmail,
+          authProvider,
+          existing.getProviderUserId(),
+          providerUserId);
+      throw new BusinessException(
+          ErrorCode.INTERNAL_SERVER_ERROR,
+          "An account with this email already exists, but the social IDs do not match. Please contact support.");
     }
 
-    // Generate default nickname if missing
+    // Handle missing nickname - Generation logic moved from Domain to Application Service
     String finalNickname = nickname;
     if (finalNickname == null || finalNickname.isBlank()) {
-      finalNickname =
-          authProvider.name().toLowerCase() + "_" + UUID.randomUUID().toString().substring(0, 8);
+      finalNickname = generateDefaultNickname(authProvider);
     }
 
     User created =
-        User.createFromSocial(authProvider, providerUserId, email, finalNickname, profileImageUrl);
+        User.createFromSocial(
+            authProvider, providerUserId, normalizedEmail, finalNickname, profileImageUrl);
 
     User saved = saveUserPort.saveUser(created);
+    log.info("New social user registered: {} via {}", normalizedEmail, authProvider);
     return SocialLoginOutcome.newUser(saved);
+  }
+
+  /** Generates a default random nickname based on the provider. */
+  private String generateDefaultNickname(AuthProvider provider) {
+    return provider.name().toLowerCase() + "_" + UUID.randomUUID().toString().substring(0, 8);
   }
 }

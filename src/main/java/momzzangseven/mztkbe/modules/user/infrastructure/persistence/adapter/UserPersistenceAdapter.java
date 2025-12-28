@@ -94,7 +94,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .password(entity.getPasswordHash())
         .nickname(entity.getNickname())
         .profileImageUrl(entity.getProfileImageUrl())
-        .provider_user_id(entity.getProviderUserId())
+        .providerUserId(entity.getProviderUserId())
         .walletAddress(entity.getWalletAddress())
         .authProvider(entity.getProvider())
         .role(entity.getRole())
@@ -106,7 +106,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
 
   /** Convert User (Domain) to UserEntity (Infrastructure). Used for creating new entities. */
   private UserEntity mapToEntity(User user) {
-    String providerUserId = user.getProvider_user_id();
+    String providerUserId = user.getProviderUserId();
 
     // LOCAL은 providerUserId가 없으니 강제로 만들어 넣기
     if (providerUserId == null || providerUserId.isBlank()) {
@@ -137,7 +137,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     entity.setPasswordHash(user.getPassword());
     entity.setNickname(user.getNickname());
     entity.setProfileImageUrl(user.getProfileImageUrl());
-    entity.setProviderUserId(user.getProvider_user_id());
+    entity.setProviderUserId(user.getProviderUserId());
     entity.setWalletAddress(user.getWalletAddress());
     entity.setProvider(user.getAuthProvider());
     entity.setRole(user.getRole());
