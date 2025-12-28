@@ -168,7 +168,7 @@ public class RefreshTokenValidator {
     // Step 3: validate domain rule
     validateDomainRules(dbRefreshToken);
 
-    // step 4: Check for the token reuse
+    // Step 4: Check for the token reuse
     checkTokenReuse(dbRefreshToken, 5);
 
     // Step 5: mark token as used. Update the row from the DB
