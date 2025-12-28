@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.auth.api.controller;
 
 import jakarta.validation.Valid;
-import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginRequestDTO;
@@ -18,6 +17,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/auth")

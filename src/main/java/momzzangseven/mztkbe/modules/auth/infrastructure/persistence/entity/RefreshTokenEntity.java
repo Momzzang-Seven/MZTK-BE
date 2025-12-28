@@ -1,9 +1,10 @@
 package momzzangseven.mztkbe.modules.auth.infrastructure.persistence.entity;
 
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
 import lombok.*;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "refresh_tokens")
