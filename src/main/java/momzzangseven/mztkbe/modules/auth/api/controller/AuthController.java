@@ -65,9 +65,7 @@ public class AuthController {
         .body(ApiResponse.success(response));
   }
 
-    /**
-     * Register a new LOCAL user and return basic profile data.
-     */
+    /** Register a new LOCAL user and return basic profile data. */
   @PostMapping("/signup")
   public ResponseEntity<ApiResponse<SignupResponseDTO>> signup(
       @Valid @RequestBody SignupRequestDTO request) {

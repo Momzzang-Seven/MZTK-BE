@@ -25,9 +25,7 @@ public class GoogleAuthProperties {
     private String redirectUri;
   }
 
-  /**
-   * Google API endpoints used for token and userinfo retrieval.
-   */
+  /** Google API endpoints used for token and userinfo retrieval. */
   @Getter
   @Setter
   public static class Api {

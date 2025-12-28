@@ -24,9 +24,7 @@ public class KakaoAuthProperties {
     private String redirect; // redirect_uri
   }
 
-  /**
-   * Kakao external API endpoints that we call.
-   */
+  /** Kakao external API endpoints that we call. */
   @Getter
   @Setter
   public static class Api {

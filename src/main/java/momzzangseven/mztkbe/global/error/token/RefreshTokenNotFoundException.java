@@ -7,9 +7,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
  */
 public class RefreshTokenNotFoundException extends TokenException {
 
-  /**
-   * Create exception indicating a token was not found.
-   */
+    /** Create exception indicating a token was not found. */
   public RefreshTokenNotFoundException() {
     super(ErrorCode.REFRESH_TOKEN_NOT_FOUND);
   }

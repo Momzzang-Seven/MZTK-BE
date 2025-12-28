@@ -34,9 +34,7 @@ public class User {
    */
   private String providerUserId;
 
-  /**
-   * Connected Web3 wallet address.
-   */
+    /** Connected Web3 wallet address. */
   private String walletAddress;
 
   private AuthProvider authProvider;

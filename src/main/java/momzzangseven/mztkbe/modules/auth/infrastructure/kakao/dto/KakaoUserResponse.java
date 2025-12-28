@@ -17,9 +17,7 @@ public class KakaoUserResponse {
   @JsonProperty("kakao_account")
   private KakaoAccount kakaoAccount;
 
-  /**
-   * Profile properties sent inside Kakao user response.
-   */
+  /** Profile properties sent inside Kakao user response. */
   @Getter
   @ToString
   public static class Properties {

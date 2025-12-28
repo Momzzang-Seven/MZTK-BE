@@ -1,11 +1,10 @@
 package momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.*;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(

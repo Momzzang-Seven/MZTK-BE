@@ -25,20 +25,27 @@ public class RefreshToken {
      * Maximum allowed token validity period (in days).
      */
     private static final int MAX_TOKEN_DAYS = 7;
+
     /**
      * Unique identifier (database primary key).
      */
-  private Long id;
+    private Long id;
+
     /** User ID who owns this token. */
-  private Long userId;
+    private Long userId;
+
     /** Actual JWT token value (encrypted string). */
   private String tokenValue;
+
     /** Token expiration timestamp. */
   private LocalDateTime expiresAt;
+
     /** Token Revocation timestamp. */
   private LocalDateTime revokedAt;
+
     /** Token creation timestamp. */
   private LocalDateTime createdAt;
+
     /** Last time this token was used for reissuing. */
   private LocalDateTime usedAt;
 
@@ -285,7 +292,7 @@ public class RefreshToken {
           return true;
       }
       if (o == null || getClass() != o.getClass()) {
-          return false;
+      return false;
     }
 
     RefreshToken that = (RefreshToken) o;

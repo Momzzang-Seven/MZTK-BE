@@ -20,9 +20,7 @@ public enum AuthProvider {
    */
   LOCAL("LOCAL", "Email/Password Authentication"),
 
-  /**
-   * Kakao OAuth authentication for Kakao users.
-   */
+  /** Kakao OAuth authentication for Kakao users. */
   KAKAO("KAKAO", "Kakao OAuth Authentication"),
 
   /** Google OAuth authentication for Google users. */
