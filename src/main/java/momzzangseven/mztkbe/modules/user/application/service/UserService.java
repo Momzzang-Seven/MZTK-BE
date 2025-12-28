@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.user.application.service;
 
 import java.util.Optional;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginOutcome;
@@ -18,6 +19,21 @@ public class UserService implements SocialLoginUseCase {
   private final LoadUserPort loadUserPort;
   private final SaveUserPort saveUserPort;
 
+  /**
+   * Handles social login or registration.
+   *
+   * <p>If the user exists, updates the last login time. If not, creates a new user. If the nickname
+   * is missing, generates a default one.
+   *
+   * @param provider the social provider name (e.g., "KAKAO", "GOOGLE")
+   * @param providerUserId the unique user ID from the provider
+   * @param email the user's email address
+   * @param nickname the user's nickname (optional, will be generated if null/blank)
+   * @param profileImageUrl the user's profile image URL
+   * @return the result of the social login, containing the user and new user flag
+   * @throws IllegalArgumentException if provider or providerUserId is invalid
+   * @throws IllegalStateException if email is missing or account exists with different provider
+   */
   @Override
   @Transactional
   public SocialLoginOutcome loginOrRegisterSocial(
@@ -50,7 +66,10 @@ public class UserService implements SocialLoginUseCase {
         loadUserPort.findByProviderAndProviderUserId(authProvider, providerUserId);
 
     if (byProvider.isPresent()) {
-      return SocialLoginOutcome.existing(byProvider.get());
+      User user = byProvider.get();
+      user.updateLastLogin();
+      User updatedUser = saveUserPort.saveUser(user);
+      return SocialLoginOutcome.existing(updatedUser);
     }
 
     Optional<User> byEmail = loadUserPort.loadUserByEmail(email);
@@ -65,13 +84,15 @@ public class UserService implements SocialLoginUseCase {
       throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
     }
 
+    // Generate default nickname if missing
+    String finalNickname = nickname;
+    if (finalNickname == null || finalNickname.isBlank()) {
+      finalNickname =
+          authProvider.name().toLowerCase() + "_" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
     User created =
-        switch (authProvider) {
-          case KAKAO -> User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
-          case GOOGLE -> User.createFromGoogle(providerUserId, email, nickname, profileImageUrl);
-          default ->
-              throw new IllegalArgumentException("Unsupported social provider: " + authProvider);
-        };
+        User.createFromSocial(authProvider, providerUserId, email, finalNickname, profileImageUrl);
 
     User saved = saveUserPort.saveUser(created);
     return SocialLoginOutcome.newUser(saved);

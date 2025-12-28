@@ -66,43 +66,36 @@ public class User {
         .build();
   }
 
-  /** Create a new user from Kakao OAuth data. */
-  public static User createFromKakao(
-      String kakaoId, String email, String nickname, String profileImageUrl) {
-    // Business Rule: Kakao ID is required
-    if (kakaoId == null) {
-      throw new IllegalArgumentException("Kakao ID is required");
+  /**
+   * Create a new user from Social OAuth data (Kakao/Google/etc).
+   *
+   * @param provider AuthProvider (KAKAO, GOOGLE, etc.)
+   * @param providerUserId Unique ID from the provider
+   * @param email User's email
+   * @param nickname User's nickname
+   * @param profileImageUrl Profile image URL
+   * @return New User instance
+   */
+  public static User createFromSocial(
+      AuthProvider provider,
+      String providerUserId,
+      String email,
+      String nickname,
+      String profileImageUrl) {
+    if (provider == null || AuthProvider.LOCAL.equals(provider)) {
+      throw new IllegalArgumentException("Invalid social provider: " + provider);
+    }
+    if (providerUserId == null || providerUserId.isBlank()) {
+      throw new IllegalArgumentException("Provider User ID is required");
     }
 
     LocalDateTime now = LocalDateTime.now();
     return User.builder()
-        .provider_user_id(kakaoId)
+        .authProvider(provider)
+        .provider_user_id(providerUserId)
         .email(email)
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
-        .authProvider(AuthProvider.KAKAO)
-        .role(UserRole.USER)
-        .lastLoginAt(now)
-        .createdAt(now)
-        .updatedAt(now)
-        .build();
-  }
-
-  /** Create a user from Google OAuth. */
-  public static User createFromGoogle(
-      String googleId, String email, String nickname, String profileImageUrl) {
-    if (googleId == null || googleId.isBlank()) {
-      throw new IllegalArgumentException("Google ID is required");
-    }
-
-    LocalDateTime now = LocalDateTime.now();
-
-    return User.builder()
-        .email(email)
-        .nickname(nickname)
-        .profileImageUrl(profileImageUrl)
-        .authProvider(AuthProvider.GOOGLE)
-        .provider_user_id(googleId)
         .role(UserRole.USER)
         .lastLoginAt(now)
         .createdAt(now)
