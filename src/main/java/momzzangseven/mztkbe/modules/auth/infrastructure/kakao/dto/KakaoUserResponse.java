@@ -4,9 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.ToString;
 
-/**
- * Kakao user profile response payload.
- */
+/** Kakao user profile response payload. */
 @Getter
 @ToString
 public class KakaoUserResponse {

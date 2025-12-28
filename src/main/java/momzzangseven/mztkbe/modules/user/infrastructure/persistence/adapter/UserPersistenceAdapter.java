@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.user.infrastructure.persistence.adapter;
 
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
@@ -11,11 +12,7 @@ import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.U
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
-
-/**
- * Persistence adapter implementing user port interfaces using UserJpaRepository.
- */
+/** Persistence adapter implementing user port interfaces using UserJpaRepository. */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -105,7 +102,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .password(entity.getPasswordHash())
         .nickname(entity.getNickname())
         .profileImageUrl(entity.getProfileImageUrl())
-            .providerUserId(entity.getProviderUserId())
+        .providerUserId(entity.getProviderUserId())
         .walletAddress(entity.getWalletAddress())
         .authProvider(entity.getProvider())
         .role(entity.getRole())

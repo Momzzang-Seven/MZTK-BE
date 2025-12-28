@@ -14,9 +14,7 @@ public class KakaoAuthProperties {
   private Auth auth = new Auth();
   private Api api = new Api();
 
-  /**
-   * Kakao OAuth client configuration values.
-   */
+  /** Kakao OAuth client configuration values. */
   @Getter
   @Setter
   public static class Auth {
