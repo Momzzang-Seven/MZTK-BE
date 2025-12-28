@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.auth.application.delegation;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
@@ -10,9 +12,6 @@ import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Duration;
-import java.time.LocalDateTime;
 
 /**
  * Handles token rotation (issuing new tokens and revoking old ones).
@@ -48,10 +47,10 @@ public class RefreshTokenManager {
     // 1. Generate new access token
     String newAccessToken =
         jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
-      log.debug(
-              "New access token generated for user {} (length: {})",
-              user.getId(),
-              newAccessToken.length());
+    log.debug(
+        "New access token generated for user {} (length: {})",
+        user.getId(),
+        newAccessToken.length());
 
     // 2. Generate and save new refresh token
     String newRefreshTokenValue = createAndSaveRefreshToken(user.getId());
@@ -90,11 +89,11 @@ public class RefreshTokenManager {
     return refreshTokenValue;
   }
 
-    /**
-     * Revoke the provided refresh token and persist the change.
-     *
-     * @param refreshToken Refresh token to revoke
-     */
+  /**
+   * Revoke the provided refresh token and persist the change.
+   *
+   * @param refreshToken Refresh token to revoke
+   */
   public void revokeToken(RefreshToken refreshToken) {
     log.debug("Revoking refresh token for userId: {}", refreshToken.getUserId());
     refreshToken.revoke();

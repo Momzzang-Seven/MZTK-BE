@@ -1,5 +1,9 @@
 package momzzangseven.mztkbe.modules.auth.infrastructure.persistence.adapter;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
@@ -11,11 +15,6 @@ import momzzangseven.mztkbe.modules.auth.infrastructure.persistence.entity.Refre
 import momzzangseven.mztkbe.modules.auth.infrastructure.repository.RefreshTokenJpaRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Optional;
 
 /**
  * Persistence Adapter for RefreshToken (Infrastructure Layer).
@@ -185,7 +184,7 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
 
     } catch (NoSuchAlgorithmException e) {
       log.error("SHA-256 algorithm not available", e);
-        throw new TokenHashingException("Failed to hash refresh token", e);
+      throw new TokenHashingException("Failed to hash refresh token", e);
     }
   }
 }

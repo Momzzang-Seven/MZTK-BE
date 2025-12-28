@@ -3,9 +3,7 @@ package momzzangseven.mztkbe.global.error.token;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import org.springframework.http.HttpStatus;
 
-/**
- * Base exception for token-related errors with an associated ErrorCode.
- */
+/** Base exception for token-related errors with an associated ErrorCode. */
 public class TokenException extends RuntimeException {
 
   private final ErrorCode errorCode;

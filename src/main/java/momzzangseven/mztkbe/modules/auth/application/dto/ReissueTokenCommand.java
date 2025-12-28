@@ -12,18 +12,18 @@ import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
  * operations
  */
 public record ReissueTokenCommand(String refreshToken) {
-    /**
-     * Create command with validation.
-     *
-     * @param refreshToken Refresh token string
-     * @return Validated ReissueTokenCommand
-     * @throws RefreshTokenNotFoundException if validation fails
-     */
-    public static ReissueTokenCommand of(String refreshToken) {
-        ReissueTokenCommand command = new ReissueTokenCommand(refreshToken);
-        command.validate();
-        return command;
-    }
+  /**
+   * Create command with validation.
+   *
+   * @param refreshToken Refresh token string
+   * @return Validated ReissueTokenCommand
+   * @throws RefreshTokenNotFoundException if validation fails
+   */
+  public static ReissueTokenCommand of(String refreshToken) {
+    ReissueTokenCommand command = new ReissueTokenCommand(refreshToken);
+    command.validate();
+    return command;
+  }
 
   /**
    * Validate command parameters.

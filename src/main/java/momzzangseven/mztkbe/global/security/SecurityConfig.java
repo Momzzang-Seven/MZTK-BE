@@ -23,11 +23,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+  private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    /**
-     * Configure stateless security filter chain, JWT auth, and request authorization rules.
-     */
+  /** Configure stateless security filter chain, JWT auth, and request authorization rules. */
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     http
@@ -35,7 +33,7 @@ public class SecurityConfig {
         .csrf(AbstractHttpConfigurer::disable)
 
         // Enable CORS
-            .cors(Customizer.withDefaults())
+        .cors(Customizer.withDefaults())
 
         // Set session management to STATELESS (using JWT, no server-side session)
         .sessionManagement(
@@ -65,7 +63,7 @@ public class SecurityConfig {
                     .anyRequest()
                     .authenticated());
 
-      http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+    http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }
 }

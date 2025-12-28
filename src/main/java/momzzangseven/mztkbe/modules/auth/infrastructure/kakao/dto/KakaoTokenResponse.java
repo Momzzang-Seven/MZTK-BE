@@ -4,9 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.ToString;
 
-/**
- * Kakao OAuth token endpoint response payload.
- */
+/** Kakao OAuth token endpoint response payload. */
 @Getter
 @ToString
 public class KakaoTokenResponse {

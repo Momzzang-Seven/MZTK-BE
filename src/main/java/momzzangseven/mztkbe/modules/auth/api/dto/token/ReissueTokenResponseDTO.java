@@ -28,9 +28,7 @@ public class ReissueTokenResponseDTO {
   /** Token type (always "Bearer"). */
   private String grantType;
 
-    /**
-     * Access token expiration time in milliseconds.
-     */
+  /** Access token expiration time in milliseconds. */
   private Long expiresIn;
 
   /**
