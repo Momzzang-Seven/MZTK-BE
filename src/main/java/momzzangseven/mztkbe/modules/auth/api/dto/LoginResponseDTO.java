@@ -20,7 +20,7 @@ public class LoginResponseDTO {
 
   private String grantType;
 
-  private Integer expiresIn;
+  private Long expiresIn;
 
   private Boolean isNewUser;
 
@@ -31,7 +31,7 @@ public class LoginResponseDTO {
     return LoginResponseDTO.builder()
         .accessToken(result.accessToken())
         .grantType(result.grantType())
-        .expiresIn(result.expiresIn())
+        .expiresIn(result.accessTokenExpiresIn())
         .isNewUser(result.isNewUser())
         .userInfo(UserInfo.from(result.user()))
         .build();

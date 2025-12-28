@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.auth.application.delegation;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,7 +9,6 @@ import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,9 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class RefreshTokenManager {
   private final JwtTokenProvider jwtTokenProvider;
   private final SaveRefreshTokenPort saveRefreshTokenPort;
-
-  @Value("${jwt.refresh-token-expiration}")
-  private long refreshTokenExpiration;
 
   /** Result of token rotation. */
   public record TokenPair(String accessToken, String refreshToken) {}
@@ -70,8 +67,9 @@ public class RefreshTokenManager {
     // 1. Generate JWT refresh token
     String refreshTokenValue = jwtTokenProvider.generateRefreshToken(userId);
 
-    // 2. Calculate expiration time (milliseconds → seconds)
-    LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(refreshTokenExpiration / 1000);
+    // 2. Calculate when the token expires at
+    LocalDateTime expiresAt =
+        LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshTokenExpiresIn()));
 
     // 3. Create domain model
     RefreshToken refreshToken = RefreshToken.create(userId, refreshTokenValue, expiresAt);

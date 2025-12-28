@@ -57,13 +57,12 @@ public class LoginService implements LoginUseCase {
         authenticatedUser.isNewUser());
 
     // Response DTO 생성
-    return LoginResult.builder()
-        .accessToken(accessToken)
-        .refreshToken(refreshToken)
-        .grantType("Bearer")
-        .expiresIn(1800)
-        .isNewUser(authenticatedUser.isNewUser())
-        .user(authenticatedUser.user())
-        .build();
+    return LoginResult.of(
+        accessToken,
+        refreshToken,
+        jwtTokenProvider.getAccessTokenExpiresIn(),
+        jwtTokenProvider.getRefreshTokenExpiresIn(),
+        authenticatedUser.isNewUser(),
+        authenticatedUser.user());
   }
 }
