@@ -65,13 +65,14 @@ public class UserService implements SocialLoginUseCase {
       throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
     }
 
-    User created =
-        switch (authProvider) {
-          case KAKAO -> User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
-          case GOOGLE -> User.createFromGoogle(providerUserId, email, nickname, profileImageUrl);
-          default ->
-              throw new IllegalArgumentException("Unsupported social provider: " + authProvider);
-        };
+    User created;
+    if (authProvider == AuthProvider.KAKAO) {
+      created = User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
+    } else if (authProvider == AuthProvider.GOOGLE) {
+      created = User.createFromGoogle(providerUserId, email, nickname, profileImageUrl);
+    } else {
+      throw new IllegalArgumentException("Unsupported social provider: " + authProvider);
+    }
 
     User saved = saveUserPort.saveUser(created);
     return SocialLoginOutcome.newUser(saved);
