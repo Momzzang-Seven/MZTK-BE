@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Single Responsibility: Orchestrate token reissue workflow
  *
- * <p>Delegates to: - RefreshTokenValidator: Validation logic - TokenRotationService: Token
+ * <p>Delegates to: - RefreshTokenValidator: Validation logic - RefreshTokenManager: Token
  * generation and rotation
  */
 @Slf4j
