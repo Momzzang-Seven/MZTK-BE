@@ -68,6 +68,11 @@ public class UserService implements SocialLoginUseCase {
       throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
     }
 
+    if (nickname == null || nickname.isBlank()) {
+      nickname =
+          provider.toLowerCase() + "_" + java.util.UUID.randomUUID().toString().substring(0, 8);
+    }
+
     User created;
     if (authProvider == AuthProvider.KAKAO) {
       created = User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
