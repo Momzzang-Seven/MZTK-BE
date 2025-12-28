@@ -1,19 +1,24 @@
-name: Validate main PR source
-
 on:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
     types: [opened, synchronize, reopened]
 
 jobs:
   validate-main-pr-source:
     runs-on: ubuntu-latest
     steps:
-      - name: Allow only dev -> main PR
+      - name: Validate only main PRs
         run: |
           echo "Base: ${{ github.base_ref }}"
           echo "Head: ${{ github.head_ref }}"
 
+          # base가 main이 아니면 그냥 성공 처리 후 종료
+          if [ "${{ github.base_ref }}" != "main" ]; then
+            echo "Not a main PR. Skipping validation."
+            exit 0
+          fi
+
+          # 여기부터는 main PR만 들어옴
           if [ "${{ github.head_ref }}" != "dev" ]; then
             echo "❌ Only PRs from 'dev' can be merged into 'main'."
             echo "Current source: ${{ github.head_ref }}"
