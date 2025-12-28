@@ -69,7 +69,9 @@ public enum ErrorCode {
       ),
 
   TOKEN_SECURITY_THREAT(
-      "TOKEN_003", "Security threat detected. Token has been revoked", HttpStatus.FORBIDDEN // 403
+      "TOKEN_003",
+      "Authentication security issue detected. Please log in again to continue.",
+      HttpStatus.FORBIDDEN // 403
       ),
 
   // ========================================
