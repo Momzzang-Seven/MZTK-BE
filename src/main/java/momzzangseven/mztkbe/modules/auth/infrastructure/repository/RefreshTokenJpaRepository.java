@@ -1,10 +1,9 @@
 package momzzangseven.mztkbe.modules.auth.infrastructure.repository;
 
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-
-import jakarta.persistence.LockModeType;
 import momzzangseven.mztkbe.modules.auth.infrastructure.persistence.entity.RefreshTokenEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -34,10 +33,7 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshTokenEnt
    */
   Optional<RefreshTokenEntity> findByTokenHash(String tokenHash);
 
-  /**
-   * Find and lock token for update (PESSIMISTIC_WRITE).
-   * Prevents concurrent modifications.
-   */
+  /** Find and lock token for update (PESSIMISTIC_WRITE). Prevents concurrent modifications. */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT rt FROM RefreshTokenEntity rt WHERE rt.tokenHash = :tokenHash")
   Optional<RefreshTokenEntity> findByTokenHashWithLock(String tokenHash);
