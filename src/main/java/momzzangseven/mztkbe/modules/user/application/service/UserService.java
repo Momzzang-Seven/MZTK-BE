@@ -50,7 +50,10 @@ public class UserService implements SocialLoginUseCase {
         loadUserPort.findByProviderAndProviderUserId(authProvider, providerUserId);
 
     if (byProvider.isPresent()) {
-      return SocialLoginOutcome.existing(byProvider.get());
+      User user = byProvider.get();
+      user.updateLastLogin();
+      saveUserPort.saveUser(user);
+      return SocialLoginOutcome.existing(user);
     }
 
     Optional<User> byEmail = loadUserPort.loadUserByEmail(email);
