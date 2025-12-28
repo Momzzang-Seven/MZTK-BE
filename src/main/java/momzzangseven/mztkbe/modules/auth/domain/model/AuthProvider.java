@@ -9,25 +9,29 @@ import lombok.RequiredArgsConstructor;
  * <p>Defines the supported authentication methods in the system. Used by the Strategy Pattern to
  * select appropriate authentication logic.
  *
- * <p>Supported providers: - LOCAL: Email/password based authentication - KAKAO: Kakao OAuth
- * authentication - GOOGLE: Google OAuth authentication
+ * <p>Supported providers: - LOCAL: Email/password based authentication. - KAKAO: Kakao OAuth
+ * authentication. - GOOGLE: Google OAuth authentication.
  */
 @Getter
 @RequiredArgsConstructor
 public enum AuthProvider {
-  /** Local authentication (email/password) Used for users who sign up directly on our platform */
+  /**
+   * Local authentication (email/password) for direct sign-ups.
+   */
   LOCAL("LOCAL", "Email/Password Authentication"),
 
-  /** Kakao OAuth authentication Used for users who sign in with their Kakao account */
+  /**
+   * Kakao OAuth authentication for Kakao users.
+   */
   KAKAO("KAKAO", "Kakao OAuth Authentication"),
 
-  /** Google OAuth authentication Used for users who sign in with their Google account */
+  /** Google OAuth authentication for Google users. */
   GOOGLE("GOOGLE", "Google OAuth Authentication");
 
-  /** Provider display name */
+  /** Provider display name. */
   private final String displayName;
 
-  /** Provider description */
+  /** Provider description. */
   private final String description;
 
   /**

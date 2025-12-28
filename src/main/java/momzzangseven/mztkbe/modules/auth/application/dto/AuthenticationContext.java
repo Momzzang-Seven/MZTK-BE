@@ -10,22 +10,18 @@ import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
  *
  * <p>Different strategies use different fields: - LOCAL: email, password - KAKAO:
  * authorizationCode, redirectUri - GOOGLE: authorizationCode, redirectUri
+ *
+ * @param provider Authentication provider (LOCAL, KAKAO, GOOGLE)
+ * @param email Email address (for LOCAL authentication)
+ * @param password Password (for LOCAL authentication)
+ * @param authorizationCode Authorization code from OAuth callback (for KAKAO, GOOGLE)
+ * @param redirectUri Redirect URI used in OAuth flow (optional, for validation)
  */
 public record AuthenticationContext(
-
-    /** Authentication provider (LOCAL, KAKAO, GOOGLE) */
     AuthProvider provider,
-
-    /** Email address (for LOCAL authentication) */
     String email,
-
-    /** Password (for LOCAL authentication) */
     String password,
-
-    /** Authorization code from OAuth callback (for KAKAO, GOOGLE) */
     String authorizationCode,
-
-    /** Redirect URI used in OAuth flow (optional, for validation) */
     String redirectUri) {
 
   /**

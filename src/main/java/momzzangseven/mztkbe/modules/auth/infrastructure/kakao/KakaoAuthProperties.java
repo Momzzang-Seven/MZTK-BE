@@ -14,6 +14,9 @@ public class KakaoAuthProperties {
   private Auth auth = new Auth();
   private Api api = new Api();
 
+  /**
+   * Kakao OAuth client configuration values.
+   */
   @Getter
   @Setter
   public static class Auth {
@@ -21,6 +24,9 @@ public class KakaoAuthProperties {
     private String redirect; // redirect_uri
   }
 
+  /**
+   * Kakao external API endpoints that we call.
+   */
   @Getter
   @Setter
   public static class Api {

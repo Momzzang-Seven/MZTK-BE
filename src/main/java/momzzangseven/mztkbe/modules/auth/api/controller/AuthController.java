@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.auth.api.controller;
 
 import jakarta.validation.Valid;
-import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginRequestDTO;
@@ -19,6 +18,8 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
+
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -28,6 +29,9 @@ public class AuthController {
   private final SignupUseCase signupUseCase;
   private final ReissueTokenUseCase reissueTokenUseCase;
 
+    /**
+     * Authenticate credentials and issue tokens for LOCAL/social login.
+     */
   @PostMapping("/login")
   public ResponseEntity<ApiResponse<LoginResponseDTO>> login(
       @Valid @RequestBody LoginRequestDTO request) {
@@ -61,6 +65,9 @@ public class AuthController {
         .body(ApiResponse.success(response));
   }
 
+    /**
+     * Register a new LOCAL user and return basic profile data.
+     */
   @PostMapping("/signup")
   public ResponseEntity<ApiResponse<SignupResponseDTO>> signup(
       @Valid @RequestBody SignupRequestDTO request) {
@@ -79,6 +86,7 @@ public class AuthController {
         .body(ApiResponse.success("Sign Up Success", response));
   }
 
+    /** Reissue access/refresh tokens based on the stored refresh token cookie. */
   @PostMapping("/reissue")
   public ResponseEntity<ApiResponse<ReissueTokenResponseDTO>> reissue(
       @CookieValue(value = "refreshToken", required = true) String refreshToken) {

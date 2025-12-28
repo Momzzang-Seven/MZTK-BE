@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.user.infrastructure.persistence.adapter;
 
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
@@ -12,6 +11,11 @@ import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.U
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
+/**
+ * Persistence adapter implementing user port interfaces using UserJpaRepository.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -28,7 +32,9 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     return userJpaRepository.findByEmail(email).map(this::mapToDomain);
   }
 
-  /** LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회 */
+  /**
+   * LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회.
+   */
   @Override
   @Transactional(readOnly = true)
   public Optional<User> findByProviderAndProviderUserId(
@@ -101,7 +107,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .password(entity.getPasswordHash())
         .nickname(entity.getNickname())
         .profileImageUrl(entity.getProfileImageUrl())
-        .provider_user_id(entity.getProviderUserId())
+            .providerUserId(entity.getProviderUserId())
         .walletAddress(entity.getWalletAddress())
         .authProvider(entity.getProvider())
         .role(entity.getRole())
@@ -113,7 +119,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
 
   /** Convert User (Domain) to UserEntity (Infrastructure). Used for creating new entities. */
   private UserEntity mapToEntity(User user) {
-    String providerUserId = user.getProvider_user_id();
+    String providerUserId = user.getProviderUserId();
 
     // LOCAL은 providerUserId가 없으니 강제로 만들어 넣기
     if (providerUserId == null || providerUserId.isBlank()) {
@@ -138,13 +144,13 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .build();
   }
 
-  /** 기존 영속 엔티티의 필드를 수정하는 방식으로 업데이트 (builder로 새 객체 만들지 말고, setter로 업데이트) */
+  /** 기존 영속 엔티티의 필드를 수정하는 방식으로 업데이트 (builder로 새 객체 만들지 말고, setter로 업데이트). */
   private void updateEntityFromDomain(UserEntity entity, User user) {
     entity.setEmail(user.getEmail());
     entity.setPasswordHash(user.getPassword());
     entity.setNickname(user.getNickname());
     entity.setProfileImageUrl(user.getProfileImageUrl());
-    entity.setProviderUserId(user.getProvider_user_id());
+    entity.setProviderUserId(user.getProviderUserId());
     entity.setWalletAddress(user.getWalletAddress());
     entity.setProvider(user.getAuthProvider());
     entity.setRole(user.getRole());
