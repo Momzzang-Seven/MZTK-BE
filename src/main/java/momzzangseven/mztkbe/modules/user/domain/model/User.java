@@ -1,12 +1,16 @@
 package momzzangseven.mztkbe.modules.user.domain.model;
 
-import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.LocalDateTime;
+
+/**
+ * Domain model representing an application user.
+ */
 @Slf4j
 @Getter
 @Builder
@@ -14,7 +18,11 @@ public class User {
   private Long id;
   private String email;
 
-  /** BCrypt-encoded password (only for LOCAL auth) Format: $2a$10$... (60 characters) */
+  /**
+   * BCrypt-encoded password (only for LOCAL auth).
+   *
+   * <p>Format: $2a$10$... (60 characters).
+   */
   private String password;
 
   private String nickname;
@@ -22,11 +30,13 @@ public class User {
 
   /**
    * Provider-specific user ID. - KAKAO: Kakao user ID (String) - GOOGLE: Google user ID (String) -
-   * LOCAL: null
+   * LOCAL: null.
    */
-  private String provider_user_id;
+  private String providerUserId;
 
-  /** Connected Web3 wallet address */
+  /**
+   * Connected Web3 wallet address.
+   */
   private String walletAddress;
 
   private AuthProvider authProvider;
@@ -76,7 +86,7 @@ public class User {
 
     LocalDateTime now = LocalDateTime.now();
     return User.builder()
-        .provider_user_id(kakaoId)
+            .providerUserId(kakaoId)
         .email(email)
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
@@ -102,7 +112,7 @@ public class User {
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
         .authProvider(AuthProvider.GOOGLE)
-        .provider_user_id(googleId)
+            .providerUserId(googleId)
         .role(UserRole.USER)
         .lastLoginAt(now)
         .createdAt(now)

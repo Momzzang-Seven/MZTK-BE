@@ -26,7 +26,12 @@ public class LoginResponseDTO {
 
   private UserInfo userInfo;
 
-  /** Convert from Application layer DTO (LoginResult) to API layer DTO. */
+  /**
+   * Convert application layer result into API response DTO.
+   *
+   * @param result login result from service
+   * @return response DTO sent to client
+   */
   public static LoginResponseDTO from(LoginResult result) {
     return LoginResponseDTO.builder()
         .accessToken(result.accessToken())
@@ -54,6 +59,12 @@ public class LoginResponseDTO {
 
     private String walletAddress;
 
+    /**
+     * Map the User domain entity to API payload.
+     *
+     * @param user domain user
+     * @return nested user info DTO
+     */
     public static UserInfo from(User user) {
       return UserInfo.builder()
           .userId(user.getId())

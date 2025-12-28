@@ -1,9 +1,10 @@
 package momzzangseven.mztkbe.modules.auth.infrastructure.persistence.entity;
 
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
 import lombok.*;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "refresh_tokens")
@@ -35,24 +36,17 @@ public class RefreshTokenEntity {
   @Column(name = "used_at")
   private LocalDateTime usedAt;
 
+    /**
+     * Update persisted entity fields from domain model.
+     *
+     * @param token     Domain refresh token
+     * @param tokenHash Hashed token value
+     */
   public void updateFrom(RefreshToken token, String tokenHash) {
     this.tokenHash = tokenHash;
     this.expiresAt = token.getExpiresAt();
     this.revokedAt = token.getRevokedAt();
     this.usedAt = token.getUsedAt();
-  }
-
-  /** Mark token as revoked. */
-  public void revoke() {
-    if (this.revokedAt != null) {
-      throw new IllegalStateException("Token already revoked");
-    }
-    this.revokedAt = LocalDateTime.now();
-  }
-
-  /** Mark token as used. */
-  public void markAsUsed() {
-    this.usedAt = LocalDateTime.now();
   }
 
   @PrePersist

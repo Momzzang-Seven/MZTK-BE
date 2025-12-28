@@ -12,12 +12,25 @@ import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
  * operations
  */
 public record ReissueTokenCommand(String refreshToken) {
+    /**
+     * Create command with validation.
+     *
+     * @param refreshToken Refresh token string
+     * @return Validated ReissueTokenCommand
+     * @throws RefreshTokenNotFoundException if validation fails
+     */
+    public static ReissueTokenCommand of(String refreshToken) {
+        ReissueTokenCommand command = new ReissueTokenCommand(refreshToken);
+        command.validate();
+        return command;
+    }
+
   /**
    * Validate command parameters.
    *
    * <p>Business Rules: - Refresh token must not be null or empty
    *
-   * @throws IllegalArgumentException if validation fails
+   * @throws RefreshTokenNotFoundException if validation fails
    */
   public void validate() {
     if (refreshToken == null || refreshToken.isBlank()) {
@@ -28,18 +41,5 @@ public record ReissueTokenCommand(String refreshToken) {
     if (refreshToken.length() < 10 || refreshToken.length() > 500) {
       throw new RefreshTokenNotFoundException("Invalid refresh token format");
     }
-  }
-
-  /**
-   * Create command with validation.
-   *
-   * @param refreshToken Refresh token string
-   * @return Validated ReissueTokenCommand
-   * @throws IllegalArgumentException if validation fails
-   */
-  public static ReissueTokenCommand of(String refreshToken) {
-    ReissueTokenCommand command = new ReissueTokenCommand(refreshToken);
-    command.validate();
-    return command;
   }
 }

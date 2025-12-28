@@ -7,29 +7,23 @@ import momzzangseven.mztkbe.modules.user.domain.model.User;
  * Result of login use case execution.
  *
  * <p>Contains all information needed for API response.
+ *
+ * @param accessToken JWT access token
+ * @param refreshToken JWT refresh token
+ * @param grantType Token type (usually "Bearer")
+ * @param accessTokenExpiresIn Access token expiration time in milliseconds
+ * @param refreshTokenExpiresIn Refresh token expiration time in milliseconds
+ * @param isNewUser Whether this is a newly registered user
+ * @param user Authenticated user information
  */
 @Builder
 public record LoginResult(
-
-    /** JWT access token */
     String accessToken,
-
-    /** JWT refresh token */
     String refreshToken,
-
-    /** Token type (usually "Bearer") */
     String grantType,
-
-    /** Access token expiration time in milliseconds */
     Long accessTokenExpiresIn,
-
-    /** Refresh token expiration time in milliseconds */
     Long refreshTokenExpiresIn,
-
-    /** Whether this is a newly registered user */
     Boolean isNewUser,
-
-    /** Authenticated user information */
     User user) {
 
   /**

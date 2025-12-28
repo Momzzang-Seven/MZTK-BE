@@ -1,48 +1,46 @@
 package momzzangseven.mztkbe.modules.auth.domain.model;
 
-import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
 
+import java.time.LocalDateTime;
+
 /**
  * Refresh Token Domain Model.
  *
  * <p>Responsibilities (Information Expert Pattern): - Validate token expiration - Check if token is
- * revoked - Track token usage - Enforce business rules for token lifecycle
+ * revoked - Track token usage - Enforce business rules for token lifecycle.
  *
  * <p>Business Rules: - Token can only be used if not expired and not revoked - Token can be revoked
- * at any time - Token usage is tracked for security audit
+ * at any time - Token usage is tracked for security audit.
  */
 @Slf4j
 @Getter
 @Builder
 public class RefreshToken {
 
-  /** Unique identifier (database primary key) */
+    /**
+     * Maximum allowed token validity period (in days).
+     */
+    private static final int MAX_TOKEN_DAYS = 7;
+    /**
+     * Unique identifier (database primary key).
+     */
   private Long id;
-
-  /** User ID who owns this token */
+    /** User ID who owns this token. */
   private Long userId;
-
-  /** Actual JWT token value (encrypted string) */
+    /** Actual JWT token value (encrypted string). */
   private String tokenValue;
-
-  /** Token expiration timestamp */
+    /** Token expiration timestamp. */
   private LocalDateTime expiresAt;
-
-  /** Token Revocation timestamp */
+    /** Token Revocation timestamp. */
   private LocalDateTime revokedAt;
-
-  /** Token creation timestamp */
+    /** Token creation timestamp. */
   private LocalDateTime createdAt;
-
-  /** Last time this token was used for reissuing */
+    /** Last time this token was used for reissuing. */
   private LocalDateTime usedAt;
-
-  /** Maximum allowed token validity period (in days) */
-  private static final int MAX_TOKEN_DAYS = 7;
 
   // ============================================
   // Factory Methods
@@ -283,8 +281,12 @@ public class RefreshToken {
    */
   @Override
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+      if (this == o) {
+          return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+          return false;
+    }
 
     RefreshToken that = (RefreshToken) o;
     return tokenValue != null && tokenValue.equals(that.tokenValue);

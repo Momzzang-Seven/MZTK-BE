@@ -26,6 +26,7 @@ public class RefreshTokenValidator {
   private final JwtTokenProvider jwtTokenProvider;
   private final LoadRefreshTokenPort loadRefreshTokenPort;
   private final SaveRefreshTokenPort saveRefreshTokenPort;
+    private final RefreshTokenManager refreshTokenManager;
 
   /**
    * Validate JWT format and signature.
@@ -75,7 +76,7 @@ public class RefreshTokenValidator {
    *
    * @param jwtUserId UserId from JWT claim
    * @param refreshToken RefreshToken from DB
-   * @throws SecurityException if mismatch
+   * @throws TokenSecurityException if mismatch
    */
   public void validateUserIdConsistency(Long jwtUserId, RefreshToken refreshToken) {
     if (!refreshToken.getUserId().equals(jwtUserId)) {
@@ -83,7 +84,7 @@ public class RefreshTokenValidator {
           "SECURITY: Token userId mismatch! JWT={}, DB={}", jwtUserId, refreshToken.getUserId());
 
       // Revoke suspicious token
-      revokeToken(refreshToken);
+        refreshTokenManager.revokeToken(refreshToken);
 
       throw new TokenSecurityException();
     }
@@ -130,7 +131,7 @@ public class RefreshTokenValidator {
           "Token reuse detected! Possible replay attack. userId={}", refreshToken.getUserId());
 
       // Security measure: Revoke token immediately
-      revokeToken(refreshToken);
+        refreshTokenManager.revokeToken(refreshToken);
 
       throw new TokenSecurityException("Token reuse detected");
     }
@@ -139,7 +140,7 @@ public class RefreshTokenValidator {
   }
 
   /**
-   * Mark token as used
+   * Mark token as used.
    *
    * <p>Purpose: - Track token usage for security audit - Enable token reuse detection
    *
@@ -151,13 +152,13 @@ public class RefreshTokenValidator {
     log.debug("Token marked as used at: {}", refreshToken.getUsedAt());
   }
 
-  public void revokeToken(RefreshToken refreshToken) {
-    log.debug("Revoking refresh token for userId: {}", refreshToken.getUserId());
-    refreshToken.revoke();
-    saveRefreshTokenPort.save(refreshToken);
-    log.debug("Token revoked");
-  }
-
+    /**
+     * Inspect refresh token for security anomalies and mark it used.
+     *
+     * @param tokenValue Token string submitted by client
+     * @param jwtUserId  User ID extracted from JWT
+     * @return Validated refresh token entity
+     */
   public RefreshToken inspectSecurityFlaw(String tokenValue, Long jwtUserId) {
     // Step 1: Load token from DB: Lock acquisition
     RefreshToken dbRefreshToken = loadTokenByValueWithLock(tokenValue);
