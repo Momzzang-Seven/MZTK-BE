@@ -48,23 +48,24 @@ public class RefreshTokenValidator {
   }
 
   /**
-   * Load and validate refresh token from database.
+   * Load refresh token from database by its value with lock.
    *
    * @param tokenValue Token string to find
    * @return Validated RefreshToken domain model
    * @throws RefreshTokenNotFoundException if not found
    */
-  public RefreshToken loadAndValidate(String tokenValue) {
+  public RefreshToken loadTokenByValueWithLock(String tokenValue) {
+    log.info("Attempting to acquire lock for token");
     RefreshToken token =
         loadRefreshTokenPort
-            .findByTokenValue(tokenValue)
+            .findByTokenValueWithLock(tokenValue)
             .orElseThrow(
                 () -> {
                   log.error("Refresh token not found in database");
                   return new RefreshTokenNotFoundException("Refresh token not found in database.");
                 });
 
-    log.debug("Token loaded from database: {}", token);
+    log.debug("Token loaded from database with lock: {}", token);
     return token;
   }
 
@@ -82,8 +83,7 @@ public class RefreshTokenValidator {
           "SECURITY: Token userId mismatch! JWT={}, DB={}", jwtUserId, refreshToken.getUserId());
 
       // Revoke suspicious token
-      refreshToken.revoke();
-      saveRefreshTokenPort.save(refreshToken);
+      revokeToken(refreshToken);
 
       throw new TokenSecurityException();
     }
@@ -111,5 +111,70 @@ public class RefreshTokenValidator {
     }
 
     log.debug("Domain rules validation passed");
+  }
+
+  /**
+   * Check for token reuse (possible replay attack).
+   *
+   * <p>Security: If a token was recently used, it's suspicious
+   *
+   * <p>Possible scenarios: - Replay attack - Token hijacking - Race condition (legitimate but rare)
+   *
+   * @param refreshToken Token to check
+   * @param thresholdMinutes Time window for reuse detection (e.g., 5 minutes)
+   * @throws TokenSecurityException if reuse detected
+   */
+  public void checkTokenReuse(RefreshToken refreshToken, int thresholdMinutes) {
+    if (refreshToken.wasRecentlyUsed(thresholdMinutes)) {
+      log.error(
+              "Token reuse detected! Possible replay attack. userId={}", refreshToken.getUserId());
+
+      // Security measure: Revoke token immediately
+      revokeToken(refreshToken);
+
+      throw new TokenSecurityException("Token reuse detected");
+    }
+
+    log.debug("No token reuse detected");
+  }
+
+
+  /**
+   * Mark token as used
+   *
+   * <p>Purpose: - Track token usage for security audit - Enable token reuse detection
+   *
+   * @param refreshToken Token to mark
+   */
+  public void markTokenUsed(RefreshToken refreshToken) {
+    refreshToken.markAsUsed();
+    saveRefreshTokenPort.save(refreshToken);
+    log.debug("Token marked as used at: {}", refreshToken.getUsedAt());
+  }
+
+  public void revokeToken(RefreshToken refreshToken) {
+    log.debug("Revoking refresh token for userId: {}", refreshToken.getUserId());
+    refreshToken.revoke();
+    saveRefreshTokenPort.save(refreshToken);
+    log.debug("Token revoked");
+  }
+
+  public RefreshToken inspectSecurityFlaw(String tokenValue, Long jwtUserId) {
+    // Step 1: Load token from DB: Lock acquisition
+    RefreshToken dbRefreshToken = loadTokenByValueWithLock(tokenValue);
+
+    // Step 2: Check Consistency between UserId from request and from DB
+    validateUserIdConsistency(jwtUserId, dbRefreshToken);
+
+    // Step 3: validate domain rule
+    validateDomainRules(dbRefreshToken);
+
+    // step 4: Check for the token reuse
+    checkTokenReuse(dbRefreshToken, 5);
+
+    // Step 5: mark token as used. Update the row from the DB
+    markTokenUsed(dbRefreshToken);
+
+    return dbRefreshToken;
   }
 }

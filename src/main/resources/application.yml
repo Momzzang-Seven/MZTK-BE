@@ -16,6 +16,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+      javax.persistence.lock.timeout: 5000 # lock timeout 5초
 
   jackson:
     serialization:

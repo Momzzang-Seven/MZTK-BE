@@ -44,41 +44,24 @@ public class ReissueTokenService implements ReissueTokenUseCase {
   public ReissueTokenResult execute(ReissueTokenCommand command) {
     log.info("Token reissue request received");
 
-    // Step 1: Validate command
+    // Step 1: Validate command: validate refresh token exists in the request or not.
     command.validate();
+
     String tokenValue = command.refreshToken();
 
-    // Step 2: Validate JWT format (delegated)
+    // Step 2: Validate JWT format: validate the token submitted has the legal format or not.
     validator.validateJwtFormat(tokenValue);
 
     // Step 3: Extract userId(PK) from JWT
     Long jwtUserId = jwtTokenProvider.getUserIdFromToken(tokenValue);
 
-    // Step 4: Load token from DB (delegated)
-    RefreshToken dbRefreshToken = validator.loadAndValidate(tokenValue);
+    // Step 4: Inspect the refresh token security flaw. Lock acquisition
+    RefreshToken dbRefreshToken = validator.inspectSecurityFlaw(tokenValue, jwtUserId);
 
-    // Step 5: Validate userId consistency (delegated)
-    validator.validateUserIdConsistency(jwtUserId, dbRefreshToken);
+    // Step 5: Rotate tokens. Update the DB
+    TokenPair tokenPair = refreshTokenManager.rotateTokens(jwtUserId, dbRefreshToken);
 
-    // Step 6: Validate domain rules (delegated)
-    validator.validateDomainRules(dbRefreshToken);
-
-    // Step 7: Check for token reuse (delegated)
-    refreshTokenManager.checkTokenReuse(dbRefreshToken, 5);
-
-    // Step 8: Mark token as used (delegated)
-    refreshTokenManager.markTokenUsed(dbRefreshToken);
-
-    // Step 9: Load user information
-    User user =
-        loadUserPort
-            .loadUserById(jwtUserId)
-            .orElseThrow(() -> new UserNotFoundException(jwtUserId));
-
-    // Step 10: Rotate tokens (delegated)
-    TokenPair tokenPair = refreshTokenManager.rotateTokens(user, dbRefreshToken);
-
-    // Step 11: Build result
+    // Step 6: Build result
     ReissueTokenResult result =
         ReissueTokenResult.of(
             tokenPair.accessToken(),
@@ -87,6 +70,6 @@ public class ReissueTokenService implements ReissueTokenUseCase {
             jwtTokenProvider.getRefreshTokenExpiresIn());
 
     log.info("Token reissue successful: userId={}", jwtUserId);
-    return result;
+    return result; // transition commit, lock release
   }
 }

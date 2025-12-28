@@ -4,12 +4,13 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.token.TokenSecurityException;
+import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
+import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -20,12 +21,13 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Security: Implements OAuth 2.0 token rotation best practice
  */
 @Slf4j
-@Service
+@Component
 @Transactional
 @RequiredArgsConstructor
 public class RefreshTokenManager {
   private final JwtTokenProvider jwtTokenProvider;
   private final SaveRefreshTokenPort saveRefreshTokenPort;
+  private final LoadUserPort loadUserPort;
 
   /** Result of token rotation. */
   public record TokenPair(String accessToken, String refreshToken) {}
@@ -33,12 +35,16 @@ public class RefreshTokenManager {
   /**
    * Generate new token pair and revoke old refresh token.
    *
-   * @param user User information
+   * @param userId User id
    * @param oldRefreshToken Old refresh token to revoke
    * @return New token pair (access + refresh)
    */
-  public TokenPair rotateTokens(User user, RefreshToken oldRefreshToken) {
-    log.info("Starting token rotation for user: {}", user.getId());
+  public TokenPair rotateTokens(Long userId, RefreshToken oldRefreshToken) {
+    log.info("Starting token rotation for user: {}", userId);
+    User user =
+            loadUserPort
+                    .loadUserById(userId)
+                    .orElseThrow(() -> new UserNotFoundException(userId));
 
     // 1. Generate new access token
     String newAccessToken =
@@ -79,45 +85,6 @@ public class RefreshTokenManager {
     log.debug("Refresh token saved to database for userId: {}", userId);
 
     return refreshTokenValue;
-  }
-
-  /**
-   * Check for token reuse (possible replay attack).
-   *
-   * <p>Security: If a token was recently used, it's suspicious
-   *
-   * <p>Possible scenarios: - Replay attack - Token hijacking - Race condition (legitimate but rare)
-   *
-   * @param refreshToken Token to check
-   * @param thresholdMinutes Time window for reuse detection (e.g., 5 minutes)
-   * @throws TokenSecurityException if reuse detected
-   */
-  public void checkTokenReuse(RefreshToken refreshToken, int thresholdMinutes) {
-    if (refreshToken.wasRecentlyUsed(thresholdMinutes)) {
-      log.error(
-          "Token reuse detected! Possible replay attack. userId={}", refreshToken.getUserId());
-
-      // Security measure: Revoke token immediately
-      revokeToken(refreshToken);
-
-      throw new TokenSecurityException(
-          "Token reuse detected. This may indicate a security issue. Please log in again to obtain a new token.");
-    }
-
-    log.debug("No token reuse detected");
-  }
-
-  /**
-   * Mark token as used (audit trail).
-   *
-   * <p>Purpose: - Track token usage for security audit - Enable token reuse detection
-   *
-   * @param refreshToken Token to mark
-   */
-  public void markTokenUsed(RefreshToken refreshToken) {
-    refreshToken.markAsUsed();
-    saveRefreshTokenPort.save(refreshToken);
-    log.debug("Token marked as used at: {}", refreshToken.getUsedAt());
   }
 
   public void revokeToken(RefreshToken refreshToken) {
