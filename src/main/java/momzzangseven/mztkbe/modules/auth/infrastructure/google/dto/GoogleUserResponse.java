@@ -4,9 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.ToString;
 
-/**
- * Google OpenID Connect userinfo response payload.
- */
+/** Google OpenID Connect userinfo response payload. */
 @Getter
 @ToString
 public class GoogleUserResponse {

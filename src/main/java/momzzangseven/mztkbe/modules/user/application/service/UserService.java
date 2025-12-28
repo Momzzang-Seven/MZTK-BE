@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.user.application.service;
 
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginOutcome;
@@ -9,8 +10,6 @@ import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor

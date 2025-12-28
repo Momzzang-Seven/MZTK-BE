@@ -73,9 +73,9 @@ public enum ErrorCode {
       "Authentication security issue detected. Please log in again to continue.",
       HttpStatus.FORBIDDEN // 403
       ),
-    TOKEN_HASHING_FAILED(
-            "TOKEN_004", "Failed to hash token", HttpStatus.INTERNAL_SERVER_ERROR // 500
-    ),
+  TOKEN_HASHING_FAILED(
+      "TOKEN_004", "Failed to hash token", HttpStatus.INTERNAL_SERVER_ERROR // 500
+      ),
 
   // ========================================
   // Wallet Errors (WALLET_xxx)
