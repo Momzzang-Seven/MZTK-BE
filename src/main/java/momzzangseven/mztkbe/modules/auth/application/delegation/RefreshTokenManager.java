@@ -42,9 +42,7 @@ public class RefreshTokenManager {
   public TokenPair rotateTokens(Long userId, RefreshToken oldRefreshToken) {
     log.info("Starting token rotation for user: {}", userId);
     User user =
-            loadUserPort
-                    .loadUserById(userId)
-                    .orElseThrow(() -> new UserNotFoundException(userId));
+        loadUserPort.loadUserById(userId).orElseThrow(() -> new UserNotFoundException(userId));
 
     // 1. Generate new access token
     String newAccessToken =

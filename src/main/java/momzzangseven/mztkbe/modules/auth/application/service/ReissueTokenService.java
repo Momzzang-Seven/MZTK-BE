@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenManager;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenManager.TokenPair;
@@ -12,7 +11,6 @@ import momzzangseven.mztkbe.modules.auth.application.dto.ReissueTokenResult;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReissueTokenUseCase;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
-import momzzangseven.mztkbe.modules.user.domain.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

@@ -127,7 +127,7 @@ public class RefreshTokenValidator {
   public void checkTokenReuse(RefreshToken refreshToken, int thresholdMinutes) {
     if (refreshToken.wasRecentlyUsed(thresholdMinutes)) {
       log.error(
-              "Token reuse detected! Possible replay attack. userId={}", refreshToken.getUserId());
+          "Token reuse detected! Possible replay attack. userId={}", refreshToken.getUserId());
 
       // Security measure: Revoke token immediately
       revokeToken(refreshToken);
@@ -137,7 +137,6 @@ public class RefreshTokenValidator {
 
     log.debug("No token reuse detected");
   }
-
 
   /**
    * Mark token as used
