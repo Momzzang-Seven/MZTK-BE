@@ -44,6 +44,16 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
   }
 
   @Override
+  @Transactional
+  public Optional<RefreshToken> findByTokenValueWithLock(String tokenValue) {
+    log.debug("Loading and locking refresh token by value");
+    String tokenHash = hashToken(tokenValue);
+
+    return repository.findByTokenHashWithLock(tokenHash)
+            .map(entity -> mapToDomain(entity, tokenValue));
+  }
+
+  @Override
   @Transactional(readOnly = true)
   public boolean existsByTokenValue(String tokenValue) {
     String tokenHash = hashToken(tokenValue);

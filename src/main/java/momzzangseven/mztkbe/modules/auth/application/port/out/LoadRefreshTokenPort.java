@@ -22,6 +22,14 @@ public interface LoadRefreshTokenPort {
   Optional<RefreshToken> findByTokenValue(String tokenValue);
 
   /**
+   * Find and lock refresh token for update.
+   *
+   * @param tokenValue Token value to find
+   * @return Locked RefreshToken
+   */
+  Optional<RefreshToken> findByTokenValueWithLock(String tokenValue);
+
+  /**
    * Check if refresh token exists by token value.
    *
    * @param tokenValue JWT token string
