@@ -22,8 +22,7 @@ public class UserService implements SocialLoginUseCase {
   /**
    * Handles social login or registration.
    *
-   * <p>If the user exists, updates the last login time. If not, creates a new user. If the nickname
-   * is missing, generates a default one.
+   * <p>If the user exists, updates the last login time. If not, creates a new user. If the nickname is missing, generates a default one.
    *
    * @param provider the social provider name (e.g., "KAKAO", "GOOGLE")
    * @param providerUserId the unique user ID from the provider
