@@ -152,6 +152,20 @@ public class JwtTokenProvider {
 
   // ========== Token Information Extraction ==========
 
+  /*
+   * return access token expiration in application.yml (in milliseconds)
+   */
+  public long getAccessTokenExpiresIn() {
+    return jwtProperties.getAccessTokenExpiration();
+  }
+
+  /*
+   * return refresh token expiration in application.yml (in milliseconds)
+   */
+  public long getRefreshTokenExpiresIn() {
+    return jwtProperties.getRefreshTokenExpiration();
+  }
+
   /**
    * Extract user ID from token.
    *

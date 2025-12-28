@@ -46,7 +46,7 @@ public class AuthController {
             .httpOnly(true)
             .secure(false)
             .path("/auth")
-            .maxAge(Duration.ofDays(7))
+            .maxAge(Duration.ofMillis(result.refreshTokenExpiresIn()))
             .sameSite("Strict")
             .build();
 
@@ -98,7 +98,7 @@ public class AuthController {
             .httpOnly(true)
             .secure(false)
             .path("/auth")
-            .maxAge(Duration.ofDays(7))
+            .maxAge(Duration.ofMillis(result.refreshTokenExpiresIn()))
             .sameSite("Strict")
             .build();
 

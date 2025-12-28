@@ -12,22 +12,32 @@ import lombok.Builder;
  */
 @Builder
 public record ReissueTokenResult(
-    String accessToken, String refreshToken, String grantType, long expiresIn) {
+    String accessToken,
+    String refreshToken,
+    String grantType,
+    Long accessTokenExpiresIn,
+    Long refreshTokenExpiresIn) {
   /**
    * Create result with default grant type.
    *
    * @param accessToken New access token
    * @param refreshToken New refresh token
-   * @param expiresIn Token expiration in seconds
+   * @param accessTokenExpiresIn Access Token expiration in milliseconds
+   * @param refreshTokenExpiresIn Refresh Token expiration in milliseconds
    * @return ReissueTokenResult
    */
-  public static ReissueTokenResult of(String accessToken, String refreshToken, long expiresIn) {
+  public static ReissueTokenResult of(
+      String accessToken,
+      String refreshToken,
+      long accessTokenExpiresIn,
+      long refreshTokenExpiresIn) {
 
     return ReissueTokenResult.builder()
         .accessToken(accessToken)
         .refreshToken(refreshToken)
         .grantType("Bearer")
-        .expiresIn(expiresIn)
+        .accessTokenExpiresIn(accessTokenExpiresIn)
+        .refreshTokenExpiresIn(refreshTokenExpiresIn)
         .build();
   }
 
@@ -43,7 +53,7 @@ public record ReissueTokenResult(
     if (refreshToken == null || refreshToken.isBlank()) {
       throw new IllegalStateException("Refresh token cannot be empty");
     }
-    if (expiresIn <= 0) {
+    if (accessTokenExpiresIn <= 0 || refreshTokenExpiresIn <= 0) {
       throw new IllegalStateException("ExpiresIn must be positive");
     }
   }

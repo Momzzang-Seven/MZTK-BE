@@ -41,7 +41,7 @@ public class ReissueTokenResponseDTO {
     return ReissueTokenResponseDTO.builder()
         .accessToken(result.accessToken())
         .grantType(result.grantType())
-        .expiresIn(result.expiresIn())
+        .expiresIn(result.accessTokenExpiresIn())
         .build();
   }
 }

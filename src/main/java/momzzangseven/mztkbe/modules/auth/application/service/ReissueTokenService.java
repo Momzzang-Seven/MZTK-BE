@@ -13,7 +13,6 @@ import momzzangseven.mztkbe.modules.auth.application.port.in.ReissueTokenUseCase
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,14 +34,11 @@ public class ReissueTokenService implements ReissueTokenUseCase {
 
   // Collaborators (Delegation)
   private final RefreshTokenValidator validator;
-  private final RefreshTokenManager tokenManager;
+  private final RefreshTokenManager refreshTokenManager;
 
   // Infrastructure
   private final JwtTokenProvider jwtTokenProvider;
   private final LoadUserPort loadUserPort;
-
-  @Value("${jwt.access-token-expiration}")
-  private long accessTokenExpiration;
 
   @Override
   public ReissueTokenResult execute(ReissueTokenCommand command) {
@@ -68,10 +64,10 @@ public class ReissueTokenService implements ReissueTokenUseCase {
     validator.validateDomainRules(dbRefreshToken);
 
     // Step 7: Check for token reuse (delegated)
-    tokenManager.checkTokenReuse(dbRefreshToken, 5);
+    refreshTokenManager.checkTokenReuse(dbRefreshToken, 5);
 
     // Step 8: Mark token as used (delegated)
-    tokenManager.markTokenUsed(dbRefreshToken);
+    refreshTokenManager.markTokenUsed(dbRefreshToken);
 
     // Step 9: Load user information
     User user =
@@ -80,12 +76,15 @@ public class ReissueTokenService implements ReissueTokenUseCase {
             .orElseThrow(() -> new UserNotFoundException(jwtUserId));
 
     // Step 10: Rotate tokens (delegated)
-    TokenPair tokenPair = tokenManager.rotateTokens(user, dbRefreshToken);
+    TokenPair tokenPair = refreshTokenManager.rotateTokens(user, dbRefreshToken);
 
     // Step 11: Build result
     ReissueTokenResult result =
         ReissueTokenResult.of(
-            tokenPair.accessToken(), tokenPair.refreshToken(), accessTokenExpiration);
+            tokenPair.accessToken(),
+            tokenPair.refreshToken(),
+            jwtTokenProvider.getAccessTokenExpiresIn(),
+            jwtTokenProvider.getRefreshTokenExpiresIn());
 
     log.info("Token reissue successful: userId={}", jwtUserId);
     return result;
