@@ -20,18 +20,23 @@ public class LoginResponseDTO {
 
   private String grantType;
 
-  private Integer expiresIn;
+  private Long expiresIn;
 
   private Boolean isNewUser;
 
   private UserInfo userInfo;
 
-  /** Convert from Application layer DTO (LoginResult) to API layer DTO. */
+  /**
+   * Convert application layer result into API response DTO.
+   *
+   * @param result login result from service
+   * @return response DTO sent to client
+   */
   public static LoginResponseDTO from(LoginResult result) {
     return LoginResponseDTO.builder()
         .accessToken(result.accessToken())
         .grantType(result.grantType())
-        .expiresIn(result.expiresIn())
+        .expiresIn(result.accessTokenExpiresIn())
         .isNewUser(result.isNewUser())
         .userInfo(UserInfo.from(result.user()))
         .build();
@@ -54,6 +59,12 @@ public class LoginResponseDTO {
 
     private String walletAddress;
 
+    /**
+     * Map the User domain entity to API payload.
+     *
+     * @param user domain user
+     * @return nested user info DTO
+     */
     public static UserInfo from(User user) {
       return UserInfo.builder()
           .userId(user.getId())

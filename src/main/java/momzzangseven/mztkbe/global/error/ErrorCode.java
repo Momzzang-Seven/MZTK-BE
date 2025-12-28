@@ -58,6 +58,26 @@ public enum ErrorCode {
       ),
 
   // ========================================
+  // Token Errors (TOKEN_xxx)
+  // ========================================
+  REFRESH_TOKEN_NOT_FOUND(
+      "TOKEN_001", "Refresh token not found", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  REFRESH_TOKEN_INVALID(
+      "TOKEN_002", "Invalid refresh token", HttpStatus.UNAUTHORIZED // 401
+      ),
+
+  TOKEN_SECURITY_THREAT(
+      "TOKEN_003",
+      "Authentication security issue detected. Please log in again to continue.",
+      HttpStatus.FORBIDDEN // 403
+      ),
+  TOKEN_HASHING_FAILED(
+      "TOKEN_004", "Failed to hash token", HttpStatus.INTERNAL_SERVER_ERROR // 500
+      ),
+
+  // ========================================
   // Wallet Errors (WALLET_xxx)
   // ========================================
   INVALID_WALLET_ADDRESS(

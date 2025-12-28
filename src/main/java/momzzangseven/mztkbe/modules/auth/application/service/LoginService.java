@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
+import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenManager;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticatedUser;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticationContext;
 import momzzangseven.mztkbe.modules.auth.application.dto.LoginCommand;
@@ -21,6 +22,7 @@ public class LoginService implements LoginUseCase {
 
   private final AuthenticationStrategyFactory strategyFactory;
   private final JwtTokenProvider jwtTokenProvider;
+  private final RefreshTokenManager refreshTokenManager;
 
   @Override
   public LoginResult execute(LoginCommand command) {
@@ -38,14 +40,16 @@ public class LoginService implements LoginUseCase {
     // Complete authentication flow including user verification and user lookup/registration
     AuthenticatedUser authenticatedUser = strategy.authenticate(context);
 
-    // JWT
+    // Create access token
     String accessToken =
         jwtTokenProvider.generateAccessToken(
             authenticatedUser.user().getId(),
             authenticatedUser.user().getEmail(),
             authenticatedUser.user().getRole());
 
-    String refreshToken = jwtTokenProvider.generateRefreshToken(authenticatedUser.user().getId());
+    // Create and save refresh token
+    String refreshToken =
+        refreshTokenManager.createAndSaveRefreshToken(authenticatedUser.user().getId());
 
     log.info(
         "Login successful for user: {}, isNewUser: {}",
@@ -53,13 +57,12 @@ public class LoginService implements LoginUseCase {
         authenticatedUser.isNewUser());
 
     // Response DTO 생성
-    return LoginResult.builder()
-        .accessToken(accessToken)
-        .refreshToken(refreshToken)
-        .grantType("Bearer")
-        .expiresIn(1800)
-        .isNewUser(authenticatedUser.isNewUser())
-        .user(authenticatedUser.user())
-        .build();
+    return LoginResult.of(
+        accessToken,
+        refreshToken,
+        jwtTokenProvider.getAccessTokenExpiresIn(),
+        jwtTokenProvider.getRefreshTokenExpiresIn(),
+        authenticatedUser.isNewUser(),
+        authenticatedUser.user());
   }
 }
