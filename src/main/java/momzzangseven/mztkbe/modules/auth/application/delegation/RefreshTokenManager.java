@@ -100,7 +100,8 @@ public class RefreshTokenManager {
       // Security measure: Revoke token immediately
       revokeToken(refreshToken);
 
-      throw new TokenSecurityException("Token reuse detected");
+      throw new TokenSecurityException(
+          "Token reuse detected. This may indicate a security issue. Please log in again to obtain a new token.");
     }
 
     log.debug("No token reuse detected");
