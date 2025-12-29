@@ -50,7 +50,10 @@ public class UserService implements SocialLoginUseCase {
         loadUserPort.findByProviderAndProviderUserId(authProvider, providerUserId);
 
     if (byProvider.isPresent()) {
-      return SocialLoginOutcome.existing(byProvider.get());
+      User user = byProvider.get();
+      user.updateLastLogin();
+      saveUserPort.saveUser(user);
+      return SocialLoginOutcome.existing(user);
     }
 
     Optional<User> byEmail = loadUserPort.loadUserByEmail(email);
@@ -63,6 +66,11 @@ public class UserService implements SocialLoginUseCase {
       }
 
       throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
+    }
+
+    if (nickname == null || nickname.isBlank()) {
+      nickname =
+          provider.toLowerCase() + "_" + java.util.UUID.randomUUID().toString().substring(0, 8);
     }
 
     User created;
