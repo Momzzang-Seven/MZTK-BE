@@ -33,7 +33,6 @@ public record UpdateUserRoleCommand(Long userId, UserRole newRole) {
    */
   public static UpdateUserRoleCommand of(Long userId, UserRole newRole) {
     UpdateUserRoleCommand command = new UpdateUserRoleCommand(userId, newRole);
-    command.validate();
     return command;
   }
 }

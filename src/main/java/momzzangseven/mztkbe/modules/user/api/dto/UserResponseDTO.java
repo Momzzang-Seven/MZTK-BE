@@ -12,9 +12,7 @@ public record UserResponseDTO(
     String email,
     String name,
     String nickname,
-    String bio,
     String profileImageUrl,
-    String phoneNumber,
     UserRole role,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
@@ -26,9 +24,7 @@ public record UserResponseDTO(
         .email(result.email())
         .name(result.name())
         .nickname(result.nickname())
-        .bio(result.bio())
         .profileImageUrl(result.profileImageUrl())
-        .phoneNumber(result.phoneNumber())
         .role(result.role())
         .createdAt(result.createdAt())
         .updatedAt(result.updatedAt())

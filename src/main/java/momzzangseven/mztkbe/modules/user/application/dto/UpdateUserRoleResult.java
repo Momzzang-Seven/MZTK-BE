@@ -12,9 +12,7 @@ public record UpdateUserRoleResult(
     String email,
     String name,
     String nickname,
-    String bio,
     String profileImageUrl,
-    String phoneNumber,
     UserRole role,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
