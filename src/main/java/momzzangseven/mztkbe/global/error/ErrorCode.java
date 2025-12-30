@@ -47,7 +47,7 @@ public enum ErrorCode {
 
   INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
 
-    ILLEGAL_TRAINER_GRANT("USER_003", "Cannot assign TRAINER role", HttpStatus.BAD_REQUEST),
+  ILLEGAL_TRAINER_GRANT("USER_003", "Cannot assign TRAINER role", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Signup Errors (SIGNUP_xxx)
