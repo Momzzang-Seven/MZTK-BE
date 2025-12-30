@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.modules.auth.application.dto.GoogleOAuthToken;
 import momzzangseven.mztkbe.modules.auth.application.dto.GoogleUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.infrastructure.google.dto.GoogleTokenResponse;
@@ -25,7 +26,17 @@ public class GoogleApiAdapter implements GoogleAuthPort {
   private final WebClient webClient;
 
   @Override
+  public GoogleOAuthToken exchangeToken(String authorizationCode) {
+    GoogleTokenResponse token = requestTokenResponse(authorizationCode);
+    return GoogleOAuthToken.of(token.getAccessToken(), token.getRefreshToken());
+  }
+
+  @Override
   public String getAccessToken(String authorizationCode) {
+    return requestTokenResponse(authorizationCode).getAccessToken();
+  }
+
+  private GoogleTokenResponse requestTokenResponse(String authorizationCode) {
     try {
       MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
       form.add("grant_type", "authorization_code");
@@ -63,7 +74,7 @@ public class GoogleApiAdapter implements GoogleAuthPort {
             ErrorCode.EXTERNAL_API_ERROR, "Failed to get Google access token");
       }
 
-      return token.getAccessToken();
+      return token;
     } catch (BusinessException e) {
       throw e;
     } catch (Exception e) {

@@ -24,6 +24,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
+  private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+  private final RestAccessDeniedHandler restAccessDeniedHandler;
 
   /** Configure stateless security filter chain, JWT auth, and request authorization rules. */
   @Bean
@@ -39,6 +41,13 @@ public class SecurityConfig {
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
+        // Return JSON responses for 401/403 instead of default HTML
+        .exceptionHandling(
+            exceptions ->
+                exceptions
+                    .authenticationEntryPoint(restAuthenticationEntryPoint)
+                    .accessDeniedHandler(restAccessDeniedHandler))
+
         // Configure authorization rules
         .authorizeHttpRequests(
             auth ->
@@ -52,8 +61,12 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/reissue")
                     .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/stepup")
+                    .authenticated()
                     .requestMatchers(HttpMethod.PATCH, "/users/me/role")
                     .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/withdrawal")
+                    .hasAuthority("ROLE_STEP_UP")
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
 

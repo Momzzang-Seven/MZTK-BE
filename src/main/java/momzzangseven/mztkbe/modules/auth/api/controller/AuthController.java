@@ -3,20 +3,25 @@ package momzzangseven.mztkbe.modules.auth.api.controller;
 import jakarta.validation.Valid;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginResponseDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.SignupRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.SignupResponseDTO;
+import momzzangseven.mztkbe.modules.auth.api.dto.StepUpRequestDTO;
+import momzzangseven.mztkbe.modules.auth.api.dto.StepUpResponseDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.token.ReissueTokenResponseDTO;
 import momzzangseven.mztkbe.modules.auth.application.dto.*;
 import momzzangseven.mztkbe.modules.auth.application.port.in.LoginUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReissueTokenUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.SignupUseCase;
+import momzzangseven.mztkbe.modules.auth.application.port.in.StepUpUseCase;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -27,6 +32,7 @@ public class AuthController {
   private final LoginUseCase loginUseCase;
   private final SignupUseCase signupUseCase;
   private final ReissueTokenUseCase reissueTokenUseCase;
+  private final StepUpUseCase stepUpUseCase;
 
   /** Authenticate credentials and issue tokens for LOCAL/social login. */
   @PostMapping("/login")
@@ -114,5 +120,30 @@ public class AuthController {
         .contentType(MediaType.APPLICATION_JSON)
         .headers(headers)
         .body(ApiResponse.success("Token successfully reissued", response));
+  }
+
+  /** Step-up authentication for sensitive operations (requires existing access token). */
+  @PostMapping("/stepup")
+  public ResponseEntity<ApiResponse<StepUpResponseDTO>> stepUp(
+      @Valid @RequestBody StepUpRequestDTO request, @AuthenticationPrincipal Long userId) {
+
+    if (userId == null) {
+      throw new UserNotAuthenticatedException();
+    }
+
+    // Convert API DTO -> Application DTO
+    StepUpCommand command =
+        StepUpCommand.of(userId, request.password(), request.authorizationCode());
+
+    // Execute Step-up UseCase
+    StepUpResult result = stepUpUseCase.execute(command);
+
+    // Convert Application Result -> API DTO
+    StepUpResponseDTO response = StepUpResponseDTO.from(result);
+
+    // Return Response
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(ApiResponse.success("Step-up authentication successful", response));
   }
 }
