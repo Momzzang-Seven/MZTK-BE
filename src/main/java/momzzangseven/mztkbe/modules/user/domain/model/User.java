@@ -178,10 +178,10 @@ public class User {
     validateNickname(nickname);
 
     return this.toBuilder()
-            .nickname(newNickname)
-            .profileImageUrl(newProfileImageUrl)
-            .updatedAt(LocalDateTime.now())
-            .build();
+        .nickname(newNickname)
+        .profileImageUrl(newProfileImageUrl)
+        .updatedAt(LocalDateTime.now())
+        .build();
   }
 
   /**
@@ -204,10 +204,7 @@ public class User {
       throw new IllegalArgumentException("Cannot self-assign ADMIN role");
     }
 
-    return this.toBuilder()
-            .role(newRole)
-            .updatedAt(LocalDateTime.now())
-            .build();
+    return this.toBuilder().role(newRole).updatedAt(LocalDateTime.now()).build();
   }
 
   /**
@@ -282,12 +279,13 @@ public class User {
   }
 
   /**
-   * Check if user can change role to TRAINER.
-   * Add business rules here (e.g., email verification, minimum age, etc.)
+   * Check if user can change role to TRAINER. Add business rules here (e.g., email verification,
+   * minimum age, etc.)
    */
   public boolean canBecomeTrainer() {
     // Business rules for becoming a trainer
-    // Example: Must have verified email, etc. We can add additional business rule to become a trainer here.
+    // Example: Must have verified email, etc. We can add additional business rule to become a
+    // trainer here.
     return this.email != null;
   }
 }
