@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
+import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -192,16 +194,16 @@ public class User {
    */
   public User updateRole(UserRole newRole) {
     if (newRole == null) {
-      throw new IllegalArgumentException("Role cannot be null");
+      throw new InvalidUserRoleException("Cannot update user role if no role is provided");
     }
 
     if (this.role == newRole) {
-      throw new IllegalArgumentException("New role is same as current role");
+      throw new InvalidUserRoleException("New role is same as current role");
     }
 
     // Business rule: Cannot change to ADMIN (only system can do this)
     if (newRole == UserRole.ADMIN) {
-      throw new IllegalArgumentException("Cannot self-assign ADMIN role");
+      throw new IllegalAdminGrantException();
     }
 
     return this.toBuilder().role(newRole).updatedAt(LocalDateTime.now()).build();
