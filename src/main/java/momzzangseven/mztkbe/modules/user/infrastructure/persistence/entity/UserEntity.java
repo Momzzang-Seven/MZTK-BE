@@ -5,14 +5,13 @@ import java.time.LocalDateTime;
 import lombok.*;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
+import org.hibernate.annotations.ColumnDefault;
 
 @Entity
 @Table(
     name = "users",
-    uniqueConstraints = {
-      @UniqueConstraint(columnNames = {"provider", "provider_user_id"}),
-      @UniqueConstraint(columnNames = {"email"})
-    })
+    uniqueConstraints = {@UniqueConstraint(columnNames = {"provider", "provider_user_id"})})
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -33,6 +32,9 @@ public class UserEntity {
   @Column(name = "provider_user_id", nullable = false)
   private String providerUserId;
 
+  @Column(name = "google_refresh_token", length = 2048)
+  private String googleRefreshToken;
+
   // 계정 식별자 (UNIQUE)
   @Column(nullable = false, unique = true)
   private String email;
@@ -50,6 +52,14 @@ public class UserEntity {
   @Column(name = "wallet_address", unique = true, length = 42)
   private String walletAddress;
 
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false)
+  @ColumnDefault("'ACTIVE'")
+  private UserStatus status;
+
+  @Column(name = "deleted_at")
+  private LocalDateTime deletedAt;
+
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 
@@ -63,6 +73,9 @@ public class UserEntity {
   protected void onCreate() {
     this.createdAt = LocalDateTime.now();
     this.updatedAt = this.createdAt;
+    if (this.status == null) {
+      this.status = UserStatus.ACTIVE;
+    }
   }
 
   @PreUpdate

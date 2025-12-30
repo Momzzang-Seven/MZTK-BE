@@ -21,6 +21,9 @@ public class JwtProperties {
   /** Refresh token expiration time in milliseconds. Default: 7 days (604800000ms) */
   private Long refreshTokenExpiration;
 
+  /** Step-up token expiration time in milliseconds. Default: 5 minutes (300000ms) */
+  private Long stepUpTokenExpiration;
+
   /** Token issuer (e.g., "MZTK-BE") */
   private String issuer;
 

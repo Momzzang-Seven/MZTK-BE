@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
+import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.UserJpaRepository;
 import org.springframework.stereotype.Component;
@@ -26,7 +27,21 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
   @Transactional(readOnly = true)
   public Optional<User> loadUserByEmail(String email) {
     log.debug("Loading user by email: {}", email);
-    return userJpaRepository.findByEmail(email).map(this::mapToDomain);
+    return userJpaRepository.findByEmail(email).filter(this::isActiveUser).map(this::mapToDomain);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<User> loadDeletedUserByEmail(String email) {
+    log.debug("Loading deleted user by email: {}", email);
+    return userJpaRepository.findByEmail(email).filter(this::isDeletedUser).map(this::mapToDomain);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<User> loadDeletedUserById(Long userId) {
+    log.debug("Loading deleted user by id: {}", userId);
+    return userJpaRepository.findById(userId).filter(this::isDeletedUser).map(this::mapToDomain);
   }
 
   /** LoadUserPort가 요구하는 메서드 (컴파일 에러 해결용) - provider + providerUserId 조합으로 유저 조회. */
@@ -37,6 +52,18 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     log.debug("Loading user by provider: {}, providerUserId: {}", provider, providerUserId);
     return userJpaRepository
         .findByProviderAndProviderUserId(provider, providerUserId)
+        .filter(this::isActiveUser)
+        .map(this::mapToDomain);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<User> findDeletedByProviderAndProviderUserId(
+      AuthProvider provider, String providerUserId) {
+    log.debug("Loading deleted user by provider: {}, providerUserId: {}", provider, providerUserId);
+    return userJpaRepository
+        .findByProviderAndProviderUserId(provider, providerUserId)
+        .filter(this::isDeletedUser)
         .map(this::mapToDomain);
   }
 
@@ -44,7 +71,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
   @Transactional(readOnly = true)
   public Optional<User> loadUserById(Long userId) {
     log.debug("Loading user by id: {}", userId);
-    return userJpaRepository.findById(userId).map(this::mapToDomain);
+    return userJpaRepository.findById(userId).filter(this::isActiveUser).map(this::mapToDomain);
   }
 
   @Override
@@ -94,8 +121,22 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
 
   // ========== Mapping Methods (Translator Pattern) ==========
 
+  private boolean isActiveUser(UserEntity entity) {
+    UserStatus status = entity.getStatus() != null ? entity.getStatus() : UserStatus.ACTIVE;
+    return status == UserStatus.ACTIVE && entity.getDeletedAt() == null;
+  }
+
+  private boolean isDeletedUser(UserEntity entity) {
+    UserStatus status = entity.getStatus() != null ? entity.getStatus() : UserStatus.ACTIVE;
+    return status == UserStatus.DELETED || entity.getDeletedAt() != null;
+  }
+
   /** Convert UserEntity (Infrastructure) to User (Domain). */
   private User mapToDomain(UserEntity entity) {
+    UserStatus status = entity.getStatus();
+    if (status == null) {
+      status = entity.getDeletedAt() == null ? UserStatus.ACTIVE : UserStatus.DELETED;
+    }
     return User.builder()
         .id(entity.getId())
         .email(entity.getEmail())
@@ -103,10 +144,13 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .nickname(entity.getNickname())
         .profileImageUrl(entity.getProfileImageUrl())
         .providerUserId(entity.getProviderUserId())
+        .googleRefreshToken(entity.getGoogleRefreshToken())
         .walletAddress(entity.getWalletAddress())
         .authProvider(entity.getProvider())
         .role(entity.getRole())
+        .status(status)
         .lastLoginAt(entity.getLastLoginAt())
+        .deletedAt(entity.getDeletedAt())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();
@@ -115,6 +159,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
   /** Convert User (Domain) to UserEntity (Infrastructure). Used for creating new entities. */
   private UserEntity mapToEntity(User user) {
     String providerUserId = user.getProviderUserId();
+    UserStatus status = user.getStatus() != null ? user.getStatus() : UserStatus.ACTIVE;
 
     // LOCAL은 providerUserId가 없으니 강제로 만들어 넣기
     if (providerUserId == null || providerUserId.isBlank()) {
@@ -130,9 +175,12 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .nickname(user.getNickname())
         .profileImageUrl(user.getProfileImageUrl())
         .providerUserId(providerUserId)
+        .googleRefreshToken(user.getGoogleRefreshToken())
         .walletAddress(user.getWalletAddress())
         .provider(user.getAuthProvider())
         .role(user.getRole())
+        .status(status)
+        .deletedAt(user.getDeletedAt())
         .lastLoginAt(user.getLastLoginAt())
         .createdAt(user.getCreatedAt())
         .updatedAt(user.getUpdatedAt())
@@ -141,14 +189,18 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
 
   /** 기존 영속 엔티티의 필드를 수정하는 방식으로 업데이트 (builder로 새 객체 만들지 말고, setter로 업데이트). */
   private void updateEntityFromDomain(UserEntity entity, User user) {
+    UserStatus status = user.getStatus() != null ? user.getStatus() : UserStatus.ACTIVE;
     entity.setEmail(user.getEmail());
     entity.setPasswordHash(user.getPassword());
     entity.setNickname(user.getNickname());
     entity.setProfileImageUrl(user.getProfileImageUrl());
     entity.setProviderUserId(user.getProviderUserId());
+    entity.setGoogleRefreshToken(user.getGoogleRefreshToken());
     entity.setWalletAddress(user.getWalletAddress());
     entity.setProvider(user.getAuthProvider());
     entity.setRole(user.getRole());
+    entity.setStatus(status);
+    entity.setDeletedAt(user.getDeletedAt());
     entity.setLastLoginAt(user.getLastLoginAt());
     entity.setUpdatedAt(user.getUpdatedAt());
   }

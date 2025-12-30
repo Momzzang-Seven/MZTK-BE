@@ -13,9 +13,16 @@ public interface LoadUserPort {
 
   Optional<User> loadUserByEmail(String email);
 
+  Optional<User> loadDeletedUserByEmail(String email);
+
+  Optional<User> loadDeletedUserById(Long userId);
+
   Optional<User> loadUserById(Long userId);
 
   boolean existsByEmail(String email);
 
   Optional<User> findByProviderAndProviderUserId(AuthProvider provider, String providerUserId);
+
+  Optional<User> findDeletedByProviderAndProviderUserId(
+      AuthProvider provider, String providerUserId);
 }

@@ -9,10 +9,13 @@ import momzzangseven.mztkbe.modules.user.api.dto.UpdateUserRoleRequestDTO;
 import momzzangseven.mztkbe.modules.user.api.dto.UserResponseDTO;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
+import momzzangseven.mztkbe.modules.user.application.dto.WithdrawUserCommand;
 import momzzangseven.mztkbe.modules.user.application.port.in.UpdateUserRoleUseCase;
+import momzzangseven.mztkbe.modules.user.application.port.in.WithdrawUserUseCase;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,16 +27,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
   private final UpdateUserRoleUseCase updateUserRoleUseCase;
+  private final WithdrawUserUseCase withdrawUserUseCase;
 
   /** Update current user's role. Example: USER -> TRAINER */
   @PatchMapping("/me/role")
   public ResponseEntity<ApiResponse<UserResponseDTO>> updateMyRole(
-      @Valid @RequestBody UpdateUserRoleRequestDTO request, Authentication authentication) {
+      @Valid @RequestBody UpdateUserRoleRequestDTO request, @AuthenticationPrincipal Long userId) {
 
     log.info("Role update request received: newRole={}", request.role());
 
-    // 1. Extract userId from authentication
-    Long userId = extractUserIdFromAuthentication(authentication);
+    userId = requireUserId(userId);
 
     // 2. Convert API DTO -> Application Command
     UpdateUserRoleCommand command = UpdateUserRoleCommand.of(userId, request.role());
@@ -48,26 +51,43 @@ public class UserController {
     return ResponseEntity.ok(ApiResponse.success("Role updated successfully", response));
   }
 
+  /** Withdraw (soft-delete) the current user after step-up verification. */
+  @PostMapping("/me/withdrawal")
+  public ResponseEntity<ApiResponse<Void>> withdrawMe(@AuthenticationPrincipal Long userId) {
+
+    userId = requireUserId(userId);
+    WithdrawUserCommand command = WithdrawUserCommand.of(userId);
+    withdrawUserUseCase.execute(command);
+    return ResponseEntity.ok(ApiResponse.success("User withdrawn successfully", null));
+  }
+
   // ============================================
   // Utility methods (private)
   // ============================================
 
-  /**
-   * Extract userId from Spring Security Authentication object. Assumes JwtAuthenticationFilter sets
-   * userId as principal.
+  /*
+   * (Legacy) Spring Security Authentication에서 userId를 추출하던 유틸 메서드.
+   * - 컨트롤러가 Authentication을 직접 받는 방식의 참고용으로만 남겨둡니다.
+   * - 현재는 @AuthenticationPrincipal Long userId를 사용해서 보일러플레이트를 줄이고,
+   *   컨트롤러 간 유틸 호출(의존) 문제를 피합니다.
+   *
+   * private Long extractUserIdFromAuthentication(Authentication authentication) {
+   *   if (authentication == null || !authentication.isAuthenticated()) {
+   *     throw new UserNotAuthenticatedException();
+   *   }
+   *
+   *   Object principal = authentication.getPrincipal();
+   *   if (principal instanceof Long) {
+   *     return (Long) principal;
+   *   }
+   *
+   *   throw new IllegalStateException("Invalid authentication principal type");
+   * }
    */
-  private Long extractUserIdFromAuthentication(Authentication authentication) {
-    if (authentication == null || !authentication.isAuthenticated()) {
+  private Long requireUserId(Long userId) {
+    if (userId == null) {
       throw new UserNotAuthenticatedException();
     }
-
-    // userId Set from JwtAuthenticationFilter (principal)
-    Object principal = authentication.getPrincipal();
-
-    if (principal instanceof Long) {
-      return (Long) principal;
-    }
-
-    throw new IllegalStateException("Invalid authentication principal type");
+    return userId;
   }
 }
