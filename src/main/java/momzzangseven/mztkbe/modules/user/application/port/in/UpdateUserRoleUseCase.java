@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.user.application.port.in;
 
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
-import momzzangseven.mztkbe.modules.user.domain.model.User;
+import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
 
 /** Usecase for updating user role. */
 public interface UpdateUserRoleUseCase {
@@ -9,7 +9,7 @@ public interface UpdateUserRoleUseCase {
    * Update user role (e.g., USER to TRAINER).
    *
    * @param command Update role command
-   * @return Updated user
+   * @return Update result containing updated user information
    */
-  User execute(UpdateUserRoleCommand command);
+  UpdateUserRoleResult execute(UpdateUserRoleCommand command);
 }
