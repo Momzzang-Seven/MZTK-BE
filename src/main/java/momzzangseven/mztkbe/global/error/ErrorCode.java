@@ -40,17 +40,12 @@ public enum ErrorCode {
       "AUTH_005", "Unauthorized access", HttpStatus.FORBIDDEN // 403
       ),
 
-    // ========================================
-    // Signup Errors (SIGNUP_xxx)
-    // ========================================
-    ILLEGAL_ADMIN_GRANT(
-            "USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST
-    ),
+  // ========================================
+  // Signup Errors (SIGNUP_xxx)
+  // ========================================
+  ILLEGAL_ADMIN_GRANT("USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST),
 
-    INVALID_ROLE(
-            "USER_002", "Invalid role value", HttpStatus.BAD_REQUEST
-    ),
-
+  INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Signup Errors (SIGNUP_xxx)
