@@ -41,11 +41,13 @@ public enum ErrorCode {
       ),
 
   // ========================================
-  // Signup Errors (SIGNUP_xxx)
+  // User Errors (USER_xxx)
   // ========================================
   ILLEGAL_ADMIN_GRANT("USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST),
 
   INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
+
+    ILLEGAL_TRAINER_GRANT("USER_003", "Cannot assign TRAINER role", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Signup Errors (SIGNUP_xxx)
