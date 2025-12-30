@@ -40,6 +40,10 @@ public enum ErrorCode {
       "AUTH_005", "Unauthorized access", HttpStatus.FORBIDDEN // 403
       ),
 
+  USER_NOT_AUTHENTICATED(
+      "AUTH_006", "User is not authenticated", HttpStatus.UNAUTHORIZED // 401
+      ),
+
   // ========================================
   // User Errors (USER_xxx)
   // ========================================
