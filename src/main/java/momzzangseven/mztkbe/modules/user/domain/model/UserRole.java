@@ -10,6 +10,9 @@ public enum UserRole {
   /** Regular user role with basic permissions. */
   USER("ROLE_USER", "Regular User", 1),
 
+  /** Regular user role with trainer permissions. */
+  TRAINER("ROLE_TRAINER", "Trainer", 2),
+
   /** Administrator role with full permissions. */
   ADMIN("ROLE_ADMIN", "Administrator", 99);
 

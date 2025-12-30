@@ -4,13 +4,15 @@ import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
+import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /** Domain model representing an application user. */
 @Slf4j
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class User {
   private Long id;
   private String email;
@@ -170,14 +172,41 @@ public class User {
   /**
    * Update user profile.
    *
-   * @param nickname New nickname
-   * @param profileImageUrl New profile image URL
+   * @param newNickname New nickname
+   * @param newProfileImageUrl New profile image URL
+   * @return Updated User instance
    */
-  public void updateProfile(String nickname, String profileImageUrl) {
+  public User updateProfile(String newNickname, String newProfileImageUrl) {
     validateNickname(nickname);
-    this.nickname = nickname;
-    this.profileImageUrl = profileImageUrl;
-    this.updatedAt = LocalDateTime.now();
+
+    return this.toBuilder()
+        .nickname(newNickname)
+        .profileImageUrl(newProfileImageUrl)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  /**
+   * Update user role.
+   *
+   * @param newRole New role
+   * @return Updated User instance
+   */
+  public User updateRole(UserRole newRole) {
+    if (newRole == null) {
+      throw new InvalidUserRoleException("Cannot update user role if no role is provided");
+    }
+
+    if (this.role == newRole) {
+      throw new InvalidUserRoleException("New role is same as current role");
+    }
+
+    // Business rule: Cannot change to ADMIN (only system can do this)
+    if (newRole == UserRole.ADMIN) {
+      throw new IllegalAdminGrantException();
+    }
+
+    return this.toBuilder().role(newRole).updatedAt(LocalDateTime.now()).build();
   }
 
   /**
@@ -208,7 +237,7 @@ public class User {
   }
 
   // ============================================
-  // Validation Methods (Private)
+  // Validation Methods
   // ============================================
 
   /** Validate email format. */
@@ -249,5 +278,16 @@ public class User {
     if (nickname.length() < 2 || nickname.length() > 50) {
       throw new IllegalArgumentException("Nickname must be between 2 and 50 characters");
     }
+  }
+
+  /**
+   * Check if user can change role to TRAINER. Add business rules here (e.g., email verification,
+   * minimum age, etc.)
+   */
+  public boolean canBecomeTrainer() {
+    // Business rules for becoming a trainer
+    // Example: Must have verified email, etc. We can add additional business rule to become a
+    // trainer here.
+    return this.email != null;
   }
 }
