@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.TokenException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -99,6 +100,33 @@ public class GlobalExceptionHandler {
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /**
+   * Handle JSON deserialization errors (e.g., invalid enum values, type mismatches).
+   *
+   * <p>This occurs when the client sends JSON that cannot be parsed into the expected types, such
+   * as sending "foo" for a UserRole enum that only accepts [USER, TRAINER, ADMIN].
+   */
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(
+      HttpMessageNotReadableException ex) {
+    log.warn("JSON deserialization error: {}", ex.getMessage());
+
+    String userFriendlyMessage = "Invalid request format. Please check your input values.";
+
+    // Extract more specific error message if available
+    if (ex.getMessage() != null) {
+      if (ex.getMessage().contains("not one of the values accepted for Enum")) {
+        userFriendlyMessage = "Invalid enum value. Please check allowed values.";
+      } else if (ex.getMessage().contains("Cannot deserialize")) {
+        userFriendlyMessage = "Invalid data format. Please check your request body.";
+      }
+    }
+
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(userFriendlyMessage, errorCode.getCode()));
   }
 
   // ========================================
