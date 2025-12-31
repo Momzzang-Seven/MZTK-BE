@@ -112,13 +112,6 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     return mapToDomain(savedEntity);
   }
 
-  @Override
-  @Transactional
-  public void deleteUser(Long userId) {
-    log.debug("Deleting user with ID: {}", userId);
-    userJpaRepository.deleteById(userId);
-  }
-
   // ========== Mapping Methods (Translator Pattern) ==========
 
   private boolean isActiveUser(UserEntity entity) {

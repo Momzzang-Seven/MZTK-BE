@@ -14,8 +14,7 @@ import momzzangseven.mztkbe.global.error.token.TokenEncryptionException;
 import org.springframework.stereotype.Component;
 
 /**
- * Encrypt/decrypt sensitive third-party tokens (e.g., Google OAuth refresh token) before
- * persisting.
+ * Encrypt sensitive third-party tokens (e.g., Google OAuth refresh token) before persisting.
  *
  * <p>Implementation details:
  *
@@ -56,30 +55,6 @@ public class SensitiveTokenCipher {
           + Base64.getEncoder().encodeToString(ciphertext);
     } catch (Exception e) {
       throw new TokenEncryptionException("Failed to encrypt token", e);
-    }
-  }
-
-  public String decrypt(String encrypted) {
-    if (encrypted == null || encrypted.isBlank()) {
-      throw new IllegalArgumentException("encrypted is required");
-    }
-
-    String[] parts = encrypted.split("\\.", 2);
-    if (parts.length != 2) {
-      throw new TokenEncryptionException("Invalid encrypted token format");
-    }
-
-    try {
-      byte[] iv = Base64.getDecoder().decode(parts[0]);
-      byte[] ciphertext = Base64.getDecoder().decode(parts[1]);
-
-      Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-      cipher.init(Cipher.DECRYPT_MODE, deriveKey(), new GCMParameterSpec(GCM_TAG_LENGTH_BIT, iv));
-
-      byte[] plaintextBytes = cipher.doFinal(ciphertext);
-      return new String(plaintextBytes, StandardCharsets.UTF_8);
-    } catch (Exception e) {
-      throw new TokenEncryptionException("Failed to decrypt token", e);
     }
   }
 
