@@ -13,16 +13,9 @@ import momzzangseven.mztkbe.modules.auth.api.dto.SignupResponseDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.StepUpRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.StepUpResponseDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.token.ReissueTokenResponseDTO;
-import momzzangseven.mztkbe.modules.auth.application.dto.LoginCommand;
-import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
-import momzzangseven.mztkbe.modules.auth.application.dto.ReactivateCommand;
-import momzzangseven.mztkbe.modules.auth.application.dto.ReissueTokenCommand;
-import momzzangseven.mztkbe.modules.auth.application.dto.ReissueTokenResult;
-import momzzangseven.mztkbe.modules.auth.application.dto.SignupCommand;
-import momzzangseven.mztkbe.modules.auth.application.dto.SignupResult;
-import momzzangseven.mztkbe.modules.auth.application.dto.StepUpCommand;
-import momzzangseven.mztkbe.modules.auth.application.dto.StepUpResult;
+import momzzangseven.mztkbe.modules.auth.application.dto.*;
 import momzzangseven.mztkbe.modules.auth.application.port.in.LoginUseCase;
+import momzzangseven.mztkbe.modules.auth.application.port.in.LogoutUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReactivateUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReissueTokenUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.SignupUseCase;
@@ -60,6 +53,7 @@ public class AuthController {
   private final ReactivateUseCase reactivateUseCase;
   private final SignupUseCase signupUseCase;
   private final ReissueTokenUseCase reissueTokenUseCase;
+  private final LogoutUseCase logoutUseCase;
   private final StepUpUseCase stepUpUseCase;
 
   /** Authenticate credentials and issue tokens for LOCAL/social login. */
@@ -181,6 +175,29 @@ public class AuthController {
         .contentType(MediaType.APPLICATION_JSON)
         .headers(headers)
         .body(ApiResponse.success("Token successfully reissued", response));
+  }
+
+  @PostMapping("/logout")
+  public ResponseEntity<Void> logout(
+      @CookieValue(value = "refreshToken", required = false) String refreshToken) {
+
+    if (refreshToken != null && !refreshToken.isBlank()) {
+      logoutUseCase.execute(LogoutCommand.of(refreshToken));
+    }
+
+    ResponseCookie deleteRefreshTokenCookie =
+        ResponseCookie.from("refreshToken", "")
+            .httpOnly(true)
+            .secure(false)
+            .path("/auth")
+            .maxAge(Duration.ZERO)
+            .sameSite("Strict")
+            .build();
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.add(HttpHeaders.SET_COOKIE, deleteRefreshTokenCookie.toString());
+
+    return ResponseEntity.noContent().headers(headers).build();
   }
 
   /** Step-up authentication for sensitive operations (requires existing access token). */
