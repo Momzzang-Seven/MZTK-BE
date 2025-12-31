@@ -14,4 +14,20 @@ public interface GoogleAuthPort {
   String getAccessToken(String authorizationCode);
 
   GoogleUserInfo getUserInfo(String accessToken);
+
+  /**
+   * Revoke a Google OAuth refresh token to disconnect the user.
+   *
+   * @param refreshToken refresh token
+   */
+  void revokeRefreshToken(String refreshToken);
+
+  /**
+   * Revoke a Google OAuth access token to disconnect the user.
+   *
+   * <p>Note: For withdrawal/disconnect flows, refresh token is preferred.
+   *
+   * @param accessToken access token
+   */
+  void revokeAccessToken(String accessToken);
 }

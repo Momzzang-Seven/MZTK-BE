@@ -27,4 +27,13 @@ public interface KakaoAuthPort {
    * @throws ExternalApiException if user info retrieval fails
    */
   KakaoUserInfo getUserInfo(String accessToken);
+
+  /**
+   * Unlink (disconnect) a Kakao user from the application.
+   *
+   * <p>This is used during social withdrawal to complete external account disconnection.
+   *
+   * @param providerUserId Kakao user id (as string)
+   */
+  void unlinkUser(String providerUserId);
 }

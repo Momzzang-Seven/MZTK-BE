@@ -22,6 +22,7 @@ public class WithdrawUserService implements WithdrawUserUseCase {
   private final LoadUserPort loadUserPort;
   private final SaveUserPort saveUserPort;
   private final SaveRefreshTokenPort saveRefreshTokenPort;
+  private final ExternalDisconnectService externalDisconnectService;
 
   @Override
   public void execute(WithdrawUserCommand command) {
@@ -33,6 +34,9 @@ public class WithdrawUserService implements WithdrawUserUseCase {
     saveUserPort.saveUser(withdrawnUser);
 
     saveRefreshTokenPort.deleteByUserId(user.getId());
+
+    // External provider disconnection is best-effort. Failures must not rollback withdrawal.
+    externalDisconnectService.disconnectOnWithdrawal(withdrawnUser);
 
     log.info(
         "User withdrawal completed: userId={}, provider={}", user.getId(), user.getAuthProvider());

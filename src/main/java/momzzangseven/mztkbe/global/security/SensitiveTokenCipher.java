@@ -36,6 +36,7 @@ public class SensitiveTokenCipher {
 
   private final SecureRandom secureRandom = new SecureRandom();
 
+  /** Encrypt plaintext into base64(iv).base64(ciphertext) using AES-256-GCM. */
   public String encrypt(String plaintext) {
     if (plaintext == null || plaintext.isBlank()) {
       throw new IllegalArgumentException("plaintext is required");
@@ -55,6 +56,33 @@ public class SensitiveTokenCipher {
           + Base64.getEncoder().encodeToString(ciphertext);
     } catch (Exception e) {
       throw new TokenEncryptionException("Failed to encrypt token", e);
+    }
+  }
+
+  /** Decrypt a value produced by {@link #encrypt(String)}. */
+  public String decrypt(String encrypted) {
+    if (encrypted == null || encrypted.isBlank()) {
+      throw new IllegalArgumentException("encrypted is required");
+    }
+
+    try {
+      String[] parts = encrypted.split("\\.", 2);
+      if (parts.length != 2) {
+        throw new TokenEncryptionException("Invalid encrypted token format");
+      }
+
+      byte[] iv = Base64.getDecoder().decode(parts[0]);
+      byte[] ciphertext = Base64.getDecoder().decode(parts[1]);
+
+      Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+      cipher.init(Cipher.DECRYPT_MODE, deriveKey(), new GCMParameterSpec(GCM_TAG_LENGTH_BIT, iv));
+
+      byte[] plaintext = cipher.doFinal(ciphertext);
+      return new String(plaintext, StandardCharsets.UTF_8);
+    } catch (TokenEncryptionException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new TokenEncryptionException("Failed to decrypt token", e);
     }
   }
 

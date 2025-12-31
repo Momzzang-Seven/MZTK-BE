@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.global.error.user;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 
+/** Thrown when a requested user role is invalid or violates role rules. */
 public class InvalidUserRoleException extends BusinessException {
 
   public InvalidUserRoleException() {

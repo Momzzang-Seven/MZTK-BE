@@ -7,6 +7,7 @@ public record WithdrawUserCommand(Long userId) {
     return new WithdrawUserCommand(userId);
   }
 
+  /** Validate required fields. */
   public void validate() {
     if (userId == null) {
       throw new IllegalArgumentException("userId is required");
