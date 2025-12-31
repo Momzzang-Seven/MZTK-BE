@@ -7,13 +7,23 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginResponseDTO;
+import momzzangseven.mztkbe.modules.auth.api.dto.ReactivateRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.SignupRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.SignupResponseDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.StepUpRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.StepUpResponseDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.token.ReissueTokenResponseDTO;
-import momzzangseven.mztkbe.modules.auth.application.dto.*;
+import momzzangseven.mztkbe.modules.auth.application.dto.LoginCommand;
+import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
+import momzzangseven.mztkbe.modules.auth.application.dto.ReactivateCommand;
+import momzzangseven.mztkbe.modules.auth.application.dto.ReissueTokenCommand;
+import momzzangseven.mztkbe.modules.auth.application.dto.ReissueTokenResult;
+import momzzangseven.mztkbe.modules.auth.application.dto.SignupCommand;
+import momzzangseven.mztkbe.modules.auth.application.dto.SignupResult;
+import momzzangseven.mztkbe.modules.auth.application.dto.StepUpCommand;
+import momzzangseven.mztkbe.modules.auth.application.dto.StepUpResult;
 import momzzangseven.mztkbe.modules.auth.application.port.in.LoginUseCase;
+import momzzangseven.mztkbe.modules.auth.application.port.in.ReactivateUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReissueTokenUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.SignupUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.StepUpUseCase;
@@ -22,14 +32,31 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
+  /*
+   * Auth endpoints overview:
+   * - /auth/login: Authenticate and issue tokens (DELETED accounts respond with USER_WITHDRAWN(409))
+   * - /auth/reactivate: Reactivate a soft-deleted account and issue tokens (public endpoint)
+   * - /auth/signup: Register a new LOCAL user
+   * - /auth/reissue: Rotate tokens using refresh token cookie
+   * - /auth/stepup: Step-up authentication for sensitive actions (requires existing access token)
+   *
+   * Token delivery:
+   * - Access token: returned in JSON body (LoginResponseDTO)
+   * - Refresh token: returned as HttpOnly cookie (refreshToken)
+   */
   private final LoginUseCase loginUseCase;
+  private final ReactivateUseCase reactivateUseCase;
   private final SignupUseCase signupUseCase;
   private final ReissueTokenUseCase reissueTokenUseCase;
   private final StepUpUseCase stepUpUseCase;
@@ -62,6 +89,40 @@ public class AuthController {
     headers.add(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString());
 
     // 6. Return Response
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_JSON)
+        .headers(headers)
+        .body(ApiResponse.success(response));
+  }
+
+  /**
+   * Reactivate a soft-deleted user and issue tokens for LOCAL/social.
+   *
+   * <p>Important:
+   * - This endpoint is intentionally public (permitAll) and is excluded from JwtAuthenticationFilter.
+   * - Clients may auto-attach an old Authorization header; if JwtAuthenticationFilter ran here,
+   *   DELETED users could be blocked before reactivation.
+   */
+  @PostMapping("/reactivate")
+  public ResponseEntity<ApiResponse<LoginResponseDTO>> reactivate(
+      @Valid @RequestBody ReactivateRequestDTO request) {
+    ReactivateCommand command = ReactivateCommand.from(request);
+    LoginResult result = reactivateUseCase.execute(command);
+    LoginResponseDTO response = LoginResponseDTO.from(result);
+
+    // Refresh token cookie is issued on successful reactivation, same as login.
+    ResponseCookie refreshTokenCookie =
+        ResponseCookie.from("refreshToken", result.refreshToken())
+            .httpOnly(true)
+            .secure(false)
+            .path("/auth")
+            .maxAge(Duration.ofMillis(result.refreshTokenExpiresIn()))
+            .sameSite("Strict")
+            .build();
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.add(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString());
+
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .headers(headers)

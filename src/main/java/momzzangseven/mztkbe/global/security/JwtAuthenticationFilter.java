@@ -51,7 +51,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getRequestURI();
-    return "/auth/login".equals(path) || "/auth/signup".equals(path);
+    /*
+     * NOTE:
+     * - shouldNotFilter(...) returning true means "skip this JWT filter".
+     * - /auth/login and /auth/signup are public endpoints; JWT auth is not required there.
+     * - /auth/reactivate is also public and must be reachable even when the caller auto-attaches
+     *   an old Authorization header that belongs to a DELETED user.
+     *   This filter enforces "immediate block" for non-ACTIVE users by returning
+     *   USER_WITHDRAWN(409) before the controller is invoked, so we skip it for reactivation.
+     */
+    return "/auth/login".equals(path)
+        || "/auth/reactivate".equals(path)
+        || "/auth/signup".equals(path);
   }
 
   @Override
