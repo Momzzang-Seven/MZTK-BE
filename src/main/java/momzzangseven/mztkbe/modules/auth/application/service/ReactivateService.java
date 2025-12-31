@@ -44,7 +44,8 @@ public class ReactivateService implements ReactivateUseCase {
           case LOCAL -> reactivateLocal(command.email(), command.password());
           case KAKAO -> reactivateKakao(command.authorizationCode());
           case GOOGLE -> reactivateGoogle(command.authorizationCode());
-          default -> throw new IllegalArgumentException("Unsupported provider: " + command.provider());
+          default ->
+              throw new IllegalArgumentException("Unsupported provider: " + command.provider());
         };
 
     return tokenIssuer.issue(user, false);
@@ -59,7 +60,8 @@ public class ReactivateService implements ReactivateUseCase {
     }
 
     // If already active, behave like login (issue tokens).
-    User active = loadUserPort.loadUserByEmail(email).orElseThrow(() -> new UserNotFoundException(email));
+    User active =
+        loadUserPort.loadUserByEmail(email).orElseThrow(() -> new UserNotFoundException(email));
     verifyLocalCredentialsOrThrow(active, password);
     active.updateLastLogin();
     return saveUserPort.saveUser(active);

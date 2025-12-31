@@ -98,10 +98,9 @@ public class AuthController {
   /**
    * Reactivate a soft-deleted user and issue tokens for LOCAL/social.
    *
-   * <p>Important:
-   * - This endpoint is intentionally public (permitAll) and is excluded from JwtAuthenticationFilter.
-   * - Clients may auto-attach an old Authorization header; if JwtAuthenticationFilter ran here,
-   *   DELETED users could be blocked before reactivation.
+   * <p>Important: - This endpoint is intentionally public (permitAll) and is excluded from
+   * JwtAuthenticationFilter. - Clients may auto-attach an old Authorization header; if
+   * JwtAuthenticationFilter ran here, DELETED users could be blocked before reactivation.
    */
   @PostMapping("/reactivate")
   public ResponseEntity<ApiResponse<LoginResponseDTO>> reactivate(

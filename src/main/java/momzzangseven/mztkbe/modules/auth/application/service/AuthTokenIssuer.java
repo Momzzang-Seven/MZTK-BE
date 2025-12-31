@@ -21,7 +21,8 @@ public class AuthTokenIssuer {
   private final RefreshTokenManager refreshTokenManager;
 
   public LoginResult issue(User user, boolean isNewUser) {
-    String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
+    String accessToken =
+        jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
     String refreshToken = refreshTokenManager.createAndSaveRefreshToken(user.getId());
 
     return LoginResult.of(
@@ -33,4 +34,3 @@ public class AuthTokenIssuer {
         user);
   }
 }
-
