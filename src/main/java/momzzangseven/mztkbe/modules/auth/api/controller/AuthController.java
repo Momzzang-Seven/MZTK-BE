@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.auth.api.dto.SignupResponseDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.token.ReissueTokenResponseDTO;
 import momzzangseven.mztkbe.modules.auth.application.dto.*;
 import momzzangseven.mztkbe.modules.auth.application.port.in.LoginUseCase;
+import momzzangseven.mztkbe.modules.auth.application.port.in.LogoutUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReissueTokenUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.in.SignupUseCase;
 import org.springframework.http.HttpHeaders;
@@ -27,6 +28,7 @@ public class AuthController {
   private final LoginUseCase loginUseCase;
   private final SignupUseCase signupUseCase;
   private final ReissueTokenUseCase reissueTokenUseCase;
+  private final LogoutUseCase logoutUseCase;
 
   /** Authenticate credentials and issue tokens for LOCAL/social login. */
   @PostMapping("/login")
@@ -114,5 +116,28 @@ public class AuthController {
         .contentType(MediaType.APPLICATION_JSON)
         .headers(headers)
         .body(ApiResponse.success("Token successfully reissued", response));
+  }
+
+  @PostMapping("/logout")
+  public ResponseEntity<Void> logout(
+      @CookieValue(value = "refreshToken", required = false) String refreshToken) {
+
+    if (refreshToken != null && !refreshToken.isBlank()) {
+      logoutUseCase.execute(LogoutCommand.of(refreshToken));
+    }
+
+    ResponseCookie deleteRefreshTokenCookie =
+        ResponseCookie.from("refreshToken", "")
+            .httpOnly(true)
+            .secure(false)
+            .path("/auth")
+            .maxAge(Duration.ZERO)
+            .sameSite("Strict")
+            .build();
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.add(HttpHeaders.SET_COOKIE, deleteRefreshTokenCookie.toString());
+
+    return ResponseEntity.noContent().headers(headers).build();
   }
 }
