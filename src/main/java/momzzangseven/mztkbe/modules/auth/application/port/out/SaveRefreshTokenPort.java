@@ -23,13 +23,6 @@ public interface SaveRefreshTokenPort {
   RefreshToken save(RefreshToken refreshToken);
 
   /**
-   * Delete refresh token.
-   *
-   * @param refreshToken Domain model to delete
-   */
-  void delete(RefreshToken refreshToken);
-
-  /**
    * Delete all refresh tokens for a user.
    *
    * <p>Use case: User logout - invalidate all tokens

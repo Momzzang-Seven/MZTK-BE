@@ -100,19 +100,6 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
 
   @Override
   @Transactional
-  public void delete(RefreshToken refreshToken) {
-    if (refreshToken.getId() != null) {
-      repository.deleteById(refreshToken.getId());
-      log.debug("Deleted refresh token with ID: {}", refreshToken.getId());
-    } else {
-      log.warn("Attempted to delete token without ID");
-      throw new RefreshTokenNotFoundException(
-          "Refresh token not found with ID: " + refreshToken.getId());
-    }
-  }
-
-  @Override
-  @Transactional
   public void deleteByUserId(Long userId) {
     repository.deleteByUserId(userId);
     log.debug("Deleted all refresh tokens for userId: {}", userId);
