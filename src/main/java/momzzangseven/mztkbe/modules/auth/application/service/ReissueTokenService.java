@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenManager;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenManager.TokenPair;
@@ -52,6 +54,14 @@ public class ReissueTokenService implements ReissueTokenUseCase {
 
     // Step 3: Extract userId(PK) from JWT
     Long jwtUserId = jwtTokenProvider.getUserIdFromToken(tokenValue);
+
+    // Step 3.5: Reject reissue for withdrawn/non-existent users.
+    if (loadUserPort.loadUserById(jwtUserId).isEmpty()) {
+      if (loadUserPort.loadDeletedUserById(jwtUserId).isPresent()) {
+        throw new UserWithdrawnException();
+      }
+      throw new UserNotFoundException(jwtUserId);
+    }
 
     // Step 4: Inspect the refresh token security flaw. Lock acquisition
     RefreshToken dbRefreshToken = validator.inspectSecurityFlaw(tokenValue, jwtUserId);

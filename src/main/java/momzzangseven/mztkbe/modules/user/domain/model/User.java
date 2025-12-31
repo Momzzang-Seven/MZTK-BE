@@ -252,6 +252,17 @@ public class User {
     return this.toBuilder().status(UserStatus.DELETED).deletedAt(now).updatedAt(now).build();
   }
 
+  /** Reactivate a soft-deleted user. */
+  public User reactivate() {
+    LocalDateTime now = LocalDateTime.now();
+    return this.toBuilder()
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
+        .lastLoginAt(now)
+        .updatedAt(now)
+        .build();
+  }
+
   /** Save encrypted Google OAuth refresh token. */
   public User updateGoogleRefreshToken(String encryptedRefreshToken) {
     if (!AuthProvider.GOOGLE.equals(this.authProvider)) {
