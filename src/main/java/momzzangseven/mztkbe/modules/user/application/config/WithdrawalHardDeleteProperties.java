@@ -13,6 +13,9 @@ public class WithdrawalHardDeleteProperties {
   /** Retention window in days before hard delete. */
   private int retentionDays = 30;
 
+  /** Batch size for selecting hard-delete targets. */
+  private int batchSize = 200;
+
   /** Cron expression for hard-delete job (used in Phase 5). */
   private String cron;
 
