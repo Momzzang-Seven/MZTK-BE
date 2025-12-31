@@ -48,8 +48,6 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/login")
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/auth/refresh")
-                    .permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/reissue")
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/logout")
