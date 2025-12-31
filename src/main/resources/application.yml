@@ -55,6 +55,7 @@ withdrawal:
       failed-retention-days: ${WITHDRAWAL_EXTERNAL_DISCONNECT_FAILED_RETENTION_DAYS:0}
   hard-delete:
     retention-days: ${WITHDRAWAL_HARD_DELETE_RETENTION_DAYS:30}
+    batch-size: ${WITHDRAWAL_HARD_DELETE_BATCH_SIZE:200}
     cron: ${WITHDRAWAL_HARD_DELETE_CRON:0 0 3 * * *}
     zone: ${WITHDRAWAL_HARD_DELETE_ZONE:Asia/Seoul}
 

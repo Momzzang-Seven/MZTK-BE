@@ -29,4 +29,8 @@ public interface ExternalDisconnectTaskJpaRepository
           + "where t.status = :status and t.updatedAt < :cutoff")
   int deleteByStatusAndUpdatedAtBefore(
       @Param("status") ExternalDisconnectStatus status, @Param("cutoff") LocalDateTime cutoff);
+
+  @Modifying
+  @Query("delete from ExternalDisconnectTaskEntity t where t.userId in :userIds")
+  int deleteByUserIdIn(@Param("userIds") List<Long> userIds);
 }

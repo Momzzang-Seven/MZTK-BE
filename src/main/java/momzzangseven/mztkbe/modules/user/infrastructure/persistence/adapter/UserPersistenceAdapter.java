@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.user.infrastructure.persistence.adapter;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -115,21 +116,21 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
   // ========== Mapping Methods (Translator Pattern) ==========
 
   private boolean isActiveUser(UserEntity entity) {
-    UserStatus status = entity.getStatus() != null ? entity.getStatus() : UserStatus.ACTIVE;
-    return status == UserStatus.ACTIVE && entity.getDeletedAt() == null;
+    return resolveStatus(entity) == UserStatus.ACTIVE;
   }
 
   private boolean isDeletedUser(UserEntity entity) {
-    UserStatus status = entity.getStatus() != null ? entity.getStatus() : UserStatus.ACTIVE;
-    return status == UserStatus.DELETED || entity.getDeletedAt() != null;
+    return resolveStatus(entity) == UserStatus.DELETED;
   }
 
   /** Convert UserEntity (Infrastructure) to User (Domain). */
   private User mapToDomain(UserEntity entity) {
-    UserStatus status = entity.getStatus();
-    if (status == null) {
-      status = entity.getDeletedAt() == null ? UserStatus.ACTIVE : UserStatus.DELETED;
-    }
+    UserStatus status = resolveStatus(entity);
+
+    // Invariant: ACTIVE users must always have deletedAt = null.
+    // (If legacy/buggy data has deletedAt set for ACTIVE users, treat it as null and let the next
+    // save operation persist the normalization.)
+    LocalDateTime deletedAt = status == UserStatus.ACTIVE ? null : entity.getDeletedAt();
     return User.builder()
         .id(entity.getId())
         .email(entity.getEmail())
@@ -143,7 +144,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .role(entity.getRole())
         .status(status)
         .lastLoginAt(entity.getLastLoginAt())
-        .deletedAt(entity.getDeletedAt())
+        .deletedAt(deletedAt)
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();
@@ -173,7 +174,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
         .provider(user.getAuthProvider())
         .role(user.getRole())
         .status(status)
-        .deletedAt(user.getDeletedAt())
+        .deletedAt(status == UserStatus.ACTIVE ? null : user.getDeletedAt())
         .lastLoginAt(user.getLastLoginAt())
         .createdAt(user.getCreatedAt())
         .updatedAt(user.getUpdatedAt())
@@ -193,8 +194,16 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     entity.setProvider(user.getAuthProvider());
     entity.setRole(user.getRole());
     entity.setStatus(status);
-    entity.setDeletedAt(user.getDeletedAt());
+    entity.setDeletedAt(status == UserStatus.ACTIVE ? null : user.getDeletedAt());
     entity.setLastLoginAt(user.getLastLoginAt());
     entity.setUpdatedAt(user.getUpdatedAt());
+  }
+
+  private static UserStatus resolveStatus(UserEntity entity) {
+    UserStatus status = entity.getStatus();
+    if (status != null) {
+      return status;
+    }
+    return entity.getDeletedAt() == null ? UserStatus.ACTIVE : UserStatus.DELETED;
   }
 }
