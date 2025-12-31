@@ -39,6 +39,9 @@ public class ReactivateService implements ReactivateUseCase {
 
     log.info("Reactivation request received for provider: {}", command.provider());
 
+    // Reactivation never creates a new user.
+    // - If a DELETED user exists, restore it and issue tokens.
+    // - If the user is already ACTIVE, behave like login and just issue tokens.
     User user;
     switch (command.provider()) {
       case LOCAL:
@@ -114,11 +117,9 @@ public class ReactivateService implements ReactivateUseCase {
 
   private static void verifyProviderInvariantOrThrow(User user, AuthProvider expectedProvider) {
     if (user.getAuthProvider() != expectedProvider) {
-      throw new IllegalStateException(
-          "Provider mismatch for reactivation: expected="
-              + expectedProvider
-              + ", actual="
-              + user.getAuthProvider());
+      // Defensive: this should not happen (queries already filter by provider),
+      // but avoid leaking internal errors as 500.
+      throw invalidPassword();
     }
   }
 

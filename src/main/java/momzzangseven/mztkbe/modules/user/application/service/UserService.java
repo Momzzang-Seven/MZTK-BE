@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.user.application.service;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginOutcome;
@@ -46,7 +47,8 @@ public class UserService implements SocialLoginUseCase {
     }
 
     if (email == null || email.isBlank()) {
-      throw new IllegalStateException("email is required for social login");
+      // Avoid 500: missing email from provider is treated as invalid credentials/state.
+      throw new InvalidCredentialsException("Invalid social login");
     }
 
     Optional<User> byProvider =
@@ -66,11 +68,12 @@ public class UserService implements SocialLoginUseCase {
       User existing = byEmail.get();
 
       if (existing.getAuthProvider() != authProvider) {
-        throw new IllegalStateException(
-            "Account already exists with a different provider. Email=" + email);
+        // Do not reveal which provider owns the email.
+        throw new InvalidCredentialsException("Invalid social login");
       }
 
-      throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
+      // Same provider but different providerUserId -> treat as invalid credentials/state.
+      throw new InvalidCredentialsException("Invalid social login");
     }
 
     verifyNotWithdrawnByEmail(email);

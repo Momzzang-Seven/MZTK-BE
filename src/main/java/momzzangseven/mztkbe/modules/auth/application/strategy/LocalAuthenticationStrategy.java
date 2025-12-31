@@ -72,6 +72,9 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
       throw new InvalidCredentialsException("Invalid password");
     }
 
+    // Security policy:
+    // - Do NOT reveal "withdrawn" status unless the caller proves they know the correct password.
+    // - This prevents user enumeration by checking whether an email is soft-deleted.
     boolean isValid = deletedUser.validatePassword(context.password(), passwordEncoder);
     if (!isValid) {
       throw new InvalidCredentialsException("Invalid password");
