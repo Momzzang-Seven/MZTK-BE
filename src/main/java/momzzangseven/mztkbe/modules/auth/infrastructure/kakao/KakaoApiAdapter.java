@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.auth.application.dto.KakaoUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.auth.infrastructure.kakao.dto.KakaoTokenResponse;
 import momzzangseven.mztkbe.modules.auth.infrastructure.kakao.dto.KakaoUserResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -111,6 +112,53 @@ public class KakaoApiAdapter implements KakaoAuthPort {
       throw e;
     } catch (Exception e) {
       throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, "Kakao userinfo request failed", e);
+    }
+  }
+
+  @Override
+  public void unlinkUser(String providerUserId) {
+    requireNonBlank(providerUserId, "providerUserId is required");
+    requireNonBlank(props.getApi().getUnlinkUri(), "kakao.api.unlink-uri is required");
+    requireNonBlank(props.getApi().getAdminKey(), "kakao.api.admin-key is required");
+
+    try {
+      MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+      form.add("target_id_type", "user_id");
+      form.add("target_id", providerUserId);
+
+      webClient
+          .post()
+          .uri(props.getApi().getUnlinkUri())
+          .header(HttpHeaders.AUTHORIZATION, "KakaoAK " + props.getApi().getAdminKey())
+          .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+          .bodyValue(form)
+          .retrieve()
+          .onStatus(
+              HttpStatusCode::isError,
+              response ->
+                  response
+                      .bodyToMono(String.class)
+                      .defaultIfEmpty("")
+                      .map(
+                          body ->
+                              new BusinessException(
+                                  ErrorCode.EXTERNAL_API_ERROR,
+                                  "Kakao unlink request failed: status="
+                                      + response.statusCode().value()
+                                      + ", body="
+                                      + body)))
+          .toBodilessEntity()
+          .block(Duration.ofSeconds(5));
+    } catch (BusinessException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, "Kakao unlink request failed", e);
+    }
+  }
+
+  private static void requireNonBlank(String value, String message) {
+    if (value == null || value.isBlank()) {
+      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, message);
     }
   }
 }

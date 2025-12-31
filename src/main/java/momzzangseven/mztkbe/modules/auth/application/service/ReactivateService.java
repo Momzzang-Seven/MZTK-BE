@@ -39,14 +39,20 @@ public class ReactivateService implements ReactivateUseCase {
 
     log.info("Reactivation request received for provider: {}", command.provider());
 
-    User user =
-        switch (command.provider()) {
-          case LOCAL -> reactivateLocal(command.email(), command.password());
-          case KAKAO -> reactivateKakao(command.authorizationCode());
-          case GOOGLE -> reactivateGoogle(command.authorizationCode());
-          default ->
-              throw new IllegalArgumentException("Unsupported provider: " + command.provider());
-        };
+    User user;
+    switch (command.provider()) {
+      case LOCAL:
+        user = reactivateLocal(command.email(), command.password());
+        break;
+      case KAKAO:
+        user = reactivateKakao(command.authorizationCode());
+        break;
+      case GOOGLE:
+        user = reactivateGoogle(command.authorizationCode());
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported provider: " + command.provider());
+    }
 
     return tokenIssuer.issue(user, false);
   }

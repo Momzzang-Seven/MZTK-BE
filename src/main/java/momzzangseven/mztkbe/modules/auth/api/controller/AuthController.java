@@ -45,7 +45,8 @@ public class AuthController {
 
   /*
    * Auth endpoints overview:
-   * - /auth/login: Authenticate and issue tokens (DELETED accounts respond with USER_WITHDRAWN(409))
+   * - /auth/login: Authenticate and issue tokens
+   *   (DELETED accounts respond with USER_WITHDRAWN(409))
    * - /auth/reactivate: Reactivate a soft-deleted account and issue tokens (public endpoint)
    * - /auth/signup: Register a new LOCAL user
    * - /auth/reissue: Rotate tokens using refresh token cookie

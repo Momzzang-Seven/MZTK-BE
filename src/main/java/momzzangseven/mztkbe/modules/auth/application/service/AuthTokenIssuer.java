@@ -20,6 +20,13 @@ public class AuthTokenIssuer {
   private final JwtTokenProvider jwtTokenProvider;
   private final RefreshTokenManager refreshTokenManager;
 
+  /**
+   * Issue access/refresh tokens for the given user.
+   *
+   * @param user authenticated user
+   * @param isNewUser whether this login created a new user
+   * @return login result containing tokens and user payload
+   */
   public LoginResult issue(User user, boolean isNewUser) {
     String accessToken =
         jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());

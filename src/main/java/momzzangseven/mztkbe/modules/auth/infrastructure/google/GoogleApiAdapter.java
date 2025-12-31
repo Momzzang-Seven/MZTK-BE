@@ -125,4 +125,58 @@ public class GoogleApiAdapter implements GoogleAuthPort {
           ErrorCode.EXTERNAL_API_ERROR, "Google userinfo request failed", e);
     }
   }
+
+  @Override
+  public void revokeRefreshToken(String refreshToken) {
+    requireNonBlank(refreshToken, "refreshToken is required");
+    revokeToken(refreshToken);
+  }
+
+  @Override
+  public void revokeAccessToken(String accessToken) {
+    requireNonBlank(accessToken, "accessToken is required");
+    revokeToken(accessToken);
+  }
+
+  private void revokeToken(String token) {
+    requireNonBlank(props.getApi().getRevokeUri(), "google.api.revoke-uri is required");
+
+    try {
+      MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+      form.add("token", token);
+
+      webClient
+          .post()
+          .uri(props.getApi().getRevokeUri())
+          .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+          .bodyValue(form)
+          .retrieve()
+          .onStatus(
+              HttpStatusCode::isError,
+              response ->
+                  response
+                      .bodyToMono(String.class)
+                      .defaultIfEmpty("")
+                      .map(
+                          body ->
+                              new BusinessException(
+                                  ErrorCode.EXTERNAL_API_ERROR,
+                                  "Google revoke request failed: status="
+                                      + response.statusCode().value()
+                                      + ", body="
+                                      + body)))
+          .toBodilessEntity()
+          .block(Duration.ofSeconds(5));
+    } catch (BusinessException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, "Google revoke request failed", e);
+    }
+  }
+
+  private static void requireNonBlank(String value, String message) {
+    if (value == null || value.isBlank()) {
+      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, message);
+    }
+  }
 }

@@ -8,10 +8,12 @@ import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
  * Command for updating user role. Separated from profile update due to different security
  * implications.
  *
- * @param userId
- * @param newRole
+ * @param userId user id
+ * @param newRole requested role
  */
 public record UpdateUserRoleCommand(Long userId, UserRole newRole) {
+
+  /** Validate command fields and business constraints. */
   public void validate() {
     if (userId == null || userId <= 0) {
       throw new IllegalArgumentException("User ID is required");
@@ -27,12 +29,11 @@ public record UpdateUserRoleCommand(Long userId, UserRole newRole) {
   /**
    * Static method to create new command from given context.
    *
-   * @param userId
-   * @param newRole
-   * @return
+   * @param userId user id
+   * @param newRole requested role
+   * @return command
    */
   public static UpdateUserRoleCommand of(Long userId, UserRole newRole) {
-    UpdateUserRoleCommand command = new UpdateUserRoleCommand(userId, newRole);
-    return command;
+    return new UpdateUserRoleCommand(userId, newRole);
   }
 }
