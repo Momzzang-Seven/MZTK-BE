@@ -38,7 +38,6 @@ public class LogoutService implements LogoutUseCase {
   }
 
   private void revokeIfNeeded(RefreshToken token) {
-    if (token.isRevoked()) return;
     token.revoke();
     saveRefreshTokenPort.save(token);
   }
