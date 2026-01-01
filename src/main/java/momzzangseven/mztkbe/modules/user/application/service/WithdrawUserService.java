@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
-import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
+import momzzangseven.mztkbe.modules.auth.application.port.out.DeleteRefreshTokenPort;
 import momzzangseven.mztkbe.modules.user.application.dto.WithdrawUserCommand;
 import momzzangseven.mztkbe.modules.user.application.port.in.WithdrawUserUseCase;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
@@ -21,7 +21,7 @@ public class WithdrawUserService implements WithdrawUserUseCase {
 
   private final LoadUserPort loadUserPort;
   private final SaveUserPort saveUserPort;
-  private final SaveRefreshTokenPort saveRefreshTokenPort;
+  private final DeleteRefreshTokenPort deleteRefreshTokenPort;
   private final ExternalDisconnectService externalDisconnectService;
 
   @Override
@@ -33,7 +33,7 @@ public class WithdrawUserService implements WithdrawUserUseCase {
     User withdrawnUser = user.withdraw();
     saveUserPort.saveUser(withdrawnUser);
 
-    saveRefreshTokenPort.deleteByUserId(user.getId());
+    deleteRefreshTokenPort.deleteByUserId(user.getId());
 
     // External provider disconnection is best-effort. Failures must not rollback withdrawal.
     externalDisconnectService.disconnectOnWithdrawal(withdrawnUser);

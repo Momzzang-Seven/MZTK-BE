@@ -64,13 +64,11 @@ public class StepUpService implements StepUpUseCase {
         "Step-up credential verification passed: userId={}, provider={}", user.getId(), provider);
 
     // Step 5: Issue Step-up Token
-    long ttlMillis = jwtTokenProvider.getStepUpTokenExpiresIn();
     String accessToken =
-        jwtTokenProvider.generateStepUpAccessToken(
-            user.getId(), user.getEmail(), user.getRole(), ttlMillis);
+        jwtTokenProvider.generateStepUpAccessToken(user.getId(), user.getEmail(), user.getRole());
 
     // Step 6: Build and Return Result
-    StepUpResult result = StepUpResult.of(accessToken, ttlMillis);
+    StepUpResult result = StepUpResult.of(accessToken, jwtTokenProvider.getStepUpTokenExpiresIn());
     log.info("Step-up authentication successful: userId={}, provider={}", user.getId(), provider);
     return result;
   }

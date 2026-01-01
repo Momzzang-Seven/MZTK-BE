@@ -6,8 +6,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.user.application.config.WithdrawalExternalDisconnectProperties;
-import momzzangseven.mztkbe.modules.user.application.port.out.LoadExternalDisconnectTaskPort;
-import momzzangseven.mztkbe.modules.user.application.port.out.SaveExternalDisconnectTaskPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.ExternalDisconnectTaskPort;
 import momzzangseven.mztkbe.modules.user.domain.model.ExternalDisconnectStatus;
 import momzzangseven.mztkbe.modules.user.domain.model.ExternalDisconnectTask;
 import org.springframework.stereotype.Service;
@@ -19,8 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ExternalDisconnectRetryService {
 
-  private final LoadExternalDisconnectTaskPort loadExternalDisconnectTaskPort;
-  private final SaveExternalDisconnectTaskPort saveExternalDisconnectTaskPort;
+  private final ExternalDisconnectTaskPort externalDisconnectTaskPort;
   private final WithdrawalExternalDisconnectProperties props;
   private final ExternalDisconnectExecutor executor;
 
@@ -32,7 +30,7 @@ public class ExternalDisconnectRetryService {
   public int runBatch() {
     LocalDateTime now = LocalDateTime.now();
     List<ExternalDisconnectTask> tasks =
-        loadExternalDisconnectTaskPort.findDueTasks(now, props.getBatchSize());
+        externalDisconnectTaskPort.findDueTasks(now, props.getBatchSize());
     for (ExternalDisconnectTask task : tasks) {
       processOne(task);
     }
@@ -48,7 +46,7 @@ public class ExternalDisconnectRetryService {
     try {
       executor.disconnect(task.getProvider(), task.getProviderUserId(), task.getEncryptedToken());
 
-      saveExternalDisconnectTaskPort.save(task.markSuccess(attemptNumber));
+      externalDisconnectTaskPort.save(task.markSuccess(attemptNumber));
     } catch (Exception e) {
       String error = e.getClass().getSimpleName() + ": " + e.getMessage();
       log.warn(
@@ -61,13 +59,13 @@ public class ExternalDisconnectRetryService {
           error,
           e);
       if (attemptNumber >= props.getMaxAttempts()) {
-        saveExternalDisconnectTaskPort.save(task.markFailedTerminal(attemptNumber, error));
+        externalDisconnectTaskPort.save(task.markFailedTerminal(attemptNumber, error));
         return;
       }
 
       long delayMillis = computeBackoffMillis(attemptNumber);
       LocalDateTime nextAttemptAt = LocalDateTime.now().plus(delayMillis, ChronoUnit.MILLIS);
-      saveExternalDisconnectTaskPort.save(task.scheduleRetry(attemptNumber, nextAttemptAt, error));
+      externalDisconnectTaskPort.save(task.scheduleRetry(attemptNumber, nextAttemptAt, error));
     }
   }
 

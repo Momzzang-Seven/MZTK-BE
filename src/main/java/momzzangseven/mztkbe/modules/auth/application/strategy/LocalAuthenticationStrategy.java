@@ -45,7 +45,7 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
     }
 
     if (!AuthProvider.LOCAL.equals(user.getAuthProvider())) {
-      throw new InvalidCredentialsException("Invalid password");
+      throw new InvalidCredentialsException("Invalid email or password");
     }
 
     // Validate password
@@ -55,7 +55,7 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
             passwordEncoder);
 
     if (!isValid) {
-      throw new InvalidCredentialsException("Invalid password");
+      throw new InvalidCredentialsException();
     }
 
     // Update last login
@@ -69,7 +69,7 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
   private AuthenticatedUser authenticateDeletedUser(
       AuthenticationContext context, User deletedUser) {
     if (!AuthProvider.LOCAL.equals(deletedUser.getAuthProvider())) {
-      throw new InvalidCredentialsException("Invalid password");
+      throw new InvalidCredentialsException("Invalid email or password");
     }
 
     // Security policy:
@@ -77,7 +77,7 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
     // - This prevents user enumeration by checking whether an email is soft-deleted.
     boolean isValid = deletedUser.validatePassword(context.password(), passwordEncoder);
     if (!isValid) {
-      throw new InvalidCredentialsException("Invalid password");
+      throw new InvalidCredentialsException("Invalid email or password");
     }
 
     throw new UserWithdrawnException();

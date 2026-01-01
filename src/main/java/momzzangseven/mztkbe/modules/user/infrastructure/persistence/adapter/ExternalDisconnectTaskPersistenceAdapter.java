@@ -3,8 +3,7 @@ package momzzangseven.mztkbe.modules.user.infrastructure.persistence.adapter;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.user.application.port.out.LoadExternalDisconnectTaskPort;
-import momzzangseven.mztkbe.modules.user.application.port.out.SaveExternalDisconnectTaskPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.ExternalDisconnectTaskPort;
 import momzzangseven.mztkbe.modules.user.domain.model.ExternalDisconnectStatus;
 import momzzangseven.mztkbe.modules.user.domain.model.ExternalDisconnectTask;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.ExternalDisconnectTaskEntity;
@@ -15,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class ExternalDisconnectTaskPersistenceAdapter
-    implements LoadExternalDisconnectTaskPort, SaveExternalDisconnectTaskPort {
+    implements ExternalDisconnectTaskPort {
 
   private final ExternalDisconnectTaskJpaRepository repository;
 
@@ -33,6 +32,11 @@ public class ExternalDisconnectTaskPersistenceAdapter
     ExternalDisconnectTaskEntity entity = toEntity(task);
     ExternalDisconnectTaskEntity saved = repository.save(entity);
     return toDomain(saved);
+  }
+
+  @Override
+  public int deleteByUserIdIn(List<Long> userIds) {
+    return repository.deleteByUserIdIn(userIds);
   }
 
   private static ExternalDisconnectTask toDomain(ExternalDisconnectTaskEntity entity) {

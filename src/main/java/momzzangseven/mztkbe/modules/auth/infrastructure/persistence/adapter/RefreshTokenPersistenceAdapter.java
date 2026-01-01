@@ -3,11 +3,13 @@ package momzzangseven.mztkbe.modules.auth.infrastructure.persistence.adapter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
 import momzzangseven.mztkbe.global.error.token.TokenHashingException;
+import momzzangseven.mztkbe.modules.auth.application.port.out.DeleteRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.LoadRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;
@@ -29,7 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, SaveRefreshTokenPort {
+public class RefreshTokenPersistenceAdapter
+    implements LoadRefreshTokenPort, SaveRefreshTokenPort, DeleteRefreshTokenPort {
 
   private final RefreshTokenJpaRepository repository;
 
@@ -103,6 +106,29 @@ public class RefreshTokenPersistenceAdapter implements LoadRefreshTokenPort, Sav
   public void deleteByUserId(Long userId) {
     repository.deleteByUserId(userId);
     log.debug("Deleted all refresh tokens for userId: {}", userId);
+  }
+
+  @Override
+  @Transactional
+  public void deleteById(Long refreshTokenId) {
+    if (refreshTokenId == null) {
+      throw new IllegalArgumentException("refreshTokenId must not be null");
+    }
+    if (!repository.existsById(refreshTokenId)) {
+      throw new RefreshTokenNotFoundException("RefreshToken not found with ID: " + refreshTokenId);
+    }
+    repository.deleteById(refreshTokenId);
+    log.debug("Deleted refresh token: id={}", refreshTokenId);
+  }
+
+  @Override
+  @Transactional
+  public void deleteByUserIdIn(List<Long> userIds) {
+    if (userIds == null || userIds.isEmpty()) {
+      return;
+    }
+    int deleted = repository.deleteByUserIdIn(userIds);
+    log.debug("Deleted refresh tokens: deleted={}, userIds={}", deleted, userIds.size());
   }
 
   // ========== Mapping Methods (Translator Pattern) ==========
