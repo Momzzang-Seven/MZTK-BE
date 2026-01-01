@@ -5,12 +5,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
+import momzzangseven.mztkbe.modules.auth.application.port.out.DeleteRefreshTokenPort;
 import momzzangseven.mztkbe.modules.user.application.config.WithdrawalHardDeleteProperties;
+import momzzangseven.mztkbe.modules.user.application.port.out.ExternalDisconnectTaskPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.UserHardDeletePort;
 import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
-import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.ExternalDisconnectTaskJpaRepository;
-import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.UserJpaRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,9 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class WithdrawalHardDeleteService {
 
-  private final UserJpaRepository userJpaRepository;
-  private final ExternalDisconnectTaskJpaRepository externalDisconnectTaskJpaRepository;
-  private final SaveRefreshTokenPort saveRefreshTokenPort;
+  private final UserHardDeletePort userHardDeletePort;
+  private final ExternalDisconnectTaskPort externalDisconnectTaskPort;
+  private final DeleteRefreshTokenPort deleteRefreshTokenPort;
   private final WithdrawalHardDeleteProperties props;
 
   /**
@@ -51,18 +50,15 @@ public class WithdrawalHardDeleteService {
 
     LocalDateTime cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
     List<Long> userIds =
-        userJpaRepository.findIdsForHardDelete(
-            UserStatus.DELETED, cutoff, PageRequest.of(0, batchSize));
+        userHardDeletePort.loadUserIdsForHardDelete(UserStatus.DELETED, cutoff, batchSize);
     if (userIds.isEmpty()) {
       return 0;
     }
 
-    for (Long userId : userIds) {
-      saveRefreshTokenPort.deleteByUserId(userId);
-    }
+    deleteRefreshTokenPort.deleteByUserIdIn(userIds);
 
-    externalDisconnectTaskJpaRepository.deleteByUserIdIn(userIds);
-    userJpaRepository.deleteAllByIdInBatch(userIds);
+    externalDisconnectTaskPort.deleteByUserIdIn(userIds);
+    userHardDeletePort.deleteAllByIdInBatch(userIds);
 
     log.info(
         "Hard deleted users: deletedUsers={}, cutoff={}, retentionDays={}, batchSize={}",

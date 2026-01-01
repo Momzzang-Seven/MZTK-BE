@@ -38,7 +38,7 @@ public interface UserJpaRepository extends JpaRepository<UserEntity, Long> {
   boolean existsByEmail(String email);
 
   /**
-   * Fetch candidate user IDs for hard delete.
+   * Fetch user IDs by deletion cutoff.
    *
    * <p>Note: uses pagination to avoid loading too many rows at once.
    */
@@ -46,6 +46,6 @@ public interface UserJpaRepository extends JpaRepository<UserEntity, Long> {
       "select u.id from UserEntity u "
           + "where u.status = :status and u.deletedAt is not null and u.deletedAt < :cutoff "
           + "order by u.deletedAt asc, u.id asc")
-  List<Long> findIdsForHardDelete(
+  List<Long> findIdsByStatusAndDeletedAtBefore(
       @Param("status") UserStatus status, @Param("cutoff") LocalDateTime cutoff, Pageable pageable);
 }

@@ -21,13 +21,4 @@ public interface SaveRefreshTokenPort {
    * @return Saved RefreshToken with ID(newly generated or existing)
    */
   RefreshToken save(RefreshToken refreshToken);
-
-  /**
-   * Delete all refresh tokens for a user.
-   *
-   * <p>Use case: User logout - invalidate all tokens
-   *
-   * @param userId User's unique identifier
-   */
-  void deleteByUserId(Long userId);
 }

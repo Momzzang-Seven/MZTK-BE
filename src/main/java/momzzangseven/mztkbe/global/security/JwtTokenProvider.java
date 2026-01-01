@@ -94,13 +94,11 @@ public class JwtTokenProvider {
    * @param userId User's unique identifier
    * @param email User's email
    * @param role User's role
-   * @param ttlMillis Token time-to-live in milliseconds
    * @return JWT access token string with step-up claim
    */
-  public String generateStepUpAccessToken(
-      Long userId, String email, UserRole role, long ttlMillis) {
+  public String generateStepUpAccessToken(Long userId, String email, UserRole role) {
     Date now = new Date();
-    Date expiryDate = new Date(now.getTime() + ttlMillis);
+    Date expiryDate = new Date(now.getTime() + jwtProperties.getStepUpTokenExpiration());
 
     return Jwts.builder()
         .header()

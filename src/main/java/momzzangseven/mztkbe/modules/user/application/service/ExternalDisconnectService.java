@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.config.WithdrawalExternalDisconnectProperties;
-import momzzangseven.mztkbe.modules.user.application.port.out.SaveExternalDisconnectTaskPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.ExternalDisconnectTaskPort;
 import momzzangseven.mztkbe.modules.user.domain.model.ExternalDisconnectStatus;
 import momzzangseven.mztkbe.modules.user.domain.model.ExternalDisconnectTask;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
@@ -24,7 +24,7 @@ public class ExternalDisconnectService {
 
   private final ExternalDisconnectExecutor executor;
   private final WithdrawalExternalDisconnectProperties props;
-  private final SaveExternalDisconnectTaskPort saveExternalDisconnectTaskPort;
+  private final ExternalDisconnectTaskPort externalDisconnectTaskPort;
 
   /**
    * Best-effort external disconnect during withdrawal.
@@ -72,6 +72,6 @@ public class ExternalDisconnectService {
             .updatedAt(now)
             .build();
 
-    saveExternalDisconnectTaskPort.save(task);
+    externalDisconnectTaskPort.save(task);
   }
 }

@@ -1,16 +1,19 @@
 package momzzangseven.mztkbe.modules.user.infrastructure.persistence.adapter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.UserHardDeletePort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.UserJpaRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
+public class UserPersistenceAdapter
+    implements LoadUserPort, SaveUserPort, UserHardDeletePort {
 
   private final UserJpaRepository userJpaRepository;
 
@@ -111,6 +115,22 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort {
     log.debug("User saved with ID: {}", savedEntity.getId());
 
     return mapToDomain(savedEntity);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<Long> loadUserIdsForHardDelete(UserStatus status, LocalDateTime cutoff, int limit) {
+    if (limit <= 0) {
+      throw new IllegalArgumentException("limit must be > 0");
+    }
+    return userJpaRepository.findIdsByStatusAndDeletedAtBefore(
+        status, cutoff, PageRequest.of(0, limit));
+  }
+
+  @Override
+  @Transactional
+  public void deleteAllByIdInBatch(List<Long> userIds) {
+    userJpaRepository.deleteAllByIdInBatch(userIds);
   }
 
   // ========== Mapping Methods (Translator Pattern) ==========
