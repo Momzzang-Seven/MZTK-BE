@@ -13,8 +13,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class ExternalDisconnectTaskPersistenceAdapter
-    implements ExternalDisconnectTaskPort {
+public class ExternalDisconnectTaskPersistenceAdapter implements ExternalDisconnectTaskPort {
 
   private final ExternalDisconnectTaskJpaRepository repository;
 
