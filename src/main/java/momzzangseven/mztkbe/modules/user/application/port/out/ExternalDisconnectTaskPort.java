@@ -11,4 +11,3 @@ public interface ExternalDisconnectTaskPort {
 
   int deleteByUserIdIn(List<Long> userIds);
 }
-
