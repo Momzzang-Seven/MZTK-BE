@@ -6,4 +6,3 @@ import java.util.List;
 public interface DeleteUserPort {
   void deleteAllByIdInBatch(List<Long> userIds);
 }
-

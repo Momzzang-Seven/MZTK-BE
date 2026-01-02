@@ -51,8 +51,7 @@ public class WithdrawalHardDeleteService {
     }
 
     LocalDateTime cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
-    List<Long> userIds =
-        loadUserPort.loadUserIdsForDeletion(UserStatus.DELETED, cutoff, batchSize);
+    List<Long> userIds = loadUserPort.loadUserIdsForDeletion(UserStatus.DELETED, cutoff, batchSize);
     if (userIds.isEmpty()) {
       return 0;
     }
