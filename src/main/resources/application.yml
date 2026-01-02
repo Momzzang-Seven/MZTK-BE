@@ -30,6 +30,8 @@ kakao:
   api:
     token-uri: https://kauth.kakao.com/oauth/token
     userinfo-uri: https://kapi.kakao.com/v2/user/me
+    unlink-uri: https://kapi.kakao.com/v1/user/unlink
+    admin-key: ${KAKAO_ADMIN_KEY}
 google:
   oauth:
     client-id: ${GOOGLE_CLIENT_ID}
@@ -38,6 +40,24 @@ google:
   api:
     token-uri: https://oauth2.googleapis.com/token
     userinfo-uri: https://openidconnect.googleapis.com/v1/userinfo
+    revoke-uri: https://oauth2.googleapis.com/revoke
+
+withdrawal:
+  external-disconnect:
+    fixed-delay: ${WITHDRAWAL_EXTERNAL_DISCONNECT_FIXED_DELAY:60000}  # 1 min
+    batch-size: ${WITHDRAWAL_EXTERNAL_DISCONNECT_BATCH_SIZE:20}
+    max-attempts: ${WITHDRAWAL_EXTERNAL_DISCONNECT_MAX_ATTEMPTS:10}
+    initial-backoff: ${WITHDRAWAL_EXTERNAL_DISCONNECT_INITIAL_BACKOFF:300000}
+    max-backoff: ${WITHDRAWAL_EXTERNAL_DISCONNECT_MAX_BACKOFF:3600000}
+    cleanup:
+      fixed-delay: ${WITHDRAWAL_EXTERNAL_DISCONNECT_CLEANUP_FIXED_DELAY:86400000} # 1 day
+      success-retention-days: ${WITHDRAWAL_EXTERNAL_DISCONNECT_SUCCESS_RETENTION_DAYS:7}
+      failed-retention-days: ${WITHDRAWAL_EXTERNAL_DISCONNECT_FAILED_RETENTION_DAYS:0}
+  hard-delete:
+    retention-days: ${WITHDRAWAL_HARD_DELETE_RETENTION_DAYS:30}
+    batch-size: ${WITHDRAWAL_HARD_DELETE_BATCH_SIZE:200}
+    cron: ${WITHDRAWAL_HARD_DELETE_CRON:0 0 3 * * *}
+    zone: ${WITHDRAWAL_HARD_DELETE_ZONE:Asia/Seoul}
 
 logging:
   level:
@@ -53,8 +73,9 @@ management:
         include: health, info
 
 jwt:
-  secret: ${JWT_SECRET:your-256-bit-secret-key-here-must-be-at-least-32-characters-long}
+  secret: ${JWT_SECRET}
   access-token-expiration: 900000      # 15 mins (in milliseconds)
   refresh-token-expiration: 604800000   # 7 days (in milliseconds)
+  step-up-token-expiration: 300000    # 5 mins (in milliseconds)
   issuer: MZTK-BE
   audience: MZTK-Client

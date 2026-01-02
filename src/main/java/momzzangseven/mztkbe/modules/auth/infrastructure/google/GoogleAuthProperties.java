@@ -29,5 +29,6 @@ public class GoogleAuthProperties {
   public static class Api {
     private String tokenUri;
     private String userinfoUri;
+    private String revokeUri;
   }
 }

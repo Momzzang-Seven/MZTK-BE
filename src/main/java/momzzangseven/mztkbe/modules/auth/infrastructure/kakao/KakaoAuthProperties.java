@@ -28,5 +28,7 @@ public class KakaoAuthProperties {
   public static class Api {
     private String tokenUri;
     private String userinfoUri;
+    private String unlinkUri;
+    private String adminKey;
   }
 }

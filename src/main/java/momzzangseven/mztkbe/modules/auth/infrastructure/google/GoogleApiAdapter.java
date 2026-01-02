@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.modules.auth.application.dto.GoogleOAuthToken;
 import momzzangseven.mztkbe.modules.auth.application.dto.GoogleUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.infrastructure.google.dto.GoogleTokenResponse;
@@ -25,7 +26,17 @@ public class GoogleApiAdapter implements GoogleAuthPort {
   private final WebClient webClient;
 
   @Override
+  public GoogleOAuthToken exchangeToken(String authorizationCode) {
+    GoogleTokenResponse token = requestTokenResponse(authorizationCode);
+    return GoogleOAuthToken.of(token.getAccessToken(), token.getRefreshToken());
+  }
+
+  @Override
   public String getAccessToken(String authorizationCode) {
+    return requestTokenResponse(authorizationCode).getAccessToken();
+  }
+
+  private GoogleTokenResponse requestTokenResponse(String authorizationCode) {
     try {
       MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
       form.add("grant_type", "authorization_code");
@@ -63,7 +74,7 @@ public class GoogleApiAdapter implements GoogleAuthPort {
             ErrorCode.EXTERNAL_API_ERROR, "Failed to get Google access token");
       }
 
-      return token.getAccessToken();
+      return token;
     } catch (BusinessException e) {
       throw e;
     } catch (Exception e) {
@@ -112,6 +123,60 @@ public class GoogleApiAdapter implements GoogleAuthPort {
     } catch (Exception e) {
       throw new BusinessException(
           ErrorCode.EXTERNAL_API_ERROR, "Google userinfo request failed", e);
+    }
+  }
+
+  @Override
+  public void revokeRefreshToken(String refreshToken) {
+    requireNonBlank(refreshToken, "refreshToken is required");
+    revokeToken(refreshToken);
+  }
+
+  @Override
+  public void revokeAccessToken(String accessToken) {
+    requireNonBlank(accessToken, "accessToken is required");
+    revokeToken(accessToken);
+  }
+
+  private void revokeToken(String token) {
+    requireNonBlank(props.getApi().getRevokeUri(), "google.api.revoke-uri is required");
+
+    try {
+      MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+      form.add("token", token);
+
+      webClient
+          .post()
+          .uri(props.getApi().getRevokeUri())
+          .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+          .bodyValue(form)
+          .retrieve()
+          .onStatus(
+              HttpStatusCode::isError,
+              response ->
+                  response
+                      .bodyToMono(String.class)
+                      .defaultIfEmpty("")
+                      .map(
+                          body ->
+                              new BusinessException(
+                                  ErrorCode.EXTERNAL_API_ERROR,
+                                  "Google revoke request failed: status="
+                                      + response.statusCode().value()
+                                      + ", body="
+                                      + body)))
+          .toBodilessEntity()
+          .block(Duration.ofSeconds(5));
+    } catch (BusinessException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, "Google revoke request failed", e);
+    }
+  }
+
+  private static void requireNonBlank(String value, String message) {
+    if (value == null || value.isBlank()) {
+      throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, message);
     }
   }
 }

@@ -33,12 +33,21 @@ public class User {
    */
   private String providerUserId;
 
+  /**
+   * Encrypted Google OAuth refresh token (only for GOOGLE users).
+   *
+   * <p>Used for revoke/unlink flows (e.g., withdrawal).
+   */
+  private String googleRefreshToken;
+
   /** Connected Web3 wallet address. */
   private String walletAddress;
 
   private AuthProvider authProvider;
   private UserRole role;
+  private UserStatus status;
   private LocalDateTime lastLoginAt;
+  private LocalDateTime deletedAt;
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
 
@@ -68,6 +77,8 @@ public class User {
         .nickname(nickname)
         .authProvider(AuthProvider.LOCAL)
         .role(UserRole.USER)
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
         .createdAt(now)
         .updatedAt(now)
         .build();
@@ -89,6 +100,8 @@ public class User {
         .profileImageUrl(profileImageUrl)
         .authProvider(AuthProvider.KAKAO)
         .role(UserRole.USER)
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
         .lastLoginAt(now)
         .createdAt(now)
         .updatedAt(now)
@@ -111,6 +124,8 @@ public class User {
         .authProvider(AuthProvider.GOOGLE)
         .providerUserId(googleId)
         .role(UserRole.USER)
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
         .lastLoginAt(now)
         .createdAt(now)
         .updatedAt(now)
@@ -229,6 +244,36 @@ public class User {
     this.lastLoginAt = LocalDateTime.now();
     this.updatedAt = LocalDateTime.now();
     log.debug("Updated last login time for user: {}", this.id);
+  }
+
+  /** Soft-delete (withdraw) this user. */
+  public User withdraw() {
+    LocalDateTime now = LocalDateTime.now();
+    return this.toBuilder().status(UserStatus.DELETED).deletedAt(now).updatedAt(now).build();
+  }
+
+  /** Reactivate a soft-deleted user. */
+  public User reactivate() {
+    LocalDateTime now = LocalDateTime.now();
+    return this.toBuilder()
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
+        .lastLoginAt(now)
+        .updatedAt(now)
+        .build();
+  }
+
+  /** Save encrypted Google OAuth refresh token. */
+  public User updateGoogleRefreshToken(String encryptedRefreshToken) {
+    if (!AuthProvider.GOOGLE.equals(this.authProvider)) {
+      throw new IllegalStateException("Google refresh token can only be saved for GOOGLE users");
+    }
+    if (encryptedRefreshToken == null || encryptedRefreshToken.isBlank()) {
+      throw new IllegalArgumentException("encryptedRefreshToken is required");
+    }
+
+    LocalDateTime now = LocalDateTime.now();
+    return this.toBuilder().googleRefreshToken(encryptedRefreshToken).updatedAt(now).build();
   }
 
   /** Check if user is admin. */

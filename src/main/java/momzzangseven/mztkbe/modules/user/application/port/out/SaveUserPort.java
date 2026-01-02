@@ -22,11 +22,4 @@ public interface SaveUserPort {
    * @return the saved user with generated ID (if new)
    */
   User saveUser(User user);
-
-  /**
-   * Delete a user by ID.
-   *
-   * @param userId the ID of the user to delete
-   */
-  void deleteUser(Long userId);
 }
