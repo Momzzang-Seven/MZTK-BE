@@ -7,8 +7,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.application.port.out.DeleteRefreshTokenPort;
 import momzzangseven.mztkbe.modules.user.application.config.WithdrawalHardDeleteProperties;
+import momzzangseven.mztkbe.modules.user.application.port.out.DeleteUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.ExternalDisconnectTaskPort;
-import momzzangseven.mztkbe.modules.user.application.port.out.UserHardDeletePort;
+import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class WithdrawalHardDeleteService {
 
-  private final UserHardDeletePort userHardDeletePort;
+  private final LoadUserPort loadUserPort;
+  private final DeleteUserPort deleteUserPort;
   private final ExternalDisconnectTaskPort externalDisconnectTaskPort;
   private final DeleteRefreshTokenPort deleteRefreshTokenPort;
   private final WithdrawalHardDeleteProperties props;
@@ -50,7 +52,7 @@ public class WithdrawalHardDeleteService {
 
     LocalDateTime cutoff = now.minus(retentionDays, ChronoUnit.DAYS);
     List<Long> userIds =
-        userHardDeletePort.loadUserIdsForHardDelete(UserStatus.DELETED, cutoff, batchSize);
+        loadUserPort.loadUserIdsForDeletion(UserStatus.DELETED, cutoff, batchSize);
     if (userIds.isEmpty()) {
       return 0;
     }
@@ -58,7 +60,7 @@ public class WithdrawalHardDeleteService {
     deleteRefreshTokenPort.deleteByUserIdIn(userIds);
 
     externalDisconnectTaskPort.deleteByUserIdIn(userIds);
-    userHardDeletePort.deleteAllByIdInBatch(userIds);
+    deleteUserPort.deleteAllByIdInBatch(userIds);
 
     log.info(
         "Hard deleted users: deletedUsers={}, cutoff={}, retentionDays={}, batchSize={}",
