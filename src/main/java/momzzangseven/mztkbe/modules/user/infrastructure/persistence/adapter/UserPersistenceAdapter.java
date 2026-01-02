@@ -6,9 +6,9 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.user.application.port.out.DeleteUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
-import momzzangseven.mztkbe.modules.user.application.port.out.UserHardDeletePort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
@@ -21,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, UserHardDeletePort {
+public class UserPersistenceAdapter
+    implements LoadUserPort, SaveUserPort, DeleteUserPort {
 
   private final UserJpaRepository userJpaRepository;
 
@@ -118,7 +119,7 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, UserH
 
   @Override
   @Transactional(readOnly = true)
-  public List<Long> loadUserIdsForHardDelete(UserStatus status, LocalDateTime cutoff, int limit) {
+  public List<Long> loadUserIdsForDeletion(UserStatus status, LocalDateTime cutoff, int limit) {
     if (limit <= 0) {
       throw new IllegalArgumentException("limit must be > 0");
     }
