@@ -108,10 +108,10 @@ public class ReactivateService implements ReactivateUseCase {
 
   private void verifyLocalCredentialsOrThrow(User user, String rawPassword) {
     if (!AuthProvider.LOCAL.equals(user.getAuthProvider())) {
-      throw invalidPassword();
+      throw new InvalidCredentialsException("Invalid email or password");
     }
     if (!user.validatePassword(rawPassword, passwordEncoder)) {
-      throw invalidPassword();
+      throw new InvalidCredentialsException("Invalid email or password");
     }
   }
 
@@ -119,11 +119,7 @@ public class ReactivateService implements ReactivateUseCase {
     if (user.getAuthProvider() != expectedProvider) {
       // Defensive: this should not happen (queries already filter by provider),
       // but avoid leaking internal errors as 500.
-      throw invalidPassword();
+      throw new InvalidCredentialsException("Invalid email or password");
     }
-  }
-
-  private static InvalidCredentialsException invalidPassword() {
-    return new InvalidCredentialsException("Invalid password");
   }
 }
