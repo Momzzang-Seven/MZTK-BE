@@ -21,8 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserPersistenceAdapter
-    implements LoadUserPort, SaveUserPort, DeleteUserPort {
+public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPort {
 
   private final UserJpaRepository userJpaRepository;
 
