@@ -1,8 +1,14 @@
 package momzzangseven.mztkbe.global.error;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.token.TokenException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -41,6 +47,86 @@ public class GlobalExceptionHandler {
     // Get HTTP status from ErrorCode
     return ResponseEntity.status(ex.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
+  }
+
+  /**
+   * Handle token-specific business exceptions coming from authentication flows.
+   *
+   * @param ex token-related business exception
+   */
+  @ExceptionHandler(TokenException.class)
+  public ResponseEntity<ApiResponse<Void>> handleTokenException(TokenException ex) {
+    log.warn(
+        "Token exception: {} (code: {}, status: {})",
+        ex.getMessage(),
+        ex.getCode(),
+        ex.getHttpStatus());
+    // Get HTTP status from ErrorCode
+    return ResponseEntity.status(ex.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
+  }
+
+  /**
+   * Handle Bean Validation failures from {@code @Valid} annotated requests.
+   *
+   * <p>Returns 400 with field error details to make development/debugging easier.
+   */
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ResponseEntity<ApiResponse<Map<String, String>>> handleMethodArgumentNotValidException(
+      MethodArgumentNotValidException ex) {
+    Map<String, String> fieldErrors = new LinkedHashMap<>();
+    ex.getBindingResult()
+        .getFieldErrors()
+        .forEach(error -> fieldErrors.put(error.getField(), error.getDefaultMessage()));
+
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error("Validation failed", errorCode.getCode(), fieldErrors));
+  }
+
+  /** Handle missing cookies (e.g., refresh token cookie not present). */
+  @ExceptionHandler(MissingRequestCookieException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMissingRequestCookieException(
+      MissingRequestCookieException ex) {
+    ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /** Handle malformed client input errors. */
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(
+      IllegalArgumentException ex) {
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /**
+   * Handle JSON deserialization errors (e.g., invalid enum values, type mismatches).
+   *
+   * <p>This occurs when the client sends JSON that cannot be parsed into the expected types, such
+   * as sending "foo" for a UserRole enum that only accepts [USER, TRAINER, ADMIN].
+   */
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(
+      HttpMessageNotReadableException ex) {
+    log.warn("JSON deserialization error: {}", ex.getMessage());
+
+    String userFriendlyMessage = "Invalid request format. Please check your input values.";
+
+    // Extract more specific error message if available
+    if (ex.getMessage() != null) {
+      if (ex.getMessage().contains("not one of the values accepted for Enum")) {
+        userFriendlyMessage = "Invalid enum value. Please check allowed values.";
+      } else if (ex.getMessage().contains("Cannot deserialize")) {
+        userFriendlyMessage = "Invalid data format. Please check your request body.";
+      }
+    }
+
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(userFriendlyMessage, errorCode.getCode()));
   }
 
   // ========================================

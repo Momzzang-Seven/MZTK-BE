@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.auth.application.strategy;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticatedUser;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticationContext;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
@@ -34,10 +35,18 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
     }
 
     // Use email and password from context
-    User user =
-        loadUserPort
-            .loadUserByEmail(context.email())
-            .orElseThrow(() -> new UserNotFoundException(context.email()));
+    User user = loadUserPort.loadUserByEmail(context.email()).orElse(null);
+    if (user == null) {
+      User deletedUser = loadUserPort.loadDeletedUserByEmail(context.email()).orElse(null);
+      if (deletedUser == null) {
+        throw new UserNotFoundException(context.email());
+      }
+      return authenticateDeletedUser(context, deletedUser);
+    }
+
+    if (!AuthProvider.LOCAL.equals(user.getAuthProvider())) {
+      throw new InvalidCredentialsException("Invalid email or password");
+    }
 
     // Validate password
     boolean isValid =
@@ -46,7 +55,7 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
             passwordEncoder);
 
     if (!isValid) {
-      throw new InvalidCredentialsException("Invalid password");
+      throw new InvalidCredentialsException();
     }
 
     // Update last login
@@ -55,5 +64,22 @@ public class LocalAuthenticationStrategy implements AuthenticationStrategy {
 
     // Always existing user for LOCAL
     return AuthenticatedUser.existing(updatedUser);
+  }
+
+  private AuthenticatedUser authenticateDeletedUser(
+      AuthenticationContext context, User deletedUser) {
+    if (!AuthProvider.LOCAL.equals(deletedUser.getAuthProvider())) {
+      throw new InvalidCredentialsException("Invalid email or password");
+    }
+
+    // Security policy:
+    // - Do NOT reveal "withdrawn" status unless the caller proves they know the correct password.
+    // - This prevents user enumeration by checking whether an email is soft-deleted.
+    boolean isValid = deletedUser.validatePassword(context.password(), passwordEncoder);
+    if (!isValid) {
+      throw new InvalidCredentialsException("Invalid email or password");
+    }
+
+    throw new UserWithdrawnException();
   }
 }

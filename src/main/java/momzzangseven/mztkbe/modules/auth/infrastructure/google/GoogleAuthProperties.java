@@ -14,6 +14,7 @@ public class GoogleAuthProperties {
   private OAuth oauth = new OAuth();
   private Api api = new Api();
 
+  /** Google OAuth client configuration values. */
   @Getter
   @Setter
   public static class OAuth {
@@ -22,10 +23,12 @@ public class GoogleAuthProperties {
     private String redirectUri;
   }
 
+  /** Google API endpoints used for token and userinfo retrieval. */
   @Getter
   @Setter
   public static class Api {
     private String tokenUri;
     private String userinfoUri;
+    private String revokeUri;
   }
 }

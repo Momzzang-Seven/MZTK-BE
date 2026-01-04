@@ -40,6 +40,39 @@ public enum ErrorCode {
       "AUTH_005", "Unauthorized access", HttpStatus.FORBIDDEN // 403
       ),
 
+  USER_NOT_AUTHENTICATED(
+      "AUTH_006", "User is not authenticated", HttpStatus.UNAUTHORIZED // 401
+      ),
+
+  /**
+   * Google OAuth token exchange may omit {@code refresh_token}.
+   *
+   * <p>In this project, we acquire/store Google refresh tokens at "revoke-needed" moments (step-up
+   * for withdrawal/disconnect). If the token response does not include a refresh token AND we have
+   * no previously stored refresh token, the client must re-run OAuth with {@code
+   * prompt=consent&access_type=offline} and retry.
+   */
+  GOOGLE_OFFLINE_CONSENT_REQUIRED(
+      "AUTH_007",
+      "Google offline consent required (prompt=consent&access_type=offline)",
+      HttpStatus.CONFLICT // 409
+      ),
+
+  STEP_UP_REQUIRED(
+      "AUTH_008", "Step-up authentication required", HttpStatus.FORBIDDEN // 403
+      ),
+
+  // ========================================
+  // User Errors (USER_xxx)
+  // ========================================
+  ILLEGAL_ADMIN_GRANT("USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST),
+
+  INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
+
+  ILLEGAL_TRAINER_GRANT("USER_003", "Cannot assign TRAINER role", HttpStatus.BAD_REQUEST),
+
+  USER_WITHDRAWN("USER_004", "User account is withdrawn", HttpStatus.CONFLICT),
+
   // ========================================
   // Signup Errors (SIGNUP_xxx)
   // ========================================
@@ -55,6 +88,30 @@ public enum ErrorCode {
 
   INVALID_EMAIL_FORMAT(
       "SIGNUP_003", "Invalid email format", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  // ========================================
+  // Token Errors (TOKEN_xxx)
+  // ========================================
+  REFRESH_TOKEN_NOT_FOUND(
+      "TOKEN_001", "Refresh token not found", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  REFRESH_TOKEN_INVALID(
+      "TOKEN_002", "Invalid refresh token", HttpStatus.UNAUTHORIZED // 401
+      ),
+
+  TOKEN_SECURITY_THREAT(
+      "TOKEN_003",
+      "Authentication security issue detected. Please log in again to continue.",
+      HttpStatus.FORBIDDEN // 403
+      ),
+  TOKEN_HASHING_FAILED(
+      "TOKEN_004", "Failed to hash token", HttpStatus.INTERNAL_SERVER_ERROR // 500
+      ),
+
+  TOKEN_ENCRYPTION_FAILED(
+      "TOKEN_005", "Failed to encrypt/decrypt token", HttpStatus.INTERNAL_SERVER_ERROR // 500
       ),
 
   // ========================================

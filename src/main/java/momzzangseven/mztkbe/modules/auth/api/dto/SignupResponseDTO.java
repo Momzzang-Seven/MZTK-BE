@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.modules.auth.application.dto.SignupResult;
 
+/** Signup response DTO (API layer). */
 @Getter
 @Builder
 public class SignupResponseDTO {

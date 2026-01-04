@@ -1,8 +1,11 @@
 package momzzangseven.mztkbe.modules.user.application.port.out;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
+import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 
 /**
  * Hexagonal Architecture: This is an OUTPUT PORT that defines operations needed by the application
@@ -13,7 +16,18 @@ public interface LoadUserPort {
 
   Optional<User> loadUserByEmail(String email);
 
+  Optional<User> loadDeletedUserByEmail(String email);
+
+  Optional<User> loadDeletedUserById(Long userId);
+
+  Optional<User> loadUserById(Long userId);
+
   boolean existsByEmail(String email);
 
   Optional<User> findByProviderAndProviderUserId(AuthProvider provider, String providerUserId);
+
+  Optional<User> findDeletedByProviderAndProviderUserId(
+      AuthProvider provider, String providerUserId);
+
+  List<Long> loadUserIdsForDeletion(UserStatus status, LocalDateTime cutoff, int limit);
 }
