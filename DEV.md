@@ -32,7 +32,7 @@ cp .env.example .env
 2️⃣ 필수 도구
 
 * JDK 21
-* Docker
+* Docker Desktop 설치
 
 3️⃣ Spring Profile
 

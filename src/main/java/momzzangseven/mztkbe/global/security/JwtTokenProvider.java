@@ -1,10 +1,15 @@
 package momzzangseven.mztkbe.global.security;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,7 +47,7 @@ public class JwtTokenProvider {
         .header()
         .type("JWT")
         .and()
-        .subject(userId.toString())
+        .subject(userId.toString()) // User PK
         .claim("email", email)
         .claim("role", role.name())
         .claim("type", "access")
@@ -71,7 +76,40 @@ public class JwtTokenProvider {
         .type("JWT")
         .and()
         .subject(userId.toString())
+        .id(UUID.randomUUID().toString())
         .claim("type", "refresh")
+        .issuer(jwtProperties.getIssuer())
+        .audience()
+        .add(jwtProperties.getAudience())
+        .and()
+        .issuedAt(now)
+        .expiration(expiryDate)
+        .signWith(getSigningKey())
+        .compact();
+  }
+
+  /**
+   * Generate a short-lived step-up access token for sensitive operations.
+   *
+   * @param userId User's unique identifier
+   * @param email User's email
+   * @param role User's role
+   * @return JWT access token string with step-up claim
+   */
+  public String generateStepUpAccessToken(Long userId, String email, UserRole role) {
+    Date now = new Date();
+    Date expiryDate = new Date(now.getTime() + jwtProperties.getStepUpTokenExpiration());
+
+    return Jwts.builder()
+        .header()
+        .type("JWT")
+        .and()
+        .subject(userId.toString()) // User PK
+        .id(UUID.randomUUID().toString())
+        .claim("email", email)
+        .claim("role", role.name())
+        .claim("type", "access")
+        .claim("step_up", true)
         .issuer(jwtProperties.getIssuer())
         .audience()
         .add(jwtProperties.getAudience())
@@ -150,7 +188,45 @@ public class JwtTokenProvider {
     }
   }
 
+  /**
+   * Validate that the token is a step-up access token.
+   *
+   * @param token JWT token
+   * @return true if step-up access token, false otherwise
+   */
+  public boolean isStepUpAccessToken(String token) {
+    try {
+      Claims claims = getClaims(token);
+      Boolean stepUp = claims.get("step_up", Boolean.class);
+      return Boolean.TRUE.equals(stepUp);
+    } catch (Exception e) {
+      log.error("Error checking step-up claim: {}", e.getMessage());
+      return false;
+    }
+  }
+
   // ========== Token Information Extraction ==========
+
+  /*
+   * return access token expiration in application.yml (in milliseconds)
+   */
+  public long getAccessTokenExpiresIn() {
+    return jwtProperties.getAccessTokenExpiration();
+  }
+
+  /*
+   * return refresh token expiration in application.yml (in milliseconds)
+   */
+  public long getRefreshTokenExpiresIn() {
+    return jwtProperties.getRefreshTokenExpiration();
+  }
+
+  /*
+   * return step-up token expiration in application.yml (in milliseconds)
+   */
+  public long getStepUpTokenExpiresIn() {
+    return jwtProperties.getStepUpTokenExpiration();
+  }
 
   /**
    * Extract user ID from token.

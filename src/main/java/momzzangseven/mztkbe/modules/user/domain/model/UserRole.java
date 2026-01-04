@@ -7,10 +7,13 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum UserRole {
-  /** Regular user role with basic permissions */
+  /** Regular user role with basic permissions. */
   USER("ROLE_USER", "Regular User", 1),
 
-  /** Administrator role with full permissions */
+  /** Regular user role with trainer permissions. */
+  TRAINER("ROLE_TRAINER", "Trainer", 2),
+
+  /** Administrator role with full permissions. */
   ADMIN("ROLE_ADMIN", "Administrator", 99);
 
   private final String authority;

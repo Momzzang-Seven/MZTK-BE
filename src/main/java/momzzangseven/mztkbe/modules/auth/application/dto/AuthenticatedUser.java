@@ -7,14 +7,11 @@ import momzzangseven.mztkbe.modules.user.domain.model.User;
  *
  * <p>Returned by AuthenticationStrategy after successful authentication. Contains authenticated
  * user and additional context.
+ *
+ * @param user Authenticated user
+ * @param isNewUser Whether this is a newly created user (auto-registered via social login)
  */
-public record AuthenticatedUser(
-
-    /** Authenticated user */
-    User user,
-
-    /** Whether this is a newly created user (auto-registered via social login) */
-    boolean isNewUser) {
+public record AuthenticatedUser(User user, boolean isNewUser) {
 
   /**
    * Create AuthenticatedUser for existing user.

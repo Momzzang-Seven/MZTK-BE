@@ -2,6 +2,9 @@ package momzzangseven.mztkbe.modules.user.application.service;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
+import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginOutcome;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginUseCase;
@@ -11,6 +14,7 @@ import momzzangseven.mztkbe.modules.user.domain.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService implements SocialLoginUseCase {
@@ -43,37 +47,72 @@ public class UserService implements SocialLoginUseCase {
     }
 
     if (email == null || email.isBlank()) {
-      throw new IllegalStateException("email is required for social login");
+      // Avoid 500: missing email from provider is treated as invalid credentials/state.
+      throw new InvalidCredentialsException("Invalid social login");
     }
 
     Optional<User> byProvider =
         loadUserPort.findByProviderAndProviderUserId(authProvider, providerUserId);
 
     if (byProvider.isPresent()) {
-      return SocialLoginOutcome.existing(byProvider.get());
+      User user = byProvider.get();
+      user.updateLastLogin();
+      saveUserPort.saveUser(user);
+      return SocialLoginOutcome.existing(user);
     }
+
+    verifyNotWithdrawnByProvider(authProvider, providerUserId);
 
     Optional<User> byEmail = loadUserPort.loadUserByEmail(email);
     if (byEmail.isPresent()) {
       User existing = byEmail.get();
 
       if (existing.getAuthProvider() != authProvider) {
-        throw new IllegalStateException(
-            "Account already exists with a different provider. Email=" + email);
+        // Do not reveal which provider owns the email.
+        throw new InvalidCredentialsException("Invalid social login");
       }
 
-      throw new IllegalStateException("Invalid social login state: providerUserId mismatch");
+      // Same provider but different providerUserId -> treat as invalid credentials/state.
+      throw new InvalidCredentialsException("Invalid social login");
     }
 
-    User created =
-        switch (authProvider) {
-          case KAKAO -> User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
-          case GOOGLE -> User.createFromGoogle(providerUserId, email, nickname, profileImageUrl);
-          default ->
-              throw new IllegalArgumentException("Unsupported social provider: " + authProvider);
-        };
+    verifyNotWithdrawnByEmail(email);
+
+    if (nickname == null || nickname.isBlank()) {
+      nickname =
+          provider.toLowerCase() + "_" + java.util.UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    User created;
+    if (authProvider == AuthProvider.KAKAO) {
+      created = User.createFromKakao(providerUserId, email, nickname, profileImageUrl);
+    } else if (authProvider == AuthProvider.GOOGLE) {
+      created = User.createFromGoogle(providerUserId, email, nickname, profileImageUrl);
+    } else {
+      throw new IllegalArgumentException("Unsupported social provider: " + authProvider);
+    }
 
     User saved = saveUserPort.saveUser(created);
     return SocialLoginOutcome.newUser(saved);
+  }
+
+  private void verifyNotWithdrawnByProvider(AuthProvider authProvider, String providerUserId) {
+    Optional<User> deletedByProvider =
+        loadUserPort.findDeletedByProviderAndProviderUserId(authProvider, providerUserId);
+    if (deletedByProvider.isPresent()) {
+      log.info(
+          "Withdrawn social account login attempt: provider={}, providerUserId={}",
+          authProvider,
+          providerUserId);
+      throw new UserWithdrawnException();
+    }
+  }
+
+  private void verifyNotWithdrawnByEmail(String email) {
+    Optional<User> deletedByEmail = loadUserPort.loadDeletedUserByEmail(email);
+    if (deletedByEmail.isPresent()) {
+      log.info("Withdrawn social account login attempt: email={}", email);
+      throw new UserWithdrawnException();
+    }
   }
 }

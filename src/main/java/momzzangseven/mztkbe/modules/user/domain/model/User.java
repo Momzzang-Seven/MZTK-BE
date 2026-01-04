@@ -4,17 +4,24 @@ import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
+import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+/** Domain model representing an application user. */
 @Slf4j
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class User {
   private Long id;
   private String email;
 
-  /** BCrypt-encoded password (only for LOCAL auth) Format: $2a$10$... (60 characters) */
+  /**
+   * BCrypt-encoded password (only for LOCAL auth).
+   *
+   * <p>Format: $2a$10$... (60 characters).
+   */
   private String password;
 
   private String nickname;
@@ -22,16 +29,25 @@ public class User {
 
   /**
    * Provider-specific user ID. - KAKAO: Kakao user ID (String) - GOOGLE: Google user ID (String) -
-   * LOCAL: null
+   * LOCAL: null.
    */
-  private String provider_user_id;
+  private String providerUserId;
 
-  /** Connected Web3 wallet address */
+  /**
+   * Encrypted Google OAuth refresh token (only for GOOGLE users).
+   *
+   * <p>Used for revoke/unlink flows (e.g., withdrawal).
+   */
+  private String googleRefreshToken;
+
+  /** Connected Web3 wallet address. */
   private String walletAddress;
 
   private AuthProvider authProvider;
   private UserRole role;
+  private UserStatus status;
   private LocalDateTime lastLoginAt;
+  private LocalDateTime deletedAt;
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
 
@@ -61,6 +77,8 @@ public class User {
         .nickname(nickname)
         .authProvider(AuthProvider.LOCAL)
         .role(UserRole.USER)
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
         .createdAt(now)
         .updatedAt(now)
         .build();
@@ -76,12 +94,14 @@ public class User {
 
     LocalDateTime now = LocalDateTime.now();
     return User.builder()
-        .provider_user_id(kakaoId)
+        .providerUserId(kakaoId)
         .email(email)
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
         .authProvider(AuthProvider.KAKAO)
         .role(UserRole.USER)
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
         .lastLoginAt(now)
         .createdAt(now)
         .updatedAt(now)
@@ -102,8 +122,10 @@ public class User {
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
         .authProvider(AuthProvider.GOOGLE)
-        .provider_user_id(googleId)
+        .providerUserId(googleId)
         .role(UserRole.USER)
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
         .lastLoginAt(now)
         .createdAt(now)
         .updatedAt(now)
@@ -165,14 +187,41 @@ public class User {
   /**
    * Update user profile.
    *
-   * @param nickname New nickname
-   * @param profileImageUrl New profile image URL
+   * @param newNickname New nickname
+   * @param newProfileImageUrl New profile image URL
+   * @return Updated User instance
    */
-  public void updateProfile(String nickname, String profileImageUrl) {
+  public User updateProfile(String newNickname, String newProfileImageUrl) {
     validateNickname(nickname);
-    this.nickname = nickname;
-    this.profileImageUrl = profileImageUrl;
-    this.updatedAt = LocalDateTime.now();
+
+    return this.toBuilder()
+        .nickname(newNickname)
+        .profileImageUrl(newProfileImageUrl)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  /**
+   * Update user role.
+   *
+   * @param newRole New role
+   * @return Updated User instance
+   */
+  public User updateRole(UserRole newRole) {
+    if (newRole == null) {
+      throw new InvalidUserRoleException("Cannot update user role if no role is provided");
+    }
+
+    if (this.role == newRole) {
+      throw new InvalidUserRoleException("New role is same as current role");
+    }
+
+    // Business rule: Cannot change to ADMIN (only system can do this)
+    if (newRole == UserRole.ADMIN) {
+      throw new IllegalAdminGrantException();
+    }
+
+    return this.toBuilder().role(newRole).updatedAt(LocalDateTime.now()).build();
   }
 
   /**
@@ -197,13 +246,43 @@ public class User {
     log.debug("Updated last login time for user: {}", this.id);
   }
 
+  /** Soft-delete (withdraw) this user. */
+  public User withdraw() {
+    LocalDateTime now = LocalDateTime.now();
+    return this.toBuilder().status(UserStatus.DELETED).deletedAt(now).updatedAt(now).build();
+  }
+
+  /** Reactivate a soft-deleted user. */
+  public User reactivate() {
+    LocalDateTime now = LocalDateTime.now();
+    return this.toBuilder()
+        .status(UserStatus.ACTIVE)
+        .deletedAt(null)
+        .lastLoginAt(now)
+        .updatedAt(now)
+        .build();
+  }
+
+  /** Save encrypted Google OAuth refresh token. */
+  public User updateGoogleRefreshToken(String encryptedRefreshToken) {
+    if (!AuthProvider.GOOGLE.equals(this.authProvider)) {
+      throw new IllegalStateException("Google refresh token can only be saved for GOOGLE users");
+    }
+    if (encryptedRefreshToken == null || encryptedRefreshToken.isBlank()) {
+      throw new IllegalArgumentException("encryptedRefreshToken is required");
+    }
+
+    LocalDateTime now = LocalDateTime.now();
+    return this.toBuilder().googleRefreshToken(encryptedRefreshToken).updatedAt(now).build();
+  }
+
   /** Check if user is admin. */
   public boolean isAdmin() {
     return UserRole.ADMIN.equals(this.role);
   }
 
   // ============================================
-  // Validation Methods (Private)
+  // Validation Methods
   // ============================================
 
   /** Validate email format. */
@@ -244,5 +323,16 @@ public class User {
     if (nickname.length() < 2 || nickname.length() > 50) {
       throw new IllegalArgumentException("Nickname must be between 2 and 50 characters");
     }
+  }
+
+  /**
+   * Check if user can change role to TRAINER. Add business rules here (e.g., email verification,
+   * minimum age, etc.)
+   */
+  public boolean canBecomeTrainer() {
+    // Business rules for becoming a trainer
+    // Example: Must have verified email, etc. We can add additional business rule to become a
+    // trainer here.
+    return this.email != null;
   }
 }

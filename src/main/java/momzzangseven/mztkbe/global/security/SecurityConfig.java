@@ -4,14 +4,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Spring Security Configuration
+ * Spring Security Configuration.
  *
  * <p>Responsibilities: - Configure authentication and authorization rules - Set up JWT-based
  * stateless authentication - Define public and protected endpoints - Disable CSRF for REST API
@@ -21,6 +23,11 @@ import org.springframework.security.web.SecurityFilterChain;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+  private final JwtAuthenticationFilter jwtAuthenticationFilter;
+  private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+  private final RestAccessDeniedHandler restAccessDeniedHandler;
+
+  /** Configure stateless security filter chain, JWT auth, and request authorization rules. */
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     http
@@ -28,11 +35,18 @@ public class SecurityConfig {
         .csrf(AbstractHttpConfigurer::disable)
 
         // Enable CORS
-        .cors(cors -> cors.configure(http))
+        .cors(Customizer.withDefaults())
 
         // Set session management to STATELESS (using JWT, no server-side session)
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+        // Return JSON responses for 401/403 instead of default HTML
+        .exceptionHandling(
+            exceptions ->
+                exceptions
+                    .authenticationEntryPoint(restAuthenticationEntryPoint)
+                    .accessDeniedHandler(restAccessDeniedHandler))
 
         // Configure authorization rules
         .authorizeHttpRequests(
@@ -43,8 +57,18 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.POST, "/auth/login")
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/auth/refresh")
+                    .requestMatchers(HttpMethod.POST, "/auth/reactivate")
                     .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/reissue")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/logout")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/stepup")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/users/me/role")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/withdrawal")
+                    .hasAuthority("ROLE_STEP_UP")
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
 
@@ -56,6 +80,7 @@ public class SecurityConfig {
                     .anyRequest()
                     .authenticated());
 
+    http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }
 }
