@@ -2,11 +2,11 @@ package momzzangseven.mztkbe.modules.level.application.service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
@@ -28,10 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
 
   private static final int MAX_PAGE_SIZE = 100;
-  private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
   private final LoadXpLedgerPort loadXpLedgerPort;
   private final LoadXpPoliciesPort loadXpPoliciesPort;
+  private final ZoneId appZoneId;
 
   @Override
   public GetMyXpLedgerResult execute(Long userId, int page, int size) {
@@ -48,7 +48,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
     XpLedgerEntrySlice slice = loadXpLedgerPort.loadXpLedgerEntries(userId, page, size);
     List<XpLedgerEntryItem> entries = slice.entries().stream().map(this::mapToItem).toList();
 
-    LocalDateTime now = ZonedDateTime.now(KST).toLocalDateTime();
+    LocalDateTime now = ZonedDateTime.now(appZoneId).toLocalDateTime();
     LocalDate earnedOn = now.toLocalDate();
     Map<XpType, XpPolicy> policiesByType =
         loadXpPoliciesPort.loadXpPolicies(now).stream()
