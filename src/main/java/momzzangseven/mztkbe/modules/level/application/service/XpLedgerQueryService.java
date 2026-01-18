@@ -1,0 +1,98 @@
+package momzzangseven.mztkbe.modules.level.application.service;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.modules.level.application.dto.MyXpLedgerResult;
+import momzzangseven.mztkbe.modules.level.application.dto.XpDailyCapStatusItem;
+import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerEntryItem;
+import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerSlice;
+import momzzangseven.mztkbe.modules.level.application.port.in.GetMyXpLedgerUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPoliciesPort;
+import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
+import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
+import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@Transactional(readOnly = true)
+@RequiredArgsConstructor
+public class XpLedgerQueryService implements GetMyXpLedgerUseCase {
+
+  private static final int MAX_PAGE_SIZE = 100;
+  private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
+  private final LoadXpLedgerPort loadXpLedgerPort;
+  private final LoadXpPoliciesPort loadXpPoliciesPort;
+
+  @Override
+  public MyXpLedgerResult execute(Long userId, int page, int size) {
+    if (userId == null) {
+      throw new UserNotAuthenticatedException();
+    }
+    if (page < 0) {
+      throw new IllegalArgumentException("page must be >= 0");
+    }
+    if (size <= 0 || size > MAX_PAGE_SIZE) {
+      throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
+    }
+
+    XpLedgerSlice slice = loadXpLedgerPort.loadXpLedgerEntries(userId, page, size);
+    List<XpLedgerEntryItem> entries = slice.entries().stream().map(this::mapToItem).toList();
+
+    LocalDateTime now = ZonedDateTime.now(KST).toLocalDateTime();
+    LocalDate earnedOn = now.toLocalDate();
+    Map<XpType, XpPolicy> policiesByType =
+        loadXpPoliciesPort.loadXpPolicies(now).stream()
+            .collect(java.util.stream.Collectors.toMap(XpPolicy::getType, Function.identity()));
+
+    List<XpDailyCapStatusItem> todayCaps =
+        policiesByType.entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .map(entry -> toTodayCap(userId, entry.getKey(), entry.getValue(), earnedOn))
+            .toList();
+
+    return MyXpLedgerResult.builder()
+        .page(page)
+        .size(size)
+        .hasNext(slice.hasNext())
+        .earnedOn(earnedOn)
+        .entries(entries)
+        .todayCaps(todayCaps)
+        .build();
+  }
+
+  private XpLedgerEntryItem mapToItem(XpLedgerEntry entry) {
+    return XpLedgerEntryItem.builder()
+        .xpLedgerId(entry.getId())
+        .type(entry.getType())
+        .xpAmount(entry.getXpAmount())
+        .earnedOn(entry.getEarnedOn())
+        .occurredAt(entry.getOccurredAt())
+        .idempotencyKey(entry.getIdempotencyKey())
+        .sourceRef(entry.getSourceRef())
+        .createdAt(entry.getCreatedAt())
+        .build();
+  }
+
+  private XpDailyCapStatusItem toTodayCap(
+      Long userId, XpType type, XpPolicy policy, LocalDate earnedOn) {
+    int dailyCap = policy.getDailyCap();
+    int grantedCount = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, type, earnedOn);
+    int remainingCount = dailyCap < 0 ? -1 : Math.max(0, dailyCap - grantedCount);
+    return XpDailyCapStatusItem.builder()
+        .type(type)
+        .dailyCap(dailyCap)
+        .grantedCount(grantedCount)
+        .remainingCount(remainingCount)
+        .build();
+  }
+}

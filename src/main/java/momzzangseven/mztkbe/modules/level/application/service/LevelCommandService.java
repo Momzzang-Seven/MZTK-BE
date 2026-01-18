@@ -38,6 +38,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
 
+  private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+
   private final LoadUserProgressPort loadUserProgressPort;
   private final SaveUserProgressPort saveUserProgressPort;
   private final LevelPolicyResolver levelPolicyResolver;
@@ -119,9 +121,6 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
     Long userId = command.userId();
     LocalDateTime occurredAt = command.occurredAt();
     XpType xpType = command.xpType();
-    if (xpType == XpType.CHECK_IN || xpType == XpType.STREAK_7D) {
-      throw new IllegalArgumentException("xpType is not supported yet: " + xpType);
-    }
 
     loadUserProgressPort.loadOrCreateUserProgress(userId);
     UserProgress progress = loadUserProgressPort.loadUserProgressWithLock(userId);
@@ -132,17 +131,19 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
             .orElseThrow(() -> new IllegalStateException("XP policy not found: type=" + xpType));
 
     String idempotencyKey = command.idempotencyKey();
+    int dailyCap = policy.getDailyCap();
+    java.time.LocalDate earnedOn = occurredAt.atZone(KST).toLocalDate();
+    int grantedToday = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
+
     if (loadXpLedgerPort.existsByUserIdAndIdempotencyKey(userId, idempotencyKey)) {
-      return GrantXpResult.alreadyGranted(policy.getDailyCap());
+      return GrantXpResult.alreadyGranted(dailyCap, grantedToday, earnedOn);
     }
 
-    java.time.LocalDate earnedOn = occurredAt.toLocalDate();
-    int dailyCap = policy.getDailyCap();
-    if (dailyCap > 0) {
-      int grantedToday = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
-      if (grantedToday >= dailyCap) {
-        return GrantXpResult.dailyCapReached(dailyCap);
-      }
+    if (dailyCap == 0) {
+      return GrantXpResult.dailyCapReached(dailyCap, grantedToday, earnedOn);
+    }
+    if (dailyCap > 0 && grantedToday >= dailyCap) {
+      return GrantXpResult.dailyCapReached(dailyCap, grantedToday, earnedOn);
     }
 
     XpLedgerEntry entry =
@@ -154,7 +155,12 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
             occurredAt,
             idempotencyKey,
             command.sourceRef());
-    saveXpLedgerPort.saveXpLedger(entry);
+    try {
+      saveXpLedgerPort.saveXpLedger(entry);
+    } catch (DataIntegrityViolationException e) {
+      // Defensive: treat unique conflicts as idempotency hits.
+      return GrantXpResult.alreadyGranted(dailyCap, grantedToday, earnedOn);
+    }
 
     UserProgress updated =
         progress.toBuilder()
@@ -164,7 +170,7 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
             .build();
     updated = saveUserProgressPort.saveUserProgress(updated);
 
-    return GrantXpResult.granted(policy.getXpAmount(), dailyCap);
+    return GrantXpResult.granted(policy.getXpAmount(), dailyCap, grantedToday + 1, earnedOn);
   }
 
   private RewardMztkResult attemptReward(Long userId, int rewardMztk, Long referenceId) {
