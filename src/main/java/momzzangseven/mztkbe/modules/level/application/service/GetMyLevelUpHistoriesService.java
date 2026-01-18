@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-public class LevelHistoryQueryService implements GetMyLevelUpHistoriesUseCase {
+public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCase {
 
   private static final int MAX_PAGE_SIZE = 100;
 

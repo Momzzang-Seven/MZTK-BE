@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.level.api.controller;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.level.api.dto.LevelPoliciesResponseDTO;
+import momzzangseven.mztkbe.modules.level.api.dto.GetLevelPoliciesResponseDTO;
 import momzzangseven.mztkbe.modules.level.api.dto.LevelUpResponseDTO;
 import momzzangseven.mztkbe.modules.level.api.dto.MyLevelResponseDTO;
 import momzzangseven.mztkbe.modules.level.api.dto.MyLevelUpHistoriesResponseDTO;
@@ -45,9 +45,9 @@ public class LevelController {
   }
 
   @GetMapping("/levels/policies")
-  public ResponseEntity<ApiResponse<LevelPoliciesResponseDTO>> getLevelPolicies() {
+  public ResponseEntity<ApiResponse<GetLevelPoliciesResponseDTO>> getLevelPolicies() {
     LevelPoliciesResult result = getLevelPoliciesUseCase.execute();
-    return ResponseEntity.ok(ApiResponse.success(LevelPoliciesResponseDTO.from(result)));
+    return ResponseEntity.ok(ApiResponse.success(GetLevelPoliciesResponseDTO.from(result)));
   }
 
   @PostMapping("/users/me/level-ups")

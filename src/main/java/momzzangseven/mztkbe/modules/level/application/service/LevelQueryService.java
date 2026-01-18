@@ -38,8 +38,8 @@ public class LevelQueryService implements GetMyLevelUseCase, GetLevelPoliciesUse
     UserProgress progress = loadUserProgressPort.loadOrCreateUserProgress(userId);
     LocalDateTime now = LocalDateTime.now();
 
-    LevelPolicyResolver.NextLevelPolicy nextPolicy =
-        levelPolicyResolver.resolveForQuery(progress.getLevel(), now);
+    LevelPolicyResolver.NextLevelPolicyInfo nextPolicy =
+        levelPolicyResolver.resolveNextLevelInfo(progress.getLevel(), now);
 
     MyLevelResult result =
         MyLevelResult.builder()

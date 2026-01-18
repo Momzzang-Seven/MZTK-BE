@@ -4,11 +4,11 @@ import lombok.Builder;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelPolicyItem;
 
 @Builder
-public record LevelPolicyResponseDTO(
+public record LevelPolicyItemResponseDTO(
     int currentLevel, int toLevel, int requiredXp, int rewardMztk) {
 
-  public static LevelPolicyResponseDTO from(LevelPolicyItem item) {
-    return LevelPolicyResponseDTO.builder()
+  public static LevelPolicyItemResponseDTO from(LevelPolicyItem item) {
+    return LevelPolicyItemResponseDTO.builder()
         .currentLevel(item.currentLevel())
         .toLevel(item.toLevel())
         .requiredXp(item.requiredXp())

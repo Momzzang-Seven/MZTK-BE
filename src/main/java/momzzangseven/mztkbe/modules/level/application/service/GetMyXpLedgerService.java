@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-public class XpLedgerQueryService implements GetMyXpLedgerUseCase {
+public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
 
   private static final int MAX_PAGE_SIZE = 100;
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
