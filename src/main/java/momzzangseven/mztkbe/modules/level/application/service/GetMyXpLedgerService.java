@@ -15,7 +15,6 @@ import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerEntryItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyXpLedgerUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.dto.XpLedgerEntrySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
@@ -45,8 +44,11 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
       throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
     }
 
-    XpLedgerEntrySlice slice = xpLedgerPort.loadXpLedgerEntries(userId, page, size);
-    List<XpLedgerEntryItem> entries = slice.entries().stream().map(this::mapToItem).toList();
+    List<XpLedgerEntry> loadedEntries = xpLedgerPort.loadXpLedgerEntries(userId, page, size);
+    boolean hasNext = loadedEntries.size() > size;
+    List<XpLedgerEntry> pageEntries =
+        hasNext ? loadedEntries.subList(0, size) : loadedEntries;
+    List<XpLedgerEntryItem> entries = pageEntries.stream().map(this::mapToItem).toList();
 
     LocalDateTime now = ZonedDateTime.now(appZoneId).toLocalDateTime();
     LocalDate earnedOn = now.toLocalDate();
@@ -63,7 +65,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
     return GetMyXpLedgerResult.builder()
         .page(page)
         .size(size)
-        .hasNext(slice.hasNext())
+        .hasNext(hasNext)
         .earnedOn(earnedOn)
         .entries(entries)
         .todayCaps(todayCaps)

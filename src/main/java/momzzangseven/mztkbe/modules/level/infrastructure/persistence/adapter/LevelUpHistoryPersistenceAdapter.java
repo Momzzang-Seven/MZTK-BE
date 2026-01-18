@@ -1,16 +1,15 @@
 package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.LevelUpAlreadyProcessedException;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.dto.LevelUpHistorySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelUpHistoryEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.LevelUpHistoryJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,15 +46,14 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
 
   @Override
   @Transactional(readOnly = true)
-  public LevelUpHistorySlice loadLevelUpHistories(Long userId, int page, int size) {
-    Slice<LevelUpHistoryEntity> slice =
-        levelUpHistoryJpaRepository.findByUserIdOrderByCreatedAtDesc(
-            userId, PageRequest.of(page, size));
-
-    return LevelUpHistorySlice.builder()
-        .histories(slice.getContent().stream().map(this::mapToDomain).toList())
-        .hasNext(slice.hasNext())
-        .build();
+  public List<LevelUpHistory> loadLevelUpHistories(Long userId, int page, int size) {
+    int fetchSize = Math.max(1, size + 1);
+    return levelUpHistoryJpaRepository
+        .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, fetchSize))
+        .getContent()
+        .stream()
+        .map(this::mapToDomain)
+        .toList();
   }
 
   private LevelUpHistory mapToDomain(LevelUpHistoryEntity entity) {

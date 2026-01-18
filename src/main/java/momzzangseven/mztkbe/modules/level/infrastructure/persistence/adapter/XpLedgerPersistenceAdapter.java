@@ -1,16 +1,15 @@
 package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
 import java.time.LocalDate;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.dto.XpLedgerEntrySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpLedgerEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.XpLedgerJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,13 +33,14 @@ public class XpLedgerPersistenceAdapter implements XpLedgerPort {
 
   @Override
   @Transactional(readOnly = true)
-  public XpLedgerEntrySlice loadXpLedgerEntries(Long userId, int page, int size) {
-    Slice<XpLedgerEntity> slice =
-        xpLedgerJpaRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
-    return XpLedgerEntrySlice.builder()
-        .entries(slice.getContent().stream().map(this::mapToDomain).toList())
-        .hasNext(slice.hasNext())
-        .build();
+  public List<XpLedgerEntry> loadXpLedgerEntries(Long userId, int page, int size) {
+    int fetchSize = Math.max(1, size + 1);
+    return xpLedgerJpaRepository
+        .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, fetchSize))
+        .getContent()
+        .stream()
+        .map(this::mapToDomain)
+        .toList();
   }
 
   @Override
