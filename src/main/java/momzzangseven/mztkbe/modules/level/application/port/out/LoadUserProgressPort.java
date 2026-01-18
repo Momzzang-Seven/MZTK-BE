@@ -8,8 +8,6 @@ public interface LoadUserProgressPort {
 
   UserProgress loadOrCreateUserProgress(Long userId);
 
-  /**
-   * Loads the user progress with a pessimistic lock to ensure data consistency during updates.
-   */
+  /** Loads the user progress with a pessimistic lock to ensure data consistency during updates. */
   UserProgress loadUserProgressWithLock(Long userId);
 }

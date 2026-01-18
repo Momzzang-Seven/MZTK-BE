@@ -12,6 +12,5 @@ public interface LoadXpLedgerPort {
   boolean existsByUserIdAndTypeAndEarnedOnBetween(
       Long userId, XpType type, LocalDate startDate, LocalDate endDate);
 
-  int countDistinctEarnedOn(
-      Long userId, XpType type, LocalDate startDate, LocalDate endDate);
+  int countDistinctEarnedOn(Long userId, XpType type, LocalDate startDate, LocalDate endDate);
 }

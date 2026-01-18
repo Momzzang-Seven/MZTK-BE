@@ -13,9 +13,9 @@ import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.in.LevelUpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPolicyPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveLevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveUserProgressPort;
@@ -129,8 +129,7 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
     XpPolicy policy =
         loadXpPolicyPort
             .loadXpPolicy(xpType, occurredAt)
-            .orElseThrow(
-                () -> new IllegalStateException("XP policy not found: type=" + xpType));
+            .orElseThrow(() -> new IllegalStateException("XP policy not found: type=" + xpType));
 
     String idempotencyKey = command.idempotencyKey();
     if (loadXpLedgerPort.existsByUserIdAndIdempotencyKey(userId, idempotencyKey)) {
@@ -140,8 +139,7 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
     java.time.LocalDate earnedOn = occurredAt.toLocalDate();
     int dailyCap = policy.getDailyCap();
     if (dailyCap > 0) {
-      int grantedToday =
-          loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
+      int grantedToday = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
       if (grantedToday >= dailyCap) {
         return GrantXpResult.dailyCapReached(dailyCap);
       }
