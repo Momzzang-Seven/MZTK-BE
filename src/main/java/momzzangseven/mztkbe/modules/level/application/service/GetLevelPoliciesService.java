@@ -53,4 +53,3 @@ public class GetLevelPoliciesService implements GetLevelPoliciesUseCase {
         .build();
   }
 }
-
