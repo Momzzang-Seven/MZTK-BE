@@ -46,8 +46,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
 
     List<XpLedgerEntry> loadedEntries = xpLedgerPort.loadXpLedgerEntries(userId, page, size);
     boolean hasNext = loadedEntries.size() > size;
-    List<XpLedgerEntry> pageEntries =
-        hasNext ? loadedEntries.subList(0, size) : loadedEntries;
+    List<XpLedgerEntry> pageEntries = hasNext ? loadedEntries.subList(0, size) : loadedEntries;
     List<XpLedgerEntryItem> entries = pageEntries.stream().map(this::mapToItem).toList();
 
     LocalDateTime now = ZonedDateTime.now(appZoneId).toLocalDateTime();

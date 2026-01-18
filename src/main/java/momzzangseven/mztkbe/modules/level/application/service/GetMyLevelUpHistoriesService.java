@@ -32,9 +32,11 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
       throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
     }
 
-    List<LevelUpHistory> loadedHistories = levelUpHistoryPort.loadLevelUpHistories(userId, page, size);
+    List<LevelUpHistory> loadedHistories =
+        levelUpHistoryPort.loadLevelUpHistories(userId, page, size);
     boolean hasNext = loadedHistories.size() > size;
-    List<LevelUpHistory> pageHistories = hasNext ? loadedHistories.subList(0, size) : loadedHistories;
+    List<LevelUpHistory> pageHistories =
+        hasNext ? loadedHistories.subList(0, size) : loadedHistories;
     List<LevelUpHistoryItem> items = pageHistories.stream().map(this::mapToItem).toList();
 
     return GetMyLevelUpHistoriesResult.builder()
