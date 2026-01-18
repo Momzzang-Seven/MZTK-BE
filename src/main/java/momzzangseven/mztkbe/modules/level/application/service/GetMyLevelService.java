@@ -43,4 +43,3 @@ public class GetMyLevelService implements GetMyLevelUseCase {
     return result;
   }
 }
-
