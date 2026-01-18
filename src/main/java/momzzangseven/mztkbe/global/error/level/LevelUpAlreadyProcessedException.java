@@ -8,4 +8,3 @@ public class LevelUpAlreadyProcessedException extends BusinessException {
     super(ErrorCode.LEVEL_UP_ALREADY_PROCESSED);
   }
 }
-
