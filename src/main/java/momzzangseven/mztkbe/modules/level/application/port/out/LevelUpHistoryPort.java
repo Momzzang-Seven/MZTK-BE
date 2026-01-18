@@ -8,4 +8,3 @@ package momzzangseven.mztkbe.modules.level.application.port.out;
  */
 public interface LevelUpHistoryPort
     extends LoadLevelUpHistoriesPort, SaveLevelUpHistoryPort, UpdateLevelUpHistoryRewardPort {}
-
