@@ -2,8 +2,7 @@ package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveXpLedgerPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.dto.XpLedgerEntrySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
@@ -17,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
-public class XpLedgerPersistenceAdapter implements LoadXpLedgerPort, SaveXpLedgerPort {
+public class XpLedgerPersistenceAdapter implements XpLedgerPort {
 
   private final XpLedgerJpaRepository xpLedgerJpaRepository;
 

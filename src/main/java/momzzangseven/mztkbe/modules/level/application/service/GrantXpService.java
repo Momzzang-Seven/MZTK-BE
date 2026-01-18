@@ -7,10 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveXpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
@@ -26,8 +25,7 @@ public class GrantXpService implements GrantXpUseCase {
 
   private final UserProgressPort userProgressPort;
   private final PolicyPort policyPort;
-  private final LoadXpLedgerPort loadXpLedgerPort;
-  private final SaveXpLedgerPort saveXpLedgerPort;
+  private final XpLedgerPort xpLedgerPort;
   private final ZoneId appZoneId;
 
   @Override
@@ -52,9 +50,9 @@ public class GrantXpService implements GrantXpUseCase {
     String idempotencyKey = command.idempotencyKey();
     int dailyCap = policy.getDailyCap();
     java.time.LocalDate earnedOn = occurredAt.atZone(appZoneId).toLocalDate();
-    int grantedToday = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
+    int grantedToday = xpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
 
-    if (loadXpLedgerPort.existsByUserIdAndIdempotencyKey(userId, idempotencyKey)) {
+    if (xpLedgerPort.existsByUserIdAndIdempotencyKey(userId, idempotencyKey)) {
       return GrantXpResult.alreadyGranted(dailyCap, grantedToday, earnedOn);
     }
 
@@ -74,7 +72,7 @@ public class GrantXpService implements GrantXpUseCase {
             occurredAt,
             idempotencyKey,
             command.sourceRef());
-    if (!saveXpLedgerPort.trySaveXpLedger(entry)) {
+    if (!xpLedgerPort.trySaveXpLedger(entry)) {
       log.info(
           "XP grant already recorded (idempotency): userId={}, type={}, key={}",
           userId,
