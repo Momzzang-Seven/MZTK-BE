@@ -13,8 +13,8 @@ import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
 import momzzangseven.mztkbe.modules.level.application.dto.XpDailyCapStatusItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerEntryItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyXpLedgerUseCase;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.dto.XpLedgerEntrySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
@@ -29,7 +29,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
 
   private static final int MAX_PAGE_SIZE = 100;
 
-  private final LoadXpLedgerPort loadXpLedgerPort;
+  private final XpLedgerPort xpLedgerPort;
   private final PolicyPort policyPort;
   private final ZoneId appZoneId;
 
@@ -45,7 +45,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
       throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
     }
 
-    XpLedgerEntrySlice slice = loadXpLedgerPort.loadXpLedgerEntries(userId, page, size);
+    XpLedgerEntrySlice slice = xpLedgerPort.loadXpLedgerEntries(userId, page, size);
     List<XpLedgerEntryItem> entries = slice.entries().stream().map(this::mapToItem).toList();
 
     LocalDateTime now = ZonedDateTime.now(appZoneId).toLocalDateTime();
@@ -86,7 +86,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
   private XpDailyCapStatusItem toTodayCap(
       Long userId, XpType type, XpPolicy policy, LocalDate earnedOn) {
     int dailyCap = policy.getDailyCap();
-    int grantedCount = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, type, earnedOn);
+    int grantedCount = xpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, type, earnedOn);
     int remainingCount = dailyCap < 0 ? -1 : Math.max(0, dailyCap - grantedCount);
     return XpDailyCapStatusItem.builder()
         .type(type)
