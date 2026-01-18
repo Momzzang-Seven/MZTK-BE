@@ -24,4 +24,3 @@ public record RewardMztkResult(RewardStatus status, String txHash, String failur
     }
   }
 }
-
