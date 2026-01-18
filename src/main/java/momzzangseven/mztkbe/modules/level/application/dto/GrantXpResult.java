@@ -9,17 +9,23 @@ import java.time.LocalDate;
  * was actually granted and how much was applied.
  */
 public record GrantXpResult(
-    GrantXpStatus status,
+    Status status,
     int grantedXp,
     int dailyCap,
     int grantedCountToday,
     int remainingCountToday,
     LocalDate earnedOn) {
 
+  public enum Status {
+    GRANTED,
+    ALREADY_GRANTED,
+    DAILY_CAP_REACHED
+  }
+
   public static GrantXpResult granted(
       int grantedXp, int dailyCap, int grantedCountToday, LocalDate earnedOn) {
     return new GrantXpResult(
-        GrantXpStatus.GRANTED,
+        Status.GRANTED,
         grantedXp,
         dailyCap,
         grantedCountToday,
@@ -30,7 +36,7 @@ public record GrantXpResult(
   public static GrantXpResult alreadyGranted(
       int dailyCap, int grantedCountToday, LocalDate earnedOn) {
     return new GrantXpResult(
-        GrantXpStatus.ALREADY_GRANTED,
+        Status.ALREADY_GRANTED,
         0,
         dailyCap,
         grantedCountToday,
@@ -41,7 +47,7 @@ public record GrantXpResult(
   public static GrantXpResult dailyCapReached(
       int dailyCap, int grantedCountToday, LocalDate earnedOn) {
     return new GrantXpResult(
-        GrantXpStatus.DAILY_CAP_REACHED,
+        Status.DAILY_CAP_REACHED,
         0,
         dailyCap,
         grantedCountToday,
