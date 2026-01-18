@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.level.application.dto;
+package momzzangseven.mztkbe.modules.level.application.port.out.dto;
 
 import lombok.Builder;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
@@ -24,3 +24,4 @@ public record RewardMztkResult(RewardStatus status, String txHash, String failur
     }
   }
 }
+
