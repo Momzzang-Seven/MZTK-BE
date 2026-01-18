@@ -7,8 +7,7 @@ import momzzangseven.mztkbe.modules.level.application.dto.GetLevelPoliciesResult
 import momzzangseven.mztkbe.modules.level.application.dto.LevelPolicyItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpPolicyItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetLevelPoliciesUseCase;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelPoliciesPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPoliciesPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,15 +16,14 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetLevelPoliciesService implements GetLevelPoliciesUseCase {
 
-  private final LoadLevelPoliciesPort loadLevelPoliciesPort;
-  private final LoadXpPoliciesPort loadXpPoliciesPort;
+  private final PolicyPort policyPort;
 
   @Override
   public GetLevelPoliciesResult execute() {
     LocalDateTime now = LocalDateTime.now();
 
     List<LevelPolicyItem> levelPolicies =
-        loadLevelPoliciesPort.loadLevelPolicies(now).stream()
+        policyPort.loadLevelPolicies(now).stream()
             .map(
                 policy ->
                     LevelPolicyItem.builder()
@@ -37,7 +35,7 @@ public class GetLevelPoliciesService implements GetLevelPoliciesUseCase {
             .toList();
 
     List<XpPolicyItem> xpPolicies =
-        loadXpPoliciesPort.loadXpPolicies(now).stream()
+        policyPort.loadXpPolicies(now).stream()
             .map(
                 policy ->
                     XpPolicyItem.builder()

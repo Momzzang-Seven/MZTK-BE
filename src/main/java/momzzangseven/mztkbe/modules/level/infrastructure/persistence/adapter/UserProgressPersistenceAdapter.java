@@ -3,8 +3,7 @@ package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveUserProgressPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.UserProgressEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.UserProgressJpaRepository;
@@ -15,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserProgressPersistenceAdapter implements LoadUserProgressPort, SaveUserProgressPort {
+public class UserProgressPersistenceAdapter implements UserProgressPort {
 
   private final UserProgressJpaRepository userProgressJpaRepository;
 

@@ -8,11 +8,10 @@ import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
 import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.LevelUpUseCase;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveLevelUpHistoryPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UpdateLevelUpHistoryRewardPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
@@ -26,8 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class LevelUpService implements LevelUpUseCase {
 
-  private final LoadUserProgressPort loadUserProgressPort;
-  private final SaveUserProgressPort saveUserProgressPort;
+  private final UserProgressPort userProgressPort;
   private final LevelPolicyResolver levelPolicyResolver;
   private final SaveLevelUpHistoryPort saveLevelUpHistoryPort;
   private final UpdateLevelUpHistoryRewardPort updateLevelUpHistoryRewardPort;
@@ -41,9 +39,9 @@ public class LevelUpService implements LevelUpUseCase {
     command.validate();
 
     Long userId = command.userId();
-    loadUserProgressPort.loadOrCreateUserProgress(userId);
+    userProgressPort.loadOrCreateUserProgress(userId);
 
-    UserProgress progress = loadUserProgressPort.loadUserProgressWithLock(userId);
+    UserProgress progress = userProgressPort.loadUserProgressWithLock(userId);
     LocalDateTime now = LocalDateTime.now();
 
     int fromLevel = progress.getLevel();
@@ -52,7 +50,7 @@ public class LevelUpService implements LevelUpUseCase {
 
     UserProgress updatedProgress = progress.levelUp(requiredXp, now);
 
-    saveUserProgressPort.saveUserProgress(updatedProgress);
+    userProgressPort.saveUserProgress(updatedProgress);
 
     int toLevel = updatedProgress.getLevel();
     int rewardMztk = policy.getRewardMztk();

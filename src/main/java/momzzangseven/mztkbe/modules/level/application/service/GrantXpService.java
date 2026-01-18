@@ -7,11 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPolicyPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveUserProgressPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveXpLedgerPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
@@ -25,9 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GrantXpService implements GrantXpUseCase {
 
-  private final LoadUserProgressPort loadUserProgressPort;
-  private final SaveUserProgressPort saveUserProgressPort;
-  private final LoadXpPolicyPort loadXpPolicyPort;
+  private final UserProgressPort userProgressPort;
+  private final PolicyPort policyPort;
   private final LoadXpLedgerPort loadXpLedgerPort;
   private final SaveXpLedgerPort saveXpLedgerPort;
   private final ZoneId appZoneId;
@@ -43,11 +41,11 @@ public class GrantXpService implements GrantXpUseCase {
     LocalDateTime occurredAt = command.occurredAt();
     XpType xpType = command.xpType();
 
-    loadUserProgressPort.loadOrCreateUserProgress(userId);
-    UserProgress progress = loadUserProgressPort.loadUserProgressWithLock(userId);
+    userProgressPort.loadOrCreateUserProgress(userId);
+    UserProgress progress = userProgressPort.loadUserProgressWithLock(userId);
 
     XpPolicy policy =
-        loadXpPolicyPort
+        policyPort
             .loadXpPolicy(xpType, occurredAt)
             .orElseThrow(() -> new IllegalStateException("XP policy not found: type=" + xpType));
 
@@ -86,7 +84,7 @@ public class GrantXpService implements GrantXpUseCase {
     }
 
     UserProgress updated = progress.grantXp(policy.getXpAmount(), LocalDateTime.now());
-    saveUserProgressPort.saveUserProgress(updated);
+    userProgressPort.saveUserProgress(updated);
 
     return GrantXpResult.granted(policy.getXpAmount(), dailyCap, grantedToday + 1, earnedOn);
   }

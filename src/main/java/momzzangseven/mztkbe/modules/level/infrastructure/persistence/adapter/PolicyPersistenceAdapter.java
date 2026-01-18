@@ -7,10 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelPoliciesPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelPolicyPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPoliciesPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPolicyPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
@@ -24,8 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
-public class PolicyPersistenceAdapter
-    implements LoadLevelPolicyPort, LoadLevelPoliciesPort, LoadXpPolicyPort, LoadXpPoliciesPort {
+public class PolicyPersistenceAdapter implements PolicyPort {
 
   private final LevelPolicyJpaRepository levelPolicyJpaRepository;
   private final XpPolicyJpaRepository xpPolicyJpaRepository;

@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUseCase;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetMyLevelService implements GetMyLevelUseCase {
 
-  private final LoadUserProgressPort loadUserProgressPort;
+  private final UserProgressPort userProgressPort;
   private final LevelPolicyResolver levelPolicyResolver;
 
   @Override
@@ -26,7 +26,7 @@ public class GetMyLevelService implements GetMyLevelUseCase {
       throw new UserNotAuthenticatedException();
     }
 
-    UserProgress progress = loadUserProgressPort.loadOrCreateUserProgress(userId);
+    UserProgress progress = userProgressPort.loadOrCreateUserProgress(userId);
     LocalDateTime now = LocalDateTime.now();
 
     LevelPolicyResolver.NextLevelPolicyInfo nextPolicy =
