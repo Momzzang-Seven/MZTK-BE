@@ -78,6 +78,7 @@ public enum ErrorCode {
   // ========================================
   NOT_ENOUGH_XP("LEVEL_001", "Not enough XP to level up", HttpStatus.CONFLICT),
   MAX_LEVEL_REACHED("LEVEL_002", "Max level reached", HttpStatus.CONFLICT),
+  LEVEL_UP_ALREADY_PROCESSED("LEVEL_003", "Level up already processed", HttpStatus.CONFLICT),
 
   // ========================================
   // Signup Errors (SIGNUP_xxx)

@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpLedgerEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.XpLedgerJpaRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Component;
@@ -45,9 +46,13 @@ public class XpLedgerPersistenceAdapter implements LoadXpLedgerPort, SaveXpLedge
 
   @Override
   @Transactional
-  public XpLedgerEntry saveXpLedger(XpLedgerEntry entry) {
-    XpLedgerEntity saved = xpLedgerJpaRepository.saveAndFlush(mapToEntity(entry));
-    return mapToDomain(saved);
+  public boolean trySaveXpLedger(XpLedgerEntry entry) {
+    try {
+      xpLedgerJpaRepository.saveAndFlush(mapToEntity(entry));
+      return true;
+    } catch (DataIntegrityViolationException e) {
+      return false;
+    }
   }
 
   private XpLedgerEntry mapToDomain(XpLedgerEntity entity) {
