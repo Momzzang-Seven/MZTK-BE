@@ -4,29 +4,20 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.level.NotEnoughXpException;
-import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
-import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
 import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkResult;
-import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.in.LevelUpUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveLevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveUserProgressPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveXpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UpdateLevelUpHistoryRewardPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
-import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
-import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 @RequiredArgsConstructor
-public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
-
-  private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
+public class LevelUpService implements LevelUpUseCase {
 
   private final LoadUserProgressPort loadUserProgressPort;
   private final SaveUserProgressPort saveUserProgressPort;
@@ -45,9 +34,6 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
   private final SaveLevelUpHistoryPort saveLevelUpHistoryPort;
   private final UpdateLevelUpHistoryRewardPort updateLevelUpHistoryRewardPort;
   private final RewardMztkPort rewardMztkPort;
-  private final LoadXpPolicyPort loadXpPolicyPort;
-  private final LoadXpLedgerPort loadXpLedgerPort;
-  private final SaveXpLedgerPort saveXpLedgerPort;
 
   @Override
   public LevelUpResult execute(LevelUpCommand command) {
@@ -62,29 +48,16 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
     UserProgress progress = loadUserProgressPort.loadUserProgressWithLock(userId);
     LocalDateTime now = LocalDateTime.now();
 
-    LevelPolicy policy = levelPolicyResolver.resolveLevelUpPolicy(progress.getLevel(), now);
-
-    int requiredXp = policy.getRequiredXp();
-    if (progress.getAvailableXp() < requiredXp) {
-      throw new NotEnoughXpException(
-          "Not enough XP to level up: availableXp="
-              + progress.getAvailableXp()
-              + ", requiredXp="
-              + requiredXp);
-    }
-
     int fromLevel = progress.getLevel();
-    int toLevel = fromLevel + 1;
+    LevelPolicy policy = levelPolicyResolver.resolveLevelUpPolicy(fromLevel, now);
+    int requiredXp = policy.getRequiredXp();
+
+    UserProgress updatedProgress = progress.levelUp(requiredXp, now);
+
+    saveUserProgressPort.saveUserProgress(updatedProgress);
+
+    int toLevel = updatedProgress.getLevel();
     int rewardMztk = policy.getRewardMztk();
-
-    UserProgress updated =
-        progress.toBuilder()
-            .level(toLevel)
-            .availableXp(progress.getAvailableXp() - requiredXp)
-            .updatedAt(LocalDateTime.now())
-            .build();
-
-    saveUserProgressPort.saveUserProgress(updated);
 
     LevelUpHistory savedHistory;
     try {
@@ -109,68 +82,6 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
         .rewardStatus(rewardResult.status())
         .rewardTxHash(rewardResult.txHash())
         .build();
-  }
-
-  @Override
-  public GrantXpResult execute(GrantXpCommand command) {
-    if (command == null) {
-      throw new IllegalArgumentException("command is required");
-    }
-    command.validate();
-
-    Long userId = command.userId();
-    LocalDateTime occurredAt = command.occurredAt();
-    XpType xpType = command.xpType();
-
-    loadUserProgressPort.loadOrCreateUserProgress(userId);
-    UserProgress progress = loadUserProgressPort.loadUserProgressWithLock(userId);
-
-    XpPolicy policy =
-        loadXpPolicyPort
-            .loadXpPolicy(xpType, occurredAt)
-            .orElseThrow(() -> new IllegalStateException("XP policy not found: type=" + xpType));
-
-    String idempotencyKey = command.idempotencyKey();
-    int dailyCap = policy.getDailyCap();
-    java.time.LocalDate earnedOn = occurredAt.atZone(KST).toLocalDate();
-    int grantedToday = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
-
-    if (loadXpLedgerPort.existsByUserIdAndIdempotencyKey(userId, idempotencyKey)) {
-      return GrantXpResult.alreadyGranted(dailyCap, grantedToday, earnedOn);
-    }
-
-    if (dailyCap == 0) {
-      return GrantXpResult.dailyCapReached(dailyCap, grantedToday, earnedOn);
-    }
-    if (dailyCap > 0 && grantedToday >= dailyCap) {
-      return GrantXpResult.dailyCapReached(dailyCap, grantedToday, earnedOn);
-    }
-
-    XpLedgerEntry entry =
-        XpLedgerEntry.create(
-            userId,
-            xpType,
-            policy.getXpAmount(),
-            earnedOn,
-            occurredAt,
-            idempotencyKey,
-            command.sourceRef());
-    try {
-      saveXpLedgerPort.saveXpLedger(entry);
-    } catch (DataIntegrityViolationException e) {
-      // Defensive: treat unique conflicts as idempotency hits.
-      return GrantXpResult.alreadyGranted(dailyCap, grantedToday, earnedOn);
-    }
-
-    UserProgress updated =
-        progress.toBuilder()
-            .availableXp(progress.getAvailableXp() + policy.getXpAmount())
-            .lifetimeXp(progress.getLifetimeXp() + policy.getXpAmount())
-            .updatedAt(LocalDateTime.now())
-            .build();
-    updated = saveUserProgressPort.saveUserProgress(updated);
-
-    return GrantXpResult.granted(policy.getXpAmount(), dailyCap, grantedToday + 1, earnedOn);
   }
 
   private RewardMztkResult attemptReward(Long userId, int rewardMztk, Long referenceId) {
