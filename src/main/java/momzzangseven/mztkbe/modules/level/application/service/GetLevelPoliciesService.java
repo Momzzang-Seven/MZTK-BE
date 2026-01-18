@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.level.application.service;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.level.application.dto.LevelPoliciesResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetLevelPoliciesResult;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelPolicyItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpPolicyItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetLevelPoliciesUseCase;
@@ -21,7 +21,7 @@ public class GetLevelPoliciesService implements GetLevelPoliciesUseCase {
   private final LoadXpPoliciesPort loadXpPoliciesPort;
 
   @Override
-  public LevelPoliciesResult execute() {
+  public GetLevelPoliciesResult execute() {
     LocalDateTime now = LocalDateTime.now();
 
     List<LevelPolicyItem> levelPolicies =
@@ -47,7 +47,7 @@ public class GetLevelPoliciesService implements GetLevelPoliciesUseCase {
                         .build())
             .toList();
 
-    return LevelPoliciesResult.builder()
+    return GetLevelPoliciesResult.builder()
         .levelPolicies(levelPolicies)
         .xpPolicies(xpPolicies)
         .build();

@@ -5,15 +5,15 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.level.api.dto.GetLevelPoliciesResponseDTO;
 import momzzangseven.mztkbe.modules.level.api.dto.LevelUpResponseDTO;
-import momzzangseven.mztkbe.modules.level.api.dto.MyLevelResponseDTO;
-import momzzangseven.mztkbe.modules.level.api.dto.MyLevelUpHistoriesResponseDTO;
-import momzzangseven.mztkbe.modules.level.api.dto.MyXpLedgerResponseDTO;
-import momzzangseven.mztkbe.modules.level.application.dto.LevelPoliciesResult;
+import momzzangseven.mztkbe.modules.level.api.dto.GetMyLevelResponseDTO;
+import momzzangseven.mztkbe.modules.level.api.dto.GetMyLevelUpHistoriesResponseDTO;
+import momzzangseven.mztkbe.modules.level.api.dto.GetMyXpLedgerResponseDTO;
+import momzzangseven.mztkbe.modules.level.application.dto.GetLevelPoliciesResult;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
-import momzzangseven.mztkbe.modules.level.application.dto.MyLevelResult;
-import momzzangseven.mztkbe.modules.level.application.dto.MyLevelUpHistoriesResult;
-import momzzangseven.mztkbe.modules.level.application.dto.MyXpLedgerResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelUpHistoriesResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetLevelPoliciesUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUpHistoriesUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUseCase;
@@ -37,16 +37,16 @@ public class LevelController {
   private final GetMyXpLedgerUseCase getMyXpLedgerUseCase;
 
   @GetMapping("/users/me/level")
-  public ResponseEntity<ApiResponse<MyLevelResponseDTO>> getMyLevel(
+  public ResponseEntity<ApiResponse<GetMyLevelResponseDTO>> getMyLevel(
       @AuthenticationPrincipal Long userId) {
     userId = requireUserId(userId);
-    MyLevelResult result = getMyLevelUseCase.execute(userId);
-    return ResponseEntity.ok(ApiResponse.success(MyLevelResponseDTO.from(result)));
+    GetMyLevelResult result = getMyLevelUseCase.execute(userId);
+    return ResponseEntity.ok(ApiResponse.success(GetMyLevelResponseDTO.from(result)));
   }
 
   @GetMapping("/levels/policies")
   public ResponseEntity<ApiResponse<GetLevelPoliciesResponseDTO>> getLevelPolicies() {
-    LevelPoliciesResult result = getLevelPoliciesUseCase.execute();
+    GetLevelPoliciesResult result = getLevelPoliciesUseCase.execute();
     return ResponseEntity.ok(ApiResponse.success(GetLevelPoliciesResponseDTO.from(result)));
   }
 
@@ -59,23 +59,23 @@ public class LevelController {
   }
 
   @GetMapping("/users/me/level-up-histories")
-  public ResponseEntity<ApiResponse<MyLevelUpHistoriesResponseDTO>> getMyLevelUpHistories(
+  public ResponseEntity<ApiResponse<GetMyLevelUpHistoriesResponseDTO>> getMyLevelUpHistories(
       @AuthenticationPrincipal Long userId,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
     userId = requireUserId(userId);
-    MyLevelUpHistoriesResult result = getMyLevelUpHistoriesUseCase.execute(userId, page, size);
-    return ResponseEntity.ok(ApiResponse.success(MyLevelUpHistoriesResponseDTO.from(result)));
+    GetMyLevelUpHistoriesResult result = getMyLevelUpHistoriesUseCase.execute(userId, page, size);
+    return ResponseEntity.ok(ApiResponse.success(GetMyLevelUpHistoriesResponseDTO.from(result)));
   }
 
   @GetMapping("/users/me/xp-ledger")
-  public ResponseEntity<ApiResponse<MyXpLedgerResponseDTO>> getMyXpLedger(
+  public ResponseEntity<ApiResponse<GetMyXpLedgerResponseDTO>> getMyXpLedger(
       @AuthenticationPrincipal Long userId,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "20") int size) {
     userId = requireUserId(userId);
-    MyXpLedgerResult result = getMyXpLedgerUseCase.execute(userId, page, size);
-    return ResponseEntity.ok(ApiResponse.success(MyXpLedgerResponseDTO.from(result)));
+    GetMyXpLedgerResult result = getMyXpLedgerUseCase.execute(userId, page, size);
+    return ResponseEntity.ok(ApiResponse.success(GetMyXpLedgerResponseDTO.from(result)));
   }
 
   private Long requireUserId(Long userId) {

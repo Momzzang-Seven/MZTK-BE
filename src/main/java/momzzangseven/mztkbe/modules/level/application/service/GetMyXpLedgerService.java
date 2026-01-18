@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.modules.level.application.dto.MyXpLedgerResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
 import momzzangseven.mztkbe.modules.level.application.dto.XpDailyCapStatusItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerEntryItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerSlice;
@@ -34,7 +34,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
   private final LoadXpPoliciesPort loadXpPoliciesPort;
 
   @Override
-  public MyXpLedgerResult execute(Long userId, int page, int size) {
+  public GetMyXpLedgerResult execute(Long userId, int page, int size) {
     if (userId == null) {
       throw new UserNotAuthenticatedException();
     }
@@ -60,7 +60,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
             .map(entry -> toTodayCap(userId, entry.getKey(), entry.getValue(), earnedOn))
             .toList();
 
-    return MyXpLedgerResult.builder()
+    return GetMyXpLedgerResult.builder()
         .page(page)
         .size(size)
         .hasNext(slice.hasNext())

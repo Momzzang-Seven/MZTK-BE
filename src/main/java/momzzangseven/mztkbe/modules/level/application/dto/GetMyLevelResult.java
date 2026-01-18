@@ -4,7 +4,7 @@ import lombok.Builder;
 
 /** Query result for {@code GET /users/me/level}. */
 @Builder
-public record MyLevelResult(
+public record GetMyLevelResult(
     int level, int availableXp, int requiredXpForNext, int rewardMztkForNext) {
 
   public void validate() {

@@ -4,5 +4,5 @@ import java.util.List;
 import lombok.Builder;
 
 @Builder
-public record LevelPoliciesResult(
+public record GetLevelPoliciesResult(
     List<LevelPolicyItem> levelPolicies, List<XpPolicyItem> xpPolicies) {}

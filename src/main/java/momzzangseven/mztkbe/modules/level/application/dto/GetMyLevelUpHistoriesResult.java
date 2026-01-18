@@ -4,5 +4,5 @@ import java.util.List;
 import lombok.Builder;
 
 @Builder
-public record MyLevelUpHistoriesResult(
+public record GetMyLevelUpHistoriesResult(
     int page, int size, boolean hasNext, List<LevelUpHistoryItem> histories) {}

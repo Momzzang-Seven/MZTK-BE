@@ -1,14 +1,14 @@
 package momzzangseven.mztkbe.modules.level.api.dto;
 
 import lombok.Builder;
-import momzzangseven.mztkbe.modules.level.application.dto.MyLevelResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelResult;
 
 @Builder
-public record MyLevelResponseDTO(
+public record GetMyLevelResponseDTO(
     int level, int availableXp, int requiredXpForNext, int rewardMztkForNext) {
 
-  public static MyLevelResponseDTO from(MyLevelResult result) {
-    return MyLevelResponseDTO.builder()
+  public static GetMyLevelResponseDTO from(GetMyLevelResult result) {
+    return GetMyLevelResponseDTO.builder()
         .level(result.level())
         .availableXp(result.availableXp())
         .requiredXpForNext(result.requiredXpForNext())
