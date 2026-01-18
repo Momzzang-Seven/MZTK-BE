@@ -9,6 +9,7 @@ import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoriesSlice;
+import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerSlice;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelPoliciesPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelPolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelUpHistoriesPort;
@@ -191,18 +192,13 @@ public class LevelPersistenceAdapter
 
   @Override
   @Transactional(readOnly = true)
-  public boolean existsByUserIdAndTypeAndEarnedOnBetween(
-      Long userId, XpType type, java.time.LocalDate startDate, java.time.LocalDate endDate) {
-    return xpLedgerJpaRepository.existsByUserIdAndTypeAndEarnedOnBetween(
-        userId, type, startDate, endDate);
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public int countDistinctEarnedOn(
-      Long userId, XpType type, java.time.LocalDate startDate, java.time.LocalDate endDate) {
-    return Math.toIntExact(
-        xpLedgerJpaRepository.countDistinctEarnedOn(userId, type, startDate, endDate));
+  public XpLedgerSlice loadXpLedgerEntries(Long userId, int page, int size) {
+    Slice<XpLedgerEntity> slice =
+        xpLedgerJpaRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
+    return XpLedgerSlice.builder()
+        .entries(slice.getContent().stream().map(this::mapToDomain).toList())
+        .hasNext(slice.hasNext())
+        .build();
   }
 
   @Override

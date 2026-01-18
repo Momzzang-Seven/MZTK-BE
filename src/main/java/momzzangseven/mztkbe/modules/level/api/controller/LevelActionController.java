@@ -10,7 +10,6 @@ import momzzangseven.mztkbe.modules.level.api.dto.GrantXpResponseDTO;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,18 +32,6 @@ public class LevelActionController {
             GrantXpCommand.of(
                 userId, request.type(), occurredAt, request.idempotencyKey(), request.sourceRef()));
     return ResponseEntity.ok(ApiResponse.success(GrantXpResponseDTO.from(request.type(), result)));
-  }
-
-  @PostMapping("/users/me/workouts")
-  public ResponseEntity<ApiResponse<GrantXpResponseDTO>> workout(
-      @AuthenticationPrincipal Long userId) {
-    userId = requireUserId(userId);
-    LocalDateTime occurredAt = LocalDateTime.now();
-    String idempotencyKey = "workout:" + userId + ":" + occurredAt.toLocalDate();
-    GrantXpResult result =
-        grantXpUseCase.execute(
-            GrantXpCommand.of(userId, XpType.WORKOUT, occurredAt, idempotencyKey, "workout"));
-    return ResponseEntity.ok(ApiResponse.success(GrantXpResponseDTO.from(XpType.WORKOUT, result)));
   }
 
   private Long requireUserId(Long userId) {
