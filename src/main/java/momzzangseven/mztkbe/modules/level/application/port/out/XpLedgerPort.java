@@ -7,4 +7,3 @@ package momzzangseven.mztkbe.modules.level.application.port.out;
  * contracts via interface inheritance.
  */
 public interface XpLedgerPort extends LoadXpLedgerPort, SaveXpLedgerPort {}
-
