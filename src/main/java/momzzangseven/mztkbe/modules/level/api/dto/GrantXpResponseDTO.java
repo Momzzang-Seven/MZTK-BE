@@ -4,11 +4,9 @@ import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpStatus;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 
-public record GrantXpResponseDTO(
-    XpType type, GrantXpStatus status, int grantedXp, int dailyCap) {
+public record GrantXpResponseDTO(XpType type, GrantXpStatus status, int grantedXp, int dailyCap) {
 
   public static GrantXpResponseDTO from(XpType type, GrantXpResult result) {
-    return new GrantXpResponseDTO(
-        type, result.status(), result.grantedXp(), result.dailyCap());
+    return new GrantXpResponseDTO(type, result.status(), result.grantedXp(), result.dailyCap());
   }
 }

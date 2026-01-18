@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.level.api.controller;
 
+import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
@@ -12,7 +13,6 @@ import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,11 +31,7 @@ public class LevelActionController {
     GrantXpResult result =
         grantXpUseCase.execute(
             GrantXpCommand.of(
-                userId,
-                request.type(),
-                occurredAt,
-                request.idempotencyKey(),
-                request.sourceRef()));
+                userId, request.type(), occurredAt, request.idempotencyKey(), request.sourceRef()));
     return ResponseEntity.ok(ApiResponse.success(GrantXpResponseDTO.from(request.type(), result)));
   }
 
@@ -47,8 +43,7 @@ public class LevelActionController {
     String idempotencyKey = "workout:" + userId + ":" + occurredAt.toLocalDate();
     GrantXpResult result =
         grantXpUseCase.execute(
-            GrantXpCommand.of(
-                userId, XpType.WORKOUT, occurredAt, idempotencyKey, "workout"));
+            GrantXpCommand.of(userId, XpType.WORKOUT, occurredAt, idempotencyKey, "workout"));
     return ResponseEntity.ok(ApiResponse.success(GrantXpResponseDTO.from(XpType.WORKOUT, result)));
   }
 

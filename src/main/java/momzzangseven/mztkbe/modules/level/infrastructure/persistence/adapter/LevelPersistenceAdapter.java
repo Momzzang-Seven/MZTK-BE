@@ -14,8 +14,8 @@ import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelPolicyPo
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelUpHistoriesPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPoliciesPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveLevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveXpLedgerPort;
@@ -170,8 +170,7 @@ public class LevelPersistenceAdapter
 
   @Override
   @Transactional(readOnly = true)
-  public Optional<XpPolicy> loadXpPolicy(
-      XpType type, LocalDateTime at) {
+  public Optional<XpPolicy> loadXpPolicy(XpType type, LocalDateTime at) {
     return xpPolicyJpaRepository.findActiveByType(type, at, PageRequest.of(0, 1)).stream()
         .findFirst()
         .map(this::mapToDomain);
