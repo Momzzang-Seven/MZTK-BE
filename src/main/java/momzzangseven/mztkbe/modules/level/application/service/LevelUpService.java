@@ -8,9 +8,8 @@ import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
 import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.RewardMztkResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.LevelUpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveLevelUpHistoryPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.UpdateLevelUpHistoryRewardPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
@@ -27,8 +26,7 @@ public class LevelUpService implements LevelUpUseCase {
 
   private final UserProgressPort userProgressPort;
   private final LevelPolicyResolver levelPolicyResolver;
-  private final SaveLevelUpHistoryPort saveLevelUpHistoryPort;
-  private final UpdateLevelUpHistoryRewardPort updateLevelUpHistoryRewardPort;
+  private final LevelUpHistoryPort levelUpHistoryPort;
   private final RewardMztkPort rewardMztkPort;
 
   @Override
@@ -56,12 +54,12 @@ public class LevelUpService implements LevelUpUseCase {
     int rewardMztk = policy.getRewardMztk();
 
     LevelUpHistory savedHistory =
-        saveLevelUpHistoryPort.saveLevelUpHistory(
+        levelUpHistoryPort.saveLevelUpHistory(
             LevelUpHistory.createPending(
                 userId, policy.getId(), fromLevel, toLevel, requiredXp, rewardMztk));
 
     RewardMztkResult rewardResult = attemptReward(userId, rewardMztk, savedHistory.getId());
-    updateLevelUpHistoryRewardPort.updateReward(
+    levelUpHistoryPort.updateReward(
         savedHistory.getId(), rewardResult.status(), rewardResult.txHash());
 
     return LevelUpResult.builder()

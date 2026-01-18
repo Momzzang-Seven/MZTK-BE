@@ -2,9 +2,7 @@ package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.LevelUpAlreadyProcessedException;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelUpHistoriesPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.SaveLevelUpHistoryPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.UpdateLevelUpHistoryRewardPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.dto.LevelUpHistorySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
@@ -19,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @RequiredArgsConstructor
 public class LevelUpHistoryPersistenceAdapter
-    implements SaveLevelUpHistoryPort, UpdateLevelUpHistoryRewardPort, LoadLevelUpHistoriesPort {
+    implements LevelUpHistoryPort {
 
   private final LevelUpHistoryJpaRepository levelUpHistoryJpaRepository;
 
