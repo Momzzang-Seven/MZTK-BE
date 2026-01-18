@@ -16,8 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
-public class LevelUpHistoryPersistenceAdapter
-    implements LevelUpHistoryPort {
+public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
 
   private final LevelUpHistoryJpaRepository levelUpHistoryJpaRepository;
 
