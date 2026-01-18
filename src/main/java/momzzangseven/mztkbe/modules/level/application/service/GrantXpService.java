@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.level.application.service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
@@ -24,13 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GrantXpService implements GrantXpUseCase {
 
-  private static final java.time.ZoneId KST = java.time.ZoneId.of("Asia/Seoul");
-
   private final LoadUserProgressPort loadUserProgressPort;
   private final SaveUserProgressPort saveUserProgressPort;
   private final LoadXpPolicyPort loadXpPolicyPort;
   private final LoadXpLedgerPort loadXpLedgerPort;
   private final SaveXpLedgerPort saveXpLedgerPort;
+  private final ZoneId appZoneId;
 
   @Override
   public GrantXpResult execute(GrantXpCommand command) {
@@ -53,7 +53,7 @@ public class GrantXpService implements GrantXpUseCase {
 
     String idempotencyKey = command.idempotencyKey();
     int dailyCap = policy.getDailyCap();
-    java.time.LocalDate earnedOn = occurredAt.atZone(KST).toLocalDate();
+    java.time.LocalDate earnedOn = occurredAt.atZone(appZoneId).toLocalDate();
     int grantedToday = loadXpLedgerPort.countByUserIdAndTypeAndEarnedOn(userId, xpType, earnedOn);
 
     if (loadXpLedgerPort.existsByUserIdAndIdempotencyKey(userId, idempotencyKey)) {
