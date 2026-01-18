@@ -5,7 +5,7 @@ import java.util.List;
 import lombok.Builder;
 
 @Builder
-public record MyXpLedgerResult(
+public record GetMyXpLedgerResult(
     int page,
     int size,
     boolean hasNext,

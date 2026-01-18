@@ -3,10 +3,10 @@ package momzzangseven.mztkbe.modules.level.api.dto;
 import java.time.LocalDate;
 import java.util.List;
 import lombok.Builder;
-import momzzangseven.mztkbe.modules.level.application.dto.MyXpLedgerResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
 
 @Builder
-public record MyXpLedgerResponseDTO(
+public record GetMyXpLedgerResponseDTO(
     int page,
     int size,
     boolean hasNext,
@@ -14,8 +14,8 @@ public record MyXpLedgerResponseDTO(
     List<XpLedgerEntryResponseDTO> entries,
     List<XpDailyCapStatusResponseDTO> todayCaps) {
 
-  public static MyXpLedgerResponseDTO from(MyXpLedgerResult result) {
-    return MyXpLedgerResponseDTO.builder()
+  public static GetMyXpLedgerResponseDTO from(GetMyXpLedgerResult result) {
+    return GetMyXpLedgerResponseDTO.builder()
         .page(result.page())
         .size(result.size())
         .hasNext(result.hasNext())

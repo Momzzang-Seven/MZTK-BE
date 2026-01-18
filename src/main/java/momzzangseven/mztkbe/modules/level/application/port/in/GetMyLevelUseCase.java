@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.level.application.port.in;
 
-import momzzangseven.mztkbe.modules.level.application.dto.MyLevelResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelResult;
 
 public interface GetMyLevelUseCase {
-  MyLevelResult execute(Long userId);
+  GetMyLevelResult execute(Long userId);
 }

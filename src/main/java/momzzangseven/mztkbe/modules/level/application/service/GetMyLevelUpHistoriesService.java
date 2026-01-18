@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoriesSlice;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoryItem;
-import momzzangseven.mztkbe.modules.level.application.dto.MyLevelUpHistoriesResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelUpHistoriesResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUpHistoriesUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelUpHistoriesPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
@@ -22,7 +22,7 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
   private final LoadLevelUpHistoriesPort loadLevelUpHistoriesPort;
 
   @Override
-  public MyLevelUpHistoriesResult execute(Long userId, int page, int size) {
+  public GetMyLevelUpHistoriesResult execute(Long userId, int page, int size) {
     if (userId == null) {
       throw new UserNotAuthenticatedException();
     }
@@ -36,7 +36,7 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
     LevelUpHistoriesSlice slice = loadLevelUpHistoriesPort.loadLevelUpHistories(userId, page, size);
     List<LevelUpHistoryItem> items = slice.histories().stream().map(this::mapToItem).toList();
 
-    return MyLevelUpHistoriesResult.builder()
+    return GetMyLevelUpHistoriesResult.builder()
         .page(page)
         .size(size)
         .hasNext(slice.hasNext())

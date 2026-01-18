@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.level.application.port.in;
 
-import momzzangseven.mztkbe.modules.level.application.dto.MyLevelUpHistoriesResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelUpHistoriesResult;
 
 public interface GetMyLevelUpHistoriesUseCase {
-  MyLevelUpHistoriesResult execute(Long userId, int page, int size);
+  GetMyLevelUpHistoriesResult execute(Long userId, int page, int size);
 }

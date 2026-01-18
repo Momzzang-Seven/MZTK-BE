@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.level.application.port.in;
 
-import momzzangseven.mztkbe.modules.level.application.dto.MyXpLedgerResult;
+import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
 
 public interface GetMyXpLedgerUseCase {
-  MyXpLedgerResult execute(Long userId, int page, int size);
+  GetMyXpLedgerResult execute(Long userId, int page, int size);
 }
