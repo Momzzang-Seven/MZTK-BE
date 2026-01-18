@@ -18,24 +18,24 @@ public class LevelPolicyResolver {
   private final LoadLevelPolicyPort loadLevelPolicyPort;
   private final LoadLevelPoliciesPort loadLevelPoliciesPort;
 
-  public NextLevelPolicy resolveForQuery(int currentLevel, LocalDateTime at) {
+  public NextLevelPolicyInfo resolveNextLevelInfo(int currentLevel, LocalDateTime at) {
     if (at == null) {
       throw new IllegalArgumentException("at must not be null");
     }
 
     return loadLevelPolicyPort
         .loadLevelPolicy(currentLevel, at)
-        .map(policy -> new NextLevelPolicy(policy.getRequiredXp(), policy.getRewardMztk()))
+        .map(policy -> new NextLevelPolicyInfo(policy.getRequiredXp(), policy.getRewardMztk()))
         .orElseGet(
             () -> {
               if (isMaxLevel(currentLevel, at)) {
-                return new NextLevelPolicy(0, 0);
+                return new NextLevelPolicyInfo(0, 0);
               }
               throw new IllegalStateException("Level policy not found: level=" + currentLevel);
             });
   }
 
-  public LevelPolicy resolveForLevelUp(int currentLevel, LocalDateTime at) {
+  public LevelPolicy resolveLevelUpPolicy(int currentLevel, LocalDateTime at) {
     if (at == null) {
       throw new IllegalArgumentException("at must not be null");
     }
@@ -63,5 +63,5 @@ public class LevelPolicyResolver {
     return currentLevel >= maxSupportedLevel;
   }
 
-  public record NextLevelPolicy(int requiredXpForNext, int rewardMztkForNext) {}
+  public record NextLevelPolicyInfo(int requiredXpForNext, int rewardMztkForNext) {}
 }

@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.level.application.service;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.error.level.NotEnoughXpException;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
@@ -52,9 +51,10 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
 
   @Override
   public LevelUpResult execute(LevelUpCommand command) {
-    if (command == null || command.userId() == null) {
-      throw new UserNotAuthenticatedException();
+    if (command == null) {
+      throw new IllegalArgumentException("command is required");
     }
+    command.validate();
 
     Long userId = command.userId();
     loadUserProgressPort.loadOrCreateUserProgress(userId);
@@ -62,7 +62,7 @@ public class LevelCommandService implements LevelUpUseCase, GrantXpUseCase {
     UserProgress progress = loadUserProgressPort.loadUserProgressWithLock(userId);
     LocalDateTime now = LocalDateTime.now();
 
-    LevelPolicy policy = levelPolicyResolver.resolveForLevelUp(progress.getLevel(), now);
+    LevelPolicy policy = levelPolicyResolver.resolveLevelUpPolicy(progress.getLevel(), now);
 
     int requiredXp = policy.getRequiredXp();
     if (progress.getAvailableXp() < requiredXp) {
