@@ -8,7 +8,15 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  sql:
+    init:
+      mode: always
+      data-locations:
+        - classpath:db/seed/level_policies.sql
+        - classpath:db/seed/xp_policies.sql
+
   jpa:
+    defer-datasource-initialization: true
     open-in-view: false
     show-sql: true                  # dev에서는 SQL 확인
     hibernate:

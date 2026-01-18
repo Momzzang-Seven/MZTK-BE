@@ -69,6 +69,10 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/users/me/withdrawal")
                     .hasAuthority("ROLE_STEP_UP")
+                    .requestMatchers(HttpMethod.GET, "/levels/policies")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/level-ups")
+                    .authenticated()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
 
