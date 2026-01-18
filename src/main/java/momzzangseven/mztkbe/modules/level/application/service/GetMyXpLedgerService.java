@@ -14,7 +14,7 @@ import momzzangseven.mztkbe.modules.level.application.dto.XpDailyCapStatusItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerEntryItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyXpLedgerUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPoliciesPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.dto.XpLedgerEntrySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
@@ -30,7 +30,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
   private static final int MAX_PAGE_SIZE = 100;
 
   private final LoadXpLedgerPort loadXpLedgerPort;
-  private final LoadXpPoliciesPort loadXpPoliciesPort;
+  private final PolicyPort policyPort;
   private final ZoneId appZoneId;
 
   @Override
@@ -51,7 +51,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
     LocalDateTime now = ZonedDateTime.now(appZoneId).toLocalDateTime();
     LocalDate earnedOn = now.toLocalDate();
     Map<XpType, XpPolicy> policiesByType =
-        loadXpPoliciesPort.loadXpPolicies(now).stream()
+        policyPort.loadXpPolicies(now).stream()
             .collect(java.util.stream.Collectors.toMap(XpPolicy::getType, Function.identity()));
 
     List<XpDailyCapStatusItem> todayCaps =
