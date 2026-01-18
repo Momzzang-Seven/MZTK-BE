@@ -18,7 +18,6 @@ import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,15 +58,10 @@ public class LevelUpService implements LevelUpUseCase {
     int toLevel = updatedProgress.getLevel();
     int rewardMztk = policy.getRewardMztk();
 
-    LevelUpHistory savedHistory;
-    try {
-      savedHistory =
-          saveLevelUpHistoryPort.saveLevelUpHistory(
-              LevelUpHistory.createPending(
-                  userId, policy.getId(), fromLevel, toLevel, requiredXp, rewardMztk));
-    } catch (DataIntegrityViolationException e) {
-      throw new NotEnoughXpException("Level up already processed");
-    }
+    LevelUpHistory savedHistory =
+        saveLevelUpHistoryPort.saveLevelUpHistory(
+            LevelUpHistory.createPending(
+                userId, policy.getId(), fromLevel, toLevel, requiredXp, rewardMztk));
 
     RewardMztkResult rewardResult = attemptReward(userId, rewardMztk, savedHistory.getId());
     updateLevelUpHistoryRewardPort.updateReward(

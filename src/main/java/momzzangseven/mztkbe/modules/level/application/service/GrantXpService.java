@@ -15,7 +15,6 @@ import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,11 +76,9 @@ public class GrantXpService implements GrantXpUseCase {
             occurredAt,
             idempotencyKey,
             command.sourceRef());
-    try {
-      saveXpLedgerPort.saveXpLedger(entry);
-    } catch (DataIntegrityViolationException e) {
+    if (!saveXpLedgerPort.trySaveXpLedger(entry)) {
       log.info(
-          "XP grant hit unique constraint (idempotency): userId={}, type={}, key={}",
+          "XP grant already recorded (idempotency): userId={}, type={}, key={}",
           userId,
           xpType,
           idempotencyKey);

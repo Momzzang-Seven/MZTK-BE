@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.level.LevelUpAlreadyProcessedException;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelUpHistoriesPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveLevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UpdateLevelUpHistoryRewardPort;
@@ -9,6 +10,7 @@ import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelUpHistoryEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.LevelUpHistoryJpaRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Component;
@@ -24,8 +26,12 @@ public class LevelUpHistoryPersistenceAdapter
   @Override
   @Transactional
   public LevelUpHistory saveLevelUpHistory(LevelUpHistory history) {
-    LevelUpHistoryEntity saved = levelUpHistoryJpaRepository.saveAndFlush(mapToEntity(history));
-    return mapToDomain(saved);
+    try {
+      LevelUpHistoryEntity saved = levelUpHistoryJpaRepository.saveAndFlush(mapToEntity(history));
+      return mapToDomain(saved);
+    } catch (DataIntegrityViolationException e) {
+      throw new LevelUpAlreadyProcessedException();
+    }
   }
 
   @Override
