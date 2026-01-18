@@ -7,7 +7,6 @@ import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelUpHistoriesR
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoryItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUpHistoriesUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
-import momzzangseven.mztkbe.modules.level.application.port.out.dto.LevelUpHistorySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,13 +32,15 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
       throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
     }
 
-    LevelUpHistorySlice slice = levelUpHistoryPort.loadLevelUpHistories(userId, page, size);
-    List<LevelUpHistoryItem> items = slice.histories().stream().map(this::mapToItem).toList();
+    List<LevelUpHistory> loadedHistories = levelUpHistoryPort.loadLevelUpHistories(userId, page, size);
+    boolean hasNext = loadedHistories.size() > size;
+    List<LevelUpHistory> pageHistories = hasNext ? loadedHistories.subList(0, size) : loadedHistories;
+    List<LevelUpHistoryItem> items = pageHistories.stream().map(this::mapToItem).toList();
 
     return GetMyLevelUpHistoriesResult.builder()
         .page(page)
         .size(size)
-        .hasNext(slice.hasNext())
+        .hasNext(hasNext)
         .histories(items)
         .build();
   }
