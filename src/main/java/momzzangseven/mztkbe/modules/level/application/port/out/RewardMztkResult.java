@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.level.application.port.out.dto;
+package momzzangseven.mztkbe.modules.level.application.port.out;
 
 import lombok.Builder;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
