@@ -94,4 +94,3 @@ public class GrantXpService implements GrantXpUseCase {
     return GrantXpResult.granted(policy.getXpAmount(), dailyCap, grantedToday + 1, earnedOn);
   }
 }
-

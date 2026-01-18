@@ -78,4 +78,3 @@ public class XpLedgerPersistenceAdapter implements LoadXpLedgerPort, SaveXpLedge
         .build();
   }
 }
-

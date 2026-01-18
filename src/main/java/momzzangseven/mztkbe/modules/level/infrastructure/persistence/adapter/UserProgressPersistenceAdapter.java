@@ -99,4 +99,3 @@ public class UserProgressPersistenceAdapter implements LoadUserProgressPort, Sav
         .build();
   }
 }
-
