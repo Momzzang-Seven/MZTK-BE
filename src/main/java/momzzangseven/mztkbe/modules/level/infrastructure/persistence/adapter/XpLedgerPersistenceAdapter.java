@@ -2,9 +2,9 @@ package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerSlice;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.SaveXpLedgerPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.dto.XpLedgerEntrySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpLedgerEntity;
@@ -34,10 +34,10 @@ public class XpLedgerPersistenceAdapter implements LoadXpLedgerPort, SaveXpLedge
 
   @Override
   @Transactional(readOnly = true)
-  public XpLedgerSlice loadXpLedgerEntries(Long userId, int page, int size) {
+  public XpLedgerEntrySlice loadXpLedgerEntries(Long userId, int page, int size) {
     Slice<XpLedgerEntity> slice =
         xpLedgerJpaRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, size));
-    return XpLedgerSlice.builder()
+    return XpLedgerEntrySlice.builder()
         .entries(slice.getContent().stream().map(this::mapToDomain).toList())
         .hasNext(slice.hasNext())
         .build();

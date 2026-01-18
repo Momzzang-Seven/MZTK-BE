@@ -4,10 +4,10 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelUpHistoriesResult;
-import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoriesSlice;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoryItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUpHistoriesUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelUpHistoriesPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.dto.LevelUpHistorySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +33,7 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
       throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
     }
 
-    LevelUpHistoriesSlice slice = loadLevelUpHistoriesPort.loadLevelUpHistories(userId, page, size);
+    LevelUpHistorySlice slice = loadLevelUpHistoriesPort.loadLevelUpHistories(userId, page, size);
     List<LevelUpHistoryItem> items = slice.histories().stream().map(this::mapToItem).toList();
 
     return GetMyLevelUpHistoriesResult.builder()

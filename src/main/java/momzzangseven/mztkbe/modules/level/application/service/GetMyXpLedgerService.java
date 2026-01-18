@@ -12,10 +12,10 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
 import momzzangseven.mztkbe.modules.level.application.dto.XpDailyCapStatusItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerEntryItem;
-import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerSlice;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyXpLedgerUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpLedgerPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadXpPoliciesPort;
+import momzzangseven.mztkbe.modules.level.application.port.out.dto.XpLedgerEntrySlice;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
@@ -45,7 +45,7 @@ public class GetMyXpLedgerService implements GetMyXpLedgerUseCase {
       throw new IllegalArgumentException("size must be between 1 and " + MAX_PAGE_SIZE);
     }
 
-    XpLedgerSlice slice = loadXpLedgerPort.loadXpLedgerEntries(userId, page, size);
+    XpLedgerEntrySlice slice = loadXpLedgerPort.loadXpLedgerEntries(userId, page, size);
     List<XpLedgerEntryItem> entries = slice.entries().stream().map(this::mapToItem).toList();
 
     LocalDateTime now = ZonedDateTime.now(KST).toLocalDateTime();
