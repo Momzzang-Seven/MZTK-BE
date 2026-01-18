@@ -25,10 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @RequiredArgsConstructor
 public class PolicyPersistenceAdapter
-    implements LoadLevelPolicyPort,
-        LoadLevelPoliciesPort,
-        LoadXpPolicyPort,
-        LoadXpPoliciesPort {
+    implements LoadLevelPolicyPort, LoadLevelPoliciesPort, LoadXpPolicyPort, LoadXpPoliciesPort {
 
   private final LevelPolicyJpaRepository levelPolicyJpaRepository;
   private final XpPolicyJpaRepository xpPolicyJpaRepository;
@@ -109,4 +106,3 @@ public class PolicyPersistenceAdapter
         .build();
   }
 }
-

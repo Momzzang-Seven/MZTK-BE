@@ -59,10 +59,6 @@ public class UserProgress {
           "Not enough XP to level up: availableXp=" + availableXp + ", requiredXp=" + requiredXp);
     }
 
-    return toBuilder()
-        .level(level + 1)
-        .availableXp(availableXp - requiredXp)
-        .updatedAt(at)
-        .build();
+    return toBuilder().level(level + 1).availableXp(availableXp - requiredXp).updatedAt(at).build();
   }
 }
