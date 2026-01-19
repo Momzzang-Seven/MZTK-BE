@@ -8,7 +8,15 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  sql:
+    init:
+      mode: always
+      data-locations:
+        - classpath:db/seed/level_policies.sql
+        - classpath:db/seed/xp_policies.sql
+
   jpa:
+    defer-datasource-initialization: true
     open-in-view: false
     show-sql: true                  # dev에서는 SQL 확인
     hibernate:
@@ -65,6 +73,13 @@ logging:
     org.springframework.web: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+level:
+  retention:
+    retention-days: 365
+    batch-size: 5000
+    cron: "0 0 4 * * *"
+    zone: Asia/Seoul
 
 management:
   endpoints:
