@@ -9,7 +9,10 @@ import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.User
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.UserProgressJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Component
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserProgressPersistenceAdapter implements UserProgressPort {
 
   private final UserProgressJpaRepository userProgressJpaRepository;
+  private final PlatformTransactionManager transactionManager;
 
   @Override
   @Transactional(readOnly = true)
@@ -41,14 +45,28 @@ public class UserProgressPersistenceAdapter implements UserProgressPort {
       return mapToDomain(existing.get());
     }
 
-    try {
-      UserProgressEntity created =
-          userProgressJpaRepository.saveAndFlush(mapToEntity(UserProgress.createInitial(userId)));
-      return mapToDomain(created);
-    } catch (DataIntegrityViolationException e) {
-      log.info("UserProgress already created concurrently: userId={}", userId);
-      return userProgressJpaRepository.findById(userId).map(this::mapToDomain).orElseThrow(() -> e);
+    TransactionTemplate requiresNew = new TransactionTemplate(transactionManager);
+    requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+    Boolean created =
+        requiresNew.execute(
+            status -> {
+              try {
+                userProgressJpaRepository.saveAndFlush(
+                    mapToEntity(UserProgress.createInitial(userId)));
+                return true;
+              } catch (DataIntegrityViolationException e) {
+                status.setRollbackOnly();
+                return false;
+              }
+            });
+
+    if (Boolean.TRUE.equals(created)) {
+      return userProgressJpaRepository.findById(userId).map(this::mapToDomain).orElseThrow();
     }
+
+    log.info("UserProgress already created concurrently: userId={}", userId);
+    return userProgressJpaRepository.findById(userId).map(this::mapToDomain).orElseThrow();
   }
 
   @Override
