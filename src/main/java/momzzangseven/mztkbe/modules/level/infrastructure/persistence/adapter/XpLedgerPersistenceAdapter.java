@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +10,6 @@ import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpLedgerEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.XpLedgerJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class XpLedgerPersistenceAdapter implements XpLedgerPort {
 
   private final XpLedgerJpaRepository xpLedgerJpaRepository;
+  private final EntityManager entityManager;
 
   @Override
   @Transactional(readOnly = true)
@@ -35,12 +36,19 @@ public class XpLedgerPersistenceAdapter implements XpLedgerPort {
   @Transactional(readOnly = true)
   public List<XpLedgerEntry> loadXpLedgerEntries(Long userId, int page, int size) {
     int fetchSize = Math.max(1, size + 1);
-    return xpLedgerJpaRepository
-        .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, fetchSize))
-        .getContent()
-        .stream()
-        .map(this::mapToDomain)
-        .toList();
+    int offset = Math.max(0, page) * Math.max(1, size);
+
+    List<XpLedgerEntity> entities =
+        entityManager
+            .createQuery(
+                "select x from XpLedgerEntity x where x.userId = :userId order by x.createdAt desc",
+                XpLedgerEntity.class)
+            .setParameter("userId", userId)
+            .setFirstResult(offset)
+            .setMaxResults(fetchSize)
+            .getResultList();
+
+    return entities.stream().map(this::mapToDomain).toList();
   }
 
   @Override

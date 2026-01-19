@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
+import jakarta.persistence.EntityManager;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.LevelUpAlreadyProcessedException;
@@ -9,7 +10,6 @@ import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelUpHistoryEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.LevelUpHistoryJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
 
   private final LevelUpHistoryJpaRepository levelUpHistoryJpaRepository;
+  private final EntityManager entityManager;
 
   @Override
   @Transactional
@@ -48,12 +49,19 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
   @Transactional(readOnly = true)
   public List<LevelUpHistory> loadLevelUpHistories(Long userId, int page, int size) {
     int fetchSize = Math.max(1, size + 1);
-    return levelUpHistoryJpaRepository
-        .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(page, fetchSize))
-        .getContent()
-        .stream()
-        .map(this::mapToDomain)
-        .toList();
+    int offset = Math.max(0, page) * Math.max(1, size);
+
+    List<LevelUpHistoryEntity> entities =
+        entityManager
+            .createQuery(
+                "select h from LevelUpHistoryEntity h where h.userId = :userId order by h.createdAt desc",
+                LevelUpHistoryEntity.class)
+            .setParameter("userId", userId)
+            .setFirstResult(offset)
+            .setMaxResults(fetchSize)
+            .getResultList();
+
+    return entities.stream().map(this::mapToDomain).toList();
   }
 
   private LevelUpHistory mapToDomain(LevelUpHistoryEntity entity) {
