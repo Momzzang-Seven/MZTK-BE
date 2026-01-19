@@ -10,4 +10,3 @@ public interface LevelRetentionPort {
 
   int deleteLevelUpHistoriesBefore(LocalDateTime cutoff, int batchSize);
 }
-

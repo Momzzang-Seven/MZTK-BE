@@ -51,4 +51,3 @@ public class PurgeLevelDataService implements PurgeLevelDataUseCase {
     return deletedTotal;
   }
 }
-

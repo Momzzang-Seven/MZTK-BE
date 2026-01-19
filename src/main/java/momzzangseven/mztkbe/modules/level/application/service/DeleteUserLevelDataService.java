@@ -27,4 +27,3 @@ public class DeleteUserLevelDataService implements DeleteUserLevelDataUseCase {
     log.info("Deleted user level data: userCount={}", command.userIds().size());
   }
 }
-
