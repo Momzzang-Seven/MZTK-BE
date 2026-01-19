@@ -6,4 +6,3 @@ import momzzangseven.mztkbe.modules.level.application.dto.DeleteUserLevelDataCom
 public interface DeleteUserLevelDataUseCase {
   void execute(DeleteUserLevelDataCommand command);
 }
-

@@ -22,4 +22,3 @@ public class LevelRetentionProperties {
   /** Time zone for purge job. */
   private String zone;
 }
-

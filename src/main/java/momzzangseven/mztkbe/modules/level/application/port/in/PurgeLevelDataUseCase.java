@@ -6,4 +6,3 @@ import java.time.LocalDateTime;
 public interface PurgeLevelDataUseCase {
   int execute(LocalDateTime now);
 }
-

@@ -87,4 +87,3 @@ public class LevelRetentionPersistenceAdapter implements LevelRetentionPort {
         .executeUpdate();
   }
 }
-
