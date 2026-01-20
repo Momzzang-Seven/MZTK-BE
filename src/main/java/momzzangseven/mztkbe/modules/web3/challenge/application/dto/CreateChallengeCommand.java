@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.challenge.application.dto;
 
 import momzzangseven.mztkbe.modules.web3.challenge.domain.model.ChallengePurpose;
+import org.web3j.crypto.WalletUtils;
 
 /**
  * Command for creating challenge.
@@ -28,6 +29,6 @@ public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, Stri
 
   /** Validate the given wallet address is valid or not. */
   private boolean isValidEthereumAddress(String address) {
-    return isValidEthereumAddress(address);
+    return WalletUtils.isValidAddress(address);
   }
 }
