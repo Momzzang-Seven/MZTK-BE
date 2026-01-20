@@ -57,6 +57,9 @@ dependencies {
     // Utilities
     implementation 'org.apache.commons:commons-lang3:3.18.0'
 
+    // Web3 (Ethereum interaction)
+    implementation 'org.web3j:core:4.11.3'
+
     // Database
     runtimeOnly 'org.postgresql:postgresql'
 

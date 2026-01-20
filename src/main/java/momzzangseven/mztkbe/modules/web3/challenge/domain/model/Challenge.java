@@ -6,7 +6,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.modules.web3.challenge.infrastructure.config.ChallengeProperties;
+import momzzangseven.mztkbe.modules.web3.challenge.domain.vo.ChallengeConfig;
 
 /**
  * Challenge domain model challenge for authentication in web3 interactions. Conform to EIP-4361
@@ -27,20 +27,29 @@ public class Challenge {
   private LocalDateTime createdAt;
   private LocalDateTime usedAt;
 
-  private final ChallengeProperties challengeProperties;
-
   /**
    * Create new challenge
    *
    * @param userId user ID
    * @param purpose purpose of creating new challenge
    * @param walletAddress wallet address
-   * @return newly created challenge object.
+   * @param config challenge configuration (EIP-4361 parameters)
+   * @return newly created challenge object
    */
-  public Challenge create(Long userId, ChallengePurpose purpose, String walletAddress) {
+  public static Challenge create(
+      Long userId, ChallengePurpose purpose, String walletAddress, ChallengeConfig config) {
     LocalDateTime now = LocalDateTime.now();
     String nonce = generateNonce();
-    String message = buildEIP4361Message(purpose, walletAddress, nonce, now);
+    String message =
+        buildEIP4361Message(
+            purpose,
+            walletAddress,
+            nonce,
+            now,
+            config.domain(),
+            config.uri(),
+            config.version(),
+            config.chainId());
 
     return Challenge.builder()
         .nonce(nonce)
@@ -49,7 +58,7 @@ public class Challenge {
         .walletAddress(walletAddress.toLowerCase()) // normalization
         .message(message)
         .status(ChallengeStatus.PENDING)
-        .expiresAt(now.plusSeconds((getTtlSeconds())))
+        .expiresAt(now.plusSeconds(config.ttlSeconds()))
         .createdAt(now)
         .build();
   }
@@ -63,15 +72,25 @@ public class Challenge {
    * Create EIP-4361 message Format: ${domain} wants you to ${action} with your Ethereum account:
    * ${address}
    *
-   * @param purpose
-   * @param address
-   * @param nonce
-   * @param issuedAt
+   * @param purpose challenge purpose
+   * @param address wallet address
+   * @param nonce unique nonce
+   * @param issuedAt timestamp
+   * @param domain service domain
+   * @param uri service URI
+   * @param version EIP-4361 version
+   * @param chainId blockchain chain ID
    * @return String EIP-4361 message
    */
-  private String buildEIP4361Message(
-      ChallengePurpose purpose, String address, String nonce, LocalDateTime issuedAt) {
-    ChallengeProperties.Eip4361 eip4361 = challengeProperties.getEip4361();
+  private static String buildEIP4361Message(
+      ChallengePurpose purpose,
+      String address,
+      String nonce,
+      LocalDateTime issuedAt,
+      String domain,
+      String uri,
+      String version,
+      String chainId) {
     String action = getActionDescription(purpose);
 
     return String.format(
@@ -82,27 +101,15 @@ public class Challenge {
             + "Chain ID: %s\n"
             + "Nonce: %s\n"
             + "Issued At: %s",
-        eip4361.getDomain(),
-        action,
-        address,
-        eip4361.getUri(),
-        eip4361.getVersion(),
-        eip4361.getChainId(),
-        nonce,
-        issuedAt.toString());
+        domain, action, address, uri, version, chainId, nonce, issuedAt.toString());
   }
 
   /** Action description for each Purpose */
-  private String getActionDescription(ChallengePurpose purpose) {
+  private static String getActionDescription(ChallengePurpose purpose) {
     return switch (purpose) {
       case WALLET_REGISTRATION -> "register your wallet";
         // further added
     };
-  }
-
-  /** Get Challenge TTL (in seconds) */
-  private int getTtlSeconds() {
-    return challengeProperties.getTtlSeconds();
   }
 
   /** Check if challenge has expired */
