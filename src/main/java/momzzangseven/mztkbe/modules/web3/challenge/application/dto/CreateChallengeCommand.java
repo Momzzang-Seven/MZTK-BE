@@ -13,7 +13,7 @@ import org.web3j.crypto.WalletUtils;
 public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, String walletAddress) {
   /** Validation method */
   public void validate() {
-    if (userId == null || userId < 0) {
+    if (userId == null || userId <= 0) {
       throw new IllegalArgumentException("User ID must be positive");
     }
     if (purpose == null) {
@@ -27,8 +27,21 @@ public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, Stri
     }
   }
 
-  /** Validate the given wallet address is valid or not. */
+  /**
+   * Validate Ethereum address format
+   *
+   * <p>Requirements:
+   * - Must start with "0x"
+   * - Must be exactly 42 characters (0x + 40 hex chars)
+   * - Must pass Web3j validation (format + checksum if applicable)
+   */
   private boolean isValidEthereumAddress(String address) {
+    // 1. Check 0x prefix
+    if (!address.startsWith("0x")) {
+      return false;
+    }
+
+    // 2. Check Web3j validation (format + checksum)
     return WalletUtils.isValidAddress(address);
   }
 }
