@@ -5,9 +5,9 @@ import java.util.List;
 
 public interface AttendanceLogPort {
 
-    boolean existsByUserIdAndAttendedDate(Long userId, LocalDate attendedDate);
+  boolean existsByUserIdAndAttendedDate(Long userId, LocalDate attendedDate);
 
-    void save(Long userId, LocalDate attendedDate);
+  void save(Long userId, LocalDate attendedDate);
 
-    List<LocalDate> findTop7AttendedDatesDesc(Long userId);
+  List<LocalDate> findTop7AttendedDatesDesc(Long userId);
 }
