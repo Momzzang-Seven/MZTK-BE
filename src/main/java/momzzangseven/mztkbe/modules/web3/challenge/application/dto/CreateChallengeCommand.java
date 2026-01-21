@@ -30,10 +30,8 @@ public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, Stri
   /**
    * Validate Ethereum address format
    *
-   * <p>Requirements:
-   * - Must start with "0x"
-   * - Must be exactly 42 characters (0x + 40 hex chars)
-   * - Must pass Web3j validation (format + checksum if applicable)
+   * <p>Requirements: - Must start with "0x" - Must be exactly 42 characters (0x + 40 hex chars) -
+   * Must pass Web3j validation (format + checksum if applicable)
    */
   private boolean isValidEthereumAddress(String address) {
     // 1. Check 0x prefix
