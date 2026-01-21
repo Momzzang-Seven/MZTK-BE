@@ -15,17 +15,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AttendanceController {
 
-    private final CheckInUseCase checkInUseCase;
+  private final CheckInUseCase checkInUseCase;
 
-    @PostMapping("/users/me/attendance")
-    public ResponseEntity<ApiResponse<CheckInResponseDTO>> checkIn(@AuthenticationPrincipal Long userId) {
-        userId = requireUserId(userId);
-        CheckInResult result = checkInUseCase.execute(userId);
-        return ResponseEntity.ok(ApiResponse.success(CheckInResponseDTO.from(result)));
-    }
+  @PostMapping("/users/me/attendance")
+  public ResponseEntity<ApiResponse<CheckInResponseDTO>> checkIn(
+      @AuthenticationPrincipal Long userId) {
+    userId = requireUserId(userId);
+    CheckInResult result = checkInUseCase.execute(userId);
+    return ResponseEntity.ok(ApiResponse.success(CheckInResponseDTO.from(result)));
+  }
 
-    private Long requireUserId(Long userId) {
-        if (userId == null) throw new UserNotAuthenticatedException();
-        return userId;
-    }
+  private Long requireUserId(Long userId) {
+    if (userId == null) throw new UserNotAuthenticatedException();
+    return userId;
+  }
 }
