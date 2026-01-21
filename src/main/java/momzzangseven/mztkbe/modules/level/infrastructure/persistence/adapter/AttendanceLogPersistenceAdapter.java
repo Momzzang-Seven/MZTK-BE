@@ -36,4 +36,15 @@ public class AttendanceLogPersistenceAdapter implements AttendanceLogPort {
         .map(AttendanceLogEntity::getAttendedDate)
         .toList();
   }
+
+  @Override
+  public List<LocalDate> findAttendedDatesBetween(
+      Long userId, LocalDate startDate, LocalDate endDate) {
+    return attendanceLogJpaRepository
+        .findByUserIdAndAttendedDateBetweenOrderByAttendedDateAsc(
+            userId, startDate, endDate) // 정렬된 메서드 사용
+        .stream()
+        .map(AttendanceLogEntity::getAttendedDate)
+        .toList();
+  }
 }

@@ -9,7 +9,7 @@ public interface AttendanceLogJpaRepository extends JpaRepository<AttendanceLogE
 
   boolean existsByUserIdAndAttendedDate(Long userId, LocalDate attendedDate);
 
-  List<AttendanceLogEntity> findByUserIdAndAttendedDateBetween(
+  List<AttendanceLogEntity> findByUserIdAndAttendedDateBetweenOrderByAttendedDateAsc(
       Long userId, LocalDate startDate, LocalDate endDate);
 
   List<AttendanceLogEntity> findTop7ByUserIdOrderByAttendedDateDesc(Long userId);
