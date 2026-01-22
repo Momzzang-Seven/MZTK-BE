@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GetAttendanceStatusService implements GetAttendanceStatusUseCase {
 
   private final AttendanceLogPort attendanceLogPort;
-  private final AttendancePolicy attendancePolicy; // 주입 추가
+  private final AttendancePolicy attendancePolicy;
   private final ZoneId appZoneId;
 
   @Override

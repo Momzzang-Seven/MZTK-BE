@@ -24,7 +24,6 @@ public class AttendanceController {
   private final GetAttendanceStatusUseCase getAttendanceStatusUseCase;
   private final GetWeeklyAttendanceUseCase getWeeklyAttendanceUseCase;
 
-  // 1. 출석 체크 (POST)
   @PostMapping("/users/me/attendance")
   public ResponseEntity<ApiResponse<CheckInResponseDTO>> checkIn(
       @AuthenticationPrincipal Long userId) {
@@ -33,7 +32,6 @@ public class AttendanceController {
     return ResponseEntity.ok(ApiResponse.success(CheckInResponseDTO.from(result)));
   }
 
-  // 2. 출석 상태 조회 (GET)
   @GetMapping("/users/me/attendance/status")
   public ResponseEntity<ApiResponse<GetAttendanceStatusResult>> getStatus(
       @AuthenticationPrincipal Long userId) {
@@ -42,7 +40,6 @@ public class AttendanceController {
     return ResponseEntity.ok(ApiResponse.success(result));
   }
 
-  // 3. 주간 출석 조회 (GET)
   @GetMapping("/users/me/attendance/weekly")
   public ResponseEntity<ApiResponse<GetWeeklyAttendanceResult>> getWeekly(
       @AuthenticationPrincipal Long userId) {

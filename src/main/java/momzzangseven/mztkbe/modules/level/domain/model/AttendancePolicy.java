@@ -16,7 +16,6 @@ public class AttendancePolicy {
     Set<LocalDate> attendedSet = new HashSet<>(recentDates);
     int streak = 0;
 
-    // 기준일부터 하루씩 뒤로 가며 기록이 있는지 확인
     while (attendedSet.contains(cursor)) {
       streak++;
       cursor = cursor.minusDays(1);
