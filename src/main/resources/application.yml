@@ -94,3 +94,12 @@ jwt:
   step-up-token-expiration: 300000    # 5 mins (in milliseconds)
   issuer: MZTK-BE
   audience: MZTK-Client
+
+web3:
+  challenge:
+    ttl-seconds: 300  # 5 Minutes
+    eip4361:
+      domain: "MZTK"
+      uri: "https://mztk.com" # MUST USE THE SERVICING DOMAIN URI
+      version: "1"
+      chain-id: "1"
