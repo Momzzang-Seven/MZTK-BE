@@ -11,6 +11,5 @@ public record GetWeeklyAttendanceResult(
         new DateRange(start, end), attendedDates, attendedDates.size());
   }
 
-  // 내부 레코드
   public record DateRange(LocalDate from, LocalDate to) {}
 }
