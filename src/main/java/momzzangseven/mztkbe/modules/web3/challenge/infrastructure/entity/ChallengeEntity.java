@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.challenge.infrastructure.entity;
 
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -39,18 +39,18 @@ public class ChallengeEntity {
   private ChallengeStatus status;
 
   @Column(name = "expires_at", nullable = false)
-  private LocalDateTime expiresAt;
+  private Instant expiresAt;
 
   @Column(name = "created_at", nullable = false, updatable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   @Column(name = "used_at")
-  private LocalDateTime usedAt;
+  private Instant usedAt;
 
   @PrePersist
   protected void onCreate() {
     if (this.createdAt == null) {
-      this.createdAt = LocalDateTime.now();
+      this.createdAt = Instant.now();
     }
   }
 }

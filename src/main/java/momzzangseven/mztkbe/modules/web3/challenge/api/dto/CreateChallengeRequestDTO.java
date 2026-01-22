@@ -5,4 +5,4 @@ import momzzangseven.mztkbe.modules.web3.challenge.domain.model.ChallengePurpose
 
 public record CreateChallengeRequestDTO(
     @NotNull(message = "Purpose must not be null") ChallengePurpose purpose,
-    @NotNull(message = "Wallete address must not be null") String walletAddress) {}
+    @NotNull(message = "Wallet address must not be null") String walletAddress) {}
