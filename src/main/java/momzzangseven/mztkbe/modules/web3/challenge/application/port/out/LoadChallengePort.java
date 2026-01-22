@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.challenge.application.port.out;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.challenge.domain.model.Challenge;
+import momzzangseven.mztkbe.modules.web3.challenge.domain.model.ChallengePurpose;
 
 public interface LoadChallengePort {
 
@@ -9,5 +10,5 @@ public interface LoadChallengePort {
   Optional<Challenge> findByNonce(String nonce);
 
   /** Find challenge by nonce and purpose */
-  Optional<Challenge> findByNonceAndPurpose(String nonce, String purpose);
+  Optional<Challenge> findByNonceAndPurpose(String nonce, ChallengePurpose purpose);
 }

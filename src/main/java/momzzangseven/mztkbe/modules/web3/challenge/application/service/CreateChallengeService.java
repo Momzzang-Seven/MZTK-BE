@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.challenge.application.service;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.challenge.application.dto.CreateChallengeCommand;
@@ -21,7 +20,6 @@ public class CreateChallengeService implements CreateChallengeUseCase {
   private final LoadChallengeConfigPort loadChallengeConfigPort;
 
   @Override
-  @Transactional
   public CreateChallengeResult execute(CreateChallengeCommand command) {
     log.info(
         "Creating challenge: userId={}, purpose={}, address={}",

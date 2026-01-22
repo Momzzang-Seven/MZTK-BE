@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.challenge.domain.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -23,9 +23,9 @@ public class Challenge {
   private String walletAddress;
   private String message;
   private ChallengeStatus status;
-  private LocalDateTime expiresAt;
-  private LocalDateTime createdAt;
-  private LocalDateTime usedAt;
+  private Instant expiresAt;
+  private Instant createdAt;
+  private Instant usedAt;
 
   /**
    * Create new challenge
@@ -38,7 +38,7 @@ public class Challenge {
    */
   public static Challenge create(
       Long userId, ChallengePurpose purpose, String walletAddress, ChallengeConfig config) {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     String nonce = generateNonce();
     String message =
         buildEIP4361Message(
@@ -86,7 +86,7 @@ public class Challenge {
       ChallengePurpose purpose,
       String address,
       String nonce,
-      LocalDateTime issuedAt,
+      Instant issuedAt,
       String domain,
       String uri,
       String version,
@@ -114,7 +114,7 @@ public class Challenge {
 
   /** Check if challenge has expired */
   public boolean isExpired() {
-    return LocalDateTime.now().isAfter(expiresAt);
+    return Instant.now().isAfter(expiresAt);
   }
 
   /** Check if challenge has already been used */
@@ -134,7 +134,7 @@ public class Challenge {
 
   /** Mark challenge as used */
   public Challenge markAsUsed() {
-    return this.toBuilder().status(ChallengeStatus.USED).usedAt(LocalDateTime.now()).build();
+    return this.toBuilder().status(ChallengeStatus.USED).usedAt(Instant.now()).build();
   }
 
   /** Mark challenge as expired */
