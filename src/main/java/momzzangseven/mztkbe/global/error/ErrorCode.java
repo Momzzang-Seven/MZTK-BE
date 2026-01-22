@@ -74,6 +74,13 @@ public enum ErrorCode {
   USER_WITHDRAWN("USER_004", "User account is withdrawn", HttpStatus.CONFLICT),
 
   // ========================================
+  // Level Errors (LEVEL_xxx)
+  // ========================================
+  NOT_ENOUGH_XP("LEVEL_001", "Not enough XP to level up", HttpStatus.CONFLICT),
+  MAX_LEVEL_REACHED("LEVEL_002", "Max level reached", HttpStatus.CONFLICT),
+  LEVEL_UP_ALREADY_PROCESSED("LEVEL_003", "Level up already processed", HttpStatus.CONFLICT),
+
+  // ========================================
   // Signup Errors (SIGNUP_xxx)
   // ========================================
   DUPLICATE_EMAIL(
@@ -134,7 +141,7 @@ public enum ErrorCode {
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
   // ========================================
-  CHALLENGE_NOT_FOUND(
+  CHALLENGE_NOT_FOUND_OR_EXPIRED(
       "CHALLENGE_001", "Challenge not found or expired", HttpStatus.BAD_REQUEST // 400
       ),
 

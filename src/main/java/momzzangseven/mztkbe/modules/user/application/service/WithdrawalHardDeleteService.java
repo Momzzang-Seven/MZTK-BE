@@ -6,6 +6,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.application.port.out.DeleteRefreshTokenPort;
+import momzzangseven.mztkbe.modules.level.application.dto.DeleteUserLevelDataCommand;
+import momzzangseven.mztkbe.modules.level.application.port.in.DeleteUserLevelDataUseCase;
 import momzzangseven.mztkbe.modules.user.application.config.WithdrawalHardDeleteProperties;
 import momzzangseven.mztkbe.modules.user.application.port.out.DeleteUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.ExternalDisconnectTaskPort;
@@ -23,6 +25,7 @@ public class WithdrawalHardDeleteService {
   private final DeleteUserPort deleteUserPort;
   private final ExternalDisconnectTaskPort externalDisconnectTaskPort;
   private final DeleteRefreshTokenPort deleteRefreshTokenPort;
+  private final DeleteUserLevelDataUseCase deleteUserLevelDataUseCase;
   private final WithdrawalHardDeleteProperties props;
 
   /**
@@ -55,6 +58,8 @@ public class WithdrawalHardDeleteService {
     if (userIds.isEmpty()) {
       return 0;
     }
+
+    deleteUserLevelDataUseCase.execute(new DeleteUserLevelDataCommand(userIds));
 
     deleteRefreshTokenPort.deleteByUserIdIn(userIds);
 

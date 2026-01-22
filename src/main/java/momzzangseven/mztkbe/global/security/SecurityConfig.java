@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.global.security;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,6 +12,9 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * Spring Security Configuration.
@@ -27,6 +31,23 @@ public class SecurityConfig {
   private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
   private final RestAccessDeniedHandler restAccessDeniedHandler;
 
+  /** CORS configuration. CORS는 URL path(/callback 등)가 아니라 Origin(스킴+도메인+포트) 기준으로 허용합니다. */
+  @Bean
+  public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration config = new CorsConfiguration();
+
+    config.setAllowedOrigins(List.of("https://mztk.vercel.app", "http://localhost:5173"));
+
+    config.setAllowCredentials(true);
+
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    config.setAllowedHeaders(List.of("*"));
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", config);
+    return source;
+  }
+
   /** Configure stateless security filter chain, JWT auth, and request authorization rules. */
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -34,7 +55,7 @@ public class SecurityConfig {
         // Disable CSRF (not needed for stateless REST API with JWT)
         .csrf(AbstractHttpConfigurer::disable)
 
-        // Enable CORS
+        // Enable CORS (uses CorsConfigurationSource bean)
         .cors(Customizer.withDefaults())
 
         // Set session management to STATELESS (using JWT, no server-side session)
@@ -69,6 +90,12 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/users/me/withdrawal")
                     .hasAuthority("ROLE_STEP_UP")
+                    .requestMatchers(HttpMethod.GET, "/levels/policies")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/level-ups")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/web3/challenges")
+                    .authenticated()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
 
