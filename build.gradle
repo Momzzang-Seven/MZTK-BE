@@ -60,6 +60,9 @@ dependencies {
     // Web3 (Ethereum interaction)
     implementation 'org.web3j:core:4.10.3'
 
+    // Jackson for JSON processing (EIP-712 JSON conversion)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
     // Database
     runtimeOnly 'org.postgresql:postgresql'
 
