@@ -51,11 +51,8 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
   }
 
   @Override
-  public WalletStatus getWalletStatus(String walletAddress) {
-    return repository
-        .findByWalletAddress(walletAddress)
-        .map(UserWalletEntity::getStatus)
-        .orElseThrow(() -> new IllegalArgumentException("Wallet not found: " + walletAddress));
+  public Optional<WalletStatus> getWalletStatus(String walletAddress) {
+    return repository.findByWalletAddress(walletAddress).map(UserWalletEntity::getStatus);
   }
 
   // ====== Save Wallet Port Implementation ======//

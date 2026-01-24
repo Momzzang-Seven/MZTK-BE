@@ -130,7 +130,7 @@ public enum ErrorCode {
 
   WALLET_ALREADY_LINKED(
       "WALLET_002",
-      "This wallet address is already linked to another account",
+      "This user already registered his/her wallet address",
       HttpStatus.CONFLICT // 409
       ),
 
@@ -143,7 +143,7 @@ public enum ErrorCode {
       ),
 
   WALLET_ALREADY_EXISTS(
-      "WALLET_005", "Wallet already exists", HttpStatus.CONFLICT // 409
+      "WALLET_005", "Wallet already exists in system", HttpStatus.CONFLICT // 409
       ),
 
   WALLET_UNAUTHORIZED_ACCESS(

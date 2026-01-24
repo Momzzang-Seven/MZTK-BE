@@ -77,23 +77,28 @@ public class RegisterWalletService implements RegisterWalletUseCase {
       throw new InvalidSignatureException();
     }
 
-    // 5. Check wallet status is blacklisted or not
-    if (loadWalletPort.getWalletStatus(command.walletAddress()).equals(WalletStatus.BLACKLISTED)) {
-      log.warn("Requested wallet is in blacklist: address = {}", command.walletAddress());
-      throw new WalletBlackListException(command.walletAddress());
-    }
+    // 5. Check if wallet is blacklisted (only if it exists in DB)
+    loadWalletPort
+        .getWalletStatus(command.walletAddress())
+        .ifPresent(
+            status -> {
+              if (status == WalletStatus.BLACKLISTED) {
+                log.warn("Requested wallet is in blacklist: address = {}", command.walletAddress());
+                throw new WalletBlackListException(command.walletAddress());
+              }
+            });
 
     // 5. Check wallet duplication
     if (loadWalletPort.existsByWalletAddress(command.walletAddress())) {
-      log.warn("Wallet already linked: address={}", command.walletAddress());
-      throw new WalletAlreadyLinkedException(command.walletAddress());
+      log.warn("Wallet already exists: walletAddress={}", command.walletAddress());
+      throw new WalletAlreadyExistsException(command.walletAddress());
     }
 
     // 6. Check user wallet limit (one wallet per user)
     int existingWalletCount = loadWalletPort.countActiveWalletsByUserId(command.userId());
     if (existingWalletCount > 0) {
       log.warn("User already has a wallet: userId={}", command.userId());
-      throw new WalletAlreadyExistsException(command.userId().toString());
+      throw new WalletAlreadyLinkedException(command.userId().toString());
     }
 
     // 7. Mark challenge as used
