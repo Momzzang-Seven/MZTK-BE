@@ -141,7 +141,7 @@ public enum ErrorCode {
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
   // ========================================
-  CHALLENGE_NOT_FOUND(
+  CHALLENGE_NOT_FOUND_OR_EXPIRED(
       "CHALLENGE_001", "Challenge not found or expired", HttpStatus.BAD_REQUEST // 400
       ),
 
