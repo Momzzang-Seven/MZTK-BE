@@ -15,15 +15,15 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "web3.eip712")
 public class EIP712Properties {
-    /** Domain name (default: "MomzzangSeven") */
-    private String domainName = "MomzzangSeven";
+  /** Domain name (default: "MomzzangSeven") */
+  private String domainName = "MomzzangSeven";
 
-    /** Domain version (default: "1") */
-    private String domainVersion = "1";
+  /** Domain version (default: "1") */
+  private String domainVersion = "1";
 
-    /** Chain ID (default: 11155111 for Sepolia testnet) */
-    private Long chainId = 11155111L;
+  /** Chain ID (default: 11155111 for Sepolia testnet) */
+  private Long chainId = 11155111L;
 
-    /** Verifying contract address */
-    private String verifyingContract = "0xCcCCccccCCCCccccCCCCccccCCCCccccCCCCcccc";
+  /** Verifying contract address */
+  private String verifyingContract = "0xCcCCccccCCCCccccCCCCccccCCCCccccCCCCcccc";
 }
