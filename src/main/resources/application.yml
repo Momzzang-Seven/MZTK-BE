@@ -103,3 +103,8 @@ web3:
       uri: "https://mztk.com" # MUST USE THE SERVICING DOMAIN URI
       version: "1"
       chain-id: "1"
+  eip712:
+    domain-name: "MomzzangSeven"
+    domain-version: "1"
+    chain-id: 11155111  # Sepolia testnet
+    verifying-contract: "0xCcCCccccCCCCccccCCCCccccCCCCccccCCCCcccc"

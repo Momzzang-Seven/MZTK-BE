@@ -66,7 +66,7 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     // 4. Verify signature
     boolean signatureValid =
         verifySignaturePort.verify(
-            challenge.getMessage(), command.signature(), command.walletAddress());
+            challenge.getMessage(), command.nonce(), command.signature(), command.walletAddress());
 
     if (!signatureValid) {
       log.warn(
