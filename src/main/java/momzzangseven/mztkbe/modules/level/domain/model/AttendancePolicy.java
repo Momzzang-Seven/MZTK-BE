@@ -4,11 +4,10 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import org.springframework.stereotype.Component;
 
-@Component
 public class AttendancePolicy {
-  public int calculateStreak(LocalDate cursor, List<LocalDate> recentDates) {
+
+  public static int calculateStreak(LocalDate cursor, List<LocalDate> recentDates) {
     if (recentDates == null || recentDates.isEmpty()) {
       return 0;
     }

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.level.application.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -26,13 +27,13 @@ public class CheckInService implements CheckInUseCase {
 
   private final AttendanceLogPort attendanceLogPort;
   private final GrantXpUseCase grantXpUseCase;
-  private final AttendancePolicy attendancePolicy;
   private final ZoneId appZoneId;
 
   @Override
   public CheckInResult execute(Long userId) {
-    LocalDateTime now = LocalDateTime.now();
-    LocalDate todayKst = now.atZone(appZoneId).toLocalDate();
+    ZonedDateTime nowKst = ZonedDateTime.now(appZoneId);
+    LocalDate todayKst = nowKst.toLocalDate();
+    LocalDateTime now = nowKst.toLocalDateTime();
 
     if (attendanceLogPort.existsByUserIdAndAttendedDate(userId, todayKst)) {
       return CheckInResult.alreadyCheckedIn(todayKst);
@@ -48,7 +49,7 @@ public class CheckInService implements CheckInUseCase {
     int grantedXp = checkinXp.grantedXp();
 
     List<LocalDate> recentDates = attendanceLogPort.findTop30AttendedDatesDesc(userId);
-    int streakDays = attendancePolicy.calculateStreak(todayKst, recentDates);
+    int streakDays = AttendancePolicy.calculateStreak(todayKst, recentDates);
 
     int bonusXp = 0;
     if (streakDays > 0 && streakDays % 7 == 0) {

@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.level.application.service;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.dto.GetAttendanceStatusResult;
@@ -17,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class GetAttendanceStatusService implements GetAttendanceStatusUseCase {
 
   private final AttendanceLogPort attendanceLogPort;
-  private final AttendancePolicy attendancePolicy;
   private final ZoneId appZoneId;
 
   @Override
@@ -26,13 +26,13 @@ public class GetAttendanceStatusService implements GetAttendanceStatusUseCase {
       throw new IllegalArgumentException("userId is required");
     }
 
-    LocalDate today = LocalDate.now(appZoneId);
+    LocalDate today = ZonedDateTime.now(appZoneId).toLocalDate();
     boolean hasAttendedToday = attendanceLogPort.existsByUserIdAndAttendedDate(userId, today);
 
     LocalDate cursor = hasAttendedToday ? today : today.minusDays(1);
     List<LocalDate> recentDates = attendanceLogPort.findTop30AttendedDatesDesc(userId);
 
-    int streak = attendancePolicy.calculateStreak(cursor, recentDates);
+    int streak = AttendancePolicy.calculateStreak(cursor, recentDates);
 
     return GetAttendanceStatusResult.of(today, hasAttendedToday, streak);
   }

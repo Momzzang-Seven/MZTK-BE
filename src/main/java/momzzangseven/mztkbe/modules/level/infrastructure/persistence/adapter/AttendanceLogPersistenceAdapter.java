@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.out.AttendanceLogPort;
@@ -23,11 +22,7 @@ public class AttendanceLogPersistenceAdapter implements AttendanceLogPort {
   @Override
   public void save(Long userId, LocalDate attendedDate) {
     attendanceLogJpaRepository.save(
-        AttendanceLogEntity.builder()
-            .userId(userId)
-            .attendedDate(attendedDate)
-            .createdAt(LocalDateTime.now())
-            .build());
+        AttendanceLogEntity.builder().userId(userId).attendedDate(attendedDate).build());
   }
 
   @Override
