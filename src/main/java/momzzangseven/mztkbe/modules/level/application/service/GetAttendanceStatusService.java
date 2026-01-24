@@ -30,7 +30,7 @@ public class GetAttendanceStatusService implements GetAttendanceStatusUseCase {
     boolean hasAttendedToday = attendanceLogPort.existsByUserIdAndAttendedDate(userId, today);
 
     LocalDate cursor = hasAttendedToday ? today : today.minusDays(1);
-    List<LocalDate> recentDates = attendanceLogPort.findTop7AttendedDatesDesc(userId);
+    List<LocalDate> recentDates = attendanceLogPort.findTop30AttendedDatesDesc(userId);
 
     int streak = attendancePolicy.calculateStreak(cursor, recentDates);
 

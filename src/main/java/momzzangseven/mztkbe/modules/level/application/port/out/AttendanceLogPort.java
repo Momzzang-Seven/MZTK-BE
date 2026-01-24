@@ -9,7 +9,7 @@ public interface AttendanceLogPort {
 
   void save(Long userId, LocalDate attendedDate);
 
-  List<LocalDate> findTop7AttendedDatesDesc(Long userId);
+  List<LocalDate> findTop30AttendedDatesDesc(Long userId);
 
   List<LocalDate> findAttendedDatesBetween(Long userId, LocalDate startDate, LocalDate endDate);
 }

@@ -31,8 +31,8 @@ public class AttendanceLogPersistenceAdapter implements AttendanceLogPort {
   }
 
   @Override
-  public List<LocalDate> findTop7AttendedDatesDesc(Long userId) {
-    return attendanceLogJpaRepository.findTop7ByUserIdOrderByAttendedDateDesc(userId).stream()
+  public List<LocalDate> findTop30AttendedDatesDesc(Long userId) {
+    return attendanceLogJpaRepository.findTop30ByUserIdOrderByAttendedDateDesc(userId).stream()
         .map(AttendanceLogEntity::getAttendedDate)
         .toList();
   }
@@ -42,7 +42,7 @@ public class AttendanceLogPersistenceAdapter implements AttendanceLogPort {
       Long userId, LocalDate startDate, LocalDate endDate) {
     return attendanceLogJpaRepository
         .findByUserIdAndAttendedDateBetweenOrderByAttendedDateAsc(
-            userId, startDate, endDate) // 정렬된 메서드 사용
+            userId, startDate, endDate)
         .stream()
         .map(AttendanceLogEntity::getAttendedDate)
         .toList();

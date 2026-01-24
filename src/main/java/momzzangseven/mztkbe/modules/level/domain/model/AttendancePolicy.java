@@ -15,13 +15,9 @@ public class AttendancePolicy {
 
     Set<LocalDate> attendedSet = new HashSet<>(recentDates);
     int streak = 0;
-
     while (attendedSet.contains(cursor)) {
       streak++;
       cursor = cursor.minusDays(1);
-      if (streak >= 7) {
-        break;
-      }
     }
     return streak;
   }
