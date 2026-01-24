@@ -6,7 +6,9 @@ import lombok.*;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 
 @Entity
-@Table(name = "user_wallets")
+@Table(
+    name = "user_wallets",
+    uniqueConstraints = {@UniqueConstraint(columnNames = "wallet_address")})
 @Getter
 @Builder
 @AllArgsConstructor

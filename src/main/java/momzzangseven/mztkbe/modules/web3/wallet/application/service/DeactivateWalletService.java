@@ -4,8 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.wallet.UnauthorizedWalletAccessException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotFoundException;
-import momzzangseven.mztkbe.modules.web3.wallet.application.dto.DeleteWalletCommand;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.DeleteWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.DeactivateWalletCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.DeactivateWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
@@ -16,31 +16,34 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional
 @RequiredArgsConstructor
-public class DeleteWalletService implements DeleteWalletUseCase {
+public class DeactivateWalletService implements DeactivateWalletUseCase {
 
   private final LoadWalletPort loadWalletPort;
   private final SaveWalletPort saveWalletPort;
 
   @Override
-  public void execute(DeleteWalletCommand command) {
-    log.info("Deleting wallet: userId={}, walletId={}", command.userId(), command.walletId());
+  public void execute(DeactivateWalletCommand command) {
+    log.info(
+        "Deactivating wallet: userId={}, walletAddress={}",
+        command.userId(),
+        command.walletAddress());
 
     // 1. Validate
     command.validate();
 
-    // 2. Load wallet
+    // 2. Load wallet by address
     UserWallet wallet =
         loadWalletPort
-            .findById(command.walletId())
-            .orElseThrow(() -> new WalletNotFoundException(command.walletId()));
+            .findByWalletAddress(command.walletAddress())
+            .orElseThrow(() -> new WalletNotFoundException());
 
     // 3. Check ownership
     if (!wallet.belongsTo(command.userId())) {
       log.warn(
-          "Unauthorized wallet access: userId={}, walletId={}",
+          "Unauthorized wallet access: userId={}, walletAddress={}",
           command.userId(),
-          command.walletId());
-      throw new UnauthorizedWalletAccessException(command.walletId(), command.userId());
+          command.walletAddress());
+      throw new UnauthorizedWalletAccessException(wallet.getId(), command.userId());
     }
 
     // 4. Deactivate wallet (soft delete)
@@ -48,8 +51,9 @@ public class DeleteWalletService implements DeleteWalletUseCase {
     saveWalletPort.save(deactivatedWallet);
 
     log.info(
-        "Wallet deleted successfully: walletId={}, userId={}",
-        command.walletId(),
+        "Wallet deactivated successfully: walletId={}, walletAddress={}, userId={}",
+        wallet.getId(),
+        command.walletAddress(),
         command.userId());
   }
 }
