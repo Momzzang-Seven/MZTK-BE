@@ -1,13 +1,13 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.port.in;
 
-import momzzangseven.mztkbe.modules.web3.wallet.application.dto.DeleteWalletCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.DeactivateWalletCommand;
 
-public interface DeleteWalletUseCase {
+public interface DeactivateWalletUseCase {
 
   /**
    * Delete (deactivate) wallet
    *
    * @param command delete command
    */
-  void execute(DeleteWalletCommand command);
+  void execute(DeactivateWalletCommand command);
 }
