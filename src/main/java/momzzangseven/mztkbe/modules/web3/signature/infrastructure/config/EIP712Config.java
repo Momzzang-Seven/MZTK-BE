@@ -14,18 +14,16 @@ import org.springframework.context.annotation.Configuration;
 @RequiredArgsConstructor
 public class EIP712Config {
 
-    private final EIP712Properties properties;
+  private final EIP712Properties properties;
 
-    /**
-     * Create EIP712Domain bean
-     */
-    @Bean
-    public EIP712Domain eip712Domain() {
-        return EIP712Domain.builder()
-                .name(properties.getDomainName())
-                .version(properties.getDomainVersion())
-                .chainId(properties.getChainId())
-                .verifyingContract(properties.getVerifyingContract())
-                .build();
-    }
+  /** Create EIP712Domain bean */
+  @Bean
+  public EIP712Domain eip712Domain() {
+    return EIP712Domain.builder()
+        .name(properties.getDomainName())
+        .version(properties.getDomainVersion())
+        .chainId(properties.getChainId())
+        .verifyingContract(properties.getVerifyingContract())
+        .build();
+  }
 }
