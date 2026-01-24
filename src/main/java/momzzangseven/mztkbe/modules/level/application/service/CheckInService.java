@@ -56,8 +56,8 @@ public class CheckInService implements CheckInUseCase {
       String streakKey = "streak7:" + userId + ":cycle" + cycle;
 
       GrantXpResult bonus =
-              grantXpUseCase.execute(
-                      GrantXpCommand.of(userId, XpType.STREAK_7D, now, streakKey, "streak7:cycle" + cycle));
+          grantXpUseCase.execute(
+              GrantXpCommand.of(userId, XpType.STREAK_7D, now, streakKey, "streak7:cycle" + cycle));
       bonusXp = bonus.grantedXp();
     }
 
