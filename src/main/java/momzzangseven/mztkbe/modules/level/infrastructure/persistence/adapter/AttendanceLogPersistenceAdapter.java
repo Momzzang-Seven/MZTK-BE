@@ -41,8 +41,7 @@ public class AttendanceLogPersistenceAdapter implements AttendanceLogPort {
   public List<LocalDate> findAttendedDatesBetween(
       Long userId, LocalDate startDate, LocalDate endDate) {
     return attendanceLogJpaRepository
-        .findByUserIdAndAttendedDateBetweenOrderByAttendedDateAsc(
-            userId, startDate, endDate)
+        .findByUserIdAndAttendedDateBetweenOrderByAttendedDateAsc(userId, startDate, endDate)
         .stream()
         .map(AttendanceLogEntity::getAttendedDate)
         .toList();
