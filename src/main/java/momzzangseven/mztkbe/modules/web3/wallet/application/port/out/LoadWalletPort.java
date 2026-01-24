@@ -16,8 +16,8 @@ public interface LoadWalletPort {
   /** Check if wallet exists by address */
   boolean existsByWalletAddress(String walletAddress);
 
-  /** Get wallet status */
-  WalletStatus getWalletStatus(String walletAddress);
+  /** Get wallet status (returns empty if wallet doesn't exist) */
+  Optional<WalletStatus> getWalletStatus(String walletAddress);
 
   /** Count active wallets by user ID */
   int countActiveWalletsByUserId(Long userId);

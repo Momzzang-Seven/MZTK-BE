@@ -9,7 +9,9 @@ public class WalletAlreadyExistsException extends BusinessException {
     super(ErrorCode.WALLET_ALREADY_EXISTS);
   }
 
-  public WalletAlreadyExistsException(String customMessage) {
-    super(ErrorCode.WALLET_ALREADY_EXISTS, customMessage);
+  public WalletAlreadyExistsException(String walletAddress) {
+    super(
+        ErrorCode.WALLET_ALREADY_EXISTS,
+        ErrorCode.WALLET_ALREADY_EXISTS.getMessage() + ". walletAddress: " + walletAddress);
   }
 }

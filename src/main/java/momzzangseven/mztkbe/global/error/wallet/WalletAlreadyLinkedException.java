@@ -9,7 +9,9 @@ public class WalletAlreadyLinkedException extends BusinessException {
     super(ErrorCode.WALLET_ALREADY_LINKED);
   }
 
-  public WalletAlreadyLinkedException(String customMessage) {
-    super(ErrorCode.WALLET_ALREADY_LINKED, customMessage);
+  public WalletAlreadyLinkedException(String userId) {
+    super(
+        ErrorCode.WALLET_ALREADY_LINKED,
+        ErrorCode.WALLET_ALREADY_LINKED.getMessage() + ". userId: " + userId);
   }
 }

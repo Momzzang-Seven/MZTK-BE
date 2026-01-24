@@ -107,4 +107,4 @@ web3:
     domain-name: "MomzzangSeven"
     domain-version: "1"
     chain-id: 11155111  # Sepolia testnet
-    verifying-contract: "0xCcCCccccCCCCccccCCCCccccCCCCccccCCCCcccc"
+    verifying-contract: "0xcccccccccccccccccccccccccccccccccccccccc"
