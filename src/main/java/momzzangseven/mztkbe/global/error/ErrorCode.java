@@ -138,17 +138,21 @@ public enum ErrorCode {
       "WALLET_003", "No wallet connected to this account", HttpStatus.BAD_REQUEST // 400
       ),
 
-    WALLET_NOT_FOUND(
-            "WALLET_004", "Wallet not found", HttpStatus.NOT_FOUND //404
-    ),
+  WALLET_NOT_FOUND(
+      "WALLET_004", "Wallet not found", HttpStatus.NOT_FOUND // 404
+      ),
 
-    WALLET_ALREADY_EXISTS(
-            "WALLET_005", "Wallet already exists", HttpStatus.CONFLICT //409
-    ),
+  WALLET_ALREADY_EXISTS(
+      "WALLET_005", "Wallet already exists", HttpStatus.CONFLICT // 409
+      ),
 
-    WALLET_UNAUTHORIZED_ACCESS(
-            "WALLET_006", "Unauthorized access", HttpStatus.UNAUTHORIZED //401
-    ),
+  WALLET_UNAUTHORIZED_ACCESS(
+      "WALLET_006", "Unauthorized access", HttpStatus.UNAUTHORIZED // 401
+      ),
+
+  WALLET_IN_BLACKLIST(
+      "WALLET_007", "Requested wallet is in blacklist", HttpStatus.BAD_REQUEST // 400
+      ),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
@@ -163,6 +167,17 @@ public enum ErrorCode {
 
   SIGNATURE_VERIFICATION_FAILED(
       "CHALLENGE_003", "Signature verification failed", HttpStatus.UNAUTHORIZED // 401
+      ),
+
+  CHALLENGE_WALLET_MISMATCH("CHALLENGE_004", "Wallet address mismatch", HttpStatus.UNAUTHORIZED),
+  CHALLENGE_USERID_MISMATCH("CHALLENGE_005", "User id mismatch", HttpStatus.UNAUTHORIZED),
+
+  // ========================================
+  // Validation Errors (VALIDATION_xxx)
+  // ========================================
+
+  SIGNATURE_INVALID(
+      "SIGNATURE_001", "Invalid signature", HttpStatus.BAD_REQUEST // 400
       ),
 
   // ========================================
