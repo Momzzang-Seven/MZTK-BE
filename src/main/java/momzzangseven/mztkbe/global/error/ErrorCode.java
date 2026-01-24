@@ -138,6 +138,18 @@ public enum ErrorCode {
       "WALLET_003", "No wallet connected to this account", HttpStatus.BAD_REQUEST // 400
       ),
 
+    WALLET_NOT_FOUND(
+            "WALLET_004", "Wallet not found", HttpStatus.NOT_FOUND //404
+    ),
+
+    WALLET_ALREADY_EXISTS(
+            "WALLET_005", "Wallet already exists", HttpStatus.CONFLICT //409
+    ),
+
+    WALLET_UNAUTHORIZED_ACCESS(
+            "WALLET_006", "Unauthorized access", HttpStatus.UNAUTHORIZED //401
+    ),
+
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
   // ========================================
