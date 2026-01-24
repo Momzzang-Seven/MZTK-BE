@@ -8,12 +8,9 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 @Entity
 @Table(
     name = "user_wallets",
-        indexes = {
-        @Index(
-                name = "unique_active_wallet_address",
-                columnList = "wallet_address",
-                unique = false)
-})
+    indexes = {
+      @Index(name = "unique_active_wallet_address", columnList = "wallet_address", unique = false)
+    })
 @Getter
 @Builder
 @AllArgsConstructor

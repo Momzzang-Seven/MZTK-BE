@@ -13,8 +13,9 @@ public interface LoadWalletPort {
   /** Find wallet by address */
   Optional<UserWallet> findByWalletAddress(String walletAddress);
 
-  /** Find wallet by address and status*/
-  Optional<UserWallet> findByWalletAddressAndStatus(String walletAddress, WalletStatus walletStatus);
+  /** Find wallet by address and status */
+  Optional<UserWallet> findByWalletAddressAndStatus(
+      String walletAddress, WalletStatus walletStatus);
 
   /** Check if wallet exists by address */
   boolean existsByWalletAddress(String walletAddress);
