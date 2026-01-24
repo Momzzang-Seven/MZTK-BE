@@ -8,7 +8,12 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 @Entity
 @Table(
     name = "user_wallets",
-    uniqueConstraints = {@UniqueConstraint(columnNames = "wallet_address")})
+        indexes = {
+        @Index(
+                name = "unique_active_wallet_address",
+                columnList = "wallet_address",
+                unique = false)
+})
 @Getter
 @Builder
 @AllArgsConstructor
@@ -21,7 +26,7 @@ public class UserWalletEntity {
   @Column(name = "user_id", nullable = false)
   private Long userId;
 
-  @Column(name = "wallet_address", unique = true, length = 42, nullable = false)
+  @Column(name = "wallet_address", length = 42, nullable = false)
   private String walletAddress;
 
   @Enumerated(EnumType.STRING)

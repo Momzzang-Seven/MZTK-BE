@@ -34,8 +34,19 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
   }
 
   @Override
+  public Optional<UserWallet> findByWalletAddressAndStatus(
+      String walletAddress, WalletStatus status) {
+    return repository.findByWalletAddressAndStatus(walletAddress, status).map(this::mapToDomain);
+  }
+
+  @Override
   public boolean existsByWalletAddress(String walletAddress) {
     return repository.existsByWalletAddress(walletAddress);
+  }
+
+  @Override
+  public boolean existsByWalletAddressAndStatus(String walletAddress, WalletStatus status) {
+    return repository.existsByWalletAddressAndStatus(walletAddress, status);
   }
 
   @Override
