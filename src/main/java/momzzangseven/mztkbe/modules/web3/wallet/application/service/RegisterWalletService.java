@@ -88,8 +88,9 @@ public class RegisterWalletService implements RegisterWalletUseCase {
               }
             });
 
-    // 5. Check wallet duplication
-    if (loadWalletPort.existsByWalletAddress(command.walletAddress())) {
+    // 5. Check wallet duplication (only ACTIVE wallets)
+    if (loadWalletPort.existsByWalletAddressAndStatus(
+        command.walletAddress(), WalletStatus.ACTIVE)) {
       log.warn("Wallet already exists: walletAddress={}", command.walletAddress());
       throw new WalletAlreadyExistsException(command.walletAddress());
     }

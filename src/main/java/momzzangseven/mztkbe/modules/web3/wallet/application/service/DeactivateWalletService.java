@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.DeactivateWa
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,10 +32,10 @@ public class DeactivateWalletService implements DeactivateWalletUseCase {
     // 1. Validate
     command.validate();
 
-    // 2. Load wallet by address
+    // 2. Load active wallet by address
     UserWallet wallet =
         loadWalletPort
-            .findByWalletAddress(command.walletAddress())
+            .findByWalletAddressAndStatus(command.walletAddress(), WalletStatus.ACTIVE)
             .orElseThrow(() -> new WalletNotFoundException());
 
     // 3. Check ownership

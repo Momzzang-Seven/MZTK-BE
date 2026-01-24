@@ -59,10 +59,10 @@ public class WalletController {
    *
    * @param userId authenticated user ID
    * @param walletAddress Ethereum wallet address (0x-prefixed)
-   * @return 204 No Content on success
+   * @return 200 OK with success response
    */
   @DeleteMapping("/{walletAddress}")
-  public ResponseEntity<Void> deactivateWallet(
+  public ResponseEntity<ApiResponse<Void>> deactivateWallet(
       @AuthenticationPrincipal Long userId, @PathVariable("walletAddress") String walletAddress) {
 
     log.info("Wallet deactivation request: userId={}, walletAddress={}", userId, walletAddress);
@@ -70,6 +70,6 @@ public class WalletController {
     DeactivateWalletCommand command = new DeactivateWalletCommand(userId, walletAddress);
     deactivateWalletUseCase.execute(command);
 
-    return ResponseEntity.noContent().build();
+    return ResponseEntity.ok(ApiResponse.success(null));
   }
 }
