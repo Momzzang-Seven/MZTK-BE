@@ -47,15 +47,17 @@ public class CheckInService implements CheckInUseCase {
 
     int grantedXp = checkinXp.grantedXp();
 
-    List<LocalDate> recentDates = attendanceLogPort.findTop7AttendedDatesDesc(userId);
+    List<LocalDate> recentDates = attendanceLogPort.findTop30AttendedDatesDesc(userId);
     int streakDays = attendancePolicy.calculateStreak(todayKst, recentDates);
 
     int bonusXp = 0;
-    if (streakDays >= 7) {
-      String streakKey = "streak7:" + userId + ":" + todayKst.format(YYYYMMDD);
+    if (streakDays > 0 && streakDays % 7 == 0) {
+      int cycle = streakDays / 7;
+      String streakKey = "streak7:" + userId + ":cycle" + cycle;
+
       GrantXpResult bonus =
-          grantXpUseCase.execute(
-              GrantXpCommand.of(userId, XpType.STREAK_7D, now, streakKey, "streak7:" + todayKst));
+              grantXpUseCase.execute(
+                      GrantXpCommand.of(userId, XpType.STREAK_7D, now, streakKey, "streak7:cycle" + cycle));
       bonusXp = bonus.grantedXp();
     }
 

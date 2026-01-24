@@ -12,5 +12,5 @@ public interface AttendanceLogJpaRepository extends JpaRepository<AttendanceLogE
   List<AttendanceLogEntity> findByUserIdAndAttendedDateBetweenOrderByAttendedDateAsc(
       Long userId, LocalDate startDate, LocalDate endDate);
 
-  List<AttendanceLogEntity> findTop7ByUserIdOrderByAttendedDateDesc(Long userId);
+  List<AttendanceLogEntity> findTop30ByUserIdOrderByAttendedDateDesc(Long userId);
 }
