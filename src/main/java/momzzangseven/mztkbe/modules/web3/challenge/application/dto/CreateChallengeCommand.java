@@ -6,11 +6,26 @@ import org.web3j.crypto.WalletUtils;
 /**
  * Command for creating challenge.
  *
+ * <p>Wallet address is automatically normalized to lowercase on creation for consistency.
+ *
  * @param userId
  * @param purpose
  * @param walletAddress
  */
 public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, String walletAddress) {
+
+  /**
+   * Canonical constructor with wallet address normalization
+   *
+   * <p>Converts wallet address to lowercase for consistency across the system.
+   */
+  public CreateChallengeCommand {
+    // Normalize wallet address to lowercase if not null
+    if (walletAddress != null) {
+      walletAddress = walletAddress.toLowerCase();
+    }
+  }
+
   /** Validation method */
   public void validate() {
     if (userId == null || userId <= 0) {

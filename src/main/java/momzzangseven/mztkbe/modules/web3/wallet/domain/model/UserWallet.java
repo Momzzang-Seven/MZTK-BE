@@ -26,7 +26,7 @@ public class UserWallet {
    * Create new wallet registration
    *
    * @param userId user ID
-   * @param walletAddress Ethereum address (normalized to lowercase)
+   * @param walletAddress Ethereum address (should be already normalized to lowercase)
    * @param registeredAt timestamp when wallet is registered
    * @return new UserWallet instance
    */
@@ -41,12 +41,9 @@ public class UserWallet {
       throw new IllegalArgumentException("Registered timestamp must not be null");
     }
 
-    // Normalize address to lowercase for consistency
-    String normalizedAddress = walletAddress.toLowerCase();
-
     return UserWallet.builder()
         .userId(userId)
-        .walletAddress(normalizedAddress)
+        .walletAddress(walletAddress)
         .status(WalletStatus.ACTIVE)
         .registeredAt(registeredAt)
         .build();

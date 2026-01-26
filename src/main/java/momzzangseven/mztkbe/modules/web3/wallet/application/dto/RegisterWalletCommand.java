@@ -2,8 +2,26 @@ package momzzangseven.mztkbe.modules.web3.wallet.application.dto;
 
 import org.web3j.crypto.WalletUtils;
 
+/**
+ * Command for wallet registration
+ *
+ * <p>Wallet address is automatically normalized to lowercase on creation for consistency.
+ */
 public record RegisterWalletCommand(
     Long userId, String walletAddress, String signature, String nonce) {
+
+  /**
+   * Canonical constructor with wallet address normalization
+   *
+   * <p>Converts wallet address to lowercase for consistency across the system.
+   */
+  public RegisterWalletCommand {
+    // Normalize wallet address to lowercase if not null
+    if (walletAddress != null) {
+      walletAddress = walletAddress.toLowerCase();
+    }
+  }
+
   public void validate() {
     if (userId == null || userId <= 0) {
       throw new IllegalArgumentException("User ID must be positive");
