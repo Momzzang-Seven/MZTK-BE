@@ -129,9 +129,7 @@ public enum ErrorCode {
       ),
 
   WALLET_ALREADY_LINKED(
-      "WALLET_002",
-      "This user already registered his/her wallet address",
-      HttpStatus.CONFLICT // 409
+      "WALLET_002", "This user already has his/her wallet address", HttpStatus.CONFLICT // 409
       ),
 
   WALLET_NOT_CONNECTED(

@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletRequestDTO;
-import momzzangseven.mztkbe.modules.web3.wallet.api.dto.WalletRegisterResponseDTO;
+import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletResponseDTO;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.DeactivateWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
@@ -36,7 +36,7 @@ public class WalletController {
    * <p>POST /web3/wallets
    */
   @PostMapping
-  public ResponseEntity<ApiResponse<WalletRegisterResponseDTO>> registerWallet(
+  public ResponseEntity<ApiResponse<RegisterWalletResponseDTO>> registerWallet(
       @AuthenticationPrincipal Long userId, @Valid @RequestBody RegisterWalletRequestDTO request) {
 
     log.info("Wallet registration request: userId={}, address={}", userId, request.walletAddress());
@@ -47,7 +47,7 @@ public class WalletController {
 
     RegisterWalletResult result = registerWalletUseCase.execute(command);
 
-    WalletRegisterResponseDTO response = WalletRegisterResponseDTO.from(result);
+    RegisterWalletResponseDTO response = RegisterWalletResponseDTO.from(result);
 
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
