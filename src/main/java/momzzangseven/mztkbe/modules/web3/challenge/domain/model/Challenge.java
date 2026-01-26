@@ -55,7 +55,7 @@ public class Challenge {
         .nonce(nonce)
         .userId(userId)
         .purpose(purpose)
-        .walletAddress(walletAddress.toLowerCase()) // normalization
+        .walletAddress(walletAddress) // already normalized in CreateChallengeCommand
         .message(message)
         .status(ChallengeStatus.PENDING)
         .expiresAt(now.plusSeconds(config.ttlSeconds()))
