@@ -19,12 +19,18 @@ import momzzangseven.mztkbe.modules.web3.signature.application.port.out.VerifySi
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.DeleteWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RecordWalletEventPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletEvent;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Wallet registration service
@@ -42,6 +48,8 @@ public class RegisterWalletService implements RegisterWalletUseCase {
   private final VerifySignaturePort verifySignaturePort;
   private final LoadWalletPort loadWalletPort;
   private final SaveWalletPort saveWalletPort;
+  private final DeleteWalletPort deleteWalletPort;
+  private final RecordWalletEventPort eventPort;
 
   @Override
   public RegisterWalletResult execute(RegisterWalletCommand command) {
@@ -77,39 +85,31 @@ public class RegisterWalletService implements RegisterWalletUseCase {
       throw new InvalidSignatureException();
     }
 
-    // 5. Check if wallet is blacklisted (only if it exists in DB)
-    loadWalletPort
-        .getWalletStatus(command.walletAddress())
-        .ifPresent(
-            status -> {
-              if (status == WalletStatus.BLACKLISTED) {
-                log.warn("Requested wallet is in blacklist: address = {}", command.walletAddress());
-                throw new WalletBlackListException(command.walletAddress());
-              }
-            });
-
-    // 5. Check wallet duplication (only ACTIVE wallets)
-    if (loadWalletPort.existsByWalletAddressAndStatus(
-        command.walletAddress(), WalletStatus.ACTIVE)) {
-      log.warn("Wallet already exists: walletAddress={}", command.walletAddress());
-      throw new WalletAlreadyExistsException(command.walletAddress());
-    }
-
-    // 6. Check user wallet limit (one wallet per user)
-    int existingWalletCount = loadWalletPort.countActiveWalletsByUserId(command.userId());
+    // Check if the user already has ACTIVE wallet
+    int existingWalletCount =
+            loadWalletPort.countWalletsByUserIdAndStatus(command.userId(), WalletStatus.ACTIVE);
     if (existingWalletCount > 0) {
       log.warn("User already has a wallet: userId={}", command.userId());
       throw new WalletAlreadyLinkedException(command.userId().toString());
     }
 
-    // 7. Mark challenge as used
+    // Check if wallet exists in DB
+    Optional<UserWallet> existingWallet =
+            loadWalletPort.findByWalletAddress(command.walletAddress());
+
+    UserWallet savedWallet;
+
+    if (existingWallet.isEmpty()) {
+      // fresh register
+      savedWallet = registerNewWallet(command);
+    } else {
+      // re-register (UNLINKED or USER_DELETED)
+      savedWallet = reRegisterWallet(existingWallet.get(), command);
+    }
+
+    // Mark challenge as used
     Challenge usedChallenge = challenge.markAsUsed();
     saveChallengePort.save(usedChallenge);
-
-    // 8. Create and save wallet
-    UserWallet wallet =
-        UserWallet.create(command.userId(), command.walletAddress(), java.time.Instant.now());
-    UserWallet savedWallet = saveWalletPort.save(wallet);
 
     log.info(
         "Wallet registered successfully: walletId={}, userId={}, address={}",
@@ -145,5 +145,101 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     if (!challenge.matchesAddress(command.walletAddress())) {
       throw new ChallengeMismatchWalletAddressException();
     }
+  }
+
+  /**
+   * Register fresh wallet
+   *
+   * @param command
+   * @return
+   */
+  private UserWallet registerNewWallet(RegisterWalletCommand command) {
+    log.info("Registering new wallet: userId={}, address={}",
+            command.userId(), command.walletAddress());
+
+    // 1. create wallet and save
+    UserWallet wallet =
+            UserWallet.create(command.userId(), command.walletAddress(), java.time.Instant.now());
+    UserWallet savedWallet = saveWalletPort.save(wallet);
+
+    // 2. record event
+    eventPort.record(WalletEvent.registered(
+            savedWallet.getWalletAddress(),
+            savedWallet.getUserId(),
+            Map.of(
+                    "source", "application",
+                    "action", "new_registration"
+            )
+    ));
+
+    return savedWallet;
+  }
+
+  /**
+   * Re-register a wallet
+   *
+   * @param existingWallet
+   * @param command
+   * @return
+   */
+  private UserWallet reRegisterWallet(UserWallet existingWallet, RegisterWalletCommand command) {
+    // 1. Check if the wallet is BLOCKED
+    if (existingWallet.getStatus() == WalletStatus.BLOCKED) {
+      log.warn("Attempted to register blocked wallet: address={}", existingWallet.getWalletAddress());
+      throw new WalletBlackListException(existingWallet.getWalletAddress());
+    }
+
+    // 2. Check if the wallet is in UNLINKED or USER_DELETED status, otherwise, the wallet already used by other user.
+    if (!existingWallet.canBeReRegistered()) {
+      log.error("Unexpected wallet status for re-registration: address={}, status={}",
+              existingWallet.getWalletAddress(), existingWallet.getStatus());
+      throw new WalletAlreadyExistsException(existingWallet.getWalletAddress());
+    }
+
+    log.info("Re-registering wallet: address={}, previousUserId={}, previousStatus={}, newUserId={}",
+            existingWallet.getWalletAddress(),
+            existingWallet.getUserId(),
+            existingWallet.getStatus(),
+            command.userId());
+
+    // 3. Cache wallet previous status and user id
+    Long previousUserId = existingWallet.getUserId();
+    WalletStatus previousStatus = existingWallet.getStatus();
+
+    // 5. Delete old record
+    deleteWalletPort.deleteById(existingWallet.getId());
+
+    // 6. Record HARD_DELETED event
+    eventPort.record(WalletEvent.hardDeleted(
+            existingWallet.getWalletAddress(),
+            previousUserId,
+            previousStatus,
+            Map.of(
+                    "source", "application",
+                    "action", "re_registration_cleanup",
+                    "new_user_id", command.userId()
+            )
+    ));
+
+    // 7. INSERT new record into user_wallets
+    UserWallet newWallet =
+            UserWallet.create(command.userId(), command.walletAddress(), java.time.Instant.now());
+    UserWallet savedWallet = saveWalletPort.save(newWallet);
+
+    // 8. Record REGISTERED event
+    eventPort.record(WalletEvent.reRegistered(
+            savedWallet.getWalletAddress(),
+            savedWallet.getUserId(),
+            previousUserId,
+            previousStatus,
+            Map.of(
+                    "source", "application",
+                    "action", "re_registration",
+                    "previous_user_id", previousUserId,
+                    "previous_status", previousStatus.name()
+            )
+    ));
+
+    return savedWallet;
   }
 }

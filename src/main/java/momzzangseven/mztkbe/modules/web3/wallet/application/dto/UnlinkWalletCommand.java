@@ -3,20 +3,20 @@ package momzzangseven.mztkbe.modules.web3.wallet.application.dto;
 import org.web3j.crypto.WalletUtils;
 
 /**
- * Command for deactivating wallet
+ * Command for unlinking wallet
  *
  * <p>Uses walletAddress instead of walletId for better RESTful API design.
  *
  * <p>Wallet address is automatically normalized to lowercase on creation for consistency.
  */
-public record DeactivateWalletCommand(Long userId, String walletAddress) {
+public record UnlinkWalletCommand(Long userId, String walletAddress) {
 
   /**
    * Canonical constructor with wallet address normalization
    *
    * <p>Converts wallet address to lowercase for consistency across the system.
    */
-  public DeactivateWalletCommand {
+  public UnlinkWalletCommand {
     // Normalize wallet address to lowercase if not null
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();

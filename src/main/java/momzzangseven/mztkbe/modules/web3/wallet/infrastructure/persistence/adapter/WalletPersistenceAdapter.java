@@ -71,9 +71,9 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
   }
 
   @Override
-  public List<WalletDeletionInfo> loadWalletsForDeletion(
-          Instant cutoffDate, int limit) {
-    Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Order.asc("unlinkedAt"), Sort.Order.asc("id")));
+  public List<WalletDeletionInfo> loadWalletsForDeletion(Instant cutoffDate, int limit) {
+    Pageable pageable =
+        PageRequest.of(0, limit, Sort.by(Sort.Order.asc("unlinkedAt"), Sort.Order.asc("id")));
     return repository.findWalletsForDeletion(cutoffDate, pageable);
   }
 
