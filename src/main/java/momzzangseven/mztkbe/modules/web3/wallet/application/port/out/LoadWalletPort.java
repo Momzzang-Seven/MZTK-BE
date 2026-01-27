@@ -33,6 +33,13 @@ public interface LoadWalletPort {
   /** Find active wallets by user ID */
   List<UserWallet> findWalletsByUserIdAndStatus(Long userId, WalletStatus status);
 
+  /**
+   * Load wallet information for hard deletion
+   *
+   * @param cutoffDate cutoff date for deletion
+   * @param limit batch size
+   * @return list of wallet info (id, address, userId) to delete
+   */
   List<WalletDeletionInfo> loadWalletsForDeletion(Instant cutoffDate, int limit);
 
   List<WalletDeletionInfo> findWalletsByUserIdInAndUserDeleted(List<Long> userIds);
