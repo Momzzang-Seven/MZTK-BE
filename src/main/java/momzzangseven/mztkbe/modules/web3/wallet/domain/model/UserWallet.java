@@ -21,6 +21,8 @@ public class UserWallet {
   private String walletAddress;
   private WalletStatus status;
   private Instant registeredAt;
+  private Instant unlinkedAt;
+  private Instant userDeletedAt;
 
   /**
    * Create new wallet registration
@@ -59,13 +61,32 @@ public class UserWallet {
     return status == WalletStatus.ACTIVE;
   }
 
-  /** Deactivate wallet (soft delete) */
-  public UserWallet deactivate() {
-    return this.toBuilder().status(WalletStatus.INACTIVE).build();
+  /** Deactivate wallet
+   * @return new UserWallet instance with UNLINKED status
+   * */
+  public UserWallet unlink() {
+    return this.toBuilder()
+            .status(WalletStatus.UNLINKED)
+            .unlinkedAt(Instant.now())
+            .build();
   }
 
-  /** Blacklist wallet */
-  public UserWallet blacklist() {
-    return this.toBuilder().status(WalletStatus.BLACKLISTED).build();
+  /** Mark as user deleted
+   * @return new UserWallet instance with USER_DELETED status*/
+  public UserWallet markAsUserDeleted() { return this.toBuilder()
+          .status(WalletStatus.USER_DELETED)
+          .userDeletedAt(Instant.now())
+          .build(); }
+
+
+  /** Blacklist wallet
+   * @return new UserWallet instance with BLOCKED status*/
+  public UserWallet block() {
+    return this.toBuilder().status(WalletStatus.BLOCKED).build();
   }
+
+  /** Check if wallet can be re-registered
+   * @return  true if wallet can be re-registered
+   * */
+  public boolean canBeReRegistered() { return status == WalletStatus.UNLINKED || status == WalletStatus.USER_DELETED; }
 }
