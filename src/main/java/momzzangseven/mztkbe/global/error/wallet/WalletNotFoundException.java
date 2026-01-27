@@ -10,6 +10,8 @@ public class WalletNotFoundException extends BusinessException {
   }
 
   public WalletNotFoundException(String walletAddress) {
-    super(ErrorCode.WALLET_NOT_FOUND, "Requested wallet is not found. wallet_address = " + walletAddress);
+    super(
+        ErrorCode.WALLET_NOT_FOUND,
+        "Requested wallet is not found. wallet_address = " + walletAddress);
   }
 }

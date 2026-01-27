@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.wallet.UnauthorizedWalletAccessException;
@@ -13,8 +14,6 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 /**
  * Wallet unlink service
@@ -34,15 +33,14 @@ public class UnlinkWalletService implements UnlinkWalletUseCase {
   @Override
   public void execute(UnlinkWalletCommand command) {
     log.info(
-        "Unlinking wallet: userId={}, walletAddress={}",
-        command.userId(),
-        command.walletAddress());
+        "Unlinking wallet: userId={}, walletAddress={}", command.userId(), command.walletAddress());
 
     // 1. Validate
     command.validate();
 
     // 2. Load active wallet by address
-    List<UserWallet> wallets = loadWalletPort.findWalletsByUserIdAndStatus(command.userId(), WalletStatus.ACTIVE);
+    List<UserWallet> wallets =
+        loadWalletPort.findWalletsByUserIdAndStatus(command.userId(), WalletStatus.ACTIVE);
 
     if (wallets.isEmpty()) {
       throw new WalletNotFoundException(command.walletAddress());
