@@ -1,8 +1,11 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.port.out;
 
+import java.util.List;
+
 /** Port for hard deleting user wallet */
 public interface DeleteWalletPort {
 
-  /** Delete user wallet in batch */
-  Long deleteWalletInBatch(Long walletId);
+  void deleteById(Long id);
+
+  void deleteAllByIdInBatch(List<Long> ids);
 }

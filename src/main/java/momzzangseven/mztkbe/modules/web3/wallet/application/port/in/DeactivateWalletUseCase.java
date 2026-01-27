@@ -5,7 +5,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.DeactivateWallet
 public interface DeactivateWalletUseCase {
 
   /**
-   * Delete (deactivate) wallet
+   * Delete (unlink) wallet
    *
    * @param command delete command
    */
