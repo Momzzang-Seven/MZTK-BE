@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.port.out;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
@@ -27,8 +28,21 @@ public interface LoadWalletPort {
   Optional<WalletStatus> getWalletStatus(String walletAddress);
 
   /** Count active wallets by user ID */
-  int countActiveWalletsByUserId(Long userId);
+  int countWalletsByUserIdAndStatus(Long userId, WalletStatus status);
 
   /** Find active wallets by user ID */
-  List<UserWallet> findActiveWalletsByUserId(Long userId);
+  List<UserWallet> findWalletsByUserIdAndStatus(Long userId, WalletStatus status);
+
+  List<WalletDeletionInfo> loadWalletsForDeletion(Instant cutoffDate, int limit);
+
+  List<WalletDeletionInfo> findWalletsByUserIdInAndUserDeleted(List<Long> userIds);
+
+  /**
+   * Wallet deletion info record
+   *
+   * @param id wallet ID
+   * @param walletAddress wallet address
+   * @param userId user ID
+   */
+  record WalletDeletionInfo(Long id, String walletAddress, Long userId) {}
 }

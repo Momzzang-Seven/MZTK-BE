@@ -4,12 +4,18 @@ import jakarta.persistence.*;
 import java.time.Instant;
 import lombok.*;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(
     name = "user_wallets",
+    uniqueConstraints = {
+      @UniqueConstraint(name = "uk_user_wallets_address", columnNames = "wallet_address")
+    },
     indexes = {
-      @Index(name = "unique_active_wallet_address", columnList = "wallet_address", unique = false)
+      @Index(name = "idx_user_wallets_status", columnList = "status"),
+      @Index(name = "idx_user_wallets_user_id", columnList = "user_id")
     })
 @Getter
 @Builder
@@ -32,6 +38,20 @@ public class UserWalletEntity {
 
   @Column(name = "registered_at", nullable = false)
   private Instant registeredAt;
+
+  @Column(name = "unlinked_at")
+  private Instant unlinkedAt;
+
+  @Column(name = "user_deleted_at")
+  private Instant userDeletedAt;
+
+  @CreationTimestamp
+  @Column(name = "created_at", nullable = false, updatable = false)
+  private Instant createdAt;
+
+  @UpdateTimestamp
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt;
 
   @PrePersist
   protected void onCreate() {

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.adapter;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -12,6 +13,9 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.entity.UserWalletEntity;
 import momzzangseven.mztkbe.modules.web3.wallet.infrastructure.persistence.repository.UserWalletJpaRepository;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -50,13 +54,13 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
   }
 
   @Override
-  public int countActiveWalletsByUserId(Long userId) {
-    return repository.countActiveWalletsByUserId(userId);
+  public int countWalletsByUserIdAndStatus(Long userId, WalletStatus status) {
+    return repository.countByUserIdAndStatus(userId, status);
   }
 
   @Override
-  public List<UserWallet> findActiveWalletsByUserId(Long userId) {
-    return repository.findActiveWalletsByUserId(userId).stream()
+  public List<UserWallet> findWalletsByUserIdAndStatus(Long userId, WalletStatus status) {
+    return repository.findByUserIdAndStatus(userId, status).stream()
         .map(this::mapToDomain)
         .collect(Collectors.toList());
   }
@@ -64,6 +68,18 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
   @Override
   public Optional<WalletStatus> getWalletStatus(String walletAddress) {
     return repository.findByWalletAddress(walletAddress).map(UserWalletEntity::getStatus);
+  }
+
+  @Override
+  public List<WalletDeletionInfo> loadWalletsForDeletion(Instant cutoffDate, int limit) {
+    Pageable pageable =
+        PageRequest.of(0, limit, Sort.by(Sort.Order.asc("unlinkedAt"), Sort.Order.asc("id")));
+    return repository.findWalletsForDeletion(cutoffDate, pageable);
+  }
+
+  @Override
+  public List<WalletDeletionInfo> findWalletsByUserIdInAndUserDeleted(List<Long> userIds) {
+    return repository.findWalletsByUserIdInAndUserDeleted(userIds);
   }
 
   // ====== Save Wallet Port Implementation ======//
@@ -75,14 +91,14 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
   }
 
   // ====== Delete Wallet Port Implementation ======//
+  @Override
+  public void deleteById(Long id) {
+    repository.deleteById(id);
+  }
 
   @Override
-  public Long deleteWalletInBatch(Long walletId) {
-    if (repository.existsById(walletId)) {
-      repository.deleteById(walletId);
-      return walletId;
-    }
-    return null;
+  public void deleteAllByIdInBatch(List<Long> ids) {
+    repository.deleteAllByIdInBatch(ids);
   }
 
   // ====== Mapping Methods ======//
@@ -94,6 +110,8 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
         .walletAddress(entity.getWalletAddress())
         .status(entity.getStatus())
         .registeredAt(entity.getRegisteredAt())
+        .unlinkedAt(entity.getUnlinkedAt())
+        .userDeletedAt(entity.getUserDeletedAt())
         .build();
   }
 
@@ -104,6 +122,8 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
         .walletAddress(wallet.getWalletAddress())
         .status(wallet.getStatus())
         .registeredAt(wallet.getRegisteredAt())
+        .unlinkedAt(wallet.getUnlinkedAt())
+        .userDeletedAt(wallet.getUserDeletedAt())
         .build();
   }
 }
