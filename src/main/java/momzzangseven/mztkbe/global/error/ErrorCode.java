@@ -149,7 +149,7 @@ public enum ErrorCode {
       ),
 
   WALLET_IN_BLACKLIST(
-      "WALLET_007", "Requested wallet is in blacklist", HttpStatus.BAD_REQUEST // 400
+      "WALLET_007", "Requested wallet is in block", HttpStatus.BAD_REQUEST // 400
       ),
 
   // ========================================
