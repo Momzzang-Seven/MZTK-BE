@@ -42,6 +42,12 @@ public interface LoadWalletPort {
    */
   List<WalletDeletionInfo> loadWalletsForDeletion(Instant cutoffDate, int limit);
 
+  /**
+   * Find wallet information by user IDs (for User hard delete cascade)
+   *
+   * @param userIds user IDs
+   * @return list of wallet info with USER_DELETED status
+   */
   List<WalletDeletionInfo> findWalletsByUserIdInAndUserDeleted(List<Long> userIds);
 
   /**

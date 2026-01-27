@@ -61,7 +61,7 @@ public interface UserWalletJpaRepository extends JpaRepository<UserWalletEntity,
         w.id ASC
       """)
   List<LoadWalletPort.WalletDeletionInfo> findWalletsForDeletion(
-          @Param("cutoffDate") Instant cutoffDate, Pageable pageable);
+      @Param("cutoffDate") Instant cutoffDate, Pageable pageable);
 
   /**
    * Batch delete wallets by IDs

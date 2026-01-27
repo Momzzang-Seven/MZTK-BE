@@ -6,10 +6,10 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletRequestDTO;
 import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletResponseDTO;
-import momzzangseven.mztkbe.modules.web3.wallet.application.dto.DeactivateWalletCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.UnlinkWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.DeactivateWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.UnlinkWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.*;
 public class WalletController {
 
   private final RegisterWalletUseCase registerWalletUseCase;
-  private final DeactivateWalletUseCase deactivateWalletUseCase;
+  private final UnlinkWalletUseCase unlinkWalletUseCase;
 
   /**
    * Register wallet
@@ -53,7 +53,7 @@ public class WalletController {
   }
 
   /**
-   * Deactivate wallet (soft delete)
+   * Unlink wallet
    *
    * <p>DELETE /web3/wallets/{walletAddress}
    *
@@ -62,13 +62,13 @@ public class WalletController {
    * @return 200 OK with success response
    */
   @DeleteMapping("/{walletAddress}")
-  public ResponseEntity<ApiResponse<Void>> deactivateWallet(
+  public ResponseEntity<ApiResponse<Void>> unlinkWallet(
       @AuthenticationPrincipal Long userId, @PathVariable("walletAddress") String walletAddress) {
 
     log.info("Wallet deactivation request: userId={}, walletAddress={}", userId, walletAddress);
 
-    DeactivateWalletCommand command = new DeactivateWalletCommand(userId, walletAddress);
-    deactivateWalletUseCase.execute(command);
+    UnlinkWalletCommand command = new UnlinkWalletCommand(userId, walletAddress);
+    unlinkWalletUseCase.execute(command);
 
     return ResponseEntity.ok(ApiResponse.success(null));
   }

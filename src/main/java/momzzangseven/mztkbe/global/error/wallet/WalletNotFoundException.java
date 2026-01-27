@@ -9,7 +9,7 @@ public class WalletNotFoundException extends BusinessException {
     super(ErrorCode.WALLET_NOT_FOUND);
   }
 
-  public WalletNotFoundException(Long walletId) {
-    super(ErrorCode.WALLET_NOT_FOUND, "Requested wallet id is not found. walled_id = " + walletId);
+  public WalletNotFoundException(String walletAddress) {
+    super(ErrorCode.WALLET_NOT_FOUND, "Requested wallet is not found. wallet_address = " + walletAddress);
   }
 }
