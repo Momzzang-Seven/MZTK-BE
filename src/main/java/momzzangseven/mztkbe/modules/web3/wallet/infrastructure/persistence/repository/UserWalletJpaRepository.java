@@ -39,8 +39,8 @@ public interface UserWalletJpaRepository extends JpaRepository<UserWalletEntity,
   /**
    * Load UNLINKED wallet information for scheduled hard deletion
    *
-   * <p>Only retrieves UNLINKED wallets. USER_DELETED wallets are handled
-   * by WithdrawalHardDeleteService as cascade deletion.
+   * <p>Only retrieves UNLINKED wallets. USER_DELETED wallets are handled by
+   * WithdrawalHardDeleteService as cascade deletion.
    *
    * @param cutoffDate cutoff date for deletion
    * @param pageable pagination info (for batch size limit)
