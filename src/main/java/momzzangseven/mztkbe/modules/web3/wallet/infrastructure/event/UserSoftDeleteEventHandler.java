@@ -28,6 +28,7 @@ public class UserSoftDeleteEventHandler {
   private final LoadWalletPort loadWalletPort;
   private final SaveWalletPort saveWalletPort;
   private final RecordWalletEventPort recordWalletEventPort;
+  private final jakarta.persistence.EntityManager entityManager;
 
   /**
    * Handle user soft-deleted event performs: update wallet status to USER_DELETED, and record the
@@ -58,23 +59,30 @@ public class UserSoftDeleteEventHandler {
 
     // Get user wallet, mark as USER_DELETED, and save it.
     UserWallet userWallet = wallets.get(0);
-    userWallet.markAsUserDeleted();
-    saveWalletPort.save(userWallet);
+    UserWallet updatedWallet = userWallet.markAsUserDeleted();
+    saveWalletPort.save(updatedWallet);
+    entityManager.flush();
+
+    log.info(
+        "Marked wallet as USER_DELETED: walletId={}, userId={}, address={}",
+        updatedWallet.getId(),
+        updatedWallet.getUserId(),
+        updatedWallet.getWalletAddress());
 
     // Record event
     recordWalletEventPort.record(
         WalletEvent.userDeleted(
-            userWallet.getWalletAddress(),
-            userWallet.getUserId(),
+            updatedWallet.getWalletAddress(),
+            updatedWallet.getUserId(),
             Map.of(
                 "source", "event_handler",
                 "action", "user_withdrawal",
-                "user_id", userWallet.getUserId())));
+                "user_id", updatedWallet.getUserId())));
 
     log.info(
-        "Marked wallet as USER_DELETED: walletId={}, userId={}, address={}",
-        userWallet.getId(),
-        userWallet.getUserId(),
-        userWallet.getWalletAddress());
+        "Record wallet event as USER_DELETED: walletId={}, userId={}, address={}",
+        updatedWallet.getId(),
+        updatedWallet.getUserId(),
+        updatedWallet.getWalletAddress());
   }
 }
