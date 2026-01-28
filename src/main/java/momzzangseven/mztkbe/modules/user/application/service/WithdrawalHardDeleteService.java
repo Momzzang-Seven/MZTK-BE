@@ -12,7 +12,9 @@ import momzzangseven.mztkbe.modules.user.application.config.WithdrawalHardDelete
 import momzzangseven.mztkbe.modules.user.application.port.out.DeleteUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.ExternalDisconnectTaskPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
+import momzzangseven.mztkbe.modules.user.domain.event.UsersHardDeletedEvent;
 import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,7 @@ public class WithdrawalHardDeleteService {
   private final DeleteRefreshTokenPort deleteRefreshTokenPort;
   private final DeleteUserLevelDataUseCase deleteUserLevelDataUseCase;
   private final WithdrawalHardDeleteProperties props;
+  private final ApplicationEventPublisher eventPublisher;
 
   /**
    * Run one hard-delete batch.
@@ -58,6 +61,9 @@ public class WithdrawalHardDeleteService {
     if (userIds.isEmpty()) {
       return 0;
     }
+
+    // Publish user hard-delete event, trigger USER_DELETED wallets to be hard deleted.
+    eventPublisher.publishEvent(new UsersHardDeletedEvent(userIds));
 
     deleteUserLevelDataUseCase.execute(new DeleteUserLevelDataCommand(userIds));
 
