@@ -108,3 +108,9 @@ web3:
     domain-version: "1"
     chain-id: 11155111  # Sepolia testnet
     verifying-contract: "0xcccccccccccccccccccccccccccccccccccccccc"
+  wallet:
+    hard-delete:
+      retention-days: 30
+      batch-size: 200
+      cron: "0 0 4 * * *"  # Every day 4 am
+      zone: "Asia/Seoul"

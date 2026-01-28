@@ -37,11 +37,14 @@ public interface UserWalletJpaRepository extends JpaRepository<UserWalletEntity,
       @Param("userId") Long userId, @Param("status") WalletStatus status);
 
   /**
-   * Load wallet information for hard deletion
+   * Load UNLINKED wallet information for scheduled hard deletion
+   *
+   * <p>Only retrieves UNLINKED wallets. USER_DELETED wallets are handled
+   * by WithdrawalHardDeleteService as cascade deletion.
    *
    * @param cutoffDate cutoff date for deletion
    * @param pageable pagination info (for batch size limit)
-   * @return list of wallet info (id, address, userId) to delete
+   * @return list of UNLINKED wallet info (id, address, userId) to delete
    */
   @Query(
       """
@@ -49,16 +52,9 @@ public interface UserWalletJpaRepository extends JpaRepository<UserWalletEntity,
           w.id, w.walletAddress, w.userId
       )
       FROM UserWalletEntity w
-      WHERE (
-          (w.status = momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus.UNLINKED
-           AND w.unlinkedAt <= :cutoffDate)
-          OR
-          (w.status = momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus.USER_DELETED
-           AND w.userDeletedAt <= :cutoffDate)
-        )
-      ORDER BY
-        COALESCE(w.unlinkedAt, w.userDeletedAt) ASC,
-        w.id ASC
+      WHERE w.status = momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus.UNLINKED
+        AND w.unlinkedAt <= :cutoffDate
+      ORDER BY w.unlinkedAt ASC, w.id ASC
       """)
   List<LoadWalletPort.WalletDeletionInfo> findWalletsForDeletion(
       @Param("cutoffDate") Instant cutoffDate, Pageable pageable);
