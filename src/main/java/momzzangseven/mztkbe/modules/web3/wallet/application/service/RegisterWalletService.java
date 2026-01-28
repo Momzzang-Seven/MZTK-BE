@@ -49,6 +49,7 @@ public class RegisterWalletService implements RegisterWalletUseCase {
   private final SaveWalletPort saveWalletPort;
   private final DeleteWalletPort deleteWalletPort;
   private final RecordWalletEventPort eventPort;
+  private final jakarta.persistence.EntityManager entityManager;
 
   @Override
   public RegisterWalletResult execute(RegisterWalletCommand command) {
@@ -211,6 +212,13 @@ public class RegisterWalletService implements RegisterWalletUseCase {
 
     // 5. Delete old record
     deleteWalletPort.deleteById(existingWallet.getId());
+
+    // 5-1. Force flush to execute DELETE immediately before INSERT
+    // This prevents unique constraint violation when re-registering the same wallet address
+    entityManager.flush();
+    log.debug(
+        "Flushed DELETE operation for wallet re-registration: address={}",
+        existingWallet.getWalletAddress());
 
     // 6. Record HARD_DELETED event
     eventPort.record(

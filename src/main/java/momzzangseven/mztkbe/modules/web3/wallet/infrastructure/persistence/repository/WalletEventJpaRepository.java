@@ -20,6 +20,15 @@ public interface WalletEventJpaRepository extends JpaRepository<WalletEventEntit
       """)
   List<WalletEventEntity> findByWalletAddress(@Param("address") String address);
 
+  /** Find events by wallet address (ordered by occurred_at ASC for E2E tests) */
+  @Query(
+      """
+      SELECT e FROM WalletEventEntity e
+      WHERE e.walletAddress = :address
+      ORDER BY e.occurredAt ASC
+      """)
+  List<WalletEventEntity> findByWalletAddressOrderByOccurredAtAsc(@Param("address") String address);
+
   /** Find events by wallet address with pagination */
   @Query(
       """
