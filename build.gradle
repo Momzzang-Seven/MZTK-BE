@@ -60,6 +60,9 @@ dependencies {
     // Web3 (Ethereum interaction)
     implementation 'org.web3j:core:4.10.3'
 
+    // Jackson for JSON processing (EIP-712 JSON conversion)
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
     // Database
     runtimeOnly 'org.postgresql:postgresql'
 
@@ -69,6 +72,8 @@ dependencies {
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'io.rest-assured:rest-assured:5.3.0'
+    testImplementation 'io.rest-assured:json-path:5.3.0'
     testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

@@ -1,42 +1,36 @@
-package momzzangseven.mztkbe.modules.web3.challenge.application.dto;
+package momzzangseven.mztkbe.modules.web3.wallet.application.dto;
 
-import momzzangseven.mztkbe.modules.web3.challenge.domain.model.ChallengePurpose;
 import org.web3j.crypto.WalletUtils;
 
 /**
- * Command for creating challenge.
+ * Command for unlinking wallet
+ *
+ * <p>Uses walletAddress instead of walletId for better RESTful API design.
  *
  * <p>Wallet address is automatically normalized to lowercase on creation for consistency.
- *
- * @param userId
- * @param purpose
- * @param walletAddress
  */
-public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, String walletAddress) {
+public record UnlinkWalletCommand(Long userId, String walletAddress) {
 
   /**
    * Canonical constructor with wallet address normalization
    *
    * <p>Converts wallet address to lowercase for consistency across the system.
    */
-  public CreateChallengeCommand {
+  public UnlinkWalletCommand {
     // Normalize wallet address to lowercase if not null
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();
     }
   }
 
-  /** Validation method */
   public void validate() {
     if (userId == null || userId <= 0) {
       throw new IllegalArgumentException("User ID must be positive");
     }
-    if (purpose == null) {
-      throw new IllegalArgumentException("Purpose must not be null");
-    }
     if (walletAddress == null || walletAddress.isBlank()) {
       throw new IllegalArgumentException("Wallet address must not be blank");
     }
+    // Validate Ethereum address format using Web3j
     if (!isValidEthereumAddress(walletAddress)) {
       throw new IllegalArgumentException("Invalid Ethereum address format");
     }
