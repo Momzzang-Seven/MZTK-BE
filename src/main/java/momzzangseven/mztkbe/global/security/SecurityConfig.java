@@ -96,6 +96,10 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/web3/challenges")
                     .authenticated()
+                    .requestMatchers(HttpMethod.POST, "web3/wallets")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "web3/wallets/")
+                    .authenticated()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
 
