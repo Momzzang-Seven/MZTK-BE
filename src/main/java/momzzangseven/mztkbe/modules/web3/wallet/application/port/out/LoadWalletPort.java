@@ -48,7 +48,7 @@ public interface LoadWalletPort {
    * @param userIds user IDs
    * @return list of wallet info with USER_DELETED status
    */
-  List<WalletDeletionInfo> findWalletsByUserIdInAndUserDeleted(List<Long> userIds);
+  List<WalletDeletionInfo> findWalletsByUserIdAndUserDeleted(List<Long> userIds);
 
   /**
    * Wallet deletion info record
