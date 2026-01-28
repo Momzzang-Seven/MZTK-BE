@@ -107,10 +107,7 @@ public class WalletHardDeleteService {
 
     // Record event
     recordEvent(
-        wallets,
-        props.getRetentionDays(),
-        WalletStatus.USER_DELETED,
-        "user_hard_delete_cascade");
+        wallets, props.getRetentionDays(), WalletStatus.USER_DELETED, "user_hard_delete_cascade");
 
     // Batch hard-deletion
     List<Long> walletIds = wallets.stream().map(LoadWalletPort.WalletDeletionInfo::id).toList();

@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
 import java.util.List;
 import java.util.Map;
-
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.wallet.UnauthorizedWalletAccessException;
@@ -66,12 +65,12 @@ public class UnlinkWalletService implements UnlinkWalletUseCase {
 
     // 5. Record the event
     eventPort.record(
-            WalletEvent.unlinked(
-                    savedWallet.getWalletAddress(),
-                    savedWallet.getUserId(),
-                    Map.of(
-                            "source", "application",
-                            "action", "unlink the wallet")));
+        WalletEvent.unlinked(
+            savedWallet.getWalletAddress(),
+            savedWallet.getUserId(),
+            Map.of(
+                "source", "application",
+                "action", "unlink the wallet")));
 
     log.info(
         "Wallet unlinked successfully: walletId={}, walletAddress={}, userId={}",
