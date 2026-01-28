@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
 import java.util.List;
+import java.util.Map;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.wallet.UnauthorizedWalletAccessException;
@@ -11,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletP
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.RecordWalletEventPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SaveWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletEvent;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -59,7 +62,16 @@ public class UnlinkWalletService implements UnlinkWalletUseCase {
 
     // 4. Unlink the wallet (soft delete)
     UserWallet unlinkedWallet = wallet.unlink();
-    saveWalletPort.save(unlinkedWallet);
+    UserWallet savedWallet = saveWalletPort.save(unlinkedWallet);
+
+    // 5. Record the event
+    eventPort.record(
+            WalletEvent.unlinked(
+                    savedWallet.getWalletAddress(),
+                    savedWallet.getUserId(),
+                    Map.of(
+                            "source", "application",
+                            "action", "unlink the wallet")));
 
     log.info(
         "Wallet unlinked successfully: walletId={}, walletAddress={}, userId={}",

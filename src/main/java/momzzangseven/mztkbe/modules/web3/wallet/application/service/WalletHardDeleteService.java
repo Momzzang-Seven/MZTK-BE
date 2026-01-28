@@ -66,7 +66,7 @@ public class WalletHardDeleteService {
     }
 
     // record event
-    recordEvent(wallets, retentionDays, cutoff, WalletStatus.UNLINKED, "scheduled_cleanup");
+    recordEvent(wallets, retentionDays, WalletStatus.UNLINKED, "scheduled_cleanup");
 
     // Batch hard-deletion
     List<Long> walletIds = wallets.stream().map(LoadWalletPort.WalletDeletionInfo::id).toList();
@@ -98,7 +98,7 @@ public class WalletHardDeleteService {
 
     // Load USER_DELETED wallets for given users
     List<LoadWalletPort.WalletDeletionInfo> wallets =
-        loadWalletPort.findWalletsByUserIdInAndUserDeleted(userIds);
+        loadWalletPort.findWalletsByUserIdAndUserDeleted(userIds);
 
     if (wallets.isEmpty()) {
       log.info("No USER_DELETED wallets found for users: count={}", userIds.size());
@@ -109,7 +109,6 @@ public class WalletHardDeleteService {
     recordEvent(
         wallets,
         props.getRetentionDays(),
-        null,
         WalletStatus.USER_DELETED,
         "user_hard_delete_cascade");
 
@@ -127,7 +126,6 @@ public class WalletHardDeleteService {
   private void recordEvent(
       List<LoadWalletPort.WalletDeletionInfo> wallets,
       int retentionDays,
-      Instant cutoff,
       WalletStatus previousStatus,
       String action) {
     // Record event
@@ -145,9 +143,7 @@ public class WalletHardDeleteService {
                             "action",
                             action,
                             "retention_days",
-                            retentionDays,
-                            "cutoff",
-                            cutoff.toString())))
+                            retentionDays)))
             .toList();
 
     recordWalletEventPort.recordBatch(events);

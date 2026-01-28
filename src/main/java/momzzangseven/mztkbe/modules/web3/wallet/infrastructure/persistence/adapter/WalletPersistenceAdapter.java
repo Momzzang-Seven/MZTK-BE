@@ -78,7 +78,7 @@ public class WalletPersistenceAdapter implements LoadWalletPort, SaveWalletPort,
   }
 
   @Override
-  public List<WalletDeletionInfo> findWalletsByUserIdInAndUserDeleted(List<Long> userIds) {
+  public List<WalletDeletionInfo> findWalletsByUserIdAndUserDeleted(List<Long> userIds) {
     return repository.findWalletsByUserIdInAndUserDeleted(userIds);
   }
 
