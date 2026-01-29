@@ -36,7 +36,8 @@ public class SecurityConfig {
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
 
-    config.setAllowedOrigins(List.of("https://mztk.vercel.app", "http://localhost:5173"));
+    config.setAllowedOrigins(
+        List.of("https://mztk.vercel.app", "http://localhost:5173", "http://localhost:3000"));
 
     config.setAllowCredentials(true);
 
