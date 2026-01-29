@@ -1,0 +1,31 @@
+package momzzangseven.mztkbe.modules.web3.wallet.domain.model;
+
+/**
+ * Wallet status enum
+ *
+ * <p>Status Flow:
+ *
+ * <ul>
+ *   <li>ACTIVE → UNLINKED (User unlink his wallet by himself)
+ *   <li>ACTIVE → USER_DELETED (User withdraw)
+ *   <li>ACTIVE → BLOCKED (Blocked by admin)
+ *   <li>UNLINKED → HARD_DELETED (Hard deleted by wallet hard delete scheduler)
+ *   <li>USER_DELETED → HARD_DELETED (Hard deleted by user hard delete scheduler)
+ * </ul>
+ */
+public enum WalletStatus {
+  /** Active and usable */
+  ACTIVE,
+
+  /** Unlinked by user himself */
+  UNLINKED,
+
+  /** User deleted */
+  USER_DELETED,
+
+  /** Blacklisted by admin */
+  BLOCKED,
+
+  /** Hard deleted by scheduler */
+  HARD_DELETED
+}

@@ -36,7 +36,8 @@ public class SecurityConfig {
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
 
-    config.setAllowedOrigins(List.of("https://mztk.vercel.app", "http://localhost:5173"));
+    config.setAllowedOrigins(
+        List.of("https://mztk.vercel.app", "http://localhost:5173", "http://localhost:3000"));
 
     config.setAllowCredentials(true);
 
@@ -95,6 +96,10 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/users/me/level-ups")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/web3/challenges")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "web3/wallets")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "web3/wallets/")
                     .authenticated()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
