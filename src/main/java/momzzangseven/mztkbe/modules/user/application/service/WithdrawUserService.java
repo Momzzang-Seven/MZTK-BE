@@ -9,7 +9,9 @@ import momzzangseven.mztkbe.modules.user.application.dto.WithdrawUserCommand;
 import momzzangseven.mztkbe.modules.user.application.port.in.WithdrawUserUseCase;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
+import momzzangseven.mztkbe.modules.user.domain.event.UserSoftDeletedEvent;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,7 @@ public class WithdrawUserService implements WithdrawUserUseCase {
   private final SaveUserPort saveUserPort;
   private final DeleteRefreshTokenPort deleteRefreshTokenPort;
   private final ExternalDisconnectService externalDisconnectService;
+  private final ApplicationEventPublisher eventPublisher;
 
   @Override
   public void execute(WithdrawUserCommand command) {
@@ -37,6 +40,9 @@ public class WithdrawUserService implements WithdrawUserUseCase {
 
     // External provider disconnection is best-effort. Failures must not rollback withdrawal.
     externalDisconnectService.disconnectOnWithdrawal(withdrawnUser);
+
+    // Publish user soft-deleted event, trigger registered wallet to be USER_DELETED status.
+    eventPublisher.publishEvent(new UserSoftDeletedEvent(user.getId()));
 
     log.info(
         "User withdrawal completed: userId={}, provider={}", user.getId(), user.getAuthProvider());
