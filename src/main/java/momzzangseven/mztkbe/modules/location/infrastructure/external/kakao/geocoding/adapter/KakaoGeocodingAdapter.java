@@ -73,7 +73,7 @@ public class KakaoGeocodingAdapter implements GeocodingPort {
   public AddressInfo reverseGeocode(double longitude, double latitude)
       throws ReverseGeocodingFailedException {
 
-    log.info("Reverse geocoding coordinates: lat={}, lng={}", longitude, latitude);
+    log.info("Reverse geocoding coordinates: lng={}, lat={}", longitude, latitude);
 
     try {
       // Call Kakao API (NOTE: Must hand over in order longitude(x) followed by latitude(y))

@@ -1,7 +1,5 @@
 package momzzangseven.mztkbe.modules.location.infrastructure.external.kakao.geocoding.client;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -28,24 +26,32 @@ public class KakaoGeocodingClient {
    */
   public KakaoGeocodingResponse geocode(String address) {
     try {
-      String encodedAddress = URLEncoder.encode(address, StandardCharsets.UTF_8);
-      String path = geocodingConfig.getAddressSearchPath() + "?query=" + encodedAddress;
-
       log.debug("Kakao Geocoding API Request: address={}", address);
 
       KakaoGeocodingResponse response =
-          kakaoRestClient.get().uri(path).retrieve().body(KakaoGeocodingResponse.class);
+          kakaoRestClient
+              .get()
+              .uri(
+                  uriBuilder ->
+                      uriBuilder
+                          .path(geocodingConfig.getAddressSearchPath())
+                          .queryParam("query", address) // Spring이 자동 인코딩
+                          .build())
+              .retrieve()
+              .body(KakaoGeocodingResponse.class);
 
-      log.debug(
-          "Kakao Geocoding API Response: totalCount={}",
-          response != null && response.getMeta() != null ? response.getMeta().getTotalCount() : 0);
+      if (response != null && response.getMeta() != null) {
+        log.debug(
+            "Kakao Geocoding API Response: totalCount={}", response.getMeta().getTotalCount());
+      }
 
       return response;
 
     } catch (Exception e) {
       log.error("Kakao Geocoding API call failed: address={}", address, e);
       throw new BusinessException(
-          ErrorCode.EXTERNAL_API_ERROR, "Failed to call Kakao Geocoding API");
+          ErrorCode.EXTERNAL_API_ERROR,
+          "Failed to call Kakao Geocoding API for address: " + address);
     }
   }
 
@@ -58,23 +64,37 @@ public class KakaoGeocodingClient {
    */
   public KakaoReverseGeocodingResponse reverseGeocode(double longitude, double latitude) {
     try {
-      String path = geocodingConfig.getCoordToAddressPath() + "?x=" + longitude + "&y=" + latitude;
-
       log.debug("Kakao Reverse Geocoding API Request: lng={}, lat={}", longitude, latitude);
 
       KakaoReverseGeocodingResponse response =
-          kakaoRestClient.get().uri(path).retrieve().body(KakaoReverseGeocodingResponse.class);
+          kakaoRestClient
+              .get()
+              .uri(
+                  uriBuilder ->
+                      uriBuilder
+                          .path(geocodingConfig.getCoordToAddressPath())
+                          .queryParam("x", longitude)
+                          .queryParam("y", latitude)
+                          .build())
+              .retrieve()
+              .body(KakaoReverseGeocodingResponse.class);
 
-      log.debug(
-          "Kakao Reverse Geocoding API Response: totalCount={}",
-          response != null && response.getMeta() != null ? response.getMeta().getTotalCount() : 0);
+      if (response != null && response.getMeta() != null) {
+        log.debug(
+            "Kakao Reverse Geocoding API Response: totalCount={}",
+            response.getMeta().getTotalCount());
+      }
 
       return response;
 
     } catch (Exception e) {
       log.error("Kakao Reverse Geocoding API call failed: lng={}, lat={}", longitude, latitude, e);
       throw new BusinessException(
-          ErrorCode.EXTERNAL_API_ERROR, "Failed to call Kakao Reverse Geocoding API");
+          ErrorCode.EXTERNAL_API_ERROR,
+          "Failed to call Kakao Reverse Geocoding API for coordinates: "
+              + longitude
+              + ", "
+              + latitude);
     }
   }
 }

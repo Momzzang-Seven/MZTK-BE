@@ -36,10 +36,10 @@ public class LocationEntity {
   @Column(name = "detail_address")
   private String detailAddress;
 
-  @Column(name = "latitude", nullable = false, precision = 10, scale = 7)
+  @Column(name = "latitude", nullable = false)
   private Double latitude;
 
-  @Column(name = "longitude", nullable = false, precision = 10, scale = 7)
+  @Column(name = "longitude", nullable = false)
   private Double longitude;
 
   @Column(name = "registered_at", nullable = false)

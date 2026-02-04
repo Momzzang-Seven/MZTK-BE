@@ -101,6 +101,8 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "web3/wallets/")
                     .authenticated()
+                    .requestMatchers(HttpMethod.POST, "users/me/locations/register")
+                    .authenticated()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
 

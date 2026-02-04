@@ -37,13 +37,7 @@ public class RegisterLocationService implements RegisterLocationUseCase {
 
     // Create Location domain model
     Location location =
-        Location.create(
-            command.userId(),
-            command.locationName(),
-            command.postalCode(),
-            command.address(),
-            command.detailAddress(),
-            coordinate);
+        Location.create(command.userId(), command.locationName(), coordinate, address);
 
     // Save the location object
     Location savedLocation = saveLocationPort.save(location);
@@ -83,7 +77,7 @@ public class RegisterLocationService implements RegisterLocationUseCase {
       // If address info is provided, use it as it is
 
       log.debug("Using provided address: {}", command.address());
-      return new AddressData(command.postalCode(), command.address(), command.detailAddress());
+      return new AddressData(command.address(), command.postalCode(), command.detailAddress());
     }
 
     // If only GPS is provided, reverse-geocoding
@@ -92,9 +86,9 @@ public class RegisterLocationService implements RegisterLocationUseCase {
         coordinate.getLatitude(),
         coordinate.getLongitude());
     AddressInfo addressInfo =
-        geocodingPort.reverseGeocode(coordinate.getLatitude(), coordinate.getLongitude());
+        geocodingPort.reverseGeocode(coordinate.getLongitude(), coordinate.getLatitude());
 
     return new AddressData(
-        addressInfo.postalCode(), addressInfo.address(), command.detailAddress());
+        addressInfo.address(), addressInfo.postalCode(), command.detailAddress());
   }
 }
