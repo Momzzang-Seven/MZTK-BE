@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.location.application.dto;
 
+import lombok.Builder;
 import momzzangseven.mztkbe.global.error.location.MissingLocationInfoException;
+import momzzangseven.mztkbe.modules.location.api.dto.RegisterLocationRequestDTO;
 
 /**
  * Command for Location Registration Input parameter of Service
@@ -13,6 +15,7 @@ import momzzangseven.mztkbe.global.error.location.MissingLocationInfoException;
  * @param latitude
  * @param longitude
  */
+@Builder
 public record RegisterLocationCommand(
     Long userId,
     String locationName,
@@ -22,6 +25,18 @@ public record RegisterLocationCommand(
     Double latitude, // nullable (if address and postalCode is provided)
     Double longitude // nullable (if address and postalCode is provided)
     ) {
+
+  public static RegisterLocationCommand from(Long userId, RegisterLocationRequestDTO request){
+    return RegisterLocationCommand.builder()
+            .userId(userId)
+            .locationName(request.locationName())
+            .postalCode(request.postalCode())
+            .address(request.address())
+            .detailAddress(request.detailAddress())
+            .latitude(request.latitude())
+            .longitude(request.longitude())
+            .build();
+  }
 
   /** Validate the input command Either address or GPS coordinates must be provided */
   public void validate() {
