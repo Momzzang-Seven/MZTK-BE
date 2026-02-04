@@ -40,6 +40,12 @@ kakao:
     userinfo-uri: https://kapi.kakao.com/v2/user/me
     unlink-uri: https://kapi.kakao.com/v1/user/unlink
     admin-key: ${KAKAO_ADMIN_KEY}
+    rest-api-key: ${KAKAO_REST_API_KEY}
+    geo-coding:
+      base-url: https://dapi.kakao.com
+      address-search-path: /v2/local/search/address.json
+      coord-to-address-path: /v2/local/geo/coord2address.json
+      timeout: 5000
 google:
   oauth:
     client-id: ${GOOGLE_CLIENT_ID}
