@@ -18,35 +18,31 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 public class LocationController {
-    private final RegisterLocationUseCase registerLocationUseCase;
+  private final RegisterLocationUseCase registerLocationUseCase;
 
-    /**
-     * 위치 등록
-     * POST /users/me/locations/register
-     */
-    @PostMapping("/users/me/locations/register")
-    public ResponseEntity<ApiResponse<RegisterLocationResponseDTO>> registerLocation(
-            @Valid @RequestBody RegisterLocationRequestDTO request,
-            @AuthenticationPrincipal Long userId
-    ) {
-        userId = requireUserId(userId);
+  /** 위치 등록 POST /users/me/locations/register */
+  @PostMapping("/users/me/locations/register")
+  public ResponseEntity<ApiResponse<RegisterLocationResponseDTO>> registerLocation(
+      @Valid @RequestBody RegisterLocationRequestDTO request,
+      @AuthenticationPrincipal Long userId) {
+    userId = requireUserId(userId);
 
-        // Create Command
-        RegisterLocationCommand command = RegisterLocationCommand.from(userId, request);
+    // Create Command
+    RegisterLocationCommand command = RegisterLocationCommand.from(userId, request);
 
-        // Call Service
-        RegisterLocationResult result = registerLocationUseCase.execute(command);
+    // Call Service
+    RegisterLocationResult result = registerLocationUseCase.execute(command);
 
-        // Response
-        RegisterLocationResponseDTO response = RegisterLocationResponseDTO.from(result);
+    // Response
+    RegisterLocationResponseDTO response = RegisterLocationResponseDTO.from(result);
 
-        return ResponseEntity.ok(ApiResponse.success(response));
+    return ResponseEntity.ok(ApiResponse.success(response));
+  }
+
+  private Long requireUserId(Long userId) {
+    if (userId == null) {
+      throw new UserNotAuthenticatedException();
     }
-
-    private Long requireUserId(Long userId) {
-        if (userId == null) {
-            throw new UserNotAuthenticatedException();
-        }
-        return userId;
-    }
+    return userId;
+  }
 }

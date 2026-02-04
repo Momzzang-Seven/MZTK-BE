@@ -26,16 +26,16 @@ public record RegisterLocationCommand(
     Double longitude // nullable (if address and postalCode is provided)
     ) {
 
-  public static RegisterLocationCommand from(Long userId, RegisterLocationRequestDTO request){
+  public static RegisterLocationCommand from(Long userId, RegisterLocationRequestDTO request) {
     return RegisterLocationCommand.builder()
-            .userId(userId)
-            .locationName(request.locationName())
-            .postalCode(request.postalCode())
-            .address(request.address())
-            .detailAddress(request.detailAddress())
-            .latitude(request.latitude())
-            .longitude(request.longitude())
-            .build();
+        .userId(userId)
+        .locationName(request.locationName())
+        .postalCode(request.postalCode())
+        .address(request.address())
+        .detailAddress(request.detailAddress())
+        .latitude(request.latitude())
+        .longitude(request.longitude())
+        .build();
   }
 
   /** Validate the input command Either address or GPS coordinates must be provided */
