@@ -183,6 +183,8 @@ public enum ErrorCode {
   // ========================================
   COORDINATE_INVALID("Location_001", "Coordinate is invalid", HttpStatus.BAD_REQUEST),
 
+  GEOCODING_FAILED("Location_002", "Geocoding is failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
   // ========================================
   // Validation Errors (VALIDATION_xxx)
   // ========================================
