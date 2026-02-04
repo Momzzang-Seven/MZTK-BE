@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.modules.location.domain.vo.AddressData;
 import momzzangseven.mztkbe.modules.location.domain.vo.GpsCoordinate;
 
 /** Domain model for location - contains business logic - independent of infrastructure layer */
@@ -23,18 +24,13 @@ public class Location {
 
   /** Factory method */
   public static Location create(
-      Long userId,
-      String locationName,
-      String postalCode,
-      String address,
-      String detailAddress,
-      GpsCoordinate coordinate) {
+      Long userId, String locationName, GpsCoordinate coordinate, AddressData addressData) {
     return Location.builder()
         .userId(userId)
         .locationName(locationName)
-        .postalCode(postalCode)
-        .address(address)
-        .detailAddress(detailAddress)
+        .postalCode(addressData.getPostalCode())
+        .address(addressData.getAddress())
+        .detailAddress(addressData.getDetailedAddress())
         .coordinate(coordinate)
         .registeredAt(Instant.now())
         .build();
