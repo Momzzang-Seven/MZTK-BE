@@ -2,14 +2,12 @@ package momzzangseven.mztkbe.modules.location.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.location.application.dto.GeoCoordinates;
-import momzzangseven.mztkbe.modules.location.application.dto.LocationItem;
-import momzzangseven.mztkbe.modules.location.application.dto.RegisterLocationCommand;
-import momzzangseven.mztkbe.modules.location.application.dto.RegisterLocationResult;
+import momzzangseven.mztkbe.modules.location.application.dto.*;
 import momzzangseven.mztkbe.modules.location.application.port.in.RegisterLocationUseCase;
 import momzzangseven.mztkbe.modules.location.application.port.out.GeocodingPort;
 import momzzangseven.mztkbe.modules.location.application.port.out.SaveLocationPort;
 import momzzangseven.mztkbe.modules.location.domain.model.Location;
+import momzzangseven.mztkbe.modules.location.domain.vo.AddressData;
 import momzzangseven.mztkbe.modules.location.domain.vo.GpsCoordinate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,8 +26,14 @@ public class RegisterLocationService implements RegisterLocationUseCase {
   public RegisterLocationResult execute(RegisterLocationCommand command) {
     log.info("Registering location for user: {}", command.userId());
 
-    // Confirm GPS coordinates: Use it if provided, o.w, Geocoding
+    // validate the command
+    command.validate();
+
+    // Confirm GPS information (provided or geocoding)
     GpsCoordinate coordinate = resolveGpsCoordinate(command);
+
+    // Confirm address information (provided or reverse-geocoding)
+    AddressData address = resolveAddress(command, coordinate);
 
     // Create Location domain model
     Location location =
@@ -50,9 +54,7 @@ public class RegisterLocationService implements RegisterLocationUseCase {
     return RegisterLocationResult.from(item, command.userId());
   }
 
-  /**
-   * Confirm GPS coordinates - Use it as it is, if provided. - If not provided, call Geocoding API.
-   */
+  /** Confirm GPS coordinates - Use it as it is, if provided. o.w, call Geocoding API. */
   private GpsCoordinate resolveGpsCoordinate(RegisterLocationCommand command) {
     if (command.latitude() != null && command.longitude() != null) {
       log.debug(
@@ -64,8 +66,35 @@ public class RegisterLocationService implements RegisterLocationUseCase {
 
     log.debug(
         "GPS coordinates not provided, calling Geocoding API for address: {}", command.address());
-    GeoCoordinates geoCoordinates = geocodingPort.convertAddressToCoordinates(command.address());
+    CoordinatesInfo coordinatesInfo = geocodingPort.geocode(command.address());
 
-    return new GpsCoordinate(geoCoordinates.latitude(), geoCoordinates.longitude());
+    return new GpsCoordinate(coordinatesInfo.latitude(), coordinatesInfo.longitude());
+  }
+
+  /**
+   * Confirm address information - Use it as it is, if provided, o.w, call Reverse-Geocoding API.
+   *
+   * @param command
+   * @param coordinate
+   * @return
+   */
+  private AddressData resolveAddress(RegisterLocationCommand command, GpsCoordinate coordinate) {
+    if (command.hasAddressInfo()) {
+      // If address info is provided, use it as it is
+
+      log.debug("Using provided address: {}", command.address());
+      return new AddressData(command.postalCode(), command.address(), command.detailAddress());
+    }
+
+    // If only GPS is provided, reverse-geocoding
+    log.debug(
+        "Address not provided, reverse geocoding coordinates: lat={}, lng={}",
+        coordinate.getLatitude(),
+        coordinate.getLongitude());
+    AddressInfo addressInfo =
+        geocodingPort.reverseGeocode(coordinate.getLatitude(), coordinate.getLongitude());
+
+    return new AddressData(
+        addressInfo.postalCode(), addressInfo.address(), command.detailAddress());
   }
 }
