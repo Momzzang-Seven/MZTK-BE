@@ -3,12 +3,12 @@ package momzzangseven.mztkbe.global.error.location;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 
-public class GeoCodingFailedException extends BusinessException {
-  public GeoCodingFailedException() {
+public class GeocodingFailedException extends BusinessException {
+  public GeocodingFailedException() {
     super(ErrorCode.GEOCODING_FAILED);
   }
 
-  public GeoCodingFailedException(String message) {
+  public GeocodingFailedException(String message) {
     super(ErrorCode.GEOCODING_FAILED, message);
   }
 }

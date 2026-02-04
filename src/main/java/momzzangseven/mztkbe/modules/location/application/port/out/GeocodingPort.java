@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.location.application.port.out;
 
-import momzzangseven.mztkbe.global.error.location.GeoCodingFailedException;
-import momzzangseven.mztkbe.global.error.location.ReverseGeoCodingFailedException;
+import momzzangseven.mztkbe.global.error.location.GeocodingFailedException;
+import momzzangseven.mztkbe.global.error.location.ReverseGeocodingFailedException;
 import momzzangseven.mztkbe.modules.location.application.dto.AddressInfo;
 import momzzangseven.mztkbe.modules.location.application.dto.CoordinatesInfo;
 
@@ -13,18 +13,18 @@ public interface GeocodingPort {
    *
    * @param address
    * @return CoordinatesInfo object
-   * @throws GeoCodingFailedException
+   * @throws GeocodingFailedException
    */
-  CoordinatesInfo geocode(String address) throws GeoCodingFailedException;
+  CoordinatesInfo geocode(String address) throws GeocodingFailedException;
 
   /**
    * Convert GPS coordinates to address (Reverse Geocoding)
    *
-   * @param latitude
    * @param longitude
+   * @param latitude
    * @return Address Info (address, postalCode)
-   * @throws ReverseGeoCodingFailedException
+   * @throws ReverseGeocodingFailedException
    */
-  AddressInfo reverseGeocode(double latitude, double longitude)
-      throws ReverseGeoCodingFailedException;
+  AddressInfo reverseGeocode(double longitude, double latitude)
+      throws ReverseGeocodingFailedException;
 }
