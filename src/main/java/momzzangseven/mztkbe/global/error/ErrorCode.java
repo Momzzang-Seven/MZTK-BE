@@ -171,12 +171,17 @@ public enum ErrorCode {
   CHALLENGE_USERID_MISMATCH("CHALLENGE_005", "User id mismatch", HttpStatus.UNAUTHORIZED),
 
   // ========================================
-  // Validation Errors (VALIDATION_xxx)
+  // Signature Errors (SIGNATURE_XXX)
   // ========================================
 
   SIGNATURE_INVALID(
       "SIGNATURE_001", "Invalid signature", HttpStatus.BAD_REQUEST // 400
       ),
+
+  // ========================================
+  // Location Errors (LOCATION_xxx)
+  // ========================================
+  COORDINATE_INVALID("Location_001", "Coordinate is invalid", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Validation Errors (VALIDATION_xxx)
