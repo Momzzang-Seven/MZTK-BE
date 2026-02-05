@@ -1,18 +1,16 @@
-package momzzangseven.mztkbe.modules.location.infrastructure.pesistence.adapter;
+package momzzangseven.mztkbe.modules.location.infrastructure.persistence.adapter;
 
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.location.application.port.out.LoadLocationPort;
 import momzzangseven.mztkbe.modules.location.application.port.out.SaveLocationPort;
 import momzzangseven.mztkbe.modules.location.domain.model.Location;
-import momzzangseven.mztkbe.modules.location.infrastructure.pesistence.entity.LocationEntity;
+import momzzangseven.mztkbe.modules.location.infrastructure.persistence.entity.LocationEntity;
 import momzzangseven.mztkbe.modules.location.infrastructure.repository.LocationJpaRepository;
 import org.springframework.stereotype.Component;
 
 /** Location persistence adapter - SaveLocationPort, LoadLocationPort implementation */
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class LocationPersistenceAdapter implements LoadLocationPort, SaveLocationPort {

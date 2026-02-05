@@ -25,8 +25,8 @@ public record LocationItem(
         .postalCode(location.getPostalCode())
         .address(location.getAddress())
         .detailAddress(location.getDetailAddress())
-        .latitude(location.getCoordinate().getLatitude())
-        .longitude(location.getCoordinate().getLongitude())
+        .latitude(location.getCoordinate().latitude())
+        .longitude(location.getCoordinate().longitude())
         .registeredAt(location.getRegisteredAt())
         .build();
   }

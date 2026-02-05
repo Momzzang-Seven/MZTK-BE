@@ -1,52 +1,50 @@
 package momzzangseven.mztkbe.modules.location.domain.vo;
 
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import momzzangseven.mztkbe.global.error.location.InvalidGpsCoordinateException;
 
 /**
- * Value Object for Gps coordinate. - Immutable - Check validity when creation - Calculate distance
- * between two Gps coordinates using Haversine formula
+ * GPS Coordinate Value Object
+ *
+ * <p>Immutable Value Object representing GPS coordinate.
+ *
+ * <p>Features:
+ *
+ * <ul>
+ *   <li>Validation on creation (Latitude: -90 to 90, Longitude: -180 to 180)
+ *   <li>Distance calculation using Haversine formula
+ *   <li>Immutable
+ * </ul>
+ *
+ * @param latitude Latitude (Latitude: -90 to 90)
+ * @param longitude Longitude (Longitude: -180 to 180)
  */
-@Getter
-@EqualsAndHashCode
-public class GpsCoordinate {
-  private final double latitude; // 위도
-  private final double longitude; // 경도
+public record GpsCoordinate(double latitude, double longitude) {
 
-  public GpsCoordinate(double latitude, double longitude) {
+  /** Earth radius (meters) - used in Haversine formula */
+  private static final double EARTH_RADIUS_METERS = 6371000.0;
+
+  /**
+   * Compact Constructor - Validation
+   *
+   * @throws InvalidGpsCoordinateException Latitude or longitude is out of valid range
+   */
+  public GpsCoordinate {
     validateLatitude(latitude);
     validateLongitude(longitude);
-    this.latitude = latitude;
-    this.longitude = longitude;
-  }
-
-  private void validateLatitude(double lat) {
-    if (lat < -90.0 || lat > 90.0) {
-      throw new InvalidGpsCoordinateException(
-          String.format("Latitude must be between -90 and 90, but was: %.7f", lat));
-    }
-  }
-
-  private void validateLongitude(double lng) {
-    if (lng < -180.0 || lng > 180.0) {
-      throw new InvalidGpsCoordinateException(
-          String.format("Longitude must be between -180 and 180, but was: %.7f", lng));
-    }
   }
 
   /**
-   * Calculate distance between two GPS coordinate using Haversine
+   * Calculate distance between two GPS coordinates using Haversine formula
    *
-   * @param other comparison target GPS Coordinate value object
-   * @return distance (in meter)
+   * @param other Comparison target GPS coordinate
+   * @return Distance between two coordinates (meters)
    */
   public double distanceTo(GpsCoordinate other) {
-    final double EARTH_RADIUS_METERS = 6371000.0;
-
+    // Convert latitude/longitude difference to radians
     double dLat = Math.toRadians(other.latitude - this.latitude);
     double dLon = Math.toRadians(other.longitude - this.longitude);
 
+    // Apply Haversine formula
     double a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2)
             + Math.cos(Math.toRadians(this.latitude))
@@ -54,13 +52,36 @@ public class GpsCoordinate {
                 * Math.sin(dLon / 2)
                 * Math.sin(dLon / 2);
 
+    // Calculate central angle
     double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
+    // Distance = Earth radius × central angle
     return EARTH_RADIUS_METERS * c;
   }
 
-  @Override
-  public String toString() {
-    return String.format("GpsCoordinate(lat=%.7f, lng=%.7f)", latitude, longitude);
+  /**
+   * Validation of latitude
+   *
+   * @param lat Latitude value
+   * @throws InvalidGpsCoordinateException Latitude is out of valid range
+   */
+  private static void validateLatitude(double lat) {
+    if (lat < -90.0 || lat > 90.0) {
+      throw new InvalidGpsCoordinateException(
+          String.format("Latitude must be between -90 and 90, but was: %.7f", lat));
+    }
+  }
+
+  /**
+   * Validation of longitude
+   *
+   * @param lng Longitude value
+   * @throws InvalidGpsCoordinateException Longitude is out of valid range
+   */
+  private static void validateLongitude(double lng) {
+    if (lng < -180.0 || lng > 180.0) {
+      throw new InvalidGpsCoordinateException(
+          String.format("Longitude must be between -180 and 180, but was: %.7f", lng));
+    }
   }
 }

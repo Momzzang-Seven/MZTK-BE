@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.location.infrastructure.pesistence.entity;
+package momzzangseven.mztkbe.modules.location.infrastructure.persistence.entity;
 
 import jakarta.persistence.*;
 import java.time.Instant;
@@ -50,8 +50,13 @@ public class LocationEntity {
 
   @PrePersist
   protected void onCreate() {
-    this.registeredAt = Instant.now();
-    this.updatedAt = this.registeredAt;
+    // initialize fields if not set in domain model
+    if (this.registeredAt == null) {
+      this.registeredAt = Instant.now();
+    }
+    if (this.updatedAt == null) {
+      this.updatedAt = Instant.now();
+    }
   }
 
   @PreUpdate
@@ -68,8 +73,8 @@ public class LocationEntity {
         .postalCode(location.getPostalCode())
         .address(location.getAddress())
         .detailAddress(location.getDetailAddress())
-        .latitude(location.getCoordinate().getLatitude())
-        .longitude(location.getCoordinate().getLongitude())
+        .latitude(location.getCoordinate().latitude())
+        .longitude(location.getCoordinate().longitude())
         .registeredAt(location.getRegisteredAt())
         .build();
   }

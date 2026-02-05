@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.location.infrastructure.repository;
 
 import java.util.List;
-import momzzangseven.mztkbe.modules.location.infrastructure.pesistence.entity.LocationEntity;
+import momzzangseven.mztkbe.modules.location.infrastructure.persistence.entity.LocationEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
