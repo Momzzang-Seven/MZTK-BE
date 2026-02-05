@@ -26,7 +26,7 @@ public class KakaoGeocodingClient {
    */
   public KakaoGeocodingResponse geocode(String address) {
     try {
-      log.debug("Kakao Geocoding API Request: address={}", address);
+      log.debug("Kakao Geocoding API Request initiated");
 
       KakaoGeocodingResponse response =
           kakaoRestClient
@@ -42,13 +42,14 @@ public class KakaoGeocodingClient {
 
       if (response != null && response.getMeta() != null) {
         log.debug(
-            "Kakao Geocoding API Response: totalCount={}", response.getMeta().getTotalCount());
+            "Kakao Geocoding API Response received: totalCount={}",
+            response.getMeta().getTotalCount());
       }
 
       return response;
 
     } catch (Exception e) {
-      log.error("Kakao Geocoding API call failed: address={}", address, e);
+      log.error("Kakao Geocoding API call failed", e);
       throw new BusinessException(
           ErrorCode.EXTERNAL_API_ERROR,
           "Failed to call Kakao Geocoding API for address: " + address);
@@ -64,7 +65,7 @@ public class KakaoGeocodingClient {
    */
   public KakaoReverseGeocodingResponse reverseGeocode(double longitude, double latitude) {
     try {
-      log.debug("Kakao Reverse Geocoding API Request: lng={}, lat={}", longitude, latitude);
+      log.debug("Kakao Reverse Geocoding API Request initiated");
 
       KakaoReverseGeocodingResponse response =
           kakaoRestClient
@@ -81,14 +82,14 @@ public class KakaoGeocodingClient {
 
       if (response != null && response.getMeta() != null) {
         log.debug(
-            "Kakao Reverse Geocoding API Response: totalCount={}",
+            "Kakao Reverse Geocoding API Response received: totalCount={}",
             response.getMeta().getTotalCount());
       }
 
       return response;
 
     } catch (Exception e) {
-      log.error("Kakao Reverse Geocoding API call failed: lng={}, lat={}", longitude, latitude, e);
+      log.error("Kakao Reverse Geocoding API call failed", e);
       throw new BusinessException(
           ErrorCode.EXTERNAL_API_ERROR,
           "Failed to call Kakao Reverse Geocoding API for coordinates: "

@@ -11,6 +11,9 @@ import momzzangseven.mztkbe.modules.location.infrastructure.external.kakao.geoco
 import momzzangseven.mztkbe.modules.location.infrastructure.external.kakao.geocoding.dto.KakaoGeocodingResponse;
 import momzzangseven.mztkbe.modules.location.infrastructure.external.kakao.geocoding.dto.KakaoReverseGeocodingResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 /** Geocoding Adapter - Geocoding port implementation - Using Kakao API */
 @Slf4j
@@ -21,7 +24,7 @@ public class KakaoGeocodingAdapter implements GeocodingPort {
 
   @Override
   public CoordinatesInfo geocode(String address) throws GeocodingFailedException {
-    log.info("Geocoding address: {}", address);
+    log.info("Geocoding request initiated");
 
     try {
       if (address == null || address.isBlank()) {
@@ -31,9 +34,10 @@ public class KakaoGeocodingAdapter implements GeocodingPort {
       // Call Kakao API
       KakaoGeocodingResponse response = kakaoGeocodingClient.geocode(address);
 
-      // Validate Response
+      // Validate Response - No results found
       if (response == null || !response.hasDocuments()) {
-        throw new GeocodingFailedException("No results found for address: " + address);
+        log.warn("No geocoding results found");
+        throw new GeocodingFailedException("No geocoding results found for addres");
       }
 
       // First element of documents: most relevant address
@@ -46,26 +50,44 @@ public class KakaoGeocodingAdapter implements GeocodingPort {
       if (document.getRoadAddress() != null) {
         latitude = Double.parseDouble(document.getRoadAddress().getY());
         longitude = Double.parseDouble(document.getRoadAddress().getX());
-        log.debug("Using road address coordinates: lat={}, lng={}", latitude, longitude);
+        log.debug("Using road address coordinates");
       } else if (document.getAddress() != null) {
         latitude = Double.parseDouble(document.getAddress().getY());
         longitude = Double.parseDouble(document.getAddress().getX());
-        log.debug("Using address coordinates: lat={}, lng={}", latitude, longitude);
+        log.debug("Using jibun address coordinates");
       } else {
         latitude = Double.parseDouble(document.getY());
         longitude = Double.parseDouble(document.getX());
-        log.debug("Using document coordinates: lat={}, lng={}", latitude, longitude);
+        log.debug("Using document coordinates");
       }
 
-      log.info("Geocoding success: address={} → lat={}, lng={}", address, latitude, longitude);
+      log.info("Geocoding completed successfully");
 
       return CoordinatesInfo.of(latitude, longitude);
 
+    } catch (HttpClientErrorException e) {
+      // 4xx error - input error
+      if (e.getStatusCode().value() == 400) {
+        log.error("Invalid address format for geocoding: status={}", e.getStatusCode());
+        throw new GeocodingFailedException("Invalid address format");
+      }
+      log.error("Geocoding client error: status={}", e.getStatusCode(), e);
+      throw new GeocodingFailedException("Address search request error");
+    } catch (HttpServerErrorException e) {
+      // 5xx error - external API error
+      log.error("Kakao Geocoding API server error: status={}", e.getStatusCode(), e);
+      throw new GeocodingFailedException(
+          "Kakao Geocoding API server error. Please try again later.");
+    } catch (ResourceAccessException e) {
+      // Network/timeout error - external API error
+      log.error("Kakao Geocoding API connection error (timeout or network issue)", e);
+      throw new GeocodingFailedException(
+          "Kakao Geocoding API connection failed (network error or timeout). Please try again later.");
     } catch (GeocodingFailedException e) {
       throw e;
     } catch (Exception e) {
-      log.error("Geocoding failed: address={}", address, e);
-      throw new GeocodingFailedException("Failed to geocode address: " + address);
+      log.error("Unexpected error during geocoding", e);
+      throw new GeocodingFailedException("Unexpected error during geocoding");
     }
   }
 
@@ -73,17 +95,18 @@ public class KakaoGeocodingAdapter implements GeocodingPort {
   public AddressInfo reverseGeocode(double longitude, double latitude)
       throws ReverseGeocodingFailedException {
 
-    log.info("Reverse geocoding coordinates: lng={}, lat={}", longitude, latitude);
+    log.info("Reverse geocoding request initiated");
 
     try {
       // Call Kakao API (NOTE: Must hand over in order longitude(x) followed by latitude(y))
       KakaoReverseGeocodingResponse response =
           kakaoGeocodingClient.reverseGeocode(longitude, latitude);
 
-      // Validate Response
+      // Validate Response - No results found
       if (response == null || !response.hasDocuments()) {
+        log.warn("No reverse geocoding results found");
         throw new ReverseGeocodingFailedException(
-            String.format("No results found for coordinates: lat=%f, lng=%f", latitude, longitude));
+            "No reverse geocoding results found for coordinates");
       }
 
       // First element of documents: most relevant address
@@ -96,37 +119,52 @@ public class KakaoGeocodingAdapter implements GeocodingPort {
       if (document.getRoadAddress() != null) {
         addressName = document.getRoadAddress().getAddressName();
         zoneNo = document.getRoadAddress().getZoneNo();
-        log.debug("Using road address: {}", addressName);
+        log.debug("Using road address");
       } else if (document.getAddress() != null) {
         addressName = document.getAddress().getAddressName();
         zoneNo = ""; // Only RoadAddress contains zoneNo
-        log.debug("Using jibun address: {}", addressName);
+        log.debug("Using jibun address");
       } else {
-        throw new ReverseGeocodingFailedException("No valid address found in response");
+        log.warn("No valid address found in reverse geocoding response");
+        throw new ReverseGeocodingFailedException(
+            "No valid address found in reverse geocoding response");
       }
 
       // Validate zoneNo (If null or empty, set it "")
       if (zoneNo == null || zoneNo.isBlank()) {
-        log.warn("No postal code found for address: {}", addressName);
+        log.warn("No postal code found in geocoding result");
         zoneNo = "";
       }
 
-      log.info(
-          "Reverse geocoding success: lat={}, lng={} → address={}, zoneNo={}",
-          latitude,
-          longitude,
-          addressName,
-          zoneNo);
+      log.info("Reverse geocoding completed successfully");
 
       return AddressInfo.of(addressName, zoneNo);
 
+    } catch (HttpClientErrorException e) {
+      // 4xx error - input error
+      if (e.getStatusCode().value() == 400) {
+        log.error("Invalid coordinates for reverse geocoding: status={}", e.getStatusCode());
+        throw new ReverseGeocodingFailedException(
+            String.format("Invalid coordinates for reverse geocoding"));
+      }
+      log.error("Reverse geocoding client error: status={}", e.getStatusCode(), e);
+      throw new ReverseGeocodingFailedException("Reverse geocoding request error");
+    } catch (HttpServerErrorException e) {
+      // 5xx error - external API error
+      log.error("Kakao Reverse Geocoding API server error: status={}", e.getStatusCode(), e);
+      throw new ReverseGeocodingFailedException(
+          "Kakao Reverse Geocoding API server error. Please try again later.");
+    } catch (ResourceAccessException e) {
+      // Network/timeout error - external API error
+      log.error("Kakao Reverse Geocoding API connection error (timeout or network issue)", e);
+      throw new ReverseGeocodingFailedException(
+          "Kakao Reverse Geocoding API connection failed (network error or timeout). Please try again later.");
     } catch (ReverseGeocodingFailedException e) {
       throw e;
     } catch (Exception e) {
-      log.error("Reverse geocoding failed: lat={}, lng={}", latitude, longitude, e);
+      log.error("Unexpected error during reverse geocoding", e);
       throw new ReverseGeocodingFailedException(
-          String.format(
-              "Failed to reverse geocode coordinates: lat=%f, lng=%f", latitude, longitude));
+          String.format("Unexpected error during reverse geocoding"));
     }
   }
 }

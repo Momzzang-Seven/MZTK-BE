@@ -28,9 +28,9 @@ public class Location {
     return Location.builder()
         .userId(userId)
         .locationName(locationName)
-        .postalCode(addressData.getPostalCode())
-        .address(addressData.getAddress())
-        .detailAddress(addressData.getDetailedAddress())
+        .postalCode(addressData.postalCode())
+        .address(addressData.address())
+        .detailAddress(addressData.detailedAddress())
         .coordinate(coordinate)
         .registeredAt(Instant.now())
         .build();
