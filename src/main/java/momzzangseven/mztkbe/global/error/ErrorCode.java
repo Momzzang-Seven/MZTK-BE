@@ -171,12 +171,24 @@ public enum ErrorCode {
   CHALLENGE_USERID_MISMATCH("CHALLENGE_005", "User id mismatch", HttpStatus.UNAUTHORIZED),
 
   // ========================================
-  // Validation Errors (VALIDATION_xxx)
+  // Signature Errors (SIGNATURE_XXX)
   // ========================================
 
   SIGNATURE_INVALID(
       "SIGNATURE_001", "Invalid signature", HttpStatus.BAD_REQUEST // 400
       ),
+
+  // ========================================
+  // Location Errors (LOCATION_xxx)
+  // ========================================
+  COORDINATE_INVALID("LOCATION_001", "Coordinate is invalid", HttpStatus.BAD_REQUEST),
+
+  GEOCODING_FAILED("LOCATION_002", "Geocoding is failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
+  REV_GEOCODING_FAILED(
+      "LOCATION_003", "Reverse Geocoding is failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
+  MISSING_LOCATION_FIELD("LOCATION_004", "Missing location field", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Validation Errors (VALIDATION_xxx)
