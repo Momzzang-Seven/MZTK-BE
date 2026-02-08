@@ -21,9 +21,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Verify Location Service
  *
- * <p>Location verification service. Verify if the user is actually at the registered location using GPS.
+ * <p>Location verification service. Verify if the user is actually at the registered location using
+ * GPS.
  *
- * <p>Grant XP when verification is successful and all verification attempts are logged as audit logs.
+ * <p>Grant XP when verification is successful and all verification attempts are logged as audit
+ * logs.
  */
 @Slf4j
 @Service

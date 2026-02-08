@@ -6,7 +6,8 @@ import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationResul
 /**
  * Verify Location Use Case
  *
- * <p>Location verification use case. Verify if the user is actually at the registered location using GPS.
+ * <p>Location verification use case. Verify if the user is actually at the registered location
+ * using GPS.
  */
 public interface VerifyLocationUseCase {
   /**
