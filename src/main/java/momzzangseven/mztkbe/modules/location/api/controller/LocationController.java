@@ -54,7 +54,7 @@ public class LocationController {
    * @param request Location verification request DTO
    * @return Location verification result
    */
-  @PostMapping("/verify")
+  @PostMapping("/locations/verify")
   public ResponseEntity<ApiResponse<VerifyLocationResponseDTO>> verifyLocation(
       @AuthenticationPrincipal Long userId, @Valid @RequestBody VerifyLocationRequestDTO request) {
     // userId null validation

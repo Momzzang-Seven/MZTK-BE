@@ -71,9 +71,4 @@ public class LocationVerification {
   public boolean isSuccessful() {
     return this.isVerified;
   }
-
-  /** business logic: check if it should grant XP */
-  public boolean shouldGrantXp() {
-    return this.isVerified;
-  }
 }

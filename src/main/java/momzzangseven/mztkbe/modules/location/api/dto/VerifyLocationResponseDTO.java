@@ -17,7 +17,11 @@ public record VerifyLocationResponseDTO(
     Double registeredLongitude,
     Double currentLatitude,
     Double currentLongitude,
-    Instant verifiedAt) {
+    Instant verifiedAt,
+    Boolean xpGranted,
+    Integer grantedXp,
+    String xpGrantMessage) {
+
   /** Factory Method: Application Result → API Response */
   public static VerifyLocationResponseDTO from(VerifyLocationResult result) {
     return VerifyLocationResponseDTO.builder()
@@ -32,6 +36,9 @@ public record VerifyLocationResponseDTO(
         .currentLatitude(result.currentLatitude())
         .currentLongitude(result.currentLongitude())
         .verifiedAt(result.verifiedAt())
+        .xpGranted(result.xpGranted())
+        .grantedXp(result.grantedXp())
+        .xpGrantMessage(result.xpGrantMessage())
         .build();
   }
 }
