@@ -120,3 +120,7 @@ web3:
       batch-size: 200
       cron: "0 0 4 * * *"  # Every day 4 am
       zone: "Asia/Seoul"
+
+location:
+  verification:
+    radius-meters: 5.0 # Location verification radius; 5m
