@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.location.application.service;
 
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
@@ -32,8 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 @RequiredArgsConstructor
 public class VerifyLocationService implements VerifyLocationUseCase {
-  private static final DateTimeFormatter YYYYMMDD_HHMMSS =
-      DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
   private final LoadLocationPort loadLocationPort;
   private final SaveVerificationPort saveVerificationPort;
@@ -98,26 +95,7 @@ public class VerifyLocationService implements VerifyLocationUseCase {
    */
   private void grantXpForVerification(LocationVerification verification) {
     try {
-      // Create Idempotency Key
-      // Format: "workout:location-verify:{userId}:{locationId}:{timestamp}"
-      // - Prefix "workout:" : GrantXpCommand verification passed
-      // - "location-verify" : location verification within WORKOUT type
-      String timestamp = verification.getVerifiedAt().atZone(appZoneId).format(YYYYMMDD_HHMMSS);
-
-      String idempotencyKey =
-          String.format(
-              "workout:location-verify:%d:%d:%s",
-              verification.getUserId(), verification.getLocationId(), timestamp);
-
-      // Request XP grant to Level module (WORKOUT type)
-      int grantedXp =
-          grantXpPort.grantLocationVerificationXp(
-              verification.getUserId(), verification.getVerifiedAt(), idempotencyKey);
-
-      log.info(
-          "XP granted for location verification (WORKOUT): userId={}, xp={}",
-          verification.getUserId(),
-          grantedXp);
+      int grantedXp = grantXpPort.grantLocationVerificationXp(verification);
 
     } catch (Exception e) {
       // XP grant failure does not roll back the entire transaction
