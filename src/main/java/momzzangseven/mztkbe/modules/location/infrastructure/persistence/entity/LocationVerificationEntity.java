@@ -44,19 +44,19 @@ public class LocationVerificationEntity {
   @Column(name = "is_verified", nullable = false)
   private Boolean isVerified;
 
-  @Column(name = "distance", nullable = false, precision = 10, scale = 2)
-  private Double distance; // meter unit
+  @Column(name = "distance", nullable = false)
+  private Double distance; // meter unit (double precision type)
 
-  @Column(name = "registered_latitude", nullable = false, precision = 10, scale = 7)
+  @Column(name = "registered_latitude", nullable = false)
   private Double registeredLatitude;
 
-  @Column(name = "registered_longitude", nullable = false, precision = 10, scale = 7)
+  @Column(name = "registered_longitude", nullable = false)
   private Double registeredLongitude;
 
-  @Column(name = "current_latitude", nullable = false, precision = 10, scale = 7)
+  @Column(name = "current_latitude", nullable = false)
   private Double currentLatitude;
 
-  @Column(name = "current_longitude", nullable = false, precision = 10, scale = 7)
+  @Column(name = "current_longitude", nullable = false)
   private Double currentLongitude;
 
   @Column(name = "verified_at", nullable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE")

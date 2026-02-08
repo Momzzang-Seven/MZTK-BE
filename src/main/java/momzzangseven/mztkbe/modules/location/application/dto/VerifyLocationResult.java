@@ -19,9 +19,14 @@ public record VerifyLocationResult(
     double registeredLongitude,
     double currentLatitude,
     double currentLongitude,
-    Instant verifiedAt) {
-  /** Factory Method: Domain Model → DTO conversion */
-  public static VerifyLocationResult from(LocationVerification verification) {
+    Instant verifiedAt,
+    boolean xpGranted,
+    int grantedXp,
+    String xpGrantMessage) {
+
+  /** Factory Method: Domain Model → DTO conversion (without XP info) */
+  public static VerifyLocationResult from(
+      LocationVerification verification, XpGrantInfo xpGrantInfo) {
     return new VerifyLocationResult(
         verification.getId(),
         verification.getLocationId(),
@@ -33,6 +38,9 @@ public record VerifyLocationResult(
         verification.getRegisteredCoordinate().longitude(),
         verification.getCurrentCoordinate().latitude(),
         verification.getCurrentCoordinate().longitude(),
-        verification.getVerifiedAt());
+        verification.getVerifiedAt(),
+        xpGrantInfo.granted(),
+        xpGrantInfo.amount(),
+        xpGrantInfo.message());
   }
 }

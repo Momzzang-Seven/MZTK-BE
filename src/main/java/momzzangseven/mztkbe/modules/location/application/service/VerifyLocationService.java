@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.error.location.LocationNotFoundException;
 import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationCommand;
 import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationResult;
+import momzzangseven.mztkbe.modules.location.application.dto.XpGrantInfo;
 import momzzangseven.mztkbe.modules.location.application.port.in.VerifyLocationUseCase;
 import momzzangseven.mztkbe.modules.location.application.port.out.GrantXpPort;
 import momzzangseven.mztkbe.modules.location.application.port.out.LoadLocationPort;
@@ -79,11 +80,17 @@ public class VerifyLocationService implements VerifyLocationUseCase {
         saved.getDistance());
 
     // 5. Grant XP (only when verification is successful)
-    if (saved.shouldGrantXp()) {
-      grantXpForVerification(saved);
+    // If the user already acquired XP for WORKOUT type, the XpGrantInfo contains the information
+    // that the user cannot be granted more XP for WORKOUT type.
+    XpGrantInfo xpInfo;
+
+    if (saved.isSuccessful()) {
+      xpInfo = grantXpForVerification(saved);
+    } else {
+      xpInfo = new XpGrantInfo(false, 0, "Verification failed - XP not granted");
     }
 
-    return VerifyLocationResult.from(saved);
+    return VerifyLocationResult.from(saved, xpInfo);
   }
 
   /**
@@ -93,15 +100,29 @@ public class VerifyLocationService implements VerifyLocationUseCase {
    *
    * <p>Idempotency guarantee: prevent duplicate XP grant for the same verification
    */
-  private void grantXpForVerification(LocationVerification verification) {
+  private XpGrantInfo grantXpForVerification(LocationVerification verification) {
     try {
       int grantedXp = grantXpPort.grantLocationVerificationXp(verification);
+
+      if (grantedXp > 0) {
+        log.info(
+            "XP granted for location verification: userId={}, xp={}",
+            verification.getUserId(),
+            grantedXp);
+        return new XpGrantInfo(true, grantedXp, "XP granted successfully");
+      } else {
+        log.info(
+            "XP not granted for location verification: userId={} - already granted today",
+            verification.getUserId());
+        return new XpGrantInfo(false, 0, "XP already granted for WORKOUT type");
+      }
 
     } catch (Exception e) {
       // XP grant failure does not roll back the entire transaction
       // (verification record must be saved)
       log.error(
           "Failed to grant XP for location verification: userId={}", verification.getUserId(), e);
+      return new XpGrantInfo(false, 0, "XP grant failed due to system error");
     }
   }
 }
