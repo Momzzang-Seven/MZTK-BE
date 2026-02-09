@@ -1,9 +1,10 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
+import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.domain.exception.PostNotFoundException; // 커스텀 예외 임포트
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,13 +17,12 @@ public class GetPostService implements GetPostUseCase {
   private final PostPersistencePort postPersistencePort;
 
   @Override
-  public PostResponse getPost(Long postId) {
-
+  public PostResult getPost(Long postId) {
     Post post =
         postPersistencePort
             .loadPost(postId)
-            .orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다."));
+            .orElseThrow(() -> new PostNotFoundException("게시글을 찾을 수 없습니다. ID: " + postId));
 
-    return PostResponse.from(post);
+    return PostResult.fromDomain(post);
   }
 }
