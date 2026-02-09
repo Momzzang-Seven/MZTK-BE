@@ -23,7 +23,6 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   public void updatePost(Long currentUserId, Long postId, UpdatePostRequest request) {
     Post post = getPostOrThrow(postId);
 
-    // 권한 체크: 작성자 본인인지 확인
     checkOwnership(post, currentUserId);
 
     post.update(request.title(), request.content());
@@ -48,7 +47,6 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
         .orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다."));
   }
 
-  // 공통 메서드: 권한 체크
   private void checkOwnership(Post post, Long currentUserId) {
     if (!post.getUserId().equals(currentUserId)) {
       throw new IllegalStateException("본인의 게시글만 수정/삭제할 수 있습니다."); // 403 Forbidden 대용

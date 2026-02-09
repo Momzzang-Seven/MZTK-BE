@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
@@ -13,13 +14,14 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class CreatePostService implements CreatePostUseCase {
 
   private final SavePostPort savePostPort;
-  private final GrantXpUseCase grantXpUseCase; // 레벨 모듈 연동!
+  private final GrantXpUseCase grantXpUseCase;
 
   @Override
   public Long createPost(CreatePostCommand command) {
@@ -33,16 +35,14 @@ public class CreatePostService implements CreatePostUseCase {
             .reward(command.reward()) // 질문이 아니면 null 들어감
             .build();
 
-    // 2. DB 저장
     Post savedPost = savePostPort.savePost(post);
 
-    // 3. 경험치(XP) 지급 (자유게시판인 경우)
     // 질문 게시판 작성 시 토큰 차감 로직은 추후 추가
     if (command.type() == PostType.FREE) {
       grantXpForPost(command.userId(), savedPost.getId());
     }
 
-    // 4. 이미지 저장 로직은 여기에 추가
+    // 이미지 저장 로직은 여기에 추가
 
     return savedPost.getId();
   }
@@ -64,9 +64,7 @@ public class CreatePostService implements CreatePostUseCase {
       grantXpUseCase.execute(xpCommand);
 
     } catch (Exception e) {
-      // 경험치 지급 실패가 게시글 작성을 실패하게 만들면 안 됨 (로그만 남김)
-      // log.error("Failed to grant XP for post creation", e);
-      System.err.println("경험치 지급 실패: " + e.getMessage());
+      log.error("게시글 작성 XP 지급 실패: userId={}, postId={}", userId, postId, e);
     }
   }
 }
