@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.post.api.dto.CreatePostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
@@ -64,7 +65,13 @@ public class PostController {
       @AuthenticationPrincipal Long userId,
       @PathVariable Long postId,
       @RequestBody @Valid UpdatePostRequest request) {
-    updatePostUseCase.updatePost(userId, postId, request);
+
+    // 1. DTO -> Command 변환 (책임 분리!)
+    UpdatePostCommand command =
+        UpdatePostCommand.of(request.title(), request.content(), request.imageUrls());
+
+    // 2. 서비스 호출
+    updatePostUseCase.updatePost(userId, postId, command);
 
     return ResponseEntity.ok(
         Map.of("code", 200, "message", "UPDATED", "data", Map.of("postId", postId)));
