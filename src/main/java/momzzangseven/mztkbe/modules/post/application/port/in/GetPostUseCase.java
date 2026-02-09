@@ -1,7 +1,8 @@
 package momzzangseven.mztkbe.modules.post.application.port.in;
 
-import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
 
 public interface GetPostUseCase {
-  Post getPost(Long postId);
+
+  PostResponse getPost(Long postId);
 }

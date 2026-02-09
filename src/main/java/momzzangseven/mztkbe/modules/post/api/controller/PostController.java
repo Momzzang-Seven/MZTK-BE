@@ -13,8 +13,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
-import momzzangseven.mztkbe.modules.post.domain.model.Post;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType; // Post 엔티티 임포트는 삭제됨
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,15 +34,11 @@ public class PostController {
   public ResponseEntity<?> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
 
-    // 1. 요청 DTO -> Command 변환
     CreatePostCommand command =
         CreatePostCommand.of(
             userId, request.title(), request.content(), PostType.FREE, null, request.imageUrls());
 
-    // 2. 서비스 호출
     Long savedPostId = createPostUseCase.createPost(command);
-
-    // 3. 응답 생성
     CreatePostResponse responseData = new CreatePostResponse(savedPostId);
 
     return ResponseEntity.status(HttpStatus.CREATED)
@@ -53,8 +48,7 @@ public class PostController {
   // [Read] 2. 게시글 상세 조회
   @GetMapping("/{postId}")
   public ResponseEntity<?> getPost(@PathVariable Long postId) {
-    Post post = getPostUseCase.getPost(postId);
-    PostResponse response = PostResponse.from(post);
+    PostResponse response = getPostUseCase.getPost(postId);
 
     return ResponseEntity.ok(Map.of("code", 200, "message", "SUCCESS", "data", response));
   }
@@ -66,11 +60,9 @@ public class PostController {
       @PathVariable Long postId,
       @RequestBody @Valid UpdatePostRequest request) {
 
-    // 1. DTO -> Command 변환 (책임 분리!)
     UpdatePostCommand command =
         UpdatePostCommand.of(request.title(), request.content(), request.imageUrls());
 
-    // 2. 서비스 호출
     updatePostUseCase.updatePost(userId, postId, command);
 
     return ResponseEntity.ok(
