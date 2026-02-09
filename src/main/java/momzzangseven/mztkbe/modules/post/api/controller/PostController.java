@@ -5,10 +5,14 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.CreatePostResponse;
+import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
+import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,17 +26,15 @@ public class PostController {
 
   private final CreatePostUseCase createPostUseCase;
   private final GetPostUseCase getPostUseCase;
-  private final momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase
-      updatePostUseCase;
-  private final momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase
-      deletePostUseCase;
+  private final UpdatePostUseCase updatePostUseCase;
+  private final DeletePostUseCase deletePostUseCase;
 
   // [Create] 1-A. 자유게시글 작성
   @PostMapping("/free")
   public ResponseEntity<?> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
+
     // 1. 요청 DTO -> Command 변환
-    // (보안 적용: Body에 있는 가짜 ID(request.userId)는 무시하고, 토큰의 진짜 ID(userId)를 사용)
     CreatePostCommand command =
         CreatePostCommand.of(
             userId, request.title(), request.content(), PostType.FREE, null, request.imageUrls());
@@ -50,7 +52,9 @@ public class PostController {
   // [Read] 2. 게시글 상세 조회
   @GetMapping("/{postId}")
   public ResponseEntity<?> getPost(@PathVariable Long postId) {
-    var response = getPostUseCase.getPost(postId);
+    Post post = getPostUseCase.getPost(postId);
+    PostResponse response = PostResponse.from(post);
+
     return ResponseEntity.ok(Map.of("code", 200, "message", "SUCCESS", "data", response));
   }
 
