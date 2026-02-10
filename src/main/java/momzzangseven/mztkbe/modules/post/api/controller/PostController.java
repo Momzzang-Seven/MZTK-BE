@@ -5,10 +5,10 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
-import momzzangseven.mztkbe.modules.post.api.dto.CreatePostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
@@ -33,16 +33,15 @@ public class PostController {
 
   // [Create] 자유게시글 작성
   @PostMapping("/free")
-  public ResponseEntity<ApiResponse<CreatePostResponse>> createFreePost(
+  public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
     CreatePostCommand command =
         CreatePostCommand.of(
             userId, request.title(), request.content(), PostType.FREE, null, request.imageUrls());
 
-    Long savedPostId = createPostUseCase.createPost(command);
-    CreatePostResponse responseData = new CreatePostResponse(savedPostId);
+    CreatePostResult response = createPostUseCase.createPost(command);
 
-    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(responseData));
+    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
 
   // [Read] 게시글 상세 조회
