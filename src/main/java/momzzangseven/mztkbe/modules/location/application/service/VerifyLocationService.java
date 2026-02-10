@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.location.application.service;
 
-import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
@@ -9,7 +8,6 @@ import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationComma
 import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationResult;
 import momzzangseven.mztkbe.modules.location.application.dto.XpGrantInfo;
 import momzzangseven.mztkbe.modules.location.application.port.in.VerifyLocationUseCase;
-import momzzangseven.mztkbe.modules.location.application.port.out.GrantXpPort;
 import momzzangseven.mztkbe.modules.location.application.port.out.LoadLocationPort;
 import momzzangseven.mztkbe.modules.location.application.port.out.SaveVerificationPort;
 import momzzangseven.mztkbe.modules.location.domain.model.Location;
@@ -35,9 +33,8 @@ public class VerifyLocationService implements VerifyLocationUseCase {
 
   private final LoadLocationPort loadLocationPort;
   private final SaveVerificationPort saveVerificationPort;
-  private final GrantXpPort grantXpPort;
+  private final XpGrantService xpGrantService;
   private final VerificationRadius verificationRadius; // ← DI added
-  private final ZoneId appZoneId;
 
   @Override
   public VerifyLocationResult execute(VerifyLocationCommand command) {
@@ -102,7 +99,11 @@ public class VerifyLocationService implements VerifyLocationUseCase {
    */
   private XpGrantInfo grantXpForVerification(LocationVerification verification) {
     try {
-      int grantedXp = grantXpPort.grantLocationVerificationXp(verification);
+      // Transaction A suspended
+      // Transaction B starts (REQUIRES_NEW)
+      int grantedXp = xpGrantService.grantXp(verification);
+      // Transaction B committed (grantedXp = 0 also committed)
+      // Transaction A resumed (resume)
 
       if (grantedXp > 0) {
         log.info(
@@ -112,14 +113,15 @@ public class VerifyLocationService implements VerifyLocationUseCase {
         return new XpGrantInfo(true, grantedXp, "XP granted successfully");
       } else {
         log.info(
-            "XP not granted for location verification: userId={} - already granted today",
+            "XP not granted for location verification: userId={} - ALREADY_GRANTED or DAILY_CAP_REACHED",
             verification.getUserId());
         return new XpGrantInfo(false, 0, "XP already granted for WORKOUT type");
       }
 
     } catch (Exception e) {
+      // System error occurred in Level module
       // XP grant failure does not roll back the entire transaction
-      // (verification record must be saved)
+      // Verification record must be saved
       log.error(
           "Failed to grant XP for location verification: userId={}", verification.getUserId(), e);
       return new XpGrantInfo(false, 0, "XP grant failed due to system error");
