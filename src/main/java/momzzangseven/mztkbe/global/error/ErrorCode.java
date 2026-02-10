@@ -216,6 +216,20 @@ public enum ErrorCode {
 
   DATABASE_ERROR(
       "INTERNAL_003", "Database operation failed", HttpStatus.INTERNAL_SERVER_ERROR // 500
+      ),
+  // ========================================
+  // Post Errors (POST_xxx)
+  // ========================================
+  POST_NOT_FOUND(
+      "POST_001", "Post not found", HttpStatus.NOT_FOUND // 404
+      ),
+
+  POST_UNAUTHORIZED(
+      "POST_002", "Unauthorized access to post", HttpStatus.FORBIDDEN // 403
+      ),
+
+  INVALID_POST_INPUT(
+      "POST_003", "Invalid post input", HttpStatus.BAD_REQUEST // 400
       );
 
   private final String code;
