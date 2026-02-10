@@ -21,23 +21,20 @@ public class CreatePostService implements CreatePostUseCase {
   @Override
   @Transactional // Transaction A 시작
   public CreatePostResult createPost(CreatePostCommand command) {
-    // 1. 입력값 검증
+
     command.validate();
 
-    // 2. 게시글 엔티티 생성 및 저장 (Transaction A 수행)
     Post post =
-        Post.builder()
-            .userId(command.userId())
-            .type(command.type())
-            .title(command.title())
-            .content(command.content())
-            .reward(command.reward())
-            .imageUrls(command.imageUrls())
-            .build();
+        Post.create(
+            command.userId(),
+            command.type(),
+            command.title(),
+            command.content(),
+            command.reward(),
+            command.imageUrls());
 
     Post savedPost = postPersistencePort.savePost(post);
 
-    // 3. 경험치 지급 시도 (Transaction A 일시중단 -> Transaction B 수행)
     Long grantedXp = 0L;
     boolean isXpGranted = false;
 
@@ -51,7 +48,6 @@ public class CreatePostService implements CreatePostUseCase {
       log.warn("Post created but XP grant failed for user: {}", command.userId(), e);
     }
 
-    // 4. 결과 반환 (Transaction A 커밋)
     String message = isXpGranted ? "게시글 작성 완료! (+" + grantedXp + " XP)" : "게시글 작성 완료";
 
     return new CreatePostResult(savedPost.getId(), isXpGranted, grantedXp, message);
