@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.modules.post.domain.exception.PostUnauthorizedException;
+import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 
 @Getter
 public class Post {
