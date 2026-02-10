@@ -13,9 +13,10 @@ public record PostResult(
     Long userId,
     List<String> imageUrls,
     Long reward,
-    Boolean isSolved,
+    boolean isSolved,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
+
   public static PostResult fromDomain(Post post) {
     return new PostResult(
         post.getId(),
@@ -25,7 +26,7 @@ public record PostResult(
         post.getUserId(),
         post.getImageUrls(),
         post.getReward(),
-        post.getIsSolved(),
+        post.getIsSolved() != null ? post.getIsSolved() : false,
         post.getCreatedAt(),
         post.getUpdatedAt());
   }

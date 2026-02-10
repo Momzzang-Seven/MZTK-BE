@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.api.controller;
 import jakarta.validation.Valid;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
@@ -22,7 +23,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/posts")
+@RequestMapping("/posts")
 @RequiredArgsConstructor
 public class PostController {
 
@@ -54,14 +55,20 @@ public class PostController {
   }
 
   // [Update] 게시글 수정
-  @PutMapping("/{postId}")
+  @PatchMapping("/{postId}")
   public ResponseEntity<ApiResponse<Map<String, Long>>> updatePost(
       @AuthenticationPrincipal Long userId,
       @PathVariable Long postId,
       @RequestBody @Valid UpdatePostRequest request) {
+
+    // 1. userId 검증 (Null이면 예외 발생)
+    Long validatedUserId = requireUserId(userId);
+
     UpdatePostCommand command =
         UpdatePostCommand.of(request.title(), request.content(), request.imageUrls());
-    updatePostUseCase.updatePost(userId, postId, command);
+
+    // 2. 검증된 ID 사용
+    updatePostUseCase.updatePost(validatedUserId, postId, command);
 
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
   }
@@ -70,8 +77,20 @@ public class PostController {
   @DeleteMapping("/{postId}")
   public ResponseEntity<ApiResponse<Map<String, Long>>> deletePost(
       @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
-    deletePostUseCase.deletePost(userId, postId);
+
+    // 1. userId 검증 (Null이면 예외 발생)
+    Long validatedUserId = requireUserId(userId);
+
+    // 2. 검증된 ID 사용
+    deletePostUseCase.deletePost(validatedUserId, postId);
 
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
+  }
+
+  private Long requireUserId(Long userId) {
+    if (userId == null) {
+      throw new PostUnauthorizedException();
+    }
+    return userId;
   }
 }
