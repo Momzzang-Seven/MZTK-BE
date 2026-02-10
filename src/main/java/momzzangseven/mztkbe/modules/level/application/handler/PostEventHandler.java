@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.level.application.handler;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
@@ -13,21 +14,19 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class PostEventHandler {
-
   private final GrantXpUseCase grantXpUseCase;
+  private final ZoneId appZoneId;
 
   @EventListener
   public void handlePostCreated(PostCreatedEvent event) {
-    // 자유게시판(FREE)인 경우에만 경험치 지급 로직 수행
     if (event.type() == PostType.FREE) {
       GrantXpCommand command =
           GrantXpCommand.of(
               event.userId(),
               XpType.POST,
-              LocalDateTime.now(),
+              LocalDateTime.now(appZoneId),
               "post:" + event.postId(),
               "Create Post ID: " + event.postId());
-
       grantXpUseCase.execute(command);
     }
   }

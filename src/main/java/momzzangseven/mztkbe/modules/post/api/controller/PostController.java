@@ -3,12 +3,13 @@ package momzzangseven.mztkbe.modules.post.api.controller;
 import jakarta.validation.Valid;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.CreatePostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult; // Result DTO 임포트
+import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
@@ -30,11 +31,10 @@ public class PostController {
   private final UpdatePostUseCase updatePostUseCase;
   private final DeletePostUseCase deletePostUseCase;
 
-  // [Create] 1-A. 자유게시글 작성
+  // [Create] 자유게시글 작성
   @PostMapping("/free")
-  public ResponseEntity<?> createFreePost(
-      @AuthenticationPrincipal Long userId, // 인증 정보에서 안전하게 userId 추출
-      @RequestBody @Valid CreateFreePostRequest request) {
+  public ResponseEntity<ApiResponse<CreatePostResponse>> createFreePost(
+      @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
     CreatePostCommand command =
         CreatePostCommand.of(
             userId, request.title(), request.content(), PostType.FREE, null, request.imageUrls());
@@ -42,41 +42,37 @@ public class PostController {
     Long savedPostId = createPostUseCase.createPost(command);
     CreatePostResponse responseData = new CreatePostResponse(savedPostId);
 
-    return ResponseEntity.status(HttpStatus.CREATED)
-        .body(Map.of("code", 201, "message", "CREATED", "data", responseData));
+    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(responseData));
   }
 
   // [Read] 게시글 상세 조회
   @GetMapping("/{postId}")
-  public ResponseEntity<?> getPost(@PathVariable Long postId) {
-    // 1. 유스케이스는 이제 PostResult를 반환함
+  public ResponseEntity<ApiResponse<PostResponse>> getPost(@PathVariable Long postId) {
     PostResult result = getPostUseCase.getPost(postId);
-
-    // 2. Controller에서 API 스펙인 PostResponse로 변환 (Mapping)
     PostResponse response = PostResponse.from(result);
 
-    return ResponseEntity.ok(Map.of("code", 200, "message", "SUCCESS", "data", response));
+    return ResponseEntity.ok(ApiResponse.success(response));
   }
 
   // [Update] 게시글 수정
   @PutMapping("/{postId}")
-  public ResponseEntity<?> updatePost(
+  public ResponseEntity<ApiResponse<Map<String, Long>>> updatePost(
       @AuthenticationPrincipal Long userId,
       @PathVariable Long postId,
       @RequestBody @Valid UpdatePostRequest request) {
     UpdatePostCommand command =
         UpdatePostCommand.of(request.title(), request.content(), request.imageUrls());
     updatePostUseCase.updatePost(userId, postId, command);
-    return ResponseEntity.ok(
-        Map.of("code", 200, "message", "UPDATED", "data", Map.of("postId", postId)));
+
+    return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
   }
 
   // [Delete] 게시글 삭제
   @DeleteMapping("/{postId}")
-  public ResponseEntity<?> deletePost(
+  public ResponseEntity<ApiResponse<Map<String, Long>>> deletePost(
       @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
     deletePostUseCase.deletePost(userId, postId);
-    return ResponseEntity.ok(
-        Map.of("code", 200, "message", "DELETED", "data", Map.of("postId", postId)));
+
+    return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
   }
 }

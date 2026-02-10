@@ -18,10 +18,7 @@ public class GetPostService implements GetPostUseCase {
 
   @Override
   public PostResult getPost(Long postId) {
-    Post post =
-        postPersistencePort
-            .loadPost(postId)
-            .orElseThrow(() -> new PostNotFoundException("게시글을 찾을 수 없습니다. ID: " + postId));
+    Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
 
     return PostResult.fromDomain(post);
   }

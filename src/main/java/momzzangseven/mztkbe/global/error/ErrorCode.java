@@ -226,8 +226,8 @@ public enum ErrorCode {
       "POST_002", "Unauthorized access to post", HttpStatus.FORBIDDEN // 403
       ),
 
-  INVALID_POST_TYPE(
-      "POST_003", "Invalid post type", HttpStatus.BAD_REQUEST // 400
+  INVALID_POST_INPUT(
+      "POST_003", "Invalid post input", HttpStatus.BAD_REQUEST // 400
       );
 
   private final String code;
