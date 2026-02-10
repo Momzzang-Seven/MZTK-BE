@@ -18,8 +18,9 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   @Override
   public void updatePost(Long currentUserId, Long postId, UpdatePostCommand command) {
-    Post post = getPostOrThrow(postId);
+    command.validate();
 
+    Post post = getPostOrThrow(postId);
     post.validateOwnership(currentUserId);
 
     post.update(command.title(), command.content(), command.imageUrls());
@@ -36,8 +37,6 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   }
 
   private Post getPostOrThrow(Long postId) {
-    return postPersistencePort
-        .loadPost(postId)
-        .orElseThrow(() -> new PostNotFoundException("게시글을 찾을 수 없습니다. ID: " + postId));
+    return postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
   }
 }

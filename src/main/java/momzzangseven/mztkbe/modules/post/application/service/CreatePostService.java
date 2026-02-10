@@ -22,6 +22,8 @@ public class CreatePostService implements CreatePostUseCase {
 
   @Override
   public Long createPost(CreatePostCommand command) {
+    command.validate();
+
     Post post =
         Post.builder()
             .userId(command.userId())
@@ -34,6 +36,7 @@ public class CreatePostService implements CreatePostUseCase {
 
     Post savedPost = postPersistencePort.savePost(post);
 
+    // 3. 이벤트 발행
     eventPublisher.publishEvent(
         new PostCreatedEvent(savedPost.getUserId(), savedPost.getId(), savedPost.getType()));
 

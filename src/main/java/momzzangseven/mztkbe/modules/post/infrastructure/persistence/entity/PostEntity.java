@@ -21,25 +21,35 @@ public class PostEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
+  @Column(nullable = false)
   private Long userId;
 
   @Enumerated(EnumType.STRING)
+  @Column(nullable = false)
   private PostType type;
 
+  @Column(nullable = false, length = 255)
   private String title;
 
-  @Column(columnDefinition = "TEXT")
+  @Column(columnDefinition = "TEXT", nullable = false)
   private String content;
 
-  @ElementCollection private List<String> imageUrls = new ArrayList<>();
+  @ElementCollection
+  @CollectionTable(name = "post_images", joinColumns = @JoinColumn(name = "post_id"))
+  private List<String> imageUrls = new ArrayList<>();
+
   private Long reward;
-  private Boolean isSolved;
+
+  @Column(nullable = false)
+  private Boolean isSolved = false;
 
   @CreatedDate
-  @Column(updatable = false)
+  @Column(updatable = false, nullable = false)
   private LocalDateTime createdAt;
 
-  @LastModifiedDate private LocalDateTime updatedAt;
+  @LastModifiedDate
+  @Column(nullable = false)
+  private LocalDateTime updatedAt;
 
   @Builder
   public PostEntity(
@@ -56,9 +66,9 @@ public class PostEntity {
     this.type = type;
     this.title = title;
     this.content = content;
-    this.imageUrls = imageUrls;
+    this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
     this.reward = reward;
-    this.isSolved = isSolved;
+    this.isSolved = isSolved != null ? isSolved : false;
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -81,7 +91,7 @@ public class PostEntity {
         .type(this.type)
         .title(this.title)
         .content(this.content)
-        .imageUrls(this.imageUrls)
+        .imageUrls(this.imageUrls == null ? new ArrayList<>() : new ArrayList<>(this.imageUrls))
         .reward(this.reward)
         .isSolved(this.isSolved)
         .createdAt(this.createdAt)

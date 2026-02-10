@@ -46,7 +46,7 @@ public class Post {
 
   public void validateOwnership(Long currentUserId) {
     if (!this.userId.equals(currentUserId)) {
-      throw new PostUnauthorizedException("본인의 게시글만 수정/삭제할 수 있습니다.");
+      throw new PostUnauthorizedException();
     }
   }
 

@@ -1,8 +1,11 @@
 package momzzangseven.mztkbe.global.error.post;
 
-/** 게시글에 대한 수정/삭제 권한이 없을 때 발생하는 예외 (403 Forbidden 대응) */
-public class PostUnauthorizedException extends RuntimeException {
-  public PostUnauthorizedException(String message) {
-    super(message);
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+
+public class PostUnauthorizedException extends BusinessException {
+
+  public PostUnauthorizedException() {
+    super(ErrorCode.POST_UNAUTHORIZED);
   }
 }
