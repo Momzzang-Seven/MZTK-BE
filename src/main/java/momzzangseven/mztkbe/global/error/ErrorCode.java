@@ -190,6 +190,8 @@ public enum ErrorCode {
 
   MISSING_LOCATION_FIELD("LOCATION_004", "Missing location field", HttpStatus.BAD_REQUEST),
 
+  LOCATION_NOT_FOUND("LOCATION_005", "Location not found", HttpStatus.NOT_FOUND),
+
   // ========================================
   // Validation Errors (VALIDATION_xxx)
   // ========================================
