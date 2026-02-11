@@ -23,6 +23,6 @@ public interface LocationJpaRepository extends JpaRepository<LocationEntity, Lon
    * @return 삭제된 개수
    */
   @Modifying
-  @Query("DELETE FROM LocationEntity l WHERE l.userId IN :userIds AND l.deletedAt IS NOT NULL")
+  @Query("DELETE FROM LocationEntity l WHERE l.userId IN :userIds")
   int deleteSoftDeletedByUserIds(@Param("userIds") List<Long> userIds);
 }
