@@ -17,8 +17,10 @@ public class Post {
   private List<String> imageUrls;
   private Long reward;
   private Boolean isSolved;
+
   private final LocalDateTime createdAt;
-  private final LocalDateTime updatedAt;
+
+  private LocalDateTime updatedAt;
 
   @Builder
   public Post(
@@ -85,13 +87,27 @@ public class Post {
   }
 
   public void update(String title, String content, List<String> imageUrls) {
-    if (title == null || title.isBlank()) throw new IllegalArgumentException("제목을 입력해주세요.");
-    if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
+    boolean isUpdated = false;
 
-    this.title = title;
-    this.content = content;
+    if (title != null) {
+      if (title.isBlank()) throw new IllegalArgumentException("수정할 제목은 비워둘 수 없습니다.");
+      this.title = title;
+      isUpdated = true;
+    }
+
+    if (content != null) {
+      if (content.isBlank()) throw new IllegalArgumentException("수정할 내용은 비워둘 수 없습니다.");
+      this.content = content;
+      isUpdated = true;
+    }
+
     if (imageUrls != null) {
       this.imageUrls = imageUrls;
+      isUpdated = true;
+    }
+
+    if (isUpdated) {
+      this.updatedAt = LocalDateTime.now();
     }
   }
 }
