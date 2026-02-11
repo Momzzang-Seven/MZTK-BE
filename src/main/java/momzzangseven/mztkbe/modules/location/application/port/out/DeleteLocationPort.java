@@ -18,7 +18,7 @@ public interface DeleteLocationPort {
   /**
    * 배치 삭제 (User IDs 기반, Soft Deleted location만 삭제)
    *
-   * <p>Used when UserHardDeleteEventHandler is triggered.
+   * <p>Used when WalletUserHardDeleteEventHandler is triggered.
    *
    * @param userIds User ID List to be hard-deleted
    * @return The number of deleted Location
