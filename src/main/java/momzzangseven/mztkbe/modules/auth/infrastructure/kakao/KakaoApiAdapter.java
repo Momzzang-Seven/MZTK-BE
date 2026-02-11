@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.auth.application.dto.KakaoUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.auth.infrastructure.config.AuthWebClientProperties;
 import momzzangseven.mztkbe.modules.auth.infrastructure.kakao.dto.KakaoTokenResponse;
 import momzzangseven.mztkbe.modules.auth.infrastructure.kakao.dto.KakaoUserResponse;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +25,7 @@ public class KakaoApiAdapter implements KakaoAuthPort {
 
   private final KakaoAuthProperties props;
   private final WebClient webClient;
+  private final AuthWebClientProperties authWebClientProperties;
 
   @Override
   public String getAccessToken(String authorizationCode) {
@@ -56,7 +58,7 @@ public class KakaoApiAdapter implements KakaoAuthPort {
                                           + ", body="
                                           + body)))
               .bodyToMono(KakaoTokenResponse.class)
-              .block(Duration.ofSeconds(5));
+              .block(Duration.ofSeconds(authWebClientProperties.getBlockTimeoutSeconds()));
 
       if (token == null || token.getAccessToken() == null) {
         throw new BusinessException(
@@ -95,7 +97,7 @@ public class KakaoApiAdapter implements KakaoAuthPort {
                                           + ", body="
                                           + body)))
               .bodyToMono(KakaoUserResponse.class)
-              .block(Duration.ofSeconds(5));
+              .block(Duration.ofSeconds(authWebClientProperties.getBlockTimeoutSeconds()));
 
       if (user == null) {
         throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, "Failed to get Kakao user info");
@@ -148,7 +150,7 @@ public class KakaoApiAdapter implements KakaoAuthPort {
                                       + ", body="
                                       + body)))
           .toBodilessEntity()
-          .block(Duration.ofSeconds(5));
+          .block(Duration.ofSeconds(authWebClientProperties.getBlockTimeoutSeconds()));
     } catch (BusinessException e) {
       throw e;
     } catch (Exception e) {

@@ -1,0 +1,25 @@
+security:
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://localhost:3000
+
+kakao:
+  auth:
+    redirect: http://localhost:3000/callback
+
+google:
+  oauth:
+    redirect-uri: http://localhost:3000/callback
+
+web3:
+  challenge:
+    eip4361:
+      uri: http://localhost:3000
+
+  explorer:
+    base-url: https://sepolia-optimism.etherscan.io
+
+  eip7702:
+    enabled: false  # dev에서 필요하면 true로
+

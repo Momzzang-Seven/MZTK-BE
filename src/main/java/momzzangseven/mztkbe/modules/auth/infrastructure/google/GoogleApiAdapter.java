@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.auth.application.dto.GoogleOAuthToken;
 import momzzangseven.mztkbe.modules.auth.application.dto.GoogleUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
+import momzzangseven.mztkbe.modules.auth.infrastructure.config.AuthWebClientProperties;
 import momzzangseven.mztkbe.modules.auth.infrastructure.google.dto.GoogleTokenResponse;
 import momzzangseven.mztkbe.modules.auth.infrastructure.google.dto.GoogleUserResponse;
 import org.springframework.http.HttpStatusCode;
@@ -24,6 +25,7 @@ public class GoogleApiAdapter implements GoogleAuthPort {
 
   private final GoogleAuthProperties props;
   private final WebClient webClient;
+  private final AuthWebClientProperties authWebClientProperties;
 
   @Override
   public GoogleOAuthToken exchangeToken(String authorizationCode) {
@@ -67,7 +69,7 @@ public class GoogleApiAdapter implements GoogleAuthPort {
                                           + ", body="
                                           + body)))
               .bodyToMono(GoogleTokenResponse.class)
-              .block(Duration.ofSeconds(5));
+              .block(Duration.ofSeconds(authWebClientProperties.getBlockTimeoutSeconds()));
 
       if (token == null || token.getAccessToken() == null) {
         throw new BusinessException(
@@ -106,7 +108,7 @@ public class GoogleApiAdapter implements GoogleAuthPort {
                                           + ", body="
                                           + body)))
               .bodyToMono(GoogleUserResponse.class)
-              .block(Duration.ofSeconds(5));
+              .block(Duration.ofSeconds(authWebClientProperties.getBlockTimeoutSeconds()));
 
       if (user == null) {
         throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR, "Failed to get Google user info");
@@ -166,7 +168,7 @@ public class GoogleApiAdapter implements GoogleAuthPort {
                                       + ", body="
                                       + body)))
           .toBodilessEntity()
-          .block(Duration.ofSeconds(5));
+          .block(Duration.ofSeconds(authWebClientProperties.getBlockTimeoutSeconds()));
     } catch (BusinessException e) {
       throw e;
     } catch (Exception e) {
