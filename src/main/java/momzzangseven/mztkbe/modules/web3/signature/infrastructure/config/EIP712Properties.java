@@ -21,19 +21,14 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "web3.eip712")
 public class EIP712Properties {
   /** Domain name */
-  @NotBlank
-  private String domainName;
+  @NotBlank private String domainName;
 
   /** Domain version */
-  @NotBlank
-  private String domainVersion;
+  @NotBlank private String domainVersion;
 
   /** Chain ID */
-  @NotNull
-  @Positive
-  private Long chainId;
+  @NotNull @Positive private Long chainId;
 
   /** Verifying contract address */
-  @NotBlank
-  private String verifyingContract;
+  @NotBlank private String verifyingContract;
 }

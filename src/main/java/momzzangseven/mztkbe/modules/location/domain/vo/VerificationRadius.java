@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
  * planning changes.
  *
  * <p>Configuration location: {@code location.verification.radius-meters}
- *
  */
 @Getter
 @Setter
