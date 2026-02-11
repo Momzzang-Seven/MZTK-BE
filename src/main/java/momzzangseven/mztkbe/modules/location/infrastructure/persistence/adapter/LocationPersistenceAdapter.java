@@ -56,7 +56,7 @@ public class LocationPersistenceAdapter
   /**
    * 배치 삭제 (User IDs 기반, Soft Deleted만 삭제)
    *
-   * <p>Used when UserHardDeleteEventHandler is triggered.
+   * <p>Used when WalletUserHardDeleteEventHandler is triggered.
    *
    * @param userIds 삭제할 User ID 목록
    * @return 삭제된 Location 개수

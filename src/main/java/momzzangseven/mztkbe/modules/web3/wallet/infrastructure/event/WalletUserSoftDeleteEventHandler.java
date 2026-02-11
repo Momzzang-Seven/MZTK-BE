@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserSoftDeleteEventHandler {
+public class WalletUserSoftDeleteEventHandler {
 
   private final LoadWalletPort loadWalletPort;
   private final SaveWalletPort saveWalletPort;

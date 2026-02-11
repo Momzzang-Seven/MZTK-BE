@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserSoftDeleteEventHandler {
+public class LocationUserSoftDeleteEventHandler {
   private final LoadLocationPort loadLocationPort;
   private final SaveLocationPort saveLocationPort;
 

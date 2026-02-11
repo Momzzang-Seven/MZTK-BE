@@ -1,10 +1,10 @@
-package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.event;
+package momzzangseven.mztkbe.modules.location.infrastructure.event;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.location.application.service.LocationHardDeleteService;
 import momzzangseven.mztkbe.modules.user.domain.event.UsersHardDeletedEvent;
-import momzzangseven.mztkbe.modules.web3.wallet.application.service.WalletHardDeleteService;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -13,21 +13,20 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Event handler for user hard deletion
  *
- * <p>Listens to UsersHardDeletedEvent and cascade-deletes USER_DELETED wallets associated with the
- * deleted users.
+ * <p>User 모듈의 스케줄러가 User를 Hard Delete할 때 발행하는 이벤트 수신
  *
- * <p>Uses REQUIRES_NEW propagation to ensure wallet deletion happens in a separate transaction from
- * user deletion.
+ * <p>REQUIRES_NEW 트랜잭션을 사용하여 User 삭제와 독립적으로 실행
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserHardDeleteEventHandler {
-
-  private final WalletHardDeleteService walletHardDeleteService;
+public class LocationUserHardDeleteEventHandler {
+  private final LocationHardDeleteService locationHardDeleteService;
 
   /**
    * Handle users hard deleted event
+   *
+   * <p>User 모듈에서 배치 삭제한 User ID 목록을 받아 Location도 Hard Delete
    *
    * @param event event containing user IDs that were hard-deleted
    */
@@ -42,23 +41,24 @@ public class UserHardDeleteEventHandler {
     }
 
     log.info(
-        "Handling user hard delete event: cascade deleting USER_DELETED wallets for userCount={}",
+        "Handling user hard delete event: cascade deleting soft deleted locations for userCount={}",
         userIds.size());
 
     try {
-      int deletedCount = walletHardDeleteService.deleteByUserIds(userIds);
+      int deletedCount = locationHardDeleteService.deleteByUserIds(userIds);
 
       log.info(
-          "Successfully cascade deleted USER_DELETED wallets: walletCount={}, userCount={}",
+          "Successfully cascade deleted soft deleted locations: locationCount={}, userCount={}",
           deletedCount,
           userIds.size());
+
     } catch (Exception e) {
+      // 예외를 잡아서 로깅만 하고 전파하지 않음
+      // 다른 이벤트 리스너가 계속 실행될 수 있도록
       log.error(
-          "Failed to cascade delete USER_DELETED wallets for users: userCount={}",
+          "Failed to cascade delete soft deleted locations for users: userCount={}",
           userIds.size(),
           e);
-      // Don't throw - let other event listeners continue
-      // The wallet scheduler will eventually clean them up
     }
   }
 }
