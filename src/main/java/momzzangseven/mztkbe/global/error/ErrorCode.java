@@ -192,6 +192,8 @@ public enum ErrorCode {
 
   LOCATION_NOT_FOUND("LOCATION_005", "Location not found", HttpStatus.NOT_FOUND),
 
+  LOCATION_ALREADY_DELETED("LOCATION_006", "Location already deleted", HttpStatus.CONFLICT),
+
   // ========================================
   // Validation Errors (VALIDATION_xxx)
   // ========================================
