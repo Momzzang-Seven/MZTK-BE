@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.comment.domain.model;
 import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 
 @Getter
 public class Comment {
@@ -40,7 +42,7 @@ public class Comment {
   // [Factory Method] 댓글 생성
   public static Comment create(Long postId, Long writerId, Long parentId, String content) {
     if (content == null || content.isBlank()) {
-      throw new IllegalArgumentException("댓글 내용은 필수입니다.");
+      throw new BusinessException(ErrorCode.INVALID_INPUT);
     }
 
     return Comment.builder()
@@ -57,11 +59,13 @@ public class Comment {
   // [Business Logic] 내용 수정
   public void updateContent(String newContent) {
     if (this.isDeleted) {
-      throw new IllegalStateException("삭제된 댓글은 수정할 수 없습니다.");
+      throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
     }
+
     if (newContent == null || newContent.isBlank()) {
-      throw new IllegalArgumentException("수정할 내용은 비워둘 수 없습니다.");
+      throw new BusinessException(ErrorCode.INVALID_INPUT);
     }
+
     this.content = newContent;
     this.updatedAt = LocalDateTime.now();
   }

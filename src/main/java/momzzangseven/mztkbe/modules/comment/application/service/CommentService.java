@@ -1,6 +1,11 @@
 package momzzangseven.mztkbe.modules.comment.application.service;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
+import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
+import momzzangseven.mztkbe.global.error.comment.CommentUnauthorizedException;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
@@ -27,7 +32,7 @@ public class CommentService
   public CommentResult createComment(CreateCommentCommand command) {
     // 1. 게시글 존재 여부 검증
     if (!loadPostPort.existsPost(command.postId())) {
-      throw new IllegalArgumentException("존재하지 않는 게시글입니다.");
+      throw new BusinessException(ErrorCode.POST_NOT_FOUND);
     }
 
     // 2. 대댓글인 경우 부모 댓글 관련 검증
@@ -35,15 +40,15 @@ public class CommentService
       Comment parent =
           loadCommentPort
               .loadComment(command.parentId())
-              .orElseThrow(() -> new IllegalArgumentException("부모 댓글을 찾을 수 없습니다."));
+              .orElseThrow(() -> new CommentNotFoundException());
 
       // 3. 부모 댓글의 postId와 요청 postId 일치 여부 검증
       if (!parent.getPostId().equals(command.postId())) {
-        throw new IllegalArgumentException("부모 댓글과 현재 게시글 정보가 일치하지 않습니다.");
+        throw new CommentPostMismatchException();
       }
 
       if (parent.isDeleted()) {
-        throw new IllegalArgumentException("삭제된 댓글에는 답글을 달 수 없습니다.");
+        throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
       }
     }
 
@@ -61,11 +66,10 @@ public class CommentService
     Comment comment =
         loadCommentPort
             .loadComment(command.commentId())
-            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 댓글입니다."));
+            .orElseThrow(() -> new CommentNotFoundException());
 
-    // [권한 검증]
     if (!comment.getWriterId().equals(command.userId())) {
-      throw new IllegalArgumentException("댓글 수정 권한이 없습니다.");
+      throw new CommentUnauthorizedException();
     }
 
     comment.updateContent(command.content());
@@ -80,14 +84,13 @@ public class CommentService
     Comment comment =
         loadCommentPort
             .loadComment(command.commentId())
-            .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 댓글입니다."));
+            .orElseThrow(() -> new CommentNotFoundException());
 
     if (!comment.getWriterId().equals(command.userId())) {
-      throw new IllegalArgumentException("댓글 삭제 권한이 없습니다.");
+      throw new CommentUnauthorizedException();
     }
 
-    comment.delete(); // Soft Delete
-
+    comment.delete();
     saveCommentPort.saveComment(comment);
   }
 
@@ -103,7 +106,7 @@ public class CommentService
   @Override
   public Page<CommentResult> getReplies(GetRepliesQuery query) {
     if (loadCommentPort.loadComment(query.parentId()).isEmpty()) {
-      throw new IllegalArgumentException("존재하지 않는 댓글입니다.");
+      throw new CommentNotFoundException();
     }
 
     return loadCommentPort.loadReplies(query.parentId(), query.pageable()).map(CommentResult::from);
