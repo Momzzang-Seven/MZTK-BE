@@ -252,6 +252,9 @@ public enum ErrorCode {
 
   COMMENT_POST_MISMATCH(
       "COMMENT_005", "Comment does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
+      ),
+  COMMENT_TOO_LONG(
+      "COMMENT_006", "Comment length must be within 1000 characters", HttpStatus.BAD_REQUEST // 400
       );
 
   private final String code;
