@@ -161,7 +161,8 @@ public class Web3jErc20Adapter implements Web3ContractPort {
             transferData);
 
     Transaction callStaticRequest =
-        Transaction.createEthCallTransaction(command.fromAddress(), tokenContractAddress, transferData);
+        Transaction.createEthCallTransaction(
+            command.fromAddress(), tokenContractAddress, transferData);
     RpcAttempt<EthCall> callStaticAttempt =
         callWithFallback(
             web3j -> web3j.ethCall(callStaticRequest, DefaultBlockParameterName.PENDING).send());

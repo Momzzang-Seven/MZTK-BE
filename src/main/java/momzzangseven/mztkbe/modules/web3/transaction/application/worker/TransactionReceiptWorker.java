@@ -87,7 +87,8 @@ public class TransactionReceiptWorker {
 
     if (receipt.found()) {
       if (Boolean.TRUE.equals(receipt.success())) {
-        updateTransactionPort.updateStatus(item.transactionId(), Web3TxStatus.SUCCEEDED, txHash, null);
+        updateTransactionPort.updateStatus(
+            item.transactionId(), Web3TxStatus.SUCCEEDED, txHash, null);
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
       } else {
         updateTransactionPort.updateStatus(
@@ -134,7 +135,8 @@ public class TransactionReceiptWorker {
 
   private void timeout(Long transactionId, String txHash, int timeoutSeconds) {
     String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_" + timeoutSeconds + "S";
-    updateTransactionPort.updateStatus(transactionId, Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
+    updateTransactionPort.updateStatus(
+        transactionId, Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
     auditStateChange(transactionId, Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
   }
 
