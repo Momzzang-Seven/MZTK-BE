@@ -5,17 +5,17 @@ import org.springframework.http.HttpStatus;
 /** Base class for business errors annotated with an ErrorCode. */
 public class BusinessException extends RuntimeException {
 
-  /** Error code enum containing code, message, and HTTP status. */
-  private final ErrorCode errorCode;
+  /** Error code containing code, message, and HTTP status. */
+  private final AppErrorCode errorCode;
 
   /**
    * Constructor with ErrorCode and custom message. Use this when you want to add context to the
    * default message.
    *
-   * @param errorCode The error code enum
+   * @param errorCode The error code
    * @param customMessage Custom message (can be null to use default)
    */
-  public BusinessException(ErrorCode errorCode, String customMessage) {
+  public BusinessException(AppErrorCode errorCode, String customMessage) {
     super(customMessage != null ? customMessage : errorCode.getMessage());
     this.errorCode = errorCode;
   }
@@ -23,9 +23,9 @@ public class BusinessException extends RuntimeException {
   /**
    * Constructor with only ErrorCode. Uses the default message from ErrorCode.
    *
-   * @param errorCode The error code enum
+   * @param errorCode The error code
    */
-  public BusinessException(ErrorCode errorCode) {
+  public BusinessException(AppErrorCode errorCode) {
     super(errorCode.getMessage());
     this.errorCode = errorCode;
   }
@@ -33,11 +33,11 @@ public class BusinessException extends RuntimeException {
   /**
    * Constructor with ErrorCode, custom message, and cause.
    *
-   * @param errorCode The error code enum
+   * @param errorCode The error code
    * @param customMessage Custom message
    * @param cause The underlying cause
    */
-  public BusinessException(ErrorCode errorCode, String customMessage, Throwable cause) {
+  public BusinessException(AppErrorCode errorCode, String customMessage, Throwable cause) {
     super(customMessage != null ? customMessage : errorCode.getMessage(), cause);
     this.errorCode = errorCode;
   }

@@ -80,7 +80,7 @@ public class GlobalExceptionHandler {
         .getFieldErrors()
         .forEach(error -> fieldErrors.put(error.getField(), error.getDefaultMessage()));
 
-    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    AppErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error("Validation failed", errorCode.getCode(), fieldErrors));
   }
@@ -89,7 +89,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(MissingRequestCookieException.class)
   public ResponseEntity<ApiResponse<Void>> handleMissingRequestCookieException(
       MissingRequestCookieException ex) {
-    ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+    AppErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
   }
@@ -98,7 +98,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(
       IllegalArgumentException ex) {
-    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    AppErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
   }
@@ -107,7 +107,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(NoResourceFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleNoResourceFoundException(
       NoResourceFoundException ex) {
-    ErrorCode errorCode = ErrorCode.RESOURCE_NOT_FOUND;
+    AppErrorCode errorCode = ErrorCode.RESOURCE_NOT_FOUND;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
   }
@@ -134,7 +134,7 @@ public class GlobalExceptionHandler {
       }
     }
 
-    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    AppErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(userFriendlyMessage, errorCode.getCode()));
   }
@@ -149,7 +149,7 @@ public class GlobalExceptionHandler {
     log.error("Unexpected exception occurred", ex);
 
     // Use ErrorCode for internal server error
-    ErrorCode errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
+    AppErrorCode errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
 
     return ResponseEntity.status(errorCode.getHttpStatus()) // ← ErrorCode에서 가져옴!
         .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));

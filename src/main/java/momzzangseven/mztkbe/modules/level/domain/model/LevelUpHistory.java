@@ -15,8 +15,6 @@ public class LevelUpHistory {
   private int toLevel;
   private int spentXp;
   private int rewardMztk;
-  private RewardStatus rewardStatus;
-  private String rewardTxHash;
   private LocalDateTime createdAt;
 
   public static LevelUpHistory createPending(
@@ -28,7 +26,6 @@ public class LevelUpHistory {
         .toLevel(toLevel)
         .spentXp(spentXp)
         .rewardMztk(rewardMztk)
-        .rewardStatus(RewardStatus.PENDING)
         .createdAt(LocalDateTime.now())
         .build();
   }

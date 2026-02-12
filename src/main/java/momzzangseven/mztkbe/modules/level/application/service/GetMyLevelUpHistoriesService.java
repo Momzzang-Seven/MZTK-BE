@@ -65,14 +65,9 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
 
   private LevelUpHistoryItem mapToItem(
       LevelUpHistory history, LoadLevelRewardTransactionPort.RewardTxView rewardTxView) {
-    Web3TxStatus rewardTxStatus =
-        rewardTxView != null ? rewardTxView.status() : mapLegacyStatus(history.getRewardStatus());
-    RewardStatus rewardStatus =
-        rewardTxView != null ? toLegacyStatus(rewardTxStatus) : history.getRewardStatus();
-    String rewardTxHash =
-        rewardTxView != null && rewardTxView.txHash() != null
-            ? rewardTxView.txHash()
-            : history.getRewardTxHash();
+    Web3TxStatus rewardTxStatus = resolveRewardTxStatus(history, rewardTxView);
+    RewardStatus rewardStatus = toLegacyStatus(rewardTxStatus);
+    String rewardTxHash = rewardTxView != null ? rewardTxView.txHash() : null;
 
     return LevelUpHistoryItem.builder()
         .levelUpHistoryId(history.getId())
@@ -89,15 +84,15 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
         .build();
   }
 
-  private Web3TxStatus mapLegacyStatus(RewardStatus rewardStatus) {
-    if (rewardStatus == null) {
-      return Web3TxStatus.CREATED;
+  private Web3TxStatus resolveRewardTxStatus(
+      LevelUpHistory history, LoadLevelRewardTransactionPort.RewardTxView rewardTxView) {
+    if (rewardTxView != null) {
+      return rewardTxView.status();
     }
-    return switch (rewardStatus) {
-      case SUCCESS -> Web3TxStatus.SUCCEEDED;
-      case FAILED -> Web3TxStatus.FAILED_ONCHAIN;
-      case PENDING -> Web3TxStatus.CREATED;
-    };
+    if (history.getRewardMztk() <= 0) {
+      return Web3TxStatus.SUCCEEDED;
+    }
+    return Web3TxStatus.CREATED;
   }
 
   private RewardStatus toLegacyStatus(Web3TxStatus status) {

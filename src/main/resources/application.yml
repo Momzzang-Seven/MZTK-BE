@@ -175,6 +175,11 @@ web3:
       eth-warning-threshold: ${TREASURY_ETH_WARNING_THRESHOLD}
       eth-critical-threshold: ${TREASURY_ETH_CRITICAL_THRESHOLD}
 
+    gas:
+      default-gas-limit: 120000
+      default-max-priority-fee-per-gas-wei: 1000000000
+      max-fee-multiplier: 2
+
     worker:
       claim-ttl-seconds: 120
       receipt-timeout-seconds: 900

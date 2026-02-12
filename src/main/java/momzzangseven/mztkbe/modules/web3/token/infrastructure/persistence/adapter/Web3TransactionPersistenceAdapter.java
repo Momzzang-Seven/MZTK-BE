@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.global.error.level.RewardFailedOnchainException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelRewardTransactionPort;
+import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
@@ -18,7 +19,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import org.web3j.crypto.WalletUtils;
 
 @Component
 @RequiredArgsConstructor
@@ -53,8 +53,8 @@ public class Web3TransactionPersistenceAdapter
             .referenceType(Web3ReferenceType.LEVEL_UP_REWARD)
             .referenceId(command.referenceId())
             .toUserId(command.userId())
-            .fromAddress(normalizeAddress(command.fromAddress()))
-            .toAddress(normalizeAddress(command.toAddress()))
+            .fromAddress(EvmAddress.of(command.fromAddress()).value())
+            .toAddress(EvmAddress.of(command.toAddress()).value())
             .amountWei(command.amountWei())
             .status(Web3TxStatus.CREATED)
             .build();
@@ -123,25 +123,14 @@ public class Web3TransactionPersistenceAdapter
     if (command.fromAddress() == null || command.fromAddress().isBlank()) {
       throw new Web3InvalidInputException("fromAddress is required");
     }
-    if (!WalletUtils.isValidAddress(command.fromAddress())) {
-      throw new Web3InvalidInputException("fromAddress must be valid EVM address");
-    }
     if (command.toAddress() == null || command.toAddress().isBlank()) {
       throw new Web3InvalidInputException("toAddress is required");
     }
-    if (!WalletUtils.isValidAddress(command.toAddress())) {
-      throw new Web3InvalidInputException("toAddress must be valid EVM address");
-    }
+    EvmAddress.of(command.fromAddress());
+    EvmAddress.of(command.toAddress());
     if (command.amountWei() == null || command.amountWei().signum() < 0) {
       throw new Web3InvalidInputException("amountWei must be >= 0");
     }
-  }
-
-  private String normalizeAddress(String rawAddress) {
-    if (rawAddress == null || rawAddress.isBlank()) {
-      throw new Web3InvalidInputException("address is required");
-    }
-    return rawAddress.toLowerCase();
   }
 
   private Web3Transaction map(Web3TransactionEntity entity) {

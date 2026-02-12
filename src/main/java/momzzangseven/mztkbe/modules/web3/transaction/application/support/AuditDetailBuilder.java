@@ -71,7 +71,8 @@ public final class AuditDetailBuilder {
     }
     if (value instanceof Map<?, ?> mapValue) {
       Map<String, Object> normalized = new LinkedHashMap<>();
-      mapValue.forEach((key, mapEntryValue) -> normalized.put(String.valueOf(key), normalize(mapEntryValue)));
+      mapValue.forEach(
+          (key, mapEntryValue) -> normalized.put(String.valueOf(key), normalize(mapEntryValue)));
       return normalized;
     }
     if (value instanceof List<?> listValue) {

@@ -1,9 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
 import jakarta.persistence.EntityManager;
-import java.util.Arrays;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -11,10 +11,10 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
@@ -107,24 +107,9 @@ public class TransactionWorkPersistenceAdapter
     }
 
     Web3TransactionEntity entity = load(transactionId);
-    if (entity.getStatus() != Web3TxStatus.CREATED) {
-      throw new Web3TransactionStateInvalidException(
-          "nonce can only be assigned for CREATED status: id=" + transactionId);
-    }
-
-    if (entity.getNonce() != null && !entity.getNonce().equals(nonce)) {
-      throw new Web3TransactionStateInvalidException(
-          "nonce already assigned with different value: id="
-              + transactionId
-              + ", existing="
-              + entity.getNonce()
-              + ", requested="
-              + nonce);
-    }
-
-    if (entity.getNonce() == null) {
-      entity.setNonce(nonce);
-    }
+    Web3Transaction transaction = toDomain(entity);
+    transaction.assignNonce(nonce);
+    apply(entity, transaction);
   }
 
   @Override
@@ -135,18 +120,9 @@ public class TransactionWorkPersistenceAdapter
     }
 
     Web3TransactionEntity entity = load(transactionId);
-    entity.setStatus(Web3TxStatus.SIGNED);
-    entity.setNonce(nonce);
-    entity.setSignedRawTx(signedRawTx);
-    if (txHash != null && !txHash.isBlank()) {
-      entity.setTxHash(txHash);
-    }
-    entity.setFailureReason(null);
-    if (entity.getSignedAt() == null) {
-      entity.setSignedAt(LocalDateTime.now());
-    }
-    entity.setProcessingBy(null);
-    entity.setProcessingUntil(null);
+    Web3Transaction transaction = toDomain(entity);
+    transaction.markSigned(nonce, signedRawTx, txHash, LocalDateTime.now());
+    apply(entity, transaction);
   }
 
   @Override
@@ -157,14 +133,9 @@ public class TransactionWorkPersistenceAdapter
     }
 
     Web3TransactionEntity entity = load(transactionId);
-    entity.setStatus(Web3TxStatus.PENDING);
-    entity.setTxHash(txHash);
-    entity.setFailureReason(null);
-    if (entity.getBroadcastedAt() == null) {
-      entity.setBroadcastedAt(LocalDateTime.now());
-    }
-    entity.setProcessingBy(null);
-    entity.setProcessingUntil(null);
+    Web3Transaction transaction = toDomain(entity);
+    transaction.markPending(txHash, LocalDateTime.now());
+    apply(entity, transaction);
   }
 
   @Override
@@ -172,26 +143,9 @@ public class TransactionWorkPersistenceAdapter
   public void updateStatus(
       Long transactionId, Web3TxStatus status, String txHash, String failureReason) {
     Web3TransactionEntity entity = load(transactionId);
-    entity.setStatus(status);
-    if (txHash != null && !txHash.isBlank()) {
-      entity.setTxHash(txHash);
-    }
-    entity.setFailureReason(failureReason);
-
-    LocalDateTime now = LocalDateTime.now();
-    if (status == Web3TxStatus.SIGNED && entity.getSignedAt() == null) {
-      entity.setSignedAt(now);
-    }
-    if (status == Web3TxStatus.PENDING && entity.getBroadcastedAt() == null) {
-      entity.setBroadcastedAt(now);
-    }
-    if ((status == Web3TxStatus.SUCCEEDED || status == Web3TxStatus.FAILED_ONCHAIN)
-        && entity.getConfirmedAt() == null) {
-      entity.setConfirmedAt(now);
-    }
-
-    entity.setProcessingBy(null);
-    entity.setProcessingUntil(null);
+    Web3Transaction transaction = toDomain(entity);
+    transaction.updateStatus(status, txHash, failureReason, LocalDateTime.now());
+    apply(entity, transaction);
   }
 
   @Override
@@ -199,17 +153,18 @@ public class TransactionWorkPersistenceAdapter
   public void scheduleRetry(
       Long transactionId, String failureReason, LocalDateTime processingUntil) {
     Web3TransactionEntity entity = load(transactionId);
-    entity.setFailureReason(failureReason);
-    entity.setProcessingBy(null);
-    entity.setProcessingUntil(processingUntil);
+    Web3Transaction transaction = toDomain(entity);
+    transaction.scheduleRetry(failureReason, processingUntil);
+    apply(entity, transaction);
   }
 
   @Override
   @Transactional
   public void clearProcessingLock(Long transactionId) {
     Web3TransactionEntity entity = load(transactionId);
-    entity.setProcessingBy(null);
-    entity.setProcessingUntil(null);
+    Web3Transaction transaction = toDomain(entity);
+    transaction.clearProcessingLock();
+    apply(entity, transaction);
   }
 
   @Override
@@ -224,7 +179,10 @@ public class TransactionWorkPersistenceAdapter
         .map(
             entity ->
                 new LoadTransactionPort.TransactionSnapshot(
-                    entity.getId(), entity.getStatus(), entity.getTxHash(), entity.getFailureReason()));
+                    entity.getId(),
+                    entity.getStatus(),
+                    entity.getTxHash(),
+                    entity.getFailureReason()));
   }
 
   private TransactionWorkItem toWorkItem(Web3TransactionEntity entity) {
@@ -244,6 +202,45 @@ public class TransactionWorkPersistenceAdapter
     return repository
         .findById(transactionId)
         .orElseThrow(() -> new Web3TransactionNotFoundException(transactionId));
+  }
+
+  private Web3Transaction toDomain(Web3TransactionEntity entity) {
+    return Web3Transaction.builder()
+        .id(entity.getId())
+        .idempotencyKey(entity.getIdempotencyKey())
+        .referenceType(entity.getReferenceType())
+        .referenceId(entity.getReferenceId())
+        .fromUserId(entity.getFromUserId())
+        .toUserId(entity.getToUserId())
+        .fromAddress(entity.getFromAddress())
+        .toAddress(entity.getToAddress())
+        .amountWei(entity.getAmountWei())
+        .nonce(entity.getNonce())
+        .status(entity.getStatus())
+        .txHash(entity.getTxHash())
+        .signedAt(entity.getSignedAt())
+        .broadcastedAt(entity.getBroadcastedAt())
+        .confirmedAt(entity.getConfirmedAt())
+        .signedRawTx(entity.getSignedRawTx())
+        .failureReason(entity.getFailureReason())
+        .processingUntil(entity.getProcessingUntil())
+        .processingBy(entity.getProcessingBy())
+        .createdAt(entity.getCreatedAt())
+        .updatedAt(entity.getUpdatedAt())
+        .build();
+  }
+
+  private void apply(Web3TransactionEntity entity, Web3Transaction domain) {
+    entity.setNonce(domain.getNonce());
+    entity.setStatus(domain.getStatus());
+    entity.setTxHash(domain.getTxHash());
+    entity.setSignedAt(domain.getSignedAt());
+    entity.setBroadcastedAt(domain.getBroadcastedAt());
+    entity.setConfirmedAt(domain.getConfirmedAt());
+    entity.setSignedRawTx(domain.getSignedRawTx());
+    entity.setFailureReason(domain.getFailureReason());
+    entity.setProcessingBy(domain.getProcessingBy());
+    entity.setProcessingUntil(domain.getProcessingUntil());
   }
 
   @SuppressWarnings("unchecked")

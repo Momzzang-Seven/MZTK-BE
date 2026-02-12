@@ -2,17 +2,16 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.worker;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.ReceiptPollAuditDetail;
+import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditDetailBuilder;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -22,45 +21,42 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
-public class TransactionReceiptWorker {
+public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
-  private static final int DEFAULT_BATCH_SIZE = 20;
-
-  private final LoadTransactionWorkPort loadTransactionWorkPort;
-  private final UpdateTransactionPort updateTransactionPort;
-  private final RecordTransactionAuditPort recordTransactionAuditPort;
   private final Web3ContractPort web3ContractPort;
-  private final RewardTokenProperties rewardTokenProperties;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
 
+  public TransactionReceiptWorker(
+      LoadTransactionWorkPort loadTransactionWorkPort,
+      UpdateTransactionPort updateTransactionPort,
+      RecordTransactionAuditPort recordTransactionAuditPort,
+      Web3ContractPort web3ContractPort,
+      RewardTokenProperties rewardTokenProperties) {
+    super(
+        loadTransactionWorkPort,
+        updateTransactionPort,
+        recordTransactionAuditPort,
+        rewardTokenProperties);
+    this.web3ContractPort = web3ContractPort;
+  }
+
   @Scheduled(fixedDelay = 1000L)
   public void run() {
-    processBatch(DEFAULT_BATCH_SIZE);
+    processBatch(20);
   }
 
   void processBatch(int limit) {
     int claimTtlSeconds =
-        Math.max(
-            rewardTokenProperties.getWorker().getClaimTtlSeconds(),
-            rewardTokenProperties.getWorker().getReceiptTimeoutSeconds());
-    Duration claimTtl = Duration.ofSeconds(claimTtlSeconds);
-    List<LoadTransactionWorkPort.TransactionWorkItem> items =
-        loadTransactionWorkPort.claimByStatus(Web3TxStatus.PENDING, limit, workerId, claimTtl);
-    if (items.isEmpty()) {
-      return;
-    }
-
-    for (LoadTransactionWorkPort.TransactionWorkItem item : items) {
-      try {
-        processItem(item);
-      } catch (Exception e) {
-        log.warn("Receipt worker failed for txId={}", item.transactionId(), e);
-        retry(item.transactionId(), Web3TxFailureReason.RPC_UNAVAILABLE.code());
-      }
-    }
+        Math.max(claimTtlSeconds(), rewardTokenProperties.getWorker().getReceiptTimeoutSeconds());
+    processBatchByStatus(
+        Web3TxStatus.PENDING,
+        limit,
+        workerId,
+        claimTtlSeconds,
+        Web3TxFailureReason.RPC_UNAVAILABLE.code(),
+        items -> forEachItem(items, this::processItem, Web3TxFailureReason.RPC_UNAVAILABLE.code()));
   }
 
   private void processItem(LoadTransactionWorkPort.TransactionWorkItem item) {
@@ -110,12 +106,6 @@ public class TransactionReceiptWorker {
     scheduleNextPoll(item.transactionId());
   }
 
-  private void retry(Long transactionId, String failureReason) {
-    LocalDateTime until =
-        LocalDateTime.now().plusSeconds(rewardTokenProperties.getWorker().getRetryBackoffSeconds());
-    updateTransactionPort.scheduleRetry(transactionId, failureReason, until);
-  }
-
   private void scheduleNextPoll(Long transactionId) {
     int pollMinSeconds = rewardTokenProperties.getWorker().getReceiptPollMinSeconds();
     int pollMaxSeconds = rewardTokenProperties.getWorker().getReceiptPollMaxSeconds();
@@ -146,13 +136,13 @@ public class TransactionReceiptWorker {
       long elapsedSeconds,
       Web3ContractPort.ReceiptResult receipt) {
     Map<String, Object> detail =
-        AuditDetailBuilder.create()
-            .put("attempt", attempt)
-            .put("elapsedSeconds", elapsedSeconds)
-            .put("result", receipt.found() ? "receipt_found" : "receipt_missing")
-            .put("rpcError", receipt.rpcError())
-            .put("failureReason", receipt.failureReason())
-            .build();
+        new ReceiptPollAuditDetail(
+                attempt,
+                elapsedSeconds,
+                receipt.found(),
+                receipt.rpcError(),
+                receipt.failureReason())
+            .toMap();
 
     audit(transactionId, Web3TransactionAuditEventType.RECEIPT_POLL, receipt.rpcAlias(), detail);
   }
@@ -162,19 +152,6 @@ public class TransactionReceiptWorker {
         transactionId,
         Web3TransactionAuditEventType.STATE_CHANGE,
         null,
-        AuditDetailBuilder.create().put("from", from).put("to", to).build());
-  }
-
-  private void audit(
-      Long transactionId,
-      Web3TransactionAuditEventType eventType,
-      String rpcAlias,
-      Map<String, Object> detail) {
-    try {
-      recordTransactionAuditPort.record(
-          new RecordTransactionAuditPort.AuditCommand(transactionId, eventType, rpcAlias, detail));
-    } catch (Exception e) {
-      log.warn("Failed to record audit log: txId={}, event={}", transactionId, eventType, e);
-    }
+        new StateChangeAuditDetail(from, to).toMap());
   }
 }

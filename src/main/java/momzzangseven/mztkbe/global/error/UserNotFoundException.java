@@ -1,13 +1,15 @@
 package momzzangseven.mztkbe.global.error;
 
+import momzzangseven.mztkbe.global.error.auth.AuthErrorCode;
+
 /** Exception thrown when a user is not found. */
 public class UserNotFoundException extends BusinessException {
 
   public UserNotFoundException(Long userId) {
-    super(ErrorCode.USER_NOT_FOUND, "User not found with ID: " + userId);
+    super(AuthErrorCode.USER_NOT_FOUND, "User not found with ID: " + userId);
   }
 
   public UserNotFoundException(String email) {
-    super(ErrorCode.USER_NOT_FOUND, "User not found with email: " + email);
+    super(AuthErrorCode.USER_NOT_FOUND, "User not found with email: " + email);
   }
 }

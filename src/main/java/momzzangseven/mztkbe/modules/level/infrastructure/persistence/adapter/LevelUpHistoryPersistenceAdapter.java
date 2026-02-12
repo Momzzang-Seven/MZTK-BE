@@ -58,8 +58,6 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
         .toLevel(entity.getToLevel())
         .spentXp(entity.getSpentXp())
         .rewardMztk(entity.getRewardMztk())
-        .rewardStatus(entity.getRewardStatus())
-        .rewardTxHash(entity.getRewardTxHash())
         .createdAt(entity.getCreatedAt())
         .build();
   }
@@ -73,8 +71,6 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
         .toLevel(history.getToLevel())
         .spentXp(history.getSpentXp())
         .rewardMztk(history.getRewardMztk())
-        .rewardStatus(history.getRewardStatus())
-        .rewardTxHash(history.getRewardTxHash())
         .createdAt(history.getCreatedAt())
         .build();
   }

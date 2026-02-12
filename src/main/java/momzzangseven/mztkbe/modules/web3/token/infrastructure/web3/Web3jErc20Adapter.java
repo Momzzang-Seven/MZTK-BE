@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.GasFeeStrategy;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
@@ -46,13 +47,11 @@ import org.web3j.protocol.http.HttpService;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class Web3jErc20Adapter implements Web3ContractPort {
 
-  private static final BigInteger DEFAULT_GAS_LIMIT = BigInteger.valueOf(120_000L);
-  private static final BigInteger DEFAULT_MAX_PRIORITY_FEE_PER_GAS =
-      BigInteger.valueOf(1_000_000_000L);
   private static final BigInteger WEI_PER_ETH = new BigInteger("1000000000000000000");
 
   private final RewardTokenProperties rewardTokenProperties;
   private final Web3CoreProperties web3CoreProperties;
+  private final GasFeeStrategy gasFeeStrategy;
 
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
@@ -197,17 +196,21 @@ public class Web3jErc20Adapter implements Web3ContractPort {
       return prevalidateFailure(Web3TxFailureReason.RPC_UNAVAILABLE, true, detail);
     }
 
-    BigInteger gasLimit =
-        positiveOrDefault(estimateGasAttempt.response().getAmountUsed(), DEFAULT_GAS_LIMIT);
-    BigInteger maxPriorityFeePerGas = resolveMaxPriorityFeePerGas(detail);
-    BigInteger maxFeePerGas = resolveMaxFeePerGas(maxPriorityFeePerGas, detail);
+    GasFeeStrategy.FeePlan feePlan =
+        resolveFeePlan(estimateGasAttempt.response().getAmountUsed(), detail);
 
-    detail.put("estimatedGas", gasLimit.toString());
-    detail.put("maxPriorityFeePerGas", maxPriorityFeePerGas.toString());
-    detail.put("maxFeePerGas", maxFeePerGas.toString());
+    detail.put("estimatedGas", feePlan.gasLimit().toString());
+    detail.put("maxPriorityFeePerGas", feePlan.maxPriorityFeePerGas().toString());
+    detail.put("maxFeePerGas", feePlan.maxFeePerGas().toString());
 
     return new PrevalidateResult(
-        true, false, null, gasLimit, maxPriorityFeePerGas, maxFeePerGas, Map.copyOf(detail));
+        true,
+        false,
+        null,
+        feePlan.gasLimit(),
+        feePlan.maxPriorityFeePerGas(),
+        feePlan.maxFeePerGas(),
+        Map.copyOf(detail));
   }
 
   @Override
@@ -271,42 +274,56 @@ public class Web3jErc20Adapter implements Web3ContractPort {
         && WalletUtils.isValidAddress(command.toAddress());
   }
 
-  private BigInteger resolveMaxPriorityFeePerGas(Map<String, Object> detail) {
+  private GasFeeStrategy.FeePlan resolveFeePlan(
+      BigInteger estimatedGas, Map<String, Object> detail) {
+    BigInteger rpcMaxPriorityFee = null;
     RpcAttempt<EthMaxPriorityFeePerGas> maxPriorityAttempt =
         callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send());
     if (maxPriorityAttempt.success()) {
-      BigInteger value =
-          positiveOrDefault(
-              maxPriorityAttempt.response().getMaxPriorityFeePerGas(),
-              DEFAULT_MAX_PRIORITY_FEE_PER_GAS);
+      BigInteger value = positiveOrNull(maxPriorityAttempt.response().getMaxPriorityFeePerGas());
       detail.put("maxPriorityFeeRpc", maxPriorityAttempt.alias());
-      return value;
+      if (value != null) {
+        rpcMaxPriorityFee = value;
+      }
+    } else {
+      detail.put("maxPriorityFeeError", maxPriorityAttempt.errorMessage());
     }
 
-    detail.put("maxPriorityFeeError", maxPriorityAttempt.errorMessage());
-    return DEFAULT_MAX_PRIORITY_FEE_PER_GAS;
-  }
-
-  private BigInteger resolveMaxFeePerGas(
-      BigInteger maxPriorityFeePerGas, Map<String, Object> detail) {
+    BigInteger rpcBaseFee = null;
+    BigInteger rpcGasPrice = null;
     RpcAttempt<EthBaseFee> baseFeeAttempt = callWithFallback(web3j -> web3j.ethBaseFee().send());
     if (baseFeeAttempt.success()) {
-      BigInteger baseFee =
-          positiveOrDefault(baseFeeAttempt.response().getBaseFee(), BigInteger.ZERO);
+      BigInteger baseFee = positiveOrNull(baseFeeAttempt.response().getBaseFee());
       detail.put("baseFeeRpc", baseFeeAttempt.alias());
-      return baseFee.multiply(BigInteger.TWO).add(maxPriorityFeePerGas);
+      if (baseFee != null) {
+        rpcBaseFee = baseFee;
+      }
+    } else {
+      detail.put("baseFeeError", baseFeeAttempt.errorMessage());
     }
 
-    RpcAttempt<EthGasPrice> gasPriceAttempt = callWithFallback(web3j -> web3j.ethGasPrice().send());
-    if (gasPriceAttempt.success()) {
-      BigInteger gasPrice =
-          positiveOrDefault(gasPriceAttempt.response().getGasPrice(), BigInteger.ZERO);
-      detail.put("gasPriceRpc", gasPriceAttempt.alias());
-      return gasPrice.add(maxPriorityFeePerGas);
+    if (rpcBaseFee == null) {
+      RpcAttempt<EthGasPrice> gasPriceAttempt =
+          callWithFallback(web3j -> web3j.ethGasPrice().send());
+      if (gasPriceAttempt.success()) {
+        BigInteger gasPrice = positiveOrNull(gasPriceAttempt.response().getGasPrice());
+        detail.put("gasPriceRpc", gasPriceAttempt.alias());
+        if (gasPrice != null) {
+          rpcGasPrice = gasPrice;
+        }
+      } else {
+        detail.put("gasPriceError", gasPriceAttempt.errorMessage());
+      }
     }
 
-    detail.put("maxFeeFallback", "priority_x2");
-    return maxPriorityFeePerGas.multiply(BigInteger.TWO);
+    GasFeeStrategy.FeePlan feePlan =
+        gasFeeStrategy.calculate(
+            new GasFeeStrategy.FeeInputs(estimatedGas, rpcMaxPriorityFee, rpcBaseFee, rpcGasPrice));
+
+    if (rpcBaseFee == null && rpcGasPrice == null) {
+      detail.put("maxFeeFallback", "strategy_default");
+    }
+    return feePlan;
   }
 
   private BigInteger decodeUint256(String encoded) {
@@ -392,9 +409,9 @@ public class Web3jErc20Adapter implements Web3ContractPort {
         && !attempt.response().getTransactionHash().isBlank();
   }
 
-  private BigInteger positiveOrDefault(BigInteger value, BigInteger defaultValue) {
+  private BigInteger positiveOrNull(BigInteger value) {
     if (value == null || value.signum() <= 0) {
-      return defaultValue;
+      return null;
     }
     return value;
   }
