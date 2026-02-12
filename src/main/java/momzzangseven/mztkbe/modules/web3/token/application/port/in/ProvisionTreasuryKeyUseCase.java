@@ -4,5 +4,5 @@ import momzzangseven.mztkbe.modules.web3.token.api.dto.ProvisionTreasuryKeyRespo
 
 public interface ProvisionTreasuryKeyUseCase {
 
-  ProvisionTreasuryKeyResponseDTO execute(String rawPrivateKey);
+  ProvisionTreasuryKeyResponseDTO execute(Long operatorId, String rawPrivateKey);
 }

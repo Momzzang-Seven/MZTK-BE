@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.port.out;
 
 import java.math.BigInteger;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
@@ -16,7 +17,9 @@ public interface LoadTransactionWorkPort {
       String fromAddress,
       String toAddress,
       BigInteger amountWei,
+      Long nonce,
       String txHash,
       String signedRawTx,
-      String failureReason) {}
+      String failureReason,
+      LocalDateTime broadcastedAt) {}
 }

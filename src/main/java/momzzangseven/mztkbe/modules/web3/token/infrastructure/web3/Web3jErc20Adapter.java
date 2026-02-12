@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
@@ -39,6 +40,7 @@ import org.web3j.protocol.http.HttpService;
 
 /** Web3ContractPort implementation using Web3j and main->sub RPC failover. */
 @Component
+@Slf4j
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class Web3jErc20Adapter implements Web3ContractPort {
@@ -92,11 +94,22 @@ public class Web3jErc20Adapter implements Web3ContractPort {
     }
 
     BigInteger ethBalanceWei = ethBalanceAttempt.response().getBalance();
+    BigInteger ethWarningWei =
+        ethToWei(rewardTokenProperties.getPrevalidate().getEthWarningThreshold());
     BigInteger ethCriticalWei =
         ethToWei(rewardTokenProperties.getPrevalidate().getEthCriticalThreshold());
     detail.put("ethBalanceWei", ethBalanceWei.toString());
+    detail.put("ethWarningThresholdWei", ethWarningWei.toString());
     detail.put("ethCriticalThresholdWei", ethCriticalWei.toString());
     detail.put("ethBalanceRpc", ethBalanceAttempt.alias());
+
+    if (ethWarningWei.signum() > 0 && ethBalanceWei.compareTo(ethWarningWei) < 0) {
+      detail.put("ethWarningTriggered", true);
+      log.warn(
+          "Treasury ETH below warning threshold: balanceWei={}, warningWei={}",
+          ethBalanceWei,
+          ethWarningWei);
+    }
 
     if (ethCriticalWei.signum() > 0 && ethBalanceWei.compareTo(ethCriticalWei) < 0) {
       return prevalidateFailure(Web3TxFailureReason.TREASURY_ETH_BELOW_CRITICAL, true, detail);
@@ -146,6 +159,24 @@ public class Web3jErc20Adapter implements Web3ContractPort {
             tokenContractAddress,
             BigInteger.ZERO,
             transferData);
+
+    Transaction callStaticRequest =
+        Transaction.createEthCallTransaction(command.fromAddress(), tokenContractAddress, transferData);
+    RpcAttempt<EthCall> callStaticAttempt =
+        callWithFallback(
+            web3j -> web3j.ethCall(callStaticRequest, DefaultBlockParameterName.PENDING).send());
+    if (!callStaticAttempt.success()) {
+      detail.put("callStaticError", callStaticAttempt.errorMessage());
+      if (callStaticAttempt.response() != null && callStaticAttempt.response().hasError()) {
+        return prevalidateFailure(Web3TxFailureReason.PREVALIDATE_REVERT, false, detail);
+      }
+      return prevalidateFailure(Web3TxFailureReason.RPC_UNAVAILABLE, true, detail);
+    }
+    if (callStaticAttempt.response().isReverted()) {
+      detail.put("revertReason", callStaticAttempt.response().getRevertReason());
+      return prevalidateFailure(Web3TxFailureReason.PREVALIDATE_REVERT, false, detail);
+    }
+    detail.put("callStaticRpc", callStaticAttempt.alias());
 
     RpcAttempt<EthEstimateGas> estimateGasAttempt =
         callWithFallback(web3j -> web3j.ethEstimateGas(estimateRequest).send());

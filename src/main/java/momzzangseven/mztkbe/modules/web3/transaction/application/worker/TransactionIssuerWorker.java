@@ -96,7 +96,7 @@ public class TransactionIssuerWorker {
       return;
     }
 
-    long nonce = reserveNoncePort.reserveNextNonce(treasuryKey.treasuryAddress());
+    long nonce = resolveNonce(item, treasuryKey.treasuryAddress());
     Web3ContractPort.SignedTransaction signed =
         web3ContractPort.signTransfer(
             new Web3ContractPort.SignTransferCommand(
@@ -179,5 +179,16 @@ public class TransactionIssuerWorker {
     } catch (Exception e) {
       log.warn("Failed to record audit log: txId={}, event={}", transactionId, eventType, e);
     }
+  }
+
+  private long resolveNonce(
+      LoadTransactionWorkPort.TransactionWorkItem item, String treasuryAddress) {
+    if (item.nonce() != null) {
+      return item.nonce();
+    }
+
+    long reservedNonce = reserveNoncePort.reserveNextNonce(treasuryAddress);
+    updateTransactionPort.assignNonce(item.transactionId(), reservedNonce);
+    return reservedNonce;
   }
 }

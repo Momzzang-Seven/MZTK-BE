@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -30,33 +33,19 @@ public class TransactionWorkPersistenceAdapter
   public List<TransactionWorkItem> claimByStatus(
       Web3TxStatus status, int limit, String workerId, Duration claimTtl) {
     if (status == null) {
-      throw new IllegalArgumentException("status is required");
+      throw new Web3InvalidInputException("status is required");
     }
     if (limit <= 0) {
-      throw new IllegalArgumentException("limit must be > 0");
+      throw new Web3InvalidInputException("limit must be > 0");
     }
     if (workerId == null || workerId.isBlank()) {
-      throw new IllegalArgumentException("workerId is required");
+      throw new Web3InvalidInputException("workerId is required");
     }
 
     LocalDateTime now = LocalDateTime.now();
     LocalDateTime processingUntil = now.plus(claimTtl == null ? Duration.ofMinutes(2) : claimTtl);
 
-    List<Number> ids =
-        entityManager
-            .createNativeQuery(
-                """
-                SELECT id
-                FROM web3_transactions
-                WHERE status = :status
-                  AND (processing_until IS NULL OR processing_until < NOW())
-                ORDER BY id
-                LIMIT :limit
-                FOR UPDATE SKIP LOCKED
-                """)
-            .setParameter("status", status.name())
-            .setParameter("limit", limit)
-            .getResultList();
+    List<Number> ids = selectClaimableIds(status, limit);
 
     if (ids.isEmpty()) {
       return List.of();
@@ -86,9 +75,37 @@ public class TransactionWorkPersistenceAdapter
 
   @Override
   @Transactional
+  public void assignNonce(Long transactionId, long nonce) {
+    if (nonce < 0) {
+      throw new Web3InvalidInputException("nonce must be >= 0");
+    }
+
+    Web3TransactionEntity entity = load(transactionId);
+    if (entity.getStatus() != Web3TxStatus.CREATED) {
+      throw new Web3TransactionStateInvalidException(
+          "nonce can only be assigned for CREATED status: id=" + transactionId);
+    }
+
+    if (entity.getNonce() != null && !entity.getNonce().equals(nonce)) {
+      throw new Web3TransactionStateInvalidException(
+          "nonce already assigned with different value: id="
+              + transactionId
+              + ", existing="
+              + entity.getNonce()
+              + ", requested="
+              + nonce);
+    }
+
+    if (entity.getNonce() == null) {
+      entity.setNonce(nonce);
+    }
+  }
+
+  @Override
+  @Transactional
   public void markSigned(Long transactionId, long nonce, String signedRawTx, String txHash) {
     if (signedRawTx == null || signedRawTx.isBlank()) {
-      throw new IllegalArgumentException("signedRawTx is required");
+      throw new Web3InvalidInputException("signedRawTx is required");
     }
 
     Web3TransactionEntity entity = load(transactionId);
@@ -110,7 +127,7 @@ public class TransactionWorkPersistenceAdapter
   @Transactional
   public void markPending(Long transactionId, String txHash) {
     if (txHash == null || txHash.isBlank()) {
-      throw new IllegalArgumentException("txHash is required");
+      throw new Web3InvalidInputException("txHash is required");
     }
 
     Web3TransactionEntity entity = load(transactionId);
@@ -175,15 +192,61 @@ public class TransactionWorkPersistenceAdapter
         entity.getFromAddress(),
         entity.getToAddress(),
         entity.getAmountWei(),
+        entity.getNonce(),
         entity.getTxHash(),
         entity.getSignedRawTx(),
-        entity.getFailureReason());
+        entity.getFailureReason(),
+        entity.getBroadcastedAt());
   }
 
   private Web3TransactionEntity load(Long transactionId) {
     return repository
         .findById(transactionId)
-        .orElseThrow(
-            () -> new IllegalStateException("web3 transaction not found: id=" + transactionId));
+        .orElseThrow(() -> new Web3TransactionNotFoundException(transactionId));
+  }
+
+  @SuppressWarnings("unchecked")
+  private List<Number> selectClaimableIds(Web3TxStatus status, int limit) {
+    if (status == Web3TxStatus.CREATED) {
+      return entityManager
+          .createNativeQuery(
+              """
+              SELECT id
+              FROM web3_transactions
+              WHERE status = :status
+                AND (processing_until IS NULL OR processing_until < NOW())
+                AND (
+                    failure_reason IS NULL
+                    OR failure_reason NOT IN (
+                        'TREASURY_TOKEN_INSUFFICIENT',
+                        'PREVALIDATE_REVERT',
+                        'TREASURY_KEY_MISSING',
+                        'INVALID_SIGNED_TX',
+                        'RECEIPT_TIMEOUT'
+                    )
+                )
+              ORDER BY id
+              LIMIT :limit
+              FOR UPDATE SKIP LOCKED
+              """)
+          .setParameter("status", status.name())
+          .setParameter("limit", limit)
+          .getResultList();
+    }
+
+    return entityManager
+        .createNativeQuery(
+            """
+            SELECT id
+            FROM web3_transactions
+            WHERE status = :status
+              AND (processing_until IS NULL OR processing_until < NOW())
+            ORDER BY id
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+            """)
+        .setParameter("status", status.name())
+        .setParameter("limit", limit)
+        .getResultList();
   }
 }

@@ -81,6 +81,11 @@ public enum ErrorCode {
   LEVEL_UP_ALREADY_PROCESSED("LEVEL_003", "Level up already processed", HttpStatus.CONFLICT),
   REWARD_FAILED_ONCHAIN(
       "LEVEL_004", "Reward transaction failed onchain and cannot be retried", HttpStatus.CONFLICT),
+  REWARD_INTENT_CREATION_FAILED(
+      "LEVEL_005", "Failed to create reward transaction intent", HttpStatus.INTERNAL_SERVER_ERROR),
+  REWARD_TREASURY_ADDRESS_INVALID(
+      "LEVEL_006", "Treasury address configuration is invalid", HttpStatus.INTERNAL_SERVER_ERROR),
+  LEVEL_UP_COMMAND_INVALID("LEVEL_007", "Invalid level up command", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Signup Errors (SIGNUP_xxx)
@@ -153,6 +158,16 @@ public enum ErrorCode {
   WALLET_IN_BLACKLIST(
       "WALLET_007", "Requested wallet is in block", HttpStatus.BAD_REQUEST // 400
       ),
+
+  // ========================================
+  // Web3 Errors (WEB3_xxx)
+  // ========================================
+  WEB3_INVALID_INPUT("WEB3_001", "Invalid web3 input", HttpStatus.BAD_REQUEST),
+  WEB3_TRANSACTION_NOT_FOUND("WEB3_002", "Web3 transaction not found", HttpStatus.NOT_FOUND),
+  WEB3_TRANSACTION_STATE_INVALID(
+      "WEB3_003", "Invalid web3 transaction state", HttpStatus.CONFLICT),
+  WEB3_TREASURY_PRIVATE_KEY_INVALID(
+      "WEB3_004", "Invalid treasury private key format", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)

@@ -8,6 +8,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.token.TokenEncryptionException;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import org.springframework.stereotype.Component;
@@ -37,7 +38,7 @@ public class TreasuryKeyCipher {
 
   public String encrypt(String plaintext, String keyB64) {
     if (plaintext == null || plaintext.isBlank()) {
-      throw new IllegalArgumentException("plaintext is required");
+      throw new Web3InvalidInputException("plaintext is required");
     }
 
     try {
@@ -59,7 +60,7 @@ public class TreasuryKeyCipher {
 
   public String decrypt(String encrypted, String keyB64) {
     if (encrypted == null || encrypted.isBlank()) {
-      throw new IllegalArgumentException("encrypted is required");
+      throw new Web3InvalidInputException("encrypted is required");
     }
 
     try {
