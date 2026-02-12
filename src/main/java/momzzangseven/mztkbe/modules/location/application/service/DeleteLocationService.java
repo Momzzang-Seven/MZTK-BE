@@ -34,6 +34,8 @@ public class DeleteLocationService implements DeleteLocationUseCase {
         command.userId(),
         command.locationId());
 
+    command.validate();
+
     // 1. Location 조회
     Location location =
         loadLocationPort

@@ -15,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>User 모듈의 스케줄러가 User를 Hard Delete할 때 발행하는 이벤트 수신
  *
- * <p>REQUIRES_NEW 트랜잭션을 사용하여 User 삭제와 독립적으로 실행
+ * <p>REQUIRED 트랜잭션을 사용하여 User 삭제와 동일한 트랜잭션에서 실행
+ *
+ * <p>Location 삭제 실패 시 User 삭제도 롤백되어 데이터 정합성을 보장합니다. User 삭제 스케줄러가 다음 실행 시 재시도합니다.
  */
 @Slf4j
 @Component
@@ -28,10 +30,13 @@ public class LocationUserHardDeleteEventHandler {
    *
    * <p>User 모듈에서 배치 삭제한 User ID 목록을 받아 Location도 Hard Delete
    *
+   * <p>User와 Location의 원자적 삭제를 보장하기 위해 같은 트랜잭션에서 실행됩니다.
+   *
    * @param event event containing user IDs that were hard-deleted
+   * @throws Exception e Location 삭제 실패 시 User 삭제도 롤백되도록 예외 전파
    */
   @EventListener
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @Transactional(propagation = Propagation.REQUIRED)
   public void handleUsersHardDeleted(UsersHardDeletedEvent event) {
     List<Long> userIds = event.userIds();
 
@@ -51,14 +56,16 @@ public class LocationUserHardDeleteEventHandler {
           "Successfully cascade deleted soft deleted locations: locationCount={}, userCount={}",
           deletedCount,
           userIds.size());
-
     } catch (Exception e) {
-      // 예외를 잡아서 로깅만 하고 전파하지 않음
-      // 다른 이벤트 리스너가 계속 실행될 수 있도록
+      // log만 남긴 후 예외를 throw. -> Roll back -> User hard deletion도 roll back
       log.error(
-          "Failed to cascade delete soft deleted locations for users: userCount={}",
+          """
+                      CRITICAL: Failed to delete locations.
+                      User deletion will be rolled back and retried tomorrow.
+                      UserCount: {}""",
           userIds.size(),
           e);
+      throw e;
     }
   }
 }
