@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.token.domain;
+package momzzangseven.mztkbe.modules.web3.token.domain.model;
 
 /** Policy-fixed idempotency key factory for reward issuance. */
 public final class RewardIdempotencyKeyFactory {
