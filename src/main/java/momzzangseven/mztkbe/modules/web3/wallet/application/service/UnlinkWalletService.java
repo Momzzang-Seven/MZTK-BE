@@ -37,10 +37,7 @@ public class UnlinkWalletService implements UnlinkWalletUseCase {
     log.info(
         "Unlinking wallet: userId={}, walletAddress={}", command.userId(), command.walletAddress());
 
-    // 1. Validate
-    command.validate();
-
-    // 2. Load active wallet by address
+    // 1. Load active wallet by address
     List<UserWallet> wallets =
         loadWalletPort.findWalletsByUserIdAndStatus(command.userId(), WalletStatus.ACTIVE);
 
@@ -48,7 +45,7 @@ public class UnlinkWalletService implements UnlinkWalletUseCase {
       throw new WalletNotFoundException(command.walletAddress());
     }
 
-    // 3. Check ownership
+    // 2. Check ownership
     UserWallet wallet = wallets.get(0);
 
     if (!wallet.belongsTo(command.userId())) {
@@ -59,11 +56,11 @@ public class UnlinkWalletService implements UnlinkWalletUseCase {
       throw new UnauthorizedWalletAccessException(wallet.getId(), command.userId());
     }
 
-    // 4. Unlink the wallet (soft delete)
+    // 3. Unlink the wallet (soft delete)
     UserWallet unlinkedWallet = wallet.unlink();
     UserWallet savedWallet = saveWalletPort.save(unlinkedWallet);
 
-    // 5. Record the event
+    // 4. Record the event
     eventPort.record(
         WalletEvent.unlinked(
             savedWallet.getWalletAddress(),

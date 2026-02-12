@@ -10,7 +10,7 @@ public record MarkTransactionSucceededCommand(
     String reason,
     String evidence) {
 
-  public void validate() {
+  public MarkTransactionSucceededCommand {
     if (operatorId == null || operatorId <= 0) {
       throw new Web3InvalidInputException("operatorId must be positive");
     }

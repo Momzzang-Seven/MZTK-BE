@@ -205,29 +205,28 @@ public class TransactionWorkPersistenceAdapter
   }
 
   private Web3Transaction toDomain(Web3TransactionEntity entity) {
-    return Web3Transaction.builder()
-        .id(entity.getId())
-        .idempotencyKey(entity.getIdempotencyKey())
-        .referenceType(entity.getReferenceType())
-        .referenceId(entity.getReferenceId())
-        .fromUserId(entity.getFromUserId())
-        .toUserId(entity.getToUserId())
-        .fromAddress(entity.getFromAddress())
-        .toAddress(entity.getToAddress())
-        .amountWei(entity.getAmountWei())
-        .nonce(entity.getNonce())
-        .status(entity.getStatus())
-        .txHash(entity.getTxHash())
-        .signedAt(entity.getSignedAt())
-        .broadcastedAt(entity.getBroadcastedAt())
-        .confirmedAt(entity.getConfirmedAt())
-        .signedRawTx(entity.getSignedRawTx())
-        .failureReason(entity.getFailureReason())
-        .processingUntil(entity.getProcessingUntil())
-        .processingBy(entity.getProcessingBy())
-        .createdAt(entity.getCreatedAt())
-        .updatedAt(entity.getUpdatedAt())
-        .build();
+    return Web3Transaction.reconstitute(
+        entity.getId(),
+        entity.getIdempotencyKey(),
+        entity.getReferenceType(),
+        entity.getReferenceId(),
+        entity.getFromUserId(),
+        entity.getToUserId(),
+        entity.getFromAddress(),
+        entity.getToAddress(),
+        entity.getAmountWei(),
+        entity.getNonce(),
+        entity.getStatus(),
+        entity.getTxHash(),
+        entity.getSignedAt(),
+        entity.getBroadcastedAt(),
+        entity.getConfirmedAt(),
+        entity.getSignedRawTx(),
+        entity.getFailureReason(),
+        entity.getProcessingUntil(),
+        entity.getProcessingBy(),
+        entity.getCreatedAt(),
+        entity.getUpdatedAt());
   }
 
   private void apply(Web3TransactionEntity entity, Web3Transaction domain) {

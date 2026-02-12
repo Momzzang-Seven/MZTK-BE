@@ -50,16 +50,15 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
   }
 
   private LevelUpHistory mapToDomain(LevelUpHistoryEntity entity) {
-    return LevelUpHistory.builder()
-        .id(entity.getId())
-        .userId(entity.getUserId())
-        .levelPolicyId(entity.getLevelPolicyId())
-        .fromLevel(entity.getFromLevel())
-        .toLevel(entity.getToLevel())
-        .spentXp(entity.getSpentXp())
-        .rewardMztk(entity.getRewardMztk())
-        .createdAt(entity.getCreatedAt())
-        .build();
+    return LevelUpHistory.reconstitute(
+        entity.getId(),
+        entity.getUserId(),
+        entity.getLevelPolicyId(),
+        entity.getFromLevel(),
+        entity.getToLevel(),
+        entity.getSpentXp(),
+        entity.getRewardMztk(),
+        entity.getCreatedAt());
   }
 
   private LevelUpHistoryEntity mapToEntity(LevelUpHistory history) {

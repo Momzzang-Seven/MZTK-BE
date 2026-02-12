@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -29,7 +30,9 @@ public class Web3TransactionPersistenceAdapter
   @Override
   @Transactional
   public Web3Transaction saveLevelUpRewardIntent(CreateLevelUpRewardTxIntentCommand command) {
-    validate(command);
+    if (command == null) {
+      throw new Web3InvalidInputException("command is required");
+    }
 
     Web3TransactionEntity existingByReference =
         repository
@@ -47,16 +50,17 @@ public class Web3TransactionPersistenceAdapter
     }
 
     Web3TransactionEntity created =
-        Web3TransactionEntity.builder()
-            .idempotencyKey(command.idempotencyKey())
-            .referenceType(Web3ReferenceType.LEVEL_UP_REWARD)
-            .referenceId(command.referenceId())
-            .toUserId(command.userId())
-            .fromAddress(command.fromAddress().value())
-            .toAddress(command.toAddress().value())
-            .amountWei(command.amountWei())
-            .status(Web3TxStatus.CREATED)
-            .build();
+        toEntity(
+            Web3Transaction.createIntent(
+                command.idempotencyKey(),
+                Web3ReferenceType.LEVEL_UP_REWARD,
+                command.referenceId(),
+                null,
+                command.userId(),
+                command.fromAddress().value(),
+                command.toAddress().value(),
+                command.amountWei(),
+                LocalDateTime.now()));
 
     try {
       return map(repository.saveAndFlush(created));
@@ -106,53 +110,54 @@ public class Web3TransactionPersistenceAdapter
     return map(existing);
   }
 
-  private void validate(CreateLevelUpRewardTxIntentCommand command) {
-    if (command == null) {
-      throw new Web3InvalidInputException("command is required");
-    }
-    if (command.userId() == null || command.userId() <= 0) {
-      throw new Web3InvalidInputException("userId must be positive");
-    }
-    if (command.levelUpHistoryId() == null || command.levelUpHistoryId() <= 0) {
-      throw new Web3InvalidInputException("levelUpHistoryId must be positive");
-    }
-    if (command.idempotencyKey() == null || command.idempotencyKey().isBlank()) {
-      throw new Web3InvalidInputException("idempotencyKey is required");
-    }
-    if (command.fromAddress() == null) {
-      throw new Web3InvalidInputException("fromAddress is required");
-    }
-    if (command.toAddress() == null) {
-      throw new Web3InvalidInputException("toAddress is required");
-    }
-    if (command.amountWei() == null || command.amountWei().signum() < 0) {
-      throw new Web3InvalidInputException("amountWei must be >= 0");
-    }
+  private Web3Transaction map(Web3TransactionEntity entity) {
+    return Web3Transaction.reconstitute(
+        entity.getId(),
+        entity.getIdempotencyKey(),
+        entity.getReferenceType(),
+        entity.getReferenceId(),
+        entity.getFromUserId(),
+        entity.getToUserId(),
+        entity.getFromAddress(),
+        entity.getToAddress(),
+        entity.getAmountWei(),
+        entity.getNonce(),
+        entity.getStatus(),
+        entity.getTxHash(),
+        entity.getSignedAt(),
+        entity.getBroadcastedAt(),
+        entity.getConfirmedAt(),
+        entity.getSignedRawTx(),
+        entity.getFailureReason(),
+        entity.getProcessingUntil(),
+        entity.getProcessingBy(),
+        entity.getCreatedAt(),
+        entity.getUpdatedAt());
   }
 
-  private Web3Transaction map(Web3TransactionEntity entity) {
-    return Web3Transaction.builder()
-        .id(entity.getId())
-        .idempotencyKey(entity.getIdempotencyKey())
-        .referenceType(entity.getReferenceType())
-        .referenceId(entity.getReferenceId())
-        .fromUserId(entity.getFromUserId())
-        .toUserId(entity.getToUserId())
-        .fromAddress(entity.getFromAddress())
-        .toAddress(entity.getToAddress())
-        .amountWei(entity.getAmountWei())
-        .nonce(entity.getNonce())
-        .status(entity.getStatus())
-        .txHash(entity.getTxHash())
-        .signedAt(entity.getSignedAt())
-        .broadcastedAt(entity.getBroadcastedAt())
-        .confirmedAt(entity.getConfirmedAt())
-        .signedRawTx(entity.getSignedRawTx())
-        .failureReason(entity.getFailureReason())
-        .processingUntil(entity.getProcessingUntil())
-        .processingBy(entity.getProcessingBy())
-        .createdAt(entity.getCreatedAt())
-        .updatedAt(entity.getUpdatedAt())
+  private Web3TransactionEntity toEntity(Web3Transaction transaction) {
+    return Web3TransactionEntity.builder()
+        .id(transaction.getId())
+        .idempotencyKey(transaction.getIdempotencyKey())
+        .referenceType(transaction.getReferenceType())
+        .referenceId(transaction.getReferenceId())
+        .fromUserId(transaction.getFromUserId())
+        .toUserId(transaction.getToUserId())
+        .fromAddress(transaction.getFromAddress())
+        .toAddress(transaction.getToAddress())
+        .amountWei(transaction.getAmountWei())
+        .nonce(transaction.getNonce())
+        .status(transaction.getStatus())
+        .txHash(transaction.getTxHash())
+        .signedAt(transaction.getSignedAt())
+        .broadcastedAt(transaction.getBroadcastedAt())
+        .confirmedAt(transaction.getConfirmedAt())
+        .signedRawTx(transaction.getSignedRawTx())
+        .failureReason(transaction.getFailureReason())
+        .processingUntil(transaction.getProcessingUntil())
+        .processingBy(transaction.getProcessingBy())
+        .createdAt(transaction.getCreatedAt())
+        .updatedAt(transaction.getUpdatedAt())
         .build();
   }
 }

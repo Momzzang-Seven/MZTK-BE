@@ -59,19 +59,16 @@ public class RegisterWalletService implements RegisterWalletUseCase {
         command.walletAddress(),
         command.nonce());
 
-    // 1. Validate command
-    command.validate();
-
-    // 2. Load challenge
+    // 1. Load challenge
     Challenge challenge =
         loadChallengePort
             .findByNonceAndPurpose(command.nonce(), ChallengePurpose.WALLET_REGISTRATION)
             .orElseThrow(() -> new ChallengeNotFoundException());
 
-    // 3. Validate challenge status
+    // 2. Validate challenge status
     validateChallenge(challenge, command);
 
-    // 4. Verify signature
+    // 3. Verify signature
     boolean signatureValid =
         verifySignaturePort.verify(
             challenge.getMessage(), command.nonce(), command.signature(), command.walletAddress());

@@ -43,8 +43,6 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
       throw new Web3InvalidInputException("command is required");
     }
 
-    command.validate();
-
     LoadTransactionPort.TransactionSnapshot snapshot =
         loadTransactionPort
             .loadById(command.transactionId())

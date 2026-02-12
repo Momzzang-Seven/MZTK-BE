@@ -47,7 +47,6 @@ public class LevelUpService implements LevelUpUseCase {
     if (command == null) {
       throw new LevelUpCommandInvalidException("command is required");
     }
-    command.validate();
 
     Long userId = command.userId();
     EvmAddress activeWalletAddress =
@@ -72,8 +71,8 @@ public class LevelUpService implements LevelUpUseCase {
 
     LevelUpHistory savedHistory =
         levelUpHistoryPort.saveLevelUpHistory(
-            LevelUpHistory.createPending(
-                userId, policy.getId(), fromLevel, toLevel, requiredXp, rewardMztk));
+            LevelUpHistory.initial(
+                userId, policy.getId(), fromLevel, toLevel, requiredXp, rewardMztk, now));
 
     RewardMztkResult rewardResult =
         attemptReward(userId, rewardMztk, savedHistory.getId(), activeWalletAddress);
@@ -96,18 +95,13 @@ public class LevelUpService implements LevelUpUseCase {
   private RewardMztkResult attemptReward(
       Long userId, int rewardMztk, Long referenceId, EvmAddress toWalletAddress) {
     if (rewardMztk <= 0) {
-      return RewardMztkResult.builder().status(Web3TxStatus.SUCCEEDED).build();
+      return RewardMztkResult.success(null);
     }
 
     try {
       RewardMztkResult result =
           rewardMztkPort.reward(
-              RewardMztkCommand.builder()
-                  .userId(userId)
-                  .rewardMztk(rewardMztk)
-                  .referenceId(referenceId)
-                  .toWalletAddress(toWalletAddress)
-                  .build());
+              new RewardMztkCommand(userId, rewardMztk, referenceId, toWalletAddress));
       if (result == null) {
         return RewardMztkResult.created("NULL_RESULT");
       }

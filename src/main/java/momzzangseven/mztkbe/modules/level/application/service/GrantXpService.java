@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
@@ -31,9 +32,8 @@ public class GrantXpService implements GrantXpUseCase {
   @Override
   public GrantXpResult execute(GrantXpCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new LevelUpCommandInvalidException("command is required");
     }
-    command.validate();
 
     Long userId = command.userId();
     LocalDateTime occurredAt = command.occurredAt();

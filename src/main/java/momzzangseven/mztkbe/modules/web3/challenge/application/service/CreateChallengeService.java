@@ -27,17 +27,14 @@ public class CreateChallengeService implements CreateChallengeUseCase {
         command.purpose(),
         command.walletAddress());
 
-    // 1. validate
-    command.validate();
-
-    // 2. Load configuration
+    // 1. Load configuration
     var config = loadChallengeConfigPort.loadConfig();
 
-    // 3. Create Challenge object
+    // 2. Create Challenge object
     Challenge challenge =
         Challenge.create(command.userId(), command.purpose(), command.walletAddress(), config);
 
-    // 4. Save challenge
+    // 3. Save challenge
     Challenge savedChallenge = saveChallengePort.save(challenge);
 
     log.info(

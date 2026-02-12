@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.domain.model;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -9,7 +10,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidExcepti
 
 /** Domain model for web3_transactions row. */
 @Getter
-@Builder(toBuilder = true)
+@Builder(access = AccessLevel.PRIVATE, toBuilder = true)
 public class Web3Transaction {
   private Long id;
   private String idempotencyKey;
@@ -36,6 +37,86 @@ public class Web3Transaction {
 
   private LocalDateTime createdAt;
   private LocalDateTime updatedAt;
+
+  public static Web3Transaction createIntent(
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId,
+      Long fromUserId,
+      Long toUserId,
+      String fromAddress,
+      String toAddress,
+      BigInteger amountWei,
+      LocalDateTime now) {
+    validateCore(idempotencyKey, referenceType, referenceId, fromAddress, toAddress, amountWei);
+    if (now == null) {
+      throw new Web3InvalidInputException("now is required");
+    }
+    return Web3Transaction.builder()
+        .idempotencyKey(idempotencyKey)
+        .referenceType(referenceType)
+        .referenceId(referenceId)
+        .fromUserId(fromUserId)
+        .toUserId(toUserId)
+        .fromAddress(fromAddress)
+        .toAddress(toAddress)
+        .amountWei(amountWei)
+        .status(Web3TxStatus.CREATED)
+        .createdAt(now)
+        .updatedAt(now)
+        .build();
+  }
+
+  public static Web3Transaction reconstitute(
+      Long id,
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId,
+      Long fromUserId,
+      Long toUserId,
+      String fromAddress,
+      String toAddress,
+      BigInteger amountWei,
+      Long nonce,
+      Web3TxStatus status,
+      String txHash,
+      LocalDateTime signedAt,
+      LocalDateTime broadcastedAt,
+      LocalDateTime confirmedAt,
+      String signedRawTx,
+      String failureReason,
+      LocalDateTime processingUntil,
+      String processingBy,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    validateCore(idempotencyKey, referenceType, referenceId, fromAddress, toAddress, amountWei);
+    if (status == null) {
+      throw new Web3InvalidInputException("status is required");
+    }
+    return Web3Transaction.builder()
+        .id(id)
+        .idempotencyKey(idempotencyKey)
+        .referenceType(referenceType)
+        .referenceId(referenceId)
+        .fromUserId(fromUserId)
+        .toUserId(toUserId)
+        .fromAddress(fromAddress)
+        .toAddress(toAddress)
+        .amountWei(amountWei)
+        .nonce(nonce)
+        .status(status)
+        .txHash(txHash)
+        .signedAt(signedAt)
+        .broadcastedAt(broadcastedAt)
+        .confirmedAt(confirmedAt)
+        .signedRawTx(signedRawTx)
+        .failureReason(failureReason)
+        .processingUntil(processingUntil)
+        .processingBy(processingBy)
+        .createdAt(createdAt)
+        .updatedAt(updatedAt)
+        .build();
+  }
 
   public String referenceKey() {
     return referenceType + ":" + referenceId;
@@ -72,7 +153,10 @@ public class Web3Transaction {
     }
     failureReason = null;
     if (signedAt == null) {
-      signedAt = now == null ? LocalDateTime.now() : now;
+      if (now == null) {
+        throw new Web3InvalidInputException("now is required");
+      }
+      signedAt = now;
     }
     clearProcessingLock();
   }
@@ -86,7 +170,10 @@ public class Web3Transaction {
     txHash = hash;
     failureReason = null;
     if (broadcastedAt == null) {
-      broadcastedAt = now == null ? LocalDateTime.now() : now;
+      if (now == null) {
+        throw new Web3InvalidInputException("now is required");
+      }
+      broadcastedAt = now;
     }
     clearProcessingLock();
   }
@@ -97,12 +184,15 @@ public class Web3Transaction {
       throw new Web3InvalidInputException("nextStatus is required");
     }
     assertTransitionAllowed(nextStatus);
+    if (nowForState == null) {
+      throw new Web3InvalidInputException("nowForState is required");
+    }
     status = nextStatus;
     if (hash != null && !hash.isBlank()) {
       txHash = hash;
     }
     failureReason = reason;
-    LocalDateTime now = nowForState == null ? LocalDateTime.now() : nowForState;
+    LocalDateTime now = nowForState;
 
     if (nextStatus == Web3TxStatus.SIGNED && signedAt == null) {
       signedAt = now;
@@ -130,7 +220,8 @@ public class Web3Transaction {
 
   private void assertTransitionAllowed(Web3TxStatus nextStatus) {
     if (status == nextStatus) {
-      return;
+      throw new Web3TransactionStateInvalidException(
+          "same-state transition is not allowed: " + status);
     }
 
     boolean allowed =
@@ -148,6 +239,33 @@ public class Web3Transaction {
     if (!allowed) {
       throw new Web3TransactionStateInvalidException(
           "invalid transition: " + status + " -> " + nextStatus);
+    }
+  }
+
+  private static void validateCore(
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId,
+      String fromAddress,
+      String toAddress,
+      BigInteger amountWei) {
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      throw new Web3InvalidInputException("idempotencyKey is required");
+    }
+    if (referenceType == null) {
+      throw new Web3InvalidInputException("referenceType is required");
+    }
+    if (referenceId == null || referenceId.isBlank()) {
+      throw new Web3InvalidInputException("referenceId is required");
+    }
+    if (fromAddress == null || fromAddress.isBlank()) {
+      throw new Web3InvalidInputException("fromAddress is required");
+    }
+    if (toAddress == null || toAddress.isBlank()) {
+      throw new Web3InvalidInputException("toAddress is required");
+    }
+    if (amountWei == null || amountWei.signum() < 0) {
+      throw new Web3InvalidInputException("amountWei must be >= 0");
     }
   }
 }
