@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.CsOverrideAuditDetail;
@@ -40,7 +41,7 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
       targetId = "#command.transactionId()")
   public MarkTransactionSucceededResult execute(MarkTransactionSucceededCommand command) {
     if (command == null) {
-      throw new Web3InvalidInputException("command is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.COMMAND_REQUIRED);
     }
 
     LoadTransactionPort.TransactionSnapshot snapshot =

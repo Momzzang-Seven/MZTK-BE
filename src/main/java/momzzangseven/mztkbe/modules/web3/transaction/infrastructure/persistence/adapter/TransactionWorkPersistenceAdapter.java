@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.mapper.Web3TransactionMapper;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +53,7 @@ public class TransactionWorkPersistenceAdapter
 
   private final EntityManager entityManager;
   private final Web3TransactionJpaRepository repository;
+  private final Web3TransactionMapper mapper;
 
   @Override
   @Transactional
@@ -107,7 +109,7 @@ public class TransactionWorkPersistenceAdapter
     }
 
     Web3TransactionEntity entity = load(transactionId);
-    Web3Transaction transaction = toDomain(entity);
+    Web3Transaction transaction = mapper.toDomain(entity);
     transaction.assignNonce(nonce);
     apply(entity, transaction);
   }
@@ -120,7 +122,7 @@ public class TransactionWorkPersistenceAdapter
     }
 
     Web3TransactionEntity entity = load(transactionId);
-    Web3Transaction transaction = toDomain(entity);
+    Web3Transaction transaction = mapper.toDomain(entity);
     transaction.markSigned(nonce, signedRawTx, txHash, LocalDateTime.now());
     apply(entity, transaction);
   }
@@ -133,7 +135,7 @@ public class TransactionWorkPersistenceAdapter
     }
 
     Web3TransactionEntity entity = load(transactionId);
-    Web3Transaction transaction = toDomain(entity);
+    Web3Transaction transaction = mapper.toDomain(entity);
     transaction.markPending(txHash, LocalDateTime.now());
     apply(entity, transaction);
   }
@@ -143,7 +145,7 @@ public class TransactionWorkPersistenceAdapter
   public void updateStatus(
       Long transactionId, Web3TxStatus status, String txHash, String failureReason) {
     Web3TransactionEntity entity = load(transactionId);
-    Web3Transaction transaction = toDomain(entity);
+    Web3Transaction transaction = mapper.toDomain(entity);
     transaction.updateStatus(status, txHash, failureReason, LocalDateTime.now());
     apply(entity, transaction);
   }
@@ -153,7 +155,7 @@ public class TransactionWorkPersistenceAdapter
   public void scheduleRetry(
       Long transactionId, String failureReason, LocalDateTime processingUntil) {
     Web3TransactionEntity entity = load(transactionId);
-    Web3Transaction transaction = toDomain(entity);
+    Web3Transaction transaction = mapper.toDomain(entity);
     transaction.scheduleRetry(failureReason, processingUntil);
     apply(entity, transaction);
   }
@@ -162,7 +164,7 @@ public class TransactionWorkPersistenceAdapter
   @Transactional
   public void clearProcessingLock(Long transactionId) {
     Web3TransactionEntity entity = load(transactionId);
-    Web3Transaction transaction = toDomain(entity);
+    Web3Transaction transaction = mapper.toDomain(entity);
     transaction.clearProcessingLock();
     apply(entity, transaction);
   }
@@ -202,31 +204,6 @@ public class TransactionWorkPersistenceAdapter
     return repository
         .findById(transactionId)
         .orElseThrow(() -> new Web3TransactionNotFoundException(transactionId));
-  }
-
-  private Web3Transaction toDomain(Web3TransactionEntity entity) {
-    return Web3Transaction.reconstitute(
-        entity.getId(),
-        entity.getIdempotencyKey(),
-        entity.getReferenceType(),
-        entity.getReferenceId(),
-        entity.getFromUserId(),
-        entity.getToUserId(),
-        entity.getFromAddress(),
-        entity.getToAddress(),
-        entity.getAmountWei(),
-        entity.getNonce(),
-        entity.getStatus(),
-        entity.getTxHash(),
-        entity.getSignedAt(),
-        entity.getBroadcastedAt(),
-        entity.getConfirmedAt(),
-        entity.getSignedRawTx(),
-        entity.getFailureReason(),
-        entity.getProcessingUntil(),
-        entity.getProcessingBy(),
-        entity.getCreatedAt(),
-        entity.getUpdatedAt());
   }
 
   private void apply(Web3TransactionEntity entity, Web3Transaction domain) {

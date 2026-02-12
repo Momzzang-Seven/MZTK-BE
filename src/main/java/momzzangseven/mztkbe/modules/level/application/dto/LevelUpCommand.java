@@ -1,12 +1,13 @@
 package momzzangseven.mztkbe.modules.level.application.dto;
 
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 
 public record LevelUpCommand(Long userId) {
 
   public LevelUpCommand {
     if (userId == null || userId <= 0) {
-      throw new LevelUpCommandInvalidException("userId is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.USER_ID_POSITIVE);
     }
   }
 

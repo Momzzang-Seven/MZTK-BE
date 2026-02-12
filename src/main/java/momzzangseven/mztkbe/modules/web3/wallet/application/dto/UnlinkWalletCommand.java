@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import org.web3j.crypto.WalletUtils;
 
 /**
@@ -22,7 +23,7 @@ public record UnlinkWalletCommand(Long userId, String walletAddress) {
       walletAddress = walletAddress.toLowerCase();
     }
     if (userId == null || userId <= 0) {
-      throw new Web3InvalidInputException("userId must be positive");
+      throw new Web3InvalidInputException(Web3ValidationMessage.USER_ID_POSITIVE);
     }
     if (walletAddress == null || walletAddress.isBlank()) {
       throw new Web3InvalidInputException("walletAddress must not be blank");

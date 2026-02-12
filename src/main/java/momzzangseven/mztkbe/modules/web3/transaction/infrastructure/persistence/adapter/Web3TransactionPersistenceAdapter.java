@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.RewardFailedOnchainException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelRewardTransactionPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTransactionPort;
@@ -15,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceT
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.mapper.Web3TransactionMapper;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
@@ -26,12 +28,13 @@ public class Web3TransactionPersistenceAdapter
     implements SaveTransactionPort, LoadLevelRewardTransactionPort {
 
   private final Web3TransactionJpaRepository repository;
+  private final Web3TransactionMapper mapper;
 
   @Override
   @Transactional
   public Web3Transaction saveLevelUpRewardIntent(CreateLevelUpRewardTxIntentCommand command) {
     if (command == null) {
-      throw new Web3InvalidInputException("command is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.COMMAND_REQUIRED);
     }
 
     Web3TransactionEntity existingByReference =
@@ -50,7 +53,7 @@ public class Web3TransactionPersistenceAdapter
     }
 
     Web3TransactionEntity created =
-        toEntity(
+        mapper.toEntity(
             Web3Transaction.createIntent(
                 command.idempotencyKey(),
                 Web3ReferenceType.LEVEL_UP_REWARD,
@@ -63,7 +66,7 @@ public class Web3TransactionPersistenceAdapter
                 LocalDateTime.now()));
 
     try {
-      return map(repository.saveAndFlush(created));
+      return mapper.toDomain(repository.saveAndFlush(created));
     } catch (DataIntegrityViolationException e) {
       Web3TransactionEntity raced =
           repository
@@ -107,57 +110,6 @@ public class Web3TransactionPersistenceAdapter
       throw new RewardFailedOnchainException(
           existing.getReferenceType().name(), existing.getReferenceId());
     }
-    return map(existing);
-  }
-
-  private Web3Transaction map(Web3TransactionEntity entity) {
-    return Web3Transaction.reconstitute(
-        entity.getId(),
-        entity.getIdempotencyKey(),
-        entity.getReferenceType(),
-        entity.getReferenceId(),
-        entity.getFromUserId(),
-        entity.getToUserId(),
-        entity.getFromAddress(),
-        entity.getToAddress(),
-        entity.getAmountWei(),
-        entity.getNonce(),
-        entity.getStatus(),
-        entity.getTxHash(),
-        entity.getSignedAt(),
-        entity.getBroadcastedAt(),
-        entity.getConfirmedAt(),
-        entity.getSignedRawTx(),
-        entity.getFailureReason(),
-        entity.getProcessingUntil(),
-        entity.getProcessingBy(),
-        entity.getCreatedAt(),
-        entity.getUpdatedAt());
-  }
-
-  private Web3TransactionEntity toEntity(Web3Transaction transaction) {
-    return Web3TransactionEntity.builder()
-        .id(transaction.getId())
-        .idempotencyKey(transaction.getIdempotencyKey())
-        .referenceType(transaction.getReferenceType())
-        .referenceId(transaction.getReferenceId())
-        .fromUserId(transaction.getFromUserId())
-        .toUserId(transaction.getToUserId())
-        .fromAddress(transaction.getFromAddress())
-        .toAddress(transaction.getToAddress())
-        .amountWei(transaction.getAmountWei())
-        .nonce(transaction.getNonce())
-        .status(transaction.getStatus())
-        .txHash(transaction.getTxHash())
-        .signedAt(transaction.getSignedAt())
-        .broadcastedAt(transaction.getBroadcastedAt())
-        .confirmedAt(transaction.getConfirmedAt())
-        .signedRawTx(transaction.getSignedRawTx())
-        .failureReason(transaction.getFailureReason())
-        .processingUntil(transaction.getProcessingUntil())
-        .processingBy(transaction.getProcessingBy())
-        .createdAt(transaction.getCreatedAt())
-        .updatedAt(transaction.getUpdatedAt())
-        .build();
+    return mapper.toDomain(existing);
   }
 }

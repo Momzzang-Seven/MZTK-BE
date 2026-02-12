@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.level.application.dto;
 import java.time.LocalDateTime;
 import java.util.regex.Pattern;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 
 /**
@@ -19,13 +20,13 @@ public record GrantXpCommand(
 
   public GrantXpCommand {
     if (userId == null) {
-      throw new LevelUpCommandInvalidException("userId is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.USER_ID_REQUIRED);
     }
     if (xpType == null) {
-      throw new LevelUpCommandInvalidException("xpType is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.XP_TYPE_REQUIRED);
     }
     if (occurredAt == null) {
-      throw new LevelUpCommandInvalidException("occurredAt is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.OCCURRED_AT_REQUIRED);
     }
     validateIdempotencyKey(xpType, idempotencyKey);
   }
@@ -41,7 +42,7 @@ public record GrantXpCommand(
 
   private static void validateIdempotencyKey(XpType type, String key) {
     if (key == null || key.isBlank()) {
-      throw new LevelUpCommandInvalidException("idempotencyKey is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.IDEMPOTENCY_KEY_REQUIRED);
     }
     if (key.length() > IDEMPOTENCY_KEY_MAX_LENGTH) {
       throw new LevelUpCommandInvalidException(
