@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.LevelUpAlreadyProcessedException;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
-import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelUpHistoryEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.LevelUpHistoryJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,20 +28,6 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
     } catch (DataIntegrityViolationException e) {
       throw new LevelUpAlreadyProcessedException();
     }
-  }
-
-  @Override
-  @Transactional
-  public void updateReward(Long levelUpHistoryId, RewardStatus status, String txHash) {
-    LevelUpHistoryEntity entity =
-        levelUpHistoryJpaRepository
-            .findById(levelUpHistoryId)
-            .orElseThrow(
-                () ->
-                    new IllegalStateException("LevelUpHistory not found: id=" + levelUpHistoryId));
-
-    entity.setRewardStatus(status);
-    entity.setRewardTxHash(status == RewardStatus.SUCCESS ? txHash : null);
   }
 
   @Override

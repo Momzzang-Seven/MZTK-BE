@@ -12,6 +12,6 @@ public class RewardMztkStubConfig {
   @Bean
   @ConditionalOnMissingBean(RewardMztkPort.class)
   public RewardMztkPort rewardMztkPort() {
-    return command -> RewardMztkResult.pending("NOT_IMPLEMENTED");
+    return command -> RewardMztkResult.created("NOT_IMPLEMENTED");
   }
 }

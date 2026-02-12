@@ -2,13 +2,10 @@ package momzzangseven.mztkbe.modules.level.application.port.out;
 
 import java.util.List;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
-import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 
 /** Outbound port for level-up history. */
 public interface LevelUpHistoryPort {
   LevelUpHistory saveLevelUpHistory(LevelUpHistory history);
-
-  void updateReward(Long levelUpHistoryId, RewardStatus status, String txHash);
 
   /**
    * Loads level-up histories ordered by createdAt desc.
