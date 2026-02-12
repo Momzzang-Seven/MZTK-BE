@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
+import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxPhase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,7 +50,7 @@ public class LevelUpService implements LevelUpUseCase {
     command.validate();
 
     Long userId = command.userId();
-    String activeWalletAddress =
+    EvmAddress activeWalletAddress =
         loadActiveWalletPort
             .loadActiveWalletAddress(userId)
             .orElseThrow(() -> new WalletNotConnectedException(userId));
@@ -93,7 +94,7 @@ public class LevelUpService implements LevelUpUseCase {
   }
 
   private RewardMztkResult attemptReward(
-      Long userId, int rewardMztk, Long referenceId, String toWalletAddress) {
+      Long userId, int rewardMztk, Long referenceId, EvmAddress toWalletAddress) {
     if (rewardMztk <= 0) {
       return RewardMztkResult.builder().status(Web3TxStatus.SUCCEEDED).build();
     }

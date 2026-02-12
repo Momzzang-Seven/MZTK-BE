@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.adapter;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadActiveWalletPort;
+import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Component;
@@ -15,9 +16,9 @@ public class LevelActiveWalletAdapter implements LoadActiveWalletPort {
   private final LoadWalletPort loadWalletPort;
 
   @Override
-  public Optional<String> loadActiveWalletAddress(Long userId) {
+  public Optional<EvmAddress> loadActiveWalletAddress(Long userId) {
     return loadWalletPort.findWalletsByUserIdAndStatus(userId, WalletStatus.ACTIVE).stream()
         .findFirst()
-        .map(wallet -> wallet.getWalletAddress().toLowerCase());
+        .map(wallet -> EvmAddress.of(wallet.getWalletAddress()));
   }
 }

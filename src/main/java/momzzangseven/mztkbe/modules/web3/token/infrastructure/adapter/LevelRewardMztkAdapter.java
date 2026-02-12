@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
+import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTransactionPort;
 import momzzangseven.mztkbe.modules.web3.token.domain.model.RewardIdempotencyKeyFactory;
@@ -43,7 +44,7 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
                 command.referenceId(),
                 idempotencyKey,
                 treasuryAddress,
-                command.toWalletAddress(),
+                command.toWalletAddress().value(),
                 amountWei));
 
     return map(transaction);
@@ -59,7 +60,7 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
     if (command.referenceId() == null || command.referenceId() <= 0) {
       throw new Web3InvalidInputException("referenceId must be positive");
     }
-    if (command.toWalletAddress() == null || command.toWalletAddress().isBlank()) {
+    if (command.toWalletAddress() == null) {
       throw new Web3InvalidInputException("toWalletAddress is required");
     }
     if (command.rewardMztk() < 0) {
@@ -94,7 +95,7 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
       throw new RewardTreasuryAddressInvalidException(treasuryAddress);
     }
 
-    String normalized = treasuryAddress.toLowerCase();
+    String normalized = EvmAddress.of(treasuryAddress).value();
     if (!WalletUtils.isValidAddress(normalized)) {
       throw new RewardTreasuryAddressInvalidException(treasuryAddress);
     }

@@ -57,6 +57,7 @@ public class Web3Transaction {
   }
 
   public void markSigned(long signedNonce, String rawTx, String hash, LocalDateTime now) {
+    assertTransitionAllowed(Web3TxStatus.SIGNED);
     if (rawTx == null || rawTx.isBlank()) {
       throw new Web3InvalidInputException("signedRawTx is required");
     }
@@ -77,6 +78,7 @@ public class Web3Transaction {
   }
 
   public void markPending(String hash, LocalDateTime now) {
+    assertTransitionAllowed(Web3TxStatus.PENDING);
     if (hash == null || hash.isBlank()) {
       throw new Web3InvalidInputException("txHash is required");
     }
@@ -91,6 +93,10 @@ public class Web3Transaction {
 
   public void updateStatus(
       Web3TxStatus nextStatus, String hash, String reason, LocalDateTime nowForState) {
+    if (nextStatus == null) {
+      throw new Web3InvalidInputException("nextStatus is required");
+    }
+    assertTransitionAllowed(nextStatus);
     status = nextStatus;
     if (hash != null && !hash.isBlank()) {
       txHash = hash;
@@ -120,5 +126,28 @@ public class Web3Transaction {
   public void clearProcessingLock() {
     processingBy = null;
     processingUntil = null;
+  }
+
+  private void assertTransitionAllowed(Web3TxStatus nextStatus) {
+    if (status == nextStatus) {
+      return;
+    }
+
+    boolean allowed =
+        switch (status) {
+          case CREATED -> nextStatus == Web3TxStatus.SIGNED;
+          case SIGNED -> nextStatus == Web3TxStatus.PENDING;
+          case PENDING ->
+              nextStatus == Web3TxStatus.SUCCEEDED
+                  || nextStatus == Web3TxStatus.FAILED_ONCHAIN
+                  || nextStatus == Web3TxStatus.UNCONFIRMED;
+          case UNCONFIRMED -> nextStatus == Web3TxStatus.SUCCEEDED;
+          case SUCCEEDED, FAILED_ONCHAIN -> false;
+        };
+
+    if (!allowed) {
+      throw new Web3TransactionStateInvalidException(
+          "invalid transition: " + status + " -> " + nextStatus);
+    }
   }
 }
