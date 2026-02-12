@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.comment.api.dto;
 
 import java.time.LocalDateTime;
-import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 
 public record CommentResponse(
     Long commentId,
@@ -11,15 +11,15 @@ public record CommentResponse(
     boolean isDeleted,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
-  // [Factory Method]
-  public static CommentResponse from(Comment comment) {
+
+  public static CommentResponse from(CommentResult result) {
     return new CommentResponse(
-        comment.getId(),
-        comment.isDeleted() ? "삭제된 댓글입니다." : comment.getContent(),
-        comment.isDeleted() ? null : comment.getWriterId(),
-        comment.getParentId(),
-        comment.isDeleted(),
-        comment.getCreatedAt(),
-        comment.getUpdatedAt());
+        result.id(),
+        result.isDeleted() ? "삭제된 댓글입니다." : result.content(),
+        result.isDeleted() ? null : result.writerId(),
+        result.parentId(),
+        result.isDeleted(),
+        result.createdAt(),
+        result.updatedAt());
   }
 }

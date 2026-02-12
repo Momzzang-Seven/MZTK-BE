@@ -4,15 +4,15 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 
 @Entity
 @Table(name = "comments")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Builder
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
+@NoArgsConstructor(access = AccessLevel.PROTECTED) // JPA 기본 생성자
 public class CommentEntity {
 
   @Id
@@ -31,11 +31,11 @@ public class CommentEntity {
   @Column(nullable = false)
   private boolean isDeleted;
 
-  // [Self-Referencing] 대댓글 구조
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "parent_id")
   private CommentEntity parent;
 
+  @Builder.Default
   @OneToMany(mappedBy = "parent", orphanRemoval = false)
   private List<CommentEntity> children = new ArrayList<>();
 
@@ -44,18 +44,18 @@ public class CommentEntity {
 
   private LocalDateTime updatedAt;
 
-  // [Factory Method] 도메인 모델 -> 엔티티 변환 생성자
+  // [Factory Method] 도메인 모델 -> 엔티티 변환
   public static CommentEntity from(Comment comment, CommentEntity parentEntity) {
-    CommentEntity entity = new CommentEntity();
-    entity.id = comment.getId();
-    entity.postId = comment.getPostId();
-    entity.writerId = comment.getWriterId();
-    entity.content = comment.getContent();
-    entity.isDeleted = comment.isDeleted();
-    entity.parent = parentEntity;
-    entity.createdAt = comment.getCreatedAt();
-    entity.updatedAt = comment.getUpdatedAt();
-    return entity;
+    return CommentEntity.builder()
+        .id(comment.getId())
+        .postId(comment.getPostId())
+        .writerId(comment.getWriterId())
+        .content(comment.getContent())
+        .isDeleted(comment.isDeleted())
+        .parent(parentEntity)
+        .createdAt(comment.getCreatedAt())
+        .updatedAt(comment.getUpdatedAt())
+        .build();
   }
 
   // [Method] 엔티티 -> 도메인 모델 변환
