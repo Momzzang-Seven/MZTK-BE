@@ -8,7 +8,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.AppErrorCode;
+import momzzangseven.mztkbe.global.error.auth.AuthErrorCode;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
@@ -34,10 +35,10 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
         request.getRequestURI(),
         authException.getMessage());
 
-    writeErrorResponse(response, ErrorCode.USER_NOT_AUTHENTICATED);
+    writeErrorResponse(response, AuthErrorCode.USER_NOT_AUTHENTICATED);
   }
 
-  private void writeErrorResponse(HttpServletResponse response, ErrorCode errorCode)
+  private void writeErrorResponse(HttpServletResponse response, AppErrorCode errorCode)
       throws IOException {
     response.setStatus(errorCode.getHttpStatus().value());
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());

@@ -8,7 +8,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.AppErrorCode;
+import momzzangseven.mztkbe.global.error.auth.AuthErrorCode;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
@@ -30,7 +31,7 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
       throws IOException, ServletException {
 
     String uri = request.getRequestURI();
-    ErrorCode errorCode = resolveErrorCode(request);
+    AppErrorCode errorCode = resolveErrorCode(request);
 
     log.debug(
         "Access denied: uri={}, code={}, message={}",
@@ -41,17 +42,17 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
     writeErrorResponse(response, errorCode);
   }
 
-  private ErrorCode resolveErrorCode(HttpServletRequest request) {
+  private AppErrorCode resolveErrorCode(HttpServletRequest request) {
     String uri = request.getRequestURI();
     String method = request.getMethod();
 
     if ("POST".equalsIgnoreCase(method) && "/users/me/withdrawal".equals(uri)) {
-      return ErrorCode.STEP_UP_REQUIRED;
+      return AuthErrorCode.STEP_UP_REQUIRED;
     }
-    return ErrorCode.UNAUTHORIZED_ACCESS;
+    return AuthErrorCode.UNAUTHORIZED_ACCESS;
   }
 
-  private void writeErrorResponse(HttpServletResponse response, ErrorCode errorCode)
+  private void writeErrorResponse(HttpServletResponse response, AppErrorCode errorCode)
       throws IOException {
     response.setStatus(errorCode.getHttpStatus().value());
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());

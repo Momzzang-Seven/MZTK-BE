@@ -27,6 +27,7 @@ public class RewardTokenProperties {
 
   private Treasury treasury = new Treasury();
   private Prevalidate prevalidate = new Prevalidate();
+  private Gas gas = new Gas();
   private Worker worker = new Worker();
 
   @Getter
@@ -71,5 +72,18 @@ public class RewardTokenProperties {
 
     @Min(1)
     private int retryBackoffSeconds = 60;
+  }
+
+  @Getter
+  @Setter
+  public static class Gas {
+    @Min(21_000)
+    private long defaultGasLimit = 120_000L;
+
+    @Min(1)
+    private long defaultMaxPriorityFeePerGasWei = 1_000_000_000L;
+
+    @Min(1)
+    private int maxFeeMultiplier = 2;
   }
 }
