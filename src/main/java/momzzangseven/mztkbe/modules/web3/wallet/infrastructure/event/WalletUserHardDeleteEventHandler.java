@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserHardDeleteEventHandler {
+public class WalletUserHardDeleteEventHandler {
 
   private final WalletHardDeleteService walletHardDeleteService;
 
