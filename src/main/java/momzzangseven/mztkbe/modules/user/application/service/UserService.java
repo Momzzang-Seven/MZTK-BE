@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.user.application.service;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
+import momzzangseven.mztkbe.global.error.auth.InvalidCredentialsException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.in.SocialLoginOutcome;

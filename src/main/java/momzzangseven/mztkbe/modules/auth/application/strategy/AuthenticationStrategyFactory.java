@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.auth.application.strategy;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import momzzangseven.mztkbe.global.error.UnsupportedProviderException;
+import momzzangseven.mztkbe.global.error.auth.UnsupportedProviderException;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.stereotype.Component;
 

@@ -4,9 +4,7 @@ import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
-import momzzangseven.mztkbe.modules.web3.admin.application.aop.AdminOnly;
-import momzzangseven.mztkbe.modules.web3.admin.domain.model.Web3AdminActionType;
-import momzzangseven.mztkbe.modules.web3.admin.domain.model.Web3AdminTargetType;
+import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.token.api.dto.ProvisionTreasuryKeyResponseDTO;
 import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasuryProvisionAuditPort;
@@ -28,8 +26,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   @Override
   @Transactional
   @AdminOnly(
-      actionType = Web3AdminActionType.TREASURY_KEY_PROVISION,
-      targetType = Web3AdminTargetType.TREASURY_KEY,
+      actionType = "TREASURY_KEY_PROVISION",
+      targetType = "TREASURY_KEY",
       operatorId = "#operatorId",
       targetId = "#result != null ? #result.treasuryAddress() : null")
   public ProvisionTreasuryKeyResponseDTO execute(Long operatorId, String rawPrivateKey) {

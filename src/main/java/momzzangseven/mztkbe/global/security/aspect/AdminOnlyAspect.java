@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.admin.application.aop;
+package momzzangseven.mztkbe.global.security.aspect;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
@@ -6,10 +6,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.AuthErrorCode;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.modules.web3.admin.application.port.out.RecordWeb3AdminActionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditLogSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -33,7 +33,7 @@ public class AdminOnlyAspect {
   private static final DefaultParameterNameDiscoverer PARAM_DISCOVERER =
       new DefaultParameterNameDiscoverer();
 
-  private final RecordWeb3AdminActionAuditPort recordWeb3AdminActionAuditPort;
+  private final RecordAdminAuditPort recordAdminAuditPort;
   private final AuditLogSerializer auditLogSerializer;
 
   @Around("@annotation(adminOnly)")
@@ -80,8 +80,8 @@ public class AdminOnlyAspect {
       rawDetail.put("arguments", sanitizeArguments(method, args));
       rawDetail.put("targetId", targetId);
 
-      recordWeb3AdminActionAuditPort.record(
-          new RecordWeb3AdminActionAuditPort.AuditCommand(
+      recordAdminAuditPort.record(
+          new RecordAdminAuditPort.AuditCommand(
               operatorId,
               adminOnly.actionType(),
               adminOnly.targetType(),

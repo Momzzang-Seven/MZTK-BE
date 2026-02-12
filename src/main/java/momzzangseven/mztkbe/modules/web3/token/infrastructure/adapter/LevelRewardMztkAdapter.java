@@ -43,8 +43,8 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
                 command.userId(),
                 command.referenceId(),
                 idempotencyKey,
-                treasuryAddress,
-                command.toWalletAddress().value(),
+                EvmAddress.of(treasuryAddress),
+                command.toWalletAddress(),
                 amountWei));
 
     return map(transaction);

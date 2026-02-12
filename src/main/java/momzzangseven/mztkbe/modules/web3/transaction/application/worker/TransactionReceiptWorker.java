@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.Sta
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -36,12 +37,14 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
-      RewardTokenProperties rewardTokenProperties) {
+      RewardTokenProperties rewardTokenProperties,
+      RetryStrategy retryStrategy) {
     super(
         loadTransactionWorkPort,
         updateTransactionPort,
         recordTransactionAuditPort,
-        rewardTokenProperties);
+        rewardTokenProperties,
+        retryStrategy);
     this.web3ContractPort = web3ContractPort;
   }
 

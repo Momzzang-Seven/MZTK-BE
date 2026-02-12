@@ -7,16 +7,17 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.BroadcastAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.PrevalidateAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.SignAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.StateChangeAuditDetail;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.IssueTransactionOperationsPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -30,7 +31,9 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
-  private final IssueTransactionOperationsPort issueTransactionOperationsPort;
+  private final LoadTreasuryKeyPort loadTreasuryKeyPort;
+  private final ReserveNoncePort reserveNoncePort;
+  private final Web3ContractPort web3ContractPort;
   private final Web3CoreProperties web3CoreProperties;
 
   private final String workerId = "issuer-" + UUID.randomUUID().toString().substring(0, 8);
@@ -39,15 +42,21 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       LoadTransactionWorkPort loadTransactionWorkPort,
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
-      IssueTransactionOperationsPort issueTransactionOperationsPort,
+      LoadTreasuryKeyPort loadTreasuryKeyPort,
+      ReserveNoncePort reserveNoncePort,
+      Web3ContractPort web3ContractPort,
       RewardTokenProperties rewardTokenProperties,
+      RetryStrategy retryStrategy,
       Web3CoreProperties web3CoreProperties) {
     super(
         loadTransactionWorkPort,
         updateTransactionPort,
         recordTransactionAuditPort,
-        rewardTokenProperties);
-    this.issueTransactionOperationsPort = issueTransactionOperationsPort;
+        rewardTokenProperties,
+        retryStrategy);
+    this.loadTreasuryKeyPort = loadTreasuryKeyPort;
+    this.reserveNoncePort = reserveNoncePort;
+    this.web3ContractPort = web3ContractPort;
     this.web3CoreProperties = web3CoreProperties;
   }
 
@@ -67,7 +76,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
-    var treasuryKey = issueTransactionOperationsPort.loadTreasuryKey().orElse(null);
+    var treasuryKey = loadTreasuryKeyPort.load().orElse(null);
     if (treasuryKey == null) {
       items.forEach(
           item ->
@@ -84,7 +93,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       LoadTransactionWorkPort.TransactionWorkItem item,
       LoadTreasuryKeyPort.TreasuryKeyMaterial treasuryKey) {
     Web3ContractPort.PrevalidateResult prevalidateResult =
-        issueTransactionOperationsPort.prevalidate(
+        web3ContractPort.prevalidate(
             new Web3ContractPort.PrevalidateCommand(
                 treasuryKey.treasuryAddress(), item.toAddress(), item.amountWei()));
 
@@ -104,7 +113,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
     long nonce = resolveNonce(item, treasuryKey.treasuryAddress());
     Web3ContractPort.SignedTransaction signed =
-        issueTransactionOperationsPort.signTransfer(
+        web3ContractPort.signTransfer(
             new Web3ContractPort.SignTransferCommand(
                 treasuryKey.privateKeyHex(),
                 rewardTokenProperties.getTokenContractAddress(),
@@ -122,8 +131,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     auditStateChange(item.transactionId(), Web3TxStatus.CREATED, Web3TxStatus.SIGNED);
 
     Web3ContractPort.BroadcastResult broadcast =
-        issueTransactionOperationsPort.broadcast(
-            new Web3ContractPort.BroadcastCommand(signed.rawTx()));
+        web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(signed.rawTx()));
     Map<String, Object> broadcastDetail =
         new BroadcastAuditDetail(broadcast.success(), broadcast.txHash(), broadcast.failureReason())
             .toMap();
@@ -172,7 +180,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return item.nonce();
     }
 
-    long reservedNonce = issueTransactionOperationsPort.reserveNextNonce(treasuryAddress);
+    long reservedNonce = reserveNoncePort.reserveNextNonce(treasuryAddress);
     updateTransactionPort.assignNonce(item.transactionId(), reservedNonce);
     return reservedNonce;
   }

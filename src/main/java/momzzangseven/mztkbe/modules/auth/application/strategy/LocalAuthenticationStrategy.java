@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.auth.application.strategy;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
-import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.auth.InvalidCredentialsException;
+import momzzangseven.mztkbe.global.error.auth.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticatedUser;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticationContext;

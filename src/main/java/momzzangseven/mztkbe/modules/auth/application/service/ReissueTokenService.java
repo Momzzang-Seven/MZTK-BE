@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.auth.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenManager;

@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.adapter;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.admin.application.port.out.RecordWeb3AdminActionAuditPort;
 import momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.entity.Web3AdminActionAuditEntity;
 import momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.repository.Web3AdminActionAuditJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditLogSerializer;
@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
-public class Web3AdminActionAuditPersistenceAdapter implements RecordWeb3AdminActionAuditPort {
+public class Web3AdminActionAuditPersistenceAdapter implements RecordAdminAuditPort {
 
   private final Web3AdminActionAuditJpaRepository repository;
   private final AuditLogSerializer auditLogSerializer;
@@ -26,18 +26,18 @@ public class Web3AdminActionAuditPersistenceAdapter implements RecordWeb3AdminAc
     if (command.operatorId() == null || command.operatorId() <= 0) {
       throw new Web3InvalidInputException("operatorId must be positive");
     }
-    if (command.actionType() == null) {
+    if (command.actionType() == null || command.actionType().isBlank()) {
       throw new Web3InvalidInputException("actionType is required");
     }
-    if (command.targetType() == null) {
+    if (command.targetType() == null || command.targetType().isBlank()) {
       throw new Web3InvalidInputException("targetType is required");
     }
 
     repository.save(
         Web3AdminActionAuditEntity.builder()
             .operatorId(command.operatorId())
-            .actionType(command.actionType().name())
-            .targetType(command.targetType().name())
+            .actionType(command.actionType())
+            .targetType(command.targetType())
             .targetId(command.targetId())
             .success(command.success())
             .detailJson(auditLogSerializer.toJson(command.detail()))
