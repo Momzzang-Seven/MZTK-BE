@@ -2,9 +2,12 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.worker;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.ReceiptPollAuditDetail;
@@ -153,5 +156,10 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         Web3TransactionAuditEventType.STATE_CHANGE,
         null,
         new StateChangeAuditDetail(from, to).toMap());
+  }
+
+  @Override
+  protected List<Class<? extends Throwable>> nonRetryableExceptions() {
+    return List.of(Web3InvalidInputException.class, Web3TransactionStateInvalidException.class);
   }
 }

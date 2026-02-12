@@ -48,15 +48,27 @@ abstract class AbstractWeb3Worker {
         itemProcessor.accept(item);
       } catch (Exception e) {
         log.warn("{} worker failed for txId={}", workerTag(), item.transactionId(), e);
+        if (isNonRetryable(e)) {
+          failPermanently(item.transactionId(), defaultFailureReason);
+          continue;
+        }
         retry(item.transactionId(), defaultFailureReason);
       }
     }
+  }
+
+  protected List<Class<? extends Throwable>> nonRetryableExceptions() {
+    return List.of();
   }
 
   protected void retry(Long transactionId, String failureReason) {
     LocalDateTime until =
         LocalDateTime.now().plusSeconds(rewardTokenProperties.getWorker().getRetryBackoffSeconds());
     updateTransactionPort.scheduleRetry(transactionId, failureReason, until);
+  }
+
+  protected void failPermanently(Long transactionId, String failureReason) {
+    updateTransactionPort.scheduleRetry(transactionId, failureReason, null);
   }
 
   protected void audit(
@@ -78,5 +90,9 @@ abstract class AbstractWeb3Worker {
 
   protected String workerTag() {
     return getClass().getSimpleName();
+  }
+
+  private boolean isNonRetryable(Throwable throwable) {
+    return nonRetryableExceptions().stream().anyMatch(type -> type.isInstance(throwable));
   }
 }

@@ -1,13 +1,11 @@
 package momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.adapter;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.RecordWeb3AdminActionAuditPort;
 import momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.entity.Web3AdminActionAuditEntity;
 import momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.repository.Web3AdminActionAuditJpaRepository;
+import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditLogSerializer;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class Web3AdminActionAuditPersistenceAdapter implements RecordWeb3AdminActionAuditPort {
 
   private final Web3AdminActionAuditJpaRepository repository;
-  private final ObjectMapper objectMapper;
+  private final AuditLogSerializer auditLogSerializer;
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -42,18 +40,7 @@ public class Web3AdminActionAuditPersistenceAdapter implements RecordWeb3AdminAc
             .targetType(command.targetType().name())
             .targetId(command.targetId())
             .success(command.success())
-            .detailJson(toJson(command.detail()))
+            .detailJson(auditLogSerializer.toJson(command.detail()))
             .build());
-  }
-
-  private String toJson(java.util.Map<String, Object> detail) {
-    if (detail == null || detail.isEmpty()) {
-      return null;
-    }
-    try {
-      return objectMapper.writeValueAsString(detail);
-    } catch (JsonProcessingException e) {
-      throw new Web3TransactionStateInvalidException("Failed to serialize admin audit detail", e);
-    }
   }
 }

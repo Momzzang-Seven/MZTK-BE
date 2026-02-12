@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.transaction.api.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.global.security.AdminOperatorGuard;
 import momzzangseven.mztkbe.modules.web3.transaction.api.dto.MarkTransactionSucceededRequestDTO;
 import momzzangseven.mztkbe.modules.web3.transaction.api.dto.MarkTransactionSucceededResponseDTO;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
@@ -24,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class TransactionAdminController {
 
-  private final AdminOperatorGuard adminOperatorGuard;
   private final MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   @PostMapping("/{txId}/mark-succeeded")
@@ -32,12 +30,10 @@ public class TransactionAdminController {
       @AuthenticationPrincipal Long operatorId,
       @PathVariable("txId") Long txId,
       @Valid @RequestBody MarkTransactionSucceededRequestDTO request) {
-    Long requiredOperatorId = adminOperatorGuard.requireOperatorId(operatorId);
-
     MarkTransactionSucceededResult result =
         markTransactionSucceededUseCase.execute(
             new MarkTransactionSucceededCommand(
-                requiredOperatorId,
+                operatorId,
                 txId,
                 request.txHash(),
                 request.explorerUrl(),

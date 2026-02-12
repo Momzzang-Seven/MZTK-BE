@@ -1,11 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditLogSerializer;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionAuditEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionAuditJpaRepository;
 import org.springframework.stereotype.Component;
@@ -16,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TransactionAuditPersistenceAdapter implements RecordTransactionAuditPort {
 
   private final Web3TransactionAuditJpaRepository repository;
-  private final ObjectMapper objectMapper;
+  private final AuditLogSerializer auditLogSerializer;
 
   @Override
   @Transactional
@@ -36,19 +34,7 @@ public class TransactionAuditPersistenceAdapter implements RecordTransactionAudi
             .web3TransactionId(command.transactionId())
             .eventType(command.eventType().name())
             .rpcAlias(command.rpcAlias())
-            .detailJson(toJson(command.detail()))
+            .detailJson(auditLogSerializer.toJson(command.detail()))
             .build());
-  }
-
-  private String toJson(java.util.Map<String, Object> detail) {
-    if (detail == null || detail.isEmpty()) {
-      return null;
-    }
-    try {
-      return objectMapper.writeValueAsString(detail);
-    } catch (JsonProcessingException e) {
-      throw new Web3TransactionStateInvalidException(
-          "Failed to serialize transaction audit detail", e);
-    }
   }
 }

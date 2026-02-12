@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
@@ -173,5 +175,10 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     long reservedNonce = issueTransactionOperationsPort.reserveNextNonce(treasuryAddress);
     updateTransactionPort.assignNonce(item.transactionId(), reservedNonce);
     return reservedNonce;
+  }
+
+  @Override
+  protected List<Class<? extends Throwable>> nonRetryableExceptions() {
+    return List.of(Web3InvalidInputException.class, Web3TransactionStateInvalidException.class);
   }
 }
