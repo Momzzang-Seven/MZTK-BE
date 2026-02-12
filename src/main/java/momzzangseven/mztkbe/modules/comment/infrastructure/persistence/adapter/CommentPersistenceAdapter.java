@@ -20,7 +20,7 @@ public class CommentPersistenceAdapter implements LoadCommentPort, SaveCommentPo
   private final CommentJpaRepository commentRepository;
 
   @Override
-  @Transactional // 쓰기 트랜잭션
+  @Transactional
   public Comment saveComment(Comment comment) {
     CommentEntity parentEntity = null;
 
@@ -28,13 +28,9 @@ public class CommentPersistenceAdapter implements LoadCommentPort, SaveCommentPo
       parentEntity = commentRepository.getReferenceById(comment.getParentId());
     }
 
-    // 도메인 -> 엔티티 변환
     CommentEntity entity = CommentEntity.from(comment, parentEntity);
-
-    // 저장
     CommentEntity savedEntity = commentRepository.save(entity);
 
-    // 엔티티 -> 도메인 변환 후 반환
     return savedEntity.toDomain();
   }
 
@@ -53,5 +49,11 @@ public class CommentPersistenceAdapter implements LoadCommentPort, SaveCommentPo
   @Override
   public Page<Comment> loadReplies(Long parentId, Pageable pageable) {
     return commentRepository.findRepliesByParentId(parentId, pageable).map(CommentEntity::toDomain);
+  }
+
+  @Override
+  @Transactional
+  public void deleteAllByPostId(Long postId) {
+    commentRepository.deleteAllByPostId(postId);
   }
 }

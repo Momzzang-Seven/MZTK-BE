@@ -4,4 +4,6 @@ import momzzangseven.mztkbe.modules.comment.application.dto.DeleteCommentCommand
 
 public interface DeleteCommentUseCase {
   void deleteComment(DeleteCommentCommand command);
+
+  void deleteCommentsByPostId(Long postId);
 }
