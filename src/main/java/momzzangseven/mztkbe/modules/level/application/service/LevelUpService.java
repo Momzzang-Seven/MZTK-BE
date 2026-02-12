@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.global.error.level.RewardIntentCreationException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpCommand;
@@ -45,7 +46,7 @@ public class LevelUpService implements LevelUpUseCase {
   @Override
   public LevelUpResult execute(LevelUpCommand command) {
     if (command == null) {
-      throw new LevelUpCommandInvalidException("command is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.COMMAND_REQUIRED);
     }
 
     Long userId = command.userId();
@@ -73,6 +74,7 @@ public class LevelUpService implements LevelUpUseCase {
         levelUpHistoryPort.saveLevelUpHistory(
             LevelUpHistory.initial(
                 userId, policy.getId(), fromLevel, toLevel, requiredXp, rewardMztk, now));
+    savedHistory.assertRewardTransactionLink(savedHistory.getId());
 
     RewardMztkResult rewardResult =
         attemptReward(userId, rewardMztk, savedHistory.getId(), activeWalletAddress);
@@ -105,7 +107,6 @@ public class LevelUpService implements LevelUpUseCase {
       if (result == null) {
         return RewardMztkResult.created("NULL_RESULT");
       }
-      result.validate();
       return result;
     } catch (BusinessException e) {
       throw e;

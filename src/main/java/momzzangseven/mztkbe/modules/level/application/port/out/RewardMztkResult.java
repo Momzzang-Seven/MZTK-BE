@@ -1,13 +1,14 @@
 package momzzangseven.mztkbe.modules.level.application.port.out;
 
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
 public record RewardMztkResult(Web3TxStatus status, String txHash, String failureReason) {
 
   public RewardMztkResult {
     if (status == null) {
-      throw new LevelUpCommandInvalidException("Reward status must not be null");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.REWARD_STATUS_REQUIRED);
     }
   }
 
@@ -25,9 +26,5 @@ public record RewardMztkResult(Web3TxStatus status, String txHash, String failur
 
   public static RewardMztkResult unconfirmed(String reason, String txHash) {
     return new RewardMztkResult(Web3TxStatus.UNCONFIRMED, txHash, reason);
-  }
-
-  public void validate() {
-    // no-op for backward compatibility; constructor enforces validity.
   }
 }

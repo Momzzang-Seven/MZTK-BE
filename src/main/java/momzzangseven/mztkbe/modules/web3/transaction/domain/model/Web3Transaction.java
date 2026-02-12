@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 
 /** Domain model for web3_transactions row. */
 @Getter
@@ -50,7 +51,7 @@ public class Web3Transaction {
       LocalDateTime now) {
     validateCore(idempotencyKey, referenceType, referenceId, fromAddress, toAddress, amountWei);
     if (now == null) {
-      throw new Web3InvalidInputException("now is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.NOW_REQUIRED);
     }
     return Web3Transaction.builder()
         .idempotencyKey(idempotencyKey)
@@ -91,7 +92,7 @@ public class Web3Transaction {
       LocalDateTime updatedAt) {
     validateCore(idempotencyKey, referenceType, referenceId, fromAddress, toAddress, amountWei);
     if (status == null) {
-      throw new Web3InvalidInputException("status is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.STATUS_REQUIRED);
     }
     return Web3Transaction.builder()
         .id(id)
@@ -138,6 +139,7 @@ public class Web3Transaction {
   }
 
   public void markSigned(long signedNonce, String rawTx, String hash, LocalDateTime now) {
+    requireCurrentStatus(Web3TxStatus.CREATED, "markSigned");
     assertTransitionAllowed(Web3TxStatus.SIGNED);
     if (rawTx == null || rawTx.isBlank()) {
       throw new Web3InvalidInputException("signedRawTx is required");
@@ -154,7 +156,7 @@ public class Web3Transaction {
     failureReason = null;
     if (signedAt == null) {
       if (now == null) {
-        throw new Web3InvalidInputException("now is required");
+        throw new Web3InvalidInputException(Web3ValidationMessage.NOW_REQUIRED);
       }
       signedAt = now;
     }
@@ -162,16 +164,17 @@ public class Web3Transaction {
   }
 
   public void markPending(String hash, LocalDateTime now) {
+    requireCurrentStatus(Web3TxStatus.SIGNED, "markPending");
     assertTransitionAllowed(Web3TxStatus.PENDING);
     if (hash == null || hash.isBlank()) {
-      throw new Web3InvalidInputException("txHash is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.TX_HASH_REQUIRED);
     }
     status = Web3TxStatus.PENDING;
     txHash = hash;
     failureReason = null;
     if (broadcastedAt == null) {
       if (now == null) {
-        throw new Web3InvalidInputException("now is required");
+        throw new Web3InvalidInputException(Web3ValidationMessage.NOW_REQUIRED);
       }
       broadcastedAt = now;
     }
@@ -181,11 +184,11 @@ public class Web3Transaction {
   public void updateStatus(
       Web3TxStatus nextStatus, String hash, String reason, LocalDateTime nowForState) {
     if (nextStatus == null) {
-      throw new Web3InvalidInputException("nextStatus is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.NEXT_STATUS_REQUIRED);
     }
     assertTransitionAllowed(nextStatus);
     if (nowForState == null) {
-      throw new Web3InvalidInputException("nowForState is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.NOW_REQUIRED);
     }
     status = nextStatus;
     if (hash != null && !hash.isBlank()) {
@@ -242,6 +245,13 @@ public class Web3Transaction {
     }
   }
 
+  private void requireCurrentStatus(Web3TxStatus expected, String action) {
+    if (status != expected) {
+      throw new Web3TransactionStateInvalidException(
+          action + " requires " + expected + " status: current=" + status);
+    }
+  }
+
   private static void validateCore(
       String idempotencyKey,
       Web3ReferenceType referenceType,
@@ -250,7 +260,7 @@ public class Web3Transaction {
       String toAddress,
       BigInteger amountWei) {
     if (idempotencyKey == null || idempotencyKey.isBlank()) {
-      throw new Web3InvalidInputException("idempotencyKey is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.IDEMPOTENCY_KEY_REQUIRED);
     }
     if (referenceType == null) {
       throw new Web3InvalidInputException("referenceType is required");
@@ -259,13 +269,13 @@ public class Web3Transaction {
       throw new Web3InvalidInputException("referenceId is required");
     }
     if (fromAddress == null || fromAddress.isBlank()) {
-      throw new Web3InvalidInputException("fromAddress is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.FROM_ADDRESS_REQUIRED);
     }
     if (toAddress == null || toAddress.isBlank()) {
-      throw new Web3InvalidInputException("toAddress is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.TO_ADDRESS_REQUIRED);
     }
     if (amountWei == null || amountWei.signum() < 0) {
-      throw new Web3InvalidInputException("amountWei must be >= 0");
+      throw new Web3InvalidInputException(Web3ValidationMessage.AMOUNT_WEI_NON_NEGATIVE);
     }
   }
 }

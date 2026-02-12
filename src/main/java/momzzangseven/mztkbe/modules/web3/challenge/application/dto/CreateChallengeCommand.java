@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.challenge.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import momzzangseven.mztkbe.modules.web3.challenge.domain.model.ChallengePurpose;
 import org.web3j.crypto.WalletUtils;
 
@@ -25,7 +26,7 @@ public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, Stri
       walletAddress = walletAddress.toLowerCase();
     }
     if (userId == null || userId <= 0) {
-      throw new Web3InvalidInputException("userId must be positive");
+      throw new Web3InvalidInputException(Web3ValidationMessage.USER_ID_POSITIVE);
     }
     if (purpose == null) {
       throw new Web3InvalidInputException("purpose must not be null");

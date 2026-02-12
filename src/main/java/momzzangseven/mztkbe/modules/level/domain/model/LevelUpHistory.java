@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 
 /** SSOT for level-ups and their reward processing status. */
 @Getter
@@ -45,6 +46,20 @@ public class LevelUpHistory {
         userId, levelPolicyId, fromLevel, toLevel, spentXp, rewardMztk, LocalDateTime.now());
   }
 
+  /** If reward amount is positive, transaction reference must point to this history id. */
+  public void assertRewardTransactionLink(Long transactionReferenceId) {
+    if (rewardMztk <= 0) {
+      return;
+    }
+    if (id == null || id <= 0) {
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.REFERENCE_ID_POSITIVE);
+    }
+    if (transactionReferenceId == null || !id.equals(transactionReferenceId)) {
+      throw new LevelUpCommandInvalidException(
+          "reward transaction reference must match levelUpHistory.id");
+    }
+  }
+
   public static LevelUpHistory reconstitute(
       Long id,
       Long userId,
@@ -76,22 +91,22 @@ public class LevelUpHistory {
       int rewardMztk,
       LocalDateTime createdAt) {
     if (userId == null || userId <= 0) {
-      throw new LevelUpCommandInvalidException("userId must be positive");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.USER_ID_POSITIVE);
     }
     if (levelPolicyId == null || levelPolicyId <= 0) {
-      throw new LevelUpCommandInvalidException("levelPolicyId must be positive");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.LEVEL_POLICY_ID_POSITIVE);
     }
     if (fromLevel <= 0 || toLevel <= 0 || toLevel <= fromLevel) {
-      throw new LevelUpCommandInvalidException("fromLevel/toLevel are invalid");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.LEVEL_RANGE_INVALID);
     }
     if (spentXp < 0) {
-      throw new LevelUpCommandInvalidException("spentXp must be >= 0");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.SPENT_XP_NON_NEGATIVE);
     }
     if (rewardMztk < 0) {
-      throw new LevelUpCommandInvalidException("rewardMztk must be >= 0");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.REWARD_MZTK_NON_NEGATIVE);
     }
     if (createdAt == null) {
-      throw new LevelUpCommandInvalidException("createdAt is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.CREATED_AT_REQUIRED);
     }
   }
 }

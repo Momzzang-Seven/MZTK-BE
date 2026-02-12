@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 
 public record MarkTransactionSucceededCommand(
     Long operatorId,
@@ -18,7 +19,7 @@ public record MarkTransactionSucceededCommand(
       throw new Web3InvalidInputException("transactionId must be positive");
     }
     if (txHash == null || txHash.isBlank()) {
-      throw new Web3InvalidInputException("txHash is required");
+      throw new Web3InvalidInputException(Web3ValidationMessage.TX_HASH_REQUIRED);
     }
     if (!txHash.matches("^0x[0-9a-fA-F]{64}$")) {
       throw new Web3InvalidInputException("txHash must be 0x-prefixed 32-byte hex");
