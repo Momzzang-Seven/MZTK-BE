@@ -3,37 +3,30 @@ package momzzangseven.mztkbe.modules.web3.token.application.service;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.token.api.dto.ProvisionTreasuryKeyResponseDTO;
+import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.crypto.TreasuryKeyCipher;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.persistence.entity.Web3TreasuryKeyEntity;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.persistence.repository.Web3TreasuryKeyJpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.crypto.Credentials;
 
 @Service
 @RequiredArgsConstructor
-public class ProvisionTreasuryKeyService {
-
-  private static final short SINGLETON_ID = 1;
+public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase {
 
   private final TreasuryKeyCipher treasuryKeyCipher;
-  private final Web3TreasuryKeyJpaRepository web3TreasuryKeyJpaRepository;
+  private final SaveTreasuryKeyPort saveTreasuryKeyPort;
 
+  @Override
   @Transactional
-  public ProvisionTreasuryKeyResponseDTO provision(String rawPrivateKey) {
+  public ProvisionTreasuryKeyResponseDTO execute(String rawPrivateKey) {
     String normalizedPrivateKey = normalizePrivateKey(rawPrivateKey);
     String treasuryAddress = Credentials.create(normalizedPrivateKey).getAddress().toLowerCase();
 
     String encryptionKeyB64 = treasuryKeyCipher.generateKeyB64();
     String encrypted = treasuryKeyCipher.encrypt(normalizedPrivateKey, encryptionKeyB64);
 
-    Web3TreasuryKeyEntity entity =
-        web3TreasuryKeyJpaRepository
-            .findById(SINGLETON_ID)
-            .orElseGet(() -> Web3TreasuryKeyEntity.builder().id(SINGLETON_ID).build());
-    entity.setTreasuryAddress(treasuryAddress);
-    entity.setTreasuryPrivateKeyEncrypted(encrypted);
-    web3TreasuryKeyJpaRepository.save(entity);
+    saveTreasuryKeyPort.upsert(treasuryAddress, encrypted);
 
     return ProvisionTreasuryKeyResponseDTO.builder()
         .treasuryAddress(treasuryAddress)

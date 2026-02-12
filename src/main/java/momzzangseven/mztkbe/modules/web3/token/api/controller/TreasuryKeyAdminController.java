@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.token.api.dto.ProvisionTreasuryKeyRequestDTO;
 import momzzangseven.mztkbe.modules.web3.token.api.dto.ProvisionTreasuryKeyResponseDTO;
-import momzzangseven.mztkbe.modules.web3.token.application.service.ProvisionTreasuryKeyService;
+import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,13 +22,13 @@ import org.springframework.web.bind.annotation.RestController;
     havingValue = "true")
 public class TreasuryKeyAdminController {
 
-  private final ProvisionTreasuryKeyService provisionTreasuryKeyService;
+  private final ProvisionTreasuryKeyUseCase provisionTreasuryKeyUseCase;
 
   @PostMapping("/provision")
   public ResponseEntity<ApiResponse<ProvisionTreasuryKeyResponseDTO>> provision(
       @Valid @RequestBody ProvisionTreasuryKeyRequestDTO request) {
     ProvisionTreasuryKeyResponseDTO response =
-        provisionTreasuryKeyService.provision(request.treasuryPrivateKey());
+        provisionTreasuryKeyUseCase.execute(request.treasuryPrivateKey());
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 }
