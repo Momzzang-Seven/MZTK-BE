@@ -23,7 +23,7 @@ public class LocationHardDeleteService {
    *
    * <p>UserHardDeleteEventHandler에서 호출
    *
-   * <p>⚠️ deleted_at IS NOT NULL인 Location만 삭제
+   * <p>deleted_at IS NOT NULL인 Location만 삭제
    *
    * @param userIds 삭제할 User ID 목록
    * @return 삭제된 Location 개수
