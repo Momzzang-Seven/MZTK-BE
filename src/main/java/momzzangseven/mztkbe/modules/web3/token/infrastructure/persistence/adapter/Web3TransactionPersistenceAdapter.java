@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.RewardFailedOnchainException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelRewardTransactionPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTransactionPort;
@@ -16,13 +18,12 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.web3j.crypto.WalletUtils;
 
 @Component
 @RequiredArgsConstructor
 public class Web3TransactionPersistenceAdapter
     implements SaveTransactionPort, LoadLevelRewardTransactionPort {
-
-  private static final String ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
   private final Web3TransactionJpaRepository repository;
 
@@ -71,7 +72,7 @@ public class Web3TransactionPersistenceAdapter
                           .findByIdempotencyKey(command.idempotencyKey())
                           .orElseThrow(
                               () ->
-                                  new IllegalStateException(
+                                  new Web3TransactionStateInvalidException(
                                       "web3_transactions race detected, but no row found", e)));
       return mapAndValidateExisting(raced);
     }
@@ -108,28 +109,37 @@ public class Web3TransactionPersistenceAdapter
 
   private void validate(CreateLevelUpRewardTxIntentCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new Web3InvalidInputException("command is required");
     }
     if (command.userId() == null || command.userId() <= 0) {
-      throw new IllegalArgumentException("userId must be positive");
+      throw new Web3InvalidInputException("userId must be positive");
     }
     if (command.levelUpHistoryId() == null || command.levelUpHistoryId() <= 0) {
-      throw new IllegalArgumentException("levelUpHistoryId must be positive");
+      throw new Web3InvalidInputException("levelUpHistoryId must be positive");
     }
     if (command.idempotencyKey() == null || command.idempotencyKey().isBlank()) {
-      throw new IllegalArgumentException("idempotencyKey is required");
+      throw new Web3InvalidInputException("idempotencyKey is required");
+    }
+    if (command.fromAddress() == null || command.fromAddress().isBlank()) {
+      throw new Web3InvalidInputException("fromAddress is required");
+    }
+    if (!WalletUtils.isValidAddress(command.fromAddress())) {
+      throw new Web3InvalidInputException("fromAddress must be valid EVM address");
     }
     if (command.toAddress() == null || command.toAddress().isBlank()) {
-      throw new IllegalArgumentException("toAddress is required");
+      throw new Web3InvalidInputException("toAddress is required");
+    }
+    if (!WalletUtils.isValidAddress(command.toAddress())) {
+      throw new Web3InvalidInputException("toAddress must be valid EVM address");
     }
     if (command.amountWei() == null || command.amountWei().signum() < 0) {
-      throw new IllegalArgumentException("amountWei must be >= 0");
+      throw new Web3InvalidInputException("amountWei must be >= 0");
     }
   }
 
   private String normalizeAddress(String rawAddress) {
     if (rawAddress == null || rawAddress.isBlank()) {
-      return ZERO_ADDRESS;
+      throw new Web3InvalidInputException("address is required");
     }
     return rawAddress.toLowerCase();
   }

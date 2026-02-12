@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.RewardIntentCreationException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
@@ -42,7 +44,7 @@ public class LevelUpService implements LevelUpUseCase {
   @Override
   public LevelUpResult execute(LevelUpCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new LevelUpCommandInvalidException("command is required");
     }
     command.validate();
 
@@ -113,8 +115,7 @@ public class LevelUpService implements LevelUpUseCase {
     } catch (BusinessException e) {
       throw e;
     } catch (Exception e) {
-      log.warn("RewardMztkPort failed: userId={}, referenceId={}", userId, referenceId, e);
-      return RewardMztkResult.created(e.getClass().getSimpleName());
+      throw new RewardIntentCreationException(userId, referenceId, e);
     }
   }
 

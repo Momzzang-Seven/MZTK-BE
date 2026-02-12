@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.web3.token.api.dto.ProvisionTreasuryKeyRespo
 import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,9 +27,10 @@ public class TreasuryKeyAdminController {
 
   @PostMapping("/provision")
   public ResponseEntity<ApiResponse<ProvisionTreasuryKeyResponseDTO>> provision(
+      @AuthenticationPrincipal Long operatorId,
       @Valid @RequestBody ProvisionTreasuryKeyRequestDTO request) {
     ProvisionTreasuryKeyResponseDTO response =
-        provisionTreasuryKeyUseCase.execute(request.treasuryPrivateKey());
+        provisionTreasuryKeyUseCase.execute(operatorId, request.treasuryPrivateKey());
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 }

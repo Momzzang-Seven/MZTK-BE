@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.level.RewardTreasuryAddressInvalidException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
@@ -13,6 +15,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.web3j.crypto.WalletUtils;
 
 /** RewardMztkPort adapter backed by web3_transactions idempotent intent creation. */
 @Component
@@ -31,7 +34,7 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
         RewardIdempotencyKeyFactory.forLevelUpReward(command.userId(), command.referenceId());
 
     BigInteger amountWei = toWei(command.rewardMztk());
-    String treasuryAddress = rewardTokenProperties.getTreasury().getTreasuryAddress();
+    String treasuryAddress = resolveTreasuryAddress();
 
     Web3Transaction transaction =
         saveTransactionPort.saveLevelUpRewardIntent(
@@ -48,19 +51,19 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
 
   private void validate(RewardMztkCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new Web3InvalidInputException("command is required");
     }
     if (command.userId() == null || command.userId() <= 0) {
-      throw new IllegalArgumentException("userId must be positive");
+      throw new Web3InvalidInputException("userId must be positive");
     }
     if (command.referenceId() == null || command.referenceId() <= 0) {
-      throw new IllegalArgumentException("referenceId must be positive");
+      throw new Web3InvalidInputException("referenceId must be positive");
     }
     if (command.toWalletAddress() == null || command.toWalletAddress().isBlank()) {
-      throw new IllegalArgumentException("toWalletAddress is required");
+      throw new Web3InvalidInputException("toWalletAddress is required");
     }
     if (command.rewardMztk() < 0) {
-      throw new IllegalArgumentException("rewardMztk must be >= 0");
+      throw new Web3InvalidInputException("rewardMztk must be >= 0");
     }
   }
 
@@ -83,5 +86,18 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
         .txHash(transaction.getTxHash())
         .failureReason(transaction.getFailureReason())
         .build();
+  }
+
+  private String resolveTreasuryAddress() {
+    String treasuryAddress = rewardTokenProperties.getTreasury().getTreasuryAddress();
+    if (treasuryAddress == null || treasuryAddress.isBlank()) {
+      throw new RewardTreasuryAddressInvalidException(treasuryAddress);
+    }
+
+    String normalized = treasuryAddress.toLowerCase();
+    if (!WalletUtils.isValidAddress(normalized)) {
+      throw new RewardTreasuryAddressInvalidException(treasuryAddress);
+    }
+    return normalized;
   }
 }

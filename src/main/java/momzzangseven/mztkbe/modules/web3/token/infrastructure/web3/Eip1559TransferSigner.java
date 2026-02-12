@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.token.infrastructure.web3;
 
 import java.math.BigInteger;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.datatypes.Address;
@@ -25,10 +26,10 @@ public final class Eip1559TransferSigner {
 
   public static String encodeTransferData(String toAddress, BigInteger amountWei) {
     if (toAddress == null || !WalletUtils.isValidAddress(toAddress)) {
-      throw new IllegalArgumentException("toAddress is invalid");
+      throw new Web3InvalidInputException("toAddress is invalid");
     }
     if (amountWei == null || amountWei.signum() < 0) {
-      throw new IllegalArgumentException("amountWei must be >= 0");
+      throw new Web3InvalidInputException("amountWei must be >= 0");
     }
 
     Function transfer =
@@ -69,23 +70,23 @@ public final class Eip1559TransferSigner {
 
   private static void validate(Web3ContractPort.SignTransferCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new Web3InvalidInputException("command is required");
     }
     if (command.treasuryPrivateKeyHex() == null || command.treasuryPrivateKeyHex().isBlank()) {
-      throw new IllegalArgumentException("treasuryPrivateKeyHex is required");
+      throw new Web3InvalidInputException("treasuryPrivateKeyHex is required");
     }
     if (command.tokenContractAddress() == null
         || !WalletUtils.isValidAddress(command.tokenContractAddress())) {
-      throw new IllegalArgumentException("tokenContractAddress is invalid");
+      throw new Web3InvalidInputException("tokenContractAddress is invalid");
     }
     if (command.toAddress() == null || !WalletUtils.isValidAddress(command.toAddress())) {
-      throw new IllegalArgumentException("toAddress is invalid");
+      throw new Web3InvalidInputException("toAddress is invalid");
     }
     if (command.nonce() < 0) {
-      throw new IllegalArgumentException("nonce must be >= 0");
+      throw new Web3InvalidInputException("nonce must be >= 0");
     }
     if (command.chainId() <= 0) {
-      throw new IllegalArgumentException("chainId must be > 0");
+      throw new Web3InvalidInputException("chainId must be > 0");
     }
   }
 

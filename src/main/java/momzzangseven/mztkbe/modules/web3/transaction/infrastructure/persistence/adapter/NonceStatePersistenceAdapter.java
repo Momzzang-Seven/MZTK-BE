@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3NonceStateEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3NonceStateJpaRepository;
@@ -17,7 +18,7 @@ public class NonceStatePersistenceAdapter implements ReserveNoncePort {
   @Transactional
   public long reserveNextNonce(String fromAddress) {
     if (fromAddress == null || fromAddress.isBlank()) {
-      throw new IllegalArgumentException("fromAddress is required");
+      throw new Web3InvalidInputException("fromAddress is required");
     }
 
     String normalizedAddress = fromAddress.toLowerCase();

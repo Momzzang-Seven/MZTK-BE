@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.worker;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +42,11 @@ public class TransactionReceiptWorker {
   }
 
   void processBatch(int limit) {
-    Duration claimTtl = Duration.ofSeconds(rewardTokenProperties.getWorker().getClaimTtlSeconds());
+    int claimTtlSeconds =
+        Math.max(
+            rewardTokenProperties.getWorker().getClaimTtlSeconds(),
+            rewardTokenProperties.getWorker().getReceiptTimeoutSeconds());
+    Duration claimTtl = Duration.ofSeconds(claimTtlSeconds);
     List<LoadTransactionWorkPort.TransactionWorkItem> items =
         loadTransactionWorkPort.claimByStatus(Web3TxStatus.PENDING, limit, workerId, claimTtl);
     if (items.isEmpty()) {
@@ -73,60 +76,66 @@ public class TransactionReceiptWorker {
     }
 
     int timeoutSeconds = rewardTokenProperties.getWorker().getReceiptTimeoutSeconds();
-    int pollMinSeconds = rewardTokenProperties.getWorker().getReceiptPollMinSeconds();
-    int pollMaxSeconds = rewardTokenProperties.getWorker().getReceiptPollMaxSeconds();
-
-    LocalDateTime startedAt = LocalDateTime.now();
-    int attempt = 0;
-    int nextWaitSeconds = pollMinSeconds;
-
-    while (Duration.between(startedAt, LocalDateTime.now()).getSeconds() < timeoutSeconds) {
-      attempt++;
-      long elapsedSeconds = Duration.between(startedAt, LocalDateTime.now()).getSeconds();
-
-      Web3ContractPort.ReceiptResult receipt = web3ContractPort.getReceipt(txHash);
-      auditReceiptPoll(item.transactionId(), attempt, elapsedSeconds, receipt);
-
-      if (receipt.found()) {
-        if (Boolean.TRUE.equals(receipt.success())) {
-          updateTransactionPort.updateStatus(
-              item.transactionId(), Web3TxStatus.SUCCEEDED, txHash, null);
-          auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
-        } else {
-          updateTransactionPort.updateStatus(
-              item.transactionId(), Web3TxStatus.FAILED_ONCHAIN, txHash, "RECEIPT_STATUS_0");
-          auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.FAILED_ONCHAIN);
-        }
-        return;
-      }
-
-      if (!sleepSeconds(nextWaitSeconds)) {
-        retry(item.transactionId(), Web3TxFailureReason.RPC_UNAVAILABLE.code());
-        return;
-      }
-      nextWaitSeconds = Math.min(pollMaxSeconds, Math.max(1, nextWaitSeconds * 2));
+    long elapsedSeconds = elapsedSeconds(item);
+    if (timeoutSeconds <= 0 || elapsedSeconds >= timeoutSeconds) {
+      timeout(item.transactionId(), txHash, timeoutSeconds);
+      return;
     }
 
-    String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_" + timeoutSeconds + "S";
-    updateTransactionPort.updateStatus(
-        item.transactionId(), Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
-    auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
-  }
+    Web3ContractPort.ReceiptResult receipt = web3ContractPort.getReceipt(txHash);
+    auditReceiptPoll(item.transactionId(), 1, elapsedSeconds, receipt);
 
-  private boolean sleepSeconds(int seconds) {
-    try {
-      Thread.sleep(Duration.of(seconds, ChronoUnit.SECONDS));
-      return true;
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      return false;
+    if (receipt.found()) {
+      if (Boolean.TRUE.equals(receipt.success())) {
+        updateTransactionPort.updateStatus(item.transactionId(), Web3TxStatus.SUCCEEDED, txHash, null);
+        auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
+      } else {
+        updateTransactionPort.updateStatus(
+            item.transactionId(), Web3TxStatus.FAILED_ONCHAIN, txHash, "RECEIPT_STATUS_0");
+        auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.FAILED_ONCHAIN);
+      }
+      return;
     }
+
+    if (receipt.rpcError()) {
+      retry(
+          item.transactionId(),
+          receipt.failureReason() != null
+              ? receipt.failureReason()
+              : Web3TxFailureReason.RPC_UNAVAILABLE.code());
+      return;
+    }
+
+    scheduleNextPoll(item.transactionId());
   }
 
   private void retry(Long transactionId, String failureReason) {
     LocalDateTime until =
         LocalDateTime.now().plusSeconds(rewardTokenProperties.getWorker().getRetryBackoffSeconds());
     updateTransactionPort.scheduleRetry(transactionId, failureReason, until);
+  }
+
+  private void scheduleNextPoll(Long transactionId) {
+    int pollMinSeconds = rewardTokenProperties.getWorker().getReceiptPollMinSeconds();
+    int pollMaxSeconds = rewardTokenProperties.getWorker().getReceiptPollMaxSeconds();
+    int nextPollSeconds = Math.max(1, Math.min(pollMinSeconds, pollMaxSeconds));
+
+    updateTransactionPort.scheduleRetry(
+        transactionId, null, LocalDateTime.now().plusSeconds(nextPollSeconds));
+  }
+
+  private long elapsedSeconds(LoadTransactionWorkPort.TransactionWorkItem item) {
+    LocalDateTime baseline = item.broadcastedAt();
+    if (baseline == null) {
+      return Long.MAX_VALUE;
+    }
+    return Math.max(0, Duration.between(baseline, LocalDateTime.now()).getSeconds());
+  }
+
+  private void timeout(Long transactionId, String txHash, int timeoutSeconds) {
+    String timeoutReason = Web3TxFailureReason.RECEIPT_TIMEOUT.code() + "_" + timeoutSeconds + "S";
+    updateTransactionPort.updateStatus(transactionId, Web3TxStatus.UNCONFIRMED, txHash, timeoutReason);
+    auditStateChange(transactionId, Web3TxStatus.PENDING, Web3TxStatus.UNCONFIRMED);
   }
 
   private void auditReceiptPoll(

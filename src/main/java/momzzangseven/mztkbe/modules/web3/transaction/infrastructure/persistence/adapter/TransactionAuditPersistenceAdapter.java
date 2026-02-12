@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionAuditEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionAuditJpaRepository;
@@ -20,13 +22,13 @@ public class TransactionAuditPersistenceAdapter implements RecordTransactionAudi
   @Transactional
   public void record(AuditCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new Web3InvalidInputException("command is required");
     }
     if (command.transactionId() == null) {
-      throw new IllegalArgumentException("transactionId is required");
+      throw new Web3InvalidInputException("transactionId is required");
     }
     if (command.eventType() == null) {
-      throw new IllegalArgumentException("eventType is required");
+      throw new Web3InvalidInputException("eventType is required");
     }
 
     repository.save(
@@ -45,7 +47,8 @@ public class TransactionAuditPersistenceAdapter implements RecordTransactionAudi
     try {
       return objectMapper.writeValueAsString(detail);
     } catch (JsonProcessingException e) {
-      throw new IllegalStateException("Failed to serialize transaction audit detail", e);
+      throw new Web3TransactionStateInvalidException(
+          "Failed to serialize transaction audit detail", e);
     }
   }
 }

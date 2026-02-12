@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.token.domain.model;
 
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+
 /** Policy-fixed idempotency key factory for reward issuance. */
 public final class RewardIdempotencyKeyFactory {
 
@@ -7,10 +9,10 @@ public final class RewardIdempotencyKeyFactory {
 
   public static String forLevelUpReward(Long userId, Long levelUpHistoryId) {
     if (userId == null || userId <= 0) {
-      throw new IllegalArgumentException("userId must be positive");
+      throw new Web3InvalidInputException("userId must be positive");
     }
     if (levelUpHistoryId == null || levelUpHistoryId <= 0) {
-      throw new IllegalArgumentException("levelUpHistoryId must be positive");
+      throw new Web3InvalidInputException("levelUpHistoryId must be positive");
     }
     return "reward:" + userId + ":" + levelUpHistoryId;
   }

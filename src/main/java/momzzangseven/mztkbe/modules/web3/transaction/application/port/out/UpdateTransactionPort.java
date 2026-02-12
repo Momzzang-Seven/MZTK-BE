@@ -6,6 +6,8 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 /** Port for changing transaction status and processing locks. */
 public interface UpdateTransactionPort {
 
+  void assignNonce(Long transactionId, long nonce);
+
   void markSigned(Long transactionId, long nonce, String signedRawTx, String txHash);
 
   void markPending(Long transactionId, String txHash);
