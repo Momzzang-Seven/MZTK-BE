@@ -82,11 +82,7 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
       return RewardMztkResult.unconfirmed(transaction.getFailureReason(), transaction.getTxHash());
     }
 
-    return RewardMztkResult.builder()
-        .status(status)
-        .txHash(transaction.getTxHash())
-        .failureReason(transaction.getFailureReason())
-        .build();
+    return new RewardMztkResult(status, transaction.getTxHash(), transaction.getFailureReason());
   }
 
   private String resolveTreasuryAddress() {

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.dto;
 
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import org.web3j.crypto.WalletUtils;
 
 /**
@@ -17,22 +18,17 @@ public record UnlinkWalletCommand(Long userId, String walletAddress) {
    * <p>Converts wallet address to lowercase for consistency across the system.
    */
   public UnlinkWalletCommand {
-    // Normalize wallet address to lowercase if not null
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();
     }
-  }
-
-  public void validate() {
     if (userId == null || userId <= 0) {
-      throw new IllegalArgumentException("User ID must be positive");
+      throw new Web3InvalidInputException("userId must be positive");
     }
     if (walletAddress == null || walletAddress.isBlank()) {
-      throw new IllegalArgumentException("Wallet address must not be blank");
+      throw new Web3InvalidInputException("walletAddress must not be blank");
     }
-    // Validate Ethereum address format using Web3j
     if (!isValidEthereumAddress(walletAddress)) {
-      throw new IllegalArgumentException("Invalid Ethereum address format");
+      throw new Web3InvalidInputException("Invalid Ethereum address format");
     }
   }
 
@@ -43,12 +39,9 @@ public record UnlinkWalletCommand(Long userId, String walletAddress) {
    * Must pass Web3j validation (format + checksum if applicable)
    */
   private boolean isValidEthereumAddress(String address) {
-    // 1. Check 0x prefix
     if (!address.startsWith("0x")) {
       return false;
     }
-
-    // 2. Check Web3j validation (format + checksum)
     return WalletUtils.isValidAddress(address);
   }
 }

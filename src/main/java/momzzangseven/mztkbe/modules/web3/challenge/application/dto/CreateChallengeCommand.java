@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.challenge.application.dto;
 
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.challenge.domain.model.ChallengePurpose;
 import org.web3j.crypto.WalletUtils;
 
@@ -20,25 +21,20 @@ public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, Stri
    * <p>Converts wallet address to lowercase for consistency across the system.
    */
   public CreateChallengeCommand {
-    // Normalize wallet address to lowercase if not null
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();
     }
-  }
-
-  /** Validation method */
-  public void validate() {
     if (userId == null || userId <= 0) {
-      throw new IllegalArgumentException("User ID must be positive");
+      throw new Web3InvalidInputException("userId must be positive");
     }
     if (purpose == null) {
-      throw new IllegalArgumentException("Purpose must not be null");
+      throw new Web3InvalidInputException("purpose must not be null");
     }
     if (walletAddress == null || walletAddress.isBlank()) {
-      throw new IllegalArgumentException("Wallet address must not be blank");
+      throw new Web3InvalidInputException("walletAddress must not be blank");
     }
     if (!isValidEthereumAddress(walletAddress)) {
-      throw new IllegalArgumentException("Invalid Ethereum address format");
+      throw new Web3InvalidInputException("Invalid Ethereum address format");
     }
   }
 
