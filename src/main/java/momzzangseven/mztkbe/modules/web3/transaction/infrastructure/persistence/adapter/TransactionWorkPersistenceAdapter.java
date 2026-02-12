@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
 import jakarta.persistence.EntityManager;
+import java.util.Arrays;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,8 +12,10 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
@@ -22,7 +25,30 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @RequiredArgsConstructor
 public class TransactionWorkPersistenceAdapter
-    implements LoadTransactionWorkPort, UpdateTransactionPort {
+    implements LoadTransactionWorkPort, LoadTransactionPort, UpdateTransactionPort {
+
+  private static final String NON_RETRYABLE_FAILURE_REASON_SQL =
+      Arrays.stream(Web3TxFailureReason.values())
+          .filter(reason -> !reason.isRetryable())
+          .map(Web3TxFailureReason::code)
+          .map(code -> "'" + code + "'")
+          .collect(Collectors.joining(","));
+
+  private static final String CLAIM_CREATED_SQL =
+      """
+      SELECT id
+      FROM web3_transactions
+      WHERE status = :status
+        AND (processing_until IS NULL OR processing_until < NOW())
+        AND (
+            failure_reason IS NULL
+            OR failure_reason NOT IN (%s)
+        )
+      ORDER BY id
+      LIMIT :limit
+      FOR UPDATE SKIP LOCKED
+      """
+          .formatted(NON_RETRYABLE_FAILURE_REASON_SQL);
 
   private final EntityManager entityManager;
   private final Web3TransactionJpaRepository repository;
@@ -186,6 +212,21 @@ public class TransactionWorkPersistenceAdapter
     entity.setProcessingUntil(null);
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public java.util.Optional<LoadTransactionPort.TransactionSnapshot> loadById(Long transactionId) {
+    if (transactionId == null || transactionId <= 0) {
+      throw new Web3InvalidInputException("transactionId must be positive");
+    }
+
+    return repository
+        .findById(transactionId)
+        .map(
+            entity ->
+                new LoadTransactionPort.TransactionSnapshot(
+                    entity.getId(), entity.getStatus(), entity.getTxHash(), entity.getFailureReason()));
+  }
+
   private TransactionWorkItem toWorkItem(Web3TransactionEntity entity) {
     return new TransactionWorkItem(
         entity.getId(),
@@ -209,26 +250,7 @@ public class TransactionWorkPersistenceAdapter
   private List<Number> selectClaimableIds(Web3TxStatus status, int limit) {
     if (status == Web3TxStatus.CREATED) {
       return entityManager
-          .createNativeQuery(
-              """
-              SELECT id
-              FROM web3_transactions
-              WHERE status = :status
-                AND (processing_until IS NULL OR processing_until < NOW())
-                AND (
-                    failure_reason IS NULL
-                    OR failure_reason NOT IN (
-                        'TREASURY_TOKEN_INSUFFICIENT',
-                        'PREVALIDATE_REVERT',
-                        'TREASURY_KEY_MISSING',
-                        'INVALID_SIGNED_TX',
-                        'RECEIPT_TIMEOUT'
-                    )
-                )
-              ORDER BY id
-              LIMIT :limit
-              FOR UPDATE SKIP LOCKED
-              """)
+          .createNativeQuery(CLAIM_CREATED_SQL)
           .setParameter("status", status.name())
           .setParameter("limit", limit)
           .getResultList();

@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.worker;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardToken
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditDetailBuilder;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -145,12 +145,14 @@ public class TransactionReceiptWorker {
       int attempt,
       long elapsedSeconds,
       Web3ContractPort.ReceiptResult receipt) {
-    Map<String, Object> detail = new LinkedHashMap<>();
-    detail.put("attempt", attempt);
-    detail.put("elapsedSeconds", elapsedSeconds);
-    detail.put("result", receipt.found() ? "receipt_found" : "receipt_missing");
-    detail.put("rpcError", receipt.rpcError());
-    detail.put("failureReason", receipt.failureReason());
+    Map<String, Object> detail =
+        AuditDetailBuilder.create()
+            .put("attempt", attempt)
+            .put("elapsedSeconds", elapsedSeconds)
+            .put("result", receipt.found() ? "receipt_found" : "receipt_missing")
+            .put("rpcError", receipt.rpcError())
+            .put("failureReason", receipt.failureReason())
+            .build();
 
     audit(transactionId, Web3TransactionAuditEventType.RECEIPT_POLL, receipt.rpcAlias(), detail);
   }
@@ -160,7 +162,7 @@ public class TransactionReceiptWorker {
         transactionId,
         Web3TransactionAuditEventType.STATE_CHANGE,
         null,
-        Map.of("from", from.name(), "to", to.name()));
+        AuditDetailBuilder.create().put("from", from).put("to", to).build());
   }
 
   private void audit(

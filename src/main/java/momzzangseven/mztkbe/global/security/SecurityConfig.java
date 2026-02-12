@@ -114,6 +114,8 @@ public class SecurityConfig {
                     //  Admin-only endpoints
                     .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/transactions/**")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // Health check and monitoring endpoints
                     .requestMatchers("/actuator/**")
