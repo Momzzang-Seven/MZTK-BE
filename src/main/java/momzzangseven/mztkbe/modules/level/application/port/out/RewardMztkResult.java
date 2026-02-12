@@ -1,21 +1,29 @@
 package momzzangseven.mztkbe.modules.level.application.port.out;
 
 import lombok.Builder;
-import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
-@Builder
-public record RewardMztkResult(RewardStatus status, String txHash, String failureReason) {
+@Builder(toBuilder = true)
+public record RewardMztkResult(Web3TxStatus status, String txHash, String failureReason) {
 
-  public static RewardMztkResult pending(String reason) {
-    return RewardMztkResult.builder().status(RewardStatus.PENDING).failureReason(reason).build();
+  public static RewardMztkResult created(String reason) {
+    return RewardMztkResult.builder().status(Web3TxStatus.CREATED).failureReason(reason).build();
+  }
+
+  public static RewardMztkResult pending(String txHash) {
+    return RewardMztkResult.builder().status(Web3TxStatus.PENDING).txHash(txHash).build();
   }
 
   public static RewardMztkResult success(String txHash) {
-    return RewardMztkResult.builder().status(RewardStatus.SUCCESS).txHash(txHash).build();
+    return RewardMztkResult.builder().status(Web3TxStatus.SUCCEEDED).txHash(txHash).build();
   }
 
-  public static RewardMztkResult failed(String reason) {
-    return RewardMztkResult.builder().status(RewardStatus.FAILED).failureReason(reason).build();
+  public static RewardMztkResult unconfirmed(String reason, String txHash) {
+    return RewardMztkResult.builder()
+        .status(Web3TxStatus.UNCONFIRMED)
+        .failureReason(reason)
+        .txHash(txHash)
+        .build();
   }
 
   public void validate() {

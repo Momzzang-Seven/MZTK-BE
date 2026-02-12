@@ -79,6 +79,8 @@ public enum ErrorCode {
   NOT_ENOUGH_XP("LEVEL_001", "Not enough XP to level up", HttpStatus.CONFLICT),
   MAX_LEVEL_REACHED("LEVEL_002", "Max level reached", HttpStatus.CONFLICT),
   LEVEL_UP_ALREADY_PROCESSED("LEVEL_003", "Level up already processed", HttpStatus.CONFLICT),
+  REWARD_FAILED_ONCHAIN(
+      "LEVEL_004", "Reward transaction failed onchain and cannot be retried", HttpStatus.CONFLICT),
 
   // ========================================
   // Signup Errors (SIGNUP_xxx)
@@ -201,6 +203,10 @@ public enum ErrorCode {
 
   MISSING_REQUIRED_FIELD(
       "VALIDATION_002", "Required field is missing", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  RESOURCE_NOT_FOUND(
+      "VALIDATION_003", "Resource not found", HttpStatus.NOT_FOUND // 404
       ),
 
   // ========================================

@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Global exception handler for the entire application.
@@ -100,6 +101,15 @@ public class GlobalExceptionHandler {
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /** Handle missing endpoint/static resource requests as 404 instead of 500. */
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<ApiResponse<Void>> handleNoResourceFoundException(
+      NoResourceFoundException ex) {
+    ErrorCode errorCode = ErrorCode.RESOURCE_NOT_FOUND;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
   }
 
   /**
