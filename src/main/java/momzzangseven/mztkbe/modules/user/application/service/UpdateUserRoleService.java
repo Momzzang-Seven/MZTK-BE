@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.user.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.auth.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.user.IllegalTrainerGrantException;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;

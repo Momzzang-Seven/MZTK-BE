@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardToken
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
@@ -22,6 +23,7 @@ abstract class AbstractWeb3Worker {
   protected final UpdateTransactionPort updateTransactionPort;
   protected final RecordTransactionAuditPort recordTransactionAuditPort;
   protected final RewardTokenProperties rewardTokenProperties;
+  protected final RetryStrategy retryStrategy;
 
   protected void processBatchByStatus(
       Web3TxStatus status,
@@ -48,11 +50,11 @@ abstract class AbstractWeb3Worker {
         itemProcessor.accept(item);
       } catch (Exception e) {
         log.warn("{} worker failed for txId={}", workerTag(), item.transactionId(), e);
-        if (isNonRetryable(e)) {
+        if (!retryStrategy.shouldRetry(e, nonRetryableExceptions())) {
           failPermanently(item.transactionId(), defaultFailureReason);
           continue;
         }
-        retry(item.transactionId(), defaultFailureReason);
+        retry(item.transactionId(), defaultFailureReason, item);
       }
     }
   }
@@ -62,8 +64,12 @@ abstract class AbstractWeb3Worker {
   }
 
   protected void retry(Long transactionId, String failureReason) {
-    LocalDateTime until =
-        LocalDateTime.now().plusSeconds(rewardTokenProperties.getWorker().getRetryBackoffSeconds());
+    retry(transactionId, failureReason, null);
+  }
+
+  protected void retry(
+      Long transactionId, String failureReason, LoadTransactionWorkPort.TransactionWorkItem item) {
+    LocalDateTime until = retryStrategy.nextRetryAt(rewardTokenProperties, item);
     updateTransactionPort.scheduleRetry(transactionId, failureReason, until);
   }
 
@@ -90,9 +96,5 @@ abstract class AbstractWeb3Worker {
 
   protected String workerTag() {
     return getClass().getSimpleName();
-  }
-
-  private boolean isNonRetryable(Throwable throwable) {
-    return nonRetryableExceptions().stream().anyMatch(type -> type.isInstance(throwable));
   }
 }

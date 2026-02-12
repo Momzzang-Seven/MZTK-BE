@@ -5,9 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.admin.application.aop.AdminOnly;
-import momzzangseven.mztkbe.modules.web3.admin.domain.model.Web3AdminActionType;
-import momzzangseven.mztkbe.modules.web3.admin.domain.model.Web3AdminTargetType;
+import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.auditdetail.CsOverrideAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
@@ -36,8 +34,8 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
 
   @Override
   @AdminOnly(
-      actionType = Web3AdminActionType.TRANSACTION_MARK_SUCCEEDED,
-      targetType = Web3AdminTargetType.WEB3_TRANSACTION,
+      actionType = "TRANSACTION_MARK_SUCCEEDED",
+      targetType = "WEB3_TRANSACTION",
       operatorId = "#command.operatorId()",
       targetId = "#command.transactionId()")
   public MarkTransactionSucceededResult execute(MarkTransactionSucceededCommand command) {

@@ -1,6 +1,6 @@
-package momzzangseven.mztkbe.global.error;
+package momzzangseven.mztkbe.global.error.auth;
 
-import momzzangseven.mztkbe.global.error.auth.AuthErrorCode;
+import momzzangseven.mztkbe.global.error.BusinessException;
 
 /** Exception thrown when a user is not found. */
 public class UserNotFoundException extends BusinessException {

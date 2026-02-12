@@ -1,19 +1,17 @@
-package momzzangseven.mztkbe.modules.web3.admin.application.aop;
+package momzzangseven.mztkbe.global.security.aspect;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import momzzangseven.mztkbe.modules.web3.admin.domain.model.Web3AdminActionType;
-import momzzangseven.mztkbe.modules.web3.admin.domain.model.Web3AdminTargetType;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface AdminOnly {
 
-  Web3AdminActionType actionType();
+  String actionType();
 
-  Web3AdminTargetType targetType();
+  String targetType();
 
   String operatorId() default "#p0";
 
