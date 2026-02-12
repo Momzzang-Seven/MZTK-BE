@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.worker;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -13,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardToken
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditDetailBuilder;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -69,10 +69,12 @@ public class SignedRecoveryWorker {
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(item.signedRawTx()));
 
-    Map<String, Object> detail = new LinkedHashMap<>();
-    detail.put("success", broadcast.success());
-    detail.put("txHash", broadcast.txHash());
-    detail.put("failureReason", broadcast.failureReason());
+    Map<String, Object> detail =
+        AuditDetailBuilder.create()
+            .put("success", broadcast.success())
+            .put("txHash", broadcast.txHash())
+            .put("failureReason", broadcast.failureReason())
+            .build();
     audit(
         item.transactionId(),
         Web3TransactionAuditEventType.BROADCAST,
@@ -107,7 +109,7 @@ public class SignedRecoveryWorker {
         transactionId,
         Web3TransactionAuditEventType.STATE_CHANGE,
         null,
-        Map.of("from", from.name(), "to", to.name()));
+        AuditDetailBuilder.create().put("from", from).put("to", to).build());
   }
 
   private void audit(

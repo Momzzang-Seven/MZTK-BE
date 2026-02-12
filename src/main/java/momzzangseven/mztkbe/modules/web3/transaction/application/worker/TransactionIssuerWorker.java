@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.worker;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -15,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardToken
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditDetailBuilder;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -82,12 +82,12 @@ public class TransactionIssuerWorker {
             new Web3ContractPort.PrevalidateCommand(
                 treasuryKey.treasuryAddress(), item.toAddress(), item.amountWei()));
 
-    Map<String, Object> prevalidateDetail = new LinkedHashMap<>();
-    if (prevalidateResult.detail() != null) {
-      prevalidateDetail.putAll(prevalidateResult.detail());
-    }
-    prevalidateDetail.put("ok", prevalidateResult.ok());
-    prevalidateDetail.put("failureReason", prevalidateResult.failureReason());
+    Map<String, Object> prevalidateDetail =
+        AuditDetailBuilder.create()
+            .putAll(prevalidateResult.detail())
+            .put("ok", prevalidateResult.ok())
+            .put("failureReason", prevalidateResult.failureReason())
+            .build();
     audit(item.transactionId(), Web3TransactionAuditEventType.PREVALIDATE, null, prevalidateDetail);
 
     if (!prevalidateResult.ok()) {
@@ -111,18 +111,19 @@ public class TransactionIssuerWorker {
                 prevalidateResult.maxFeePerGas()));
 
     updateTransactionPort.markSigned(item.transactionId(), nonce, signed.rawTx(), signed.txHash());
-    Map<String, Object> signDetail = new LinkedHashMap<>();
-    signDetail.put("nonce", nonce);
-    signDetail.put("txHash", signed.txHash());
+    Map<String, Object> signDetail =
+        AuditDetailBuilder.create().put("nonce", nonce).put("txHash", signed.txHash()).build();
     audit(item.transactionId(), Web3TransactionAuditEventType.SIGN, null, signDetail);
     auditStateChange(item.transactionId(), Web3TxStatus.CREATED, Web3TxStatus.SIGNED);
 
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(signed.rawTx()));
-    Map<String, Object> broadcastDetail = new LinkedHashMap<>();
-    broadcastDetail.put("success", broadcast.success());
-    broadcastDetail.put("txHash", broadcast.txHash());
-    broadcastDetail.put("failureReason", broadcast.failureReason());
+    Map<String, Object> broadcastDetail =
+        AuditDetailBuilder.create()
+            .put("success", broadcast.success())
+            .put("txHash", broadcast.txHash())
+            .put("failureReason", broadcast.failureReason())
+            .build();
     audit(
         item.transactionId(),
         Web3TransactionAuditEventType.BROADCAST,
@@ -165,7 +166,7 @@ public class TransactionIssuerWorker {
         transactionId,
         Web3TransactionAuditEventType.STATE_CHANGE,
         null,
-        Map.of("from", from.name(), "to", to.name()));
+        AuditDetailBuilder.create().put("from", from).put("to", to).build());
   }
 
   private void audit(

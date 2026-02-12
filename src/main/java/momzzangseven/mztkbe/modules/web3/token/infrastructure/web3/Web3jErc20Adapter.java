@@ -19,6 +19,7 @@ import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Address;
+import org.web3j.abi.datatypes.Bool;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Uint256;
@@ -76,7 +77,9 @@ public class Web3jErc20Adapter implements Web3ContractPort {
   public PrevalidateResult prevalidate(PrevalidateCommand command) {
     if (!isValidCommand(command)) {
       return prevalidateFailure(
-          Web3TxFailureReason.PREVALIDATE_REVERT, false, Map.of("reason", "INVALID_COMMAND"));
+          Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND,
+          false,
+          Map.of("reason", "INVALID_COMMAND"));
     }
 
     Map<String, Object> detail = new LinkedHashMap<>();
@@ -178,6 +181,11 @@ public class Web3jErc20Adapter implements Web3ContractPort {
       return prevalidateFailure(Web3TxFailureReason.PREVALIDATE_REVERT, false, detail);
     }
     detail.put("callStaticRpc", callStaticAttempt.alias());
+    Boolean callStaticResult = decodeBool(callStaticAttempt.response().getValue());
+    detail.put("callStaticResult", callStaticResult);
+    if (Boolean.FALSE.equals(callStaticResult)) {
+      return prevalidateFailure(Web3TxFailureReason.PREVALIDATE_TRANSFER_FALSE, false, detail);
+    }
 
     RpcAttempt<EthEstimateGas> estimateGasAttempt =
         callWithFallback(web3j -> web3j.ethEstimateGas(estimateRequest).send());
@@ -317,6 +325,22 @@ public class Web3jErc20Adapter implements Web3ContractPort {
     return BigInteger.ZERO;
   }
 
+  private Boolean decodeBool(String encoded) {
+    if (encoded == null || encoded.isBlank() || "0x".equals(encoded)) {
+      return null;
+    }
+
+    List<Type> decoded = FunctionReturnDecoder.decode(encoded, boolDecoderOutputParameters());
+    if (decoded.isEmpty()) {
+      return null;
+    }
+    Object value = decoded.getFirst().getValue();
+    if (value instanceof Boolean boolValue) {
+      return boolValue;
+    }
+    return null;
+  }
+
   private PrevalidateResult prevalidateFailure(
       Web3TxFailureReason failureReason, boolean retryable, Map<String, Object> detail) {
     return new PrevalidateResult(
@@ -404,5 +428,10 @@ public class Web3jErc20Adapter implements Web3ContractPort {
   @SuppressWarnings({"rawtypes", "unchecked"})
   private List<TypeReference<Type>> uint256DecoderOutputParameters() {
     return List.of((TypeReference) TypeReference.create(Uint256.class));
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private List<TypeReference<Type>> boolDecoderOutputParameters() {
+    return List.of((TypeReference) TypeReference.create(Bool.class));
   }
 }
