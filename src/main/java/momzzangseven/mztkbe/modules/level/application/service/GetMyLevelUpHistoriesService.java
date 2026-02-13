@@ -10,7 +10,7 @@ import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUpHistor
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelRewardTransactionPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
-import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxPhase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import org.springframework.beans.factory.annotation.Value;

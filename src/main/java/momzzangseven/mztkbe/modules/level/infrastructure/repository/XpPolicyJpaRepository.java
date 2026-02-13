@@ -1,8 +1,8 @@
-package momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository;
+package momzzangseven.mztkbe.modules.level.infrastructure.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpPolicyEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
