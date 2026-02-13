@@ -25,6 +25,9 @@ public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, Stri
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();
     }
+  }
+
+  public void validate() {
     if (userId == null || userId <= 0) {
       throw new Web3InvalidInputException(Web3ValidationMessage.USER_ID_POSITIVE);
     }
@@ -46,12 +49,9 @@ public record CreateChallengeCommand(Long userId, ChallengePurpose purpose, Stri
    * Must pass Web3j validation (format + checksum if applicable)
    */
   private boolean isValidEthereumAddress(String address) {
-    // 1. Check 0x prefix
     if (!address.startsWith("0x")) {
       return false;
     }
-
-    // 2. Check Web3j validation (format + checksum)
     return WalletUtils.isValidAddress(address);
   }
 }

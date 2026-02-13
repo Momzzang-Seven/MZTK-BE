@@ -1,23 +1,22 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.dto;
 
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import org.web3j.crypto.WalletUtils;
 
 /**
- * Command for registering a new wallet
+ * Command for wallet registration
  *
- * <p>Converts wallet address to lowercase for consistency across the system.
+ * <p>Wallet address is automatically normalized to lowercase on creation for consistency.
  */
 public record RegisterWalletCommand(
     Long userId, String walletAddress, String signature, String nonce) {
 
   /**
-   * Compact constructor for normalization
+   * Canonical constructor with wallet address normalization
    *
    * <p>Converts wallet address to lowercase for consistency across the system.
    */
   public RegisterWalletCommand {
+    // Normalize wallet address to lowercase if not null
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();
     }
@@ -25,24 +24,26 @@ public record RegisterWalletCommand(
 
   public void validate() {
     if (userId == null || userId <= 0) {
-      throw new Web3InvalidInputException(Web3ValidationMessage.USER_ID_POSITIVE);
+      throw new IllegalArgumentException("User ID must be positive");
     }
     if (walletAddress == null || walletAddress.isBlank()) {
-      throw new Web3InvalidInputException("walletAddress must not be blank");
+      throw new IllegalArgumentException("Wallet address must not be blank");
     }
     if (signature == null || signature.isBlank()) {
-      throw new Web3InvalidInputException("signature must not be blank");
+      throw new IllegalArgumentException("Signature must not be blank");
     }
     if (nonce == null || nonce.isBlank()) {
-      throw new Web3InvalidInputException("nonce must not be blank");
+      throw new IllegalArgumentException("Nonce must not be blank");
     }
 
+    // Validate Ethereum address format
     if (!walletAddress.startsWith("0x") || !WalletUtils.isValidAddress(walletAddress)) {
-      throw new Web3InvalidInputException("Invalid Ethereum address format");
+      throw new IllegalArgumentException("Invalid Ethereum address format");
     }
 
+    // Validate signature format (should be 132 chars: 0x + 130 hex)
     if (!signature.matches("^0x[0-9a-fA-F]{130}$")) {
-      throw new Web3InvalidInputException("Invalid signature format");
+      throw new IllegalArgumentException("Invalid signature format");
     }
   }
 }
