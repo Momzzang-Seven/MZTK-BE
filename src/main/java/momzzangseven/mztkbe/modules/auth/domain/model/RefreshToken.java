@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.RefreshTokenInvalidException;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
 
 /**
  * Refresh Token Domain Model.

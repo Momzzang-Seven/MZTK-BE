@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.level.application.dto;
 
 import java.util.List;
-import momzzangseven.mztkbe.global.error.LevelUpCommandInvalidException;
-import momzzangseven.mztkbe.global.error.LevelValidationMessage;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 
 public record DeleteUserLevelDataCommand(List<Long> userIds) {
 

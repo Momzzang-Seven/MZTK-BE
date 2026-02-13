@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.token.application.dto;
 
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 
 public record ProvisionTreasuryKeyResult(
     String treasuryAddress,

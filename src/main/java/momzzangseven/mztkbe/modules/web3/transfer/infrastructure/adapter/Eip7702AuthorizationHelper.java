@@ -4,7 +4,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Locale;
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
 import org.web3j.crypto.ECDSASignature;
 import org.web3j.crypto.Hash;

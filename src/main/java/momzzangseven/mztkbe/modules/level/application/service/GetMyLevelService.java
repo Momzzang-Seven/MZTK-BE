@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.level.application.service;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;

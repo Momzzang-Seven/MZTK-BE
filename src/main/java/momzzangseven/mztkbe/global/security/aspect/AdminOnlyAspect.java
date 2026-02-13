@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditLogSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;

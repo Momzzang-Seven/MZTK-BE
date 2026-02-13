@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import org.springframework.stereotype.Component;
 
 @Component

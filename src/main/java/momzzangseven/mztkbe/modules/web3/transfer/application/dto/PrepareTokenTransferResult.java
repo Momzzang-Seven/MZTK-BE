@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.dto;
 
 import java.time.LocalDateTime;
 import lombok.Builder;
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 
 @Builder
 public record PrepareTokenTransferResult(

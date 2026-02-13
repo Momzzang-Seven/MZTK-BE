@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.MaxLevelReachedException;
+import momzzangseven.mztkbe.global.error.level.MaxLevelReachedException;
 import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import org.springframework.stereotype.Service;

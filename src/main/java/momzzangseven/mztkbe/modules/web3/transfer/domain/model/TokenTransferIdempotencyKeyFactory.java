@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transfer.domain.model;
 
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 
 /** Policy-fixed idempotency key format for EIP-7702 transfer flow. */
 public final class TokenTransferIdempotencyKeyFactory {

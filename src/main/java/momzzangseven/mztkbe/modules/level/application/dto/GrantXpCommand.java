@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.level.application.dto;
 
 import java.time.LocalDateTime;
 import java.util.regex.Pattern;
-import momzzangseven.mztkbe.global.error.LevelUpCommandInvalidException;
-import momzzangseven.mztkbe.global.error.LevelValidationMessage;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.modules.level.domain.model.XpType;
 
 /**
