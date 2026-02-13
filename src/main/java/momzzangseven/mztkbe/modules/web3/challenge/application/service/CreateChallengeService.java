@@ -27,6 +27,9 @@ public class CreateChallengeService implements CreateChallengeUseCase {
         command.purpose(),
         command.walletAddress());
 
+    // 0. Validate command
+    command.validate();
+
     // 1. Load configuration
     var config = loadChallengeConfigPort.loadConfig();
 
