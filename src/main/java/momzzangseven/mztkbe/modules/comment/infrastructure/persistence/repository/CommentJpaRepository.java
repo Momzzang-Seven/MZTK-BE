@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,4 +26,12 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
   @Query(
       "UPDATE CommentEntity c SET c.isDeleted = true, c.updatedAt = CURRENT_TIMESTAMP WHERE c.postId = :postId")
   void deleteAllByPostId(@Param("postId") Long postId);
+
+  @Query("SELECT c.id FROM CommentEntity c WHERE c.isDeleted = true AND c.updatedAt < :cutoff")
+  List<Long> findIdsByIsDeletedTrueAndUpdatedAtBefore(
+      @Param("cutoff") LocalDateTime cutoff, Pageable pageable);
+
+  @Modifying(clearAutomatically = true)
+  @Query("DELETE FROM CommentEntity c WHERE c.parent.id IN :parentIds")
+  void deleteByParentIdIn(@Param("parentIds") List<Long> parentIds);
 }

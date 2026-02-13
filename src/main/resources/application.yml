@@ -73,6 +73,13 @@ withdrawal:
     cron: ${WITHDRAWAL_HARD_DELETE_CRON:0 0 3 * * *}
     zone: ${WITHDRAWAL_HARD_DELETE_ZONE:Asia/Seoul}
 
+  comment:
+    hard-delete:
+      retention-days: ${COMMENT_HARD_DELETE_RETENTION_DAYS:30}
+      batch-size: ${COMMENT_HARD_DELETE_BATCH_SIZE:100}
+      cron: ${COMMENT_HARD_DELETE_CRON:0 0 4 * * *}
+      zone: ${COMMENT_HARD_DELETE_ZONE:Asia/Seoul}
+
 logging:
   level:
     root: INFO
