@@ -4,8 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.comment.InvalidCommentConfigException;
 import momzzangseven.mztkbe.modules.comment.application.config.CommentHardDeleteProperties;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
@@ -46,7 +45,7 @@ public class CommentHardDeleteService {
 
   private void validateProperties() {
     if (props.getRetentionDays() <= 0 || props.getBatchSize() <= 0) {
-      throw new BusinessException(ErrorCode.INVALID_COMMENT_HARD_DELETE_CONFIG);
+      throw new InvalidCommentConfigException();
     }
   }
 }
