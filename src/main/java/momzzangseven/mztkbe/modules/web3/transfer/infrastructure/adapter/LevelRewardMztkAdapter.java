@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.level.RewardTreasuryAddressInvalidException;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.RewardTreasuryAddressInvalidException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;

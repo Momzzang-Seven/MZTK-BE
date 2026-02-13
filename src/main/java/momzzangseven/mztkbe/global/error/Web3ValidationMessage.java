@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.global.error.web3;
+package momzzangseven.mztkbe.global.error;
 
 /** Shared validation messages for web3 input/domain checks. */
 public final class Web3ValidationMessage {

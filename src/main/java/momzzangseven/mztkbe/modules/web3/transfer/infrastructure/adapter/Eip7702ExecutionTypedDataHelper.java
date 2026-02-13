@@ -6,7 +6,7 @@ import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 import org.web3j.crypto.StructuredDataEncoder;
 import org.web3j.utils.Numeric;
 

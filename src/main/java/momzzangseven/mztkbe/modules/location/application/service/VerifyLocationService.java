@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.location.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.error.location.LocationNotFoundException;
 import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationCommand;
 import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationResult;

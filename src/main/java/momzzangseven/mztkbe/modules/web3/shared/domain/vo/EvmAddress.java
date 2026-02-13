@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.shared.domain.vo;
 
 import java.util.Locale;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 import org.web3j.crypto.WalletUtils;
 
 /** Canonical EVM address value object. Always stored as lower-case hex. */

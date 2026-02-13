@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transfer.domain.model;
 
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 
 /** Policy-fixed idempotency key factory for reward issuance. */
 public final class RewardIdempotencyKeyFactory {

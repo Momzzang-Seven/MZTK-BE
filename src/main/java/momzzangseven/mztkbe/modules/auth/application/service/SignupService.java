@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.auth.DuplicateEmailException;
+import momzzangseven.mztkbe.global.error.DuplicateEmailException;
 import momzzangseven.mztkbe.modules.auth.application.dto.SignupCommand;
 import momzzangseven.mztkbe.modules.auth.application.dto.SignupResult;
 import momzzangseven.mztkbe.modules.auth.application.port.in.SignupUseCase;

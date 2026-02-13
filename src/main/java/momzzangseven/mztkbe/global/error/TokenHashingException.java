@@ -1,6 +1,4 @@
-package momzzangseven.mztkbe.global.error.token;
-
-import momzzangseven.mztkbe.global.error.ErrorCode;
+package momzzangseven.mztkbe.global.error;
 
 /** Thrown when hashing a token value fails due to cryptographic issues. */
 public class TokenHashingException extends TokenException {

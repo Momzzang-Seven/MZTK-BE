@@ -11,9 +11,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.web3.Web3ErrorCode;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
@@ -101,7 +101,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     if (!prepare.getAuthExpiresAt().isAfter(LocalDateTime.now())) {
       prepare.setStatus(TransferPrepareStatus.EXPIRED);
       prepareRepository.save(prepare);
-      throw new Web3TransferException(Web3ErrorCode.AUTH_EXPIRED, false);
+      throw new Web3TransferException(ErrorCode.AUTH_EXPIRED, false);
     }
 
     Web3TransactionEntity existingByReference =
@@ -109,7 +109,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
             .findByReferenceTypeAndReferenceId(prepare.getReferenceType(), prepare.getReferenceId())
             .orElse(null);
     if (existingByReference != null) {
-      throw new Web3TransferException(Web3ErrorCode.IDEMPOTENCY_CONFLICT, false);
+      throw new Web3TransferException(ErrorCode.IDEMPOTENCY_CONFLICT, false);
     }
 
     assertDelegateAllowlisted(prepare);
@@ -153,7 +153,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
     if (estimatedGas.compareTo(BigInteger.valueOf(eip7702Properties.getSponsor().getMaxGasLimit()))
         > 0) {
-      throw new Web3TransferException(Web3ErrorCode.SPONSOR_GAS_LIMIT_EXCEEDED, false);
+      throw new Web3TransferException(ErrorCode.SPONSOR_GAS_LIMIT_EXCEEDED, false);
     }
 
     Eip7702ChainPort.FeePlan feePlan = eip7702ChainPort.loadSponsorFeePlan();
@@ -285,7 +285,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         EvmAddress.of(eip7702Properties.getDelegation().getBatchImplAddress()).value();
     String current = EvmAddress.of(prepare.getDelegateTarget()).value();
     if (!allowlisted.equals(current)) {
-      throw new Web3TransferException(Web3ErrorCode.DELEGATE_NOT_ALLOWLISTED, false);
+      throw new Web3TransferException(ErrorCode.DELEGATE_NOT_ALLOWLISTED, false);
     }
   }
 
@@ -298,14 +298,14 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       currentNonce = onchainNonce.longValueExact();
     } catch (ArithmeticException ex) {
       throw new Web3TransferException(
-          Web3ErrorCode.AUTH_NONCE_MISMATCH,
+          ErrorCode.AUTH_NONCE_MISMATCH,
           "authority nonce overflow. expected=" + expectedNonce,
           true);
     }
 
     if (currentNonce != expectedNonce) {
       throw new Web3TransferException(
-          Web3ErrorCode.AUTH_NONCE_MISMATCH,
+          ErrorCode.AUTH_NONCE_MISMATCH,
           "authority nonce mismatch. expected=" + expectedNonce + ", actual=" + currentNonce,
           true);
     }
@@ -345,12 +345,12 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       Long userId, BigInteger amountWei, BigInteger estimatedCostWei) {
     BigInteger maxAmountWei = BigInteger.valueOf(5_000L).multiply(BigInteger.TEN.pow(18));
     if (amountWei.compareTo(maxAmountWei) > 0) {
-      throw new Web3TransferException(Web3ErrorCode.SPONSOR_AMOUNT_LIMIT_EXCEEDED, false);
+      throw new Web3TransferException(ErrorCode.SPONSOR_AMOUNT_LIMIT_EXCEEDED, false);
     }
 
     BigInteger perTxCapWei = ethToWei(eip7702Properties.getSponsor().getPerTxCapEth());
     if (estimatedCostWei.compareTo(perTxCapWei) > 0) {
-      throw new Web3TransferException(Web3ErrorCode.SPONSOR_AMOUNT_LIMIT_EXCEEDED, false);
+      throw new Web3TransferException(ErrorCode.SPONSOR_AMOUNT_LIMIT_EXCEEDED, false);
     }
 
     LocalDate usageDate = LocalDate.now(kstClock);
@@ -368,7 +368,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     BigInteger dailyCapWei = ethToWei(eip7702Properties.getSponsor().getPerDayUserCapEth());
     BigInteger next = usage.getEstimatedCostWei().add(estimatedCostWei);
     if (next.compareTo(dailyCapWei) > 0) {
-      throw new Web3TransferException(Web3ErrorCode.SPONSOR_DAILY_LIMIT_EXCEEDED, true);
+      throw new Web3TransferException(ErrorCode.SPONSOR_DAILY_LIMIT_EXCEEDED, true);
     }
 
     return new DailyUsageSnapshot(usage.getEstimatedCostWei(), dailyCapWei);

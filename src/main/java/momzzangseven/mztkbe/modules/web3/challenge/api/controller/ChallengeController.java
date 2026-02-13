@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.web3.challenge.api.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.challenge.api.dto.ChallengeResponseDTO;
 import momzzangseven.mztkbe.modules.web3.challenge.api.dto.CreateChallengeRequestDTO;
