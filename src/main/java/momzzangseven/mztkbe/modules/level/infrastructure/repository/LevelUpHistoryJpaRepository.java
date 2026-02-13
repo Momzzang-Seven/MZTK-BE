@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository;
+package momzzangseven.mztkbe.modules.level.infrastructure.repository;
 
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelUpHistoryEntity;
 import org.springframework.data.domain.Pageable;

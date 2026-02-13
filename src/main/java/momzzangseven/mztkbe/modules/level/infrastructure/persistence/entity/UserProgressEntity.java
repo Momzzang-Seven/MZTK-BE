@@ -13,6 +13,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 
 @Entity
 @Table(name = "user_progress")
@@ -41,6 +42,30 @@ public class UserProgressEntity {
 
   @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
+
+  /** Domain model -> Entity */
+  public static UserProgressEntity from(UserProgress domain) {
+    return UserProgressEntity.builder()
+        .userId(domain.getUserId())
+        .level(domain.getLevel())
+        .availableXp(domain.getAvailableXp())
+        .lifetimeXp(domain.getLifetimeXp())
+        .createdAt(domain.getCreatedAt())
+        .updatedAt(domain.getUpdatedAt())
+        .build();
+  }
+
+  /** Entity -> Domain model */
+  public UserProgress toDomain() {
+    return UserProgress.builder()
+        .userId(this.userId)
+        .level(this.level)
+        .availableXp(this.availableXp)
+        .lifetimeXp(this.lifetimeXp)
+        .createdAt(this.createdAt)
+        .updatedAt(this.updatedAt)
+        .build();
+  }
 
   @PrePersist
   protected void onCreate() {

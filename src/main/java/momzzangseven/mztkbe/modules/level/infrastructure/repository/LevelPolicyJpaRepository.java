@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository;
+package momzzangseven.mztkbe.modules.level.infrastructure.repository;
 
 import java.time.LocalDateTime;
 import java.util.List;

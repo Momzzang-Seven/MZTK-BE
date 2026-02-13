@@ -5,7 +5,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.out.AttendanceLogPort;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.AttendanceLogEntity;
-import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.AttendanceLogJpaRepository;
+import momzzangseven.mztkbe.modules.level.infrastructure.repository.AttendanceLogJpaRepository;
 import org.springframework.stereotype.Component;
 
 @Component
