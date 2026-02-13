@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.comment.CommentUnauthorizedException;
 
 @Getter
 public class Comment {
@@ -75,5 +76,11 @@ public class Comment {
     this.isDeleted = true;
     this.content = "삭제된 댓글입니다.";
     this.updatedAt = LocalDateTime.now();
+  }
+
+  public void validateWriter(Long userId) {
+    if (!this.writerId.equals(userId)) {
+      throw new CommentUnauthorizedException();
+    }
   }
 }
