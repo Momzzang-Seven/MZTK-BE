@@ -219,6 +219,13 @@ web3:
       allowed-target-contracts: []               # prod에서만 채우는 것을 권장
       blocked-function-selectors: []             # prod에서만 채우는 것을 권장
 
+    cleanup:
+      enabled: true
+      retention-days: 180
+      batch-size: 500
+      cron: "0 30 4 * * *"
+      zone: "Asia/Seoul"
+
     observability:
       log-auth-hash: true
       log-user-op: false

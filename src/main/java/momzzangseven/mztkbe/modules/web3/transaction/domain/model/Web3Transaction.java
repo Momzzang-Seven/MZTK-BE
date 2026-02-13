@@ -190,6 +190,9 @@ public class Web3Transaction {
     if (nowForState == null) {
       throw new Web3InvalidInputException(Web3ValidationMessage.NOW_REQUIRED);
     }
+    if (nextStatus == Web3TxStatus.UNCONFIRMED && (reason == null || reason.isBlank())) {
+      throw new Web3InvalidInputException("failureReason is required for UNCONFIRMED status");
+    }
     status = nextStatus;
     if (hash != null && !hash.isBlank()) {
       txHash = hash;

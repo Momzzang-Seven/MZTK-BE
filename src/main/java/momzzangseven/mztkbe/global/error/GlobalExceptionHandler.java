@@ -5,6 +5,7 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.code.ErrorCode;
 import momzzangseven.mztkbe.global.error.token.TokenException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -31,6 +32,19 @@ public class GlobalExceptionHandler {
   // ========================================
   // Business Exceptions
   // ========================================
+
+  @ExceptionHandler(Web3TransferException.class)
+  public ResponseEntity<ApiResponse<Void>> handleWeb3TransferException(Web3TransferException ex) {
+    log.warn(
+        "Web3 transfer exception: {} (code: {}, status: {}, retryable: {})",
+        ex.getMessage(),
+        ex.getCode(),
+        ex.getHttpStatus(),
+        ex.isRetryable());
+
+    return ResponseEntity.status(ex.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), ex.getCode(), ex.isRetryable()));
+  }
 
   /**
    * Handle all BusinessExceptions.
