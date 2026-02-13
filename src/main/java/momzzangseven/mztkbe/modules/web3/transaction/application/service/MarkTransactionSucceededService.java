@@ -15,7 +15,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Record
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.audit.detail.CsOverrideAuditDetail;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.CsOverrideAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;

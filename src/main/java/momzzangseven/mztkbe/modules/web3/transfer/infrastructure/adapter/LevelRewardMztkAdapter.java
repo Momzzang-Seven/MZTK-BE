@@ -11,7 +11,7 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CreateLevelUpRewardTxIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SaveTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.RewardIdempotencyKeyFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

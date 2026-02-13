@@ -38,5 +38,8 @@ public record PrepareTokenTransferCommand(
         && (toUserId == null || toUserId <= 0)) {
       throw new Web3InvalidInputException("toUserId is required for USER_TO_USER");
     }
+    if (referenceType == TokenTransferReferenceType.USER_TO_SERVER && toUserId != null) {
+      throw new Web3InvalidInputException("toUserId must be null for USER_TO_SERVER");
+    }
   }
 }
