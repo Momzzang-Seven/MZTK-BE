@@ -5,7 +5,6 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
-import momzzangseven.mztkbe.global.error.comment.CommentUnauthorizedException;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
@@ -53,12 +52,8 @@ public class CommentService
   public CommentResult updateComment(UpdateCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
 
-    // 권한 검증
-    if (!comment.getWriterId().equals(command.userId())) {
-      throw new CommentUnauthorizedException();
-    }
+    comment.validateWriter(command.userId());
 
-    // 도메인 로직 실행 (내용 수정)
     comment.updateContent(command.content());
 
     return CommentResult.from(saveCommentPort.saveComment(comment));
@@ -70,21 +65,17 @@ public class CommentService
   public void deleteComment(DeleteCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
 
-    // 권한 검증
-    if (!comment.getWriterId().equals(command.userId())) {
-      throw new CommentUnauthorizedException();
-    }
+    comment.validateWriter(command.userId());
 
-    // 도메인 로직 실행 (Soft Delete)
     comment.delete();
     saveCommentPort.saveComment(comment);
   }
 
-  // 3-2. 삭제 (Delete - 게시글 삭제 이벤트 수신용) [NEW!]
+  // 3-2. 삭제 (Delete - 게시글 삭제 이벤트 수신용)
   @Override
   @Transactional
   public void deleteCommentsByPostId(Long postId) {
-    // 해당 게시글의 모든 댓글 일괄 Soft Delete (Port -> Adapter -> Bulk Query 실행)
+    // 해당 게시글의 모든 댓글 일괄 Soft Delete
     saveCommentPort.deleteAllByPostId(postId);
   }
 
