@@ -1,7 +1,4 @@
-package momzzangseven.mztkbe.global.error.level;
-
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+package momzzangseven.mztkbe.global.error;
 
 public class MaxLevelReachedException extends BusinessException {
   public MaxLevelReachedException() {

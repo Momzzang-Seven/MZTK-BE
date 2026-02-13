@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.level.api.controller;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.level.api.dto.GetLevelPoliciesResponseDTO;
 import momzzangseven.mztkbe.modules.level.api.dto.GetMyLevelResponseDTO;

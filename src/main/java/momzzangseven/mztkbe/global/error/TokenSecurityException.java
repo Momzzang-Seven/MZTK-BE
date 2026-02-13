@@ -1,6 +1,4 @@
-package momzzangseven.mztkbe.global.error.token;
-
-import momzzangseven.mztkbe.global.error.ErrorCode;
+package momzzangseven.mztkbe.global.error;
 
 /** Thrown when a security violation is detected during token validation. */
 public class TokenSecurityException extends TokenException {

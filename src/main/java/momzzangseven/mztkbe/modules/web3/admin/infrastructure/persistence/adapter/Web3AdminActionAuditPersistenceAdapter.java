@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.adapt
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.entity.Web3AdminActionAuditEntity;
 import momzzangseven.mztkbe.modules.web3.admin.infrastructure.persistence.repository.Web3AdminActionAuditJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditLogSerializer;

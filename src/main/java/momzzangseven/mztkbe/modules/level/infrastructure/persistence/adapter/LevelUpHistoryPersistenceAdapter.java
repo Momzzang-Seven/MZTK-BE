@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 import jakarta.persistence.EntityManager;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.level.LevelUpAlreadyProcessedException;
+import momzzangseven.mztkbe.global.error.LevelUpAlreadyProcessedException;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelUpHistoryEntity;

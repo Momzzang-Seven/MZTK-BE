@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.global.error.level;
+package momzzangseven.mztkbe.global.error;
 
 /** Shared validation messages for level module commands/results. */
 public final class LevelValidationMessage {

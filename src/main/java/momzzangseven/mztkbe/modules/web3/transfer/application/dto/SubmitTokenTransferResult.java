@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.dto;
 
 import lombok.Builder;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 
 @Builder
 public record SubmitTokenTransferResult(Long transactionId, String status, String txHash) {

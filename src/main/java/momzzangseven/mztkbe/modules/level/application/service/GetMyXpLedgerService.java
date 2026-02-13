@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyXpLedgerResult;
 import momzzangseven.mztkbe.modules.level.application.dto.XpDailyCapStatusItem;
 import momzzangseven.mztkbe.modules.level.application.dto.XpLedgerEntryItem;

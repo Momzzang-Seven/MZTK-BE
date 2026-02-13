@@ -1,6 +1,4 @@
-package momzzangseven.mztkbe.global.error.token;
-
-import momzzangseven.mztkbe.global.error.ErrorCode;
+package momzzangseven.mztkbe.global.error;
 
 /** Thrown when a refresh token is expired or revoked. */
 public class RefreshTokenInvalidException extends TokenException {

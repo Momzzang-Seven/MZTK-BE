@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.dto;
 
 import java.math.BigInteger;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 
 public record PrepareTokenTransferCommand(

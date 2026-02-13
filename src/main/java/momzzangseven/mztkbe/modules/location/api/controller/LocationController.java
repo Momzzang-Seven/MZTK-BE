@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.location.api.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.location.api.dto.RegisterLocationRequestDTO;
 import momzzangseven.mztkbe.modules.location.api.dto.RegisterLocationResponseDTO;

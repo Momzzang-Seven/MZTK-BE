@@ -9,7 +9,7 @@ import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import momzzangseven.mztkbe.global.error.token.TokenEncryptionException;
+import momzzangseven.mztkbe.global.error.TokenEncryptionException;
 import org.springframework.stereotype.Component;
 
 /** Shared AES-256-GCM utility for sensitive payload encryption/decryption. */

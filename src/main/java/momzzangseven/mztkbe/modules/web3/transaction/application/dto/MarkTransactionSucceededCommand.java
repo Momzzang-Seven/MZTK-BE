@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.dto;
 
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3ValidationMessage;
 
 public record MarkTransactionSucceededCommand(
     Long operatorId,

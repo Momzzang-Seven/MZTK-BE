@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.AppErrorCode;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
@@ -122,7 +121,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     return loadUserPort.loadDeletedUserById(userId).isPresent();
   }
 
-  private void writeErrorResponse(HttpServletResponse response, AppErrorCode errorCode)
+  private void writeErrorResponse(HttpServletResponse response, ErrorCode errorCode)
       throws IOException {
     response.setStatus(errorCode.getHttpStatus().value());
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());

@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.auth.application.dto;
 
-import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
+import momzzangseven.mztkbe.global.error.RefreshTokenNotFoundException;
 
 /**
  * Command for token reissue operation.

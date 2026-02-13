@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.level.domain.model;
 import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.global.error.level.NotEnoughXpException;
+import momzzangseven.mztkbe.global.error.NotEnoughXpException;
 
 /** Domain model for user's level/XP state (cached). */
 @Getter

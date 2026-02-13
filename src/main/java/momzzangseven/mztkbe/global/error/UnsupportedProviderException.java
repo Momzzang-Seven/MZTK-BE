@@ -1,7 +1,5 @@
-package momzzangseven.mztkbe.global.error.auth;
+package momzzangseven.mztkbe.global.error;
 
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 
 /** Thrown when an authentication provider is not supported. */
