@@ -22,6 +22,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 
 @Entity
 @Table(
@@ -77,6 +78,22 @@ public class Web3TransactionEntity {
   private Long nonce;
 
   @Enumerated(EnumType.STRING)
+  @Column(name = "tx_type", nullable = false, length = 20)
+  private Web3TxType txType;
+
+  @Column(name = "authority_address", length = 42)
+  private String authorityAddress;
+
+  @Column(name = "authorization_nonce")
+  private Long authorizationNonce;
+
+  @Column(name = "delegate_target", length = 42)
+  private String delegateTarget;
+
+  @Column(name = "authorization_expires_at")
+  private LocalDateTime authorizationExpiresAt;
+
+  @Enumerated(EnumType.STRING)
   @Column(name = "status", nullable = false, length = 20)
   private Web3TxStatus status;
 
@@ -121,6 +138,9 @@ public class Web3TransactionEntity {
     }
     if (status == null) {
       status = Web3TxStatus.CREATED;
+    }
+    if (txType == null) {
+      txType = Web3TxType.EIP1559;
     }
   }
 

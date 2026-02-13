@@ -59,7 +59,7 @@ dependencies {
     implementation 'org.apache.commons:commons-lang3:3.18.0'
 
     // Web3 (Ethereum interaction)
-    implementation 'org.web3j:core:4.13.0'
+    implementation 'org.web3j:core:5.0.2'
 
     // Jackson for JSON processing (EIP-712 JSON conversion)
     implementation 'com.fasterxml.jackson.core:jackson-databind'
