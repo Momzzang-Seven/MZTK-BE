@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.global.error.web3;
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 

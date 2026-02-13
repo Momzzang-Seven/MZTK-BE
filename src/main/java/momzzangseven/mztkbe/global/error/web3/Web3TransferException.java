@@ -1,10 +1,8 @@
 package momzzangseven.mztkbe.global.error.web3;
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
 
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 
 /** Policy exception for EIP-7702 transfer flow including retryable metadata. */
 @Getter
