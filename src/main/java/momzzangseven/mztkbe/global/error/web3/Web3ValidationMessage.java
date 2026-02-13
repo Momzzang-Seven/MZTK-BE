@@ -1,4 +1,8 @@
-package momzzangseven.mztkbe.global.error;
+package momzzangseven.mztkbe.global.error.web3;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 
 /** Shared validation messages for web3 input/domain checks. */
 public final class Web3ValidationMessage {

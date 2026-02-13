@@ -1,4 +1,8 @@
-package momzzangseven.mztkbe.global.error;
+package momzzangseven.mztkbe.global.error.auth;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 
 /**
  * Exception thrown when an unauthenticated user attempts to access a protected resource.

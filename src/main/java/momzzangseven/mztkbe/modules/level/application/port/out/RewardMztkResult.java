@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.level.application.port.out;
 
-import momzzangseven.mztkbe.global.error.LevelUpCommandInvalidException;
-import momzzangseven.mztkbe.global.error.LevelValidationMessage;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
 public record RewardMztkResult(Web3TxStatus status, String txHash, String failureReason) {

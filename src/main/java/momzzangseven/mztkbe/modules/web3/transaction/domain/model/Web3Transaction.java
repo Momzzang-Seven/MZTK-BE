@@ -5,9 +5,9 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.global.error.Web3ValidationMessage;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 
 /** Domain model for web3_transactions row. */
 @Getter

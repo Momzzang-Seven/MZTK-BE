@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.token.application.port.out;
 
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 public interface RecordTreasuryProvisionAuditPort {
