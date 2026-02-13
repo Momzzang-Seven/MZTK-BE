@@ -15,6 +15,7 @@ spring:
         - classpath:db/seed/level_policies.sql
         - classpath:db/seed/xp_policies.sql
         - classpath:db/seed/web3_treasury_keys.sql
+        - classpath:db/seed/user_wallets_status_constraint.sql
 
   jpa:
     defer-datasource-initialization: true
