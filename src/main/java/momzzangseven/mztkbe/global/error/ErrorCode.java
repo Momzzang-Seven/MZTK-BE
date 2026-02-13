@@ -181,7 +181,6 @@ public enum ErrorCode {
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
   // ========================================
-
   CHALLENGE_NOT_FOUND_OR_EXPIRED(
       "CHALLENGE_001", "Challenge not found or expired", HttpStatus.BAD_REQUEST // 400
       ),
@@ -261,36 +260,6 @@ public enum ErrorCode {
 
   INVALID_POST_INPUT(
       "POST_003", "Invalid post input", HttpStatus.BAD_REQUEST // 400
-      ),
-  // ========================================
-  // Comment Errors (COMMENT_xxx)
-  // ========================================
-  COMMENT_NOT_FOUND(
-      "COMMENT_001", "Comment not found", HttpStatus.NOT_FOUND // 404
-      ),
-
-  COMMENT_UNAUTHORIZED(
-      "COMMENT_002", "Unauthorized access to comment", HttpStatus.FORBIDDEN // 403
-      ),
-
-  CANNOT_UPDATE_DELETED_COMMENT(
-      "COMMENT_003", "Cannot update a deleted comment", HttpStatus.BAD_REQUEST // 400
-      ),
-
-  PARENT_COMMENT_NOT_FOUND(
-      "COMMENT_004", "Parent comment not found", HttpStatus.NOT_FOUND // 404
-      ),
-
-  COMMENT_POST_MISMATCH(
-      "COMMENT_005", "Comment does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
-      ),
-  COMMENT_TOO_LONG(
-      "COMMENT_006", "Comment length must be within 1000 characters", HttpStatus.BAD_REQUEST // 400
-      ),
-  INVALID_COMMENT_HARD_DELETE_CONFIG(
-      "COMMENT_007",
-      "Invalid comment hard-delete configuration",
-      HttpStatus.INTERNAL_SERVER_ERROR // 500
       );
 
   private final String code;

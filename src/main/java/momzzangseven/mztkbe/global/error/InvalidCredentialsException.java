@@ -4,7 +4,7 @@ package momzzangseven.mztkbe.global.error;
 public class InvalidCredentialsException extends BusinessException {
 
   public InvalidCredentialsException() {
-    super(ErrorCode.INVALID_CREDENTIALS);
+    super(ErrorCode.INVALID_CREDENTIALS); // Uses default message
   }
 
   public InvalidCredentialsException(String customMessage) {
