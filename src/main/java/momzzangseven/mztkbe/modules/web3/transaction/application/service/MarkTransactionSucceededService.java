@@ -7,7 +7,6 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
-import momzzangseven.mztkbe.modules.web3.transaction.application.audit.detail.CsOverrideAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
@@ -16,6 +15,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Record
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.audit.detail.CsOverrideAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;

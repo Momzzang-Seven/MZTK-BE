@@ -18,7 +18,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.mapper.Web3TransactionMapper;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
