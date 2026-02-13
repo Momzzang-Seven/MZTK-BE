@@ -14,6 +14,7 @@ spring:
       data-locations:
         - classpath:db/seed/level_policies.sql
         - classpath:db/seed/xp_policies.sql
+        - classpath:db/seed/web3_treasury_keys.sql
 
   jpa:
     defer-datasource-initialization: true
