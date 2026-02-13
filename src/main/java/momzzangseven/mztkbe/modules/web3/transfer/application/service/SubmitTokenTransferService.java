@@ -23,7 +23,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.audit.AuditDetailBuilder;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditDetailBuilder;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
@@ -35,10 +35,10 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.ReserveNo
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.web3.Eip1559TransferSigner;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.web3.Eip7702AuthorizationHelper;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.web3.Eip7702BatchCallAbi;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.web3.Eip7702TransactionEncoder;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip1559TransferSigner;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702AuthorizationHelper;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702BatchCallAbi;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702TransactionEncoder;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
