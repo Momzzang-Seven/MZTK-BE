@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.dto;
 
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 
 public record SubmitTokenTransferCommand(
     Long userId, String prepareId, String authorizationSignature, String executionSignature) {

@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter;
 
 import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.token.TokenEncryptionException;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.TokenEncryptionException;
 import momzzangseven.mztkbe.global.security.AesGcmCipher;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import org.springframework.stereotype.Component;

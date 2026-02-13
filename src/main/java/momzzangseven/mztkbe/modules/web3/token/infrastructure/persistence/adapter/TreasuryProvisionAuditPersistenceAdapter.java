@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.token.infrastructure.persistence.adapter;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.persistence.entity.Web3TreasuryProvisionAuditEntity;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.persistence.repository.Web3TreasuryProvisionAuditJpaRepository;

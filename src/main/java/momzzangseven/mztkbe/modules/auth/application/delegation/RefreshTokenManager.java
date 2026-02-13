@@ -4,7 +4,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.auth.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.port.out.SaveRefreshTokenPort;
 import momzzangseven.mztkbe.modules.auth.domain.model.RefreshToken;

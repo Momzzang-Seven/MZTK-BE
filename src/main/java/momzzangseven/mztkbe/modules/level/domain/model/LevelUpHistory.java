@@ -4,8 +4,8 @@ import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
-import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
+import momzzangseven.mztkbe.global.error.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.LevelValidationMessage;
 
 /** SSOT for level-ups and their reward processing status. */
 @Getter

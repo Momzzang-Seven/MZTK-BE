@@ -1,7 +1,4 @@
-package momzzangseven.mztkbe.global.error.auth;
-
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+package momzzangseven.mztkbe.global.error;
 
 /** Exception thrown when password doesn't meet requirements. */
 public class InvalidPasswordException extends BusinessException {

@@ -2,10 +2,10 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3TransactionNotFoundException;
+import momzzangseven.mztkbe.global.error.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.global.error.Web3ValidationMessage;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;

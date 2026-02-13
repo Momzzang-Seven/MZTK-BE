@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.token.application.port.out;
 
 import java.util.Optional;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 /** Port for loading and decrypting treasury key material. */

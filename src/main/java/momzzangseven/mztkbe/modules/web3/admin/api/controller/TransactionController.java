@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.MarkTransactionSucceededRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.MarkTransactionSucceededResponseDTO;

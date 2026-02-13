@@ -1,6 +1,4 @@
-package momzzangseven.mztkbe.global.error.token;
-
-import momzzangseven.mztkbe.global.error.ErrorCode;
+package momzzangseven.mztkbe.global.error;
 
 /** Thrown when a refresh token cannot be located in the database. */
 public class RefreshTokenNotFoundException extends TokenException {

@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.level.application.service;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelUpHistoriesResult;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoryItem;
 import momzzangseven.mztkbe.modules.level.application.port.in.GetMyLevelUpHistoriesUseCase;

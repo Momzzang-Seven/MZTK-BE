@@ -16,7 +16,7 @@ import org.springframework.http.HttpStatus;
  */
 @Getter
 @RequiredArgsConstructor
-public enum ErrorCode implements AppErrorCode {
+public enum ErrorCode {
   // ========================================
   // Authentication Errors (AUTH_xxx)
   // ========================================
@@ -167,10 +167,21 @@ public enum ErrorCode implements AppErrorCode {
   WEB3_TRANSACTION_STATE_INVALID("WEB3_003", "Invalid web3 transaction state", HttpStatus.CONFLICT),
   WEB3_TREASURY_PRIVATE_KEY_INVALID(
       "WEB3_004", "Invalid treasury private key format", HttpStatus.BAD_REQUEST),
+  AUTH_EXPIRED("WEB3_005", "Authorization expired", HttpStatus.BAD_REQUEST),
+  AUTH_NONCE_MISMATCH("WEB3_006", "Authority nonce mismatch", HttpStatus.CONFLICT),
+  DELEGATE_NOT_ALLOWLISTED(
+      "WEB3_007", "Delegate target is not allowlisted", HttpStatus.BAD_REQUEST),
+  SPONSOR_GAS_LIMIT_EXCEEDED("WEB3_008", "Sponsor gas limit exceeded", HttpStatus.BAD_REQUEST),
+  SPONSOR_DAILY_LIMIT_EXCEEDED(
+      "WEB3_009", "Sponsor daily limit exceeded", HttpStatus.TOO_MANY_REQUESTS),
+  SPONSOR_AMOUNT_LIMIT_EXCEEDED(
+      "WEB3_010", "Sponsor amount limit exceeded", HttpStatus.BAD_REQUEST),
+  IDEMPOTENCY_CONFLICT("WEB3_011", "Idempotency conflict", HttpStatus.CONFLICT),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
   // ========================================
+
   CHALLENGE_NOT_FOUND_OR_EXPIRED(
       "CHALLENGE_001", "Challenge not found or expired", HttpStatus.BAD_REQUEST // 400
       ),

@@ -1,19 +1,18 @@
 package momzzangseven.mztkbe.global.error;
 
-import momzzangseven.mztkbe.global.error.code.ErrorCode;
 import org.springframework.http.HttpStatus;
 
 /** Base class for business errors annotated with an ErrorCode. */
 public class BusinessException extends RuntimeException {
 
-  /** Error code containing code, message, and HTTP status. */
+  /** Error code enum containing code, message, and HTTP status. */
   private final ErrorCode errorCode;
 
   /**
    * Constructor with ErrorCode and custom message. Use this when you want to add context to the
    * default message.
    *
-   * @param errorCode The error code
+   * @param errorCode The error code enum
    * @param customMessage Custom message (can be null to use default)
    */
   public BusinessException(ErrorCode errorCode, String customMessage) {
@@ -24,7 +23,7 @@ public class BusinessException extends RuntimeException {
   /**
    * Constructor with only ErrorCode. Uses the default message from ErrorCode.
    *
-   * @param errorCode The error code
+   * @param errorCode The error code enum
    */
   public BusinessException(ErrorCode errorCode) {
     super(errorCode.getMessage());
@@ -34,7 +33,7 @@ public class BusinessException extends RuntimeException {
   /**
    * Constructor with ErrorCode, custom message, and cause.
    *
-   * @param errorCode The error code
+   * @param errorCode The error code enum
    * @param customMessage Custom message
    * @param cause The underlying cause
    */
