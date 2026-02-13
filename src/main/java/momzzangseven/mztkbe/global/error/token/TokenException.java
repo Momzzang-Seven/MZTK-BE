@@ -12,7 +12,7 @@ public class TokenException extends RuntimeException {
    * Constructor with ErrorCode and custom message. Use this when you want to add context to the
    * default message.
    *
-   * @param errorCode The error code
+   * @param errorCode The error code enum
    * @param customMessage Custom message (can be null to use default)
    */
   public TokenException(ErrorCode errorCode, String customMessage) {
@@ -23,7 +23,7 @@ public class TokenException extends RuntimeException {
   /**
    * Constructor with only ErrorCode. Uses the default message from ErrorCode.
    *
-   * @param errorCode The error code
+   * @param errorCode The error code enum
    */
   public TokenException(ErrorCode errorCode) {
     super(errorCode.getMessage());
@@ -33,7 +33,7 @@ public class TokenException extends RuntimeException {
   /**
    * Constructor with ErrorCode, custom message, and cause.
    *
-   * @param errorCode The error code
+   * @param errorCode The error code enum
    * @param customMessage Custom message
    * @param cause The underlying cause
    */
