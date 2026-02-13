@@ -60,10 +60,8 @@ public class CommentPersistenceAdapter
     return commentRepository.findRepliesByParentId(parentId, pageable).map(CommentEntity::toDomain);
   }
 
-  /** 하드 딜리트 대상 ID 조회 */
   @Override
   public List<Long> loadCommentIdsForDeletion(LocalDateTime cutoff, int batchSize) {
-    // Repository에 findIdsByIsDeletedTrueAndUpdatedAtBefore 메서드 필요
     return commentRepository.findIdsByIsDeletedTrueAndUpdatedAtBefore(
         cutoff, PageRequest.of(0, batchSize));
   }
@@ -76,15 +74,17 @@ public class CommentPersistenceAdapter
     commentRepository.deleteAllByPostId(postId);
   }
 
-  /** ID 리스트 기반 일괄 하드 딜리트 */
   @Override
   @Transactional
-  public void deleteAllByIdInBatch(List<Long> commentIds) {
+  public void deleteAllById(List<Long> commentIds) {
+    if (commentIds == null || commentIds.isEmpty()) {
+      return;
+    }
 
     // 1. 자식(대댓글) 먼저 삭제
     commentRepository.deleteByParentIdIn(commentIds);
 
-    // 2.부모 삭제
+    // 2. 부모 삭제 (JPA 최적화 기술 활용)
     commentRepository.deleteAllByIdInBatch(commentIds);
   }
 }

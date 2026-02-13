@@ -255,6 +255,11 @@ public enum ErrorCode {
       ),
   COMMENT_TOO_LONG(
       "COMMENT_006", "Comment length must be within 1000 characters", HttpStatus.BAD_REQUEST // 400
+      ),
+  INVALID_COMMENT_HARD_DELETE_CONFIG(
+      "COMMENT_007",
+      "Invalid comment hard-delete configuration",
+      HttpStatus.INTERNAL_SERVER_ERROR // 500
       );
 
   private final String code;

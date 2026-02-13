@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
+import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -24,6 +25,7 @@ public class CommentService
   private final LoadCommentPort loadCommentPort;
   private final SaveCommentPort saveCommentPort;
   private final LoadPostPort loadPostPort;
+  private final DeleteCommentPort deleteCommentPort;
 
   // 1. 생성 (Create)
   @Override
@@ -76,7 +78,7 @@ public class CommentService
   @Transactional
   public void deleteCommentsByPostId(Long postId) {
     // 해당 게시글의 모든 댓글 일괄 Soft Delete
-    saveCommentPort.deleteAllByPostId(postId);
+    deleteCommentPort.deleteAllByPostId(postId);
   }
 
   // 4. 루트 댓글 조회 (Read)
