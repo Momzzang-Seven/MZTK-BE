@@ -6,7 +6,7 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.audit.detail.BroadcastAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.application.audit.detail.StateChangeAuditDetail;

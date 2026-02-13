@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.token.application.port.out;
+package momzzangseven.mztkbe.modules.web3.transfer.application.port.out;
 
 import java.math.BigInteger;
 import java.util.Map;

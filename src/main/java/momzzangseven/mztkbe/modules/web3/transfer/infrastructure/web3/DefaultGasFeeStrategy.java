@@ -1,8 +1,8 @@
-package momzzangseven.mztkbe.modules.web3.token.infrastructure.web3;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.web3;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.GasFeeStrategy;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.GasFeeStrategy;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
