@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transaction.api.dto.request;
+package momzzangseven.mztkbe.modules.web3.admin.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
 

@@ -18,9 +18,7 @@ public class TreasuryProvisionAuditPersistenceAdapter implements RecordTreasuryP
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void record(AuditCommand command) {
-    if (command == null) {
-      throw new Web3InvalidInputException("command is required");
-    }
+    validate(command);
 
     repository.save(
         Web3TreasuryProvisionAuditEntity.builder()
@@ -29,5 +27,11 @@ public class TreasuryProvisionAuditPersistenceAdapter implements RecordTreasuryP
             .success(command.success())
             .failureReason(command.failureReason())
             .build());
+  }
+
+  private void validate(AuditCommand command) {
+    if (command == null) {
+      throw new Web3InvalidInputException("command is required");
+    }
   }
 }

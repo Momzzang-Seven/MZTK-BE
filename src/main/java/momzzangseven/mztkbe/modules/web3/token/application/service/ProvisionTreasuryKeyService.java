@@ -4,8 +4,9 @@ import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
-import momzzangseven.mztkbe.modules.web3.token.api.dto.response.ProvisionTreasuryKeyResponseDTO;
+import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTreasuryKeyPort;
@@ -30,7 +31,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       targetType = "TREASURY_KEY",
       operatorId = "#operatorId",
       targetId = "#result != null ? #result.treasuryAddress() : null")
-  public ProvisionTreasuryKeyResponseDTO execute(Long operatorId, String rawPrivateKey) {
+  public ProvisionTreasuryKeyResult execute(Long operatorId, String rawPrivateKey) {
+    validateOperatorId(operatorId);
     String treasuryAddress = null;
 
     try {
@@ -44,14 +46,16 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
 
       recordAudit(operatorId, treasuryAddress, true, null);
 
-      return ProvisionTreasuryKeyResponseDTO.builder()
-          .treasuryAddress(treasuryAddress)
-          .treasuryPrivateKeyEncrypted(encrypted)
-          .treasuryKeyEncryptionKeyB64(encryptionKeyB64)
-          .build();
+      return ProvisionTreasuryKeyResult.of(treasuryAddress, encrypted, encryptionKeyB64);
     } catch (RuntimeException e) {
       recordAudit(operatorId, treasuryAddress, false, e.getClass().getSimpleName());
       throw e;
+    }
+  }
+
+  private void validateOperatorId(Long operatorId) {
+    if (operatorId == null || operatorId <= 0) {
+      throw new Web3InvalidInputException("operatorId must be positive");
     }
   }
 
