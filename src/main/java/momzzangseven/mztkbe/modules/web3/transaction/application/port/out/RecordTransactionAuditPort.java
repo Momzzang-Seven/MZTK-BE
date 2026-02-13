@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.port.out;
 
 import java.util.Collections;
 import java.util.Map;
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 
 /** Port for append-only transaction audit logging. */

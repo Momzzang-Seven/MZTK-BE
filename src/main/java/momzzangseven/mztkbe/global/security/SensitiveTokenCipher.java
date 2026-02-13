@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.global.security;
 
 import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.TokenEncryptionException;
+import momzzangseven.mztkbe.global.error.token.TokenEncryptionException;
 import org.springframework.stereotype.Component;
 
 /**

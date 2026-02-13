@@ -1,4 +1,8 @@
-package momzzangseven.mztkbe.global.error;
+package momzzangseven.mztkbe.global.error.token;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 
 /** Thrown when encrypting/decrypting a sensitive token fails due to cryptographic issues. */
 public class TokenEncryptionException extends TokenException {

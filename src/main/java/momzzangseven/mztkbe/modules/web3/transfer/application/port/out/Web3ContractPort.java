@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.port.out;
 import java.math.BigInteger;
 import java.util.Collections;
 import java.util.Map;
-import momzzangseven.mztkbe.global.error.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 /** Port for on-chain contract operations used by reward token workers. */

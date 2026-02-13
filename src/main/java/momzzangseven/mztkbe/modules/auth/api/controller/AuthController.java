@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.auth.api.controller;
 import jakarta.validation.Valid;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginRequestDTO;
 import momzzangseven.mztkbe.modules.auth.api.dto.LoginResponseDTO;

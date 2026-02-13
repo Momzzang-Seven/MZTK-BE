@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.RefreshTokenNotFoundException;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenValidator;
 import momzzangseven.mztkbe.modules.auth.application.dto.LogoutCommand;
 import momzzangseven.mztkbe.modules.auth.application.port.in.LogoutUseCase;
