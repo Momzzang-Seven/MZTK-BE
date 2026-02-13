@@ -9,8 +9,6 @@ public interface VerifyExecutionSignaturePort {
       String authorityAddress,
       String prepareId,
       String callDataHash,
-      BigInteger gasLimit,
-      BigInteger maxFeePerGas,
       BigInteger deadlineEpochSeconds,
       String signatureHex);
 }

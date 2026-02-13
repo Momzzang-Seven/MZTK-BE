@@ -24,8 +24,6 @@ public final class Eip7702ExecutionTypedDataHelper {
       String verifyingContract,
       String prepareId,
       String callDataHash,
-      BigInteger gasLimit,
-      BigInteger maxFeePerGas,
       BigInteger deadlineEpochSeconds) {
     validate(
         domainName,
@@ -34,8 +32,6 @@ public final class Eip7702ExecutionTypedDataHelper {
         verifyingContract,
         prepareId,
         callDataHash,
-        gasLimit,
-        maxFeePerGas,
         deadlineEpochSeconds);
 
     try {
@@ -47,8 +43,6 @@ public final class Eip7702ExecutionTypedDataHelper {
               verifyingContract,
               prepareId,
               callDataHash,
-              gasLimit,
-              maxFeePerGas,
               deadlineEpochSeconds);
       StructuredDataEncoder encoder = new StructuredDataEncoder(typedDataJson);
       return encoder.hashStructuredData();
@@ -64,8 +58,6 @@ public final class Eip7702ExecutionTypedDataHelper {
       String verifyingContract,
       String prepareId,
       String callDataHash,
-      BigInteger gasLimit,
-      BigInteger maxFeePerGas,
       BigInteger deadlineEpochSeconds) {
     if (domainName == null || domainName.isBlank()) {
       throw new Web3InvalidInputException("eip712 domain name is required");
@@ -85,12 +77,6 @@ public final class Eip7702ExecutionTypedDataHelper {
     if (callDataHash == null || !callDataHash.matches("^0x[0-9a-fA-F]{64}$")) {
       throw new Web3InvalidInputException("callDataHash must be bytes32 hex");
     }
-    if (gasLimit == null || gasLimit.signum() <= 0) {
-      throw new Web3InvalidInputException("gasLimit must be > 0");
-    }
-    if (maxFeePerGas == null || maxFeePerGas.signum() <= 0) {
-      throw new Web3InvalidInputException("maxFeePerGas must be > 0");
-    }
     if (deadlineEpochSeconds == null || deadlineEpochSeconds.signum() <= 0) {
       throw new Web3InvalidInputException("deadline must be > 0");
     }
@@ -103,8 +89,6 @@ public final class Eip7702ExecutionTypedDataHelper {
       String verifyingContract,
       String prepareId,
       String callDataHash,
-      BigInteger gasLimit,
-      BigInteger maxFeePerGas,
       BigInteger deadlineEpochSeconds)
       throws JsonProcessingException {
     Map<String, Object> typedData = new LinkedHashMap<>();
@@ -122,8 +106,6 @@ public final class Eip7702ExecutionTypedDataHelper {
         List.of(
             Map.of("name", "prepareId", "type", "string"),
             Map.of("name", "callDataHash", "type", "bytes32"),
-            Map.of("name", "gasLimit", "type", "uint256"),
-            Map.of("name", "maxFeePerGas", "type", "uint256"),
             Map.of("name", "deadline", "type", "uint256")));
     typedData.put("types", types);
     typedData.put("primaryType", "Mztk7702Execution");
@@ -139,8 +121,6 @@ public final class Eip7702ExecutionTypedDataHelper {
     Map<String, Object> message = new LinkedHashMap<>();
     message.put("prepareId", prepareId);
     message.put("callDataHash", Numeric.prependHexPrefix(Numeric.cleanHexPrefix(callDataHash)));
-    message.put("gasLimit", gasLimit);
-    message.put("maxFeePerGas", maxFeePerGas);
     message.put("deadline", deadlineEpochSeconds);
     typedData.put("message", message);
 
