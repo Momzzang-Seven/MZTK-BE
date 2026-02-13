@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class PostPersistenceAdapter implements PostPersistencePort {
+public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort {
   private final PostJpaRepository postJpaRepository;
 
   @Override
@@ -31,5 +32,10 @@ public class PostPersistenceAdapter implements PostPersistencePort {
   public Optional<Post> loadPost(Long postId) {
 
     return postJpaRepository.findById(postId).map(PostEntity::toDomain);
+  }
+
+  @Override
+  public boolean existsPost(Long postId) {
+    return postJpaRepository.existsById(postId);
   }
 }
