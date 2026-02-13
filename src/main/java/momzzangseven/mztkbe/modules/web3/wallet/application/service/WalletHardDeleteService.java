@@ -84,8 +84,8 @@ public class WalletHardDeleteService {
   /**
    * Delete USER_DELETED wallets by user IDs (cascade delete)
    *
-   * <p>Called by UserHardDeleteEventHandler when it receives user hard-delete event. This ensures
-   * wallets are deleted before users, maintaining FK constraints.
+   * <p>Called by WalletUserHardDeleteEventHandler when it receives user hard-delete event. This
+   * ensures wallets are deleted before users, maintaining FK constraints.
    *
    * @param userIds user IDs to delete wallets for
    * @return number of deleted wallets
