@@ -21,7 +21,7 @@ import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
-import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxPhase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import org.springframework.beans.factory.annotation.Value;

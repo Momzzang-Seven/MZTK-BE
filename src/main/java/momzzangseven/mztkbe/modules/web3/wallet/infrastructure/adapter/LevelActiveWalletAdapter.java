@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.adapter;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadActiveWalletPort;
-import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.stereotype.Component;
