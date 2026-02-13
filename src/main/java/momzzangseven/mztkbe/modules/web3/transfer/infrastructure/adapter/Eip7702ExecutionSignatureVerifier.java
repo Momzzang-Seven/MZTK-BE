@@ -23,8 +23,6 @@ public class Eip7702ExecutionSignatureVerifier implements VerifyExecutionSignatu
       String authorityAddress,
       String prepareId,
       String callDataHash,
-      BigInteger gasLimit,
-      BigInteger maxFeePerGas,
       BigInteger deadlineEpochSeconds,
       String signatureHex) {
     byte[] digest =
@@ -35,8 +33,6 @@ public class Eip7702ExecutionSignatureVerifier implements VerifyExecutionSignatu
             authorityAddress,
             prepareId,
             callDataHash,
-            gasLimit,
-            maxFeePerGas,
             deadlineEpochSeconds);
     String recoveredAddress = Eip7702AuthorizationHelper.recoverAddress(digest, signatureHex);
     return recoveredAddress.equalsIgnoreCase(authorityAddress);
