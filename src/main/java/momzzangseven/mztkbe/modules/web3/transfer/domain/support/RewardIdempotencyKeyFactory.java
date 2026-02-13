@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.token.domain.model;
+package momzzangseven.mztkbe.modules.web3.transfer.domain.support;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 

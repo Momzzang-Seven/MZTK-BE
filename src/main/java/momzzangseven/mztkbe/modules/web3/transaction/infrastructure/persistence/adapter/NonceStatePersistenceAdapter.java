@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.ReserveNoncePort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3NonceStateEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3NonceStateJpaRepository;
 import org.springframework.stereotype.Component;

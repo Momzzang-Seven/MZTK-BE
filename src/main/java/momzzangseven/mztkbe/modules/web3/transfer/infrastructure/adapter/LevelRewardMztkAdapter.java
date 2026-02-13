@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
@@ -8,9 +8,9 @@ import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.CreateLevelUpRewardTxIntentCommand;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTransactionPort;
-import momzzangseven.mztkbe.modules.web3.token.domain.model.RewardIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CreateLevelUpRewardTxIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SaveTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.support.RewardIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;

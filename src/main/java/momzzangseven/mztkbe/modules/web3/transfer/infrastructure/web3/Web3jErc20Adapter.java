@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.token.infrastructure.web3;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.web3;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.GasFeeStrategy;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.GasFeeStrategy;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
