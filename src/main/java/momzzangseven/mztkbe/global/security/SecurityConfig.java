@@ -98,6 +98,8 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/users/me/level-ups")
                     .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/**")
+                    .authenticated()
                     .requestMatchers(HttpMethod.POST, "/web3/challenges")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/web3/wallets")

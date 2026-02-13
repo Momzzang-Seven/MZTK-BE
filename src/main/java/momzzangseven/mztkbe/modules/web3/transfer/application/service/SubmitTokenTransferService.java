@@ -27,13 +27,13 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
-import momzzangseven.mztkbe.modules.web3.transfer.application.command.SubmitTokenTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.SubmitTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.result.SubmitTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
@@ -278,18 +278,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     if (command == null) {
       throw new Web3InvalidInputException("command is required");
     }
-    if (command.userId() == null || command.userId() <= 0) {
-      throw new Web3InvalidInputException("userId must be positive");
-    }
-    if (command.prepareId() == null || command.prepareId().isBlank()) {
-      throw new Web3InvalidInputException("prepareId is required");
-    }
-    if (command.authorizationSignature() == null || command.authorizationSignature().isBlank()) {
-      throw new Web3InvalidInputException("authorizationSignature is required");
-    }
-    if (command.executionSignature() == null || command.executionSignature().isBlank()) {
-      throw new Web3InvalidInputException("executionSignature is required");
-    }
+    command.validate();
   }
 
   private void assertDelegateAllowlisted(Web3TransferPrepareEntity prepare) {

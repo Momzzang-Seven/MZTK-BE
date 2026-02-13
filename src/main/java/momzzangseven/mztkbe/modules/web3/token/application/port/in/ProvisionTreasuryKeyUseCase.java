@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.token.application.port.in;
 
-import momzzangseven.mztkbe.modules.web3.token.api.dto.response.ProvisionTreasuryKeyResponseDTO;
+import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
 
 public interface ProvisionTreasuryKeyUseCase {
 
-  ProvisionTreasuryKeyResponseDTO execute(Long operatorId, String rawPrivateKey);
+  ProvisionTreasuryKeyResult execute(Long operatorId, String rawPrivateKey);
 }

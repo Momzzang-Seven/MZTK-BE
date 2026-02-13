@@ -10,10 +10,10 @@ import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import momzzangseven.mztkbe.modules.web3.transfer.application.command.PrepareTokenTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.result.PrepareTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.support.TokenTransferIdempotencyKeyFactory;
@@ -36,8 +36,6 @@ import org.web3j.utils.Numeric;
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
 public class PrepareTokenTransferService implements PrepareTokenTransferUseCase {
-
-  private static final BigInteger MAX_TRANSFER_MZTK = BigInteger.valueOf(5_000L);
 
   private final LoadWalletPort loadWalletPort;
   private final Web3TransferPrepareJpaRepository prepareRepository;
@@ -102,31 +100,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
     if (command == null) {
       throw new Web3InvalidInputException("command is required");
     }
-    if (command.userId() == null || command.userId() <= 0) {
-      throw new Web3InvalidInputException("userId must be positive");
-    }
-    if (command.referenceType() == null) {
-      throw new Web3InvalidInputException("referenceType is required");
-    }
-    if (command.referenceId() == null || command.referenceId().isBlank()) {
-      throw new Web3InvalidInputException("referenceId is required");
-    }
-    if (command.referenceId().length() > 100) {
-      throw new Web3InvalidInputException("referenceId length must be <= 100");
-    }
-    if (command.amountWei() == null || command.amountWei().signum() <= 0) {
-      throw new Web3InvalidInputException("amountWei must be > 0");
-    }
-
-    BigInteger maxTransferWei = MAX_TRANSFER_MZTK.multiply(BigInteger.TEN.pow(18));
-    if (command.amountWei().compareTo(maxTransferWei) > 0) {
-      throw new Web3InvalidInputException("amountWei exceeds max transfer limit");
-    }
-
-    if (command.referenceType() == TokenTransferReferenceType.USER_TO_USER
-        && (command.toUserId() == null || command.toUserId() <= 0)) {
-      throw new Web3InvalidInputException("toUserId is required for USER_TO_USER");
-    }
+    command.validate();
   }
 
   private String resolveAuthorityAddress(Long userId) {

@@ -8,14 +8,8 @@ import org.web3j.crypto.WalletUtils;
 public record EvmAddress(String value) {
 
   public EvmAddress {
-    if (value == null || value.isBlank()) {
-      throw new Web3InvalidInputException("EVM address is required");
-    }
-    String normalized = value.trim().toLowerCase(Locale.ROOT);
-    if (!WalletUtils.isValidAddress(normalized)) {
-      throw new Web3InvalidInputException("invalid EVM address: " + value);
-    }
-    value = normalized;
+    value = normalize(value);
+    validate(value);
   }
 
   public static EvmAddress of(String raw) {
@@ -25,5 +19,18 @@ public record EvmAddress(String value) {
   @Override
   public String toString() {
     return value;
+  }
+
+  private static String normalize(String raw) {
+    if (raw == null || raw.isBlank()) {
+      throw new Web3InvalidInputException("EVM address is required");
+    }
+    return raw.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private static void validate(String normalized) {
+    if (!WalletUtils.isValidAddress(normalized)) {
+      throw new Web3InvalidInputException("invalid EVM address: " + normalized);
+    }
   }
 }

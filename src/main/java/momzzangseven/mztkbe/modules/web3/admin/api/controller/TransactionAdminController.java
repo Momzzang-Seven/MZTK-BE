@@ -1,13 +1,14 @@
-package momzzangseven.mztkbe.modules.web3.transaction.api.controller;
+package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.web3.transaction.api.dto.request.MarkTransactionSucceededRequestDTO;
-import momzzangseven.mztkbe.modules.web3.transaction.api.dto.response.MarkTransactionSucceededResponseDTO;
-import momzzangseven.mztkbe.modules.web3.transaction.application.command.MarkTransactionSucceededCommand;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.MarkTransactionSucceededRequestDTO;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.MarkTransactionSucceededResponseDTO;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import momzzangseven.mztkbe.modules.web3.transaction.application.result.MarkTransactionSucceededResult;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -30,16 +31,26 @@ public class TransactionAdminController {
       @AuthenticationPrincipal Long operatorId,
       @PathVariable("txId") Long txId,
       @Valid @RequestBody MarkTransactionSucceededRequestDTO request) {
-    MarkTransactionSucceededResult result =
-        markTransactionSucceededUseCase.execute(
-            new MarkTransactionSucceededCommand(
-                operatorId,
-                txId,
-                request.txHash(),
-                request.explorerUrl(),
-                request.reason(),
-                request.evidence()));
+    operatorId = requireOperatorId(operatorId);
+    MarkTransactionSucceededCommand command =
+        new MarkTransactionSucceededCommand(
+            operatorId,
+            txId,
+            request.txHash(),
+            request.explorerUrl(),
+            request.reason(),
+            request.evidence());
 
-    return ResponseEntity.ok(ApiResponse.success(MarkTransactionSucceededResponseDTO.from(result)));
+    MarkTransactionSucceededResult result = markTransactionSucceededUseCase.execute(command);
+    MarkTransactionSucceededResponseDTO response = MarkTransactionSucceededResponseDTO.from(result);
+
+    return ResponseEntity.ok(ApiResponse.success(response));
+  }
+
+  private Long requireOperatorId(Long operatorId) {
+    if (operatorId == null) {
+      throw new UserNotAuthenticatedException();
+    }
+    return operatorId;
   }
 }

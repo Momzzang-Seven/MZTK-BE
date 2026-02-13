@@ -8,12 +8,12 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidExcepti
 import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.transaction.application.audit.detail.CsOverrideAuditDetail;
-import momzzangseven.mztkbe.modules.web3.transaction.application.command.MarkTransactionSucceededCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.result.MarkTransactionSucceededResult;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;

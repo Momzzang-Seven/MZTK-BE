@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.api.dto.request;
+package momzzangseven.mztkbe.modules.web3.transfer.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

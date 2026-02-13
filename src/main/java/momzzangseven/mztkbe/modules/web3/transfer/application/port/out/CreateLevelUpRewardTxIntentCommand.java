@@ -15,6 +15,20 @@ public record CreateLevelUpRewardTxIntentCommand(
     BigInteger amountWei) {
 
   public CreateLevelUpRewardTxIntentCommand {
+    validate(userId, levelUpHistoryId, idempotencyKey, fromAddress, toAddress, amountWei);
+  }
+
+  public String referenceId() {
+    return String.valueOf(levelUpHistoryId);
+  }
+
+  private static void validate(
+      Long userId,
+      Long levelUpHistoryId,
+      String idempotencyKey,
+      EvmAddress fromAddress,
+      EvmAddress toAddress,
+      BigInteger amountWei) {
     if (userId == null || userId <= 0) {
       throw new Web3InvalidInputException(Web3ValidationMessage.USER_ID_POSITIVE);
     }
@@ -33,9 +47,5 @@ public record CreateLevelUpRewardTxIntentCommand(
     if (amountWei == null || amountWei.signum() < 0) {
       throw new Web3InvalidInputException(Web3ValidationMessage.AMOUNT_WEI_NON_NEGATIVE);
     }
-  }
-
-  public String referenceId() {
-    return String.valueOf(levelUpHistoryId);
   }
 }

@@ -1,10 +1,12 @@
-package momzzangseven.mztkbe.modules.web3.token.api.controller;
+package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.web3.token.api.dto.request.ProvisionTreasuryKeyRequestDTO;
-import momzzangseven.mztkbe.modules.web3.token.api.dto.response.ProvisionTreasuryKeyResponseDTO;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyRequestDTO;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyResponseDTO;
+import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
@@ -29,8 +31,17 @@ public class TreasuryKeyAdminController {
   public ResponseEntity<ApiResponse<ProvisionTreasuryKeyResponseDTO>> provision(
       @AuthenticationPrincipal Long operatorId,
       @Valid @RequestBody ProvisionTreasuryKeyRequestDTO request) {
-    ProvisionTreasuryKeyResponseDTO response =
+    operatorId = requireOperatorId(operatorId);
+    ProvisionTreasuryKeyResult result =
         provisionTreasuryKeyUseCase.execute(operatorId, request.treasuryPrivateKey());
+    ProvisionTreasuryKeyResponseDTO response = ProvisionTreasuryKeyResponseDTO.from(result);
     return ResponseEntity.ok(ApiResponse.success(response));
+  }
+
+  private Long requireOperatorId(Long operatorId) {
+    if (operatorId == null) {
+      throw new UserNotAuthenticatedException();
+    }
+    return operatorId;
   }
 }

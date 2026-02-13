@@ -24,7 +24,7 @@ public class TreasuryKeyPersistenceAdapter implements LoadTreasuryKeyPort, SaveT
         .findById(SINGLETON_ID)
         .map(
             entity ->
-                new TreasuryKeyMaterial(
+                TreasuryKeyMaterial.of(
                     entity.getTreasuryAddress(),
                     treasuryKeyCipher.decryptWithConfiguredKey(
                         entity.getTreasuryPrivateKeyEncrypted())));

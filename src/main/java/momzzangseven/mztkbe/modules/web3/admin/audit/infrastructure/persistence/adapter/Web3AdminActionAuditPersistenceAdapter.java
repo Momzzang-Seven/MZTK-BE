@@ -20,6 +20,20 @@ public class Web3AdminActionAuditPersistenceAdapter implements RecordAdminAuditP
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void record(AuditCommand command) {
+    validate(command);
+
+    repository.save(
+        Web3AdminActionAuditEntity.builder()
+            .operatorId(command.operatorId())
+            .actionType(command.actionType())
+            .targetType(command.targetType())
+            .targetId(command.targetId())
+            .success(command.success())
+            .detailJson(auditLogSerializer.toJson(command.detail()))
+            .build());
+  }
+
+  private void validate(AuditCommand command) {
     if (command == null) {
       throw new Web3InvalidInputException("command is required");
     }
@@ -32,15 +46,5 @@ public class Web3AdminActionAuditPersistenceAdapter implements RecordAdminAuditP
     if (command.targetType() == null || command.targetType().isBlank()) {
       throw new Web3InvalidInputException("targetType is required");
     }
-
-    repository.save(
-        Web3AdminActionAuditEntity.builder()
-            .operatorId(command.operatorId())
-            .actionType(command.actionType())
-            .targetType(command.targetType())
-            .targetId(command.targetId())
-            .success(command.success())
-            .detailJson(auditLogSerializer.toJson(command.detail()))
-            .build());
   }
 }
