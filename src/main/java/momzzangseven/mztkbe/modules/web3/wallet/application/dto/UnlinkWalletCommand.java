@@ -5,16 +5,14 @@ import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import org.web3j.crypto.WalletUtils;
 
 /**
- * Command for unlinking wallet
+ * Command for unlinking a wallet
  *
- * <p>Uses walletAddress instead of walletId for better RESTful API design.
- *
- * <p>Wallet address is automatically normalized to lowercase on creation for consistency.
+ * <p>Data Transfer Object for wallet unlinking operations.
  */
 public record UnlinkWalletCommand(Long userId, String walletAddress) {
 
   /**
-   * Canonical constructor with wallet address normalization
+   * Compact constructor for normalization
    *
    * <p>Converts wallet address to lowercase for consistency across the system.
    */
@@ -22,6 +20,9 @@ public record UnlinkWalletCommand(Long userId, String walletAddress) {
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();
     }
+  }
+
+  public void validate() {
     if (userId == null || userId <= 0) {
       throw new Web3InvalidInputException(Web3ValidationMessage.USER_ID_POSITIVE);
     }
@@ -34,10 +35,10 @@ public record UnlinkWalletCommand(Long userId, String walletAddress) {
   }
 
   /**
-   * Validate Ethereum address format
+   * Simple Ethereum address validation helper.
    *
-   * <p>Requirements: - Must start with "0x" - Must be exactly 42 characters (0x + 40 hex chars) -
-   * Must pass Web3j validation (format + checksum if applicable)
+   * <p>Conditions: 1. Starts with 0x 2. Must be 42 characters (including 0x) 3. Valid hex
+   * characters after 0x 4. Must pass Web3j validation (format + checksum if applicable)
    */
   private boolean isValidEthereumAddress(String address) {
     if (!address.startsWith("0x")) {
