@@ -163,8 +163,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         assertSponsorLimits(prepare.getFromUserId(), prepare.getAmountWei(), estimatedCostWei);
 
     assertAuthorizationSignature(prepare, command.authorizationSignature());
-    assertExecutionSignature(
-        prepare, command.executionSignature(), callDataHash);
+    assertExecutionSignature(prepare, command.executionSignature(), callDataHash);
 
     long sponsorNonce = reserveNoncePort.reserveNextNonce(sponsorAddress);
 
@@ -327,9 +326,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   }
 
   private void assertExecutionSignature(
-      Web3TransferPrepareEntity prepare,
-      String executionSignature,
-      String callDataHash) {
+      Web3TransferPrepareEntity prepare, String executionSignature, String callDataHash) {
     BigInteger deadlineEpochSeconds =
         BigInteger.valueOf(prepare.getAuthExpiresAt().toEpochSecond(ZoneOffset.UTC));
     boolean valid =
