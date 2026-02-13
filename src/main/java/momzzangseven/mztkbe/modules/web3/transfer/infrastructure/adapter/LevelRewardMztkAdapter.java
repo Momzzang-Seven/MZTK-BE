@@ -13,7 +13,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SaveTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.support.RewardIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.RewardIdempotencyKeyFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.crypto.WalletUtils;

@@ -14,13 +14,13 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTr
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.support.TokenTransferIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.web3.Eip7702AuthorizationHelper;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3TransferPrepareJpaRepository;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.web3.Eip7702AuthorizationHelper;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;

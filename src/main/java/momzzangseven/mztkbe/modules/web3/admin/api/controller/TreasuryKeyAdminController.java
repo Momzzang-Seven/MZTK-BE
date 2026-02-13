@@ -6,8 +6,9 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyResponseDTO;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyAdminCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyAdminUseCase;
 import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
-import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -25,15 +26,16 @@ import org.springframework.web.bind.annotation.RestController;
     havingValue = "true")
 public class TreasuryKeyAdminController {
 
-  private final ProvisionTreasuryKeyUseCase provisionTreasuryKeyUseCase;
+  private final ProvisionTreasuryKeyAdminUseCase provisionTreasuryKeyAdminUseCase;
 
   @PostMapping("/provision")
   public ResponseEntity<ApiResponse<ProvisionTreasuryKeyResponseDTO>> provision(
       @AuthenticationPrincipal Long operatorId,
       @Valid @RequestBody ProvisionTreasuryKeyRequestDTO request) {
-    operatorId = requireOperatorId(operatorId);
-    ProvisionTreasuryKeyResult result =
-        provisionTreasuryKeyUseCase.execute(operatorId, request.treasuryPrivateKey());
+    ProvisionTreasuryKeyAdminCommand command =
+        new ProvisionTreasuryKeyAdminCommand(
+            requireOperatorId(operatorId), request.treasuryPrivateKey());
+    ProvisionTreasuryKeyResult result = provisionTreasuryKeyAdminUseCase.execute(command);
     ProvisionTreasuryKeyResponseDTO response = ProvisionTreasuryKeyResponseDTO.from(result);
     return ResponseEntity.ok(ApiResponse.success(response));
   }

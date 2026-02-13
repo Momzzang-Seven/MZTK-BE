@@ -10,7 +10,7 @@ import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasury
 import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTreasuryKeyPort;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.crypto.TreasuryKeyCipher;
+import momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter.crypto.TreasuryKeyCipher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.crypto.Credentials;

@@ -26,11 +26,6 @@ spring:
         format_sql: true
       javax.persistence.lock.timeout: 5000 # lock timeout 5초
 
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    locations: classpath:db/migration
-
   jackson:
     serialization:
       write-dates-as-timestamps: false

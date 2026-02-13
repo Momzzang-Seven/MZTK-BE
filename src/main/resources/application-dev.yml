@@ -21,5 +21,4 @@ web3:
     base-url: https://sepolia-optimism.etherscan.io
 
   eip7702:
-    enabled: false  # dev에서 필요하면 true로
-
+    enabled: true  # dev에서 필요하면 true로
