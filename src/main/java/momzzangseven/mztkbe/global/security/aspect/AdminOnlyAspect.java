@@ -10,7 +10,7 @@ import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPo
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.AuthErrorCode;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.modules.web3.transaction.application.support.AuditLogSerializer;
+import momzzangseven.mztkbe.modules.web3.transaction.application.audit.AuditLogSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;

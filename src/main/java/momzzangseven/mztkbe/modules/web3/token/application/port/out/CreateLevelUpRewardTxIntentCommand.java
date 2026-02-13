@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.web3.token.application.port.out;
 import java.math.BigInteger;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
-import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 /** Command for creating or loading an idempotent LEVEL_UP_REWARD tx intent. */
 public record CreateLevelUpRewardTxIntentCommand(

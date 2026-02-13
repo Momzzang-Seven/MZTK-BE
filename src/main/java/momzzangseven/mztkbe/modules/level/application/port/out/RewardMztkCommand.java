@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.level.application.port.out;
 
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
 import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
-import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 /** Command for issuing a level-up reward via {@code RewardMztkPort}. */
 public record RewardMztkCommand(

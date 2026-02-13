@@ -7,7 +7,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
-import momzzangseven.mztkbe.modules.web3.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTransactionPort;
 import momzzangseven.mztkbe.modules.web3.token.domain.model.RewardIdempotencyKeyFactory;

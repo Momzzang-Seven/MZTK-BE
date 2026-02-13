@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.token.application.port.in;
 
-import momzzangseven.mztkbe.modules.web3.token.api.dto.ProvisionTreasuryKeyResponseDTO;
+import momzzangseven.mztkbe.modules.web3.token.api.dto.response.ProvisionTreasuryKeyResponseDTO;
 
 public interface ProvisionTreasuryKeyUseCase {
 
