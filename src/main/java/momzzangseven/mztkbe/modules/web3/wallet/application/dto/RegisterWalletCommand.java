@@ -5,15 +5,15 @@ import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
 import org.web3j.crypto.WalletUtils;
 
 /**
- * Command for wallet registration
+ * Command for registering a new wallet
  *
- * <p>Wallet address is automatically normalized to lowercase on creation for consistency.
+ * <p>Converts wallet address to lowercase for consistency across the system.
  */
 public record RegisterWalletCommand(
     Long userId, String walletAddress, String signature, String nonce) {
 
   /**
-   * Canonical constructor with wallet address normalization
+   * Compact constructor for normalization
    *
    * <p>Converts wallet address to lowercase for consistency across the system.
    */
@@ -21,6 +21,9 @@ public record RegisterWalletCommand(
     if (walletAddress != null) {
       walletAddress = walletAddress.toLowerCase();
     }
+  }
+
+  public void validate() {
     if (userId == null || userId <= 0) {
       throw new Web3InvalidInputException(Web3ValidationMessage.USER_ID_POSITIVE);
     }
