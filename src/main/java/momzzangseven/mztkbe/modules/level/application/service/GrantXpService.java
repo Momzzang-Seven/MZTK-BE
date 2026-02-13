@@ -15,7 +15,7 @@ import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

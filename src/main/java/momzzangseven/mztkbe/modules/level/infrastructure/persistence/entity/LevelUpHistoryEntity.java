@@ -15,6 +15,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 
 @Entity
 @Table(
@@ -51,6 +52,33 @@ public class LevelUpHistoryEntity {
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
+
+  /** Domain model -> Entity */
+  public static LevelUpHistoryEntity from(LevelUpHistory domain) {
+    return LevelUpHistoryEntity.builder()
+        .id(domain.getId())
+        .userId(domain.getUserId())
+        .levelPolicyId(domain.getLevelPolicyId())
+        .fromLevel(domain.getFromLevel())
+        .toLevel(domain.getToLevel())
+        .spentXp(domain.getSpentXp())
+        .rewardMztk(domain.getRewardMztk())
+        .createdAt(domain.getCreatedAt())
+        .build();
+  }
+
+  /** Entity -> Domain model */
+  public LevelUpHistory toDomain() {
+    return LevelUpHistory.reconstitute(
+        this.id,
+        this.userId,
+        this.levelPolicyId,
+        this.fromLevel,
+        this.toLevel,
+        this.spentXp,
+        this.rewardMztk,
+        this.createdAt);
+  }
 
   @PrePersist
   protected void onCreate() {

@@ -7,7 +7,7 @@ import momzzangseven.mztkbe.global.error.level.LevelUpAlreadyProcessedException;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelUpHistoryEntity;
-import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.LevelUpHistoryJpaRepository;
+import momzzangseven.mztkbe.modules.level.infrastructure.repository.LevelUpHistoryJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +23,9 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
   @Transactional
   public LevelUpHistory saveLevelUpHistory(LevelUpHistory history) {
     try {
-      LevelUpHistoryEntity saved = levelUpHistoryJpaRepository.saveAndFlush(mapToEntity(history));
-      return mapToDomain(saved);
+      LevelUpHistoryEntity saved =
+          levelUpHistoryJpaRepository.saveAndFlush(LevelUpHistoryEntity.from(history));
+      return saved.toDomain();
     } catch (DataIntegrityViolationException e) {
       throw new LevelUpAlreadyProcessedException();
     }
@@ -46,31 +47,6 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
             .setMaxResults(fetchSize)
             .getResultList();
 
-    return entities.stream().map(this::mapToDomain).toList();
-  }
-
-  private LevelUpHistory mapToDomain(LevelUpHistoryEntity entity) {
-    return LevelUpHistory.reconstitute(
-        entity.getId(),
-        entity.getUserId(),
-        entity.getLevelPolicyId(),
-        entity.getFromLevel(),
-        entity.getToLevel(),
-        entity.getSpentXp(),
-        entity.getRewardMztk(),
-        entity.getCreatedAt());
-  }
-
-  private LevelUpHistoryEntity mapToEntity(LevelUpHistory history) {
-    return LevelUpHistoryEntity.builder()
-        .id(history.getId())
-        .userId(history.getUserId())
-        .levelPolicyId(history.getLevelPolicyId())
-        .fromLevel(history.getFromLevel())
-        .toLevel(history.getToLevel())
-        .spentXp(history.getSpentXp())
-        .rewardMztk(history.getRewardMztk())
-        .createdAt(history.getCreatedAt())
-        .build();
+    return entities.stream().map(LevelUpHistoryEntity::toDomain).toList();
   }
 }

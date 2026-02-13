@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import java.util.regex.Pattern;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
 import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 /**
  * Command for granting XP.

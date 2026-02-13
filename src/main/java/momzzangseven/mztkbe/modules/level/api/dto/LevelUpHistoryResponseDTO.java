@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.LocalDateTime;
 import lombok.Builder;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpHistoryItem;
-import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxPhase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 

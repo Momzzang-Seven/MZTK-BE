@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.level.infrastructure.reward;
+package momzzangseven.mztkbe.modules.level.infrastructure.external.reward;
 
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;

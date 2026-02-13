@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.level.domain.model;
+package momzzangseven.mztkbe.modules.level.domain.vo;
 
 /** XP grant type (SSOT for xp-ledger and policy). */
 public enum XpType {
