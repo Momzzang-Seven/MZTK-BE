@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.comment.application.config.CommentHardDeleteProperties;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
@@ -24,35 +26,27 @@ public class CommentHardDeleteService {
 
   @Transactional
   public int runBatch(LocalDateTime now) {
-    int retentionDays = props.getRetentionDays();
-    int batchSize = props.getBatchSize();
 
-    if (retentionDays <= 0 || batchSize <= 0) {
-      throw new IllegalArgumentException("Comment hard-delete properties must be > 0");
-    }
+    validateProperties();
 
-    // 기준 시간 계산 (오늘 - 30일)
-    LocalDateTime cutoff = now.minusDays(retentionDays);
+    LocalDateTime cutoff = now.minusDays(props.getRetentionDays());
+    List<Long> targetIds = loadCommentPort.loadCommentIdsForDeletion(cutoff, props.getBatchSize());
 
-    // 삭제 대상 ID 조회
-    List<Long> commentIds = loadCommentPort.loadCommentIdsForDeletion(cutoff, batchSize);
-
-    if (commentIds.isEmpty()) {
+    if (targetIds.isEmpty()) {
       return 0;
     }
 
-    // 1. 다른 모듈에 알리기 위한 이벤트 발행
-    eventPublisher.publishEvent(new CommentsHardDeletedEvent(commentIds));
+    deleteCommentPort.deleteAllById(targetIds);
 
-    // 2. 댓글 본체 하드 딜리트
-    deleteCommentPort.deleteAllByIdInBatch(commentIds);
+    eventPublisher.publishEvent(new CommentsHardDeletedEvent(targetIds));
 
-    log.info(
-        "Hard deleted comments: count={}, cutoff={}, batchSize={}",
-        commentIds.size(),
-        cutoff,
-        batchSize);
+    log.info("Comment hard delete batch completed: count={}, cutoff={}", targetIds.size(), cutoff);
+    return targetIds.size();
+  }
 
-    return commentIds.size();
+  private void validateProperties() {
+    if (props.getRetentionDays() <= 0 || props.getBatchSize() <= 0) {
+      throw new BusinessException(ErrorCode.INVALID_COMMENT_HARD_DELETE_CONFIG);
+    }
   }
 }
