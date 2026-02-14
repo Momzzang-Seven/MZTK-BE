@@ -11,10 +11,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class WalletHardDeleteProperties {
 
   /** Retention window in days before hard delete */
-  private int retentionDays = 30;
+  private int retentionDays;
 
   /** Batch size for selecting hard-delete targets */
-  private int batchSize = 200;
+  private int batchSize;
 
   /** Cron expression for hard-delete job */
   private String cron;

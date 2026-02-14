@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 /** Outbound port for loading policies. */
 public interface PolicyPort {

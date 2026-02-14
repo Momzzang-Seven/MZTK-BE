@@ -1,4 +1,4 @@
--- Seed: level_policies (from Excel: docs/[몸짱코인] 통합 기획 시트.xlsx / sheet: 보상정책)
+-- Seed: level_policies
 --
 -- This script is idempotent (INSERT ... WHERE NOT EXISTS) and is intended to be executed manually
 -- (or by tests via @Sql) until a proper migration tool (Flyway/Liquibase) is adopted.

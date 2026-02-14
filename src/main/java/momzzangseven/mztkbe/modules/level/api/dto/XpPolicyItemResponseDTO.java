@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.level.api.dto;
 
 import lombok.Builder;
 import momzzangseven.mztkbe.modules.level.application.dto.XpPolicyItem;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 @Builder
 public record XpPolicyItemResponseDTO(XpType type, int xpAmount, int dailyCap) {

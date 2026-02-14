@@ -11,17 +11,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class WithdrawalExternalDisconnectProperties {
 
   /** Fixed delay between scheduler runs (milliseconds). */
-  private long fixedDelay = 60000;
+  private long fixedDelay;
 
   /** Max number of tasks to process per run. */
-  private int batchSize = 20;
+  private int batchSize;
 
   /** Maximum total attempts (including the immediate attempt on withdrawal). */
-  private int maxAttempts = 10;
+  private int maxAttempts;
 
   /** Initial backoff after first failure (milliseconds). */
-  private long initialBackoff = 300000;
+  private long initialBackoff;
 
   /** Maximum backoff between retries (milliseconds). */
-  private long maxBackoff = 3600000;
+  private long maxBackoff;
 }

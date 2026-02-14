@@ -11,10 +11,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class LevelRetentionProperties {
 
   /** How long to keep level data in live tables (days). */
-  private int retentionDays = 365;
+  private int retentionDays;
 
   /** Batch size for purge job. */
-  private int batchSize = 5000;
+  private int batchSize;
 
   /** Cron expression for purge job. */
   private String cron;
