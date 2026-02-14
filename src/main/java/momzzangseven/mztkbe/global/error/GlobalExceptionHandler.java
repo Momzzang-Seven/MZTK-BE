@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.TokenException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Global exception handler for the entire application.
@@ -29,6 +31,19 @@ public class GlobalExceptionHandler {
   // ========================================
   // Business Exceptions
   // ========================================
+
+  @ExceptionHandler(Web3TransferException.class)
+  public ResponseEntity<ApiResponse<Void>> handleWeb3TransferException(Web3TransferException ex) {
+    log.warn(
+        "Web3 transfer exception: {} (code: {}, status: {}, retryable: {})",
+        ex.getMessage(),
+        ex.getCode(),
+        ex.getHttpStatus(),
+        ex.isRetryable());
+
+    return ResponseEntity.status(ex.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), ex.getCode(), ex.isRetryable()));
+  }
 
   /**
    * Handle all BusinessExceptions.
@@ -100,6 +115,15 @@ public class GlobalExceptionHandler {
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /** Handle missing endpoint/static resource requests as 404 instead of 500. */
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<ApiResponse<Void>> handleNoResourceFoundException(
+      NoResourceFoundException ex) {
+    ErrorCode errorCode = ErrorCode.RESOURCE_NOT_FOUND;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
   }
 
   /**

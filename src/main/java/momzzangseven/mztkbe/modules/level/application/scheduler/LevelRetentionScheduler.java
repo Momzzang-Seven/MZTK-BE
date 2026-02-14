@@ -14,7 +14,7 @@ public class LevelRetentionScheduler {
 
   private final PurgeLevelDataUseCase purgeLevelDataUseCase;
 
-  @Scheduled(cron = "${level.retention.cron}", zone = "${level.retention.zone:Asia/Seoul}")
+  @Scheduled(cron = "${level.retention.cron}", zone = "${level.retention.zone}")
   public void run() {
     LocalDateTime now = LocalDateTime.now();
     int deleted = purgeLevelDataUseCase.execute(now);

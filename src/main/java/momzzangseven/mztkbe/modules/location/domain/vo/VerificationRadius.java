@@ -12,8 +12,6 @@ import org.springframework.stereotype.Component;
  * planning changes.
  *
  * <p>Configuration location: {@code location.verification.radius-meters}
- *
- * <p>Default value: 5.0m
  */
 @Getter
 @Setter
@@ -21,12 +19,8 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "location.verification")
 public class VerificationRadius {
 
-  /**
-   * Verification radius (meters)
-   *
-   * <p>Default value: 5.0m
-   */
-  private double radiusMeters = 5.0;
+  /** Verification radius (meters) */
+  private double radiusMeters;
 
   /**
    * Check if the distance is within the verification radius

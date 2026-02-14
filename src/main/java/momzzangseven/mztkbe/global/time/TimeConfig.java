@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 public class TimeConfig {
 
   @Bean
-  public ZoneId appZoneId(@Value("${spring.jackson.time-zone:Asia/Seoul}") String zoneId) {
+  public ZoneId appZoneId(@Value("${spring.jackson.time-zone}") String zoneId) {
     return ZoneId.of(zoneId);
   }
 

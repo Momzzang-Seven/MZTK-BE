@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.level.domain.model;
 import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 /** Domain model for XP grant policy per XpType. */
 @Getter
