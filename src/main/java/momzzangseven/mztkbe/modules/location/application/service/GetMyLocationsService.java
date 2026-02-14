@@ -9,7 +9,6 @@ import momzzangseven.mztkbe.modules.location.application.port.in.GetMyLocationsU
 import momzzangseven.mztkbe.modules.location.application.port.out.LoadLocationPort;
 import momzzangseven.mztkbe.modules.location.domain.model.Location;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Get My Locations Service
