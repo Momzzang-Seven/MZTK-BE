@@ -107,6 +107,8 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/users/me/locations/**")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "users/me/locations")
+                    .authenticated()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
 
