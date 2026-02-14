@@ -1,0 +1,31 @@
+package momzzangseven.mztkbe.modules.web3.admin.application.service;
+
+import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Service;
+
+@Service("web3AdminProvisionTreasuryKeyService")
+@RequiredArgsConstructor
+@ConditionalOnProperty(
+    prefix = "web3.reward-token.treasury.provisioning",
+    name = "enabled",
+    havingValue = "true")
+public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase {
+
+  private final momzzangseven.mztkbe.modules.web3.token.application.port.in
+          .ProvisionTreasuryKeyUseCase
+      provisionTreasuryKeyUseCase;
+
+  @Override
+  public ProvisionTreasuryKeyResult execute(ProvisionTreasuryKeyCommand command) {
+    if (command == null) {
+      throw new Web3InvalidInputException("command is required");
+    }
+    command.validate();
+    return provisionTreasuryKeyUseCase.execute(command.operatorId(), command.treasuryPrivateKey());
+  }
+}

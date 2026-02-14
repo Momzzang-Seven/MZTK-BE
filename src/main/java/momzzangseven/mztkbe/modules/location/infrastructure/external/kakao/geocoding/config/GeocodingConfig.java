@@ -24,7 +24,7 @@ public class GeocodingConfig {
   @Value("${kakao.api.geocoding.coord-to-address-path}")
   private String coordToAddressPath;
 
-  @Value("${kakao.api.geocoding.timeout:5000}")
+  @Value("${kakao.api.geocoding.timeout}")
   private int timeout;
 
   /**

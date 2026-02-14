@@ -2,7 +2,9 @@ package momzzangseven.mztkbe.modules.level.application.dto;
 
 import java.time.LocalDateTime;
 import java.util.regex.Pattern;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 /**
  * Command for granting XP.
@@ -16,6 +18,19 @@ public record GrantXpCommand(
   private static final Pattern IDEMPOTENCY_KEY_PATTERN =
       Pattern.compile("^[A-Za-z0-9][A-Za-z0-9:_\\-.]{0,199}$");
 
+  public GrantXpCommand {
+    if (userId == null) {
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.USER_ID_REQUIRED);
+    }
+    if (xpType == null) {
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.XP_TYPE_REQUIRED);
+    }
+    if (occurredAt == null) {
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.OCCURRED_AT_REQUIRED);
+    }
+    validateIdempotencyKey(xpType, idempotencyKey);
+  }
+
   public static GrantXpCommand of(
       Long userId,
       XpType xpType,
@@ -25,35 +40,22 @@ public record GrantXpCommand(
     return new GrantXpCommand(userId, xpType, occurredAt, idempotencyKey, sourceRef);
   }
 
-  public void validate() {
-    if (userId == null) {
-      throw new IllegalArgumentException("userId is required");
-    }
-    if (xpType == null) {
-      throw new IllegalArgumentException("xpType is required");
-    }
-    if (occurredAt == null) {
-      throw new IllegalArgumentException("occurredAt is required");
-    }
-    validateIdempotencyKey(xpType, idempotencyKey);
-  }
-
   private static void validateIdempotencyKey(XpType type, String key) {
     if (key == null || key.isBlank()) {
-      throw new IllegalArgumentException("idempotencyKey is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.IDEMPOTENCY_KEY_REQUIRED);
     }
     if (key.length() > IDEMPOTENCY_KEY_MAX_LENGTH) {
-      throw new IllegalArgumentException(
+      throw new LevelUpCommandInvalidException(
           "idempotencyKey must be <= " + IDEMPOTENCY_KEY_MAX_LENGTH + " characters");
     }
     if (!IDEMPOTENCY_KEY_PATTERN.matcher(key).matches()) {
-      throw new IllegalArgumentException(
+      throw new LevelUpCommandInvalidException(
           "idempotencyKey contains invalid characters (allowed: A-Z a-z 0-9 : _ - .)");
     }
 
     String prefix = recommendedPrefix(type);
     if (prefix != null && !key.startsWith(prefix)) {
-      throw new IllegalArgumentException("idempotencyKey must start with prefix: " + prefix);
+      throw new LevelUpCommandInvalidException("idempotencyKey must start with prefix: " + prefix);
     }
   }
 

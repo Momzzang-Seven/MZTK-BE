@@ -1,0 +1,47 @@
+spring:
+  sql:
+    init:
+      mode: never
+
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+
+security:
+  cors:
+    allowed-origins:
+      - https://mztk.vercel.app   # 실제 배포 도메인으로 설정
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+
+kakao:
+  auth:
+    redirect:
+
+google:
+  oauth:
+    redirect-uri:
+
+web3:
+  challenge:
+    eip4361:
+      uri:
+
+  explorer:
+    base-url: https://optimistic.etherscan.io
+
+  eip7702:
+    enabled: true                   # prod에서 실제로 스폰서 기능을 쓰면 true
+    execution:
+      # prod에서는 반드시 allowlist를 채우는 걸 강하게 권장
+      allowed-target-contracts:
+        - 0x0000000000000000000000000000000000000000
+      blocked-function-selectors:
+        - 0x095ea7b3                # approve (예시)
+

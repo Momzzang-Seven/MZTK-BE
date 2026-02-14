@@ -14,6 +14,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 
 @Entity
 @Table(
@@ -49,6 +50,32 @@ public class LevelPolicyEntity {
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
+
+  /** Domain model -> Entity */
+  public static LevelPolicyEntity from(LevelPolicy domain) {
+    return LevelPolicyEntity.builder()
+        .id(domain.getId())
+        .level(domain.getLevel())
+        .requiredXp(domain.getRequiredXp())
+        .rewardMztk(domain.getRewardMztk())
+        .effectiveFrom(domain.getEffectiveFrom())
+        .effectiveTo(domain.getEffectiveTo())
+        .enabled(domain.isEnabled())
+        .build();
+  }
+
+  /** Entity -> Domain model */
+  public LevelPolicy toDomain() {
+    return LevelPolicy.builder()
+        .id(this.id)
+        .level(this.level)
+        .requiredXp(this.requiredXp)
+        .rewardMztk(this.rewardMztk)
+        .effectiveFrom(this.effectiveFrom)
+        .effectiveTo(this.effectiveTo)
+        .enabled(this.enabled)
+        .build();
+  }
 
   @PrePersist
   protected void onCreate() {
