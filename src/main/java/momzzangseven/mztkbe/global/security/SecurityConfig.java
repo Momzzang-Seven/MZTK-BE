@@ -78,58 +78,93 @@ public class SecurityConfig {
             auth ->
                 auth
                     // --- Public Endpoints ---
-                    .requestMatchers(HttpMethod.POST, "/auth/signup").permitAll()
-                    .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
-                    .requestMatchers(HttpMethod.POST, "/auth/reactivate").permitAll()
-                    .requestMatchers(HttpMethod.POST, "/auth/reissue").permitAll()
-                    .requestMatchers(HttpMethod.POST, "/auth/logout").permitAll()
-                    .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**").permitAll()
-                    .requestMatchers("/actuator/health").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/signup")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/login")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/reactivate")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/reissue")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/auth/logout")
+                    .permitAll()
+                    .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
+                    .permitAll()
+                    .requestMatchers("/actuator/health")
+                    .permitAll()
 
                     // --- Auth Endpoints ---
-                    .requestMatchers(HttpMethod.POST, "/auth/stepup").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/auth/stepup")
+                    .authenticated()
 
                     // --- User & Me Endpoints ---
-                    .requestMatchers(HttpMethod.POST, "/users/me/withdrawal").hasAuthority("ROLE_STEP_UP")
-                    .requestMatchers(HttpMethod.PATCH, "/users/me/role").authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/attendance").authenticated()
-                    .requestMatchers(HttpMethod.GET, "/users/me/attendance/status").authenticated()
-                    .requestMatchers(HttpMethod.GET, "/users/me/attendance/weekly").authenticated()
-                    .requestMatchers(HttpMethod.GET, "/users/me/level").authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/level-ups").authenticated()
-                    .requestMatchers(HttpMethod.GET, "/users/me/level-up-histories").authenticated()
-                    .requestMatchers(HttpMethod.GET, "/users/me/xp-ledger").authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/locations/register").authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/prepare").authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/submit").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/withdrawal")
+                    .hasAuthority("ROLE_STEP_UP")
+                    .requestMatchers(HttpMethod.PATCH, "/users/me/role")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/attendance")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/users/me/attendance/status")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/users/me/attendance/weekly")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/users/me/level")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/level-ups")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/users/me/level-up-histories")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/users/me/xp-ledger")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/locations/register")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/prepare")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/submit")
+                    .authenticated()
 
                     // --- Level Policies ---
-                    .requestMatchers(HttpMethod.GET, "/levels/policies").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/levels/policies")
+                    .authenticated()
 
                     // --- Location Endpoints ---
-                    .requestMatchers(HttpMethod.POST, "/locations/verify").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/locations/verify")
+                    .authenticated()
 
                     // --- Web3 Endpoints ---
-                    .requestMatchers(HttpMethod.POST, "/web3/challenges").authenticated()
-                    .requestMatchers(HttpMethod.POST, "/web3/wallets").authenticated()
-                    .requestMatchers(HttpMethod.DELETE, "/web3/wallets/{walletAddress}").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/web3/challenges")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/web3/wallets")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/web3/wallets/{walletAddress}")
+                    .authenticated()
 
                     // --- Post (Community) Endpoints ---
-                    .requestMatchers(HttpMethod.POST, "/posts/free").authenticated()
-                    .requestMatchers(HttpMethod.GET, "/posts/{postId}").authenticated()
-                    .requestMatchers(HttpMethod.PATCH, "/posts/{postId}").authenticated()
-                    .requestMatchers(HttpMethod.DELETE, "/posts/{postId}").authenticated()
+                    .requestMatchers(HttpMethod.POST, "/posts/free")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/posts/{postId}")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/posts/{postId}")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/posts/{postId}")
+                    .authenticated()
 
                     // --- Admin Endpoints ---
-                    .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision").hasAuthority("ROLE_ADMIN")
-                    .requestMatchers(HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded").hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // --- Actuator Endpoints ---
-                    .requestMatchers("/actuator/info").authenticated()
-                    .requestMatchers("/actuator/**").hasAuthority("ROLE_ADMIN")
+                    .requestMatchers("/actuator/info")
+                    .authenticated()
+                    .requestMatchers("/actuator/**")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // Fallback
-                    .anyRequest().authenticated());
+                    .anyRequest()
+                    .authenticated());
 
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
