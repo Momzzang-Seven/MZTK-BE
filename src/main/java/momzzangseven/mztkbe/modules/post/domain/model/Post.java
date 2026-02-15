@@ -17,9 +17,9 @@ public class Post {
   private List<String> imageUrls;
   private Long reward;
   private Boolean isSolved;
+  private List<String> tags;
 
   private final LocalDateTime createdAt;
-
   private LocalDateTime updatedAt;
 
   @Builder
@@ -32,6 +32,7 @@ public class Post {
       List<String> imageUrls,
       Long reward,
       Boolean isSolved,
+      List<String> tags,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
     this.id = id;
@@ -42,6 +43,7 @@ public class Post {
     this.imageUrls = imageUrls != null ? imageUrls : new ArrayList<>();
     this.reward = reward;
     this.isSolved = isSolved;
+    this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }
@@ -75,6 +77,7 @@ public class Post {
         .reward(reward)
         .imageUrls(imageUrls != null ? imageUrls : new ArrayList<>())
         .isSolved(false)
+        .tags(new ArrayList<>())
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();
@@ -109,5 +112,9 @@ public class Post {
     if (isUpdated) {
       this.updatedAt = LocalDateTime.now();
     }
+  }
+
+  public void setTags(List<String> tags) {
+    this.tags = tags != null ? tags : new ArrayList<>();
   }
 }

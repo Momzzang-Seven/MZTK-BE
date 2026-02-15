@@ -71,3 +71,8 @@ src/test/*
 ############################
 .DS_Store
 Thumbs.db
+
+############################
+# QueryDSL (Generated Classes)
+############################
+src/main/generated/
