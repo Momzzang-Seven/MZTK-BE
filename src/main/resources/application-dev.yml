@@ -1,3 +1,10 @@
+info:
+  app:
+    name: "MZTK-BE (Development)"
+    version: "0.0.1-SNAPSHOT"
+    description: "MZTK-BE Backend Service for Development"
+    environment: "dev"
+
 security:
   cors:
     allowed-origins:
