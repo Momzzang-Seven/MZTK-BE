@@ -104,10 +104,17 @@ level:
     zone: Asia/Seoul
 
 management:
+  info:
+    env:
+      enabled: true
   endpoints:
     web:
       exposure:
         include: health, info
+  endpoint:
+    health:
+      show-details: when_authorized
+      roles: ROLE_ADMIN
 
 jwt:
   secret: ${JWT_SECRET}

@@ -120,8 +120,12 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
 
                     // Health check and monitoring endpoints
-                    .requestMatchers("/actuator/**")
+                    .requestMatchers("/actuator/health")
                     .permitAll()
+                    .requestMatchers("/actuator/info")
+                    .authenticated()
+                    .requestMatchers("/actuator/**")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // All other requests require authentication
                     .anyRequest()
