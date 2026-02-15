@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import org.springframework.stereotype.Service;
@@ -17,13 +18,15 @@ public class CreatePostService implements CreatePostUseCase {
 
   private final PostPersistencePort postPersistencePort;
   private final PostXpService postXpService;
+  private final LinkTagPort linkTagPort;
 
   @Override
-  @Transactional // Transaction A 시작
+  @Transactional
   public CreatePostResult createPost(CreatePostCommand command) {
 
     command.validate();
 
+    // 1. 게시글 도메인 객체 생성
     Post post =
         Post.create(
             command.userId(),
@@ -33,7 +36,13 @@ public class CreatePostService implements CreatePostUseCase {
             command.reward(),
             command.imageUrls());
 
+    // 2. 게시글 저장
     Post savedPost = postPersistencePort.savePost(post);
+
+    // 3.태그 모듈 호출
+    if (command.tags() != null && !command.tags().isEmpty()) {
+      linkTagPort.linkTagsToPost(savedPost.getId(), command.tags());
+    }
 
     Long grantedXp = 0L;
     boolean isXpGranted = false;
