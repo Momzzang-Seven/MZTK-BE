@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
@@ -9,7 +11,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePor
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
+import org.springframework.util.StringUtils; // 이게 필요합니다!
 
 @Service
 @RequiredArgsConstructor
@@ -22,20 +24,30 @@ public class SearchPostsService implements SearchPostsUseCase {
   @Override
   public List<Post> searchPosts(PostSearchCondition condition) {
     List<Long> filteredPostIds = null;
+    if (StringUtils.hasText(condition.tagName())) {
+      filteredPostIds = loadTagPort.findPostIdsByTagName(condition.tagName());
 
-    if (StringUtils.hasText(condition.getTagName())) {
-      filteredPostIds = loadTagPort.findPostIdsByTagName(condition.getTagName());
-      if (filteredPostIds.isEmpty()) return List.of();
+      if (filteredPostIds.isEmpty()) {
+        return List.of();
+      }
     }
 
-    // 2. 게시글 기본 정보 조회
+    // 1. 게시글 조회
     List<Post> posts = postPersistencePort.findPostsByCondition(condition, filteredPostIds);
 
-    // 3.조회된 게시글들에 대한 태그 정보를 가져와서 채워넣기
-    for (Post post : posts) {
-      List<String> tags = loadTagPort.findTagNamesByPostId(post.getId());
-      post.setTags(tags); // Post 도메인 객체에 태그 리스트 세팅
-    }
+    if (posts.isEmpty()) return List.of();
+
+    // 2. 조회된 게시글들의 ID 추출
+    List<Long> postIds = posts.stream().map(Post::getId).toList();
+
+    // 3. 태그 일괄 조회
+    Map<Long, List<String>> tagMap = loadTagPort.findTagsByPostIdsIn(postIds);
+
+    // 4. 메모리에서 매핑
+    posts.forEach(
+        post -> {
+          post.setTags(tagMap.getOrDefault(post.getId(), Collections.emptyList()));
+        });
 
     return posts;
   }
