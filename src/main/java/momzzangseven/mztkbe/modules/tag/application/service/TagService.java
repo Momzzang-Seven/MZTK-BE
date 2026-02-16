@@ -33,7 +33,7 @@ public class TagService implements TagLinkUseCase {
     List<Tag> existingTags = loadTagPort.loadTagsByNames(distinctNames);
     List<String> existingNames = existingTags.stream().map(Tag::getName).toList();
 
-    // 3. 존재하지 않는 새 태그 생성 (Factory Method 사용)
+    // 3. 존재하지 않는 새 태그 생성
     List<Tag> newTags =
         distinctNames.stream()
             .filter(name -> !existingNames.contains(name))

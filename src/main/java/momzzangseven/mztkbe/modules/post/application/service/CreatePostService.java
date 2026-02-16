@@ -22,7 +22,7 @@ public class CreatePostService implements CreatePostUseCase {
 
   @Override
   @Transactional
-  public CreatePostResult createPost(CreatePostCommand command) {
+  public CreatePostResult execute(CreatePostCommand command) {
 
     command.validate();
 

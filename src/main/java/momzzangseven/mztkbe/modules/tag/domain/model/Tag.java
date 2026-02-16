@@ -10,8 +10,11 @@ public class Tag {
 
   @Builder
   public Tag(Long id, String name) {
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("태그 이름은 필수입니다.");
+    }
     this.id = id;
-    this.name = name;
+    this.name = name.trim();
   }
 
   public static Tag create(String name) {
