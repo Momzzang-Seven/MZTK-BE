@@ -47,7 +47,7 @@ public class PostController {
             request.imageUrls(),
             request.tags());
 
-    CreatePostResult response = createPostUseCase.createPost(command);
+    CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
 

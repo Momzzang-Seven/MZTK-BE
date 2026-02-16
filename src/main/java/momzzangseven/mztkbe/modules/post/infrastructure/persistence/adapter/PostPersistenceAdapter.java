@@ -58,12 +58,12 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
         queryFactory
             .selectFrom(postEntity)
             .where(
-                eqType(condition.getType()),
-                containsSearch(condition.getSearch()),
+                eqType(condition.type()),
+                containsSearch(condition.search()),
                 filterByTagIds(filteredPostIds))
             .orderBy(postEntity.createdAt.desc())
-            .offset((long) condition.getPage() * condition.getSize())
-            .limit(condition.getSize())
+            .offset((long) condition.page() * condition.size())
+            .limit(condition.size())
             .fetch();
 
     return entities.stream().map(PostEntity::toDomain).toList();
