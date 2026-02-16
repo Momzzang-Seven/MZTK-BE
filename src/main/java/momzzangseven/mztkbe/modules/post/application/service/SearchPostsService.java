@@ -45,8 +45,7 @@ public class SearchPostsService implements SearchPostsUseCase {
 
     // 4. 메모리에서 매핑
     return posts.stream()
-            .map(post -> post.withTags(tagMap.getOrDefault(post.getId(), Collections.emptyList())))
-            .toList();
-
+        .map(post -> post.withTags(tagMap.getOrDefault(post.getId(), Collections.emptyList())))
+        .toList();
   }
 }

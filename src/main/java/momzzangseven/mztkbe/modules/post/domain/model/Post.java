@@ -116,8 +116,6 @@ public class Post {
   }
 
   public Post withTags(List<String> tags) {
-    return this.toBuilder()
-            .tags(tags != null ? tags : new ArrayList<>())
-            .build();
+    return this.toBuilder().tags(tags != null ? tags : new ArrayList<>()).build();
   }
 }
