@@ -44,11 +44,9 @@ public class SearchPostsService implements SearchPostsUseCase {
     Map<Long, List<String>> tagMap = loadTagPort.findTagsByPostIdsIn(postIds);
 
     // 4. 메모리에서 매핑
-    posts.forEach(
-        post -> {
-          post.setTags(tagMap.getOrDefault(post.getId(), Collections.emptyList()));
-        });
+    return posts.stream()
+            .map(post -> post.withTags(tagMap.getOrDefault(post.getId(), Collections.emptyList())))
+            .toList();
 
-    return posts;
   }
 }
