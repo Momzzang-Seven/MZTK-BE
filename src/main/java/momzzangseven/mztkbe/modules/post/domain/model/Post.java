@@ -8,6 +8,7 @@ import lombok.Getter;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 
 @Getter
+@Builder(toBuilder = true)
 public class Post {
   private final Long id;
   private final Long userId;
@@ -114,7 +115,9 @@ public class Post {
     }
   }
 
-  public void setTags(List<String> tags) {
-    this.tags = tags != null ? tags : new ArrayList<>();
+  public Post withTags(List<String> tags) {
+    return this.toBuilder()
+            .tags(tags != null ? tags : new ArrayList<>())
+            .build();
   }
 }
