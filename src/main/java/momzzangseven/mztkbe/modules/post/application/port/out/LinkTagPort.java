@@ -4,4 +4,6 @@ import java.util.List;
 
 public interface LinkTagPort {
   void linkTagsToPost(Long postId, List<String> tagNames);
+
+  void updateTags(Long postId, List<String> tagNames);
 }

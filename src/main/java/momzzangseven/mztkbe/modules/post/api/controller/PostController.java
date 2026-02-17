@@ -85,7 +85,8 @@ public class PostController {
     Long validatedUserId = requireUserId(userId);
 
     UpdatePostCommand command =
-        UpdatePostCommand.of(request.title(), request.content(), request.imageUrls());
+        UpdatePostCommand.of(
+            request.title(), request.content(), request.imageUrls(), request.tags());
 
     updatePostUseCase.updatePost(validatedUserId, postId, command);
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));

@@ -70,4 +70,9 @@ public class PostTagLinkAdapter implements LoadTagPort, LinkTagPort {
                 tuple -> tuple.get(postTagEntity.postId),
                 Collectors.mapping(tuple -> tuple.get(tagEntity.name), Collectors.toList())));
   }
+
+  @Override
+  public void updateTags(Long postId, List<String> tagNames) {
+    tagLinkUseCase.updateTags(postId, tagNames);
+  }
 }
