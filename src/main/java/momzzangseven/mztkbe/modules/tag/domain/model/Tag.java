@@ -14,7 +14,7 @@ public class Tag {
       throw new IllegalArgumentException("태그 이름은 필수입니다.");
     }
     this.id = id;
-    this.name = name.trim();
+    this.name = name.trim().toLowerCase();
   }
 
   public static Tag create(String name) {
