@@ -54,4 +54,16 @@ public class TagService implements TagLinkUseCase {
     // 6. 게시글-태그 연결 (매핑 저장)
     saveTagPort.savePostTagMappings(postId, allTagIds);
   }
+
+  @Override
+  @Transactional
+  public void updateTags(Long postId, List<String> tagNames) {
+
+    saveTagPort.deleteTagsByPostId(postId);
+
+    // 새 태그 연결
+    if (tagNames != null && !tagNames.isEmpty()) {
+      this.linkTagsToPost(postId, tagNames);
+    }
+  }
 }
