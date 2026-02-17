@@ -17,6 +17,7 @@ public class TagPersistenceAdapter implements LoadTagPort, SaveTagPort {
 
   private final TagJpaRepository tagJpaRepository;
   private final PostTagJpaRepository postTagJpaRepository;
+  private final PostTagJpaRepository postTagRepository;
 
   @Override
   public List<Tag> loadTagsByNames(List<String> names) {
@@ -38,5 +39,10 @@ public class TagPersistenceAdapter implements LoadTagPort, SaveTagPort {
         tagIds.stream().map(tagId -> new PostTagEntity(postId, tagId)).toList();
 
     postTagJpaRepository.saveAll(mappingEntities);
+  }
+
+  @Override
+  public void deleteTagsByPostId(Long postId) {
+    postTagRepository.deleteByPostId(postId);
   }
 }

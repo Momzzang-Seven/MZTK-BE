@@ -10,4 +10,6 @@ public interface TagLinkUseCase {
    * @param tagNames 태그 이름 리스트 (예: ["오운완", "3대500"])
    */
   void linkTagsToPost(Long postId, List<String> tagNames);
+
+  void updateTags(Long postId, List<String> tagNames);
 }

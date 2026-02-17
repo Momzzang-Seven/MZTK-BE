@@ -34,7 +34,8 @@ public class CreatePostService implements CreatePostUseCase {
             command.title(),
             command.content(),
             command.reward(),
-            command.imageUrls());
+            command.imageUrls(),
+            command.tags());
 
     // 2. 게시글 저장
     Post savedPost = postPersistencePort.savePost(post);

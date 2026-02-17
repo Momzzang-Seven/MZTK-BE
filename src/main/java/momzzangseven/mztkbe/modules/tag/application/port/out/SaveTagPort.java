@@ -7,4 +7,6 @@ public interface SaveTagPort {
   List<Tag> saveTags(List<Tag> tags);
 
   void savePostTagMappings(Long postId, List<Long> tagIds);
+
+  void deleteTagsByPostId(Long postId);
 }
