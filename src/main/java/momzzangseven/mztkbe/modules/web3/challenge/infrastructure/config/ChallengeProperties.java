@@ -16,7 +16,7 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "web3.challenge")
 public class ChallengeProperties {
-  private int ttlSeconds = 300;
+  private int ttlSeconds;
 
   private Eip4361 eip4361 = new Eip4361();
 
@@ -24,13 +24,13 @@ public class ChallengeProperties {
   @Setter
   public static class Eip4361 {
 
-    private String domain = "MZTK";
+    private String domain;
 
-    private String uri = "https://mztk.com";
+    private String uri;
 
-    private String version = "1";
+    private String version;
 
     /** Blockchain network Chain ID - 1: Ethereum Mainnet - 11155111: Sepolia Testnet */
-    private String chainId = "11155111";
+    private String chainId;
   }
 }

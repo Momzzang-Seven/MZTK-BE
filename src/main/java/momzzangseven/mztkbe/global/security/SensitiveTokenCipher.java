@@ -1,14 +1,6 @@
 package momzzangseven.mztkbe.global.security;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Base64;
-import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.token.TokenEncryptionException;
 import org.springframework.stereotype.Component;
@@ -28,13 +20,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class SensitiveTokenCipher {
 
-  private static final String TRANSFORMATION = "AES/GCM/NoPadding";
-  private static final int GCM_TAG_LENGTH_BIT = 128;
-  private static final int IV_LENGTH_BYTE = 12;
-
   private final JwtProperties jwtProperties;
-
-  private final SecureRandom secureRandom = new SecureRandom();
+  private final AesGcmCipher aesGcmCipher;
 
   /** Encrypt plaintext into base64(iv).base64(ciphertext) using AES-256-GCM. */
   public String encrypt(String plaintext) {
@@ -43,17 +30,7 @@ public class SensitiveTokenCipher {
     }
 
     try {
-      byte[] iv = new byte[IV_LENGTH_BYTE];
-      secureRandom.nextBytes(iv);
-
-      Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-      cipher.init(Cipher.ENCRYPT_MODE, deriveKey(), new GCMParameterSpec(GCM_TAG_LENGTH_BIT, iv));
-
-      byte[] ciphertext = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-
-      return Base64.getEncoder().encodeToString(iv)
-          + "."
-          + Base64.getEncoder().encodeToString(ciphertext);
+      return aesGcmCipher.encrypt(plaintext, deriveKey());
     } catch (Exception e) {
       throw new TokenEncryptionException("Failed to encrypt token", e);
     }
@@ -66,19 +43,7 @@ public class SensitiveTokenCipher {
     }
 
     try {
-      String[] parts = encrypted.split("\\.", 2);
-      if (parts.length != 2) {
-        throw new TokenEncryptionException("Invalid encrypted token format");
-      }
-
-      byte[] iv = Base64.getDecoder().decode(parts[0]);
-      byte[] ciphertext = Base64.getDecoder().decode(parts[1]);
-
-      Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-      cipher.init(Cipher.DECRYPT_MODE, deriveKey(), new GCMParameterSpec(GCM_TAG_LENGTH_BIT, iv));
-
-      byte[] plaintext = cipher.doFinal(ciphertext);
-      return new String(plaintext, StandardCharsets.UTF_8);
+      return aesGcmCipher.decrypt(encrypted, deriveKey());
     } catch (TokenEncryptionException e) {
       throw e;
     } catch (Exception e) {
@@ -91,13 +56,6 @@ public class SensitiveTokenCipher {
     if (secret == null || secret.isBlank()) {
       throw new TokenEncryptionException("jwt.secret is required for token encryption");
     }
-
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      byte[] keyBytes = digest.digest(secret.getBytes(StandardCharsets.UTF_8));
-      return new SecretKeySpec(keyBytes, "AES");
-    } catch (NoSuchAlgorithmException e) {
-      throw new TokenEncryptionException("SHA-256 algorithm not available", e);
-    }
+    return aesGcmCipher.deriveSha256Key(secret);
   }
 }

@@ -79,6 +79,13 @@ public enum ErrorCode {
   NOT_ENOUGH_XP("LEVEL_001", "Not enough XP to level up", HttpStatus.CONFLICT),
   MAX_LEVEL_REACHED("LEVEL_002", "Max level reached", HttpStatus.CONFLICT),
   LEVEL_UP_ALREADY_PROCESSED("LEVEL_003", "Level up already processed", HttpStatus.CONFLICT),
+  REWARD_FAILED_ONCHAIN(
+      "LEVEL_004", "Reward transaction failed onchain and cannot be retried", HttpStatus.CONFLICT),
+  REWARD_INTENT_CREATION_FAILED(
+      "LEVEL_005", "Failed to create reward transaction intent", HttpStatus.INTERNAL_SERVER_ERROR),
+  REWARD_TREASURY_ADDRESS_INVALID(
+      "LEVEL_006", "Treasury address configuration is invalid", HttpStatus.INTERNAL_SERVER_ERROR),
+  LEVEL_UP_COMMAND_INVALID("LEVEL_007", "Invalid level up command", HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Signup Errors (SIGNUP_xxx)
@@ -153,6 +160,25 @@ public enum ErrorCode {
       ),
 
   // ========================================
+  // Web3 Errors (WEB3_xxx)
+  // ========================================
+  WEB3_INVALID_INPUT("WEB3_001", "Invalid web3 input", HttpStatus.BAD_REQUEST),
+  WEB3_TRANSACTION_NOT_FOUND("WEB3_002", "Web3 transaction not found", HttpStatus.NOT_FOUND),
+  WEB3_TRANSACTION_STATE_INVALID("WEB3_003", "Invalid web3 transaction state", HttpStatus.CONFLICT),
+  WEB3_TREASURY_PRIVATE_KEY_INVALID(
+      "WEB3_004", "Invalid treasury private key format", HttpStatus.BAD_REQUEST),
+  AUTH_EXPIRED("WEB3_005", "Authorization expired", HttpStatus.BAD_REQUEST),
+  AUTH_NONCE_MISMATCH("WEB3_006", "Authority nonce mismatch", HttpStatus.CONFLICT),
+  DELEGATE_NOT_ALLOWLISTED(
+      "WEB3_007", "Delegate target is not allowlisted", HttpStatus.BAD_REQUEST),
+  SPONSOR_GAS_LIMIT_EXCEEDED("WEB3_008", "Sponsor gas limit exceeded", HttpStatus.BAD_REQUEST),
+  SPONSOR_DAILY_LIMIT_EXCEEDED(
+      "WEB3_009", "Sponsor daily limit exceeded", HttpStatus.TOO_MANY_REQUESTS),
+  SPONSOR_AMOUNT_LIMIT_EXCEEDED(
+      "WEB3_010", "Sponsor amount limit exceeded", HttpStatus.BAD_REQUEST),
+  IDEMPOTENCY_CONFLICT("WEB3_011", "Idempotency conflict", HttpStatus.CONFLICT),
+
+  // ========================================
   // Challenge Errors (CHALLENGE_xxx)
   // ========================================
   CHALLENGE_NOT_FOUND_OR_EXPIRED(
@@ -171,12 +197,28 @@ public enum ErrorCode {
   CHALLENGE_USERID_MISMATCH("CHALLENGE_005", "User id mismatch", HttpStatus.UNAUTHORIZED),
 
   // ========================================
-  // Validation Errors (VALIDATION_xxx)
+  // Signature Errors (SIGNATURE_XXX)
   // ========================================
 
   SIGNATURE_INVALID(
       "SIGNATURE_001", "Invalid signature", HttpStatus.BAD_REQUEST // 400
       ),
+
+  // ========================================
+  // Location Errors (LOCATION_xxx)
+  // ========================================
+  COORDINATE_INVALID("LOCATION_001", "Coordinate is invalid", HttpStatus.BAD_REQUEST),
+
+  GEOCODING_FAILED("LOCATION_002", "Geocoding is failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
+  REV_GEOCODING_FAILED(
+      "LOCATION_003", "Reverse Geocoding is failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
+  MISSING_LOCATION_FIELD("LOCATION_004", "Missing location field", HttpStatus.BAD_REQUEST),
+
+  LOCATION_NOT_FOUND("LOCATION_005", "Location not found", HttpStatus.NOT_FOUND),
+
+  LOCATION_ALREADY_DELETED("LOCATION_006", "Location already deleted", HttpStatus.CONFLICT),
 
   // ========================================
   // Validation Errors (VALIDATION_xxx)
@@ -187,6 +229,10 @@ public enum ErrorCode {
 
   MISSING_REQUIRED_FIELD(
       "VALIDATION_002", "Required field is missing", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  RESOURCE_NOT_FOUND(
+      "VALIDATION_003", "Resource not found", HttpStatus.NOT_FOUND // 404
       ),
 
   // ========================================
@@ -202,6 +248,50 @@ public enum ErrorCode {
 
   DATABASE_ERROR(
       "INTERNAL_003", "Database operation failed", HttpStatus.INTERNAL_SERVER_ERROR // 500
+      ),
+  // ========================================
+  // Post Errors (POST_xxx)
+  // ========================================
+  POST_NOT_FOUND(
+      "POST_001", "Post not found", HttpStatus.NOT_FOUND // 404
+      ),
+
+  POST_UNAUTHORIZED(
+      "POST_002", "Unauthorized access to post", HttpStatus.FORBIDDEN // 403
+      ),
+
+  INVALID_POST_INPUT(
+      "POST_003", "Invalid post input", HttpStatus.BAD_REQUEST // 400
+      ),
+  // ========================================
+  // Comment Errors (COMMENT_xxx)
+  // ========================================
+  COMMENT_NOT_FOUND(
+      "COMMENT_001", "Comment not found", HttpStatus.NOT_FOUND // 404
+      ),
+
+  COMMENT_UNAUTHORIZED(
+      "COMMENT_002", "Unauthorized access to comment", HttpStatus.FORBIDDEN // 403
+      ),
+
+  CANNOT_UPDATE_DELETED_COMMENT(
+      "COMMENT_003", "Cannot update a deleted comment", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  PARENT_COMMENT_NOT_FOUND(
+      "COMMENT_004", "Parent comment not found", HttpStatus.NOT_FOUND // 404
+      ),
+
+  COMMENT_POST_MISMATCH(
+      "COMMENT_005", "Comment does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
+      ),
+  COMMENT_TOO_LONG(
+      "COMMENT_006", "Comment length must be within 1000 characters", HttpStatus.BAD_REQUEST // 400
+      ),
+  INVALID_COMMENT_HARD_DELETE_CONFIG(
+      "COMMENT_007",
+      "Invalid comment hard-delete configuration",
+      HttpStatus.INTERNAL_SERVER_ERROR // 500
       );
 
   private final String code;

@@ -10,11 +10,11 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.LevelPolicyEntity;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpPolicyEntity;
-import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.LevelPolicyJpaRepository;
-import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.XpPolicyJpaRepository;
+import momzzangseven.mztkbe.modules.level.infrastructure.repository.LevelPolicyJpaRepository;
+import momzzangseven.mztkbe.modules.level.infrastructure.repository.XpPolicyJpaRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +33,7 @@ public class PolicyPersistenceAdapter implements PolicyPort {
         .findActiveByLevel(currentLevel, at, PageRequest.of(0, 1))
         .stream()
         .findFirst()
-        .map(this::mapToDomain);
+        .map(LevelPolicyEntity::toDomain);
   }
 
   @Override
@@ -49,7 +49,7 @@ public class PolicyPersistenceAdapter implements PolicyPort {
 
     return latestByLevel.values().stream()
         .sorted(Comparator.comparingInt(LevelPolicyEntity::getLevel))
-        .map(this::mapToDomain)
+        .map(LevelPolicyEntity::toDomain)
         .toList();
   }
 
@@ -58,7 +58,7 @@ public class PolicyPersistenceAdapter implements PolicyPort {
   public Optional<XpPolicy> loadXpPolicy(XpType type, LocalDateTime at) {
     return xpPolicyJpaRepository.findActiveByType(type, at, PageRequest.of(0, 1)).stream()
         .findFirst()
-        .map(this::mapToDomain);
+        .map(XpPolicyEntity::toDomain);
   }
 
   @Override
@@ -74,31 +74,7 @@ public class PolicyPersistenceAdapter implements PolicyPort {
 
     return latestByType.values().stream()
         .sorted(Comparator.comparing(XpPolicyEntity::getType))
-        .map(this::mapToDomain)
+        .map(XpPolicyEntity::toDomain)
         .toList();
-  }
-
-  private LevelPolicy mapToDomain(LevelPolicyEntity entity) {
-    return LevelPolicy.builder()
-        .id(entity.getId())
-        .level(entity.getLevel())
-        .requiredXp(entity.getRequiredXp())
-        .rewardMztk(entity.getRewardMztk())
-        .effectiveFrom(entity.getEffectiveFrom())
-        .effectiveTo(entity.getEffectiveTo())
-        .enabled(entity.isEnabled())
-        .build();
-  }
-
-  private XpPolicy mapToDomain(XpPolicyEntity entity) {
-    return XpPolicy.builder()
-        .id(entity.getId())
-        .type(entity.getType())
-        .xpAmount(entity.getXpAmount())
-        .dailyCap(entity.getDailyCap())
-        .effectiveFrom(entity.getEffectiveFrom())
-        .effectiveTo(entity.getEffectiveTo())
-        .enabled(entity.isEnabled())
-        .build();
   }
 }
