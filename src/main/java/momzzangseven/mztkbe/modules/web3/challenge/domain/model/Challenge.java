@@ -40,10 +40,12 @@ public class Challenge {
       Long userId, ChallengePurpose purpose, String walletAddress, ChallengeConfig config) {
     Instant now = Instant.now();
     String nonce = generateNonce();
+    // Normalize wallet address to lowercase for consistency
+    String normalizedWalletAddress = walletAddress != null ? walletAddress.toLowerCase() : null;
     String message =
         buildEIP4361Message(
             purpose,
-            walletAddress,
+            normalizedWalletAddress,
             nonce,
             now,
             config.domain(),
@@ -55,7 +57,7 @@ public class Challenge {
         .nonce(nonce)
         .userId(userId)
         .purpose(purpose)
-        .walletAddress(walletAddress) // already normalized in CreateChallengeCommand
+        .walletAddress(normalizedWalletAddress)
         .message(message)
         .status(ChallengeStatus.PENDING)
         .expiresAt(now.plusSeconds(config.ttlSeconds()))
