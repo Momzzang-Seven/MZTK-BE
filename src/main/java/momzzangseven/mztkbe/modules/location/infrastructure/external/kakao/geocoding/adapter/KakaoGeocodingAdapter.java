@@ -37,7 +37,7 @@ public class KakaoGeocodingAdapter implements GeocodingPort {
       // Validate Response - No results found
       if (response == null || !response.hasDocuments()) {
         log.warn("No geocoding results found");
-        throw new GeocodingFailedException("No geocoding results found for addres");
+        throw new GeocodingFailedException("No geocoding results found for address");
       }
 
       // First element of documents: most relevant address
