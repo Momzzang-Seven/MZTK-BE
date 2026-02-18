@@ -9,9 +9,7 @@ on:
       - 'build.gradle'
       - 'Dockerfile'
       - '.github/workflows/deploy-prod.yml'
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+      - '.dockerignore'
   
   workflow_dispatch:
     inputs:
