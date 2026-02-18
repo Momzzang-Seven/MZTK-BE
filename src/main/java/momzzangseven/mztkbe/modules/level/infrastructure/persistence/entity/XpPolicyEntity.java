@@ -16,7 +16,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 @Entity
 @Table(
@@ -53,6 +54,32 @@ public class XpPolicyEntity {
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
+
+  /** Domain model -> Entity */
+  public static XpPolicyEntity from(XpPolicy domain) {
+    return XpPolicyEntity.builder()
+        .id(domain.getId())
+        .type(domain.getType())
+        .xpAmount(domain.getXpAmount())
+        .dailyCap(domain.getDailyCap())
+        .effectiveFrom(domain.getEffectiveFrom())
+        .effectiveTo(domain.getEffectiveTo())
+        .enabled(domain.isEnabled())
+        .build();
+  }
+
+  /** Entity -> Domain model */
+  public XpPolicy toDomain() {
+    return XpPolicy.builder()
+        .id(this.id)
+        .type(this.type)
+        .xpAmount(this.xpAmount)
+        .dailyCap(this.dailyCap)
+        .effectiveFrom(this.effectiveFrom)
+        .effectiveTo(this.effectiveTo)
+        .enabled(this.enabled)
+        .build();
+  }
 
   @PrePersist
   protected void onCreate() {

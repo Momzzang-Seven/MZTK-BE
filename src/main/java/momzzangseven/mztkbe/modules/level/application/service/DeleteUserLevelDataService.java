@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.level.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.modules.level.application.dto.DeleteUserLevelDataCommand;
 import momzzangseven.mztkbe.modules.level.application.port.in.DeleteUserLevelDataUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelRetentionPort;
@@ -19,9 +21,8 @@ public class DeleteUserLevelDataService implements DeleteUserLevelDataUseCase {
   @Override
   public void execute(DeleteUserLevelDataCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.COMMAND_REQUIRED);
     }
-    command.validate();
 
     levelRetentionPort.deleteUserLevelDataByUserIds(command.userIds());
     log.info("Deleted user level data: userCount={}", command.userIds().size());

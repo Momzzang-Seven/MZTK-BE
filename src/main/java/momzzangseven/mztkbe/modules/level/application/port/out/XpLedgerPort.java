@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.level.application.port.out;
 import java.time.LocalDate;
 import java.util.List;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 /** Outbound port for XP ledger. */
 public interface XpLedgerPort {

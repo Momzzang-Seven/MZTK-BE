@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.UserProgressEntity;
-import momzzangseven.mztkbe.modules.level.infrastructure.persistence.repository.UserProgressJpaRepository;
+import momzzangseven.mztkbe.modules.level.infrastructure.repository.UserProgressJpaRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -25,7 +25,7 @@ public class UserProgressPersistenceAdapter implements UserProgressPort {
   @Override
   @Transactional(readOnly = true)
   public Optional<UserProgress> loadUserProgress(Long userId) {
-    return userProgressJpaRepository.findById(userId).map(this::mapToDomain);
+    return userProgressJpaRepository.findById(userId).map(UserProgressEntity::toDomain);
   }
 
   @Override
@@ -33,7 +33,7 @@ public class UserProgressPersistenceAdapter implements UserProgressPort {
   public UserProgress loadUserProgressWithLock(Long userId) {
     return userProgressJpaRepository
         .findByUserIdForUpdate(userId)
-        .map(this::mapToDomain)
+        .map(UserProgressEntity::toDomain)
         .orElseThrow(() -> new IllegalStateException("UserProgress not found: userId=" + userId));
   }
 
@@ -42,7 +42,7 @@ public class UserProgressPersistenceAdapter implements UserProgressPort {
   public UserProgress loadOrCreateUserProgress(Long userId) {
     Optional<UserProgressEntity> existing = userProgressJpaRepository.findById(userId);
     if (existing.isPresent()) {
-      return mapToDomain(existing.get());
+      return existing.get().toDomain();
     }
 
     TransactionTemplate requiresNew = new TransactionTemplate(transactionManager);
@@ -53,7 +53,7 @@ public class UserProgressPersistenceAdapter implements UserProgressPort {
             status -> {
               try {
                 userProgressJpaRepository.saveAndFlush(
-                    mapToEntity(UserProgress.createInitial(userId)));
+                    UserProgressEntity.from(UserProgress.createInitial(userId)));
                 return true;
               } catch (DataIntegrityViolationException e) {
                 status.setRollbackOnly();
@@ -62,11 +62,17 @@ public class UserProgressPersistenceAdapter implements UserProgressPort {
             });
 
     if (Boolean.TRUE.equals(created)) {
-      return userProgressJpaRepository.findById(userId).map(this::mapToDomain).orElseThrow();
+      return userProgressJpaRepository
+          .findById(userId)
+          .map(UserProgressEntity::toDomain)
+          .orElseThrow();
     }
 
     log.info("UserProgress already created concurrently: userId={}", userId);
-    return userProgressJpaRepository.findById(userId).map(this::mapToDomain).orElseThrow();
+    return userProgressJpaRepository
+        .findById(userId)
+        .map(UserProgressEntity::toDomain)
+        .orElseThrow();
   }
 
   @Override
@@ -75,44 +81,13 @@ public class UserProgressPersistenceAdapter implements UserProgressPort {
     UserProgressEntity entity =
         userProgressJpaRepository
             .findById(progress.getUserId())
-            .orElseGet(
-                () ->
-                    UserProgressEntity.builder()
-                        .userId(progress.getUserId())
-                        .level(progress.getLevel())
-                        .availableXp(progress.getAvailableXp())
-                        .lifetimeXp(progress.getLifetimeXp())
-                        .createdAt(progress.getCreatedAt())
-                        .updatedAt(progress.getUpdatedAt())
-                        .build());
+            .orElseGet(() -> UserProgressEntity.from(progress));
 
     entity.setLevel(progress.getLevel());
     entity.setAvailableXp(progress.getAvailableXp());
     entity.setLifetimeXp(progress.getLifetimeXp());
     entity.setUpdatedAt(progress.getUpdatedAt());
 
-    return mapToDomain(userProgressJpaRepository.save(entity));
-  }
-
-  private UserProgress mapToDomain(UserProgressEntity entity) {
-    return UserProgress.builder()
-        .userId(entity.getUserId())
-        .level(entity.getLevel())
-        .availableXp(entity.getAvailableXp())
-        .lifetimeXp(entity.getLifetimeXp())
-        .createdAt(entity.getCreatedAt())
-        .updatedAt(entity.getUpdatedAt())
-        .build();
-  }
-
-  private UserProgressEntity mapToEntity(UserProgress progress) {
-    return UserProgressEntity.builder()
-        .userId(progress.getUserId())
-        .level(progress.getLevel())
-        .availableXp(progress.getAvailableXp())
-        .lifetimeXp(progress.getLifetimeXp())
-        .createdAt(progress.getCreatedAt())
-        .updatedAt(progress.getUpdatedAt())
-        .build();
+    return userProgressJpaRepository.save(entity).toDomain();
   }
 }

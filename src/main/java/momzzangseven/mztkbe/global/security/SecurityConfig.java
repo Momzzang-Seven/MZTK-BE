@@ -30,6 +30,7 @@ public class SecurityConfig {
   private final JwtAuthenticationFilter jwtAuthenticationFilter;
   private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
   private final RestAccessDeniedHandler restAccessDeniedHandler;
+  private final SecurityCorsProperties securityCorsProperties;
 
   /** CORS configuration. CORS는 URL path(/callback 등)가 아니라 Origin(스킴+도메인+포트) 기준으로 허용합니다. */
   @Bean
@@ -37,7 +38,9 @@ public class SecurityConfig {
     CorsConfiguration config = new CorsConfiguration();
 
     config.setAllowedOrigins(
-        List.of("https://mztk.vercel.app", "http://localhost:5173", "http://localhost:3000"));
+        securityCorsProperties.getAllowedOrigins() == null
+            ? List.of()
+            : securityCorsProperties.getAllowedOrigins());
 
     config.setAllowCredentials(true);
 
@@ -95,14 +98,30 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/users/me/level-ups")
                     .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/**")
+                    .authenticated()
                     .requestMatchers(HttpMethod.POST, "/web3/challenges")
                     .authenticated()
-                    .requestMatchers(HttpMethod.POST, "web3/wallets")
+                    .requestMatchers(HttpMethod.POST, "/web3/wallets")
                     .authenticated()
-                    .requestMatchers(HttpMethod.DELETE, "web3/wallets/")
+                    .requestMatchers(HttpMethod.DELETE, "/web3/wallets/")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/users/me/locations/register")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/locations/verify")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/users/me/locations/**")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "users/me/locations")
                     .authenticated()
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
                     .permitAll()
+
+                    //  Admin-only endpoints
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/transactions/**")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // Health check and monitoring endpoints
                     .requestMatchers("/actuator/**")
