@@ -1,0 +1,200 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'build.gradle'
+      - 'Dockerfile'
+      - '.github/workflows/deploy-prod.yml'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Deployment reason'
+        required: false
+        default: 'Manual deployment'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ============================================
+      # 배포 정보 로깅
+      # ============================================
+      - name: Log deployment info
+        run: |
+          echo "🚀 Deployment triggered"
+          echo "Event: ${{ github.event_name }}"
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+          
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "📝 Manual deployment"
+            echo "Reason: ${{ github.event.inputs.reason }}"
+          else
+            echo "✅ Automatic deployment from PR merge"
+          fi
+      
+      # ============================================
+      # 1. 코드 체크아웃
+      # ============================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ============================================
+      # 2. JDK 21 설정
+      # ============================================
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      # ============================================
+      # 3. Gradle 권한 설정
+      # ============================================
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # ============================================
+      # 4. 테스트 실행
+      # ============================================
+      - name: Run tests
+        run: ./gradlew test --no-daemon
+
+      # ============================================
+      # 5. JAR 빌드
+      # ============================================
+      - name: Build with Gradle
+        run: ./gradlew clean bootJar --no-daemon
+
+      # ============================================
+      # 6. Docker Buildx 설정
+      # ============================================
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ============================================
+      # 7. Docker Hub 로그인
+      # ============================================
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      # ============================================
+      # 8. Docker 이미지 빌드 & 푸시 (amd64 명시)
+      # ============================================
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/mztk-be:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/mztk-be:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ============================================
+      # 9. EC2 배포
+      # ============================================
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_PUBLIC_IP }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            # 앱 디렉토리로 이동
+            cd ~/apps
+            
+            # .env 파일에서 공개 환경변수 로드
+            set -a
+            source .env
+            set +a
+            
+            # GitHub Secrets에서 민감 정보 덮어쓰기
+            export DB_URL_PROD="${{ secrets.DB_URL_PROD }}"
+            export DB_USERNAME="${{ secrets.DB_USERNAME }}"
+            export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+            export JWT_SECRET="${{ secrets.JWT_SECRET }}"
+            export KAKAO_CLIENT_ID="${{ secrets.KAKAO_CLIENT_ID }}"
+            export KAKAO_ADMIN_KEY="${{ secrets.KAKAO_ADMIN_KEY }}"
+            export KAKAO_REST_API_KEY="${{ secrets.KAKAO_REST_API_KEY }}"
+            export GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
+            export GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
+            export WEB3_EXPLORER_API_KEY="${{ secrets.WEB3_EXPLORER_API_KEY }}"
+            export TREASURY_KEY_ENCRYPTION_KEY_B64="${{ secrets.TREASURY_KEY_ENCRYPTION_KEY_B64 }}"
+            export SPONSOR_KEY_ENCRYPTION_KEY_B64="${{ secrets.SPONSOR_KEY_ENCRYPTION_KEY_B64 }}"
+            
+            # Docker Hub에서 최신 이미지 pull
+            docker pull ${{ secrets.DOCKER_HUB_USERNAME }}/mztk-be:latest
+            
+            # 기존 컨테이너 중지 및 제거
+            docker stop mztk-prod || true
+            docker rm mztk-prod || true
+            
+            # 새 컨테이너 실행
+            docker run -d \
+              --name mztk-prod \
+              --restart unless-stopped \
+              -p 8080:8080 \
+              -e SPRING_PROFILES_ACTIVE=prod \
+              -e DB_URL_PROD="$DB_URL_PROD" \
+              -e DB_USERNAME="$DB_USERNAME" \
+              -e DB_PASSWORD="$DB_PASSWORD" \
+              -e JWT_SECRET="$JWT_SECRET" \
+              -e KAKAO_CLIENT_ID="$KAKAO_CLIENT_ID" \
+              -e KAKAO_ADMIN_KEY="$KAKAO_ADMIN_KEY" \
+              -e KAKAO_REST_API_KEY="$KAKAO_REST_API_KEY" \
+              -e GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" \
+              -e GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
+              -e WEB3_CHAIN_ID="$WEB3_CHAIN_ID" \
+              -e WEB3_RPC_MAIN="$WEB3_RPC_MAIN" \
+              -e WEB3_RPC_SUB="$WEB3_RPC_SUB" \
+              -e WEB3_EXPLORER_BASE_URL="$WEB3_EXPLORER_BASE_URL" \
+              -e WEB3_EXPLORER_API_KEY="$WEB3_EXPLORER_API_KEY" \
+              -e WEB3_EIP712_VERIFYING_CONTRACT="$WEB3_EIP712_VERIFYING_CONTRACT" \
+              -e MZTK_TOKEN_CONTRACT_ADDRESS="$MZTK_TOKEN_CONTRACT_ADDRESS" \
+              -e TREASURY_KEY_ENCRYPTION_KEY_B64="$TREASURY_KEY_ENCRYPTION_KEY_B64" \
+              -e TREASURY_WALLET_ADDRESS="$TREASURY_WALLET_ADDRESS" \
+              -e WEB3_TREASURY_PROVISIONING_ENABLED="$WEB3_TREASURY_PROVISIONING_ENABLED" \
+              -e TREASURY_ETH_WARNING_THRESHOLD="$TREASURY_ETH_WARNING_THRESHOLD" \
+              -e TREASURY_ETH_CRITICAL_THRESHOLD="$TREASURY_ETH_CRITICAL_THRESHOLD" \
+              -e WEB3_EIP7702_DELEGATION_CONTRACT_ADDRESS="$WEB3_EIP7702_DELEGATION_CONTRACT_ADDRESS" \
+              -e WEB3_EIP7702_NONCE_TRACKER_ADDRESS="$WEB3_EIP7702_NONCE_TRACKER_ADDRESS" \
+              -e WEB3_EIP7702_BATCH_IMPL_ADDRESS="$WEB3_EIP7702_BATCH_IMPL_ADDRESS" \
+              -e WEB3_EIP7702_DEFAULT_RECEIVER_ADDRESS="$WEB3_EIP7702_DEFAULT_RECEIVER_ADDRESS" \
+              -e SPONSOR_KEY_ENCRYPTION_KEY_B64="$SPONSOR_KEY_ENCRYPTION_KEY_B64" \
+              ${{ secrets.DOCKER_HUB_USERNAME }}/mztk-be:latest
+            
+            # 오래된 이미지 정리
+            docker image prune -f
+            
+            # 배포 확인
+            echo "⏳ Waiting for application to start..."
+            sleep 15
+            
+            # 컨테이너 상태 확인
+            docker ps | grep mztk-prod
+            
+            # 헬스체크
+            curl -f http://localhost:8080/actuator/health || {
+              echo "❌ Health check failed!"
+              docker logs --tail 50 mztk-prod
+              exit 1
+            }
+            
+            echo "✅ Deployment successful!"
