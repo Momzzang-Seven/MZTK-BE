@@ -19,7 +19,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 
 @Entity
 @Table(
@@ -61,6 +62,36 @@ public class XpLedgerEntity {
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
+
+  /** Domain model -> Entity */
+  public static XpLedgerEntity from(XpLedgerEntry domain) {
+    return XpLedgerEntity.builder()
+        .id(domain.getId())
+        .userId(domain.getUserId())
+        .type(domain.getType())
+        .xpAmount(domain.getXpAmount())
+        .earnedOn(domain.getEarnedOn())
+        .occurredAt(domain.getOccurredAt())
+        .idempotencyKey(domain.getIdempotencyKey())
+        .sourceRef(domain.getSourceRef())
+        .createdAt(domain.getCreatedAt())
+        .build();
+  }
+
+  /** Entity -> Domain model */
+  public XpLedgerEntry toDomain() {
+    return XpLedgerEntry.builder()
+        .id(this.id)
+        .userId(this.userId)
+        .type(this.type)
+        .xpAmount(this.xpAmount)
+        .earnedOn(this.earnedOn)
+        .occurredAt(this.occurredAt)
+        .idempotencyKey(this.idempotencyKey)
+        .sourceRef(this.sourceRef)
+        .createdAt(this.createdAt)
+        .build();
+  }
 
   @PrePersist
   protected void onCreate() {

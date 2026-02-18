@@ -1,26 +1,30 @@
 package momzzangseven.mztkbe.modules.level.application.port.out;
 
-import lombok.Builder;
-import momzzangseven.mztkbe.modules.level.domain.model.RewardStatus;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
-@Builder
-public record RewardMztkResult(RewardStatus status, String txHash, String failureReason) {
+public record RewardMztkResult(Web3TxStatus status, String txHash, String failureReason) {
 
-  public static RewardMztkResult pending(String reason) {
-    return RewardMztkResult.builder().status(RewardStatus.PENDING).failureReason(reason).build();
+  public RewardMztkResult {
+    if (status == null) {
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.REWARD_STATUS_REQUIRED);
+    }
+  }
+
+  public static RewardMztkResult created(String reason) {
+    return new RewardMztkResult(Web3TxStatus.CREATED, null, reason);
+  }
+
+  public static RewardMztkResult pending(String txHash) {
+    return new RewardMztkResult(Web3TxStatus.PENDING, txHash, null);
   }
 
   public static RewardMztkResult success(String txHash) {
-    return RewardMztkResult.builder().status(RewardStatus.SUCCESS).txHash(txHash).build();
+    return new RewardMztkResult(Web3TxStatus.SUCCEEDED, txHash, null);
   }
 
-  public static RewardMztkResult failed(String reason) {
-    return RewardMztkResult.builder().status(RewardStatus.FAILED).failureReason(reason).build();
-  }
-
-  public void validate() {
-    if (status == null) {
-      throw new IllegalStateException("Reward status must not be null");
-    }
+  public static RewardMztkResult unconfirmed(String reason, String txHash) {
+    return new RewardMztkResult(Web3TxStatus.UNCONFIRMED, txHash, reason);
   }
 }

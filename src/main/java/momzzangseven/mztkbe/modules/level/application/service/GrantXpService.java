@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
+import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
@@ -13,7 +15,7 @@ import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
 import momzzangseven.mztkbe.modules.level.domain.model.XpPolicy;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,9 +33,8 @@ public class GrantXpService implements GrantXpUseCase {
   @Override
   public GrantXpResult execute(GrantXpCommand command) {
     if (command == null) {
-      throw new IllegalArgumentException("command is required");
+      throw new LevelUpCommandInvalidException(LevelValidationMessage.COMMAND_REQUIRED);
     }
-    command.validate();
 
     Long userId = command.userId();
     LocalDateTime occurredAt = command.occurredAt();

@@ -14,7 +14,7 @@ import momzzangseven.mztkbe.modules.level.application.port.in.CheckInUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.application.port.out.AttendanceLogPort;
 import momzzangseven.mztkbe.modules.level.domain.model.AttendancePolicy;
-import momzzangseven.mztkbe.modules.level.domain.model.XpType;
+import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
