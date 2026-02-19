@@ -39,10 +39,9 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   @Override
   public void deletePost(Long currentUserId, Long postId) {
-    Post post = getPostOrThrow(postId);
+    Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
 
     post.validateOwnership(currentUserId);
-
     postPersistencePort.deletePost(post);
 
     eventPublisher.publishEvent(new PostDeletedEvent(postId));
