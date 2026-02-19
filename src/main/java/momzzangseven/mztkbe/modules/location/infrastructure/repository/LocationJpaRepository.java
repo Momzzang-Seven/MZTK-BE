@@ -17,7 +17,7 @@ public interface LocationJpaRepository extends JpaRepository<LocationEntity, Lon
   /**
    * Soft Deleted Location 배치 삭제 (User IDs 기반)
    *
-   * <p>⚠️ deleted_at IS NOT NULL인 Location만 삭제 (which is in Soft-deleted status)
+   * <p>deleted_at IS NOT NULL인 Location만 삭제 (which is in Soft-deleted status)
    *
    * @param userIds 삭제할 User ID 목록
    * @return 삭제된 개수

@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.location.api.dto.*;
 import momzzangseven.mztkbe.modules.location.application.dto.*;
 import momzzangseven.mztkbe.modules.location.application.port.in.DeleteLocationUseCase;
+import momzzangseven.mztkbe.modules.location.application.port.in.GetMyLocationsUseCase;
 import momzzangseven.mztkbe.modules.location.application.port.in.RegisterLocationUseCase;
 import momzzangseven.mztkbe.modules.location.application.port.in.VerifyLocationUseCase;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,31 @@ public class LocationController {
   private final RegisterLocationUseCase registerLocationUseCase;
   private final VerifyLocationUseCase verifyLocationUseCase;
   private final DeleteLocationUseCase deleteLocationUseCase;
+  private final GetMyLocationsUseCase getMyLocationsUseCase;
+
+  /**
+   * 내 위치 목록 조회 API
+   *
+   * <p>GET /users/me/locations
+   *
+   * @param userId 인증된 사용자 ID (@AuthenticationPrincipal)
+   * @return 사용자가 등록한 위치 목록
+   */
+  @GetMapping("/users/me/locations")
+  public ResponseEntity<ApiResponse<GetMyLocationsResponseDTO>> getMyLocations(
+      @AuthenticationPrincipal Long userId) {
+
+    // userId null validation
+    userId = requireUserId(userId);
+
+    // Execute Use Case
+    GetMyLocationsResult result = getMyLocationsUseCase.execute(userId);
+
+    // Convert to Response DTO
+    GetMyLocationsResponseDTO response = GetMyLocationsResponseDTO.from(result);
+
+    return ResponseEntity.ok(ApiResponse.success(response));
+  }
 
   /** 위치 등록 POST /users/me/locations/register */
   @PostMapping("/users/me/locations/register")
