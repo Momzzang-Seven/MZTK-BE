@@ -12,4 +12,6 @@ public interface TagLinkUseCase {
   void linkTagsToPost(Long postId, List<String> tagNames);
 
   void updateTags(Long postId, List<String> tagNames);
+
+  void deleteTagsByPostId(Long postId);
 }
