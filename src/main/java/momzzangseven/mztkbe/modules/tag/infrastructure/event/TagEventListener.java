@@ -9,10 +9,10 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class TagEventListener {
-    private final TagLinkUseCase tagLinkUseCase;
+  private final TagLinkUseCase tagLinkUseCase;
 
-    @EventListener
-    public void handlePostDeletedEvent(PostDeletedEvent event) {
-        tagLinkUseCase.deleteTagsByPostId(event.postId());
-    }
+  @EventListener
+  public void handlePostDeletedEvent(PostDeletedEvent event) {
+    tagLinkUseCase.deleteTagsByPostId(event.postId());
+  }
 }
