@@ -75,7 +75,7 @@ public class CommentService
 
   // 3-2. 삭제 (Delete - 게시글 삭제 이벤트 수신용)
   @Override
-  @Transactional
+  @Transactional(readOnly = false)
   public void deleteCommentsByPostId(Long postId) {
     // 해당 게시글의 모든 댓글 일괄 Soft Delete
     deleteCommentPort.deleteAllByPostId(postId);

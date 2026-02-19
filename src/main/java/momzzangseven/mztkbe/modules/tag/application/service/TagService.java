@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.tag.application.service;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.tag.application.port.in.TagLinkUseCase;
+import momzzangseven.mztkbe.modules.tag.application.port.in.ManageTagsUseCase;
 import momzzangseven.mztkbe.modules.tag.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.tag.application.port.out.SaveTagPort;
 import momzzangseven.mztkbe.modules.tag.domain.model.Tag;
@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true) // 기본적으로 읽기 전용
-public class TagService implements TagLinkUseCase {
+public class TagService implements ManageTagsUseCase {
 
   private final LoadTagPort loadTagPort; // DB 조회용 포트
   private final SaveTagPort saveTagPort; // DB 저장용 포트
