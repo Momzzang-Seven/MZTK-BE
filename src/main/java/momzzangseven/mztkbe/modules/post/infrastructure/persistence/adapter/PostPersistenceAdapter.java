@@ -42,7 +42,8 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
 
   @Override
   public void deletePost(Post post) {
-    postJpaRepository.delete(PostEntity.fromDomain(post));
+    postJpaRepository.deleteById(post.getId());
+    postJpaRepository.flush();
   }
 
   @Override

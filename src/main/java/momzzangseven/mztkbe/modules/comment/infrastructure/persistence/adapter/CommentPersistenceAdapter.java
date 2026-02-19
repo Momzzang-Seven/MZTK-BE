@@ -69,7 +69,7 @@ public class CommentPersistenceAdapter
   // ========== DeleteCommentPort Implementation ==========
 
   @Override
-  @Transactional
+  @Transactional(readOnly = false)
   public void deleteAllByPostId(Long postId) {
     commentRepository.deleteAllByPostId(postId);
   }

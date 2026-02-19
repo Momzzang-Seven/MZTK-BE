@@ -11,20 +11,20 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
-import momzzangseven.mztkbe.modules.tag.application.port.in.TagLinkUseCase;
+import momzzangseven.mztkbe.modules.tag.application.port.in.ManageTagsUseCase;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class PostTagLinkAdapter implements LoadTagPort, LinkTagPort {
 
-  private final TagLinkUseCase tagLinkUseCase;
+  private final ManageTagsUseCase manageTagsUseCase;
   private final JPAQueryFactory queryFactory;
 
   // 1. 게시글-태그 연결 (저장)
   @Override
   public void linkTagsToPost(Long postId, List<String> tagNames) {
-    tagLinkUseCase.linkTagsToPost(postId, tagNames);
+    manageTagsUseCase.linkTagsToPost(postId, tagNames);
   }
 
   // 2. 태그 이름으로 게시글 ID 찾기 (검색용)
@@ -73,6 +73,6 @@ public class PostTagLinkAdapter implements LoadTagPort, LinkTagPort {
 
   @Override
   public void updateTags(Long postId, List<String> tagNames) {
-    tagLinkUseCase.updateTags(postId, tagNames);
+    manageTagsUseCase.updateTags(postId, tagNames);
   }
 }
