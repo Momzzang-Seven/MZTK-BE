@@ -186,16 +186,34 @@ jobs:
             
             # 배포 확인
             echo "⏳ Waiting for application to start..."
-            sleep 15
             
             # 컨테이너 상태 확인
             docker ps | grep mztk-prod
+
+            # 초기 20초 sleep
+            sleep 20
             
-            # 헬스체크
-            curl -f http://localhost:8080/actuator/health || {
-              echo "❌ Health check failed!"
-              docker logs --tail 50 mztk-prod
-              exit 1
-            }
+            # 헬스체크 (재시도 로직)
+            echo "🏥 Starting health check (max 60 seconds)..."
+            for i in {1..12}; do
+              echo "Attempt $i/12..."
+              if curl -f -s http://localhost:8080/actuator/health > /dev/null 2>&1; then
+                echo "✅ Health check passed!"
+                curl http://localhost:8080/actuator/health
+                break
+              fi
+              
+              if [ $i -eq 12 ]; then
+                echo "❌ Health check failed after 60 seconds!"
+                echo "📋 Container status:"
+                docker ps | grep mztk-prod
+                echo "📋 Last 50 lines of logs:"
+                docker logs --tail 50 mztk-prod
+                exit 1
+              fi
+              
+              echo "Waiting 5 seconds before retry..."
+              sleep 5
+            done
             
             echo "✅ Deployment successful!"
