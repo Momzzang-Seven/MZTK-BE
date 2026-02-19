@@ -18,7 +18,9 @@ public class TagService implements TagLinkUseCase {
   private final LoadTagPort loadTagPort; // DB 조회용 포트
   private final SaveTagPort saveTagPort; // DB 저장용 포트
 
-  /** [기능 1] 게시글 생성/수정 시 태그 연결 (Write) - 기존에 없는 태그는 새로 생성 - 게시글 ID와 태그 ID를 매핑 테이블에 저장 */
+  /**
+   * [기능 1] 게시글 생성/수정 시 태그 연결 (Write) - 기존에 없는 태그는 새로 생성 - 게시글 ID와 태그 ID를 매핑 테이블에 저장
+   */
   @Override
   @Transactional // 쓰기 작업이 있으므로 트랜잭션 필요
   public void linkTagsToPost(Long postId, List<String> tagNames) {
@@ -35,10 +37,10 @@ public class TagService implements TagLinkUseCase {
 
     // 3. 존재하지 않는 새 태그 생성
     List<Tag> newTags =
-        distinctNames.stream()
-            .filter(name -> !existingNames.contains(name))
-            .map(Tag::create)
-            .toList();
+            distinctNames.stream()
+                    .filter(name -> !existingNames.contains(name))
+                    .map(Tag::create)
+                    .toList();
 
     // 4. 새 태그 저장 (ID 생성됨)
     List<Tag> savedNewTags = new ArrayList<>();
@@ -65,5 +67,11 @@ public class TagService implements TagLinkUseCase {
     if (tagNames != null && !tagNames.isEmpty()) {
       this.linkTagsToPost(postId, tagNames);
     }
+  }
+
+  @Override
+  @Transactional
+  public void deleteTagsByPostId(Long postId) {
+    saveTagPort.deleteTagsByPostId(postId);
   }
 }
