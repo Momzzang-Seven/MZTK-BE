@@ -104,12 +104,13 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       throw new Web3TransferException(ErrorCode.AUTH_EXPIRED, false);
     }
 
-    Web3TransactionEntity existingByReference =
-        transactionRepository
-            .findByReferenceTypeAndReferenceId(prepare.getReferenceType(), prepare.getReferenceId())
-            .orElse(null);
-    if (existingByReference != null) {
-      throw new Web3TransferException(ErrorCode.IDEMPOTENCY_CONFLICT, false);
+    Web3TransactionEntity existingByIdempotency =
+        transactionRepository.findByIdempotencyKey(prepare.getIdempotencyKey()).orElse(null);
+    if (existingByIdempotency != null) {
+      prepare.setStatus(TransferPrepareStatus.SUBMITTED);
+      prepare.setSubmittedTxId(existingByIdempotency.getId());
+      prepareRepository.save(prepare);
+      return toResult(existingByIdempotency);
     }
 
     assertDelegateAllowlisted(prepare);

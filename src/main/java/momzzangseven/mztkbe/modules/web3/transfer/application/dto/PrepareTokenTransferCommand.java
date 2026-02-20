@@ -2,11 +2,11 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.dto;
 
 import java.math.BigInteger;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 
 public record PrepareTokenTransferCommand(
     Long userId,
-    TokenTransferReferenceType referenceType,
+    DomainReferenceType domainType,
     String referenceId,
     Long toUserId,
     BigInteger amountWei) {
@@ -19,8 +19,8 @@ public record PrepareTokenTransferCommand(
     if (userId == null || userId <= 0) {
       throw new Web3InvalidInputException("userId must be positive");
     }
-    if (referenceType == null) {
-      throw new Web3InvalidInputException("referenceType is required");
+    if (domainType == null) {
+      throw new Web3InvalidInputException("domainType is required");
     }
     if (referenceId == null || referenceId.isBlank()) {
       throw new Web3InvalidInputException("referenceId is required");
@@ -34,12 +34,8 @@ public record PrepareTokenTransferCommand(
     if (amountWei.compareTo(MAX_TRANSFER_WEI) > 0) {
       throw new Web3InvalidInputException("amountWei exceeds max transfer limit");
     }
-    if (referenceType == TokenTransferReferenceType.USER_TO_USER
-        && (toUserId == null || toUserId <= 0)) {
-      throw new Web3InvalidInputException("toUserId is required for USER_TO_USER");
-    }
-    if (referenceType == TokenTransferReferenceType.USER_TO_SERVER && toUserId != null) {
-      throw new Web3InvalidInputException("toUserId must be null for USER_TO_SERVER");
+    if (toUserId == null || toUserId <= 0) {
+      throw new Web3InvalidInputException("toUserId must be positive");
     }
   }
 }
