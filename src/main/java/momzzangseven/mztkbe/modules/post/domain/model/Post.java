@@ -8,15 +8,18 @@ import lombok.Getter;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 
 @Getter
+@Builder(toBuilder = true)
 public class Post {
   private final Long id;
   private final Long userId;
   private final PostType type;
-  private String title;
-  private String content;
-  private List<String> imageUrls;
-  private Long reward;
-  private Boolean isSolved;
+  private final String title;
+  private final String content;
+  private final List<String> imageUrls;
+  private final Long reward;
+  private final Boolean isSolved;
+  private final List<String> tags;
+
   private final LocalDateTime createdAt;
   private final LocalDateTime updatedAt;
 
@@ -30,6 +33,7 @@ public class Post {
       List<String> imageUrls,
       Long reward,
       Boolean isSolved,
+      List<String> tags,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
     this.id = id;
@@ -40,6 +44,7 @@ public class Post {
     this.imageUrls = imageUrls != null ? imageUrls : new ArrayList<>();
     this.reward = reward;
     this.isSolved = isSolved;
+    this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }
@@ -50,7 +55,8 @@ public class Post {
       String title,
       String content,
       Long reward,
-      List<String> imageUrls) {
+      List<String> imageUrls,
+      List<String> tags) {
 
     if (userId == null) throw new IllegalArgumentException("작성자 ID는 필수입니다.");
     if (type == null) throw new IllegalArgumentException("게시글 타입은 필수입니다.");
@@ -73,6 +79,7 @@ public class Post {
         .reward(reward)
         .imageUrls(imageUrls != null ? imageUrls : new ArrayList<>())
         .isSolved(false)
+        .tags(tags != null ? tags : new ArrayList<>())
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();
@@ -84,14 +91,41 @@ public class Post {
     }
   }
 
-  public void update(String title, String content, List<String> imageUrls) {
-    if (title == null || title.isBlank()) throw new IllegalArgumentException("제목을 입력해주세요.");
-    if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
+  public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
+    var builder = this.toBuilder();
+    boolean isUpdated = false;
 
-    this.title = title;
-    this.content = content;
-    if (imageUrls != null) {
-      this.imageUrls = imageUrls;
+    if (title != null) {
+      if (title.isBlank()) throw new IllegalArgumentException("수정할 제목은 비워둘 수 없습니다.");
+      builder.title(title);
+      isUpdated = true;
     }
+
+    if (content != null) {
+      if (content.isBlank()) throw new IllegalArgumentException("수정할 내용은 비워둘 수 없습니다.");
+      builder.content(content);
+      isUpdated = true;
+    }
+
+    if (imageUrls != null) {
+      builder.imageUrls(imageUrls);
+      isUpdated = true;
+    }
+
+    if (tags != null) {
+      builder.tags(tags);
+      isUpdated = true;
+    }
+
+    if (isUpdated) {
+      builder.updatedAt(LocalDateTime.now());
+      return builder.build();
+    }
+
+    return this;
+  }
+
+  public Post withTags(List<String> tags) {
+    return this.toBuilder().tags(tags != null ? tags : new ArrayList<>()).build();
   }
 }
