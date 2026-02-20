@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTr
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.resolver.DomainRewardResolver;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
@@ -61,6 +62,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   @Transactional
   public PrepareTokenTransferResult execute(PrepareTokenTransferCommand command) {
     validate(command);
+    assertSupportedForUserPrepare(command);
 
     String idempotencyKey =
         TokenTransferIdempotencyKeyFactory.create(
@@ -130,6 +132,19 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
       throw new Web3InvalidInputException("command is required");
     }
     command.validate();
+  }
+
+  private void assertSupportedForUserPrepare(PrepareTokenTransferCommand command) {
+    if (command.domainType().isUserPrepareSupported()) {
+      return;
+    }
+    if (command.domainType() == DomainReferenceType.LEVEL_UP_REWARD) {
+      throw new Web3InvalidInputException(
+          "LEVEL_UP_REWARD must use server-internal flow, not /users/me/token-transfers/prepare");
+    }
+    throw new Web3InvalidInputException(
+        "domainType is not supported by /users/me/token-transfers/prepare: "
+            + command.domainType().name());
   }
 
   private DomainRewardResolver resolveResolver(PrepareTokenTransferCommand command) {
