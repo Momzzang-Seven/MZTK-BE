@@ -33,6 +33,13 @@ spring:
       write-dates-as-timestamps: false
     time-zone: Asia/Seoul
 
+info:
+  app:
+    name: ${APP_NAME:MZTK-BE}
+    version: ${APP_VERSION:0.0.1-SNAPSHOT}
+    description: ${APP_DESCRIPTION:MZTK-BE Backend Service}
+    environment: ${APP_ENVIRONMENT:local}
+
 security:
   cors:
     allowed-origins:
