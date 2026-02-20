@@ -32,12 +32,12 @@ public class PostTagLinkAdapter implements LoadTagPort, LinkTagPort {
   public List<Long> findPostIdsByTagName(String tagName) {
     String searchTagName = tagName.trim().toLowerCase();
     return queryFactory
-            .select(postTagEntity.postId)
-            .from(tagEntity)
-            .join(postTagEntity)
-            .on(tagEntity.id.eq(postTagEntity.tagId))
-            .where(tagEntity.name.eq(searchTagName))
-            .fetch();
+        .select(postTagEntity.postId)
+        .from(tagEntity)
+        .join(postTagEntity)
+        .on(tagEntity.id.eq(postTagEntity.tagId))
+        .where(tagEntity.name.eq(searchTagName))
+        .fetch();
   }
 
   // 3. 단건 조회 메서드
