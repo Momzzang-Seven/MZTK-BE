@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.token.application.service;
 
 import java.util.Locale;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
@@ -12,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasu
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter.TreasuryKeyCipher;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.crypto.Credentials;
@@ -25,6 +27,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   private final SaveTreasuryKeyPort saveTreasuryKeyPort;
   private final RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
   private final RewardTokenProperties rewardTokenProperties;
+  private final Eip7702Properties eip7702Properties;
 
   @Override
   @Transactional
@@ -70,7 +73,16 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     if (resolved == null || resolved.isBlank()) {
       throw new Web3InvalidInputException("walletAlias is required");
     }
-    return resolved.trim();
+    String normalized = resolved.trim();
+    Set<String> allowedAliases =
+        Set.of(
+            rewardTokenProperties.getTreasury().getWalletAlias(),
+            eip7702Properties.getSponsor().getWalletAlias());
+    if (!allowedAliases.contains(normalized)) {
+      throw new Web3InvalidInputException(
+          "walletAlias must be configured in application.yml: " + normalized);
+    }
+    return normalized;
   }
 
   private String normalizePrivateKey(String rawPrivateKey) {
