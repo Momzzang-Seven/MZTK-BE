@@ -1,23 +1,21 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.resolver;
 
-import java.math.BigInteger;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
-import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import org.springframework.stereotype.Component;
 
-/** Resolves QUESTION_REWARD from posts SSOT. */
+/** Resolves QUESTION_REWARD from intent SSOT registered by acceptance domain. */
 @Component
 @RequiredArgsConstructor
 public class QuestionRewardResolver implements DomainRewardResolver {
 
-  private final PostJpaRepository postJpaRepository;
-  private final RewardTokenProperties rewardTokenProperties;
+  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
 
   @Override
   public boolean supports(DomainReferenceType type) {
@@ -26,61 +24,55 @@ public class QuestionRewardResolver implements DomainRewardResolver {
 
   @Override
   public ResolvedReward resolve(Long requesterId, String referenceId) {
-    Long answerCommentId = parseAnswerCommentId(referenceId);
-    PostJpaRepository.QuestionRewardSourceSnapshot source =
-        postJpaRepository
-            .findQuestionRewardSourceByAnswerCommentId(answerCommentId)
+    Long postId = parsePostId(referenceId);
+    QuestionRewardIntentEntity intent =
+        questionRewardIntentJpaRepository
+            .findByPostId(postId)
             .orElseThrow(
                 () ->
                     new Web3InvalidInputException(
-                        "question reward source not found for answer comment: " + answerCommentId));
+                        "question reward intent not found for post: " + postId));
 
-    if (!PostType.QUESTION.name().equals(source.getPostType())) {
-      throw new Web3InvalidInputException("reference post is not QUESTION type");
-    }
-    if (isFlagOn(source.getPostSolved())) {
+    if (intent.getStatus() == QuestionRewardIntentStatus.SUCCEEDED) {
       throw new Web3InvalidInputException("question reward is already settled for this post");
     }
-    if (source.getPostOwnerUserId() == null || source.getPostOwnerUserId() <= 0) {
-      throw new Web3InvalidInputException("question post has invalid owner userId");
+    if (intent.getStatus() == QuestionRewardIntentStatus.SUBMITTED) {
+      throw new Web3InvalidInputException("question reward is already in submitted state");
     }
-    if (!Objects.equals(requesterId, source.getPostOwnerUserId())) {
+    if (intent.getStatus() == QuestionRewardIntentStatus.CANCELED) {
+      throw new Web3InvalidInputException("question reward intent is canceled");
+    }
+    if (intent.getStatus() == QuestionRewardIntentStatus.FAILED_ONCHAIN) {
+      throw new Web3InvalidInputException("question reward failed onchain; re-register intent");
+    }
+    if (intent.getFromUserId() == null || intent.getFromUserId() <= 0) {
+      throw new Web3InvalidInputException("question reward intent has invalid fromUserId");
+    }
+    if (!Objects.equals(requesterId, intent.getFromUserId())) {
       throw new Web3InvalidInputException("only question owner can prepare question reward");
     }
-    if (source.getAnswerWriterUserId() == null || source.getAnswerWriterUserId() <= 0) {
+    if (intent.getToUserId() == null || intent.getToUserId() <= 0) {
       throw new Web3InvalidInputException("accepted answer has invalid writer userId");
     }
-    if (isFlagOn(source.getAnswerDeleted())) {
-      throw new Web3InvalidInputException("accepted answer comment is deleted");
-    }
-    if (source.getReward() == null || source.getReward() <= 0) {
-      throw new Web3InvalidInputException("question post has invalid reward amount");
+    if (intent.getAmountWei() == null || intent.getAmountWei().signum() <= 0) {
+      throw new Web3InvalidInputException("question reward intent has invalid amountWei");
     }
 
-    BigInteger amountWei =
-        BigInteger.valueOf(source.getReward())
-            .multiply(BigInteger.TEN.pow(Math.max(0, rewardTokenProperties.getDecimals())));
-
-    return new ResolvedReward(source.getAnswerWriterUserId(), amountWei);
+    return new ResolvedReward(intent.getToUserId(), intent.getAmountWei());
   }
 
-  private boolean isFlagOn(Integer flag) {
-    return flag != null && flag != 0;
-  }
-
-  private Long parseAnswerCommentId(String referenceId) {
+  private Long parsePostId(String referenceId) {
     if (referenceId == null || referenceId.isBlank()) {
       throw new Web3InvalidInputException("referenceId is required");
     }
     try {
       long parsed = Long.parseLong(referenceId);
       if (parsed <= 0) {
-        throw new Web3InvalidInputException(
-            "referenceId must be positive numeric answer comment id");
+        throw new Web3InvalidInputException("referenceId must be positive numeric post id");
       }
       return parsed;
     } catch (NumberFormatException e) {
-      throw new Web3InvalidInputException("referenceId must be numeric answer comment id");
+      throw new Web3InvalidInputException("referenceId must be numeric post id");
     }
   }
 }
