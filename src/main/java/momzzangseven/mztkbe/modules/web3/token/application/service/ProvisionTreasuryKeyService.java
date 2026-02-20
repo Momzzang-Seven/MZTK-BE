@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTrea
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter.TreasuryKeyCipher;
+import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.crypto.Credentials;
@@ -23,6 +24,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   private final TreasuryKeyCipher treasuryKeyCipher;
   private final SaveTreasuryKeyPort saveTreasuryKeyPort;
   private final RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
+  private final RewardTokenProperties rewardTokenProperties;
 
   @Override
   @Transactional
@@ -31,8 +33,10 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       targetType = "TREASURY_KEY",
       operatorId = "#operatorId",
       targetId = "#result != null ? #result.treasuryAddress() : null")
-  public ProvisionTreasuryKeyResult execute(Long operatorId, String rawPrivateKey) {
+  public ProvisionTreasuryKeyResult execute(
+      Long operatorId, String walletAlias, String rawPrivateKey) {
     validateOperatorId(operatorId);
+    String resolvedWalletAlias = resolveWalletAlias(walletAlias);
     String treasuryAddress = null;
 
     try {
@@ -42,7 +46,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       String encryptionKeyB64 = treasuryKeyCipher.generateKeyB64();
       String encrypted = treasuryKeyCipher.encrypt(normalizedPrivateKey, encryptionKeyB64);
 
-      saveTreasuryKeyPort.upsert(treasuryAddress, encrypted);
+      saveTreasuryKeyPort.upsert(resolvedWalletAlias, treasuryAddress, encrypted);
 
       recordAudit(operatorId, treasuryAddress, true, null);
 
@@ -57,6 +61,16 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     if (operatorId == null || operatorId <= 0) {
       throw new Web3InvalidInputException("operatorId must be positive");
     }
+  }
+
+  private String resolveWalletAlias(String walletAlias) {
+    String configuredDefaultAlias = rewardTokenProperties.getTreasury().getWalletAlias();
+    String resolved =
+        (walletAlias == null || walletAlias.isBlank()) ? configuredDefaultAlias : walletAlias;
+    if (resolved == null || resolved.isBlank()) {
+      throw new Web3InvalidInputException("walletAlias is required");
+    }
+    return resolved.trim();
   }
 
   private String normalizePrivateKey(String rawPrivateKey) {

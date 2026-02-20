@@ -6,7 +6,7 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 /** Port for loading and decrypting treasury key material. */
 public interface LoadTreasuryKeyPort {
-  Optional<TreasuryKeyMaterial> load();
+  Optional<TreasuryKeyMaterial> loadByAlias(String walletAlias, String keyEncryptionKeyB64);
 
   record TreasuryKeyMaterial(String treasuryAddress, String privateKeyHex) {
 
