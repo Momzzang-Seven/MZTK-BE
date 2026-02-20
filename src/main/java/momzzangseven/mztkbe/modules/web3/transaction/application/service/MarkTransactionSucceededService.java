@@ -12,7 +12,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransac
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.CsOverrideAuditDetail;
@@ -29,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarkTransactionSucceededService implements MarkTransactionSucceededUseCase {
 
   private final LoadTransactionPort loadTransactionPort;
-  private final UpdateTransactionPort updateTransactionPort;
+  private final TransactionOutcomePublisher transactionOutcomePublisher;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
   private final Web3ContractPort web3ContractPort;
 
@@ -68,8 +67,14 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
           "receipt proof is required (receipt.status == 1)");
     }
 
-    updateTransactionPort.updateStatus(
-        command.transactionId(), Web3TxStatus.SUCCEEDED, command.txHash(), null);
+    transactionOutcomePublisher.markSucceededAndPublish(
+        command.transactionId(),
+        snapshot.idempotencyKey(),
+        snapshot.referenceType(),
+        snapshot.referenceId(),
+        snapshot.fromUserId(),
+        snapshot.toUserId(),
+        command.txHash());
     recordTransactionAuditPort.record(
         new RecordTransactionAuditPort.AuditCommand(
             command.transactionId(),

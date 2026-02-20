@@ -33,6 +33,7 @@ public class RewardTokenProperties {
   @Getter
   @Setter
   public static class Treasury {
+    @NotBlank private String walletAlias = "reward-treasury";
     private String keyEncryptionKeyB64;
     private String treasuryAddress;
     private Provisioning provisioning = new Provisioning();

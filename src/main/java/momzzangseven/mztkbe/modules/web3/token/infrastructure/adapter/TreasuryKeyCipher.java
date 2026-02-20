@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.token.TokenEncryptionException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.AesGcmCipher;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import org.springframework.stereotype.Component;
 
 /** AES-256-GCM cipher for treasury private key payloads. */
@@ -13,18 +12,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TreasuryKeyCipher {
 
-  private final RewardTokenProperties rewardTokenProperties;
   private final AesGcmCipher aesGcmCipher;
-
-  public String encryptWithConfiguredKey(String plaintext) {
-    String keyB64 = rewardTokenProperties.getTreasury().getKeyEncryptionKeyB64();
-    return encrypt(plaintext, keyB64);
-  }
-
-  public String decryptWithConfiguredKey(String encrypted) {
-    String keyB64 = rewardTokenProperties.getTreasury().getKeyEncryptionKeyB64();
-    return decrypt(encrypted, keyB64);
-  }
 
   public String encrypt(String plaintext, String keyB64) {
     if (plaintext == null || plaintext.isBlank()) {

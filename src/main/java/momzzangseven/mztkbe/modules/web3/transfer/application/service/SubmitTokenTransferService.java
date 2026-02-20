@@ -132,7 +132,9 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
     LoadTreasuryKeyPort.TreasuryKeyMaterial sponsorKey =
         loadTreasuryKeyPort
-            .load()
+            .loadByAlias(
+                eip7702Properties.getSponsor().getWalletAlias(),
+                eip7702Properties.getSponsor().getKeyEncryptionKeyB64())
             .orElseThrow(() -> new Web3InvalidInputException("sponsor signer key is missing"));
 
     String sponsorAddress = EvmAddress.of(sponsorKey.treasuryAddress()).value();
