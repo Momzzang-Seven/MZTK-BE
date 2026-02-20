@@ -9,11 +9,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuesti
  * <p>Publish from acceptance domain after commit.
  */
 public record QuestionRewardIntentRequestedEvent(
-    Long postId,
-    Long acceptedCommentId,
-    Long fromUserId,
-    Long toUserId,
-    BigInteger amountWei) {
+    Long postId, Long acceptedCommentId, Long fromUserId, Long toUserId, BigInteger amountWei) {
 
   public RegisterQuestionRewardIntentCommand toCommand() {
     return new RegisterQuestionRewardIntentCommand(

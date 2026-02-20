@@ -38,8 +38,7 @@ public class QuestionRewardFailureCompensator implements DomainTransferFailureCo
             postId,
             QuestionRewardIntentStatus.FAILED_ONCHAIN,
             EnumSet.of(
-                QuestionRewardIntentStatus.PREPARE_REQUIRED,
-                QuestionRewardIntentStatus.SUBMITTED));
+                QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
 
     if (updated > 0) {
       log.info(

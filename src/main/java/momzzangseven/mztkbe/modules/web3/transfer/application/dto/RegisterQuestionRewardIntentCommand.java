@@ -6,15 +6,11 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 /**
  * Command for registering/updating QUESTION_REWARD intent from acceptance domain.
  *
- * <p>Designed to be called by other domain modules (event handler or direct service call)
- * before user-facing prepare/submit.
+ * <p>Designed to be called by other domain modules (event handler or direct service call) before
+ * user-facing prepare/submit.
  */
 public record RegisterQuestionRewardIntentCommand(
-    Long postId,
-    Long acceptedCommentId,
-    Long fromUserId,
-    Long toUserId,
-    BigInteger amountWei) {
+    Long postId, Long acceptedCommentId, Long fromUserId, Long toUserId, BigInteger amountWei) {
 
   public void validate() {
     if (postId == null || postId <= 0) {
