@@ -5,8 +5,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceT
 /** Business domain type for transfer preparation requests. */
 public enum DomainReferenceType {
   QUESTION_REWARD(TokenTransferReferenceType.USER_TO_USER),
-  POST_SPONSOR(TokenTransferReferenceType.USER_TO_USER),
-  ITEM_PURCHASE(TokenTransferReferenceType.USER_TO_SERVER),
   LEVEL_UP_REWARD(TokenTransferReferenceType.SERVER_TO_USER);
 
   private final TokenTransferReferenceType transferReferenceType;
@@ -21,5 +19,9 @@ public enum DomainReferenceType {
 
   public Web3ReferenceType toWeb3ReferenceType() {
     return transferReferenceType.toWeb3ReferenceType();
+  }
+
+  public boolean isUserPrepareSupported() {
+    return this == QUESTION_REWARD;
   }
 }

@@ -15,11 +15,7 @@ import org.springframework.stereotype.Component;
 public class UnsupportedDomainRewardResolver implements DomainRewardResolver {
 
   private static final Set<DomainReferenceType> UNSUPPORTED_TYPES =
-      EnumSet.of(
-          DomainReferenceType.QUESTION_REWARD,
-          DomainReferenceType.POST_SPONSOR,
-          DomainReferenceType.ITEM_PURCHASE,
-          DomainReferenceType.LEVEL_UP_REWARD);
+      EnumSet.of(DomainReferenceType.LEVEL_UP_REWARD);
 
   @Override
   public boolean supports(DomainReferenceType type) {
@@ -34,6 +30,7 @@ public class UnsupportedDomainRewardResolver implements DomainRewardResolver {
   @Override
   public ResolvedReward resolve(Long requesterId, String referenceId) {
     throw new Web3InvalidInputException(
-        "domain resolver is not available for this endpoint/domainType");
+        "domain resolver is not available for this endpoint/domainType"
+            + " (SERVER_TO_USER must use internal flow)");
   }
 }
