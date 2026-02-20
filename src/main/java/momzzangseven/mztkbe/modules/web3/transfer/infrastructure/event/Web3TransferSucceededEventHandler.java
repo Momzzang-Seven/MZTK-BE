@@ -28,8 +28,8 @@ public class Web3TransferSucceededEventHandler {
       return;
     }
 
-    Long postId = parseLongOrNull(event.referenceId());
-    if (postId == null) {
+    Long answerCommentId = parseLongOrNull(event.referenceId());
+    if (answerCommentId == null) {
       log.warn(
           "SUCCEEDED sync skipped: txId={}, invalid question referenceId={}",
           event.transactionId(),
@@ -37,19 +37,30 @@ public class Web3TransferSucceededEventHandler {
       return;
     }
 
+    Long postId = postJpaRepository.findPostIdByAnswerCommentId(answerCommentId).orElse(null);
+    if (postId == null) {
+      log.warn(
+          "SUCCEEDED sync skipped: txId={}, answerCommentId={} not found",
+          event.transactionId(),
+          answerCommentId);
+      return;
+    }
+
     int updatedRows = postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
     if (updatedRows > 0) {
       log.info(
-          "SUCCEEDED sync completed: txId={}, questionPostId={}, txHash={}",
+          "SUCCEEDED sync completed: txId={}, answerCommentId={}, questionPostId={}, txHash={}",
           event.transactionId(),
+          answerCommentId,
           postId,
           event.txHash());
       return;
     }
 
     log.info(
-        "SUCCEEDED sync no-op: txId={}, questionPostId={} (already solved or non-question)",
+        "SUCCEEDED sync no-op: txId={}, answerCommentId={}, questionPostId={} (already solved or non-question)",
         event.transactionId(),
+        answerCommentId,
         postId);
   }
 
