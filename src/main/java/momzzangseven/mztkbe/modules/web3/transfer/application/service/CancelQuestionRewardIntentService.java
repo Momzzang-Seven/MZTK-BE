@@ -6,9 +6,9 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CancelQuestionRewardIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CancelQuestionRewardIntentService implements CancelQuestionRewardIntentUseCase {
 
-  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
+  private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   @Override
   @Transactional
@@ -24,7 +24,7 @@ public class CancelQuestionRewardIntentService implements CancelQuestionRewardIn
     validate(command);
 
     QuestionRewardIntentEntity existing =
-        questionRewardIntentJpaRepository.findForUpdateByPostId(command.postId()).orElse(null);
+        questionRewardIntentPersistencePort.findForUpdateByPostId(command.postId()).orElse(null);
     if (existing == null) {
       return new CancelQuestionRewardIntentResult(command.postId(), null, false, false);
     }
@@ -41,7 +41,7 @@ public class CancelQuestionRewardIntentService implements CancelQuestionRewardIn
     }
 
     existing.setStatus(QuestionRewardIntentStatus.CANCELED);
-    QuestionRewardIntentEntity saved = questionRewardIntentJpaRepository.save(existing);
+    QuestionRewardIntentEntity saved = questionRewardIntentPersistencePort.save(existing);
     return new CancelQuestionRewardIntentResult(saved.getPostId(), saved.getStatus(), true, true);
   }
 

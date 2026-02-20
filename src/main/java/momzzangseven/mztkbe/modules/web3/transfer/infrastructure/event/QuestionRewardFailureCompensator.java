@@ -4,10 +4,10 @@ import java.util.EnumSet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.rollback.DomainTransferFailureCompensator;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class QuestionRewardFailureCompensator implements DomainTransferFailureCompensator {
 
-  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
+  private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   @Override
   public boolean supports(DomainReferenceType domainType) {
@@ -34,7 +34,7 @@ public class QuestionRewardFailureCompensator implements DomainTransferFailureCo
     }
 
     int updated =
-        questionRewardIntentJpaRepository.updateStatusIfCurrentIn(
+        questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
             postId,
             QuestionRewardIntentStatus.FAILED_ONCHAIN,
             EnumSet.of(

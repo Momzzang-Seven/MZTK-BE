@@ -3,11 +3,11 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.resolver;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import org.springframework.stereotype.Component;
 
 /** Resolves QUESTION_REWARD from intent SSOT registered by acceptance domain. */
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class QuestionRewardResolver implements DomainRewardResolver {
 
-  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
+  private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   @Override
   public boolean supports(DomainReferenceType type) {
@@ -26,7 +26,7 @@ public class QuestionRewardResolver implements DomainRewardResolver {
   public ResolvedReward resolve(Long requesterId, String referenceId) {
     Long postId = parsePostId(referenceId);
     QuestionRewardIntentEntity intent =
-        questionRewardIntentJpaRepository
+        questionRewardIntentPersistencePort
             .findByPostId(postId)
             .orElseThrow(
                 () ->
