@@ -7,8 +7,7 @@ public final class TokenTransferIdempotencyKeyFactory {
 
   private TokenTransferIdempotencyKeyFactory() {}
 
-  public static String create(
-      DomainReferenceType domainType, Long fromUserId, String referenceId) {
+  public static String create(DomainReferenceType domainType, Long fromUserId, String referenceId) {
     if (domainType == null) {
       throw new Web3InvalidInputException("domainType is required");
     }
