@@ -41,11 +41,20 @@ public class Web3TransferSucceededEventHandler {
       return;
     }
 
-    questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
-        postId,
-        QuestionRewardIntentStatus.SUCCEEDED,
-        EnumSet.of(
-            QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
+    int intentUpdated =
+        questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
+            postId,
+            QuestionRewardIntentStatus.SUCCEEDED,
+            EnumSet.of(
+                QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
+
+    if (!isIntentSettled(postId, intentUpdated)) {
+      log.warn(
+          "SUCCEEDED sync skipped post update due to unsettled intent: txId={}, questionPostId={}",
+          event.transactionId(),
+          postId);
+      return;
+    }
 
     int updatedRows = postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
     if (updatedRows > 0) {
@@ -84,5 +93,15 @@ public class Web3TransferSucceededEventHandler {
     } catch (NumberFormatException e) {
       return null;
     }
+  }
+
+  private boolean isIntentSettled(Long postId, int intentUpdated) {
+    if (intentUpdated > 0) {
+      return true;
+    }
+    return questionRewardIntentPersistencePort
+        .findByPostId(postId)
+        .map(intent -> intent.getStatus() == QuestionRewardIntentStatus.SUCCEEDED)
+        .orElse(false);
   }
 }

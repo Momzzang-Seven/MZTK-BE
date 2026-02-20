@@ -12,8 +12,7 @@ import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardToken
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionSucceededEvent;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.TransactionOutcomePublisher;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -22,7 +21,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -32,7 +30,7 @@ import org.springframework.stereotype.Component;
 public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
-  private final ApplicationEventPublisher eventPublisher;
+  private final TransactionOutcomePublisher transactionOutcomePublisher;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -41,7 +39,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
-      ApplicationEventPublisher eventPublisher,
+      TransactionOutcomePublisher transactionOutcomePublisher,
       RewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy) {
     super(
@@ -51,7 +49,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         rewardTokenProperties,
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
-    this.eventPublisher = eventPublisher;
+    this.transactionOutcomePublisher = transactionOutcomePublisher;
   }
 
   @Scheduled(fixedDelay = 1000L)
@@ -95,15 +93,26 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
     if (receipt.found()) {
       if (Boolean.TRUE.equals(receipt.success())) {
-        updateTransactionPort.updateStatus(
-            item.transactionId(), Web3TxStatus.SUCCEEDED, txHash, null);
+        transactionOutcomePublisher.markSucceededAndPublish(
+            item.transactionId(),
+            item.idempotencyKey(),
+            item.referenceType(),
+            item.referenceId(),
+            item.fromUserId(),
+            item.toUserId(),
+            txHash);
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
-        publishSucceededEvent(item, txHash);
       } else {
-        updateTransactionPort.updateStatus(
-            item.transactionId(), Web3TxStatus.FAILED_ONCHAIN, txHash, "RECEIPT_STATUS_0");
+        transactionOutcomePublisher.markFailedOnchainAndPublish(
+            item.transactionId(),
+            item.idempotencyKey(),
+            item.referenceType(),
+            item.referenceId(),
+            item.fromUserId(),
+            item.toUserId(),
+            txHash,
+            "RECEIPT_STATUS_0");
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.FAILED_ONCHAIN);
-        publishFailedOnchainEvent(item, txHash, "RECEIPT_STATUS_0");
       }
       return;
     }
@@ -118,51 +127,6 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     }
 
     scheduleNextPoll(item.transactionId());
-  }
-
-  private void publishSucceededEvent(
-      LoadTransactionWorkPort.TransactionWorkItem item, String txHash) {
-    try {
-      eventPublisher.publishEvent(
-          new Web3TransactionSucceededEvent(
-              item.transactionId(),
-              item.idempotencyKey(),
-              item.referenceType(),
-              item.referenceId(),
-              item.fromUserId(),
-              item.toUserId(),
-              txHash));
-    } catch (Exception e) {
-      log.error(
-          "Failed to publish SUCCEEDED event: txId={}, referenceType={}, referenceId={}",
-          item.transactionId(),
-          item.referenceType(),
-          item.referenceId(),
-          e);
-    }
-  }
-
-  private void publishFailedOnchainEvent(
-      LoadTransactionWorkPort.TransactionWorkItem item, String txHash, String failureReason) {
-    try {
-      eventPublisher.publishEvent(
-          new Web3TransactionFailedOnchainEvent(
-              item.transactionId(),
-              item.idempotencyKey(),
-              item.referenceType(),
-              item.referenceId(),
-              item.fromUserId(),
-              item.toUserId(),
-              txHash,
-              failureReason));
-    } catch (Exception e) {
-      log.error(
-          "Failed to publish FAILED_ONCHAIN event: txId={}, referenceType={}, referenceId={}",
-          item.transactionId(),
-          item.referenceType(),
-          item.referenceId(),
-          e);
-    }
   }
 
   private void scheduleNextPoll(Long transactionId) {

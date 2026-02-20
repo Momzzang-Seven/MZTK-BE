@@ -34,7 +34,7 @@ public class TransactionWorkPersistenceAdapter
           .map(code -> "'" + code + "'")
           .collect(Collectors.joining(","));
 
-  private static final String CLAIM_CREATED_SQL =
+  private static final String CLAIM_BY_STATUS_SQL =
       """
       SELECT id
       FROM web3_transactions
@@ -180,6 +180,11 @@ public class TransactionWorkPersistenceAdapter
             entity ->
                 new LoadTransactionPort.TransactionSnapshot(
                     entity.getId(),
+                    entity.getIdempotencyKey(),
+                    entity.getReferenceType(),
+                    entity.getReferenceId(),
+                    entity.getFromUserId(),
+                    entity.getToUserId(),
                     entity.getStatus(),
                     entity.getTxHash(),
                     entity.getFailureReason()));
@@ -249,25 +254,8 @@ public class TransactionWorkPersistenceAdapter
 
   @SuppressWarnings("unchecked")
   private List<Number> selectClaimableIds(Web3TxStatus status, int limit) {
-    if (status == Web3TxStatus.CREATED) {
-      return entityManager
-          .createNativeQuery(CLAIM_CREATED_SQL)
-          .setParameter("status", status.name())
-          .setParameter("limit", limit)
-          .getResultList();
-    }
-
     return entityManager
-        .createNativeQuery(
-            """
-            SELECT id
-            FROM web3_transactions
-            WHERE status = :status
-              AND (processing_until IS NULL OR processing_until < NOW())
-            ORDER BY id
-            LIMIT :limit
-            FOR UPDATE SKIP LOCKED
-            """)
+        .createNativeQuery(CLAIM_BY_STATUS_SQL)
         .setParameter("status", status.name())
         .setParameter("limit", limit)
         .getResultList();

@@ -40,6 +40,11 @@ public class CancelQuestionRewardIntentService implements CancelQuestionRewardIn
           existing.getPostId(), existing.getStatus(), true, false);
     }
 
+    if (existing.getStatus() == QuestionRewardIntentStatus.SUBMITTED) {
+      return new CancelQuestionRewardIntentResult(
+          existing.getPostId(), existing.getStatus(), true, false);
+    }
+
     existing.setStatus(QuestionRewardIntentStatus.CANCELED);
     QuestionRewardIntentEntity saved = questionRewardIntentPersistencePort.save(existing);
     return new CancelQuestionRewardIntentResult(saved.getPostId(), saved.getStatus(), true, true);

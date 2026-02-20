@@ -76,7 +76,12 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
-    var treasuryKey = loadTreasuryKeyPort.load().orElse(null);
+    var treasuryKey =
+        loadTreasuryKeyPort
+            .loadByAlias(
+                rewardTokenProperties.getTreasury().getWalletAlias(),
+                rewardTokenProperties.getTreasury().getKeyEncryptionKeyB64())
+            .orElse(null);
     if (treasuryKey == null) {
       items.forEach(
           item ->

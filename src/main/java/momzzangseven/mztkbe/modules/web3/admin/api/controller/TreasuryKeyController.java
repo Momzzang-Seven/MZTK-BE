@@ -34,7 +34,7 @@ public class TreasuryKeyController {
       @Valid @RequestBody ProvisionTreasuryKeyRequestDTO request) {
     ProvisionTreasuryKeyCommand command =
         new ProvisionTreasuryKeyCommand(
-            requireOperatorId(operatorId), request.treasuryPrivateKey());
+            requireOperatorId(operatorId), request.treasuryPrivateKey(), request.walletAlias());
     ProvisionTreasuryKeyResult result = provisionTreasuryKeyUseCase.execute(command);
     ProvisionTreasuryKeyResponseDTO response = ProvisionTreasuryKeyResponseDTO.from(result);
     return ResponseEntity.ok(ApiResponse.success(response));
