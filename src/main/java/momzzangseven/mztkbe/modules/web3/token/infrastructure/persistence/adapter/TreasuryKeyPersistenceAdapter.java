@@ -18,9 +18,9 @@ public class TreasuryKeyPersistenceAdapter implements LoadTreasuryKeyPort, SaveT
   private final TreasuryKeyCipher treasuryKeyCipher;
 
   @Override
-  public Optional<TreasuryKeyMaterial> loadByAlias(String walletAlias, String keyEncryptionKeyB64) {
+  public Optional<TreasuryKeyMaterial> loadByAlias(String walletAlias, String kekB64) {
     requireNonBlank(walletAlias, "walletAlias");
-    requireNonBlank(keyEncryptionKeyB64, "keyEncryptionKeyB64");
+    requireNonBlank(kekB64, "kekB64");
     return repository
         .findByWalletAlias(walletAlias)
         .map(
@@ -28,7 +28,7 @@ public class TreasuryKeyPersistenceAdapter implements LoadTreasuryKeyPort, SaveT
                 TreasuryKeyMaterial.of(
                     entity.getTreasuryAddress(),
                     treasuryKeyCipher.decrypt(
-                        entity.getTreasuryPrivateKeyEncrypted(), keyEncryptionKeyB64)));
+                        entity.getTreasuryPrivateKeyEncrypted(), kekB64)));
   }
 
   @Override
