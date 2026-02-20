@@ -27,11 +27,8 @@ public class TagService implements ManageTagsUseCase {
     }
 
     // 1. 중복 제거 및 공백 제거
-    List<String> distinctNames = tagNames.stream()
-            .map(String::trim)
-            .map(String::toLowerCase)
-            .distinct()
-            .toList();
+    List<String> distinctNames =
+        tagNames.stream().map(String::trim).map(String::toLowerCase).distinct().toList();
 
     // 2. 이미 DB에 존재하는 태그 조회
     List<Tag> existingTags = loadTagPort.loadTagsByNames(distinctNames);
