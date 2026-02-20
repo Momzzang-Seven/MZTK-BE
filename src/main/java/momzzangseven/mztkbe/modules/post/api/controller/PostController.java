@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.api.controller;
 
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
@@ -8,15 +9,13 @@ import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
-import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
-import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
-import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
-import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.dto.*;
+import momzzangseven.mztkbe.modules.post.application.port.in.*;
+import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,17 +30,24 @@ public class PostController {
   private final GetPostUseCase getPostUseCase;
   private final UpdatePostUseCase updatePostUseCase;
   private final DeletePostUseCase deletePostUseCase;
+  private final SearchPostsUseCase searchPostsUseCase;
 
   // [Create] 자유게시글 작성
   @PostMapping("/free")
   public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
+
     CreatePostCommand command =
         CreatePostCommand.of(
-            userId, request.title(), request.content(), PostType.FREE, null, request.imageUrls());
+            userId,
+            request.title(),
+            request.content(),
+            PostType.FREE,
+            0L,
+            request.imageUrls(),
+            request.tags());
 
-    CreatePostResult response = createPostUseCase.createPost(command);
-
+    CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
 
@@ -49,7 +55,22 @@ public class PostController {
   @GetMapping("/{postId}")
   public ResponseEntity<ApiResponse<PostResponse>> getPost(@PathVariable Long postId) {
     PostResult result = getPostUseCase.getPost(postId);
-    PostResponse response = PostResponse.from(result);
+    return ResponseEntity.ok(ApiResponse.success(PostResponse.from(result)));
+  }
+
+  // [Read] 게시글 목록 조회
+  @GetMapping
+  public ResponseEntity<ApiResponse<List<PostResponse>>> getPosts(
+      @RequestParam(required = false) PostType type,
+      @RequestParam(required = false) String tag,
+      @RequestParam(required = false) String search,
+      @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC)
+          Pageable pageable) {
+    PostSearchCondition condition =
+        PostSearchCondition.of(type, tag, search, pageable.getPageNumber(), pageable.getPageSize());
+
+    List<Post> posts = searchPostsUseCase.searchPosts(condition);
+    List<PostResponse> response = posts.stream().map(PostResponse::from).toList();
 
     return ResponseEntity.ok(ApiResponse.success(response));
   }
@@ -61,15 +82,13 @@ public class PostController {
       @PathVariable Long postId,
       @RequestBody @Valid UpdatePostRequest request) {
 
-    // 1. userId 검증 (Null이면 예외 발생)
     Long validatedUserId = requireUserId(userId);
 
     UpdatePostCommand command =
-        UpdatePostCommand.of(request.title(), request.content(), request.imageUrls());
+        UpdatePostCommand.of(
+            request.title(), request.content(), request.imageUrls(), request.tags());
 
-    // 2. 검증된 ID 사용
     updatePostUseCase.updatePost(validatedUserId, postId, command);
-
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
   }
 
@@ -78,12 +97,8 @@ public class PostController {
   public ResponseEntity<ApiResponse<Map<String, Long>>> deletePost(
       @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
 
-    // 1. userId 검증 (Null이면 예외 발생)
     Long validatedUserId = requireUserId(userId);
-
-    // 2. 검증된 ID 사용
     deletePostUseCase.deletePost(validatedUserId, postId);
-
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
   }
 
