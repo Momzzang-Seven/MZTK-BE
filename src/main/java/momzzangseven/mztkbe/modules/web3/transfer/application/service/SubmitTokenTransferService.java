@@ -44,6 +44,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702BatchCallAbi;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702TransactionEncoder;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
@@ -109,6 +110,8 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       prepareRepository.save(prepare);
       throw new Web3TransferException(ErrorCode.AUTH_EXPIRED, false);
     }
+
+    assertQuestionRewardIntentSubmittable(prepare);
 
     Web3TransactionEntity existingByIdempotency =
         transactionRepository.findByIdempotencyKey(prepare.getIdempotencyKey()).orElse(null);
@@ -287,6 +290,45 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       throw new Web3InvalidInputException("command is required");
     }
     command.validate();
+  }
+
+  private void assertQuestionRewardIntentSubmittable(Web3TransferPrepareEntity prepare) {
+    DomainReferenceType domainType =
+        TokenTransferIdempotencyKeyFactory.parseDomainType(prepare.getIdempotencyKey());
+    if (domainType != DomainReferenceType.QUESTION_REWARD) {
+      return;
+    }
+
+    Long postId = parseLongOrNull(prepare.getReferenceId());
+    if (postId == null) {
+      throw new Web3InvalidInputException("invalid question reward referenceId in prepare");
+    }
+
+    QuestionRewardIntentEntity intent =
+        questionRewardIntentJpaRepository
+            .findForUpdateByPostId(postId)
+            .orElseThrow(
+                () ->
+                    new Web3InvalidInputException(
+                        "question reward intent not found for post: " + postId));
+
+    if (intent.getStatus() == QuestionRewardIntentStatus.CANCELED) {
+      throw new Web3InvalidInputException("question reward intent is canceled");
+    }
+    if (intent.getStatus() == QuestionRewardIntentStatus.SUCCEEDED) {
+      throw new Web3InvalidInputException("question reward is already settled");
+    }
+
+    boolean acceptedCommentMatched =
+        prepare.getAcceptedCommentId() == null
+            || Objects.equals(intent.getAcceptedCommentId(), prepare.getAcceptedCommentId());
+    if (!acceptedCommentMatched
+        || !Objects.equals(intent.getToUserId(), prepare.getToUserId())
+        || intent.getAmountWei() == null
+        || intent.getAmountWei().compareTo(prepare.getAmountWei()) != 0) {
+      throw new Web3InvalidInputException(
+          "prepared transfer session is stale against latest question reward intent");
+    }
   }
 
   private void markQuestionRewardIntentSubmittedIfNeeded(Web3TransferPrepareEntity prepare) {

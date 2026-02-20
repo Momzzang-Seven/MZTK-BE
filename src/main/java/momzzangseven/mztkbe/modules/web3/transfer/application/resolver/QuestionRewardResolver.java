@@ -54,11 +54,15 @@ public class QuestionRewardResolver implements DomainRewardResolver {
     if (intent.getToUserId() == null || intent.getToUserId() <= 0) {
       throw new Web3InvalidInputException("accepted answer has invalid writer userId");
     }
+    if (intent.getAcceptedCommentId() == null || intent.getAcceptedCommentId() <= 0) {
+      throw new Web3InvalidInputException("question reward intent has invalid acceptedCommentId");
+    }
     if (intent.getAmountWei() == null || intent.getAmountWei().signum() <= 0) {
       throw new Web3InvalidInputException("question reward intent has invalid amountWei");
     }
 
-    return new ResolvedReward(intent.getToUserId(), intent.getAmountWei());
+    return new ResolvedReward(
+        intent.getToUserId(), intent.getAmountWei(), intent.getAcceptedCommentId());
   }
 
   private Long parsePostId(String referenceId) {
