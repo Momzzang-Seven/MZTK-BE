@@ -48,6 +48,9 @@ public class LocationEntity {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  @Column(name = "deleted_at", nullable = true)
+  private Instant deletedAt;
+
   @PrePersist
   protected void onCreate() {
     // initialize fields if not set in domain model
@@ -76,6 +79,7 @@ public class LocationEntity {
         .latitude(location.getCoordinate().latitude())
         .longitude(location.getCoordinate().longitude())
         .registeredAt(location.getRegisteredAt())
+        .deletedAt(location.getDeletedAt())
         .build();
   }
 
@@ -90,6 +94,7 @@ public class LocationEntity {
         .detailAddress(this.detailAddress)
         .coordinate(new GpsCoordinate(this.latitude, this.longitude))
         .registeredAt(this.registeredAt)
+        .deletedAt(this.deletedAt)
         .build();
   }
 }

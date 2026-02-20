@@ -2,7 +2,7 @@
 -- wallet_events 테이블 생성 (이벤트 히스토리)
 -- Application Layer에서 명시적으로 INSERT
 -- ============================================================
-CREATE TABLE wallet_events (
+CREATE TABLE IF NOT EXISTS wallet_events (
     id BIGSERIAL PRIMARY KEY,
     
     -- 지갑 정보

@@ -1,0 +1,189 @@
+name: Delayed Health Check (Post-Deployment)
+
+# 배포 워크플로우 완료 후 자동으로 트리거
+on:
+  workflow_run:
+    workflows: ["Deploy to Production"]
+    types:
+      - completed
+  
+  # 수동 실행도 가능
+  workflow_dispatch:
+    inputs:
+      wait_minutes:
+        description: '헬스체크 전 대기 시간 (분)'
+        required: false
+        default: '10'
+
+jobs:
+  delayed-health-check:
+    name: Delayed Health Check
+    # 배포가 성공한 경우에만 실행
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ============================================
+      # 배포 정보 확인
+      # ============================================
+      - name: Display deployment info
+        run: |
+          echo "🔍 Deployment Information"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Triggered by: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "Workflow: ${{ github.event.workflow_run.name }}"
+            echo "Conclusion: ${{ github.event.workflow_run.conclusion }}"
+            echo "Commit: ${{ github.event.workflow_run.head_sha }}"
+          fi
+          echo "Current time: $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      
+      # ============================================
+      # 10분 대기 (또는 사용자 지정 시간)
+      # ============================================
+      - name: Wait before health check
+        run: |
+          WAIT_MINUTES="${{ github.event.inputs.wait_minutes || '10' }}"
+          WAIT_SECONDS=$((WAIT_MINUTES * 60))
+          
+          echo "⏳ Waiting ${WAIT_MINUTES} minutes before delayed health check..."
+          echo "Start time: $(date '+%Y-%m-%d %H:%M:%S')"
+          echo "Expected end time: $(date -d "+${WAIT_MINUTES} minutes" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -v+${WAIT_MINUTES}M '+%Y-%m-%d %H:%M:%S')"
+          
+          sleep $WAIT_SECONDS
+          
+          echo "End time: $(date '+%Y-%m-%d %H:%M:%S')"
+      
+      # ============================================
+      # EC2 헬스체크
+      # ============================================
+      - name: Perform delayed health check
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_PUBLIC_IP }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "🏥 Performing delayed health check..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Current time: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo ""
+            
+            # ============================================
+            # 1. 컨테이너 존재 확인
+            # ============================================
+            echo "📦 1. Checking container existence..."
+            CONTAINER_ID=$(docker ps -q -f name=mztk-prod)
+            
+            if [ -z "$CONTAINER_ID" ]; then
+              echo "❌ Container 'mztk-prod' not found!"
+              echo "Available containers:"
+              docker ps -a
+              exit 1
+            fi
+            
+            echo "✅ Container found: $CONTAINER_ID"
+            echo ""
+            
+            # ============================================
+            # 2. 컨테이너 상태 확인
+            # ============================================
+            echo "📊 2. Container status:"
+            docker ps | grep mztk-prod
+            echo ""
+            
+            # 시작 시간 확인
+            STARTED_AT=$(docker inspect -f '{{.State.StartedAt}}' mztk-prod)
+            echo "Started at: $STARTED_AT"
+            
+            # Uptime 계산
+            UPTIME_SECONDS=$(docker inspect -f '{{.State.Running}}' mztk-prod)
+            echo "Running: $UPTIME_SECONDS"
+            echo ""
+            
+            # ============================================
+            # 3. Docker Health 상태 확인
+            # ============================================
+            echo "🏥 3. Docker health status:"
+            HEALTH_STATUS=$(docker inspect -f '{{.State.Health.Status}}' mztk-prod 2>/dev/null || echo "no-healthcheck")
+            echo "Health status: $HEALTH_STATUS"
+            
+            if [ "$HEALTH_STATUS" = "unhealthy" ]; then
+              echo "❌ Container is unhealthy!"
+              echo "Health logs:"
+              docker inspect -f '{{range .State.Health.Log}}{{.Output}}{{end}}' mztk-prod
+              exit 1
+            elif [ "$HEALTH_STATUS" = "starting" ]; then
+              echo "⚠️ Warning: Container is still in 'starting' state after 10+ minutes"
+            elif [ "$HEALTH_STATUS" = "healthy" ]; then
+              echo "✅ Container is healthy"
+            fi
+            echo ""
+            
+            # ============================================
+            # 4. HTTP Health Check
+            # ============================================
+            echo "🌐 4. HTTP health check:"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
+            
+            echo "HTTP Status Code: $HTTP_CODE"
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ HTTP health check passed!"
+              echo ""
+              echo "Response:"
+              curl -s http://localhost:8080/actuator/health | jq . || curl http://localhost:8080/actuator/health
+            else
+              echo "❌ HTTP health check failed!"
+              echo "Status code: $HTTP_CODE"
+              echo ""
+              echo "📋 Recent logs (last 50 lines):"
+              docker logs --tail 50 mztk-prod
+              exit 1
+            fi
+            echo ""
+            
+            # ============================================
+            # 5. 리소스 사용량 확인
+            # ============================================
+            echo "📊 5. Container resource usage:"
+            docker stats --no-stream mztk-prod
+            echo ""
+            
+            # ============================================
+            # 6. 최근 로그 확인 (에러 검색)
+            # ============================================
+            echo "📋 6. Checking for errors in recent logs..."
+            ERROR_COUNT=$(docker logs --since 10m mztk-prod 2>&1 | grep -i "error\|exception\|failed" | wc -l)
+            
+            if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "⚠️ Found $ERROR_COUNT error/exception messages in last 10 minutes"
+              echo "Recent errors:"
+              docker logs --since 10m mztk-prod 2>&1 | grep -i "error\|exception\|failed" | head -10
+            else
+              echo "✅ No errors found in recent logs"
+            fi
+            echo ""
+            
+            # ============================================
+            # 7. 데이터베이스 연결 확인
+            # ============================================
+            echo "🗄️ 7. Database connection check:"
+            DB_LOG=$(docker logs --tail 100 mztk-prod 2>&1 | grep -i "hikari" | tail -3)
+            echo "$DB_LOG"
+            
+            if echo "$DB_LOG" | grep -q "HikariPool.*Start completed"; then
+              echo "✅ Database connection pool is active"
+            else
+              echo "⚠️ Could not verify database connection"
+            fi
+            echo ""
+            
+            # ============================================
+            # 최종 결과
+            # ============================================
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "✅ Delayed health check completed successfully!"
+            echo "All systems operational after 10+ minutes"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
