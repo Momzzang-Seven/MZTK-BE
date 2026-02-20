@@ -8,9 +8,7 @@ public interface DomainRewardResolver {
 
   ResolvedReward resolve(Long requesterId, String referenceId);
 
-  /**
-   * Fallback resolvers are only used when no concrete domain resolver is available.
-   */
+  /** Fallback resolvers are only used when no concrete domain resolver is available. */
   default boolean isFallback() {
     return false;
   }

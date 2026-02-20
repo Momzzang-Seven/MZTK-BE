@@ -120,7 +120,8 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     scheduleNextPoll(item.transactionId());
   }
 
-  private void publishSucceededEvent(LoadTransactionWorkPort.TransactionWorkItem item, String txHash) {
+  private void publishSucceededEvent(
+      LoadTransactionWorkPort.TransactionWorkItem item, String txHash) {
     try {
       eventPublisher.publishEvent(
           new Web3TransactionSucceededEvent(
