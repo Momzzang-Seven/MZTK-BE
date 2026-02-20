@@ -5,16 +5,22 @@ import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public record CreatePostCommand(
-    Long userId, String title, String content, PostType type, Long reward, List<String> imageUrls) {
-  // 정적 팩토리 메서드
+    Long userId,
+    String title,
+    String content,
+    PostType type,
+    Long reward,
+    List<String> imageUrls,
+    List<String> tags) {
   public static CreatePostCommand of(
       Long userId,
       String title,
       String content,
       PostType type,
       Long reward,
-      List<String> imageUrls) {
-    return new CreatePostCommand(userId, title, content, type, reward, imageUrls);
+      List<String> imageUrls,
+      List<String> tags) {
+    return new CreatePostCommand(userId, title, content, type, reward, imageUrls, tags);
   }
 
   public void validate() {

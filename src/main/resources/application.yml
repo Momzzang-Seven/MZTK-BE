@@ -26,7 +26,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
-      javax.persistence.lock.timeout: 5000 # lock timeout 5초
+      jakarta.persistence.lock.timeout: 5000 # lock timeout 5초
 
   jackson:
     serialization:
@@ -88,6 +88,13 @@ withdrawal:
     batch-size: 200
     cron: "0 0 3 * * *"
     zone: Asia/Seoul
+
+  comment:
+    hard-delete:
+      retention-days: ${COMMENT_HARD_DELETE_RETENTION_DAYS:30}
+      batch-size: ${COMMENT_HARD_DELETE_BATCH_SIZE:100}
+      cron: ${COMMENT_HARD_DELETE_CRON:0 0 4 * * *}
+      zone: ${COMMENT_HARD_DELETE_ZONE:Asia/Seoul}
 
 logging:
   level:

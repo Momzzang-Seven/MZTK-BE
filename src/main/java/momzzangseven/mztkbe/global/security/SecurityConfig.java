@@ -148,6 +148,12 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/posts/{postId}")
                     .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/users/me/locations/**")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "users/me/locations")
+                    .authenticated()
+                    .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-resources/**")
+                    .permitAll()
 
                     // --- Admin Endpoints ---
                     .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
