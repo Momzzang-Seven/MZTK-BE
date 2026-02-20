@@ -188,6 +188,11 @@ public class TransactionWorkPersistenceAdapter
   private TransactionWorkItem toWorkItem(Web3TransactionEntity entity) {
     return new TransactionWorkItem(
         entity.getId(),
+        entity.getIdempotencyKey(),
+        entity.getReferenceType(),
+        entity.getReferenceId(),
+        entity.getFromUserId(),
+        entity.getToUserId(),
         entity.getFromAddress(),
         entity.getToAddress(),
         entity.getAmountWei(),
