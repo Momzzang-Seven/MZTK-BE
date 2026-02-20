@@ -37,8 +37,7 @@ public class RegisterQuestionRewardIntentService implements RegisterQuestionRewa
                   .status(QuestionRewardIntentStatus.PREPARE_REQUIRED)
                   .build());
 
-      return new RegisterQuestionRewardIntentResult(
-          created.getPostId(), created.getStatus(), true);
+      return new RegisterQuestionRewardIntentResult(created.getPostId(), created.getStatus(), true);
     }
 
     if (existing.getStatus() == QuestionRewardIntentStatus.SUBMITTED

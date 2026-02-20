@@ -25,7 +25,10 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardInt
 @Table(
     name = "web3_question_reward_intents",
     indexes = {
-      @Index(name = "uk_web3_question_reward_intents_post_id", columnList = "post_id", unique = true),
+      @Index(
+          name = "uk_web3_question_reward_intents_post_id",
+          columnList = "post_id",
+          unique = true),
       @Index(name = "idx_web3_question_reward_intents_status", columnList = "status")
     })
 @Getter
