@@ -8,12 +8,9 @@ public final class TokenTransferIdempotencyKeyFactory {
   private TokenTransferIdempotencyKeyFactory() {}
 
   public static String create(
-      TokenTransferReferenceType referenceType,
-      Long fromUserId,
-      Long toUserId,
-      String referenceId) {
-    if (referenceType == null) {
-      throw new Web3InvalidInputException("referenceType is required");
+      DomainReferenceType domainType, Long fromUserId, String referenceId) {
+    if (domainType == null) {
+      throw new Web3InvalidInputException("domainType is required");
     }
     if (fromUserId == null || fromUserId <= 0) {
       throw new Web3InvalidInputException("fromUserId must be positive");
@@ -22,14 +19,21 @@ public final class TokenTransferIdempotencyKeyFactory {
       throw new Web3InvalidInputException("referenceId is required");
     }
 
-    return switch (referenceType) {
-      case USER_TO_USER -> {
-        if (toUserId == null || toUserId <= 0) {
-          throw new Web3InvalidInputException("toUserId must be positive for USER_TO_USER");
-        }
-        yield "u2u:" + fromUserId + ":" + toUserId + ":" + referenceId;
-      }
-      case USER_TO_SERVER -> "u2s:" + fromUserId + ":" + referenceId;
-    };
+    return "domain:" + domainType.name() + ":" + referenceId + ":" + fromUserId;
+  }
+
+  public static DomainReferenceType parseDomainType(String idempotencyKey) {
+    if (idempotencyKey == null || idempotencyKey.isBlank()) {
+      return null;
+    }
+    String[] tokens = idempotencyKey.split(":");
+    if (tokens.length < 4 || !"domain".equals(tokens[0])) {
+      return null;
+    }
+    try {
+      return DomainReferenceType.valueOf(tokens[1]);
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
   }
 }

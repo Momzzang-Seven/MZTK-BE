@@ -5,10 +5,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 
 public record TokenTransferPrepareRequestDTO(
-    @NotNull TokenTransferReferenceType referenceType,
+    @NotNull DomainReferenceType domainType,
     @NotBlank @Size(max = 100) String referenceId,
-    @Positive Long toUserId,
+    @NotNull @Positive Long toUserId,
     @NotBlank @Pattern(regexp = "^[0-9]+$") String amountWei) {}
