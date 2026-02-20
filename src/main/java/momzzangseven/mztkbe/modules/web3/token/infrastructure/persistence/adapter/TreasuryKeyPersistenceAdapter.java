@@ -27,8 +27,7 @@ public class TreasuryKeyPersistenceAdapter implements LoadTreasuryKeyPort, SaveT
             entity ->
                 TreasuryKeyMaterial.of(
                     entity.getTreasuryAddress(),
-                    treasuryKeyCipher.decrypt(
-                        entity.getTreasuryPrivateKeyEncrypted(), kekB64)));
+                    treasuryKeyCipher.decrypt(entity.getTreasuryPrivateKeyEncrypted(), kekB64)));
   }
 
   @Override
