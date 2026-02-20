@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTr
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.RecordTransferGuardAuditPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.resolver.DomainRewardResolver;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
@@ -31,7 +32,6 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareSt
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702AuthorizationHelper;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3TransferPrepareJpaRepository;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
@@ -53,7 +53,7 @@ import org.web3j.utils.Numeric;
 public class PrepareTokenTransferService implements PrepareTokenTransferUseCase {
 
   private final LoadWalletPort loadWalletPort;
-  private final Web3TransferPrepareJpaRepository prepareRepository;
+  private final TransferPreparePersistencePort transferPreparePersistencePort;
   private final Eip7702ChainPort eip7702ChainPort;
   private final Eip7702Properties eip7702Properties;
   private final Web3CoreProperties web3CoreProperties;
@@ -73,9 +73,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
             command.domainType(), command.userId(), command.referenceId());
 
     Web3TransferPrepareEntity existing =
-        prepareRepository
-            .findFirstByIdempotencyKeyOrderByCreatedAtDesc(idempotencyKey)
-            .orElse(null);
+        transferPreparePersistencePort.findFirstByIdempotencyKey(idempotencyKey).orElse(null);
     if (existing != null && existing.getAuthExpiresAt().isAfter(LocalDateTime.now())) {
       assertAutoRecoveryMatchesRequest(existing, command);
       return toResult(existing);
@@ -84,7 +82,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
         && existing.getStatus() != TransferPrepareStatus.SUBMITTED
         && !existing.getAuthExpiresAt().isAfter(LocalDateTime.now())) {
       existing.setStatus(TransferPrepareStatus.EXPIRED);
-      prepareRepository.save(existing);
+      transferPreparePersistencePort.save(existing);
     }
 
     DomainRewardResolver resolver = resolveResolver(command);
@@ -129,7 +127,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
             .status(TransferPrepareStatus.CREATED)
             .build();
 
-    return toResult(prepareRepository.saveAndFlush(entity));
+    return toResult(transferPreparePersistencePort.saveAndFlush(entity));
   }
 
   private void validate(PrepareTokenTransferCommand command) {
