@@ -425,7 +425,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
   private DailyUsageSnapshot assertSponsorLimits(
       Long userId, BigInteger amountWei, BigInteger estimatedCostWei) {
-    BigInteger maxAmountWei = BigInteger.valueOf(5_000L).multiply(BigInteger.TEN.pow(18));
+    BigInteger maxAmountWei = ethToWei(eip7702Properties.getSponsor().getMaxTransferAmountEth());
     if (amountWei.compareTo(maxAmountWei) > 0) {
       throw new Web3TransferException(ErrorCode.SPONSOR_AMOUNT_LIMIT_EXCEEDED, false);
     }
