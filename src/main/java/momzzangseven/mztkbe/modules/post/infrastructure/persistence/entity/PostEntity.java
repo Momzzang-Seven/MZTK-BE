@@ -44,7 +44,7 @@ public class PostEntity {
   private Boolean isSolved = false;
 
   @CreatedDate
-  @Column(updatable = false, nullable = false)
+  @Column(updatable = false)
   private LocalDateTime createdAt;
 
   @LastModifiedDate
@@ -84,7 +84,7 @@ public class PostEntity {
         .build();
   }
 
-  public Post toDomain() {
+  public Post toDomain(List<String> tags) {
     return Post.builder()
         .id(this.id)
         .userId(this.userId)
@@ -94,8 +94,13 @@ public class PostEntity {
         .imageUrls(this.imageUrls == null ? new ArrayList<>() : new ArrayList<>(this.imageUrls))
         .reward(this.reward)
         .isSolved(this.isSolved)
+        .tags(tags)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)
         .build();
+  }
+
+  public Post toDomain() {
+    return toDomain(new ArrayList<>());
   }
 }
