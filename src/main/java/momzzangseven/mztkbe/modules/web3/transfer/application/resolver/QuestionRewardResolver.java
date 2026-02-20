@@ -33,8 +33,7 @@ public class QuestionRewardResolver implements DomainRewardResolver {
             .orElseThrow(
                 () ->
                     new Web3InvalidInputException(
-                        "question reward source not found for answer comment: "
-                            + answerCommentId));
+                        "question reward source not found for answer comment: " + answerCommentId));
 
     if (!PostType.QUESTION.name().equals(source.getPostType())) {
       throw new Web3InvalidInputException("reference post is not QUESTION type");
