@@ -40,6 +40,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 @Service
@@ -136,6 +137,16 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
       throw new Web3InvalidInputException("command is required");
     }
     command.validate();
+    assertAmountWithinSponsorLimit(command.amountWei());
+  }
+
+  private void assertAmountWithinSponsorLimit(BigInteger amountWei) {
+    BigInteger maxAmountWei =
+        Convert.toWei(eip7702Properties.getSponsor().getMaxTransferAmountEth(), Convert.Unit.ETHER)
+            .toBigIntegerExact();
+    if (amountWei.compareTo(maxAmountWei) > 0) {
+      throw new Web3InvalidInputException("amountWei exceeds max transfer limit");
+    }
   }
 
   private void assertSupportedForUserPrepare(PrepareTokenTransferCommand command) {

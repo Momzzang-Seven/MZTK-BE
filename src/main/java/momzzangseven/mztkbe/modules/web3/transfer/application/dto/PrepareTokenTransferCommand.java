@@ -12,8 +12,6 @@ public record PrepareTokenTransferCommand(
     BigInteger amountWei) {
 
   private static final int MAX_REFERENCE_ID_LENGTH = 100;
-  private static final BigInteger MAX_TRANSFER_WEI =
-      BigInteger.valueOf(5_000L).multiply(BigInteger.TEN.pow(18));
 
   public void validate() {
     if (userId == null || userId <= 0) {
@@ -30,9 +28,6 @@ public record PrepareTokenTransferCommand(
     }
     if (amountWei == null || amountWei.signum() <= 0) {
       throw new Web3InvalidInputException("amountWei must be > 0");
-    }
-    if (amountWei.compareTo(MAX_TRANSFER_WEI) > 0) {
-      throw new Web3InvalidInputException("amountWei exceeds max transfer limit");
     }
     if (toUserId == null || toUserId <= 0) {
       throw new Web3InvalidInputException("toUserId must be positive");
