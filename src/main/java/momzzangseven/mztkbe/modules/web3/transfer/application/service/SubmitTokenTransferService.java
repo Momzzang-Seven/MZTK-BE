@@ -305,7 +305,8 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         postId,
         QuestionRewardIntentStatus.SUBMITTED,
         EnumSet.of(
-            QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.FAILED_ONCHAIN));
+            QuestionRewardIntentStatus.PREPARE_REQUIRED,
+            QuestionRewardIntentStatus.FAILED_ONCHAIN));
   }
 
   private Long parseLongOrNull(String value) {

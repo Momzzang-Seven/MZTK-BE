@@ -44,7 +44,8 @@ public class Web3TransferSucceededEventHandler {
     questionRewardIntentJpaRepository.updateStatusIfCurrentIn(
         postId,
         QuestionRewardIntentStatus.SUCCEEDED,
-        EnumSet.of(QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
+        EnumSet.of(
+            QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
 
     int updatedRows = postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
     if (updatedRows > 0) {
