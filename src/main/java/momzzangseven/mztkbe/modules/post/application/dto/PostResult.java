@@ -14,6 +14,7 @@ public record PostResult(
     List<String> imageUrls,
     Long reward,
     boolean isSolved,
+    List<String> tags,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
@@ -27,6 +28,7 @@ public record PostResult(
         post.getImageUrls(),
         post.getReward(),
         post.getIsSolved() != null ? post.getIsSolved() : false,
+        post.getTags(),
         post.getCreatedAt(),
         post.getUpdatedAt());
   }

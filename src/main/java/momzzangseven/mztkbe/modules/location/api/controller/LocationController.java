@@ -4,27 +4,47 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.location.api.dto.RegisterLocationRequestDTO;
-import momzzangseven.mztkbe.modules.location.api.dto.RegisterLocationResponseDTO;
-import momzzangseven.mztkbe.modules.location.api.dto.VerifyLocationRequestDTO;
-import momzzangseven.mztkbe.modules.location.api.dto.VerifyLocationResponseDTO;
-import momzzangseven.mztkbe.modules.location.application.dto.RegisterLocationCommand;
-import momzzangseven.mztkbe.modules.location.application.dto.RegisterLocationResult;
-import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationCommand;
-import momzzangseven.mztkbe.modules.location.application.dto.VerifyLocationResult;
+import momzzangseven.mztkbe.modules.location.api.dto.*;
+import momzzangseven.mztkbe.modules.location.application.dto.*;
+import momzzangseven.mztkbe.modules.location.application.port.in.DeleteLocationUseCase;
+import momzzangseven.mztkbe.modules.location.application.port.in.GetMyLocationsUseCase;
 import momzzangseven.mztkbe.modules.location.application.port.in.RegisterLocationUseCase;
 import momzzangseven.mztkbe.modules.location.application.port.in.VerifyLocationUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
 public class LocationController {
   private final RegisterLocationUseCase registerLocationUseCase;
   private final VerifyLocationUseCase verifyLocationUseCase;
+  private final DeleteLocationUseCase deleteLocationUseCase;
+  private final GetMyLocationsUseCase getMyLocationsUseCase;
+
+  /**
+   * 내 위치 목록 조회 API
+   *
+   * <p>GET /users/me/locations
+   *
+   * @param userId 인증된 사용자 ID (@AuthenticationPrincipal)
+   * @return 사용자가 등록한 위치 목록
+   */
+  @GetMapping("/users/me/locations")
+  public ResponseEntity<ApiResponse<GetMyLocationsResponseDTO>> getMyLocations(
+      @AuthenticationPrincipal Long userId) {
+
+    // userId null validation
+    userId = requireUserId(userId);
+
+    // Execute Use Case
+    GetMyLocationsResult result = getMyLocationsUseCase.execute(userId);
+
+    // Convert to Response DTO
+    GetMyLocationsResponseDTO response = GetMyLocationsResponseDTO.from(result);
+
+    return ResponseEntity.ok(ApiResponse.success(response));
+  }
 
   /** 위치 등록 POST /users/me/locations/register */
   @PostMapping("/users/me/locations/register")
@@ -70,6 +90,32 @@ public class LocationController {
 
     // Convert Response and return
     VerifyLocationResponseDTO response = VerifyLocationResponseDTO.from(result);
+    return ResponseEntity.ok(ApiResponse.success(response));
+  }
+
+  /**
+   * Location Deletion API
+   *
+   * @param userId
+   * @param locationId
+   * @return
+   */
+  @DeleteMapping("/users/me/locations/{locationId}")
+  public ResponseEntity<ApiResponse<DeleteLocationResponseDTO>> deleteLocation(
+      @AuthenticationPrincipal Long userId, @PathVariable Long locationId) {
+
+    // userId null validation
+    userId = requireUserId(userId);
+
+    // Create Command
+    DeleteLocationCommand command = DeleteLocationCommand.of(userId, locationId);
+
+    // Execute Use Case
+    DeleteLocationResult result = deleteLocationUseCase.execute(command);
+
+    // Convert Response
+    DeleteLocationResponseDTO response = DeleteLocationResponseDTO.from(result);
+
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
