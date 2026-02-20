@@ -27,7 +27,9 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 @Entity
 @Table(
     name = "web3_transactions",
-    uniqueConstraints = {@UniqueConstraint(name = "uk_web3_tx_idempotency", columnNames = "idempotency_key")},
+    uniqueConstraints = {
+      @UniqueConstraint(name = "uk_web3_tx_idempotency", columnNames = "idempotency_key")
+    },
     indexes = {
       @Index(name = "idx_web3_tx_status", columnList = "status"),
       @Index(name = "idx_web3_tx_processing_until", columnList = "processing_until"),

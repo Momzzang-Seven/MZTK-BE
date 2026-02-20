@@ -87,7 +87,8 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
 
     TokenTransferReferenceType transferType = command.domainType().toTokenTransferReferenceType();
     if (transferType == TokenTransferReferenceType.SERVER_TO_USER) {
-      throw new Web3InvalidInputException("SERVER_TO_USER domain is not supported by this endpoint");
+      throw new Web3InvalidInputException(
+          "SERVER_TO_USER domain is not supported by this endpoint");
     }
 
     String authorityAddress = resolveAuthorityAddress(command.userId());

@@ -8,9 +8,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.rollback.DomainTra
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import org.springframework.stereotype.Component;
 
-/**
- * LEVEL_UP_REWARD has no separate mutable lock state; tx status itself is the source of truth.
- */
+/** LEVEL_UP_REWARD has no separate mutable lock state; tx status itself is the source of truth. */
 @Slf4j
 @Component
 @RequiredArgsConstructor

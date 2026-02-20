@@ -8,7 +8,8 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
 import org.springframework.stereotype.Component;
 
 /**
- * Explicitly blocks domain types that are declared in API but not yet wired to source-of-truth data.
+ * Explicitly blocks domain types that are declared in API but not yet wired to source-of-truth
+ * data.
  */
 @Component
 public class UnsupportedDomainRewardResolver implements DomainRewardResolver {
