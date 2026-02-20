@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -229,14 +230,19 @@ public class Web3jErc20Adapter implements Web3ContractPort {
     if (isBroadcastSuccess(mainAttempt)) {
       return new BroadcastResult(true, mainAttempt.response().getTransactionHash(), null, "main");
     }
+    Web3TxFailureReason mainFailureReason = classifyBroadcastFailure(mainAttempt);
 
     RpcAttempt<EthSendTransaction> subAttempt =
         call("sub", subWeb3j, web3j -> web3j.ethSendRawTransaction(command.rawTx()).send());
     if (isBroadcastSuccess(subAttempt)) {
       return new BroadcastResult(true, subAttempt.response().getTransactionHash(), null, "sub");
     }
+    Web3TxFailureReason subFailureReason = classifyBroadcastFailure(subAttempt);
 
-    return new BroadcastResult(false, null, Web3TxFailureReason.BROADCAST_FAILED.code(), "sub");
+    Web3TxFailureReason prioritizedFailure =
+        prioritizeBroadcastFailure(mainFailureReason, subFailureReason);
+
+    return new BroadcastResult(false, null, prioritizedFailure.code(), "sub");
   }
 
   @Override
@@ -407,6 +413,47 @@ public class Web3jErc20Adapter implements Web3ContractPort {
         && attempt.response() != null
         && attempt.response().getTransactionHash() != null
         && !attempt.response().getTransactionHash().isBlank();
+  }
+
+  private Web3TxFailureReason classifyBroadcastFailure(RpcAttempt<EthSendTransaction> attempt) {
+    if (attempt == null) {
+      return Web3TxFailureReason.BROADCAST_FAILED;
+    }
+
+    if (attempt.response() != null && attempt.response().hasError()) {
+      return classifyBroadcastFailureMessage(attempt.response().getError().getMessage());
+    }
+    if (attempt.exception() != null) {
+      return Web3TxFailureReason.RPC_UNAVAILABLE;
+    }
+    return Web3TxFailureReason.BROADCAST_FAILED;
+  }
+
+  static Web3TxFailureReason classifyBroadcastFailureMessage(String message) {
+    if (message == null || message.isBlank()) {
+      return Web3TxFailureReason.BROADCAST_FAILED;
+    }
+
+    String normalized = message.toLowerCase(Locale.ROOT);
+    if (normalized.contains("insufficient funds")
+        || normalized.contains("insufficient balance")
+        || normalized.contains("not enough funds")) {
+      return Web3TxFailureReason.TREASURY_ETH_BELOW_CRITICAL;
+    }
+    return Web3TxFailureReason.BROADCAST_FAILED;
+  }
+
+  private Web3TxFailureReason prioritizeBroadcastFailure(
+      Web3TxFailureReason mainFailureReason, Web3TxFailureReason subFailureReason) {
+    if (mainFailureReason == Web3TxFailureReason.TREASURY_ETH_BELOW_CRITICAL
+        || subFailureReason == Web3TxFailureReason.TREASURY_ETH_BELOW_CRITICAL) {
+      return Web3TxFailureReason.TREASURY_ETH_BELOW_CRITICAL;
+    }
+    if (mainFailureReason == Web3TxFailureReason.BROADCAST_FAILED
+        || subFailureReason == Web3TxFailureReason.BROADCAST_FAILED) {
+      return Web3TxFailureReason.BROADCAST_FAILED;
+    }
+    return Web3TxFailureReason.RPC_UNAVAILABLE;
   }
 
   private BigInteger positiveOrNull(BigInteger value) {

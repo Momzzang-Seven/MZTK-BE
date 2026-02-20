@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
@@ -57,6 +58,7 @@ import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @ConditionalOnProperty(
     prefix = "web3",
@@ -272,6 +274,13 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         broadcast.failureReason() == null || broadcast.failureReason().isBlank()
             ? Web3TxFailureReason.BROADCAST_FAILED.code()
             : broadcast.failureReason();
+    alertSponsorEthLowIfNeeded(
+        created.getId(),
+        sponsorAddress,
+        reason,
+        estimatedGas,
+        feePlan.maxFeePerGas(),
+        estimatedCostWei);
     updateTransactionPort.scheduleRetry(
         created.getId(),
         reason,
@@ -480,6 +489,27 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
   private BigInteger ethToWei(BigDecimal eth) {
     return Convert.toWei(eth, Convert.Unit.ETHER).toBigIntegerExact();
+  }
+
+  private void alertSponsorEthLowIfNeeded(
+      Long txId,
+      String sponsorAddress,
+      String failureReason,
+      BigInteger estimatedGas,
+      BigInteger maxFeePerGas,
+      BigInteger estimatedCostWei) {
+    if (!Web3TxFailureReason.TREASURY_ETH_BELOW_CRITICAL.code().equals(failureReason)) {
+      return;
+    }
+
+    log.error(
+        "WEB3_SPONSOR_ETH_ALERT txId={}, sponsorAddress={}, failureReason={}, estimatedGas={}, maxFeePerGas={}, estimatedCostWei={}, action=retry_scheduled",
+        txId,
+        sponsorAddress,
+        failureReason,
+        estimatedGas,
+        maxFeePerGas,
+        estimatedCostWei);
   }
 
   private Web3TransactionEntity loadSubmittedTransaction(Long txId) {
