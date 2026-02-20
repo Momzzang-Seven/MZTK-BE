@@ -28,12 +28,15 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditDetailBuilder;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.SubmitTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.ReserveNoncePort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferTransactionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
@@ -48,9 +51,6 @@ import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702P
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3SponsorDailyUsageJpaRepository;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3TransferPrepareJpaRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,10 +68,10 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-  private final Web3TransferPrepareJpaRepository prepareRepository;
-  private final Web3TransactionJpaRepository transactionRepository;
-  private final Web3SponsorDailyUsageJpaRepository sponsorDailyUsageRepository;
-  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
+  private final TransferPreparePersistencePort transferPreparePersistencePort;
+  private final TransferTransactionPersistencePort transferTransactionPersistencePort;
+  private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   private final UpdateTransactionPort updateTransactionPort;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
@@ -93,7 +93,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     validate(command);
 
     Web3TransferPrepareEntity prepare =
-        prepareRepository
+        transferPreparePersistencePort
             .findForUpdateByPrepareId(command.prepareId())
             .orElseThrow(
                 () -> new Web3InvalidInputException("prepareId not found: " + command.prepareId()));
@@ -109,18 +109,20 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
     if (!prepare.getAuthExpiresAt().isAfter(LocalDateTime.now())) {
       prepare.setStatus(TransferPrepareStatus.EXPIRED);
-      prepareRepository.save(prepare);
+      transferPreparePersistencePort.save(prepare);
       throw new Web3TransferException(ErrorCode.AUTH_EXPIRED, false);
     }
 
     assertQuestionRewardIntentSubmittable(prepare);
 
     Web3TransactionEntity existingByIdempotency =
-        transactionRepository.findByIdempotencyKey(prepare.getIdempotencyKey()).orElse(null);
+        transferTransactionPersistencePort
+            .findByIdempotencyKey(prepare.getIdempotencyKey())
+            .orElse(null);
     if (existingByIdempotency != null) {
       prepare.setStatus(TransferPrepareStatus.SUBMITTED);
       prepare.setSubmittedTxId(existingByIdempotency.getId());
-      prepareRepository.save(prepare);
+      transferPreparePersistencePort.save(prepare);
       markQuestionRewardIntentSubmittedIfNeeded(prepare);
       return toResult(existingByIdempotency);
     }
@@ -194,7 +196,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
             sponsorKey.privateKeyHex());
 
     Web3TransactionEntity created =
-        transactionRepository.saveAndFlush(
+        transferTransactionPersistencePort.saveAndFlush(
             Web3TransactionEntity.builder()
                 .idempotencyKey(prepare.getIdempotencyKey())
                 .referenceType(prepare.getReferenceType())
@@ -252,7 +254,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
     prepare.setStatus(TransferPrepareStatus.SUBMITTED);
     prepare.setSubmittedTxId(created.getId());
-    prepareRepository.save(prepare);
+    transferPreparePersistencePort.save(prepare);
     markQuestionRewardIntentSubmittedIfNeeded(prepare);
 
     if (broadcast.success()) {
@@ -314,7 +316,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     }
 
     QuestionRewardIntentEntity intent =
-        questionRewardIntentJpaRepository
+        questionRewardIntentPersistencePort
             .findForUpdateByPostId(postId)
             .orElseThrow(
                 () ->
@@ -352,7 +354,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       return;
     }
 
-    questionRewardIntentJpaRepository.updateStatusIfCurrentIn(
+    questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
         postId,
         QuestionRewardIntentStatus.SUBMITTED,
         EnumSet.of(
@@ -446,7 +448,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
     LocalDate usageDate = LocalDate.now(kstClock);
     Web3SponsorDailyUsageEntity usage =
-        sponsorDailyUsageRepository
+        sponsorDailyUsagePersistencePort
             .findForUpdate(userId, usageDate)
             .orElseGet(
                 () ->
@@ -468,7 +470,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   private void addDailyUsage(Long userId, BigInteger estimatedCostWei) {
     LocalDate usageDate = LocalDate.now(kstClock);
     Web3SponsorDailyUsageEntity usage =
-        sponsorDailyUsageRepository
+        sponsorDailyUsagePersistencePort
             .findForUpdate(userId, usageDate)
             .orElseGet(
                 () ->
@@ -479,7 +481,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
                         .build());
 
     usage.setEstimatedCostWei(usage.getEstimatedCostWei().add(estimatedCostWei));
-    sponsorDailyUsageRepository.save(usage);
+    sponsorDailyUsagePersistencePort.save(usage);
   }
 
   private BigInteger estimateCostWei(BigInteger estimatedGas, BigInteger maxFeePerGas) {
@@ -513,7 +515,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   }
 
   private Web3TransactionEntity loadSubmittedTransaction(Long txId) {
-    return transactionRepository
+    return transferTransactionPersistencePort
         .findById(txId)
         .orElseThrow(
             () -> new Web3InvalidInputException("submitted transaction not found: " + txId));

@@ -6,9 +6,9 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RegisterQuestionRewardIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class RegisterQuestionRewardIntentService implements RegisterQuestionRewardIntentUseCase {
 
-  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
+  private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   @Override
   @Transactional
@@ -24,10 +24,10 @@ public class RegisterQuestionRewardIntentService implements RegisterQuestionRewa
     validate(command);
 
     QuestionRewardIntentEntity existing =
-        questionRewardIntentJpaRepository.findForUpdateByPostId(command.postId()).orElse(null);
+        questionRewardIntentPersistencePort.findForUpdateByPostId(command.postId()).orElse(null);
     if (existing == null) {
       QuestionRewardIntentEntity created =
-          questionRewardIntentJpaRepository.save(
+          questionRewardIntentPersistencePort.save(
               QuestionRewardIntentEntity.builder()
                   .postId(command.postId())
                   .acceptedCommentId(command.acceptedCommentId())
@@ -56,7 +56,7 @@ public class RegisterQuestionRewardIntentService implements RegisterQuestionRewa
     existing.setAmountWei(command.amountWei());
     existing.setStatus(QuestionRewardIntentStatus.PREPARE_REQUIRED);
 
-    QuestionRewardIntentEntity saved = questionRewardIntentJpaRepository.save(existing);
+    QuestionRewardIntentEntity saved = questionRewardIntentPersistencePort.save(existing);
     return new RegisterQuestionRewardIntentResult(saved.getPostId(), saved.getStatus(), false);
   }
 

@@ -7,10 +7,10 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionSucceededEvent;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class Web3TransferSucceededEventHandler {
 
   private final PostJpaRepository postJpaRepository;
-  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
+  private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   @EventListener
   @Transactional
@@ -41,7 +41,7 @@ public class Web3TransferSucceededEventHandler {
       return;
     }
 
-    questionRewardIntentJpaRepository.updateStatusIfCurrentIn(
+    questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
         postId,
         QuestionRewardIntentStatus.SUCCEEDED,
         EnumSet.of(
