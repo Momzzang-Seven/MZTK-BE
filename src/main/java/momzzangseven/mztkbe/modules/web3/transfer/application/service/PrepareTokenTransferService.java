@@ -20,11 +20,13 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTr
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.RecordTransferGuardAuditPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.resolver.DomainRewardResolver;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferGuardAuditReason;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702AuthorizationHelper;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
@@ -55,6 +57,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   private final Eip7702Properties eip7702Properties;
   private final Web3CoreProperties web3CoreProperties;
   private final List<DomainRewardResolver> domainRewardResolvers;
+  private final RecordTransferGuardAuditPort recordTransferGuardAuditPort;
 
   private final SecureRandom secureRandom = new SecureRandom();
 
@@ -110,6 +113,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
             .prepareId(UUID.randomUUID().toString())
             .fromUserId(command.userId())
             .toUserId(resolved.toUserId())
+            .acceptedCommentId(resolved.acceptedCommentId())
             .referenceType(command.domainType().toWeb3ReferenceType())
             .referenceId(command.referenceId())
             .idempotencyKey(idempotencyKey)
@@ -187,6 +191,17 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
         command.amountWei(),
         resolved.amountWei());
 
+    recordGuardAudit(
+        command.userId(),
+        command.domainType(),
+        command.referenceId(),
+        null,
+        TransferGuardAuditReason.REQUEST_RESOLVED_MISMATCH,
+        command.toUserId(),
+        resolved.toUserId(),
+        command.amountWei(),
+        resolved.amountWei());
+
     throw new Web3InvalidInputException("request payload does not match domain source data");
   }
 
@@ -210,8 +225,53 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
         existing.getAmountWei(),
         existing.getPrepareId());
 
+    recordGuardAudit(
+        command.userId(),
+        command.domainType(),
+        command.referenceId(),
+        existing.getPrepareId(),
+        TransferGuardAuditReason.AUTO_RECOVERY_MISMATCH,
+        command.toUserId(),
+        existing.getToUserId(),
+        command.amountWei(),
+        existing.getAmountWei());
+
     throw new Web3InvalidInputException(
         "request payload does not match existing prepared transfer session");
+  }
+
+  private void recordGuardAudit(
+      Long userId,
+      DomainReferenceType domainType,
+      String referenceId,
+      String prepareId,
+      TransferGuardAuditReason reason,
+      Long requestedToUserId,
+      Long resolvedToUserId,
+      BigInteger requestedAmountWei,
+      BigInteger resolvedAmountWei) {
+    try {
+      recordTransferGuardAuditPort.record(
+          new RecordTransferGuardAuditPort.AuditCommand(
+              userId,
+              resolveClientIp(),
+              domainType,
+              referenceId,
+              prepareId,
+              reason,
+              requestedToUserId,
+              resolvedToUserId,
+              requestedAmountWei,
+              resolvedAmountWei));
+    } catch (Exception e) {
+      log.warn(
+          "Failed to persist transfer guard audit: userId={}, domainType={}, referenceId={}, reason={}",
+          userId,
+          domainType,
+          referenceId,
+          reason,
+          e);
+    }
   }
 
   private String resolveAuthorityAddress(Long userId) {

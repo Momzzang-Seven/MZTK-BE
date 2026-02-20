@@ -49,6 +49,9 @@ public class Web3TransferPrepareEntity {
   @Column(name = "to_user_id")
   private Long toUserId;
 
+  @Column(name = "accepted_comment_id")
+  private Long acceptedCommentId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "reference_type", nullable = false, length = 30)
   private Web3ReferenceType referenceType;
