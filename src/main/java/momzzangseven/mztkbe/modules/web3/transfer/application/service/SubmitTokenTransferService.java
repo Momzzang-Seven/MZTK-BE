@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -34,6 +35,9 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702Ch
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip1559TransferSigner;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702AuthorizationHelper;
@@ -42,6 +46,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3SponsorDailyUsageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3TransferPrepareJpaRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -63,6 +68,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   private final Web3TransferPrepareJpaRepository prepareRepository;
   private final Web3TransactionJpaRepository transactionRepository;
   private final Web3SponsorDailyUsageJpaRepository sponsorDailyUsageRepository;
+  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
 
   private final UpdateTransactionPort updateTransactionPort;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
@@ -110,6 +116,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       prepare.setStatus(TransferPrepareStatus.SUBMITTED);
       prepare.setSubmittedTxId(existingByIdempotency.getId());
       prepareRepository.save(prepare);
+      markQuestionRewardIntentSubmittedIfNeeded(prepare);
       return toResult(existingByIdempotency);
     }
 
@@ -241,6 +248,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     prepare.setStatus(TransferPrepareStatus.SUBMITTED);
     prepare.setSubmittedTxId(created.getId());
     prepareRepository.save(prepare);
+    markQuestionRewardIntentSubmittedIfNeeded(prepare);
 
     if (broadcast.success()) {
       String txHash =
@@ -279,6 +287,36 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       throw new Web3InvalidInputException("command is required");
     }
     command.validate();
+  }
+
+  private void markQuestionRewardIntentSubmittedIfNeeded(Web3TransferPrepareEntity prepare) {
+    DomainReferenceType domainType =
+        TokenTransferIdempotencyKeyFactory.parseDomainType(prepare.getIdempotencyKey());
+    if (domainType != DomainReferenceType.QUESTION_REWARD) {
+      return;
+    }
+
+    Long postId = parseLongOrNull(prepare.getReferenceId());
+    if (postId == null) {
+      return;
+    }
+
+    questionRewardIntentJpaRepository.updateStatusIfCurrentIn(
+        postId,
+        QuestionRewardIntentStatus.SUBMITTED,
+        EnumSet.of(
+            QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.FAILED_ONCHAIN));
+  }
+
+  private Long parseLongOrNull(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    try {
+      return Long.parseLong(value);
+    } catch (NumberFormatException e) {
+      return null;
+    }
   }
 
   private void assertDelegateAllowlisted(Web3TransferPrepareEntity prepare) {

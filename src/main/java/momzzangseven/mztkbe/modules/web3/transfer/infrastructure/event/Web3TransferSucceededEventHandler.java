@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 
+import java.util.EnumSet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -7,7 +8,9 @@ import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.P
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionSucceededEvent;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class Web3TransferSucceededEventHandler {
 
   private final PostJpaRepository postJpaRepository;
+  private final QuestionRewardIntentJpaRepository questionRewardIntentJpaRepository;
 
   @EventListener
   @Transactional
@@ -28,8 +32,8 @@ public class Web3TransferSucceededEventHandler {
       return;
     }
 
-    Long answerCommentId = parseLongOrNull(event.referenceId());
-    if (answerCommentId == null) {
+    Long postId = parseLongOrNull(event.referenceId());
+    if (postId == null) {
       log.warn(
           "SUCCEEDED sync skipped: txId={}, invalid question referenceId={}",
           event.transactionId(),
@@ -37,30 +41,24 @@ public class Web3TransferSucceededEventHandler {
       return;
     }
 
-    Long postId = postJpaRepository.findPostIdByAnswerCommentId(answerCommentId).orElse(null);
-    if (postId == null) {
-      log.warn(
-          "SUCCEEDED sync skipped: txId={}, answerCommentId={} not found",
-          event.transactionId(),
-          answerCommentId);
-      return;
-    }
+    questionRewardIntentJpaRepository.updateStatusIfCurrentIn(
+        postId,
+        QuestionRewardIntentStatus.SUCCEEDED,
+        EnumSet.of(QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
 
     int updatedRows = postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
     if (updatedRows > 0) {
       log.info(
-          "SUCCEEDED sync completed: txId={}, answerCommentId={}, questionPostId={}, txHash={}",
+          "SUCCEEDED sync completed: txId={}, questionPostId={}, txHash={}",
           event.transactionId(),
-          answerCommentId,
           postId,
           event.txHash());
       return;
     }
 
     log.info(
-        "SUCCEEDED sync no-op: txId={}, answerCommentId={}, questionPostId={} (already solved or non-question)",
+        "SUCCEEDED sync no-op: txId={}, questionPostId={} (already solved or non-question)",
         event.transactionId(),
-        answerCommentId,
         postId);
   }
 
