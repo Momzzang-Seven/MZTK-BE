@@ -8,7 +8,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuesti
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RegisterQuestionRewardIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.QuestionRewardIntentRecord;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,12 +23,12 @@ public class RegisterQuestionRewardIntentService implements RegisterQuestionRewa
   public RegisterQuestionRewardIntentResult execute(RegisterQuestionRewardIntentCommand command) {
     validate(command);
 
-    QuestionRewardIntentEntity existing =
+    QuestionRewardIntentRecord existing =
         questionRewardIntentPersistencePort.findForUpdateByPostId(command.postId()).orElse(null);
     if (existing == null) {
-      QuestionRewardIntentEntity created =
+      QuestionRewardIntentRecord created =
           questionRewardIntentPersistencePort.save(
-              QuestionRewardIntentEntity.builder()
+              QuestionRewardIntentRecord.builder()
                   .postId(command.postId())
                   .acceptedCommentId(command.acceptedCommentId())
                   .fromUserId(command.fromUserId())
@@ -56,7 +56,7 @@ public class RegisterQuestionRewardIntentService implements RegisterQuestionRewa
     existing.setAmountWei(command.amountWei());
     existing.setStatus(QuestionRewardIntentStatus.PREPARE_REQUIRED);
 
-    QuestionRewardIntentEntity saved = questionRewardIntentPersistencePort.save(existing);
+    QuestionRewardIntentRecord saved = questionRewardIntentPersistencePort.save(existing);
     return new RegisterQuestionRewardIntentResult(saved.getPostId(), saved.getStatus(), false);
   }
 
@@ -68,7 +68,7 @@ public class RegisterQuestionRewardIntentService implements RegisterQuestionRewa
   }
 
   private boolean isSamePayload(
-      QuestionRewardIntentEntity existing, RegisterQuestionRewardIntentCommand command) {
+      QuestionRewardIntentRecord existing, RegisterQuestionRewardIntentCommand command) {
     return Objects.equals(existing.getAcceptedCommentId(), command.acceptedCommentId())
         && Objects.equals(existing.getFromUserId(), command.fromUserId())
         && Objects.equals(existing.getToUserId(), command.toUserId())
