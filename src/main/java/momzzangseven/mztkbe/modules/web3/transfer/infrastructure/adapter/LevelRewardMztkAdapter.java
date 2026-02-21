@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SaveTransactionPort;
@@ -82,7 +83,12 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
       return RewardMztkResult.unconfirmed(transaction.getFailureReason(), transaction.getTxHash());
     }
 
-    return new RewardMztkResult(status, transaction.getTxHash(), transaction.getFailureReason());
+    return new RewardMztkResult(
+        toRewardTxStatus(status), transaction.getTxHash(), transaction.getFailureReason());
+  }
+
+  private RewardTxStatus toRewardTxStatus(Web3TxStatus status) {
+    return RewardTxStatus.valueOf(status.name());
   }
 
   private String resolveTreasuryAddress() {

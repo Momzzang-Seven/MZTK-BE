@@ -108,7 +108,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
             .fromUserId(command.userId())
             .toUserId(resolved.toUserId())
             .acceptedCommentId(resolved.acceptedCommentId())
-            .referenceType(command.domainType().toWeb3ReferenceType())
+            .referenceType(transferType)
             .referenceId(command.referenceId())
             .idempotencyKey(idempotencyKey)
             .authorityAddress(authorityAddress)
