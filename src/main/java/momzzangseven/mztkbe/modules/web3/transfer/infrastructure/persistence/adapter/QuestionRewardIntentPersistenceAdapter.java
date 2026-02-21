@@ -3,8 +3,9 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.ad
 import java.util.Collection;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.QuestionRewardIntentRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.QuestionRewardIntentJpaRepository;
@@ -17,34 +18,34 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
   private final QuestionRewardIntentJpaRepository repository;
 
   @Override
-  public Optional<QuestionRewardIntentRecord> findByPostId(Long postId) {
-    return repository.findByPostId(postId).map(this::toRecord);
+  public Optional<QuestionRewardIntent> findByPostId(Long postId) {
+    return repository.findByPostId(postId).map(this::toDomain);
   }
 
   @Override
-  public Optional<QuestionRewardIntentRecord> findForUpdateByPostId(Long postId) {
-    return repository.findForUpdateByPostId(postId).map(this::toRecord);
+  public Optional<QuestionRewardIntent> findForUpdateByPostId(Long postId) {
+    return repository.findForUpdateByPostId(postId).map(this::toDomain);
   }
 
   @Override
-  public QuestionRewardIntentRecord save(QuestionRewardIntentRecord record) {
+  public QuestionRewardIntent create(QuestionRewardIntent intent) {
+    if (intent.getId() != null) {
+      throw new Web3InvalidInputException("create requires id to be null");
+    }
+    return toDomain(repository.save(toEntity(intent)));
+  }
+
+  @Override
+  public QuestionRewardIntent update(QuestionRewardIntent intent) {
+    if (intent.getId() == null) {
+      throw new Web3InvalidInputException("update requires id");
+    }
     QuestionRewardIntentEntity entity =
-        record.getId() == null
-            ? repository
-                .findByPostId(record.getPostId())
-                .orElseGet(QuestionRewardIntentEntity.builder()::build)
-            : repository
-                .findById(record.getId())
-                .orElseGet(QuestionRewardIntentEntity.builder()::build);
-
-    entity.setPostId(record.getPostId());
-    entity.setAcceptedCommentId(record.getAcceptedCommentId());
-    entity.setFromUserId(record.getFromUserId());
-    entity.setToUserId(record.getToUserId());
-    entity.setAmountWei(record.getAmountWei());
-    entity.setStatus(record.getStatus());
-
-    return toRecord(repository.save(entity));
+        repository
+            .findById(intent.getId())
+            .orElseThrow(() -> new Web3InvalidInputException("question reward intent not found"));
+    merge(intent, entity);
+    return toDomain(repository.save(entity));
   }
 
   @Override
@@ -55,8 +56,23 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
     return repository.updateStatusIfCurrentIn(postId, toStatus, fromStatuses);
   }
 
-  private QuestionRewardIntentRecord toRecord(QuestionRewardIntentEntity entity) {
-    return QuestionRewardIntentRecord.builder()
+  private QuestionRewardIntentEntity toEntity(QuestionRewardIntent domain) {
+    QuestionRewardIntentEntity entity = QuestionRewardIntentEntity.builder().build();
+    merge(domain, entity);
+    return entity;
+  }
+
+  private void merge(QuestionRewardIntent domain, QuestionRewardIntentEntity entity) {
+    entity.setPostId(domain.getPostId());
+    entity.setAcceptedCommentId(domain.getAcceptedCommentId());
+    entity.setFromUserId(domain.getFromUserId());
+    entity.setToUserId(domain.getToUserId());
+    entity.setAmountWei(domain.getAmountWei());
+    entity.setStatus(domain.getStatus());
+  }
+
+  private QuestionRewardIntent toDomain(QuestionRewardIntentEntity entity) {
+    return QuestionRewardIntent.builder()
         .id(entity.getId())
         .postId(entity.getPostId())
         .acceptedCommentId(entity.getAcceptedCommentId())
