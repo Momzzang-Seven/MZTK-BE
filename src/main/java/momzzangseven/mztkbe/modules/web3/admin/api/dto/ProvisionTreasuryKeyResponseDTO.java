@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.web3.admin.api.dto;
 
 import lombok.Builder;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 
 @Builder
 public record ProvisionTreasuryKeyResponseDTO(String treasuryKeyEncryptionKeyB64) {

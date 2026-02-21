@@ -4,7 +4,7 @@ import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,7 +19,7 @@ public interface Web3TransferPrepareJpaRepository
       String idempotencyKey);
 
   Optional<Web3TransferPrepareEntity> findFirstByReferenceTypeAndReferenceIdOrderByCreatedAtDesc(
-      Web3ReferenceType referenceType, String referenceId);
+      TokenTransferReferenceType referenceType, String referenceId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select p from Web3TransferPrepareEntity p where p.prepareId = :prepareId")

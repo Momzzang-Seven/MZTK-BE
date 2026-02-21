@@ -17,7 +17,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
 
 @Entity
@@ -54,7 +54,7 @@ public class Web3TransferPrepareEntity {
 
   @Enumerated(EnumType.STRING)
   @Column(name = "reference_type", nullable = false, length = 30)
-  private Web3ReferenceType referenceType;
+  private TokenTransferReferenceType referenceType;
 
   @Column(name = "reference_id", nullable = false, length = 100)
   private String referenceId;

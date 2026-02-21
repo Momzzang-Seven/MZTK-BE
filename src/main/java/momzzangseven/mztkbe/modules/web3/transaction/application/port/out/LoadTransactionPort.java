@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.port.out;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
@@ -8,6 +10,9 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 public interface LoadTransactionPort {
 
   Optional<TransactionSnapshot> loadById(Long transactionId);
+
+  List<TransactionSnapshot> loadByReferenceTypeAndReferenceIds(
+      Web3ReferenceType referenceType, Collection<String> referenceIds);
 
   record TransactionSnapshot(
       Long transactionId,

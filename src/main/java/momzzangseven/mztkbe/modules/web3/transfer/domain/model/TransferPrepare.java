@@ -6,7 +6,6 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 
 @Getter
 @Builder(toBuilder = true)
@@ -17,7 +16,7 @@ public class TransferPrepare {
   private final Long fromUserId;
   private final Long toUserId;
   private final Long acceptedCommentId;
-  private final Web3ReferenceType referenceType;
+  private final TokenTransferReferenceType referenceType;
   private final String referenceId;
   private final String idempotencyKey;
   private final String authorityAddress;
