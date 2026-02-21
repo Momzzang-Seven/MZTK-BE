@@ -1,8 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import org.springframework.stereotype.Component;
@@ -12,8 +10,8 @@ import org.springframework.stereotype.Component;
 public class TransferRuntimeConfigAdapter implements LoadTransferRuntimeConfigPort {
 
   private final Eip7702Properties eip7702Properties;
-  private final RewardTokenProperties rewardTokenProperties;
-  private final Web3CoreProperties web3CoreProperties;
+  private final TransferRewardTokenProperties rewardTokenProperties;
+  private final TransferCoreProperties web3CoreProperties;
 
   @Override
   public TransferRuntimeConfig load() {

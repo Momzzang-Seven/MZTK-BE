@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.application.dto;
+package momzzangseven.mztkbe.modules.web3.transaction.application.dto;
 
 import java.math.BigInteger;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;

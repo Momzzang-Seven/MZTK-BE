@@ -177,6 +177,7 @@ public enum ErrorCode {
   SPONSOR_AMOUNT_LIMIT_EXCEEDED(
       "WEB3_010", "Sponsor amount limit exceeded", HttpStatus.BAD_REQUEST),
   IDEMPOTENCY_CONFLICT("WEB3_011", "Idempotency conflict", HttpStatus.CONFLICT),
+  WEB3_CONFIG_INVALID("WEB3_012", "Invalid web3 configuration", HttpStatus.INTERNAL_SERVER_ERROR),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)

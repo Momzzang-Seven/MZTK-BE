@@ -1,10 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.service;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigInteger;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702Au
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.RecordTransferGuardAuditPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.ResolveClientIpPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.resolver.DomainRewardResolver;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
@@ -38,8 +35,6 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.web3j.utils.Convert;
 import org.web3j.utils.Numeric;
 
@@ -59,6 +54,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   private final Eip7702AuthorizationPort eip7702AuthorizationPort;
   private final List<DomainRewardResolver> domainRewardResolvers;
   private final RecordTransferGuardAuditPort recordTransferGuardAuditPort;
+  private final ResolveClientIpPort resolveClientIpPort;
 
   private final SecureRandom secureRandom = new SecureRandom();
 
@@ -323,81 +319,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   }
 
   private String resolveClientIp() {
-    ServletRequestAttributes attrs =
-        (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-    if (attrs == null) {
-      return "unknown";
-    }
-
-    HttpServletRequest request = attrs.getRequest();
-    String remoteAddr = request.getRemoteAddr();
-    if (remoteAddr == null || remoteAddr.isBlank()) {
-      return "unknown";
-    }
-
-    String forwardedFor = request.getHeader("X-Forwarded-For");
-    if (isTrustedProxy(remoteAddr) && forwardedFor != null && !forwardedFor.isBlank()) {
-      String forwardedClientIp = extractFirstValidIp(forwardedFor);
-      if (forwardedClientIp != null) {
-        return forwardedClientIp;
-      }
-    }
-
-    return remoteAddr;
-  }
-
-  private String extractFirstValidIp(String forwardedFor) {
-    String[] candidates = forwardedFor.split(",");
-    for (String candidate : candidates) {
-      String trimmed = candidate == null ? "" : candidate.trim();
-      if (trimmed.isEmpty()) {
-        continue;
-      }
-      InetAddress parsed = parseIpLiteral(trimmed);
-      if (parsed != null) {
-        return parsed.getHostAddress();
-      }
-    }
-    return null;
-  }
-
-  private boolean isTrustedProxy(String remoteAddr) {
-    InetAddress parsed = parseIpLiteral(remoteAddr);
-    if (parsed == null) {
-      return false;
-    }
-    if (parsed.isLoopbackAddress() || parsed.isSiteLocalAddress()) {
-      return true;
-    }
-    if (parsed instanceof Inet6Address inet6Address) {
-      byte[] bytes = inet6Address.getAddress();
-      return bytes.length > 0 && (bytes[0] & (byte) 0xFE) == (byte) 0xFC;
-    }
-    return false;
-  }
-
-  private InetAddress parseIpLiteral(String value) {
-    if (value == null || value.isBlank()) {
-      return null;
-    }
-    // Accept only literal IP characters to avoid DNS lookups for hostnames.
-    for (int i = 0; i < value.length(); i++) {
-      char ch = value.charAt(i);
-      boolean allowed =
-          (ch >= '0' && ch <= '9')
-              || (ch >= 'a' && ch <= 'f')
-              || (ch >= 'A' && ch <= 'F')
-              || ch == '.'
-              || ch == ':';
-      if (!allowed) {
-        return null;
-      }
-    }
-    try {
-      return InetAddress.getByName(value);
-    } catch (UnknownHostException ignored) {
-      return null;
-    }
+    return resolveClientIpPort.resolveClientIp();
   }
 
   private PrepareTokenTransferResult toResult(TransferPrepare entity) {

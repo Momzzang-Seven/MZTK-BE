@@ -3,10 +3,9 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 import java.util.EnumSet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
-import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionSucceededEvent;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.MarkQuestionPostSolvedPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
@@ -21,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class Web3TransferSucceededEventHandler {
 
-  private final PostJpaRepository postJpaRepository;
+  private final MarkQuestionPostSolvedPort markQuestionPostSolvedPort;
   private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   @EventListener
@@ -56,7 +55,7 @@ public class Web3TransferSucceededEventHandler {
       return;
     }
 
-    int updatedRows = postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
+    int updatedRows = markQuestionPostSolvedPort.markSolved(postId);
     if (updatedRows > 0) {
       log.info(
           "SUCCEEDED sync completed: txId={}, questionPostId={}, txHash={}",

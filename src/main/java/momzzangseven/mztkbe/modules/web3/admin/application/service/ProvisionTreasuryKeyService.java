@@ -5,7 +5,6 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
 import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryAliasPolicyPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -20,7 +19,6 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   private final momzzangseven.mztkbe.modules.web3.token.application.port.in
           .ProvisionTreasuryKeyUseCase
       provisionTreasuryKeyUseCase;
-  private final LoadTreasuryAliasPolicyPort loadTreasuryAliasPolicyPort;
 
   @Override
   public ProvisionTreasuryKeyResult execute(ProvisionTreasuryKeyCommand command) {
@@ -29,15 +27,6 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     }
     command.validate();
     return provisionTreasuryKeyUseCase.execute(
-        command.operatorId(),
-        resolveWalletAlias(command.walletAlias()),
-        command.treasuryPrivateKey());
-  }
-
-  private String resolveWalletAlias(String requestedAlias) {
-    if (requestedAlias == null || requestedAlias.isBlank()) {
-      return loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias();
-    }
-    return requestedAlias.trim();
+        command.operatorId(), command.walletAlias(), command.treasuryPrivateKey());
   }
 }
