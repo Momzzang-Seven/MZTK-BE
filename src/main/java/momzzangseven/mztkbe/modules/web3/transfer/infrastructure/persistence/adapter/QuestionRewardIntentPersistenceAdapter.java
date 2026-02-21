@@ -30,8 +30,12 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
   public QuestionRewardIntentRecord save(QuestionRewardIntentRecord record) {
     QuestionRewardIntentEntity entity =
         record.getId() == null
-            ? repository.findByPostId(record.getPostId()).orElseGet(QuestionRewardIntentEntity.builder()::build)
-            : repository.findById(record.getId()).orElseGet(QuestionRewardIntentEntity.builder()::build);
+            ? repository
+                .findByPostId(record.getPostId())
+                .orElseGet(QuestionRewardIntentEntity.builder()::build)
+            : repository
+                .findById(record.getId())
+                .orElseGet(QuestionRewardIntentEntity.builder()::build);
 
     entity.setPostId(record.getPostId());
     entity.setAcceptedCommentId(record.getAcceptedCommentId());
