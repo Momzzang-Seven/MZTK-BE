@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,8 +29,7 @@ public class Eip7702CleanupService {
 
   @Transactional
   public CleanupBatchResult runBatch(Instant now) {
-    LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig =
-        loadTransferRuntimeConfigPort.load();
+    TransferRuntimeConfig runtimeConfig = loadTransferRuntimeConfigPort.load();
     ZoneId zone = ZoneId.of(runtimeConfig.cleanupZone());
     int retentionDays = runtimeConfig.cleanupRetentionDays();
     int batchSize = runtimeConfig.cleanupBatchSize();

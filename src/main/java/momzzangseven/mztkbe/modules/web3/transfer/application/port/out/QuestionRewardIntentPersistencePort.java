@@ -2,17 +2,19 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.port.out;
 
 import java.util.Collection;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.QuestionRewardIntentRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 
 /** Persistence port for QUESTION_REWARD intent SSOT rows. */
 public interface QuestionRewardIntentPersistencePort {
 
-  Optional<QuestionRewardIntentRecord> findByPostId(Long postId);
+  Optional<QuestionRewardIntent> findByPostId(Long postId);
 
-  Optional<QuestionRewardIntentRecord> findForUpdateByPostId(Long postId);
+  Optional<QuestionRewardIntent> findForUpdateByPostId(Long postId);
 
-  QuestionRewardIntentRecord save(QuestionRewardIntentRecord record);
+  QuestionRewardIntent create(QuestionRewardIntent intent);
+
+  QuestionRewardIntent update(QuestionRewardIntent intent);
 
   int updateStatusIfCurrentIn(
       Long postId,

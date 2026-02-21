@@ -23,14 +23,15 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702Ch
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.RecordTransferGuardAuditPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.TransferPrepareRecord;
 import momzzangseven.mztkbe.modules.web3.transfer.application.resolver.DomainRewardResolver;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferGuardAuditReason;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepare;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
@@ -66,24 +67,22 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   public PrepareTokenTransferResult execute(PrepareTokenTransferCommand command) {
     validate(command);
     assertSupportedForUserPrepare(command);
-    LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig =
-        loadTransferRuntimeConfigPort.load();
+    TransferRuntimeConfig runtimeConfig = loadTransferRuntimeConfigPort.load();
 
     String idempotencyKey =
         TokenTransferIdempotencyKeyFactory.create(
             command.domainType(), command.userId(), command.referenceId());
 
-    TransferPrepareRecord existing =
+    TransferPrepare existing =
         transferPreparePersistencePort.findFirstByIdempotencyKey(idempotencyKey).orElse(null);
-    if (existing != null && existing.getAuthExpiresAt().isAfter(LocalDateTime.now())) {
+    if (existing != null && existing.isActiveAt(LocalDateTime.now())) {
       assertAutoRecoveryMatchesRequest(existing, command);
       return toResult(existing);
     }
     if (existing != null
         && existing.getStatus() != TransferPrepareStatus.SUBMITTED
-        && !existing.getAuthExpiresAt().isAfter(LocalDateTime.now())) {
-      existing.setStatus(TransferPrepareStatus.EXPIRED);
-      transferPreparePersistencePort.save(existing);
+        && !existing.isActiveAt(LocalDateTime.now())) {
+      transferPreparePersistencePort.update(existing.expire());
     }
 
     DomainRewardResolver resolver = resolveResolver(command);
@@ -107,8 +106,8 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
     LocalDateTime expiresAt =
         LocalDateTime.now().plusSeconds(runtimeConfig.authorizationTtlSeconds());
 
-    TransferPrepareRecord entity =
-        TransferPrepareRecord.builder()
+    TransferPrepare entity =
+        TransferPrepare.builder()
             .prepareId(UUID.randomUUID().toString())
             .fromUserId(command.userId())
             .toUserId(resolved.toUserId())
@@ -127,7 +126,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
             .status(TransferPrepareStatus.CREATED)
             .build();
 
-    return toResult(transferPreparePersistencePort.saveAndFlush(entity));
+    return toResult(transferPreparePersistencePort.create(entity));
   }
 
   private void validate(PrepareTokenTransferCommand command) {
@@ -139,8 +138,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   }
 
   private void assertAmountWithinSponsorLimit(BigInteger amountWei) {
-    LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig =
-        loadTransferRuntimeConfigPort.load();
+    TransferRuntimeConfig runtimeConfig = loadTransferRuntimeConfigPort.load();
     BigInteger maxAmountWei =
         Convert.toWei(runtimeConfig.sponsorMaxTransferAmountEth(), Convert.Unit.ETHER)
             .toBigIntegerExact();
@@ -217,7 +215,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   }
 
   private void assertAutoRecoveryMatchesRequest(
-      TransferPrepareRecord existing, PrepareTokenTransferCommand command) {
+      TransferPrepare existing, PrepareTokenTransferCommand command) {
     boolean toUserMatched = Objects.equals(command.toUserId(), existing.getToUserId());
     boolean amountMatched = command.amountWei().compareTo(existing.getAmountWei()) == 0;
     if (toUserMatched && amountMatched) {
@@ -402,7 +400,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
     }
   }
 
-  private PrepareTokenTransferResult toResult(TransferPrepareRecord entity) {
+  private PrepareTokenTransferResult toResult(TransferPrepare entity) {
     return PrepareTokenTransferResult.builder()
         .prepareId(entity.getPrepareId())
         .idempotencyKey(entity.getIdempotencyKey())

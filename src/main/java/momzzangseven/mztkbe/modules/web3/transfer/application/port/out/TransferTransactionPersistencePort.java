@@ -1,14 +1,14 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.port.out;
 
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.TransferTransactionRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferTransaction;
 
 /** Persistence port for transfer-initiated web3_transactions reads/writes. */
 public interface TransferTransactionPersistencePort {
 
-  Optional<TransferTransactionRecord> findByIdempotencyKey(String idempotencyKey);
+  Optional<TransferTransaction> findByIdempotencyKey(String idempotencyKey);
 
-  Optional<TransferTransactionRecord> findById(Long transactionId);
+  Optional<TransferTransaction> findById(Long transactionId);
 
-  TransferTransactionRecord saveAndFlush(TransferTransactionRecord record);
+  TransferTransaction createAndFlush(TransferTransaction transaction);
 }
