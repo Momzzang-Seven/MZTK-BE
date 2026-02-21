@@ -9,9 +9,9 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferCoreProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.protocol.Web3j;
@@ -34,7 +34,7 @@ import org.web3j.utils.Numeric;
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class Eip7702Web3jAdapter implements Eip7702ChainPort {
 
-  private final Web3CoreProperties web3CoreProperties;
+  private final TransferCoreProperties web3CoreProperties;
   private final Eip7702Properties eip7702Properties;
 
   private HttpService mainService;

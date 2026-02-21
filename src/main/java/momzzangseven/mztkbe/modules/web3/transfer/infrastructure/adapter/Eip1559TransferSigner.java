@@ -4,7 +4,7 @@ import java.math.BigInteger;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.Function;

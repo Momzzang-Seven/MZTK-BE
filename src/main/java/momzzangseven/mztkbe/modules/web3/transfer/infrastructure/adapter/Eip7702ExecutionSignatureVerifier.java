@@ -2,8 +2,9 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.signature.infrastructure.config.EIP712Properties;
+import momzzangseven.mztkbe.global.error.web3.Web3ConfigInvalidException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferEip712Properties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Component;
     havingValue = "true")
 public class Eip7702ExecutionSignatureVerifier implements VerifyExecutionSignaturePort {
 
-  private final EIP712Properties eip712Properties;
+  private final TransferEip712Properties eip712Properties;
 
   @Override
   public boolean verify(
@@ -25,11 +26,15 @@ public class Eip7702ExecutionSignatureVerifier implements VerifyExecutionSignatu
       String callDataHash,
       BigInteger deadlineEpochSeconds,
       String signatureHex) {
+    Long chainId = eip712Properties.getChainId();
+    if (chainId == null) {
+      throw new Web3ConfigInvalidException("web3.eip712.chain-id is required");
+    }
     byte[] digest =
         Eip7702ExecutionTypedDataHelper.buildDigest(
             eip712Properties.getDomainName(),
             eip712Properties.getDomainVersion(),
-            eip712Properties.getChainId(),
+            chainId,
             authorityAddress,
             prepareId,
             callDataHash,

@@ -2,10 +2,10 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferTransactionPersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferTransaction;
 import org.springframework.stereotype.Component;
 
 @Component

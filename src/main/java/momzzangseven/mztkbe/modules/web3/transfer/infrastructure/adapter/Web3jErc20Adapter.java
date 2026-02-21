@@ -10,11 +10,11 @@ import java.util.Locale;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.GasFeeStrategy;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferCoreProperties;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
@@ -50,8 +50,8 @@ public class Web3jErc20Adapter implements Web3ContractPort {
 
   private static final BigInteger WEI_PER_ETH = new BigInteger("1000000000000000000");
 
-  private final RewardTokenProperties rewardTokenProperties;
-  private final Web3CoreProperties web3CoreProperties;
+  private final TransferRewardTokenProperties rewardTokenProperties;
+  private final TransferCoreProperties web3CoreProperties;
   private final GasFeeStrategy gasFeeStrategy;
 
   private Web3j mainWeb3j;
