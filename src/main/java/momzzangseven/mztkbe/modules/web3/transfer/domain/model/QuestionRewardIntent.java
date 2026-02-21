@@ -55,7 +55,8 @@ public class QuestionRewardIntent {
   }
 
   public boolean isImmutableForRegister() {
-    return status == QuestionRewardIntentStatus.SUBMITTED || status == QuestionRewardIntentStatus.SUCCEEDED;
+    return status == QuestionRewardIntentStatus.SUBMITTED
+        || status == QuestionRewardIntentStatus.SUCCEEDED;
   }
 
   public boolean isSamePayload(
