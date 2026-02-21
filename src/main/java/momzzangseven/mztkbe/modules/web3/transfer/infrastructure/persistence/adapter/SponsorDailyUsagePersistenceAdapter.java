@@ -4,8 +4,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDailyUsagePersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.SponsorDailyUsageRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3SponsorDailyUsageJpaRepository;
 import org.springframework.data.domain.PageRequest;
@@ -18,26 +19,29 @@ public class SponsorDailyUsagePersistenceAdapter implements SponsorDailyUsagePer
   private final Web3SponsorDailyUsageJpaRepository repository;
 
   @Override
-  public Optional<SponsorDailyUsageRecord> findForUpdate(Long userId, LocalDate usageDateKst) {
-    return repository.findForUpdate(userId, usageDateKst).map(this::toRecord);
+  public Optional<SponsorDailyUsage> findForUpdate(Long userId, LocalDate usageDateKst) {
+    return repository.findForUpdate(userId, usageDateKst).map(this::toDomain);
   }
 
   @Override
-  public SponsorDailyUsageRecord save(SponsorDailyUsageRecord record) {
+  public SponsorDailyUsage create(SponsorDailyUsage usage) {
+    if (usage.getId() != null) {
+      throw new Web3InvalidInputException("create requires id to be null");
+    }
+    return toDomain(repository.save(toEntity(usage)));
+  }
+
+  @Override
+  public SponsorDailyUsage update(SponsorDailyUsage usage) {
+    if (usage.getId() == null) {
+      throw new Web3InvalidInputException("update requires id");
+    }
     Web3SponsorDailyUsageEntity entity =
-        record.getId() == null
-            ? repository
-                .findForUpdate(record.getUserId(), record.getUsageDateKst())
-                .orElseGet(Web3SponsorDailyUsageEntity.builder()::build)
-            : repository
-                .findById(record.getId())
-                .orElseGet(Web3SponsorDailyUsageEntity.builder()::build);
-
-    entity.setUserId(record.getUserId());
-    entity.setUsageDateKst(record.getUsageDateKst());
-    entity.setEstimatedCostWei(record.getEstimatedCostWei());
-
-    return toRecord(repository.save(entity));
+        repository
+            .findById(usage.getId())
+            .orElseThrow(() -> new Web3InvalidInputException("sponsor usage not found"));
+    merge(usage, entity);
+    return toDomain(repository.save(entity));
   }
 
   @Override
@@ -50,8 +54,20 @@ public class SponsorDailyUsagePersistenceAdapter implements SponsorDailyUsagePer
     return repository.deleteByIdIn(ids);
   }
 
-  private SponsorDailyUsageRecord toRecord(Web3SponsorDailyUsageEntity entity) {
-    return SponsorDailyUsageRecord.builder()
+  private Web3SponsorDailyUsageEntity toEntity(SponsorDailyUsage usage) {
+    Web3SponsorDailyUsageEntity entity = Web3SponsorDailyUsageEntity.builder().build();
+    merge(usage, entity);
+    return entity;
+  }
+
+  private void merge(SponsorDailyUsage usage, Web3SponsorDailyUsageEntity entity) {
+    entity.setUserId(usage.getUserId());
+    entity.setUsageDateKst(usage.getUsageDateKst());
+    entity.setEstimatedCostWei(usage.getEstimatedCostWei());
+  }
+
+  private SponsorDailyUsage toDomain(Web3SponsorDailyUsageEntity entity) {
+    return SponsorDailyUsage.builder()
         .id(entity.getId())
         .userId(entity.getUserId())
         .usageDateKst(entity.getUsageDateKst())

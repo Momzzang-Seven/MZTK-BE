@@ -4,8 +4,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.TransferPrepareRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepare;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3TransferPrepareJpaRepository;
 import org.springframework.data.domain.PageRequest;
@@ -18,35 +19,33 @@ public class TransferPreparePersistenceAdapter implements TransferPreparePersist
   private final Web3TransferPrepareJpaRepository repository;
 
   @Override
-  public Optional<TransferPrepareRecord> findFirstByIdempotencyKey(String idempotencyKey) {
+  public Optional<TransferPrepare> findFirstByIdempotencyKey(String idempotencyKey) {
     return repository
         .findFirstByIdempotencyKeyOrderByCreatedAtDesc(idempotencyKey)
-        .map(this::toRecord);
+        .map(this::toDomain);
   }
 
   @Override
-  public Optional<TransferPrepareRecord> findForUpdateByPrepareId(String prepareId) {
-    return repository.findForUpdateByPrepareId(prepareId).map(this::toRecord);
+  public Optional<TransferPrepare> findForUpdateByPrepareId(String prepareId) {
+    return repository.findForUpdateByPrepareId(prepareId).map(this::toDomain);
   }
 
   @Override
-  public TransferPrepareRecord save(TransferPrepareRecord record) {
+  public TransferPrepare create(TransferPrepare prepare) {
+    if (prepare.getPrepareId() == null || prepare.getPrepareId().isBlank()) {
+      throw new Web3InvalidInputException("create requires prepareId");
+    }
+    return toDomain(repository.save(toEntity(prepare)));
+  }
+
+  @Override
+  public TransferPrepare update(TransferPrepare prepare) {
     Web3TransferPrepareEntity entity =
         repository
-            .findById(record.getPrepareId())
-            .orElseGet(Web3TransferPrepareEntity.builder()::build);
-    merge(record, entity);
-    return toRecord(repository.save(entity));
-  }
-
-  @Override
-  public TransferPrepareRecord saveAndFlush(TransferPrepareRecord record) {
-    Web3TransferPrepareEntity entity =
-        repository
-            .findById(record.getPrepareId())
-            .orElseGet(Web3TransferPrepareEntity.builder()::build);
-    merge(record, entity);
-    return toRecord(repository.saveAndFlush(entity));
+            .findById(prepare.getPrepareId())
+            .orElseThrow(() -> new Web3InvalidInputException("transfer prepare not found"));
+    merge(prepare, entity);
+    return toDomain(repository.save(entity));
   }
 
   @Override
@@ -59,28 +58,34 @@ public class TransferPreparePersistenceAdapter implements TransferPreparePersist
     return repository.deleteByPrepareIdIn(prepareIds);
   }
 
-  private void merge(TransferPrepareRecord record, Web3TransferPrepareEntity entity) {
-    entity.setPrepareId(record.getPrepareId());
-    entity.setFromUserId(record.getFromUserId());
-    entity.setToUserId(record.getToUserId());
-    entity.setAcceptedCommentId(record.getAcceptedCommentId());
-    entity.setReferenceType(record.getReferenceType());
-    entity.setReferenceId(record.getReferenceId());
-    entity.setIdempotencyKey(record.getIdempotencyKey());
-    entity.setAuthorityAddress(record.getAuthorityAddress());
-    entity.setToAddress(record.getToAddress());
-    entity.setAmountWei(record.getAmountWei());
-    entity.setAuthorityNonce(record.getAuthorityNonce());
-    entity.setDelegateTarget(record.getDelegateTarget());
-    entity.setAuthExpiresAt(record.getAuthExpiresAt());
-    entity.setPayloadHashToSign(record.getPayloadHashToSign());
-    entity.setSalt(record.getSalt());
-    entity.setStatus(record.getStatus());
-    entity.setSubmittedTxId(record.getSubmittedTxId());
+  private Web3TransferPrepareEntity toEntity(TransferPrepare domain) {
+    Web3TransferPrepareEntity entity = Web3TransferPrepareEntity.builder().build();
+    merge(domain, entity);
+    return entity;
   }
 
-  private TransferPrepareRecord toRecord(Web3TransferPrepareEntity entity) {
-    return TransferPrepareRecord.builder()
+  private void merge(TransferPrepare domain, Web3TransferPrepareEntity entity) {
+    entity.setPrepareId(domain.getPrepareId());
+    entity.setFromUserId(domain.getFromUserId());
+    entity.setToUserId(domain.getToUserId());
+    entity.setAcceptedCommentId(domain.getAcceptedCommentId());
+    entity.setReferenceType(domain.getReferenceType());
+    entity.setReferenceId(domain.getReferenceId());
+    entity.setIdempotencyKey(domain.getIdempotencyKey());
+    entity.setAuthorityAddress(domain.getAuthorityAddress());
+    entity.setToAddress(domain.getToAddress());
+    entity.setAmountWei(domain.getAmountWei());
+    entity.setAuthorityNonce(domain.getAuthorityNonce());
+    entity.setDelegateTarget(domain.getDelegateTarget());
+    entity.setAuthExpiresAt(domain.getAuthExpiresAt());
+    entity.setPayloadHashToSign(domain.getPayloadHashToSign());
+    entity.setSalt(domain.getSalt());
+    entity.setStatus(domain.getStatus());
+    entity.setSubmittedTxId(domain.getSubmittedTxId());
+  }
+
+  private TransferPrepare toDomain(Web3TransferPrepareEntity entity) {
+    return TransferPrepare.builder()
         .prepareId(entity.getPrepareId())
         .fromUserId(entity.getFromUserId())
         .toUserId(entity.getToUserId())

@@ -3,18 +3,18 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.port.out;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.TransferPrepareRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepare;
 
 /** Persistence port for web3_transfer_prepares used by transfer application services. */
 public interface TransferPreparePersistencePort {
 
-  Optional<TransferPrepareRecord> findFirstByIdempotencyKey(String idempotencyKey);
+  Optional<TransferPrepare> findFirstByIdempotencyKey(String idempotencyKey);
 
-  Optional<TransferPrepareRecord> findForUpdateByPrepareId(String prepareId);
+  Optional<TransferPrepare> findForUpdateByPrepareId(String prepareId);
 
-  TransferPrepareRecord save(TransferPrepareRecord record);
+  TransferPrepare create(TransferPrepare prepare);
 
-  TransferPrepareRecord saveAndFlush(TransferPrepareRecord record);
+  TransferPrepare update(TransferPrepare prepare);
 
   List<String> findPrepareIdsForCleanup(LocalDateTime cutoff, int batchSize);
 

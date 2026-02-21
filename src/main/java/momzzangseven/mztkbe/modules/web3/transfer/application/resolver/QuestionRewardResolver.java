@@ -1,12 +1,10 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.resolver;
 
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.QuestionRewardIntentRecord;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
 import org.springframework.stereotype.Component;
 
@@ -25,7 +23,7 @@ public class QuestionRewardResolver implements DomainRewardResolver {
   @Override
   public ResolvedReward resolve(Long requesterId, String referenceId) {
     Long postId = parsePostId(referenceId);
-    QuestionRewardIntentRecord intent =
+    QuestionRewardIntent intent =
         questionRewardIntentPersistencePort
             .findByPostId(postId)
             .orElseThrow(
@@ -33,33 +31,7 @@ public class QuestionRewardResolver implements DomainRewardResolver {
                     new Web3InvalidInputException(
                         "question reward intent not found for post: " + postId));
 
-    if (intent.getStatus() == QuestionRewardIntentStatus.SUCCEEDED) {
-      throw new Web3InvalidInputException("question reward is already settled for this post");
-    }
-    if (intent.getStatus() == QuestionRewardIntentStatus.SUBMITTED) {
-      throw new Web3InvalidInputException("question reward is already in submitted state");
-    }
-    if (intent.getStatus() == QuestionRewardIntentStatus.CANCELED) {
-      throw new Web3InvalidInputException("question reward intent is canceled");
-    }
-    if (intent.getStatus() == QuestionRewardIntentStatus.FAILED_ONCHAIN) {
-      throw new Web3InvalidInputException("question reward failed onchain; re-register intent");
-    }
-    if (intent.getFromUserId() == null || intent.getFromUserId() <= 0) {
-      throw new Web3InvalidInputException("question reward intent has invalid fromUserId");
-    }
-    if (!Objects.equals(requesterId, intent.getFromUserId())) {
-      throw new Web3InvalidInputException("only question owner can prepare question reward");
-    }
-    if (intent.getToUserId() == null || intent.getToUserId() <= 0) {
-      throw new Web3InvalidInputException("accepted answer has invalid writer userId");
-    }
-    if (intent.getAcceptedCommentId() == null || intent.getAcceptedCommentId() <= 0) {
-      throw new Web3InvalidInputException("question reward intent has invalid acceptedCommentId");
-    }
-    if (intent.getAmountWei() == null || intent.getAmountWei().signum() <= 0) {
-      throw new Web3InvalidInputException("question reward intent has invalid amountWei");
-    }
+    intent.assertResolvableBy(requesterId);
 
     return new ResolvedReward(
         intent.getToUserId(), intent.getAmountWei(), intent.getAcceptedCommentId());
