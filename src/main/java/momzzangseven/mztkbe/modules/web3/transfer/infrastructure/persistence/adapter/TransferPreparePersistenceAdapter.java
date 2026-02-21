@@ -19,7 +19,9 @@ public class TransferPreparePersistenceAdapter implements TransferPreparePersist
 
   @Override
   public Optional<TransferPrepareRecord> findFirstByIdempotencyKey(String idempotencyKey) {
-    return repository.findFirstByIdempotencyKeyOrderByCreatedAtDesc(idempotencyKey).map(this::toRecord);
+    return repository
+        .findFirstByIdempotencyKeyOrderByCreatedAtDesc(idempotencyKey)
+        .map(this::toRecord);
   }
 
   @Override
@@ -30,7 +32,9 @@ public class TransferPreparePersistenceAdapter implements TransferPreparePersist
   @Override
   public TransferPrepareRecord save(TransferPrepareRecord record) {
     Web3TransferPrepareEntity entity =
-        repository.findById(record.getPrepareId()).orElseGet(Web3TransferPrepareEntity.builder()::build);
+        repository
+            .findById(record.getPrepareId())
+            .orElseGet(Web3TransferPrepareEntity.builder()::build);
     merge(record, entity);
     return toRecord(repository.save(entity));
   }
@@ -38,7 +42,9 @@ public class TransferPreparePersistenceAdapter implements TransferPreparePersist
   @Override
   public TransferPrepareRecord saveAndFlush(TransferPrepareRecord record) {
     Web3TransferPrepareEntity entity =
-        repository.findById(record.getPrepareId()).orElseGet(Web3TransferPrepareEntity.builder()::build);
+        repository
+            .findById(record.getPrepareId())
+            .orElseGet(Web3TransferPrepareEntity.builder()::build);
     merge(record, entity);
     return toRecord(repository.saveAndFlush(entity));
   }

@@ -29,7 +29,9 @@ public class SponsorDailyUsagePersistenceAdapter implements SponsorDailyUsagePer
             ? repository
                 .findForUpdate(record.getUserId(), record.getUsageDateKst())
                 .orElseGet(Web3SponsorDailyUsageEntity.builder()::build)
-            : repository.findById(record.getId()).orElseGet(Web3SponsorDailyUsageEntity.builder()::build);
+            : repository
+                .findById(record.getId())
+                .orElseGet(Web3SponsorDailyUsageEntity.builder()::build);
 
     entity.setUserId(record.getUserId());
     entity.setUsageDateKst(record.getUsageDateKst());
