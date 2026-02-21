@@ -25,6 +25,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Transf
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -45,6 +46,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardInt
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepare;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -197,7 +199,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         transferTransactionPersistencePort.createAndFlush(
             TransferTransaction.builder()
                 .idempotencyKey(prepare.getIdempotencyKey())
-                .referenceType(prepare.getReferenceType())
+                .referenceType(toWeb3ReferenceType(prepare.getReferenceType()))
                 .referenceId(prepare.getReferenceId())
                 .fromUserId(prepare.getFromUserId())
                 .toUserId(prepare.getToUserId())
@@ -340,6 +342,10 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     } catch (NumberFormatException e) {
       return null;
     }
+  }
+
+  private Web3ReferenceType toWeb3ReferenceType(TokenTransferReferenceType referenceType) {
+    return Web3ReferenceType.valueOf(referenceType.name());
   }
 
   private void assertDelegateAllowlisted(

@@ -4,8 +4,10 @@ import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -169,7 +172,7 @@ public class TransactionWorkPersistenceAdapter
 
   @Override
   @Transactional(readOnly = true)
-  public java.util.Optional<LoadTransactionPort.TransactionSnapshot> loadById(Long transactionId) {
+  public Optional<LoadTransactionPort.TransactionSnapshot> loadById(Long transactionId) {
     if (transactionId == null || transactionId <= 0) {
       throw new Web3InvalidInputException("transactionId must be positive");
     }
@@ -188,6 +191,32 @@ public class TransactionWorkPersistenceAdapter
                     entity.getStatus(),
                     entity.getTxHash(),
                     entity.getFailureReason()));
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<LoadTransactionPort.TransactionSnapshot> loadByReferenceTypeAndReferenceIds(
+      Web3ReferenceType referenceType, Collection<String> referenceIds) {
+    if (referenceType == null) {
+      throw new Web3InvalidInputException("referenceType is required");
+    }
+    if (referenceIds == null || referenceIds.isEmpty()) {
+      return List.of();
+    }
+    return repository.findByReferenceTypeAndReferenceIdIn(referenceType, referenceIds).stream()
+        .map(
+            entity ->
+                new LoadTransactionPort.TransactionSnapshot(
+                    entity.getId(),
+                    entity.getIdempotencyKey(),
+                    entity.getReferenceType(),
+                    entity.getReferenceId(),
+                    entity.getFromUserId(),
+                    entity.getToUserId(),
+                    entity.getStatus(),
+                    entity.getTxHash(),
+                    entity.getFailureReason()))
+        .toList();
   }
 
   private TransactionWorkItem toWorkItem(Web3TransactionEntity entity) {
