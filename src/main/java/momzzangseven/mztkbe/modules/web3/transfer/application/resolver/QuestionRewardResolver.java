@@ -7,7 +7,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionR
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.QuestionRewardIntentRecord;
 import org.springframework.stereotype.Component;
 
 /** Resolves QUESTION_REWARD from intent SSOT registered by acceptance domain. */
@@ -25,7 +25,7 @@ public class QuestionRewardResolver implements DomainRewardResolver {
   @Override
   public ResolvedReward resolve(Long requesterId, String referenceId) {
     Long postId = parsePostId(referenceId);
-    QuestionRewardIntentEntity intent =
+    QuestionRewardIntentRecord intent =
         questionRewardIntentPersistencePort
             .findByPostId(postId)
             .orElseThrow(

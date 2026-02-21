@@ -15,13 +15,15 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTokenTransferUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702AuthorizationPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.RecordTransferGuardAuditPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.TransferPrepareRecord;
 import momzzangseven.mztkbe.modules.web3.transfer.application.resolver.DomainRewardResolver;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.ResolvedReward;
@@ -29,9 +31,6 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdem
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferGuardAuditReason;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702AuthorizationHelper;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
@@ -55,8 +54,8 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   private final LoadWalletPort loadWalletPort;
   private final TransferPreparePersistencePort transferPreparePersistencePort;
   private final Eip7702ChainPort eip7702ChainPort;
-  private final Eip7702Properties eip7702Properties;
-  private final Web3CoreProperties web3CoreProperties;
+  private final LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
+  private final Eip7702AuthorizationPort eip7702AuthorizationPort;
   private final List<DomainRewardResolver> domainRewardResolvers;
   private final RecordTransferGuardAuditPort recordTransferGuardAuditPort;
 
@@ -67,12 +66,14 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   public PrepareTokenTransferResult execute(PrepareTokenTransferCommand command) {
     validate(command);
     assertSupportedForUserPrepare(command);
+    LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig =
+        loadTransferRuntimeConfigPort.load();
 
     String idempotencyKey =
         TokenTransferIdempotencyKeyFactory.create(
             command.domainType(), command.userId(), command.referenceId());
 
-    Web3TransferPrepareEntity existing =
+    TransferPrepareRecord existing =
         transferPreparePersistencePort.findFirstByIdempotencyKey(idempotencyKey).orElse(null);
     if (existing != null && existing.getAuthExpiresAt().isAfter(LocalDateTime.now())) {
       assertAutoRecoveryMatchesRequest(existing, command);
@@ -98,17 +99,16 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
     String authorityAddress = resolveAuthorityAddress(command.userId());
     String toAddress = resolveToAddress(transferType, resolved.toUserId());
     long authorityNonce = resolveAuthorityNonce(authorityAddress);
-    String delegateTarget =
-        EvmAddress.of(eip7702Properties.getDelegation().getBatchImplAddress()).value();
+    String delegateTarget = EvmAddress.of(runtimeConfig.delegationBatchImplAddress()).value();
     String payloadHashToSign =
-        Eip7702AuthorizationHelper.buildSigningHashHex(
-            web3CoreProperties.getChainId(), delegateTarget, BigInteger.valueOf(authorityNonce));
+        eip7702AuthorizationPort.buildSigningHashHex(
+            runtimeConfig.chainId(), delegateTarget, BigInteger.valueOf(authorityNonce));
 
     LocalDateTime expiresAt =
-        LocalDateTime.now().plusSeconds(eip7702Properties.getAuthorization().getTtlSeconds());
+        LocalDateTime.now().plusSeconds(runtimeConfig.authorizationTtlSeconds());
 
-    Web3TransferPrepareEntity entity =
-        Web3TransferPrepareEntity.builder()
+    TransferPrepareRecord entity =
+        TransferPrepareRecord.builder()
             .prepareId(UUID.randomUUID().toString())
             .fromUserId(command.userId())
             .toUserId(resolved.toUserId())
@@ -139,8 +139,10 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   }
 
   private void assertAmountWithinSponsorLimit(BigInteger amountWei) {
+    LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig =
+        loadTransferRuntimeConfigPort.load();
     BigInteger maxAmountWei =
-        Convert.toWei(eip7702Properties.getSponsor().getMaxTransferAmountEth(), Convert.Unit.ETHER)
+        Convert.toWei(runtimeConfig.sponsorMaxTransferAmountEth(), Convert.Unit.ETHER)
             .toBigIntegerExact();
     if (amountWei.compareTo(maxAmountWei) > 0) {
       throw new Web3InvalidInputException("amountWei exceeds max transfer limit");
@@ -215,7 +217,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
   }
 
   private void assertAutoRecoveryMatchesRequest(
-      Web3TransferPrepareEntity existing, PrepareTokenTransferCommand command) {
+      TransferPrepareRecord existing, PrepareTokenTransferCommand command) {
     boolean toUserMatched = Objects.equals(command.toUserId(), existing.getToUserId());
     boolean amountMatched = command.amountWei().compareTo(existing.getAmountWei()) == 0;
     if (toUserMatched && amountMatched) {
@@ -294,7 +296,8 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
 
   private String resolveToAddress(TokenTransferReferenceType referenceType, Long toUserId) {
     if (referenceType == TokenTransferReferenceType.USER_TO_SERVER) {
-      return EvmAddress.of(eip7702Properties.getDelegation().getDefaultReceiverAddress()).value();
+      return EvmAddress.of(loadTransferRuntimeConfigPort.load().delegationDefaultReceiverAddress())
+          .value();
     }
 
     List<UserWallet> activeWallets =
@@ -399,7 +402,7 @@ public class PrepareTokenTransferService implements PrepareTokenTransferUseCase 
     }
   }
 
-  private PrepareTokenTransferResult toResult(Web3TransferPrepareEntity entity) {
+  private PrepareTokenTransferResult toResult(TransferPrepareRecord entity) {
     return PrepareTokenTransferResult.builder()
         .prepareId(entity.getPrepareId())
         .idempotencyKey(entity.getIdempotencyKey())
