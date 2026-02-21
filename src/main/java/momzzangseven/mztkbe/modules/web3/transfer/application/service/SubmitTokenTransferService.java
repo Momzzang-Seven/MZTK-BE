@@ -140,7 +140,8 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
             command.authorizationSignature());
 
     String transferData =
-        eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei());
+        eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei());
     List<Eip7702TransactionCodecPort.BatchCall> calls =
         List.of(
             new Eip7702TransactionCodecPort.BatchCall(
@@ -150,7 +151,8 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     String callDataHash = eip7702TransactionCodecPort.hashCalls(calls);
 
     byte[] executionSignatureBytes = Numeric.hexStringToByteArray(command.executionSignature());
-    String executeCalldata = eip7702TransactionCodecPort.encodeExecute(calls, executionSignatureBytes);
+    String executeCalldata =
+        eip7702TransactionCodecPort.encodeExecute(calls, executionSignatureBytes);
 
     BigInteger estimatedGas =
         eip7702ChainPort.estimateGasWithAuthorization(
@@ -171,7 +173,8 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         assertSponsorLimits(
             prepare.getFromUserId(), prepare.getAmountWei(), estimatedCostWei, runtimeConfig);
 
-    assertAuthorizationSignature(prepare, command.authorizationSignature(), runtimeConfig.chainId());
+    assertAuthorizationSignature(
+        prepare, command.authorizationSignature(), runtimeConfig.chainId());
     assertExecutionSignature(prepare, command.executionSignature(), callDataHash);
 
     long sponsorNonce = reserveNoncePort.reserveNextNonce(sponsorAddress);
@@ -267,7 +270,9 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         feePlan.maxFeePerGas(),
         estimatedCostWei);
     updateTransactionPort.scheduleRetry(
-        created.getId(), reason, LocalDateTime.now().plusSeconds(runtimeConfig.retryBackoffSeconds()));
+        created.getId(),
+        reason,
+        LocalDateTime.now().plusSeconds(runtimeConfig.retryBackoffSeconds()));
 
     return SubmitTokenTransferResult.builder()
         .transactionId(created.getId())
@@ -337,7 +342,8 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     }
   }
 
-  private void assertDelegateAllowlisted(TransferPrepare prepare, TransferRuntimeConfig runtimeConfig) {
+  private void assertDelegateAllowlisted(
+      TransferPrepare prepare, TransferRuntimeConfig runtimeConfig) {
     String allowlisted = EvmAddress.of(runtimeConfig.delegationBatchImplAddress()).value();
     String current = EvmAddress.of(prepare.getDelegateTarget()).value();
     if (!allowlisted.equals(current)) {
@@ -346,7 +352,8 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   }
 
   private void assertAuthorityNonceMatches(TransferPrepare prepare) {
-    BigInteger onchainNonce = eip7702ChainPort.loadPendingAccountNonce(prepare.getAuthorityAddress());
+    BigInteger onchainNonce =
+        eip7702ChainPort.loadPendingAccountNonce(prepare.getAuthorityAddress());
     long expectedNonce = prepare.getAuthorityNonce();
     long currentNonce;
     try {
