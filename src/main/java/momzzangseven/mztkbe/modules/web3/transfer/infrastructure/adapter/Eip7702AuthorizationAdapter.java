@@ -27,6 +27,7 @@ public class Eip7702AuthorizationAdapter implements Eip7702AuthorizationPort {
   @Override
   public Eip7702ChainPort.AuthorizationTuple toAuthorizationTuple(
       long chainId, String delegateTarget, BigInteger nonce, String signatureHex) {
-    return Eip7702AuthorizationHelper.toAuthorizationTuple(chainId, delegateTarget, nonce, signatureHex);
+    return Eip7702AuthorizationHelper.toAuthorizationTuple(
+        chainId, delegateTarget, nonce, signatureHex);
   }
 }

@@ -15,14 +15,18 @@ public class Eip7702TransactionCodecAdapter implements Eip7702TransactionCodecPo
   @Override
   public String hashCalls(List<BatchCall> calls) {
     List<Eip7702BatchCallAbi.Call> abiCalls =
-        calls.stream().map(call -> new Eip7702BatchCallAbi.Call(call.to(), call.value(), call.data())).toList();
+        calls.stream()
+            .map(call -> new Eip7702BatchCallAbi.Call(call.to(), call.value(), call.data()))
+            .toList();
     return Eip7702BatchCallAbi.hashCalls(abiCalls);
   }
 
   @Override
   public String encodeExecute(List<BatchCall> calls, byte[] executionSignature) {
     List<Eip7702BatchCallAbi.Call> abiCalls =
-        calls.stream().map(call -> new Eip7702BatchCallAbi.Call(call.to(), call.value(), call.data())).toList();
+        calls.stream()
+            .map(call -> new Eip7702BatchCallAbi.Call(call.to(), call.value(), call.data()))
+            .toList();
     return Eip7702BatchCallAbi.encodeExecute(abiCalls, executionSignature);
   }
 
