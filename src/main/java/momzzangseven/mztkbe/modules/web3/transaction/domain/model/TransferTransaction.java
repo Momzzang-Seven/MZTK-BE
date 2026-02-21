@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.domain.model;
+package momzzangseven.mztkbe.modules.web3.transaction.domain.model;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
@@ -6,9 +6,6 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 
 @Getter
 @Builder(toBuilder = true)

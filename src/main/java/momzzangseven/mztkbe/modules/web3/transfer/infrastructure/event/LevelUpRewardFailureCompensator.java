@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.level.infrastructure.repository.LevelUpHistoryJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CheckLevelUpHistoryExistsPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.rollback.DomainTransferFailureCompensator;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import org.springframework.stereotype.Component;
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class LevelUpRewardFailureCompensator implements DomainTransferFailureCompensator {
 
-  private final LevelUpHistoryJpaRepository levelUpHistoryJpaRepository;
+  private final CheckLevelUpHistoryExistsPort checkLevelUpHistoryExistsPort;
 
   @Override
   public boolean supports(DomainReferenceType domainType) {
@@ -31,7 +31,7 @@ public class LevelUpRewardFailureCompensator implements DomainTransferFailureCom
           event.referenceId());
       return;
     }
-    if (!levelUpHistoryJpaRepository.existsById(levelUpHistoryId)) {
+    if (!checkLevelUpHistoryExistsPort.existsById(levelUpHistoryId)) {
       log.warn(
           "LEVEL_UP_REWARD compensation skipped: txId={}, levelUpHistoryId={} not found",
           event.transactionId(),
