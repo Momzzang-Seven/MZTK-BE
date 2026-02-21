@@ -9,11 +9,10 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryAliasPolicyPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTreasuryKeyPort;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter.TreasuryKeyCipher;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.TreasuryKeyEncryptionPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.crypto.Credentials;
@@ -23,11 +22,10 @@ import org.web3j.crypto.Credentials;
 @RequiredArgsConstructor
 public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase {
 
-  private final TreasuryKeyCipher treasuryKeyCipher;
+  private final TreasuryKeyEncryptionPort treasuryKeyEncryptionPort;
   private final SaveTreasuryKeyPort saveTreasuryKeyPort;
   private final RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
-  private final RewardTokenProperties rewardTokenProperties;
-  private final Eip7702Properties eip7702Properties;
+  private final LoadTreasuryAliasPolicyPort loadTreasuryAliasPolicyPort;
 
   @Override
   @Transactional
@@ -46,8 +44,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       String normalizedPrivateKey = normalizePrivateKey(rawPrivateKey);
       treasuryAddress = Credentials.create(normalizedPrivateKey).getAddress().toLowerCase();
 
-      String encryptionKeyB64 = treasuryKeyCipher.generateKeyB64();
-      String encrypted = treasuryKeyCipher.encrypt(normalizedPrivateKey, encryptionKeyB64);
+      String encryptionKeyB64 = treasuryKeyEncryptionPort.generateKeyB64();
+      String encrypted = treasuryKeyEncryptionPort.encrypt(normalizedPrivateKey, encryptionKeyB64);
 
       saveTreasuryKeyPort.upsert(resolvedWalletAlias, treasuryAddress, encrypted);
 
@@ -67,17 +65,14 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   }
 
   private String resolveWalletAlias(String walletAlias) {
-    String configuredDefaultAlias = rewardTokenProperties.getTreasury().getWalletAlias();
+    String configuredDefaultAlias = loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias();
     String resolved =
         (walletAlias == null || walletAlias.isBlank()) ? configuredDefaultAlias : walletAlias;
     if (resolved == null || resolved.isBlank()) {
       throw new Web3InvalidInputException("walletAlias is required");
     }
     String normalized = resolved.trim();
-    Set<String> allowedAliases =
-        Set.of(
-            rewardTokenProperties.getTreasury().getWalletAlias(),
-            eip7702Properties.getSponsor().getWalletAlias());
+    Set<String> allowedAliases = loadTreasuryAliasPolicyPort.allowedAliases();
     if (!allowedAliases.contains(normalized)) {
       throw new Web3InvalidInputException(
           "walletAlias must be configured in application.yml: " + normalized);

@@ -8,7 +8,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestion
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CancelQuestionRewardIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.QuestionRewardIntentRecord;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +23,7 @@ public class CancelQuestionRewardIntentService implements CancelQuestionRewardIn
   public CancelQuestionRewardIntentResult execute(CancelQuestionRewardIntentCommand command) {
     validate(command);
 
-    QuestionRewardIntentEntity existing =
+    QuestionRewardIntentRecord existing =
         questionRewardIntentPersistencePort.findForUpdateByPostId(command.postId()).orElse(null);
     if (existing == null) {
       return new CancelQuestionRewardIntentResult(command.postId(), null, false, false);
@@ -46,7 +46,7 @@ public class CancelQuestionRewardIntentService implements CancelQuestionRewardIn
     }
 
     existing.setStatus(QuestionRewardIntentStatus.CANCELED);
-    QuestionRewardIntentEntity saved = questionRewardIntentPersistencePort.save(existing);
+    QuestionRewardIntentRecord saved = questionRewardIntentPersistencePort.save(existing);
     return new CancelQuestionRewardIntentResult(saved.getPostId(), saved.getStatus(), true, true);
   }
 
@@ -58,7 +58,7 @@ public class CancelQuestionRewardIntentService implements CancelQuestionRewardIn
   }
 
   private boolean isStaleCancelRequest(
-      QuestionRewardIntentEntity existing, CancelQuestionRewardIntentCommand command) {
+      QuestionRewardIntentRecord existing, CancelQuestionRewardIntentCommand command) {
     if (command.acceptedCommentId() == null) {
       return false;
     }

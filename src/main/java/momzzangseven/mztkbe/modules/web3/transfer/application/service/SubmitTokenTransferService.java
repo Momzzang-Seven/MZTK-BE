@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,20 +19,19 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditDetailBuilder;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.SubmitTokenTransferUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702AuthorizationPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702ChainPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Eip7702TransactionCodecPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDailyUsagePersistencePort;
@@ -39,18 +39,14 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferP
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferTransactionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.QuestionRewardIntentRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.SponsorDailyUsageRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.TransferPrepareRecord;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.model.TransferTransactionRecord;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip1559TransferSigner;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702AuthorizationHelper;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702BatchCallAbi;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip7702TransactionEncoder;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.QuestionRewardIntentEntity;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3TransferPrepareEntity;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -81,10 +77,11 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   private final ReserveNoncePort reserveNoncePort;
   private final Web3ContractPort web3ContractPort;
 
-  private final Eip7702Properties eip7702Properties;
-  private final Web3CoreProperties web3CoreProperties;
-  private final RewardTokenProperties rewardTokenProperties;
+  private final LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
+  private final Eip7702AuthorizationPort eip7702AuthorizationPort;
+  private final Eip7702TransactionCodecPort eip7702TransactionCodecPort;
   private final VerifyExecutionSignaturePort executionSignatureVerifier;
+
   private Clock kstClock = Clock.system(KST);
 
   @Override
@@ -92,7 +89,10 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   public SubmitTokenTransferResult execute(SubmitTokenTransferCommand command) {
     validate(command);
 
-    Web3TransferPrepareEntity prepare =
+    LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig =
+        loadTransferRuntimeConfigPort.load();
+
+    TransferPrepareRecord prepare =
         transferPreparePersistencePort
             .findForUpdateByPrepareId(command.prepareId())
             .orElseThrow(
@@ -115,7 +115,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
     assertQuestionRewardIntentSubmittable(prepare);
 
-    Web3TransactionEntity existingByIdempotency =
+    TransferTransactionRecord existingByIdempotency =
         transferTransactionPersistencePort
             .findByIdempotencyKey(prepare.getIdempotencyKey())
             .orElse(null);
@@ -127,38 +127,36 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       return toResult(existingByIdempotency);
     }
 
-    assertDelegateAllowlisted(prepare);
+    assertDelegateAllowlisted(prepare, runtimeConfig);
     assertAuthorityNonceMatches(prepare);
 
     LoadTreasuryKeyPort.TreasuryKeyMaterial sponsorKey =
         loadTreasuryKeyPort
             .loadByAlias(
-                eip7702Properties.getSponsor().getWalletAlias(),
-                eip7702Properties.getSponsor().getKeyEncryptionKeyB64())
+                runtimeConfig.sponsorWalletAlias(), runtimeConfig.sponsorKeyEncryptionKeyB64())
             .orElseThrow(() -> new Web3InvalidInputException("sponsor signer key is missing"));
 
     String sponsorAddress = EvmAddress.of(sponsorKey.treasuryAddress()).value();
 
     Eip7702ChainPort.AuthorizationTuple authTuple =
-        Eip7702AuthorizationHelper.toAuthorizationTuple(
-            web3CoreProperties.getChainId(),
+        eip7702AuthorizationPort.toAuthorizationTuple(
+            runtimeConfig.chainId(),
             prepare.getDelegateTarget(),
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             command.authorizationSignature());
 
     String transferData =
-        Eip1559TransferSigner.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei());
-    List<Eip7702BatchCallAbi.Call> calls =
+        eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei());
+    List<Eip7702TransactionCodecPort.BatchCall> calls =
         List.of(
-            new Eip7702BatchCallAbi.Call(
-                rewardTokenProperties.getTokenContractAddress(),
+            new Eip7702TransactionCodecPort.BatchCall(
+                runtimeConfig.tokenContractAddress(),
                 BigInteger.ZERO,
                 Numeric.hexStringToByteArray(transferData)));
-    String callDataHash = Eip7702BatchCallAbi.hashCalls(calls);
+    String callDataHash = eip7702TransactionCodecPort.hashCalls(calls);
 
     byte[] executionSignatureBytes = Numeric.hexStringToByteArray(command.executionSignature());
-
-    String executeCalldata = Eip7702BatchCallAbi.encodeExecute(calls, executionSignatureBytes);
+    String executeCalldata = eip7702TransactionCodecPort.encodeExecute(calls, executionSignatureBytes);
 
     BigInteger estimatedGas =
         eip7702ChainPort.estimateGasWithAuthorization(
@@ -168,8 +166,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       throw new Web3InvalidInputException("estimatedGas must be > 0");
     }
 
-    if (estimatedGas.compareTo(BigInteger.valueOf(eip7702Properties.getSponsor().getMaxGasLimit()))
-        > 0) {
+    if (estimatedGas.compareTo(BigInteger.valueOf(runtimeConfig.sponsorMaxGasLimit())) > 0) {
       throw new Web3TransferException(ErrorCode.SPONSOR_GAS_LIMIT_EXCEEDED, false);
     }
 
@@ -177,29 +174,31 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
     BigInteger estimatedCostWei = estimateCostWei(estimatedGas, feePlan.maxFeePerGas());
     DailyUsageSnapshot dailyUsageSnapshot =
-        assertSponsorLimits(prepare.getFromUserId(), prepare.getAmountWei(), estimatedCostWei);
+        assertSponsorLimits(
+            prepare.getFromUserId(), prepare.getAmountWei(), estimatedCostWei, runtimeConfig);
 
-    assertAuthorizationSignature(prepare, command.authorizationSignature());
+    assertAuthorizationSignature(prepare, command.authorizationSignature(), runtimeConfig.chainId());
     assertExecutionSignature(prepare, command.executionSignature(), callDataHash);
 
     long sponsorNonce = reserveNoncePort.reserveNextNonce(sponsorAddress);
 
-    Eip7702TransactionEncoder.SignedPayload signedPayload =
-        Eip7702TransactionEncoder.signAndEncode(
-            web3CoreProperties.getChainId(),
-            BigInteger.valueOf(sponsorNonce),
-            feePlan.maxPriorityFeePerGas(),
-            feePlan.maxFeePerGas(),
-            estimatedGas,
-            prepare.getAuthorityAddress(),
-            BigInteger.ZERO,
-            executeCalldata,
-            List.of(authTuple),
-            sponsorKey.privateKeyHex());
+    Eip7702TransactionCodecPort.SignedPayload signedPayload =
+        eip7702TransactionCodecPort.signAndEncode(
+            new Eip7702TransactionCodecPort.SignCommand(
+                runtimeConfig.chainId(),
+                BigInteger.valueOf(sponsorNonce),
+                feePlan.maxPriorityFeePerGas(),
+                feePlan.maxFeePerGas(),
+                estimatedGas,
+                prepare.getAuthorityAddress(),
+                BigInteger.ZERO,
+                executeCalldata,
+                List.of(authTuple),
+                sponsorKey.privateKeyHex()));
 
-    Web3TransactionEntity created =
+    TransferTransactionRecord created =
         transferTransactionPersistencePort.saveAndFlush(
-            Web3TransactionEntity.builder()
+            TransferTransactionRecord.builder()
                 .idempotencyKey(prepare.getIdempotencyKey())
                 .referenceType(prepare.getReferenceType())
                 .referenceId(prepare.getReferenceId())
@@ -223,23 +222,17 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         created.getId(),
         Web3TransactionAuditEventType.AUTHORIZATION,
         null,
-        AuditDetailBuilder.create()
-            .put("prepareId", prepare.getPrepareId())
-            .put("payloadHash", prepare.getPayloadHashToSign())
-            .put("authorityNonce", prepare.getAuthorityNonce())
-            .put("authorizationExpiresAt", prepare.getAuthExpiresAt())
-            .build());
+        authorizationAuditDetail(prepare));
     audit(
         created.getId(),
         Web3TransactionAuditEventType.LIMIT_CHECK,
         null,
-        AuditDetailBuilder.create()
-            .put("estimatedGas", estimatedGas)
-            .put("maxFeePerGas", feePlan.maxFeePerGas())
-            .put("estimatedCostWei", estimatedCostWei)
-            .put("dailyUsedWei", dailyUsageSnapshot.currentUsedWei())
-            .put("dailyCapWei", dailyUsageSnapshot.dailyCapWei())
-            .build());
+        limitCheckAuditDetail(
+            estimatedGas,
+            feePlan.maxFeePerGas(),
+            estimatedCostWei,
+            dailyUsageSnapshot.currentUsedWei(),
+            dailyUsageSnapshot.dailyCapWei()));
     auditStateChange(created.getId(), Web3TxStatus.CREATED, Web3TxStatus.SIGNED);
 
     Web3ContractPort.BroadcastResult broadcast =
@@ -248,11 +241,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         created.getId(),
         Web3TransactionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
-        AuditDetailBuilder.create()
-            .put("success", broadcast.success())
-            .put("txHash", broadcast.txHash())
-            .put("errorCode", broadcast.failureReason())
-            .build());
+        broadcastAuditDetail(broadcast));
 
     prepare.setStatus(TransferPrepareStatus.SUBMITTED);
     prepare.setSubmittedTxId(created.getId());
@@ -286,10 +275,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         feePlan.maxFeePerGas(),
         estimatedCostWei);
     updateTransactionPort.scheduleRetry(
-        created.getId(),
-        reason,
-        LocalDateTime.now()
-            .plusSeconds(rewardTokenProperties.getWorker().getRetryBackoffSeconds()));
+        created.getId(), reason, LocalDateTime.now().plusSeconds(runtimeConfig.retryBackoffSeconds()));
 
     return SubmitTokenTransferResult.builder()
         .transactionId(created.getId())
@@ -305,7 +291,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     command.validate();
   }
 
-  private void assertQuestionRewardIntentSubmittable(Web3TransferPrepareEntity prepare) {
+  private void assertQuestionRewardIntentSubmittable(TransferPrepareRecord prepare) {
     DomainReferenceType domainType =
         TokenTransferIdempotencyKeyFactory.parseDomainType(prepare.getIdempotencyKey());
     if (domainType != DomainReferenceType.QUESTION_REWARD) {
@@ -317,7 +303,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
       throw new Web3InvalidInputException("invalid question reward referenceId in prepare");
     }
 
-    QuestionRewardIntentEntity intent =
+    QuestionRewardIntentRecord intent =
         questionRewardIntentPersistencePort
             .findForUpdateByPostId(postId)
             .orElseThrow(
@@ -344,7 +330,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     }
   }
 
-  private void markQuestionRewardIntentSubmittedIfNeeded(Web3TransferPrepareEntity prepare) {
+  private void markQuestionRewardIntentSubmittedIfNeeded(TransferPrepareRecord prepare) {
     DomainReferenceType domainType =
         TokenTransferIdempotencyKeyFactory.parseDomainType(prepare.getIdempotencyKey());
     if (domainType != DomainReferenceType.QUESTION_REWARD) {
@@ -375,18 +361,18 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
     }
   }
 
-  private void assertDelegateAllowlisted(Web3TransferPrepareEntity prepare) {
-    String allowlisted =
-        EvmAddress.of(eip7702Properties.getDelegation().getBatchImplAddress()).value();
+  private void assertDelegateAllowlisted(
+      TransferPrepareRecord prepare,
+      LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig) {
+    String allowlisted = EvmAddress.of(runtimeConfig.delegationBatchImplAddress()).value();
     String current = EvmAddress.of(prepare.getDelegateTarget()).value();
     if (!allowlisted.equals(current)) {
       throw new Web3TransferException(ErrorCode.DELEGATE_NOT_ALLOWLISTED, false);
     }
   }
 
-  private void assertAuthorityNonceMatches(Web3TransferPrepareEntity prepare) {
-    BigInteger onchainNonce =
-        eip7702ChainPort.loadPendingAccountNonce(prepare.getAuthorityAddress());
+  private void assertAuthorityNonceMatches(TransferPrepareRecord prepare) {
+    BigInteger onchainNonce = eip7702ChainPort.loadPendingAccountNonce(prepare.getAuthorityAddress());
     long expectedNonce = prepare.getAuthorityNonce();
     long currentNonce;
     try {
@@ -407,10 +393,10 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   }
 
   private void assertAuthorizationSignature(
-      Web3TransferPrepareEntity prepare, String authorizationSignature) {
+      TransferPrepareRecord prepare, String authorizationSignature, long chainId) {
     boolean valid =
-        Eip7702AuthorizationHelper.verifySigner(
-            web3CoreProperties.getChainId(),
+        eip7702AuthorizationPort.verifySigner(
+            chainId,
             prepare.getDelegateTarget(),
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature,
@@ -421,7 +407,7 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   }
 
   private void assertExecutionSignature(
-      Web3TransferPrepareEntity prepare, String executionSignature, String callDataHash) {
+      TransferPrepareRecord prepare, String executionSignature, String callDataHash) {
     BigInteger deadlineEpochSeconds =
         BigInteger.valueOf(prepare.getAuthExpiresAt().toEpochSecond(ZoneOffset.UTC));
     boolean valid =
@@ -437,30 +423,33 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   }
 
   private DailyUsageSnapshot assertSponsorLimits(
-      Long userId, BigInteger amountWei, BigInteger estimatedCostWei) {
-    BigInteger maxAmountWei = ethToWei(eip7702Properties.getSponsor().getMaxTransferAmountEth());
+      Long userId,
+      BigInteger amountWei,
+      BigInteger estimatedCostWei,
+      LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig) {
+    BigInteger maxAmountWei = ethToWei(runtimeConfig.sponsorMaxTransferAmountEth());
     if (amountWei.compareTo(maxAmountWei) > 0) {
       throw new Web3TransferException(ErrorCode.SPONSOR_AMOUNT_LIMIT_EXCEEDED, false);
     }
 
-    BigInteger perTxCapWei = ethToWei(eip7702Properties.getSponsor().getPerTxCapEth());
+    BigInteger perTxCapWei = ethToWei(runtimeConfig.sponsorPerTxCapEth());
     if (estimatedCostWei.compareTo(perTxCapWei) > 0) {
       throw new Web3TransferException(ErrorCode.SPONSOR_AMOUNT_LIMIT_EXCEEDED, false);
     }
 
     LocalDate usageDate = LocalDate.now(kstClock);
-    Web3SponsorDailyUsageEntity usage =
+    SponsorDailyUsageRecord usage =
         sponsorDailyUsagePersistencePort
             .findForUpdate(userId, usageDate)
             .orElseGet(
                 () ->
-                    Web3SponsorDailyUsageEntity.builder()
+                    SponsorDailyUsageRecord.builder()
                         .userId(userId)
                         .usageDateKst(usageDate)
                         .estimatedCostWei(BigInteger.ZERO)
                         .build());
 
-    BigInteger dailyCapWei = ethToWei(eip7702Properties.getSponsor().getPerDayUserCapEth());
+    BigInteger dailyCapWei = ethToWei(runtimeConfig.sponsorPerDayUserCapEth());
     BigInteger next = usage.getEstimatedCostWei().add(estimatedCostWei);
     if (next.compareTo(dailyCapWei) > 0) {
       throw new Web3TransferException(ErrorCode.SPONSOR_DAILY_LIMIT_EXCEEDED, true);
@@ -471,12 +460,12 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
 
   private void addDailyUsage(Long userId, BigInteger estimatedCostWei) {
     LocalDate usageDate = LocalDate.now(kstClock);
-    Web3SponsorDailyUsageEntity usage =
+    SponsorDailyUsageRecord usage =
         sponsorDailyUsagePersistencePort
             .findForUpdate(userId, usageDate)
             .orElseGet(
                 () ->
-                    Web3SponsorDailyUsageEntity.builder()
+                    SponsorDailyUsageRecord.builder()
                         .userId(userId)
                         .usageDateKst(usageDate)
                         .estimatedCostWei(BigInteger.ZERO)
@@ -516,14 +505,14 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
         estimatedCostWei);
   }
 
-  private Web3TransactionEntity loadSubmittedTransaction(Long txId) {
+  private TransferTransactionRecord loadSubmittedTransaction(Long txId) {
     return transferTransactionPersistencePort
         .findById(txId)
         .orElseThrow(
             () -> new Web3InvalidInputException("submitted transaction not found: " + txId));
   }
 
-  private SubmitTokenTransferResult toResult(Web3TransactionEntity tx) {
+  private SubmitTokenTransferResult toResult(TransferTransactionRecord tx) {
     return SubmitTokenTransferResult.builder()
         .transactionId(tx.getId())
         .status(tx.getStatus().name())
@@ -541,11 +530,42 @@ public class SubmitTokenTransferService implements SubmitTokenTransferUseCase {
   }
 
   private void auditStateChange(Long txId, Web3TxStatus from, Web3TxStatus to) {
-    audit(
-        txId,
-        Web3TransactionAuditEventType.STATE_CHANGE,
-        null,
-        AuditDetailBuilder.create().put("from", from).put("to", to).build());
+    Map<String, Object> detail = new LinkedHashMap<>();
+    detail.put("from", from.name());
+    detail.put("to", to.name());
+    audit(txId, Web3TransactionAuditEventType.STATE_CHANGE, null, detail);
+  }
+
+  private Map<String, Object> authorizationAuditDetail(TransferPrepareRecord prepare) {
+    Map<String, Object> detail = new LinkedHashMap<>();
+    detail.put("prepareId", prepare.getPrepareId());
+    detail.put("payloadHash", prepare.getPayloadHashToSign());
+    detail.put("authorityNonce", prepare.getAuthorityNonce());
+    detail.put("authorizationExpiresAt", prepare.getAuthExpiresAt());
+    return detail;
+  }
+
+  private Map<String, Object> limitCheckAuditDetail(
+      BigInteger estimatedGas,
+      BigInteger maxFeePerGas,
+      BigInteger estimatedCostWei,
+      BigInteger dailyUsedWei,
+      BigInteger dailyCapWei) {
+    Map<String, Object> detail = new LinkedHashMap<>();
+    detail.put("estimatedGas", estimatedGas.toString());
+    detail.put("maxFeePerGas", maxFeePerGas.toString());
+    detail.put("estimatedCostWei", estimatedCostWei.toString());
+    detail.put("dailyUsedWei", dailyUsedWei.toString());
+    detail.put("dailyCapWei", dailyCapWei.toString());
+    return detail;
+  }
+
+  private Map<String, Object> broadcastAuditDetail(Web3ContractPort.BroadcastResult broadcast) {
+    Map<String, Object> detail = new LinkedHashMap<>();
+    detail.put("success", broadcast.success());
+    detail.put("txHash", broadcast.txHash());
+    detail.put("errorCode", broadcast.failureReason());
+    return detail;
   }
 
   private record DailyUsageSnapshot(BigInteger currentUsedWei, BigInteger dailyCapWei) {}

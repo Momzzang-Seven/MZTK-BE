@@ -6,9 +6,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,13 +24,15 @@ public class Eip7702CleanupService {
 
   private final TransferPreparePersistencePort transferPreparePersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
-  private final Eip7702Properties eip7702Properties;
+  private final LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
 
   @Transactional
   public CleanupBatchResult runBatch(Instant now) {
-    ZoneId zone = ZoneId.of(eip7702Properties.getCleanup().getZone());
-    int retentionDays = eip7702Properties.getCleanup().getRetentionDays();
-    int batchSize = eip7702Properties.getCleanup().getBatchSize();
+    LoadTransferRuntimeConfigPort.TransferRuntimeConfig runtimeConfig =
+        loadTransferRuntimeConfigPort.load();
+    ZoneId zone = ZoneId.of(runtimeConfig.cleanupZone());
+    int retentionDays = runtimeConfig.cleanupRetentionDays();
+    int batchSize = runtimeConfig.cleanupBatchSize();
 
     LocalDateTime prepareCutoff = LocalDateTime.ofInstant(now, zone).minusDays(retentionDays);
     LocalDate usageCutoff = LocalDate.ofInstant(now, zone).minusDays(retentionDays);
