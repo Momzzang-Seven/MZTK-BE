@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.application.scheduler;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.scheduler;
 
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;

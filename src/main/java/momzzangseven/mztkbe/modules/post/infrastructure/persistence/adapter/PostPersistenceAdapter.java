@@ -70,6 +70,11 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
     return entities.stream().map(PostEntity::toDomain).toList();
   }
 
+  @Override
+  public int markQuestionPostSolved(Long postId) {
+    return postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
+  }
+
   // --- 동적 쿼리용 헬퍼 메서드 ---
 
   private BooleanExpression eqType(PostType type) {

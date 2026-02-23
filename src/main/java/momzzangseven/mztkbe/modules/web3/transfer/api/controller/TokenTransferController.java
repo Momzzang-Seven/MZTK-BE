@@ -44,7 +44,7 @@ public class TokenTransferController {
     PrepareTokenTransferCommand command =
         new PrepareTokenTransferCommand(
             userId,
-            request.referenceType(),
+            request.domainType(),
             request.referenceId(),
             request.toUserId(),
             new BigInteger(request.amountWei()));

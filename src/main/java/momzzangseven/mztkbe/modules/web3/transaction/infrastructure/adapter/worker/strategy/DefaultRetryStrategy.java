@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.wor
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,7 +17,8 @@ public class DefaultRetryStrategy implements RetryStrategy {
 
   @Override
   public LocalDateTime nextRetryAt(
-      RewardTokenProperties properties, LoadTransactionWorkPort.TransactionWorkItem item) {
+      TransactionRewardTokenProperties properties,
+      LoadTransactionWorkPort.TransactionWorkItem item) {
     int backoffSeconds = Math.max(1, properties.getWorker().getRetryBackoffSeconds());
     return LocalDateTime.now().plusSeconds(backoffSeconds);
   }

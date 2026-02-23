@@ -8,17 +8,18 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.TransactionOutcomePublisher;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.ReceiptPollAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Component;
 public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
+  private final TransactionOutcomePublisher transactionOutcomePublisher;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -37,7 +39,8 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
-      RewardTokenProperties rewardTokenProperties,
+      TransactionOutcomePublisher transactionOutcomePublisher,
+      TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy) {
     super(
         loadTransactionWorkPort,
@@ -46,6 +49,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         rewardTokenProperties,
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
+    this.transactionOutcomePublisher = transactionOutcomePublisher;
   }
 
   @Scheduled(fixedDelay = 1000L)
@@ -89,12 +93,25 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
     if (receipt.found()) {
       if (Boolean.TRUE.equals(receipt.success())) {
-        updateTransactionPort.updateStatus(
-            item.transactionId(), Web3TxStatus.SUCCEEDED, txHash, null);
+        transactionOutcomePublisher.markSucceededAndPublish(
+            item.transactionId(),
+            item.idempotencyKey(),
+            item.referenceType(),
+            item.referenceId(),
+            item.fromUserId(),
+            item.toUserId(),
+            txHash);
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
       } else {
-        updateTransactionPort.updateStatus(
-            item.transactionId(), Web3TxStatus.FAILED_ONCHAIN, txHash, "RECEIPT_STATUS_0");
+        transactionOutcomePublisher.markFailedOnchainAndPublish(
+            item.transactionId(),
+            item.idempotencyKey(),
+            item.referenceType(),
+            item.referenceId(),
+            item.fromUserId(),
+            item.toUserId(),
+            txHash,
+            "RECEIPT_STATUS_0");
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.FAILED_ONCHAIN);
       }
       return;

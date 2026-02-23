@@ -33,6 +33,13 @@ spring:
       write-dates-as-timestamps: false
     time-zone: Asia/Seoul
 
+info:
+  app:
+    name: ${APP_NAME:MZTK-BE}
+    version: ${APP_VERSION:0.0.1-SNAPSHOT}
+    description: ${APP_DESCRIPTION:MZTK-BE Backend Service}
+    environment: ${APP_ENVIRONMENT:local}
+
 security:
   cors:
     allowed-origins:
@@ -111,10 +118,17 @@ level:
     zone: Asia/Seoul
 
 management:
+  info:
+    env:
+      enabled: true
   endpoints:
     web:
       exposure:
         include: health, info
+  endpoint:
+    health:
+      show-details: when_authorized
+      roles: ROLE_ADMIN
 
 jwt:
   secret: ${JWT_SECRET}
@@ -170,6 +184,7 @@ web3:
 
     # 임계치/워커 튜닝은 yml 상수 유지
     treasury:
+      wallet-alias: reward-treasury
       key-encryption-key-b64: ${TREASURY_KEY_ENCRYPTION_KEY_B64}
       treasury-address: ${TREASURY_WALLET_ADDRESS}
       provisioning:
@@ -204,12 +219,14 @@ web3:
     sponsor:
       enabled: true
       key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
-      wallet-alias: reward-treasury
+      wallet-alias: sponsor-treasury
 
       # 안전장치는 yml 상수 유지(운영 중 급변할 값 아니면)
       max-gas-limit: 500000
       max-max-fee-gwei: 60
       max-priority-fee-gwei: 2
+      max-transfer-amount-eth: 5000
+      per-tx-cap-eth: 0.002
       daily-sponsor-cap-eth: 0.5
       per-day-user-cap-eth: 0.02
 

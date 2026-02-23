@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.GasFeeStrategy;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class DefaultGasFeeStrategy implements GasFeeStrategy {
 
-  private final RewardTokenProperties rewardTokenProperties;
+  private final TransferRewardTokenProperties rewardTokenProperties;
 
   @Override
   public FeePlan calculate(FeeInputs inputs) {

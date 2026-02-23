@@ -2,8 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config;
 
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.signature.infrastructure.config.EIP712Properties;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import momzzangseven.mztkbe.global.error.web3.Web3ConfigInvalidException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -13,13 +12,14 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class Eip7702ChainConsistencyValidator {
 
-  private final Web3CoreProperties web3CoreProperties;
-  private final EIP712Properties eip712Properties;
+  private final TransferCoreProperties web3CoreProperties;
+  private final TransferEip712Properties eip712Properties;
 
   @PostConstruct
   void validate() {
-    if (web3CoreProperties.getChainId() != eip712Properties.getChainId()) {
-      throw new IllegalStateException(
+    Long eip712ChainId = eip712Properties.getChainId();
+    if (eip712ChainId == null || web3CoreProperties.getChainId() != eip712ChainId) {
+      throw new Web3ConfigInvalidException(
           "web3.chain-id and web3.eip712.chain-id must match for EIP-7702 flow");
     }
   }

@@ -21,9 +21,9 @@ import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.domain.vo.RewardStatus;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxPhase;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxPhase;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -88,7 +88,7 @@ public class LevelUpService implements LevelUpUseCase {
         .rewardMztk(rewardMztk)
         .rewardStatus(rewardStatus)
         .rewardTxStatus(rewardResult.status())
-        .rewardTxPhase(Web3TxPhase.from(rewardResult.status()))
+        .rewardTxPhase(RewardTxPhase.from(rewardResult.status()))
         .rewardTxHash(rewardResult.txHash())
         .rewardExplorerUrl(buildExplorerUrl(rewardResult.txHash()))
         .build();
@@ -115,11 +115,11 @@ public class LevelUpService implements LevelUpUseCase {
     }
   }
 
-  private RewardStatus toLegacyRewardStatus(Web3TxStatus status) {
-    if (status == Web3TxStatus.SUCCEEDED) {
+  private RewardStatus toLegacyRewardStatus(RewardTxStatus status) {
+    if (status == RewardTxStatus.SUCCEEDED) {
       return RewardStatus.SUCCESS;
     }
-    if (status == Web3TxStatus.FAILED_ONCHAIN) {
+    if (status == RewardTxStatus.FAILED_ONCHAIN) {
       return RewardStatus.FAILED;
     }
     return RewardStatus.PENDING;

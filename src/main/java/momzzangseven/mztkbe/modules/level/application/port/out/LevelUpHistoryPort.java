@@ -14,4 +14,6 @@ public interface LevelUpHistoryPort {
    * {@code size + 1} items to support {@code hasNext} computation by the application service.
    */
   List<LevelUpHistory> loadLevelUpHistories(Long userId, int page, int size);
+
+  boolean existsById(Long levelUpHistoryId);
 }
