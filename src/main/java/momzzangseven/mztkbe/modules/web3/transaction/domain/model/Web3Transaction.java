@@ -214,6 +214,9 @@ public class Web3Transaction {
   }
 
   public void scheduleRetry(String reason, LocalDateTime until) {
+    if (status == Web3TxStatus.SUCCEEDED || status == Web3TxStatus.FAILED_ONCHAIN) {
+      return;
+    }
     failureReason = reason;
     processingBy = null;
     processingUntil = until;

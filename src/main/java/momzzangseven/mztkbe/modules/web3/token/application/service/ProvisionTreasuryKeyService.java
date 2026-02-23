@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.token.application.service;
 
 import java.util.Locale;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
@@ -8,9 +9,10 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.token.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryAliasPolicyPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.SaveTreasuryKeyPort;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter.TreasuryKeyCipher;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.TreasuryKeyEncryptionPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.crypto.Credentials;
@@ -20,9 +22,10 @@ import org.web3j.crypto.Credentials;
 @RequiredArgsConstructor
 public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase {
 
-  private final TreasuryKeyCipher treasuryKeyCipher;
+  private final TreasuryKeyEncryptionPort treasuryKeyEncryptionPort;
   private final SaveTreasuryKeyPort saveTreasuryKeyPort;
   private final RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
+  private final LoadTreasuryAliasPolicyPort loadTreasuryAliasPolicyPort;
 
   @Override
   @Transactional
@@ -31,18 +34,20 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       targetType = "TREASURY_KEY",
       operatorId = "#operatorId",
       targetId = "#result != null ? #result.treasuryAddress() : null")
-  public ProvisionTreasuryKeyResult execute(Long operatorId, String rawPrivateKey) {
+  public ProvisionTreasuryKeyResult execute(
+      Long operatorId, String walletAlias, String rawPrivateKey) {
     validateOperatorId(operatorId);
+    String resolvedWalletAlias = resolveWalletAlias(walletAlias);
     String treasuryAddress = null;
 
     try {
       String normalizedPrivateKey = normalizePrivateKey(rawPrivateKey);
       treasuryAddress = Credentials.create(normalizedPrivateKey).getAddress().toLowerCase();
 
-      String encryptionKeyB64 = treasuryKeyCipher.generateKeyB64();
-      String encrypted = treasuryKeyCipher.encrypt(normalizedPrivateKey, encryptionKeyB64);
+      String encryptionKeyB64 = treasuryKeyEncryptionPort.generateKeyB64();
+      String encrypted = treasuryKeyEncryptionPort.encrypt(normalizedPrivateKey, encryptionKeyB64);
 
-      saveTreasuryKeyPort.upsert(treasuryAddress, encrypted);
+      saveTreasuryKeyPort.upsert(resolvedWalletAlias, treasuryAddress, encrypted);
 
       recordAudit(operatorId, treasuryAddress, true, null);
 
@@ -57,6 +62,22 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     if (operatorId == null || operatorId <= 0) {
       throw new Web3InvalidInputException("operatorId must be positive");
     }
+  }
+
+  private String resolveWalletAlias(String walletAlias) {
+    String configuredDefaultAlias = loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias();
+    String resolved =
+        (walletAlias == null || walletAlias.isBlank()) ? configuredDefaultAlias : walletAlias;
+    if (resolved == null || resolved.isBlank()) {
+      throw new Web3InvalidInputException("walletAlias is required");
+    }
+    String normalized = resolved.trim();
+    Set<String> allowedAliases = loadTreasuryAliasPolicyPort.allowedAliases();
+    if (!allowedAliases.contains(normalized)) {
+      throw new Web3InvalidInputException(
+          "walletAlias must be configured in application.yml: " + normalized);
+    }
+    return normalized;
   }
 
   private String normalizePrivateKey(String rawPrivateKey) {

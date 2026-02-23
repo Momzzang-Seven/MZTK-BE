@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -12,11 +14,9 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransac
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.CsOverrideAuditDetail;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarkTransactionSucceededService implements MarkTransactionSucceededUseCase {
 
   private final LoadTransactionPort loadTransactionPort;
-  private final UpdateTransactionPort updateTransactionPort;
+  private final TransactionOutcomePublisher transactionOutcomePublisher;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
   private final Web3ContractPort web3ContractPort;
 
@@ -68,25 +68,20 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
           "receipt proof is required (receipt.status == 1)");
     }
 
-    updateTransactionPort.updateStatus(
-        command.transactionId(), Web3TxStatus.SUCCEEDED, command.txHash(), null);
+    transactionOutcomePublisher.markSucceededAndPublish(
+        command.transactionId(),
+        snapshot.idempotencyKey(),
+        snapshot.referenceType(),
+        snapshot.referenceId(),
+        snapshot.fromUserId(),
+        snapshot.toUserId(),
+        command.txHash());
     recordTransactionAuditPort.record(
         new RecordTransactionAuditPort.AuditCommand(
             command.transactionId(),
             Web3TransactionAuditEventType.CS_OVERRIDE,
             receipt.rpcAlias(),
-            new CsOverrideAuditDetail(
-                    command.operatorId(),
-                    snapshot.status(),
-                    Web3TxStatus.SUCCEEDED,
-                    command.reason(),
-                    command.evidence(),
-                    command.explorerUrl(),
-                    command.txHash(),
-                    receipt.found(),
-                    receipt.success(),
-                    receipt.failureReason())
-                .toMap()));
+            csOverrideAuditDetail(command, snapshot, receipt)));
 
     return MarkTransactionSucceededResult.builder()
         .transactionId(command.transactionId())
@@ -95,5 +90,23 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
         .txHash(command.txHash())
         .explorerUrl(command.explorerUrl())
         .build();
+  }
+
+  private Map<String, Object> csOverrideAuditDetail(
+      MarkTransactionSucceededCommand command,
+      LoadTransactionPort.TransactionSnapshot snapshot,
+      Web3ContractPort.ReceiptResult receipt) {
+    Map<String, Object> detail = new LinkedHashMap<>();
+    detail.put("operatorId", command.operatorId());
+    detail.put("fromStatus", snapshot.status().name());
+    detail.put("toStatus", Web3TxStatus.SUCCEEDED.name());
+    detail.put("reason", command.reason());
+    detail.put("evidence", command.evidence());
+    detail.put("explorerUrl", command.explorerUrl());
+    detail.put("txHash", command.txHash());
+    detail.put("receiptFound", receipt.found());
+    detail.put("receiptSuccess", receipt.success());
+    detail.put("receiptFailureReason", receipt.failureReason());
+    return detail;
   }
 }
