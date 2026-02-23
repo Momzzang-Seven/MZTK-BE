@@ -1,30 +1,25 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
 import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.RewardFailedOnchainException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3ValidationMessage;
-import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelRewardTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTxIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SaveTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3TransactionEntity;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.repository.Web3TransactionJpaRepository;
-import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CreateLevelUpRewardTxIntentCommand;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SaveTransactionPort;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
-public class Web3TransactionPersistenceAdapter
-    implements SaveTransactionPort, LoadLevelRewardTransactionPort {
+public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
 
   private final Web3TransactionJpaRepository repository;
 
@@ -80,27 +75,6 @@ public class Web3TransactionPersistenceAdapter
                                       "web3_transactions race detected, but no row found", e)));
       return mapAndValidateExisting(raced);
     }
-  }
-
-  @Override
-  @Transactional(readOnly = true)
-  public Map<Long, RewardTxView> loadByLevelUpHistoryIds(Collection<Long> levelUpHistoryIds) {
-    if (levelUpHistoryIds == null || levelUpHistoryIds.isEmpty()) {
-      return Map.of();
-    }
-
-    var referenceIds = levelUpHistoryIds.stream().map(String::valueOf).toList();
-
-    Map<Long, RewardTxView> views = new LinkedHashMap<>();
-    repository
-        .findByReferenceTypeAndReferenceIdIn(Web3ReferenceType.LEVEL_UP_REWARD, referenceIds)
-        .forEach(
-            entity -> {
-              Long levelUpHistoryId = Long.parseLong(entity.getReferenceId());
-              views.put(levelUpHistoryId, new RewardTxView(entity.getStatus(), entity.getTxHash()));
-            });
-
-    return views;
   }
 
   private Web3Transaction mapAndValidateExisting(Web3TransactionEntity existing) {

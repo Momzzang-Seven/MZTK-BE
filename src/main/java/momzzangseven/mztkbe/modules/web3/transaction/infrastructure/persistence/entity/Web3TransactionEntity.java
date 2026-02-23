@@ -28,10 +28,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 @Table(
     name = "web3_transactions",
     uniqueConstraints = {
-      @UniqueConstraint(name = "uk_web3_tx_idempotency", columnNames = "idempotency_key"),
-      @UniqueConstraint(
-          name = "uk_web3_tx_reference",
-          columnNames = {"reference_type", "reference_id"})
+      @UniqueConstraint(name = "uk_web3_tx_idempotency", columnNames = "idempotency_key")
     },
     indexes = {
       @Index(name = "idx_web3_tx_status", columnList = "status"),

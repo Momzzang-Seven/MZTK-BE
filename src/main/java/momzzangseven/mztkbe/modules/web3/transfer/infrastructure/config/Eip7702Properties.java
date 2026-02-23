@@ -56,6 +56,9 @@ public class Eip7702Properties {
     private long maxPriorityFeeGwei = 2L;
 
     @DecimalMin("0")
+    private BigDecimal maxTransferAmountEth = new BigDecimal("5000");
+
+    @DecimalMin("0")
     private BigDecimal perTxCapEth = new BigDecimal("0.002");
 
     @DecimalMin("0")

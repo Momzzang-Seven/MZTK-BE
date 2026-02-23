@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.web3.token.infrastructure.persistence.entit
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -23,9 +25,14 @@ import lombok.Setter;
 @Builder
 public class Web3TreasuryKeyEntity {
 
-  @Id private Short id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-  @Column(name = "treasury_address", nullable = false, unique = true, length = 42)
+  @Column(name = "wallet_alias", nullable = false, unique = true, length = 64)
+  private String walletAlias;
+
+  @Column(name = "treasury_address", nullable = false, length = 42)
   private String treasuryAddress;
 
   @Column(name = "treasury_private_key_encrypted", nullable = false, columnDefinition = "TEXT")
@@ -40,9 +47,6 @@ public class Web3TreasuryKeyEntity {
   @PrePersist
   void onCreate() {
     LocalDateTime now = LocalDateTime.now();
-    if (id == null) {
-      id = 1;
-    }
     if (createdAt == null) {
       createdAt = now;
     }

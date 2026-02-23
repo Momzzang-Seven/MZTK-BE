@@ -6,11 +6,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.Eip7702Properties;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3SponsorDailyUsageJpaRepository;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.repository.Web3TransferPrepareJpaRepository;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,33 +23,33 @@ import org.springframework.transaction.annotation.Transactional;
     havingValue = "true")
 public class Eip7702CleanupService {
 
-  private final Web3TransferPrepareJpaRepository prepareRepository;
-  private final Web3SponsorDailyUsageJpaRepository sponsorDailyUsageRepository;
-  private final Eip7702Properties eip7702Properties;
+  private final TransferPreparePersistencePort transferPreparePersistencePort;
+  private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  private final LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
 
   @Transactional
   public CleanupBatchResult runBatch(Instant now) {
-    ZoneId zone = ZoneId.of(eip7702Properties.getCleanup().getZone());
-    int retentionDays = eip7702Properties.getCleanup().getRetentionDays();
-    int batchSize = eip7702Properties.getCleanup().getBatchSize();
+    TransferRuntimeConfig runtimeConfig = loadTransferRuntimeConfigPort.load();
+    ZoneId zone = ZoneId.of(runtimeConfig.cleanupZone());
+    int retentionDays = runtimeConfig.cleanupRetentionDays();
+    int batchSize = runtimeConfig.cleanupBatchSize();
 
     LocalDateTime prepareCutoff = LocalDateTime.ofInstant(now, zone).minusDays(retentionDays);
     LocalDate usageCutoff = LocalDate.ofInstant(now, zone).minusDays(retentionDays);
 
     List<String> prepareIds =
-        prepareRepository.findPrepareIdsForCleanup(prepareCutoff, PageRequest.of(0, batchSize));
+        transferPreparePersistencePort.findPrepareIdsForCleanup(prepareCutoff, batchSize);
     List<Long> usageIds =
-        sponsorDailyUsageRepository.findUsageIdsForCleanup(
-            usageCutoff, PageRequest.of(0, batchSize));
+        sponsorDailyUsagePersistencePort.findUsageIdsForCleanup(usageCutoff, batchSize);
 
     int deletedPrepare =
         prepareIds.isEmpty()
             ? 0
-            : Math.toIntExact(prepareRepository.deleteByPrepareIdIn(prepareIds));
+            : Math.toIntExact(transferPreparePersistencePort.deleteByPrepareIdIn(prepareIds));
     int deletedUsage =
         usageIds.isEmpty()
             ? 0
-            : Math.toIntExact(sponsorDailyUsageRepository.deleteByIdIn(usageIds));
+            : Math.toIntExact(sponsorDailyUsagePersistencePort.deleteByIdIn(usageIds));
 
     return new CleanupBatchResult(deletedPrepare, deletedUsage);
   }
