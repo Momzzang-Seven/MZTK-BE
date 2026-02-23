@@ -6,6 +6,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 
 @Getter
 @Builder(toBuilder = true)
@@ -41,10 +42,25 @@ public class TransferPrepare {
   }
 
   public TransferPrepare expire() {
+    if (status == TransferPrepareStatus.EXPIRED) {
+      throw new Web3InvalidInputException("transfer prepare is already expired");
+    }
+    if (status == TransferPrepareStatus.SUBMITTED) {
+      throw new Web3InvalidInputException("submitted transfer prepare cannot be expired");
+    }
     return toBuilder().status(TransferPrepareStatus.EXPIRED).build();
   }
 
   public TransferPrepare submit(Long txId) {
+    if (txId == null || txId <= 0) {
+      throw new Web3InvalidInputException("txId must be positive");
+    }
+    if (status == TransferPrepareStatus.SUBMITTED) {
+      throw new Web3InvalidInputException("transfer prepare is already submitted");
+    }
+    if (status == TransferPrepareStatus.EXPIRED) {
+      throw new Web3InvalidInputException("expired transfer prepare cannot be submitted");
+    }
     return toBuilder().status(TransferPrepareStatus.SUBMITTED).submittedTxId(txId).build();
   }
 }
