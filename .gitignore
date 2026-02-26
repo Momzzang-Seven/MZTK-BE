@@ -64,7 +64,6 @@ bin/
 *.log
 hs_err_pid*
 replay_pid*
-src/test/*
 
 ############################
 # OS generated files
