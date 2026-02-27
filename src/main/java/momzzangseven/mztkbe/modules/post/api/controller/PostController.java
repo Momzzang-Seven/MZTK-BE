@@ -40,7 +40,7 @@ public class PostController {
     CreatePostCommand command =
         CreatePostCommand.of(
             userId,
-            request.title(),
+            null,
             request.content(),
             PostType.FREE,
             0L,
