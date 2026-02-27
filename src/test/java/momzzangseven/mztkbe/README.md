@@ -11,8 +11,16 @@
                     - **📌 NOTE! playwrite 디렉터리는 외부 API까지 연동된 통합테스트가 필요한 경우에만 작성합니다.**
                     - **📌 외부 API 응답까지 포함한 E2E 테스트 결과물을 .md파일로 작성해야 합니다.**
                     - **📌 여기에는 .java코드가 들어가지 않습니다. (ts 기반 스크립트)**
-                    1. `playwrite를 위한 스크립트 파일`
-                    2. `playwrite 수행 후 결과 보고서 (.md파일 형식)` 
+                    - {기능 이름} ex) social-login
+                        1. `playwrite를 위한 스크립트 파일`
+                        2. `playwrite 수행 후 결과 보고서 (.md파일 형식)` 
+                    - .env.example <- 환경변수 템플릿 🌐 공용
+                    - globalSetup.js <- 서버 헬스체크용  🌐 공용
+                    - package.json <- 의존성 관리 🌐 공용
+                    - package-lock.json <- 버전 고정 🌐 공용
+                    - playwright.config.ts <- 개인 설정 (🙅‍♂️ 개인관리 .gitignore)
+                    - .env <- 자격증명 (🙅‍♂️ 개인관리 .gitignore)
+
                 - e2e (Local server + Local DB)
                     - **📌 NOTE! e2e 디렉터리에는 .java 코드가 들어갑니다.**
                     - **📌 로컬 서버와 로컬 DB서버 이용한 "실제 DB 상호작용 테스트" 가 목적입니다.**
@@ -20,7 +28,7 @@
             - modules
                 - {모듈 이름}
                     - api (MockMVC + H2 DB)
-                        - **📌 NOTE! integration 디렉터리에는 .java코드가 들어갑니다.**
+                        - **📌 NOTE! api 디렉터리에는 .java코드가 들어갑니다.**
                         - **📌 H2 기반의 테스트를 돌림으로써 코드의 문제 검증이 목적입니다.**
                         - `테스트 코드`
                     - application (Unit Test)
@@ -44,8 +52,13 @@ momzzangseven.mztkbe (test root)
 │   │   └── {기능명}E2ETest.java
 │   │
 │   └── play_write/                    ← 외부 API 연동 E2E (ts 스크립트 + MD 보고서)
-│       ├── {기능명}.spec.ts
-│       └── {기능명}-report.md
+│       ├── {기능 명}
+│       │    ├── {기능명}.spec.ts
+│       │    └── {기능명}-report.md
+│       ├── .env.example
+│       ├── globalSetup.js
+│       ├── package.json
+│       └── package-lock.json
 │
 └── modules/                           ← 단위 테스트 (모듈별 격리 검증)
     └── {모듈명}/                       예) location, web3, auth, level ...
