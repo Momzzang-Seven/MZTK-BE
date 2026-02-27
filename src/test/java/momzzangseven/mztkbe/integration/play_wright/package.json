@@ -1,0 +1,17 @@
+{
+  "name": "mztk-playwright-e2e",
+  "version": "1.0.0",
+  "description": "Playwright E2E tests for MZTK-BE external OAuth integrations",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^22.0.0",
+    "dotenv": "^16.4.0",
+    "typescript": "^5.7.0"
+  }
+}
