@@ -56,6 +56,7 @@ class RegisterWalletServiceTest {
   @Mock private SaveWalletPort saveWalletPort;
   @Mock private DeleteWalletPort deleteWalletPort;
   @Mock private RecordWalletEventPort eventPort;
+  @Mock private jakarta.persistence.EntityManager entityManager;
 
   @InjectMocks private RegisterWalletService registerWalletService;
 
@@ -187,7 +188,11 @@ class RegisterWalletServiceTest {
     void execute_UnlinkedWallet_SuccessfullyReRegisters() {
       // Given
       UserWallet unlinkedWallet =
-          UserWallet.create(DIFFERENT_USER_ID, VALID_WALLET_ADDRESS, Instant.now()).unlink();
+          UserWallet.create(DIFFERENT_USER_ID, VALID_WALLET_ADDRESS, Instant.now())
+              .unlink()
+              .toBuilder()
+              .id(999L)
+              .build();
 
       RegisterWalletCommand command =
           new RegisterWalletCommand(
@@ -208,7 +213,7 @@ class RegisterWalletServiceTest {
 
       // Then
       assertThat(result).isNotNull();
-      verify(deleteWalletPort, times(1)).deleteById(unlinkedWallet.getId());
+      verify(deleteWalletPort, times(1)).deleteById(999L);
       verify(saveWalletPort, times(1)).save(any(UserWallet.class));
       verify(eventPort, times(2)).record(any(WalletEvent.class)); // HARD_DELETED + REGISTERED
     }
@@ -218,7 +223,11 @@ class RegisterWalletServiceTest {
     void execute_UnlinkedWallet_RecordsTwoEvents() {
       // Given
       UserWallet unlinkedWallet =
-          UserWallet.create(DIFFERENT_USER_ID, VALID_WALLET_ADDRESS, Instant.now()).unlink();
+          UserWallet.create(DIFFERENT_USER_ID, VALID_WALLET_ADDRESS, Instant.now())
+              .unlink()
+              .toBuilder()
+              .id(999L)
+              .build();
 
       RegisterWalletCommand command =
           new RegisterWalletCommand(
@@ -256,7 +265,10 @@ class RegisterWalletServiceTest {
       // Given
       UserWallet userDeletedWallet =
           UserWallet.create(DIFFERENT_USER_ID, VALID_WALLET_ADDRESS, Instant.now())
-              .markAsUserDeleted();
+              .markAsUserDeleted()
+              .toBuilder()
+              .id(998L)
+              .build();
 
       RegisterWalletCommand command =
           new RegisterWalletCommand(
@@ -277,7 +289,7 @@ class RegisterWalletServiceTest {
 
       // Then
       assertThat(result).isNotNull();
-      verify(deleteWalletPort, times(1)).deleteById(userDeletedWallet.getId());
+      verify(deleteWalletPort, times(1)).deleteById(998L);
       verify(saveWalletPort, times(1)).save(any(UserWallet.class));
       verify(eventPort, times(2)).record(any(WalletEvent.class));
     }
