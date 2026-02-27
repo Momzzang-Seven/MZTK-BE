@@ -12,6 +12,7 @@ public record CreatePostCommand(
     Long reward,
     List<String> imageUrls,
     List<String> tags) {
+
   public static CreatePostCommand of(
       Long userId,
       String title,
@@ -20,19 +21,13 @@ public record CreatePostCommand(
       Long reward,
       List<String> imageUrls,
       List<String> tags) {
-    return new CreatePostCommand(userId, title, content, type, reward, imageUrls, tags);
+
+    return new CreatePostCommand(userId, null, content, type, reward, imageUrls, tags);
   }
 
   public void validate() {
-    if (title == null || title.isBlank()) {
-      throw new PostInvalidInputException("Title is required");
-    }
     if (content == null || content.isBlank()) {
       throw new PostInvalidInputException("Content is required");
-    }
-
-    if (type == PostType.QUESTION && (reward == null || reward < 0)) {
-      throw new PostInvalidInputException("Questions must have a valid reward");
     }
   }
 }
