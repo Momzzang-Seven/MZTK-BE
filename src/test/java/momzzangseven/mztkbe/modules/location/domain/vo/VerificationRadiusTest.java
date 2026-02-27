@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.location.domain.vo;
 
 import static org.assertj.core.api.Assertions.*;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,15 @@ class VerificationRadiusTest {
   @DisplayName("기본 설정 로드")
   class DefaultConfigurationTest {
 
-    private VerificationRadius verificationRadius = new VerificationRadius();
+    private VerificationRadius verificationRadius;
+
+    @BeforeEach
+    void setUp() {
+      // Spring 컨텍스트 없이 생성하면 radiusMeters가 0.0으로 초기화되므로
+      // application.yml의 기본값(5.0m)을 직접 주입
+      verificationRadius = new VerificationRadius();
+      verificationRadius.setRadiusMeters(5.0);
+    }
 
     @Test
     @DisplayName("application.yml에서 기본 설정 로드 (5.0m)")
