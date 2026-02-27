@@ -1,0 +1,249 @@
+spring:
+  # 테스트 환경에서는 별도 프로파일 없이 기본 설정만 사용
+  profiles:
+    active: ""
+
+  # H2 인메모리 DB 사용 (PostgreSQL 대체)
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  # Flyway 비활성화 (테스트에서는 Flyway 마이그레이션 불필요)
+  flyway:
+    enabled: false
+
+  # SQL 초기화 비활성화
+  sql:
+    init:
+      mode: never
+
+  jpa:
+    defer-datasource-initialization: false
+    open-in-view: false
+    show-sql: false
+    hibernate:
+      ddl-auto: create-drop   # 테스트 실행 시 스키마 생성 후 종료 시 삭제
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.H2Dialect
+      jakarta.persistence.lock.timeout: 5000
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    time-zone: Asia/Seoul
+
+  # 테스트에서 OAuth2 자동 구성 비활성화
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
+
+# JWT (테스트용 더미 시크릿 - 256비트 이상)
+jwt:
+  secret: dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0aW5nLW9ubHktZG8tbm90LXVzZS1pbi1wcm9kdWN0aW9u
+  access-token-expiration: 900000
+  refresh-token-expiration: 604800000
+  step-up-token-expiration: 300000
+  issuer: MZTK-BE
+  audience: MZTK-Client
+
+# Kakao API (테스트용 더미)
+kakao:
+  auth:
+    client: test-kakao-client-id
+    redirect: http://localhost:3000/callback
+  api:
+    token-uri: https://kauth.kakao.com/oauth/token
+    userinfo-uri: https://kapi.kakao.com/v2/user/me
+    unlink-uri: https://kapi.kakao.com/v1/user/unlink
+    admin-key: test-kakao-admin-key
+    rest-api-key: test-kakao-rest-api-key
+    geocoding:
+      base-url: https://dapi.kakao.com
+      address-search-path: /v2/local/search/address.json
+      coord-to-address-path: /v2/local/geo/coord2address.json
+      timeout: 5000
+
+# Google OAuth (테스트용 더미)
+google:
+  oauth:
+    client-id: test-google-client-id
+    client-secret: test-google-client-secret
+    redirect-uri: http://localhost:3000/callback
+  api:
+    token-uri: https://oauth2.googleapis.com/token
+    userinfo-uri: https://openidconnect.googleapis.com/v1/userinfo
+    revoke-uri: https://oauth2.googleapis.com/revoke
+
+# Web3 설정 (테스트용 더미 - 실제 온체인 호출 없음)
+web3:
+  chain-id: 1
+  confirmations: 1
+  gas-policy: EIP1559
+
+  rpc:
+    main: https://mainnet.infura.io/v3/test-key
+    sub: https://mainnet.infura.io/v3/test-key
+
+  explorer:
+    base-url: https://etherscan.io
+    api-url: https://api.etherscan.io/v2/api
+    api-key: test-explorer-api-key
+
+  challenge:
+    ttl-seconds: 300
+    eip4361:
+      domain: "MZTK"
+      uri: "https://mztk.com"
+      version: "1"
+      chain-id: 1
+
+  eip712:
+    domain-name: "MomzzangSeven"
+    domain-version: "1"
+    chain-id: 1
+    verifying-contract: "0x0000000000000000000000000000000000000001"
+
+  wallet:
+    hard-delete:
+      retention-days: 30
+      batch-size: 200
+      cron: "0 0 4 * * *"
+      zone: "Asia/Seoul"
+
+  # 보상 토큰 - 테스트에서는 비활성화
+  reward-token:
+    enabled: false
+    token-contract-address: "0x0000000000000000000000000000000000000001"
+    decimals: 18
+    treasury:
+      wallet-alias: reward-treasury
+      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk=
+      treasury-address: "0x0000000000000000000000000000000000000001"
+      provisioning:
+        enabled: false
+    prevalidate:
+      eth-warning-threshold: 0.1
+      eth-critical-threshold: 0.05
+    gas:
+      default-gas-limit: 120000
+      default-max-priority-fee-per-gas-wei: 1000000000
+      max-fee-multiplier: 2
+    worker:
+      claim-ttl-seconds: 120
+      receipt-timeout-seconds: 900
+      receipt-poll-min-seconds: 1
+      receipt-poll-max-seconds: 5
+      retry-backoff-seconds: 60
+
+  # EIP-7702 - 테스트에서는 비활성화
+  eip7702:
+    enabled: false
+    delegation:
+      contract-address: "0x0000000000000000000000000000000000000001"
+      nonce-tracker-address: "0x0000000000000000000000000000000000000001"
+      batch-impl-address: "0x0000000000000000000000000000000000000001"
+      default-receiver-address: "0x0000000000000000000000000000000000000001"
+    sponsor:
+      enabled: false
+      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk=
+      wallet-alias: sponsor-treasury
+      max-gas-limit: 500000
+      max-max-fee-gwei: 60
+      max-priority-fee-gwei: 2
+      max-transfer-amount-eth: 5000
+      per-tx-cap-eth: 0.002
+      daily-sponsor-cap-eth: 0.5
+      per-day-user-cap-eth: 0.02
+    authorization:
+      ttl-seconds: 300
+      nonce-policy: ONCHAIN
+      require-chain-id-match: true
+      max-auth-list-length: 1
+    execution:
+      allowed-target-contracts: []
+      blocked-function-selectors: []
+    cleanup:
+      enabled: false
+      retention-days: 180
+      batch-size: 500
+      cron: "0 30 4 * * *"
+      zone: "Asia/Seoul"
+    observability:
+      log-auth-hash: true
+      log-user-op: false
+
+# 위치 인증 반경 (5m)
+location:
+  verification:
+    radius-meters: 5.0
+
+# 회원 탈퇴 정책
+withdrawal:
+  external-disconnect:
+    fixed-delay: 60000
+    batch-size: 20
+    max-attempts: 10
+    initial-backoff: 300000
+    max-backoff: 3600000
+    cleanup:
+      fixed-delay: 86400000
+      success-retention-days: 7
+      failed-retention-days: 0
+  hard-delete:
+    retention-days: 30
+    batch-size: 200
+    cron: "0 0 3 * * *"
+    zone: Asia/Seoul
+  comment:
+    hard-delete:
+      retention-days: 30
+      batch-size: 100
+      cron: "0 0 4 * * *"
+      zone: Asia/Seoul
+
+# 레벨 정책
+level:
+  retention:
+    retention-days: 365
+    batch-size: 5000
+    cron: "0 0 4 * * *"
+    zone: Asia/Seoul
+
+# Security CORS
+security:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+
+# 앱 정보
+info:
+  app:
+    name: MZTK-BE
+    version: 0.0.1-SNAPSHOT
+    description: MZTK-BE Backend Service (Test)
+    environment: test
+
+# 로그 레벨 최소화 (테스트 출력 간소화)
+logging:
+  level:
+    root: WARN
+    momzzangseven: INFO
+    org.springframework.security: WARN
+    org.hibernate: WARN
+
+management:
+  info:
+    env:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: when_authorized
+      roles: ROLE_ADMIN
