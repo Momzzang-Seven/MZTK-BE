@@ -7,7 +7,7 @@
         - momzzangseven.mztkbe
             `README.md`
             - integration
-                - playWright (E2E Test, 외부 api 응답까지 확인)
+                - play_wright (E2E Test, 외부 api 응답까지 확인)
                     - **📌 NOTE! playwrite 디렉터리는 외부 API까지 연동된 통합테스트가 필요한 경우에만 작성합니다.**
                     - **📌 외부 API 응답까지 포함한 E2E 테스트 결과물을 .md파일로 작성해야 합니다.**
                     - **📌 여기에는 .java코드가 들어가지 않습니다. (ts 기반 스크립트)**
@@ -51,7 +51,7 @@ momzzangseven.mztkbe (test root)
 │   ├── e2e/                           ← 로컬 서버 + 로컬 DB 기반 E2E (Java)
 │   │   └── {기능명}E2ETest.java
 │   │
-│   └── play_write/                    ← 외부 API 연동 E2E (ts 스크립트 + MD 보고서)
+│   └── play_wright/                    ← 외부 API 연동 E2E (ts 스크립트 + MD 보고서)
 │       ├── {기능 명}
 │       │    ├── {기능명}.spec.ts
 │       │    └── {기능명}-report.md
