@@ -60,7 +60,6 @@ public class Post {
 
     if (userId == null) throw new IllegalArgumentException("작성자 ID는 필수입니다.");
     if (type == null) throw new IllegalArgumentException("게시글 타입은 필수입니다.");
-    if (title == null || title.isBlank()) throw new IllegalArgumentException("제목을 입력해주세요.");
     if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
 
     if (type == PostType.QUESTION) {
@@ -94,12 +93,6 @@ public class Post {
   public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
     var builder = this.toBuilder();
     boolean isUpdated = false;
-
-    if (title != null) {
-      if (title.isBlank()) throw new IllegalArgumentException("수정할 제목은 비워둘 수 없습니다.");
-      builder.title(title);
-      isUpdated = true;
-    }
 
     if (content != null) {
       if (content.isBlank()) throw new IllegalArgumentException("수정할 내용은 비워둘 수 없습니다.");

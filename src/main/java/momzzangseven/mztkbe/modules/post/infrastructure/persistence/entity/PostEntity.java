@@ -28,7 +28,7 @@ public class PostEntity {
   @Column(nullable = false)
   private PostType type;
 
-  @Column(nullable = false, length = 255)
+  @Column(length = 255)
   private String title;
 
   @Column(columnDefinition = "TEXT", nullable = false)
