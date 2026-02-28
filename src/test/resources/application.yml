@@ -43,7 +43,7 @@ spring:
 
 # JWT (테스트용 더미 시크릿 - 256비트 이상)
 jwt:
-  secret: dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0aW5nLW9ubHktZG8tbm90LXVzZS1pbi1wcm9kdWN0aW9u
+  secret: dGVzdC1qd3Qtc2VjcmV0LWtleS1mb3ItdW5pdC10ZXN0aW5nLW9ubHktZG8tbm90LXVzZS1pbi1wcm9kdWN0aW9u # gitleaks:allow
   access-token-expiration: 900000
   refresh-token-expiration: 604800000
   step-up-token-expiration: 300000
@@ -121,7 +121,7 @@ web3:
     decimals: 18
     treasury:
       wallet-alias: reward-treasury
-      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk=
+      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk= # gitleaks:allow
       treasury-address: "0x0000000000000000000000000000000000000001"
       provisioning:
         enabled: false
@@ -149,7 +149,7 @@ web3:
       default-receiver-address: "0x0000000000000000000000000000000000000001"
     sponsor:
       enabled: false
-      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk=
+      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk= # gitleaks:allow
       wallet-alias: sponsor-treasury
       max-gas-limit: 500000
       max-max-fee-gwei: 60
