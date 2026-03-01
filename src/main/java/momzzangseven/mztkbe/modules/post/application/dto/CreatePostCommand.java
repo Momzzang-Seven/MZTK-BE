@@ -38,6 +38,13 @@ public record CreatePostCommand(
       if (reward == null || reward < 0) {
         throw new PostInvalidInputException("Questions must have a valid reward");
       }
+    } else if (type == PostType.FREE) {
+      if (title != null) {
+        throw new PostInvalidInputException("Title must be null for free board");
+      }
+      if (reward == null || reward != 0L) {
+        throw new PostInvalidInputException("Free posts must have zero reward");
+      }
     }
   }
 }
