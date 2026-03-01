@@ -142,7 +142,8 @@ class AesGcmCipherTest {
   @Test
   void deriveSha256Key_isDeterministic() throws Exception {
     SecretKey key = cipher.deriveSha256Key("my-secret");
-    byte[] expected = MessageDigest.getInstance("SHA-256").digest("my-secret".getBytes(StandardCharsets.UTF_8));
+    byte[] expected =
+        MessageDigest.getInstance("SHA-256").digest("my-secret".getBytes(StandardCharsets.UTF_8));
 
     assertThat(key.getAlgorithm()).isEqualTo("AES");
     assertThat(key.getEncoded()).isEqualTo(expected);

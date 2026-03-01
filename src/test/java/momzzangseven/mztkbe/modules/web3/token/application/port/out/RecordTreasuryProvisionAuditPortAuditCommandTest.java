@@ -31,11 +31,13 @@ class RecordTreasuryProvisionAuditPortAuditCommandTest {
 
   @Test
   void constructor_rejectsInvalidOperatorId() {
-    assertThatThrownBy(() -> new RecordTreasuryProvisionAuditPort.AuditCommand(null, null, true, null))
+    assertThatThrownBy(
+            () -> new RecordTreasuryProvisionAuditPort.AuditCommand(null, null, true, null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("operatorId must be positive");
 
-    assertThatThrownBy(() -> new RecordTreasuryProvisionAuditPort.AuditCommand(0L, null, true, null))
+    assertThatThrownBy(
+            () -> new RecordTreasuryProvisionAuditPort.AuditCommand(0L, null, true, null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("operatorId must be positive");
   }
@@ -43,9 +45,7 @@ class RecordTreasuryProvisionAuditPortAuditCommandTest {
   @Test
   void constructor_rejectsInvalidTreasuryAddress() {
     assertThatThrownBy(
-            () ->
-                new RecordTreasuryProvisionAuditPort.AuditCommand(
-                    1L, "not-address", true, null))
+            () -> new RecordTreasuryProvisionAuditPort.AuditCommand(1L, "not-address", true, null))
         .isInstanceOf(Web3InvalidInputException.class);
   }
 
@@ -66,4 +66,3 @@ class RecordTreasuryProvisionAuditPortAuditCommandTest {
         .hasMessageContaining("failureReason is required");
   }
 }
-

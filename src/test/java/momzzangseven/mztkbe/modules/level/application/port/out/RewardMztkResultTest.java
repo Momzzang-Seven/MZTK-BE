@@ -26,4 +26,3 @@ class RewardMztkResultTest {
         .isEqualTo(RewardTxStatus.UNCONFIRMED);
   }
 }
-

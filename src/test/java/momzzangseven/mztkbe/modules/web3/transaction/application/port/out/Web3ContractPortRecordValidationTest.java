@@ -64,7 +64,8 @@ class Web3ContractPortRecordValidationTest {
 
     // detail=null is normalized to empty map; and ok=false allows null gas fields.
     Web3ContractPort.PrevalidateResult failure =
-        new Web3ContractPort.PrevalidateResult(false, false, "RPC_UNAVAILABLE", null, null, null, null);
+        new Web3ContractPort.PrevalidateResult(
+            false, false, "RPC_UNAVAILABLE", null, null, null, null);
     assertThat(failure.detail()).isEmpty();
   }
 
@@ -113,7 +114,8 @@ class Web3ContractPortRecordValidationTest {
 
   @Test
   void signedTransaction_acceptsValidFields() {
-    assertThatCode(() -> new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "a".repeat(64)))
+    assertThatCode(
+            () -> new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "a".repeat(64)))
         .doesNotThrowAnyException();
   }
 
@@ -136,11 +138,13 @@ class Web3ContractPortRecordValidationTest {
 
   @Test
   void receiptResult_rejectsInvalidTxHashOrMissingRpcErrorReason() {
-    assertThatThrownBy(() -> new Web3ContractPort.ReceiptResult(null, false, null, "rpc", false, null))
+    assertThatThrownBy(
+            () -> new Web3ContractPort.ReceiptResult(null, false, null, "rpc", false, null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("txHash is required");
 
-    assertThatThrownBy(() -> new Web3ContractPort.ReceiptResult(" ", false, null, "rpc", false, null))
+    assertThatThrownBy(
+            () -> new Web3ContractPort.ReceiptResult(" ", false, null, "rpc", false, null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("txHash is required");
 
@@ -174,4 +178,3 @@ class Web3ContractPortRecordValidationTest {
         .doesNotThrowAnyException();
   }
 }
-

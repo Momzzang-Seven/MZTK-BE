@@ -26,7 +26,8 @@ class LocationUserHardDeleteEventHandlerTest {
     handler.handleUsersHardDeleted(new UsersHardDeletedEvent(null));
     handler.handleUsersHardDeleted(new UsersHardDeletedEvent(List.of()));
 
-    verify(locationHardDeleteService, never()).deleteByUserIds(org.mockito.ArgumentMatchers.anyList());
+    verify(locationHardDeleteService, never())
+        .deleteByUserIds(org.mockito.ArgumentMatchers.anyList());
   }
 
   @Test
@@ -48,4 +49,3 @@ class LocationUserHardDeleteEventHandlerTest {
         .hasMessageContaining("db fail");
   }
 }
-

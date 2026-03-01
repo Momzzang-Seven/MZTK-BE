@@ -36,24 +36,16 @@ class Eip7702AuthorizationHelperTest {
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("chainId");
 
-    assertThatThrownBy(
-            () ->
-                Eip7702AuthorizationHelper.buildSigningHash(
-                    1L, " ", BigInteger.ZERO))
+    assertThatThrownBy(() -> Eip7702AuthorizationHelper.buildSigningHash(1L, " ", BigInteger.ZERO))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("delegateTarget");
+
+    assertThatThrownBy(() -> Eip7702AuthorizationHelper.buildSigningHash(1L, null, BigInteger.ZERO))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("delegateTarget");
 
     assertThatThrownBy(
-            () ->
-                Eip7702AuthorizationHelper.buildSigningHash(
-                    1L, null, BigInteger.ZERO))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("delegateTarget");
-
-    assertThatThrownBy(
-            () ->
-                Eip7702AuthorizationHelper.buildSigningHash(
-                    1L, "0x" + "a".repeat(40), null))
+            () -> Eip7702AuthorizationHelper.buildSigningHash(1L, "0x" + "a".repeat(40), null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("nonce must be >= 0");
 
@@ -76,11 +68,7 @@ class Eip7702AuthorizationHelperTest {
 
     assertThat(
             Eip7702AuthorizationHelper.verifySigner(
-                11155111L,
-                "0x" + "a".repeat(40),
-                BigInteger.ONE,
-                signatureHex,
-                expectedAddress))
+                11155111L, "0x" + "a".repeat(40), BigInteger.ONE, signatureHex, expectedAddress))
         .isTrue();
     assertThat(
             Eip7702AuthorizationHelper.verifySigner(

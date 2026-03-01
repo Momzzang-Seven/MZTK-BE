@@ -99,7 +99,8 @@ class SignedRecoveryWorkerTest {
             eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64))));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
-        .thenReturn(new Web3ContractPort.BroadcastResult(true, "0x" + "b".repeat(64), null, "rpc-a"));
+        .thenReturn(
+            new Web3ContractPort.BroadcastResult(true, "0x" + "b".repeat(64), null, "rpc-a"));
 
     worker.processBatch(1);
 
@@ -144,8 +145,7 @@ class SignedRecoveryWorkerTest {
             eq(Web3TxStatus.SIGNED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item("0xdeadbeef", "0x" + "a".repeat(64))));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
-        .thenReturn(
-            new Web3ContractPort.BroadcastResult(false, null, "RPC_TIMEOUT", "rpc-a"));
+        .thenReturn(new Web3ContractPort.BroadcastResult(false, null, "RPC_TIMEOUT", "rpc-a"));
     when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
         .thenReturn(retryAt);
 

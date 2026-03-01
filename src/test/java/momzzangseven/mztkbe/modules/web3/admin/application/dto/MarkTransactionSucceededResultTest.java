@@ -13,11 +13,7 @@ class MarkTransactionSucceededResultTest {
     assertThatCode(
             () ->
                 new MarkTransactionSucceededResult(
-                    1L,
-                    "SUCCEEDED",
-                    "PENDING",
-                    "0x" + "a".repeat(64),
-                    "https://explorer/tx/1"))
+                    1L, "SUCCEEDED", "PENDING", "0x" + "a".repeat(64), "https://explorer/tx/1"))
         .doesNotThrowAnyException();
   }
 
@@ -26,22 +22,14 @@ class MarkTransactionSucceededResultTest {
     assertThatThrownBy(
             () ->
                 new MarkTransactionSucceededResult(
-                    null,
-                    "SUCCEEDED",
-                    "PENDING",
-                    "0x" + "a".repeat(64),
-                    "https://explorer/tx/1"))
+                    null, "SUCCEEDED", "PENDING", "0x" + "a".repeat(64), "https://explorer/tx/1"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("transactionId must be positive");
 
     assertThatThrownBy(
             () ->
                 new MarkTransactionSucceededResult(
-                    0L,
-                    "SUCCEEDED",
-                    "PENDING",
-                    "0x" + "a".repeat(64),
-                    "https://explorer/tx/1"))
+                    0L, "SUCCEEDED", "PENDING", "0x" + "a".repeat(64), "https://explorer/tx/1"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("transactionId must be positive");
   }
@@ -108,4 +96,3 @@ class MarkTransactionSucceededResultTest {
         .hasMessageContaining("explorerUrl is required");
   }
 }
-

@@ -27,15 +27,18 @@ class Web3TransactionFailedOnchainEventTest {
 
   @Test
   void constructor_rejectsInvalidCoreFields() {
-    assertThatThrownBy(() -> eventWith(null, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", "REVERT"))
+    assertThatThrownBy(
+            () -> eventWith(null, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", "REVERT"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("transactionId must be positive");
 
-    assertThatThrownBy(() -> eventWith(0L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", "REVERT"))
+    assertThatThrownBy(
+            () -> eventWith(0L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", "REVERT"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("transactionId must be positive");
 
-    assertThatThrownBy(() -> eventWith(1L, null, Web3ReferenceType.LEVEL_UP_REWARD, "101", "REVERT"))
+    assertThatThrownBy(
+            () -> eventWith(1L, null, Web3ReferenceType.LEVEL_UP_REWARD, "101", "REVERT"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("idempotencyKey is required");
 
@@ -47,11 +50,13 @@ class Web3TransactionFailedOnchainEventTest {
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("referenceType is required");
 
-    assertThatThrownBy(() -> eventWith(1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, null, "REVERT"))
+    assertThatThrownBy(
+            () -> eventWith(1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, null, "REVERT"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("referenceId is required");
 
-    assertThatThrownBy(() -> eventWith(1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, " ", "REVERT"))
+    assertThatThrownBy(
+            () -> eventWith(1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, " ", "REVERT"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("referenceId is required");
   }
@@ -97,4 +102,3 @@ class Web3TransactionFailedOnchainEventTest {
         transactionId, idempotencyKey, referenceType, referenceId, 1L, 2L, null, failureReason);
   }
 }
-

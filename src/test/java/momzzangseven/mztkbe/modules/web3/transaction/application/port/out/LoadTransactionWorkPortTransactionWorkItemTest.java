@@ -244,7 +244,10 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
   }
 
   private LoadTransactionWorkPort.TransactionWorkItem itemWith(
-      Long transactionId, String idempotencyKey, Web3ReferenceType referenceType, String referenceId) {
+      Long transactionId,
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId) {
     return new LoadTransactionWorkPort.TransactionWorkItem(
         transactionId,
         idempotencyKey,
@@ -262,4 +265,3 @@ class LoadTransactionWorkPortTransactionWorkItemTest {
         LocalDateTime.now());
   }
 }
-

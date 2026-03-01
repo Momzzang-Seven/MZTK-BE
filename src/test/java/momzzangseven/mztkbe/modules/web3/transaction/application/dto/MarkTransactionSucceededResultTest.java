@@ -85,7 +85,11 @@ class MarkTransactionSucceededResultTest {
     assertThatThrownBy(
             () ->
                 new MarkTransactionSucceededResult(
-                    11L, Web3TxStatus.SUCCEEDED, Web3TxStatus.UNCONFIRMED, null, "https://explorer/tx/11"))
+                    11L,
+                    Web3TxStatus.SUCCEEDED,
+                    Web3TxStatus.UNCONFIRMED,
+                    null,
+                    "https://explorer/tx/11"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("txHash is required");
   }
@@ -109,7 +113,11 @@ class MarkTransactionSucceededResultTest {
     assertThatThrownBy(
             () ->
                 new MarkTransactionSucceededResult(
-                    11L, Web3TxStatus.SUCCEEDED, Web3TxStatus.UNCONFIRMED, "0x" + "a".repeat(64), null))
+                    11L,
+                    Web3TxStatus.SUCCEEDED,
+                    Web3TxStatus.UNCONFIRMED,
+                    "0x" + "a".repeat(64),
+                    null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("explorerUrl is required");
   }
