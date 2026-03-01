@@ -8,14 +8,14 @@
             `README.md`
             - integration
                 - play_wright (E2E Test, 외부 api 응답까지 확인)
-                    - **📌 NOTE! playwrite 디렉터리는 외부 API까지 연동된 통합테스트가 필요한 경우에만 작성합니다.**
+                    - **📌 NOTE! Playwright 디렉터리는 외부 API까지 연동된 통합테스트가 필요한 경우에만 작성합니다.**
                     - **📌 외부 API 응답까지 포함한 E2E 테스트 결과물을 .md파일로 작성해야 합니다.**
                     - **📌 여기에는 .java코드가 들어가지 않습니다. (ts 기반 스크립트)**
                     - {기능 이름} ex) social-login
-                        1. `playwrite를 위한 스크립트 파일`
-                        2. `playwrite 수행 후 결과 보고서 (.md파일 형식)` 
+                        1. `Playwright를 위한 스크립트 파일`
+                        2. `Playwright 수행 후 결과 보고서 (.md파일 형식)` 
                     - .env.example <- 환경변수 템플릿 🌐 공용
-                    - globalSetup.js <- 서버 헬스체크용  🌐 공용
+                    - globalSetup.ts <- 서버 헬스체크용  🌐 공용
                     - package.json <- 의존성 관리 🌐 공용
                     - package-lock.json <- 버전 고정 🌐 공용
                     - playwright.config.ts <- 개인 설정 (🙅‍♂️ 개인관리 .gitignore)
@@ -28,7 +28,7 @@
                     - `테스트 코드`
             - modules
                 - {모듈 이름}
-                    - api (MockMVC + H2 DB)
+                    - api (전체 통합 테스트: MockMVC + H2 DB)
                         - **📌 NOTE! api 디렉터리에는 .java코드가 들어갑니다.**
                         - **📌 H2 기반의 테스트를 돌림으로써 코드의 문제 검증이 목적입니다.**
                         - `테스트 코드`
@@ -57,13 +57,13 @@ momzzangseven.mztkbe (test root)
 │       │    ├── {기능명}.spec.ts
 │       │    └── {기능명}-report.md
 │       ├── .env.example
-│       ├── globalSetup.js
+│       ├── globalSetup.ts
 │       ├── package.json
 │       └── package-lock.json
 │
 └── modules/                           ← 단위 테스트 (모듈별 격리 검증)
     └── {모듈명}/                       예) location, web3, auth, level ...
-        ├── api/                       ← Controller 테스트 (MockMvc + H2)
+        ├── api/                       ← 전체 통합 테스트 (MockMVC + H2)
         │   └── {기능명}ControllerTest.java
         ├── application/
         │   ├── service/               ← Service 단위 테스트 (Mockito)
@@ -98,7 +98,7 @@ momzzangseven.mztkbe (test root)
 - **외부 API(카카오, 구글 등)는 `@MockBean` 처리**하여 외부 의존성 제거
 - `@Tag("e2e")` 로 CI 파이프라인에서 선택적 실행 가능
 
-## `integration/play_write/`
+## `integration/play_wright/`
 
 **목적**: 실제 외부 API까지 포함한 완전한 E2E 시나리오를 Playwright(TypeScript)로 검증합니다.
 
@@ -108,11 +108,11 @@ momzzangseven.mztkbe (test root)
 
 ## `modules/{모듈명}/api/`
 
-**목적**: Controller 레이어를 MockMvc + H2 인메모리 DB로 테스트합니다.
+**목적**: Spring 전체 컨텍스트를 로드하여 MockMVC + H2 인메모리 DB 기반의 전체 통합 테스트를 수행합니다.
 
 - HTTP 요청/응답 형식(상태코드, JSON 구조) 검증
 - Spring Security 필터 체인 통과 여부 확인
-- Service 레이어는 `@MockBean`으로 대체
+- Controller → Service → Repository 연동 검증
 
 ## `modules/{모듈명}/application/service/`
 
@@ -160,10 +160,10 @@ momzzangseven.mztkbe (test root)
 | 어노테이션 | 설명 |
 |---|---|
 | `@SpringBootTest(webEnvironment = RANDOM_PORT)` | 실제 서버를 랜덤 포트로 기동 |
-| `@AutoConfigureMockMvc` | MockMvc 자동 설정 (포트 없이 슬라이스 테스트 시) |
+| `@AutoConfigureMockMvc` | MockMVC 자동 설정 (Spring 컨텍스트 기반 통합 테스트) |
 | `@Transactional` | 테스트 후 DB 롤백 (오염 방지) |
 | `@Sql(scripts = "...")` | 테스트 전 SQL 스크립트로 픽스처 데이터 삽입 |
-| `@Tag("e2e")` | `./gradlew test -Dgroups=e2e` 로 선택 실행 |
+| `@Tag("e2e")` | `./gradlew e2eTest` 로 선택 실행 |
 | `@TestPropertySource` | 테스트 전용 프로퍼티 오버라이드 |
 | `@MockBean` | 외부 API 어댑터 등 특정 Bean만 Mock 처리 |
 | `@WithMockUser` | Spring Security 인증 컨텍스트 주입 |
@@ -220,7 +220,7 @@ class RegisterLocationE2ETest {
 ## 주의사항
 
 - **외부 API**(카카오, Google OAuth 등)는 반드시 `@MockBean`으로 대체합니다.
-- 테스트 DB는 로컬 PostgreSQL를 사용하며, `application-test.yml`에 DataSource를 별도 설정합니다.
+- 테스트 DB는 로컬 PostgreSQL를 사용하며, `application-integration.yml`에 DataSource를 별도 설정합니다.
 - `@Transactional`을 붙이면 테스트 종료 후 자동 롤백되어 DB 오염을 방지합니다.
 - 픽스처 데이터가 필요한 경우 `@Sql`을 사용하고, `src/test/resources/sql/fixtures/`에 SQL 파일을 위치시킵니다.
 
@@ -240,14 +240,15 @@ class RegisterLocationE2ETest {
 | `@Spy` | 실제 객체를 감싸서 일부 메서드만 Mock |
 | `@Captor` | `ArgumentCaptor` 자동 생성 (호출 인자 검증) |
 
-### Controller 테스트 (MockMvc + H2)
+### 전체 통합 테스트 (MockMVC + H2)
 
 | 어노테이션 | 설명 |
 |---|---|
-| `@WebMvcTest(XxxController.class)` | Controller 레이어만 로드, Service는 `@MockBean` 처리 |
+| `@SpringBootTest` | Spring 전체 컨텍스트를 로드하여 애플리케이션 통합 검증 |
 | `@MockBean` | Spring 컨텍스트의 Bean을 Mock으로 대체 |
 | `@WithMockUser(roles = "USER")` | 인증된 사용자 컨텍스트 주입 |
-| `@AutoConfigureMockMvc` | MockMvc 자동 설정 |
+| `@AutoConfigureMockMvc` | MockMVC 자동 설정 |
+| `@Transactional` | 테스트 종료 후 롤백으로 DB 오염 방지 |
 
 ### 공통 테스트 구조 어노테이션
 
@@ -357,11 +358,13 @@ class LocationPersistenceAdapterTest {
 }
 ```
 
-## 코드 예시 — Controller 단위 테스트 (MockMvc)
+## 코드 예시 — 전체 통합 테스트 (MockMVC + H2)
 
 ```java
-@WebMvcTest(LocationController.class)
-@DisplayName("LocationController 단위 테스트")
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
+@DisplayName("Location 전체 통합 테스트 (MockMVC + H2)")
 class LocationControllerTest {
 
     @Autowired
@@ -434,7 +437,7 @@ void geocode_throwsException_whenAddressIsBlank(String address) {
 
 ## 개요
 
-`integration/play_write/` 디렉터리에는 TypeScript 기반 Playwright 스크립트를 작성합니다.  
+`integration/play_wright/` 디렉터리에는 TypeScript 기반 Playwright 스크립트를 작성합니다.  
 **.java 파일이 존재하지 않으며**, 실행 결과는 반드시 `.md` 보고서로 저장합니다.
 
 ## 1. 사전 요구사항
@@ -443,8 +446,8 @@ void geocode_throwsException_whenAddressIsBlank(String address) {
 # Node.js 18 이상 필요
 node --version
 
-# play_write 디렉터리로 이동 후 패키지 초기화
-cd src/test/java/momzzangseven/mztkbe/integration/play_write
+# play_wright 디렉터리로 이동 후 패키지 초기화
+cd src/test/java/momzzangseven/mztkbe/integration/play_wright
 npm init -y
 npm install -D @playwright/test
 
@@ -455,7 +458,7 @@ npx playwright install chromium
 ## 2. 디렉터리 구조
 
 ```
-integration/play_write/
+integration/play_wright/
 ├── playwright.config.ts         ← Playwright 전역 설정
 ├── package.json
 ├── .env                         ← 테스트용 민감 정보 (gitignore 필수!)
@@ -475,7 +478,7 @@ export default defineConfig({
   testDir: '.',
   timeout: 30_000,
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://localhost:8080',
+    baseURL: process.env.BACKEND_URL ?? 'http://localhost:8080',
     extraHTTPHeaders: {
       'Content-Type': 'application/json',
     },
@@ -499,9 +502,9 @@ test.describe('지갑 등록 E2E', () => {
 
   test.beforeAll(async () => {
     // Step 0: 로그인하여 액세스 토큰 발급
-    const api = await request.newContext({ baseURL: process.env.BASE_URL });
+    const api = await request.newContext({ baseURL: process.env.BACKEND_URL });
     const loginRes = await api.post('/auth/login', {
-      data: { provider: 'KAKAO', code: process.env.KAKAO_TEST_CODE },
+      data: { provider: 'KAKAO', authorizationCode: process.env.KAKAO_TEST_AUTHORIZATION_CODE },
     });
     expect(loginRes.ok()).toBeTruthy();
     const loginBody = await loginRes.json();
@@ -510,7 +513,7 @@ test.describe('지갑 등록 E2E', () => {
 
   test('챌린지 발급 → 서명 → 지갑 등록 전체 흐름', async () => {
     const api = await request.newContext({
-      baseURL: process.env.BASE_URL,
+      baseURL: process.env.BACKEND_URL,
       extraHTTPHeaders: { Authorization: `Bearer ${accessToken}` },
     });
 
@@ -549,14 +552,14 @@ test.describe('지갑 등록 E2E', () => {
 
 ## 5. `.env` 파일 설정
 
-`play_write/` 디렉터리 안에 `.env` 파일을 생성합니다. 이 파일은 **반드시 `.gitignore`에 포함**시켜야 합니다.
+`play_wright/` 디렉터리 안에 `.env` 파일을 생성합니다. 이 파일은 **반드시 `.gitignore`에 포함**시켜야 합니다.
 
 ```bash
-# play_write/.env
-BASE_URL=http://localhost:8080
+# play_wright/.env
+BACKEND_URL=http://localhost:8080
 TEST_WALLET_ADDRESS=0x...
 TEST_PRIVATE_KEY=0x...       # 반드시 테스트 전용 지갑 키만 사용
-KAKAO_TEST_CODE=...          # 카카오 OAuth 테스트용 인가 코드
+KAKAO_TEST_AUTHORIZATION_CODE=...  # 카카오 OAuth 테스트용 인가 코드
 ```
 
 > ⚠️ **주의**: `TEST_PRIVATE_KEY`는 **실제 자산이 있는 지갑의 키를 절대 사용하지 마세요.**  
@@ -565,8 +568,8 @@ KAKAO_TEST_CODE=...          # 카카오 OAuth 테스트용 인가 코드
 ## 6. 실행 방법
 
 ```bash
-# play_write 디렉터리로 이동
-cd src/test/java/momzzangseven/mztkbe/integration/play_write
+# play_wright 디렉터리로 이동
+cd src/test/java/momzzangseven/mztkbe/integration/play_wright
 
 # 로컬 Spring Boot 서버를 먼저 기동한 뒤 실행
 npx playwright test
@@ -580,7 +583,7 @@ npx playwright show-report
 
 ## 7. 결과 보고서 작성 규칙
 
-Playwright 실행 후, 아래 양식에 따라 `{기능명}-report.md` 파일을 `play_write/` 디렉터리에 저장합니다.
+Playwright 실행 후, 아래 양식에 따라 `{기능명}-report.md` 파일을 `play_wright/` 디렉터리에 저장합니다.
 
 ```markdown
 # {기능명} E2E 테스트 결과 보고서
@@ -619,11 +622,11 @@ Playwright 실행 후, 아래 양식에 따라 `{기능명}-report.md` 파일을
 ./gradlew test --tests "*.GetMyLocationsServiceTest"
 
 # e2e 태그가 붙은 테스트만 실행
-./gradlew test -Dgroups=e2e
+./gradlew e2eTest
 
 # 코드 스타일 + 단위 테스트 전체 검증 (PR 전 필수)
 ./gradlew check
 
-# Playwright E2E 실행 (play_write 디렉터리에서)
+# Playwright E2E 실행 (play_wright 디렉터리에서)
 npx playwright test
 ```
