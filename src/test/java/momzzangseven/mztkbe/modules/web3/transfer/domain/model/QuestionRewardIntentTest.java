@@ -209,8 +209,7 @@ class QuestionRewardIntentTest {
 
   @Test
   void withPrepareRequired_updatesPayloadAndStatus() {
-    QuestionRewardIntent intent =
-        baseIntent().status(QuestionRewardIntentStatus.SUCCEEDED).build();
+    QuestionRewardIntent intent = baseIntent().status(QuestionRewardIntentStatus.SUCCEEDED).build();
 
     QuestionRewardIntent updated =
         intent.withPrepareRequired(301L, 70L, 220L, new BigInteger("2000"));
@@ -279,8 +278,10 @@ class QuestionRewardIntentTest {
 
   @Test
   void cannotCancel_trueForSubmittedAndSucceeded_falseForPrepareRequired() {
-    QuestionRewardIntent submitted = baseIntent().status(QuestionRewardIntentStatus.SUBMITTED).build();
-    QuestionRewardIntent succeeded = baseIntent().status(QuestionRewardIntentStatus.SUCCEEDED).build();
+    QuestionRewardIntent submitted =
+        baseIntent().status(QuestionRewardIntentStatus.SUBMITTED).build();
+    QuestionRewardIntent succeeded =
+        baseIntent().status(QuestionRewardIntentStatus.SUCCEEDED).build();
     QuestionRewardIntent prepareRequired =
         baseIntent().status(QuestionRewardIntentStatus.PREPARE_REQUIRED).build();
 
@@ -291,8 +292,10 @@ class QuestionRewardIntentTest {
 
   @Test
   void isImmutableForRegister_trueForSubmittedAndSucceeded_falseForFailedOnchain() {
-    QuestionRewardIntent submitted = baseIntent().status(QuestionRewardIntentStatus.SUBMITTED).build();
-    QuestionRewardIntent succeeded = baseIntent().status(QuestionRewardIntentStatus.SUCCEEDED).build();
+    QuestionRewardIntent submitted =
+        baseIntent().status(QuestionRewardIntentStatus.SUBMITTED).build();
+    QuestionRewardIntent succeeded =
+        baseIntent().status(QuestionRewardIntentStatus.SUCCEEDED).build();
     QuestionRewardIntent failed =
         baseIntent().status(QuestionRewardIntentStatus.FAILED_ONCHAIN).build();
 
@@ -381,8 +384,7 @@ class QuestionRewardIntentTest {
   void assertSubmittableByPrepare_throwsWhenToUserMismatch() {
     QuestionRewardIntent intent =
         baseIntent().status(QuestionRewardIntentStatus.PREPARE_REQUIRED).build();
-    TransferPrepare prepare =
-        matchingPrepare().toBuilder().toUserId(999L).build();
+    TransferPrepare prepare = matchingPrepare().toBuilder().toUserId(999L).build();
 
     assertThatThrownBy(() -> intent.assertSubmittableByPrepare(prepare))
         .isInstanceOf(Web3InvalidInputException.class)
@@ -405,8 +407,7 @@ class QuestionRewardIntentTest {
   void assertSubmittableByPrepare_throwsWhenAcceptedCommentMismatchOnly() {
     QuestionRewardIntent intent =
         baseIntent().status(QuestionRewardIntentStatus.PREPARE_REQUIRED).build();
-    TransferPrepare prepare =
-        matchingPrepare().toBuilder().acceptedCommentId(999L).build();
+    TransferPrepare prepare = matchingPrepare().toBuilder().acceptedCommentId(999L).build();
 
     assertThatThrownBy(() -> intent.assertSubmittableByPrepare(prepare))
         .isInstanceOf(Web3InvalidInputException.class)

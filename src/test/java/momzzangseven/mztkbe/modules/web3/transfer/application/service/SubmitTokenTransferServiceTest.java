@@ -6,9 +6,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -40,12 +40,12 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDa
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepare;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -281,18 +281,25 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
-    when(sponsorDailyUsagePersistencePort.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
-    when(sponsorDailyUsagePersistencePort.update(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.create(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -370,16 +377,21 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -414,8 +426,7 @@ class SubmitTokenTransferServiceTest {
                 .build());
     when(web3ContractPort.broadcast(any()))
         .thenReturn(
-            new Web3ContractPort.BroadcastResult(
-                false, null, "BROADCAST_FAILED", "rpc-main"));
+            new Web3ContractPort.BroadcastResult(false, null, "BROADCAST_FAILED", "rpc-main"));
 
     SubmitTokenTransferResult result = service.execute(command);
 
@@ -541,7 +552,10 @@ class SubmitTokenTransferServiceTest {
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(null);
 
     assertThatThrownBy(() -> service.execute(command))
@@ -589,7 +603,10 @@ class SubmitTokenTransferServiceTest {
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(2_000_000L));
 
     assertThatThrownBy(() -> service.execute(command)).isInstanceOf(Web3TransferException.class);
@@ -631,18 +648,25 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
-    when(sponsorDailyUsagePersistencePort.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
-    when(sponsorDailyUsagePersistencePort.update(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.create(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -721,18 +745,25 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
-    when(sponsorDailyUsagePersistencePort.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
-    when(sponsorDailyUsagePersistencePort.update(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.create(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -811,16 +842,21 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -905,16 +941,21 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -1120,12 +1161,16 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
@@ -1137,7 +1182,8 @@ class SubmitTokenTransferServiceTest {
                     .usageDateKst(java.time.LocalDate.now())
                     .estimatedCostWei(BigInteger.valueOf(100))
                     .build()));
-    when(sponsorDailyUsagePersistencePort.update(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(sponsorDailyUsagePersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -1208,7 +1254,7 @@ class SubmitTokenTransferServiceTest {
         new SubmitTokenTransferCommand(7L, "prepare-1", authorizationSignature, executionSignature);
     TransferPrepare prepare =
         activePrepare(
-            "domain:LEVEL_UP_REWARD:101:7", TokenTransferReferenceType.SERVER_TO_USER, "101")
+                "domain:LEVEL_UP_REWARD:101:7", TokenTransferReferenceType.SERVER_TO_USER, "101")
             .toBuilder()
             .amountWei(new BigInteger("600000000000000000"))
             .build();
@@ -1228,7 +1274,10 @@ class SubmitTokenTransferServiceTest {
         activePrepare(
             "domain:LEVEL_UP_REWARD:101:7", TokenTransferReferenceType.SERVER_TO_USER, "101");
     stubPreSignatureFlow(
-        prepare, authorizationSignature, BigInteger.valueOf(100_000), BigInteger.valueOf(2_000_000_000_000L));
+        prepare,
+        authorizationSignature,
+        BigInteger.valueOf(100_000),
+        BigInteger.valueOf(2_000_000_000_000L));
 
     assertThatThrownBy(() -> service.execute(command)).isInstanceOf(Web3TransferException.class);
   }
@@ -1279,7 +1328,8 @@ class SubmitTokenTransferServiceTest {
     verify(questionRewardIntentPersistencePort)
         .updateStatusIfCurrentIn(
             101L,
-            momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus.SUBMITTED,
+            momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus
+                .SUBMITTED,
             EnumSet.of(
                 momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus
                     .PREPARE_REQUIRED,
@@ -1317,7 +1367,8 @@ class SubmitTokenTransferServiceTest {
 
     SubmitTokenTransferResult result = service.execute(command);
     assertThat(result.transactionId()).isEqualTo(33L);
-    verify(questionRewardIntentPersistencePort, never()).updateStatusIfCurrentIn(anyLong(), any(), any());
+    verify(questionRewardIntentPersistencePort, never())
+        .updateStatusIfCurrentIn(anyLong(), any(), any());
     verify(questionRewardIntentPersistencePort, never()).findForUpdateByPostId(anyLong());
   }
 
@@ -1351,14 +1402,16 @@ class SubmitTokenTransferServiceTest {
     try (MockedStatic<TokenTransferIdempotencyKeyFactory> mocked =
         Mockito.mockStatic(TokenTransferIdempotencyKeyFactory.class)) {
       mocked
-          .when(() -> TokenTransferIdempotencyKeyFactory.parseDomainType(prepare.getIdempotencyKey()))
+          .when(
+              () -> TokenTransferIdempotencyKeyFactory.parseDomainType(prepare.getIdempotencyKey()))
           .thenReturn(DomainReferenceType.LEVEL_UP_REWARD, DomainReferenceType.QUESTION_REWARD);
 
       SubmitTokenTransferResult result = service.execute(command);
       assertThat(result.transactionId()).isEqualTo(96L);
     }
 
-    verify(questionRewardIntentPersistencePort, never()).updateStatusIfCurrentIn(anyLong(), any(), any());
+    verify(questionRewardIntentPersistencePort, never())
+        .updateStatusIfCurrentIn(anyLong(), any(), any());
   }
 
   @Test
@@ -1371,7 +1424,8 @@ class SubmitTokenTransferServiceTest {
     when(loadTransferRuntimeConfigPort.load()).thenReturn(runtimeConfig());
     when(transferPreparePersistencePort.findForUpdateByPrepareId("prepare-1"))
         .thenReturn(Optional.of(prepare));
-    when(questionRewardIntentPersistencePort.findForUpdateByPostId(101L)).thenReturn(Optional.empty());
+    when(questionRewardIntentPersistencePort.findForUpdateByPostId(101L))
+        .thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(Web3InvalidInputException.class)
@@ -1388,7 +1442,10 @@ class SubmitTokenTransferServiceTest {
         activePrepare(
             "domain:LEVEL_UP_REWARD:101:7", TokenTransferReferenceType.SERVER_TO_USER, "101");
     stubPreSignatureFlow(
-        prepare, authorizationSignature, BigInteger.valueOf(100_000), BigInteger.valueOf(200_000_000_000L));
+        prepare,
+        authorizationSignature,
+        BigInteger.valueOf(100_000),
+        BigInteger.valueOf(200_000_000_000L));
     when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
         .thenReturn(
             Optional.of(
@@ -1436,16 +1493,21 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -1522,16 +1584,21 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(BigInteger.valueOf(100_000));
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, BigInteger.valueOf(2)));
-    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any())).thenReturn(Optional.empty());
+    when(sponsorDailyUsagePersistencePort.findForUpdate(anyLong(), any()))
+        .thenReturn(Optional.empty());
     when(eip7702AuthorizationPort.verifySigner(
             11155111L,
             prepare.getDelegateTarget(),
@@ -1602,7 +1669,8 @@ class SubmitTokenTransferServiceTest {
     when(questionRewardIntentPersistencePort.findForUpdateByPostId(101L))
         .thenReturn(Optional.of(intent));
 
-    assertThatThrownBy(() -> service.execute(command)).isInstanceOf(Web3InvalidInputException.class);
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3InvalidInputException.class);
   }
 
   private void stubPreSignatureFlow(
@@ -1636,12 +1704,16 @@ class SubmitTokenTransferServiceTest {
             BigInteger.valueOf(prepare.getAuthorityNonce()),
             authorizationSignature))
         .thenReturn(authTuple);
-    when(eip7702TransactionCodecPort.encodeTransferData(prepare.getToAddress(), prepare.getAmountWei()))
+    when(eip7702TransactionCodecPort.encodeTransferData(
+            prepare.getToAddress(), prepare.getAmountWei()))
         .thenReturn("0x");
     when(eip7702TransactionCodecPort.hashCalls(any())).thenReturn("0x" + "a".repeat(64));
     when(eip7702TransactionCodecPort.encodeExecute(any(), any())).thenReturn("0x");
     when(eip7702ChainPort.estimateGasWithAuthorization(
-            "0x" + "f".repeat(40), prepare.getAuthorityAddress(), "0x", java.util.List.of(authTuple)))
+            "0x" + "f".repeat(40),
+            prepare.getAuthorityAddress(),
+            "0x",
+            java.util.List.of(authTuple)))
         .thenReturn(estimatedGas);
     when(eip7702ChainPort.loadSponsorFeePlan())
         .thenReturn(new Eip7702ChainPort.FeePlan(BigInteger.ONE, maxFeePerGas));

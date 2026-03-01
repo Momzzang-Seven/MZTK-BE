@@ -19,7 +19,8 @@ class TransferPrepareTest {
 
   @Test
   void isActiveAt_falseWhenExpiryIsNull() {
-    TransferPrepare prepare = basePrepare(TransferPrepareStatus.CREATED, null).toBuilder().authExpiresAt(null).build();
+    TransferPrepare prepare =
+        basePrepare(TransferPrepareStatus.CREATED, null).toBuilder().authExpiresAt(null).build();
 
     assertThat(prepare.isActiveAt(LocalDateTime.now())).isFalse();
   }
@@ -27,7 +28,8 @@ class TransferPrepareTest {
   @Test
   void isActiveAt_falseWhenNowEqualsExpiry() {
     LocalDateTime now = LocalDateTime.now();
-    TransferPrepare prepare = basePrepare(TransferPrepareStatus.CREATED, null).toBuilder().authExpiresAt(now).build();
+    TransferPrepare prepare =
+        basePrepare(TransferPrepareStatus.CREATED, null).toBuilder().authExpiresAt(now).build();
 
     assertThat(prepare.isActiveAt(now)).isFalse();
   }

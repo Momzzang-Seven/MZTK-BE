@@ -48,15 +48,18 @@ class GasFeeStrategyTest {
 
   @Test
   void feePlan_rejectsInvalidValues() {
-    assertThatThrownBy(() -> new GasFeeStrategy.FeePlan(BigInteger.ZERO, BigInteger.ONE, BigInteger.ONE))
+    assertThatThrownBy(
+            () -> new GasFeeStrategy.FeePlan(BigInteger.ZERO, BigInteger.ONE, BigInteger.ONE))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("gasLimit must be > 0");
 
-    assertThatThrownBy(() -> new GasFeeStrategy.FeePlan(BigInteger.ONE, BigInteger.ZERO, BigInteger.ONE))
+    assertThatThrownBy(
+            () -> new GasFeeStrategy.FeePlan(BigInteger.ONE, BigInteger.ZERO, BigInteger.ONE))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("maxPriorityFeePerGas must be > 0");
 
-    assertThatThrownBy(() -> new GasFeeStrategy.FeePlan(BigInteger.ONE, BigInteger.ONE, BigInteger.ZERO))
+    assertThatThrownBy(
+            () -> new GasFeeStrategy.FeePlan(BigInteger.ONE, BigInteger.ONE, BigInteger.ZERO))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("maxFeePerGas must be > 0");
   }
