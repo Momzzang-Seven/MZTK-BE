@@ -22,12 +22,22 @@ public record CreatePostCommand(
       List<String> imageUrls,
       List<String> tags) {
 
-    return new CreatePostCommand(userId, null, content, type, reward, imageUrls, tags);
+    String finalTitle = (type == PostType.QUESTION) ? title : null;
+    return new CreatePostCommand(userId, finalTitle, content, type, reward, imageUrls, tags);
   }
 
   public void validate() {
     if (content == null || content.isBlank()) {
       throw new PostInvalidInputException("Content is required");
+    }
+    if (type == PostType.QUESTION) {
+
+      if (title == null || title.isBlank()) {
+        throw new PostInvalidInputException("Title is required for question board");
+      }
+      if (reward == null || reward < 0) {
+        throw new PostInvalidInputException("Questions must have a valid reward");
+      }
     }
   }
 }
