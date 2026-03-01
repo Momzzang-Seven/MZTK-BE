@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.web3.transfer.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -88,12 +90,16 @@ class TokenTransferControllerIntegrationTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.prepareId").value("p-1"));
+
+    verify(prepareTokenTransferUseCase).execute(any(PrepareTokenTransferCommand.class));
   }
 
   @Test
   @DisplayName("POST /users/me/token-transfers/prepare 인증 없으면 401")
   void prepare_unauthenticated_returns401() throws Exception {
     mockMvc.perform(post("/users/me/token-transfers/prepare")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
   }
 
   @Test
@@ -131,6 +137,8 @@ class TokenTransferControllerIntegrationTest {
                             "amountWei", "1000000000000000000"))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
   }
 
   @Test
@@ -144,6 +152,75 @@ class TokenTransferControllerIntegrationTest {
                 .content(json(Map.of("domainType", "QUESTION_REWARD", "referenceId", "77"))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/token-transfers/prepare toUserId가 0이면 400")
+  void prepare_nonPositiveToUserId_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/prepare")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "domainType", "QUESTION_REWARD",
+                            "referenceId", "77",
+                            "toUserId", 0,
+                            "amountWei", "1000000000000000000"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/token-transfers/prepare referenceId 공백이면 400")
+  void prepare_blankReferenceId_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/prepare")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "domainType", "QUESTION_REWARD",
+                            "referenceId", " ",
+                            "toUserId", 2,
+                            "amountWei", "1000000000000000000"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/token-transfers/prepare referenceId가 100자 초과면 400")
+  void prepare_referenceIdTooLong_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/prepare")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "domainType",
+                            "QUESTION_REWARD",
+                            "referenceId",
+                            "r".repeat(101),
+                            "toUserId",
+                            2,
+                            "amountWei",
+                            "1000000000000000000"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
   }
 
   @Test
@@ -163,6 +240,8 @@ class TokenTransferControllerIntegrationTest {
                             "amountWei", "1.5"))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
   }
 
   @Test
@@ -191,6 +270,8 @@ class TokenTransferControllerIntegrationTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.transactionId").value(1))
         .andExpect(jsonPath("$.data.status").value("SIGNED"));
+
+    verify(submitTokenTransferUseCase).execute(any(SubmitTokenTransferCommand.class));
   }
 
   @Test
@@ -209,12 +290,56 @@ class TokenTransferControllerIntegrationTest {
                             "executionSignature", signature("b")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(submitTokenTransferUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/token-transfers/submit executionSignature 형식이 틀리면 400")
+  void submit_invalidExecutionSignature_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/submit")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "prepareId", "123e4567-e89b-12d3-a456-426614174000",
+                            "authorizationSignature", signature("a"),
+                            "executionSignature", "0x1234"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(submitTokenTransferUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/token-transfers/submit executionSignature 공백이면 400")
+  void submit_blankExecutionSignature_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/submit")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "prepareId", "123e4567-e89b-12d3-a456-426614174000",
+                            "authorizationSignature", signature("a"),
+                            "executionSignature", " "))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(submitTokenTransferUseCase);
   }
 
   @Test
   @DisplayName("POST /users/me/token-transfers/submit 인증 없으면 401")
   void submit_unauthenticated_returns401() throws Exception {
     mockMvc.perform(post("/users/me/token-transfers/submit")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(submitTokenTransferUseCase);
   }
 
   @Test
@@ -233,6 +358,8 @@ class TokenTransferControllerIntegrationTest {
                             "executionSignature", signature("b")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(submitTokenTransferUseCase);
   }
 
   private String signature(String hexChar) {
