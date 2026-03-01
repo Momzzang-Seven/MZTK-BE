@@ -104,8 +104,7 @@ class UserTest {
   @Test
   @DisplayName("createFromLocal rejects too long nickname")
   void createFromLocal_withTooLongNickname_throws() {
-    assertThatThrownBy(
-            () -> User.createFromLocal("local@example.com", bcrypt(), "n".repeat(51)))
+    assertThatThrownBy(() -> User.createFromLocal("local@example.com", bcrypt(), "n".repeat(51)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Nickname must be between 2 and 50 characters");
   }
