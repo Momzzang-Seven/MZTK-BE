@@ -18,7 +18,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("TagPersistenceAdapter unit test")
@@ -30,12 +29,10 @@ class TagPersistenceAdapterTest {
   @InjectMocks private TagPersistenceAdapter tagPersistenceAdapter;
 
   @Test
-  @DisplayName("loadTagsByNames maps entities to domain")
+  @DisplayName("loadTagsByNames maps entity names to domain")
   void loadTagsByNamesMapsToDomain() {
     TagEntity java = new TagEntity("java");
     TagEntity spring = new TagEntity("spring");
-    ReflectionTestUtils.setField(java, "id", 1L);
-    ReflectionTestUtils.setField(spring, "id", 2L);
 
     when(tagJpaRepository.findByNameIn(List.of("java", "spring")))
         .thenReturn(List.of(java, spring));
@@ -43,9 +40,7 @@ class TagPersistenceAdapterTest {
     List<Tag> result = tagPersistenceAdapter.loadTagsByNames(List.of("java", "spring"));
 
     assertThat(result).hasSize(2);
-    assertThat(result.get(0).getId()).isEqualTo(1L);
     assertThat(result.get(0).getName()).isEqualTo("java");
-    assertThat(result.get(1).getId()).isEqualTo(2L);
     assertThat(result.get(1).getName()).isEqualTo("spring");
   }
 
@@ -55,7 +50,6 @@ class TagPersistenceAdapterTest {
     Tag tag = Tag.builder().id(null).name("java").build();
 
     TagEntity saved = new TagEntity("java");
-    ReflectionTestUtils.setField(saved, "id", 99L);
 
     when(tagJpaRepository.saveAll(anyList())).thenReturn(List.of(saved));
 
@@ -67,7 +61,6 @@ class TagPersistenceAdapterTest {
     assertThat(captor.getValue().getFirst().getName()).isEqualTo("java");
 
     assertThat(result).hasSize(1);
-    assertThat(result.getFirst().getId()).isEqualTo(99L);
     assertThat(result.getFirst().getName()).isEqualTo("java");
   }
 

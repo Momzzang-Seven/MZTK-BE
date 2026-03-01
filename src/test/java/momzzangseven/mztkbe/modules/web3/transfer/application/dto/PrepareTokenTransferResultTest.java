@@ -64,12 +64,46 @@ class PrepareTokenTransferResultTest {
   }
 
   @Test
+  void constructor_throws_whenPrepareIdNull() {
+    assertThatThrownBy(
+            () ->
+                new PrepareTokenTransferResult(
+                    null,
+                    "domain:QUESTION_REWARD:1:2",
+                    "EIP7702",
+                    "0x" + "a".repeat(40),
+                    0L,
+                    "0x" + "b".repeat(40),
+                    LocalDateTime.now().plusMinutes(1),
+                    "0x" + "c".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("prepareId is required");
+  }
+
+  @Test
   void constructor_throws_whenIdempotencyKeyBlank() {
     assertThatThrownBy(
             () ->
                 new PrepareTokenTransferResult(
                     "prepare-1",
                     " ",
+                    "EIP7702",
+                    "0x" + "a".repeat(40),
+                    0L,
+                    "0x" + "b".repeat(40),
+                    LocalDateTime.now().plusMinutes(1),
+                    "0x" + "c".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("idempotencyKey is required");
+  }
+
+  @Test
+  void constructor_throws_whenIdempotencyKeyNull() {
+    assertThatThrownBy(
+            () ->
+                new PrepareTokenTransferResult(
+                    "prepare-1",
+                    null,
                     "EIP7702",
                     "0x" + "a".repeat(40),
                     0L,
@@ -98,6 +132,23 @@ class PrepareTokenTransferResultTest {
   }
 
   @Test
+  void constructor_throws_whenTxTypeNull() {
+    assertThatThrownBy(
+            () ->
+                new PrepareTokenTransferResult(
+                    "prepare-1",
+                    "domain:QUESTION_REWARD:1:2",
+                    null,
+                    "0x" + "a".repeat(40),
+                    0L,
+                    "0x" + "b".repeat(40),
+                    LocalDateTime.now().plusMinutes(1),
+                    "0x" + "c".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("txType is required");
+  }
+
+  @Test
   void constructor_throws_whenAuthorityAddressBlank() {
     assertThatThrownBy(
             () ->
@@ -115,6 +166,40 @@ class PrepareTokenTransferResultTest {
   }
 
   @Test
+  void constructor_throws_whenAuthorityAddressNull() {
+    assertThatThrownBy(
+            () ->
+                new PrepareTokenTransferResult(
+                    "prepare-1",
+                    "domain:QUESTION_REWARD:1:2",
+                    "EIP7702",
+                    null,
+                    0L,
+                    "0x" + "b".repeat(40),
+                    LocalDateTime.now().plusMinutes(1),
+                    "0x" + "c".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("authorityAddress is required");
+  }
+
+  @Test
+  void constructor_throws_whenAuthorityNonceNull() {
+    assertThatThrownBy(
+            () ->
+                new PrepareTokenTransferResult(
+                    "prepare-1",
+                    "domain:QUESTION_REWARD:1:2",
+                    "EIP7702",
+                    "0x" + "a".repeat(40),
+                    null,
+                    "0x" + "b".repeat(40),
+                    LocalDateTime.now().plusMinutes(1),
+                    "0x" + "c".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("authorityNonce must be >= 0");
+  }
+
+  @Test
   void constructor_throws_whenDelegateTargetBlank() {
     assertThatThrownBy(
             () ->
@@ -125,6 +210,23 @@ class PrepareTokenTransferResultTest {
                     "0x" + "a".repeat(40),
                     0L,
                     " ",
+                    LocalDateTime.now().plusMinutes(1),
+                    "0x" + "c".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("delegateTarget is required");
+  }
+
+  @Test
+  void constructor_throws_whenDelegateTargetNull() {
+    assertThatThrownBy(
+            () ->
+                new PrepareTokenTransferResult(
+                    "prepare-1",
+                    "domain:QUESTION_REWARD:1:2",
+                    "EIP7702",
+                    "0x" + "a".repeat(40),
+                    0L,
+                    null,
                     LocalDateTime.now().plusMinutes(1),
                     "0x" + "c".repeat(64)))
         .isInstanceOf(Web3InvalidInputException.class)
@@ -161,6 +263,23 @@ class PrepareTokenTransferResultTest {
                     "0x" + "b".repeat(40),
                     LocalDateTime.now().plusMinutes(1),
                     " "))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("payloadHashToSign is required");
+  }
+
+  @Test
+  void constructor_throws_whenPayloadHashNull() {
+    assertThatThrownBy(
+            () ->
+                new PrepareTokenTransferResult(
+                    "prepare-1",
+                    "domain:QUESTION_REWARD:1:2",
+                    "EIP7702",
+                    "0x" + "a".repeat(40),
+                    0L,
+                    "0x" + "b".repeat(40),
+                    LocalDateTime.now().plusMinutes(1),
+                    null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("payloadHashToSign is required");
   }

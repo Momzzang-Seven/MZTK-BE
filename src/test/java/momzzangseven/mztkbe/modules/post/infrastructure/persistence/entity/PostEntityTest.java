@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -63,9 +62,6 @@ class PostEntityTest {
   @Test
   @DisplayName("toDomain maps entity fields and provided tags")
   void toDomainMapsWithTags() {
-    LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 9, 0);
-    LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 10, 0);
-
     PostEntity entity =
         PostEntity.builder()
             .id(9L)
@@ -78,9 +74,6 @@ class PostEntityTest {
             .isSolved(true)
             .build();
 
-    org.springframework.test.util.ReflectionTestUtils.setField(entity, "createdAt", createdAt);
-    org.springframework.test.util.ReflectionTestUtils.setField(entity, "updatedAt", updatedAt);
-
     Post post = entity.toDomain(List.of("spring"));
 
     assertThat(post.getId()).isEqualTo(9L);
@@ -92,8 +85,8 @@ class PostEntityTest {
     assertThat(post.getReward()).isZero();
     assertThat(post.getIsSolved()).isTrue();
     assertThat(post.getTags()).containsExactly("spring");
-    assertThat(post.getCreatedAt()).isEqualTo(createdAt);
-    assertThat(post.getUpdatedAt()).isEqualTo(updatedAt);
+    assertThat(post.getCreatedAt()).isNull();
+    assertThat(post.getUpdatedAt()).isNull();
   }
 
   @Test

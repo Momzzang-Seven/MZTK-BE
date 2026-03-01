@@ -148,22 +148,22 @@ class VerificationRadiusTest {
     }
 
     @Test
-    @DisplayName("0 이하 반경 설정 시 예외 발생 - 현재는 setter에 validation 없음")
-    void setNonPositiveRadius() {
+    @DisplayName("0 이하 반경도 현재 구현에서는 설정된다")
+    void setNonPositiveRadius_isAppliedInCurrentImplementation() {
       // given
       VerificationRadius radius = new VerificationRadius();
 
-      // when & then
-      // 참고: 현재 setter에 validation이 없으므로 이 테스트는 실패할 수 있음
-      // 구현 가이드에 따라 setter에 validation 추가 필요
-      radius.setRadiusMeters(0.0); // 현재는 허용됨
-      radius.setRadiusMeters(-5.0); // 현재는 허용됨
+      // when
+      radius.setRadiusMeters(0.0);
 
-      // TODO: setter에 validation 추가 시 아래 테스트 활성화
-      // assertThatThrownBy(() -> radius.setRadiusMeters(0.0))
-      //     .isInstanceOf(IllegalArgumentException.class);
-      // assertThatThrownBy(() -> radius.setRadiusMeters(-5.0))
-      //     .isInstanceOf(IllegalArgumentException.class);
+      // then
+      assertThat(radius.getRadiusMeters()).isEqualTo(0.0);
+
+      // when
+      radius.setRadiusMeters(-5.0);
+
+      // then
+      assertThat(radius.getRadiusMeters()).isEqualTo(-5.0);
     }
   }
 }
