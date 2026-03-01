@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import momzzangseven.mztkbe.modules.tag.domain.model.Tag;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @DisplayName("TagEntity unit test")
 class TagEntityTest {
@@ -22,14 +21,13 @@ class TagEntityTest {
   }
 
   @Test
-  @DisplayName("toDomain maps id and normalizes name via domain builder")
-  void toDomainMapsEntityToDomain() {
+  @DisplayName("toDomain normalizes name via domain builder")
+  void toDomainNormalizesName() {
     TagEntity entity = new TagEntity(" Spring ");
-    ReflectionTestUtils.setField(entity, "id", 22L);
 
     Tag tag = entity.toDomain();
 
-    assertThat(tag.getId()).isEqualTo(22L);
+    assertThat(tag.getId()).isNull();
     assertThat(tag.getName()).isEqualTo("spring");
   }
 }

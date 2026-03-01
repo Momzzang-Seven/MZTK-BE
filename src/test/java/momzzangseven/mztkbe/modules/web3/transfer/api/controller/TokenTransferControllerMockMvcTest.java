@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transfer.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -11,6 +12,8 @@ import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.GlobalExceptionHandler;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.PrepareTokenTransferResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.SubmitTokenTransferResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTokenTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.SubmitTokenTransferUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -104,6 +107,8 @@ class TokenTransferControllerMockMvcTest {
                     """))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
   }
 
   @Test
@@ -124,6 +129,8 @@ class TokenTransferControllerMockMvcTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.message").value("Validation failed"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
   }
 
   @Test
@@ -143,6 +150,109 @@ class TokenTransferControllerMockMvcTest {
                     """))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(prepareTokenTransferUseCase);
+  }
+
+  @Test
+  void submit_returnsAccepted_whenRequestIsValid() throws Exception {
+    when(submitTokenTransferUseCase.execute(any(SubmitTokenTransferCommand.class)))
+        .thenReturn(
+            SubmitTokenTransferResult.builder()
+                .transactionId(10L)
+                .status("SIGNED")
+                .txHash("0x" + "a".repeat(64))
+                .build());
+
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/submit")
+                .principal(() -> "1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "prepareId": "123e4567-e89b-12d3-a456-426614174000",
+                      "authorizationSignature": "%s",
+                      "executionSignature": "%s"
+                    }
+                    """
+                        .formatted(signature("b"), signature("c"))))
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.transactionId").value(10))
+        .andExpect(jsonPath("$.data.status").value("SIGNED"));
+
+    verify(submitTokenTransferUseCase).execute(any(SubmitTokenTransferCommand.class));
+  }
+
+  @Test
+  void submit_returnsBadRequest_whenValidationFails() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/submit")
+                .principal(() -> "1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "prepareId": "123e4567-e89b-12d3-a456-426614174000",
+                      "authorizationSignature": "%s"
+                    }
+                    """
+                        .formatted(signature("b"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.message").value("Validation failed"));
+
+    verifyNoInteractions(submitTokenTransferUseCase);
+  }
+
+  @Test
+  void submit_returnsBadRequest_whenPrepareIdIsInvalidFormat() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/submit")
+                .principal(() -> "1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "prepareId": "not-uuid",
+                      "authorizationSignature": "%s",
+                      "executionSignature": "%s"
+                    }
+                    """
+                        .formatted(signature("b"), signature("c"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(submitTokenTransferUseCase);
+  }
+
+  @Test
+  void submit_returnsUnauthorized_whenAuthenticationMissing() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/submit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "prepareId": "123e4567-e89b-12d3-a456-426614174000",
+                      "authorizationSignature": "%s",
+                      "executionSignature": "%s"
+                    }
+                    """
+                        .formatted(signature("b"), signature("c"))))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(submitTokenTransferUseCase);
+  }
+
+  private String signature(String hexChar) {
+    return "0x" + hexChar.repeat(130);
   }
 
   private static class TestAuthenticationPrincipalResolver

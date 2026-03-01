@@ -49,11 +49,52 @@ class UserServiceTest {
   }
 
   @Test
+  @DisplayName("loginOrRegisterSocial rejects null provider")
+  void loginOrRegisterSocial_withNullProvider_throws() {
+    assertThatThrownBy(() -> service.loginOrRegisterSocial(null, "pid", "a@b.com", "nick", null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("provider is required");
+  }
+
+  @Test
+  @DisplayName("loginOrRegisterSocial rejects unsupported provider")
+  void loginOrRegisterSocial_withUnsupportedProvider_throws() {
+    assertThatThrownBy(
+            () -> service.loginOrRegisterSocial("NAVER", "pid", "a@b.com", "nick", null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Unsupported social provider: NAVER");
+  }
+
+  @Test
   @DisplayName("loginOrRegisterSocial rejects blank providerUserId")
   void loginOrRegisterSocial_withBlankProviderUserId_throws() {
     assertThatThrownBy(() -> service.loginOrRegisterSocial("KAKAO", " ", "a@b.com", "nick", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("providerUserId is required");
+  }
+
+  @Test
+  @DisplayName("loginOrRegisterSocial rejects null providerUserId")
+  void loginOrRegisterSocial_withNullProviderUserId_throws() {
+    assertThatThrownBy(() -> service.loginOrRegisterSocial("KAKAO", null, "a@b.com", "nick", null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("providerUserId is required");
+  }
+
+  @Test
+  @DisplayName("loginOrRegisterSocial rejects blank email")
+  void loginOrRegisterSocial_withBlankEmail_throws() {
+    assertThatThrownBy(() -> service.loginOrRegisterSocial("KAKAO", "pid", " ", "nick", null))
+        .isInstanceOf(InvalidCredentialsException.class)
+        .hasMessage("Invalid social login");
+  }
+
+  @Test
+  @DisplayName("loginOrRegisterSocial rejects null email")
+  void loginOrRegisterSocial_withNullEmail_throws() {
+    assertThatThrownBy(() -> service.loginOrRegisterSocial("KAKAO", "pid", null, "nick", null))
+        .isInstanceOf(InvalidCredentialsException.class)
+        .hasMessage("Invalid social login");
   }
 
   @Test
@@ -130,6 +171,28 @@ class UserServiceTest {
   }
 
   @Test
+  @DisplayName("loginOrRegisterSocial rejects email collision with different provider")
+  void loginOrRegisterSocial_withEmailCollisionDifferentProvider_throwsInvalidCredentials() {
+    User byEmail = baseUser(4L, "collision@example.com", AuthProvider.GOOGLE, UserStatus.ACTIVE);
+
+    when(loadUserPort.findByProviderAndProviderUserId(AuthProvider.KAKAO, "kakao-id"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.findDeletedByProviderAndProviderUserId(AuthProvider.KAKAO, "kakao-id"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.loadUserByEmail("collision@example.com")).thenReturn(Optional.of(byEmail));
+
+    assertThatThrownBy(
+            () ->
+                service.loginOrRegisterSocial(
+                    "KAKAO", "kakao-id", "collision@example.com", "nick", null))
+        .isInstanceOf(InvalidCredentialsException.class)
+        .hasMessage("Invalid social login");
+
+    verify(loadUserPort, never()).loadDeletedUserByEmail("collision@example.com");
+    verify(saveUserPort, never()).saveUser(any(User.class));
+  }
+
+  @Test
   @DisplayName("loginOrRegisterSocial creates new social user with fallback nickname")
   void loginOrRegisterSocial_withNewSocialUser_createsUser() {
     when(loadUserPort.findByProviderAndProviderUserId(AuthProvider.KAKAO, "new-kakao-id"))
@@ -156,6 +219,33 @@ class UserServiceTest {
 
     assertThat(outcome.isNewUser()).isTrue();
     assertThat(outcome.user().getId()).isEqualTo(777L);
+  }
+
+  @Test
+  @DisplayName("loginOrRegisterSocial creates GOOGLE social user with provided nickname")
+  void loginOrRegisterSocial_withGoogleNewUser_createsGoogleUser() {
+    when(loadUserPort.findByProviderAndProviderUserId(AuthProvider.GOOGLE, "google-id"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.findDeletedByProviderAndProviderUserId(AuthProvider.GOOGLE, "google-id"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.loadUserByEmail("google@example.com")).thenReturn(Optional.empty());
+    when(loadUserPort.loadDeletedUserByEmail("google@example.com")).thenReturn(Optional.empty());
+    when(saveUserPort.saveUser(any(User.class)))
+        .thenAnswer(
+            invocation -> invocation.getArgument(0, User.class).toBuilder().id(778L).build());
+
+    SocialLoginOutcome outcome =
+        service.loginOrRegisterSocial(
+            "GOOGLE", "google-id", "google@example.com", "googleNick", "profile");
+
+    ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+    verify(saveUserPort).saveUser(userCaptor.capture());
+    User created = userCaptor.getValue();
+
+    assertThat(created.getAuthProvider()).isEqualTo(AuthProvider.GOOGLE);
+    assertThat(created.getNickname()).isEqualTo("googleNick");
+    assertThat(outcome.isNewUser()).isTrue();
+    assertThat(outcome.user().getId()).isEqualTo(778L);
   }
 
   @Test

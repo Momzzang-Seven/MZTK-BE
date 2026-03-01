@@ -11,6 +11,51 @@ import org.junit.jupiter.api.Test;
 class XpLedgerEntryTest {
 
   @Test
+  void create_shouldThrowWhenUserIdInvalid() {
+    assertThatThrownBy(
+            () ->
+                XpLedgerEntry.create(
+                    0L,
+                    XpType.CHECK_IN,
+                    10,
+                    LocalDate.of(2026, 2, 26),
+                    LocalDateTime.of(2026, 2, 26, 9, 0),
+                    "checkin:1:20260226",
+                    "attendance:2026-02-26"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("userId must be positive");
+
+    assertThatThrownBy(
+            () ->
+                XpLedgerEntry.create(
+                    null,
+                    XpType.CHECK_IN,
+                    10,
+                    LocalDate.of(2026, 2, 26),
+                    LocalDateTime.of(2026, 2, 26, 9, 0),
+                    "checkin:1:20260226",
+                    "attendance:2026-02-26"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("userId must be positive");
+  }
+
+  @Test
+  void create_shouldThrowWhenTypeNull() {
+    assertThatThrownBy(
+            () ->
+                XpLedgerEntry.create(
+                    1L,
+                    null,
+                    10,
+                    LocalDate.of(2026, 2, 26),
+                    LocalDateTime.of(2026, 2, 26, 9, 0),
+                    "checkin:1:20260226",
+                    "attendance:2026-02-26"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("type is required");
+  }
+
+  @Test
   void create_shouldThrowWhenXpAmountIsNotPositive() {
     assertThatThrownBy(
             () ->
@@ -40,6 +85,54 @@ class XpLedgerEntryTest {
                     "attendance:2026-02-26"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("idempotencyKey is required");
+  }
+
+  @Test
+  void create_shouldThrowWhenIdempotencyKeyIsNull() {
+    assertThatThrownBy(
+            () ->
+                XpLedgerEntry.create(
+                    1L,
+                    XpType.CHECK_IN,
+                    10,
+                    LocalDate.of(2026, 2, 26),
+                    LocalDateTime.of(2026, 2, 26, 9, 0),
+                    null,
+                    "attendance:2026-02-26"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("idempotencyKey is required");
+  }
+
+  @Test
+  void create_shouldThrowWhenEarnedOnNull() {
+    assertThatThrownBy(
+            () ->
+                XpLedgerEntry.create(
+                    1L,
+                    XpType.CHECK_IN,
+                    10,
+                    null,
+                    LocalDateTime.of(2026, 2, 26, 9, 0),
+                    "checkin:1:20260226",
+                    "attendance:2026-02-26"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("earnedOn is required");
+  }
+
+  @Test
+  void create_shouldThrowWhenOccurredAtNull() {
+    assertThatThrownBy(
+            () ->
+                XpLedgerEntry.create(
+                    1L,
+                    XpType.CHECK_IN,
+                    10,
+                    LocalDate.of(2026, 2, 26),
+                    null,
+                    "checkin:1:20260226",
+                    "attendance:2026-02-26"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("occurredAt is required");
   }
 
   @Test

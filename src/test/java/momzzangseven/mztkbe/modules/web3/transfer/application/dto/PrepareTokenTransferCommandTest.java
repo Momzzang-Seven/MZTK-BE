@@ -25,6 +25,18 @@ class PrepareTokenTransferCommandTest {
   }
 
   @Test
+  @DisplayName("validate rejects null userId")
+  void validate_nullUserId_throwsException() {
+    PrepareTokenTransferCommand command =
+        new PrepareTokenTransferCommand(
+            null, DomainReferenceType.QUESTION_REWARD, "101", 2L, BigInteger.ONE);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("userId must be positive");
+  }
+
+  @Test
   @DisplayName("validate rejects null domain type")
   void validate_nullDomainType_throwsException() {
     PrepareTokenTransferCommand command =
@@ -60,11 +72,33 @@ class PrepareTokenTransferCommandTest {
   }
 
   @Test
+  @DisplayName("validate rejects null reference ID")
+  void validate_referenceIdNull_throwsException() {
+    PrepareTokenTransferCommand command =
+        new PrepareTokenTransferCommand(1L, DomainReferenceType.QUESTION_REWARD, null, 2L, BigInteger.ONE);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("referenceId is required");
+  }
+
+  @Test
   @DisplayName("validate rejects non-positive amount")
   void validate_nonPositiveAmount_throwsException() {
     PrepareTokenTransferCommand command =
         new PrepareTokenTransferCommand(
             1L, DomainReferenceType.QUESTION_REWARD, "101", 2L, BigInteger.ZERO);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("amountWei must be > 0");
+  }
+
+  @Test
+  @DisplayName("validate rejects null amount")
+  void validate_nullAmount_throwsException() {
+    PrepareTokenTransferCommand command =
+        new PrepareTokenTransferCommand(1L, DomainReferenceType.QUESTION_REWARD, "101", 2L, null);
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(Web3InvalidInputException.class)
@@ -87,6 +121,18 @@ class PrepareTokenTransferCommandTest {
     PrepareTokenTransferCommand command =
         new PrepareTokenTransferCommand(
             1L, DomainReferenceType.QUESTION_REWARD, "101", 0L, BigInteger.ONE);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("toUserId must be positive");
+  }
+
+  @Test
+  @DisplayName("validate rejects null toUserId")
+  void validate_nullToUserId_throwsException() {
+    PrepareTokenTransferCommand command =
+        new PrepareTokenTransferCommand(
+            1L, DomainReferenceType.QUESTION_REWARD, "101", null, BigInteger.ONE);
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(Web3InvalidInputException.class)
