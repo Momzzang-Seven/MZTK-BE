@@ -4,6 +4,7 @@ plugins {
     id 'io.spring.dependency-management' version '1.1.7'
     id 'com.diffplug.spotless' version '6.25.0'
     id 'checkstyle'
+    id 'jacoco'
 }
 
 group = 'Momzzang-Seven'
@@ -95,11 +96,25 @@ checkstyle {
     configFile = file("config/checkstyle/google_checks.xml")
 }
 
+jacoco {
+    toolVersion = '0.8.12'
+}
+
 // 기본 test 태스크에서 @Tag("e2e") 태그가 붙은 테스트는 제외.
 // ./gradlew test 실행 시 e2e테스트는 실행되지 않음.
 tasks.named('test') {
     useJUnitPlatform {
         excludeTags 'e2e'
+    }
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test')
+    reports {
+        html.required = true
+        xml.required = true
+        csv.required = false
     }
 }
 
