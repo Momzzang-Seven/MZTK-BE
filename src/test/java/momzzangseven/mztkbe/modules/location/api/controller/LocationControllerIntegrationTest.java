@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.location.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -146,6 +147,8 @@ class LocationControllerIntegrationTest {
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("locationName", "집"))))
         .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(registerLocationUseCase);
   }
 
   @Test
@@ -159,6 +162,68 @@ class LocationControllerIntegrationTest {
                 .content(json(Map.of("locationName", "   "))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(registerLocationUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/locations/register 위치 이름이 100자 초과면 400")
+  void registerLocation_nameTooLong_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/locations/register")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("locationName", "a".repeat(101)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(registerLocationUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/locations/register postalCode가 10자 초과면 400")
+  void registerLocation_postalCodeTooLong_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/locations/register")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("locationName", "집", "postalCode", "1".repeat(11)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(registerLocationUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/locations/register address가 255자 초과면 400")
+  void registerLocation_addressTooLong_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/locations/register")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("locationName", "집", "address", "a".repeat(256)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(registerLocationUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/locations/register detailAddress가 255자 초과면 400")
+  void registerLocation_detailAddressTooLong_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/locations/register")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("locationName", "집", "detailAddress", "a".repeat(256)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(registerLocationUseCase);
   }
 
   @Test
@@ -209,12 +274,46 @@ class LocationControllerIntegrationTest {
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("currentLatitude", 37.5, "currentLongitude", 126.9))))
         .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(verifyLocationUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /locations/verify currentLatitude 누락이면 400")
+  void verifyLocation_missingLatitude_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/locations/verify")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("locationId", 1, "currentLongitude", 126.9))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(verifyLocationUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /locations/verify currentLongitude 누락이면 400")
+  void verifyLocation_missingLongitude_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/locations/verify")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("locationId", 1, "currentLatitude", 37.5))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(verifyLocationUseCase);
   }
 
   @Test
   @DisplayName("POST /locations/verify 인증 없으면 401")
   void verifyLocation_unauthenticated_returns401() throws Exception {
     mockMvc.perform(post("/locations/verify")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(verifyLocationUseCase);
   }
 
   @Test
