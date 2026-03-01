@@ -17,7 +17,7 @@ import { test, expect, APIResponse, BrowserContext, Page } from "@playwright/tes
 import * as dotenv from "dotenv";
 import * as path from "path";
 
-dotenv.config({ path: path.resolve(__dirname, ".env") });
+dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 // ────────────────────────────────────────────────────────────────────────────
 // 환경 변수

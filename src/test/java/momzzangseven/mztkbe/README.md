@@ -49,7 +49,7 @@ momzzangseven.mztkbe (test root)
 ├── README.md                          ← 이 문서
 │
 ├── integration/                       ← 통합 테스트 (레이어 간 실제 연동 검증)
-│   ├── e2e/                           ← 로컬 서버 + 로컬 DB 기반 E2E (Java)
+│   ├── e2e/                           ← Local server + Local DB 통합 테스트 (Java)
 │   │   └── {기능명}E2ETest.java
 │   │
 │   └── play_wright/                    ← 외부 API 연동 E2E (ts 스크립트 + MD 보고서)
@@ -61,7 +61,7 @@ momzzangseven.mztkbe (test root)
 │       ├── package.json
 │       └── package-lock.json
 │
-└── modules/                           ← 단위 테스트 (모듈별 격리 검증)
+└── modules/                           ← 모듈별 테스트 (단위 + H2 통합)
     └── {모듈명}/                       예) location, web3, auth, level ...
         ├── api/                       ← 전체 통합 테스트 (MockMVC + H2)
         │   └── {기능명}ControllerTest.java
@@ -91,10 +91,10 @@ momzzangseven.mztkbe (test root)
 
 ## `integration/e2e/`
 
-**목적**: 로컬에서 실제 Spring Boot 서버와 로컬 PostgreSQL DB를 함께 기동하여, HTTP 요청부터 DB 저장까지의 전체 흐름을 검증합니다.
+**목적**: 로컬에서 실제 Spring Boot 서버와 로컬 PostgreSQL DB를 함께 기동하여, HTTP 요청부터 DB 커밋까지의 통합 흐름을 검증합니다.
 
 - 실제 DB 스키마와 Flyway 마이그레이션이 올바르게 적용되는지 확인
-- Controller → Service → Repository → DB의 레이어 간 연결 이상 여부 검증
+- HTTP 엔드포인트부터 DB 반영까지의 실제 연동 검증
 - **외부 API(카카오, 구글 등)는 `@MockBean` 처리**하여 외부 의존성 제거
 - `@Tag("e2e")` 로 CI 파이프라인에서 선택적 실행 가능
 
@@ -153,27 +153,27 @@ momzzangseven.mztkbe (test root)
 
 ---
 
-# `integration/e2e/` — 테스트 작성 가이드
+# `integration/e2e/` — Local server + Local DB 통합 테스트 가이드
 
 ## 사용 가능한 어노테이션
 
 | 어노테이션 | 설명 |
 |---|---|
 | `@SpringBootTest(webEnvironment = RANDOM_PORT)` | 실제 서버를 랜덤 포트로 기동 |
-| `@AutoConfigureMockMvc` | MockMVC 자동 설정 (Spring 컨텍스트 기반 통합 테스트) |
-| `@Transactional` | 테스트 후 DB 롤백 (오염 방지) |
+| `@ActiveProfiles("integration")` | `application-integration.yml` 기반 설정 사용 |
+| `@LocalServerPort` | 랜덤 포트 값을 주입받아 실제 HTTP 호출 주소 구성 |
 | `@Sql(scripts = "...")` | 테스트 전 SQL 스크립트로 픽스처 데이터 삽입 |
 | `@Tag("e2e")` | `./gradlew e2eTest` 로 선택 실행 |
 | `@TestPropertySource` | 테스트 전용 프로퍼티 오버라이드 |
 | `@MockBean` | 외부 API 어댑터 등 특정 Bean만 Mock 처리 |
-| `@WithMockUser` | Spring Security 인증 컨텍스트 주입 |
+| `TestRestTemplate` | 실제 HTTP 요청/응답 기반 통합 검증 |
 
 ## 코드 예시 — 위치 등록 E2E 테스트
 
 ```java
 @Tag("e2e")
+@ActiveProfiles("integration")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Transactional
 @DisplayName("[E2E] 위치 등록 전체 흐름 테스트")
 class RegisterLocationE2ETest {
 
@@ -221,12 +221,12 @@ class RegisterLocationE2ETest {
 
 - **외부 API**(카카오, Google OAuth 등)는 반드시 `@MockBean`으로 대체합니다.
 - 테스트 DB는 로컬 PostgreSQL를 사용하며, `application-integration.yml`에 DataSource를 별도 설정합니다.
-- `@Transactional`을 붙이면 테스트 종료 후 자동 롤백되어 DB 오염을 방지합니다.
+- `RANDOM_PORT + TestRestTemplate` 기반 통합 테스트에서는 테스트 메서드 트랜잭션 롤백에 의존하지 말고, 테스트 데이터 격리(고유 키/픽스처 정리) 전략을 사용합니다.
 - 픽스처 데이터가 필요한 경우 `@Sql`을 사용하고, `src/test/resources/sql/fixtures/`에 SQL 파일을 위치시킵니다.
 
 ---
 
-# `modules/{모듈}/` — 단위 테스트 작성 가이드
+# `modules/{모듈}/` — 모듈 테스트 작성 가이드 (단위 + H2 통합)
 
 ## 사용 가능한 어노테이션
 
@@ -446,10 +446,9 @@ void geocode_throwsException_whenAddressIsBlank(String address) {
 # Node.js 18 이상 필요
 node --version
 
-# play_wright 디렉터리로 이동 후 패키지 초기화
+# play_wright 디렉터리로 이동 후 의존성 설치
 cd src/test/java/momzzangseven/mztkbe/integration/play_wright
-npm init -y
-npm install -D @playwright/test
+npm ci
 
 # 브라우저 바이너리 설치 (chromium만 설치해도 충분)
 npx playwright install chromium
@@ -459,11 +458,13 @@ npx playwright install chromium
 
 ```
 integration/play_wright/
-├── playwright.config.ts         ← Playwright 전역 설정
 ├── package.json
 ├── .env                         ← 테스트용 민감 정보 (gitignore 필수!)
-├── {기능명}.spec.ts              ← 테스트 시나리오 스크립트
-└── {기능명}-report.md            ← 실행 결과 보고서
+├── globalSetup.ts
+├── {기능명}/
+│   ├── {기능명}.spec.ts          ← 테스트 시나리오 스크립트
+│   └── {기능명}-report.md        ← 실행 결과 보고서
+└── playwright.config.ts         ← (선택) 개인 로컬 설정 파일
 ```
 
 ## 3. `playwright.config.ts` 기본 설정
@@ -615,16 +616,16 @@ Playwright 실행 후, 아래 양식에 따라 `{기능명}-report.md` 파일을
 # 테스트 실행 명령어 요약
 
 ```bash
-# 전체 단위 테스트 실행
+# 기본 테스트 실행 (e2e 제외: 단위 + MockMVC + H2 통합)
 ./gradlew test
 
 # 특정 테스트 클래스만 실행
 ./gradlew test --tests "*.GetMyLocationsServiceTest"
 
-# e2e 태그가 붙은 테스트만 실행
+# e2e(Local server + Local DB) 테스트 실행
 ./gradlew e2eTest
 
-# 코드 스타일 + 단위 테스트 전체 검증 (PR 전 필수)
+# 코드 스타일 + 기본 테스트 전체 검증 (PR 전 필수)
 ./gradlew check
 
 # Playwright E2E 실행 (play_wright 디렉터리에서)
