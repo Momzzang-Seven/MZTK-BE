@@ -57,11 +57,16 @@ class AuditDetailBuilderTest {
   void put_normalizesNestedMapListIterableAndArray() {
     Map<String, Object> nested =
         Map.of(
-            "amount", new BigInteger("99"),
-            "items", List.of(new BigDecimal("1.20"), Web3TxStatus.SUCCEEDED),
-            "iterable", (Iterable<Integer>) List.of(1, 2),
-            "array", new Object[] {new BigInteger("7"), "ok"},
-            "primitiveArray", new int[] {1, 2});
+            "amount",
+            new BigInteger("99"),
+            "items",
+            List.of(new BigDecimal("1.20"), Web3TxStatus.SUCCEEDED),
+            "iterable",
+            (Iterable<Integer>) List.of(1, 2),
+            "array",
+            new Object[] {new BigInteger("7"), "ok"},
+            "primitiveArray",
+            new int[] {1, 2});
 
     Map<String, Object> result = AuditDetailBuilder.create().put("nested", nested).build();
 

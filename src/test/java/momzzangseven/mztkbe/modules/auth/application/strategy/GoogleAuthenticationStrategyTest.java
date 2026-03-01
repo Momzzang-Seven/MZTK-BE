@@ -110,4 +110,3 @@ class GoogleAuthenticationStrategyTest {
     return User.builder().id(1L).email("google@example.com").build();
   }
 }
-

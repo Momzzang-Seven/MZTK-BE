@@ -110,4 +110,3 @@ class KakaoAuthenticationStrategyTest {
     return User.builder().id(2L).email("kakao@example.com").build();
   }
 }
-

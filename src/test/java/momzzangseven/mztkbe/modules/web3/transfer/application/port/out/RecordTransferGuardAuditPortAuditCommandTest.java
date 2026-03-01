@@ -31,11 +31,13 @@ class RecordTransferGuardAuditPortAuditCommandTest {
 
   @Test
   void constructor_rejectsNullOrNonPositiveUserId() {
-    assertThatThrownBy(() -> commandWith(null, "127.0.0.1", DomainReferenceType.QUESTION_REWARD, "101"))
+    assertThatThrownBy(
+            () -> commandWith(null, "127.0.0.1", DomainReferenceType.QUESTION_REWARD, "101"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("userId must be positive");
 
-    assertThatThrownBy(() -> commandWith(0L, "127.0.0.1", DomainReferenceType.QUESTION_REWARD, "101"))
+    assertThatThrownBy(
+            () -> commandWith(0L, "127.0.0.1", DomainReferenceType.QUESTION_REWARD, "101"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("userId must be positive");
   }
@@ -60,7 +62,8 @@ class RecordTransferGuardAuditPortAuditCommandTest {
 
   @Test
   void constructor_rejectsNullOrBlankReferenceId() {
-    assertThatThrownBy(() -> commandWith(1L, "127.0.0.1", DomainReferenceType.QUESTION_REWARD, null))
+    assertThatThrownBy(
+            () -> commandWith(1L, "127.0.0.1", DomainReferenceType.QUESTION_REWARD, null))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("referenceId is required");
 

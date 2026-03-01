@@ -75,7 +75,8 @@ class PrepareTokenTransferCommandTest {
   @DisplayName("validate rejects null reference ID")
   void validate_referenceIdNull_throwsException() {
     PrepareTokenTransferCommand command =
-        new PrepareTokenTransferCommand(1L, DomainReferenceType.QUESTION_REWARD, null, 2L, BigInteger.ONE);
+        new PrepareTokenTransferCommand(
+            1L, DomainReferenceType.QUESTION_REWARD, null, 2L, BigInteger.ONE);
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(Web3InvalidInputException.class)

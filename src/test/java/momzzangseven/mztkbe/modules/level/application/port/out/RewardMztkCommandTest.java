@@ -11,34 +11,36 @@ class RewardMztkCommandTest {
 
   @Test
   void constructor_acceptsValidPayload() {
-    assertThatCode(
-            () ->
-                new RewardMztkCommand(
-                    1L, 10, 77L, EvmAddress.of("0x" + "a".repeat(40))))
+    assertThatCode(() -> new RewardMztkCommand(1L, 10, 77L, EvmAddress.of("0x" + "a".repeat(40))))
         .doesNotThrowAnyException();
   }
 
   @Test
   void constructor_rejectsNullOrNonPositiveUserId() {
-    assertThatThrownBy(() -> new RewardMztkCommand(null, 10, 77L, EvmAddress.of("0x" + "a".repeat(40))))
+    assertThatThrownBy(
+            () -> new RewardMztkCommand(null, 10, 77L, EvmAddress.of("0x" + "a".repeat(40))))
         .isInstanceOf(LevelUpCommandInvalidException.class);
 
-    assertThatThrownBy(() -> new RewardMztkCommand(0L, 10, 77L, EvmAddress.of("0x" + "a".repeat(40))))
+    assertThatThrownBy(
+            () -> new RewardMztkCommand(0L, 10, 77L, EvmAddress.of("0x" + "a".repeat(40))))
         .isInstanceOf(LevelUpCommandInvalidException.class);
   }
 
   @Test
   void constructor_rejectsNullOrNonPositiveReferenceId() {
-    assertThatThrownBy(() -> new RewardMztkCommand(1L, 10, null, EvmAddress.of("0x" + "a".repeat(40))))
+    assertThatThrownBy(
+            () -> new RewardMztkCommand(1L, 10, null, EvmAddress.of("0x" + "a".repeat(40))))
         .isInstanceOf(LevelUpCommandInvalidException.class);
 
-    assertThatThrownBy(() -> new RewardMztkCommand(1L, 10, 0L, EvmAddress.of("0x" + "a".repeat(40))))
+    assertThatThrownBy(
+            () -> new RewardMztkCommand(1L, 10, 0L, EvmAddress.of("0x" + "a".repeat(40))))
         .isInstanceOf(LevelUpCommandInvalidException.class);
   }
 
   @Test
   void constructor_rejectsNegativeReward() {
-    assertThatThrownBy(() -> new RewardMztkCommand(1L, -1, 77L, EvmAddress.of("0x" + "a".repeat(40))))
+    assertThatThrownBy(
+            () -> new RewardMztkCommand(1L, -1, 77L, EvmAddress.of("0x" + "a".repeat(40))))
         .isInstanceOf(LevelUpCommandInvalidException.class);
   }
 
@@ -48,4 +50,3 @@ class RewardMztkCommandTest {
         .isInstanceOf(LevelUpCommandInvalidException.class);
   }
 }
-

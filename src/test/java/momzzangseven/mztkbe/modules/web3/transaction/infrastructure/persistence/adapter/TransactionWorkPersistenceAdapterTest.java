@@ -55,9 +55,7 @@ class TransactionWorkPersistenceAdapterTest {
   @Test
   void claimByStatus_throws_whenLimitNonPositive() {
     assertThatThrownBy(
-            () ->
-                adapter.claimByStatus(
-                    Web3TxStatus.CREATED, 0, "worker-1", Duration.ofMinutes(1)))
+            () -> adapter.claimByStatus(Web3TxStatus.CREATED, 0, "worker-1", Duration.ofMinutes(1)))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("limit must be > 0");
   }
@@ -65,9 +63,7 @@ class TransactionWorkPersistenceAdapterTest {
   @Test
   void claimByStatus_throws_whenWorkerBlank() {
     assertThatThrownBy(
-            () ->
-                adapter.claimByStatus(
-                    Web3TxStatus.CREATED, 10, " ", Duration.ofMinutes(1)))
+            () -> adapter.claimByStatus(Web3TxStatus.CREATED, 10, " ", Duration.ofMinutes(1)))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("workerId is required");
   }
@@ -107,7 +103,8 @@ class TransactionWorkPersistenceAdapterTest {
     assertThat(result.get(0).transactionId()).isEqualTo(1L);
     assertThat(result.get(1).transactionId()).isEqualTo(2L);
 
-    ArgumentCaptor<LocalDateTime> processingUntilCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+    ArgumentCaptor<LocalDateTime> processingUntilCaptor =
+        ArgumentCaptor.forClass(LocalDateTime.class);
     verify(updateQuery).setParameter(eq("processingUntil"), processingUntilCaptor.capture());
     long seconds = Duration.between(startedAt, processingUntilCaptor.getValue()).getSeconds();
     assertThat(seconds).isBetween(100L, 140L);

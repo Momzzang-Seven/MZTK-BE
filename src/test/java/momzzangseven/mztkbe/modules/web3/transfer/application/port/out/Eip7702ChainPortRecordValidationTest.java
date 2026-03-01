@@ -188,4 +188,3 @@ class Eip7702ChainPortRecordValidationTest {
         .hasMessageContaining("maxFeePerGas must be > 0");
   }
 }
-
