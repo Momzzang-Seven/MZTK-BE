@@ -141,7 +141,7 @@ web3:
 
   # EIP-7702 - 테스트에서는 비활성화
   eip7702:
-    enabled: false
+    enabled: true
     delegation:
       contract-address: "0x0000000000000000000000000000000000000001"
       nonce-tracker-address: "0x0000000000000000000000000000000000000001"
