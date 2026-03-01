@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -75,6 +77,8 @@ class TransactionControllerIntegrationTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.transactionId").value(1))
         .andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
+
+    verify(markTransactionSucceededUseCase).execute(any(MarkTransactionSucceededCommand.class));
   }
 
   @Test
@@ -93,6 +97,8 @@ class TransactionControllerIntegrationTest {
                             "reason", "manual-confirmation",
                             "evidence", "ops-ticket-1234"))))
         .andExpect(status().isForbidden());
+
+    verifyNoInteractions(markTransactionSucceededUseCase);
   }
 
   @Test
@@ -101,6 +107,8 @@ class TransactionControllerIntegrationTest {
     mockMvc
         .perform(post("/admin/web3/transactions/1/mark-succeeded"))
         .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(markTransactionSucceededUseCase);
   }
 
   @Test
@@ -120,6 +128,71 @@ class TransactionControllerIntegrationTest {
                             "evidence", "ops-ticket-1234"))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(markTransactionSucceededUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/{txId}/mark-succeeded explorerUrl 공백이면 400")
+  void markSucceeded_blankExplorerUrl_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/1/mark-succeeded")
+                .with(adminPrincipal(9L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "txHash", "0xabc123",
+                            "explorerUrl", " ",
+                            "reason", "manual-confirmation",
+                            "evidence", "ops-ticket-1234"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(markTransactionSucceededUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/{txId}/mark-succeeded reason 공백이면 400")
+  void markSucceeded_blankReason_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/1/mark-succeeded")
+                .with(adminPrincipal(9L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "txHash", "0xabc123",
+                            "explorerUrl", "https://explorer.example/tx/0xabc123",
+                            "reason", " ",
+                            "evidence", "ops-ticket-1234"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(markTransactionSucceededUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/transactions/{txId}/mark-succeeded evidence 공백이면 400")
+  void markSucceeded_blankEvidence_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/web3/transactions/1/mark-succeeded")
+                .with(adminPrincipal(9L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "txHash", "0xabc123",
+                            "explorerUrl", "https://explorer.example/tx/0xabc123",
+                            "reason", "manual-confirmation",
+                            "evidence", " "))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(markTransactionSucceededUseCase);
   }
 
   @Test
@@ -138,6 +211,8 @@ class TransactionControllerIntegrationTest {
                             "reason", "manual-confirmation",
                             "evidence", "ops-ticket-1234"))))
         .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(markTransactionSucceededUseCase);
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(

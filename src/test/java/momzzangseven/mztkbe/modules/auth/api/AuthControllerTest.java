@@ -262,6 +262,22 @@ class AuthControllerTest {
                           Map.of("email", EMAIL, "password", PASSWORD))))
           .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("이메일 형식 오류 → 400 Bad Request (@Email 검증)")
+    void login_invalidEmailFormat_returns400() throws Exception {
+      mockMvc
+          .perform(
+              post("/auth/login")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      objectMapper.writeValueAsString(
+                          Map.of(
+                              "provider", "LOCAL",
+                              "email", "invalid-email",
+                              "password", PASSWORD))))
+          .andExpect(status().isBadRequest());
+    }
   }
 
   // ============================================================

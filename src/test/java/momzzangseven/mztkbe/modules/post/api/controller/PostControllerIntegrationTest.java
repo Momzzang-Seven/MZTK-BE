@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.post.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -91,6 +93,8 @@ class PostControllerIntegrationTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(100));
+
+    verify(createPostUseCase).execute(any(CreatePostCommand.class));
   }
 
   @Test
@@ -102,6 +106,8 @@ class PostControllerIntegrationTest {
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("title", "t", "content", "c"))))
         .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(createPostUseCase);
   }
 
   @Test
@@ -113,6 +119,57 @@ class PostControllerIntegrationTest {
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("title", " ", "content", "c"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/free 내용 공백이면 400")
+  void createFreePost_blankContent_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "제목", "content", " "))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/free imageUrls URL 형식이 잘못되면 400")
+  void createFreePost_invalidImageUrl_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "title", "자유글", "content", "내용", "imageUrls", List.of("invalid-url")))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/free principal이 null이면 400 (현재 구현 기준)")
+  void createFreePost_nullPrincipal_returns400() throws Exception {
+    given(createPostUseCase.execute(any(CreatePostCommand.class)))
+        .willThrow(new IllegalArgumentException("작성자 ID는 필수입니다."));
+
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(nullUserPrincipal())
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "제목", "content", "내용"))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
   }
@@ -178,7 +235,7 @@ class PostControllerIntegrationTest {
 
   @Test
   @DisplayName("GET /posts type enum 값이 잘못되면 500 (현재 예외 매핑 기준)")
-  void getPosts_invalidTypeEnum_returns400() throws Exception {
+  void getPosts_invalidTypeEnum_returns500() throws Exception {
     mockMvc
         .perform(get("/posts?type=INVALID").with(userPrincipal(1L)))
         .andExpect(status().isInternalServerError())
