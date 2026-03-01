@@ -60,10 +60,12 @@ public class Post {
 
     if (userId == null) throw new IllegalArgumentException("작성자 ID는 필수입니다.");
     if (type == null) throw new IllegalArgumentException("게시글 타입은 필수입니다.");
-    if (title == null || title.isBlank()) throw new IllegalArgumentException("제목을 입력해주세요.");
     if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
 
     if (type == PostType.QUESTION) {
+      if (title == null || title.isBlank()) {
+        throw new IllegalArgumentException("질문 게시글은 제목이 필요합니다.");
+      }
       if (reward == null || reward <= 0) {
         throw new IllegalArgumentException("질문 게시글은 보상(XP)이 필요합니다.");
       }
