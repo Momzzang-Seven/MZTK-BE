@@ -60,7 +60,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
             .selectFrom(postEntity)
             .where(
                 eqType(condition.type()),
-                containsSearch(condition.search()),
+                containsSearch(condition.type(), condition.search()),
                 filterByTagIds(filteredPostIds))
             .orderBy(postEntity.createdAt.desc())
             .offset((long) condition.page() * condition.size())
@@ -81,9 +81,13 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
     return type != null ? postEntity.type.eq(type) : null;
   }
 
-  private BooleanExpression containsSearch(String search) {
+  private BooleanExpression containsSearch(PostType type, String search) {
     if (!StringUtils.hasText(search)) return null;
-    return postEntity.title.contains(search).or(postEntity.content.contains(search));
+
+    if (type == PostType.FREE) {
+      return null;
+    }
+    return postEntity.title.contains(search);
   }
 
   private BooleanExpression filterByTagIds(List<Long> postIds) {
