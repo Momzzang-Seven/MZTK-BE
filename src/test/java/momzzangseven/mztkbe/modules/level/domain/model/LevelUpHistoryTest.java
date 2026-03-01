@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.level.domain.model;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
@@ -118,8 +118,7 @@ class LevelUpHistoryTest {
   void initial_shouldThrowWhenLevelPolicyIdInvalid() {
     assertThatThrownBy(
             () ->
-                LevelUpHistory.initial(
-                    1L, 0L, 1, 2, 100, 10, LocalDateTime.of(2026, 2, 26, 10, 0)))
+                LevelUpHistory.initial(1L, 0L, 1, 2, 100, 10, LocalDateTime.of(2026, 2, 26, 10, 0)))
         .isInstanceOf(LevelUpCommandInvalidException.class);
   }
 
@@ -154,8 +153,7 @@ class LevelUpHistoryTest {
   void initial_shouldThrowWhenSpentXpNegative() {
     assertThatThrownBy(
             () ->
-                LevelUpHistory.initial(
-                    1L, 10L, 1, 2, -1, 10, LocalDateTime.of(2026, 2, 26, 10, 0)))
+                LevelUpHistory.initial(1L, 10L, 1, 2, -1, 10, LocalDateTime.of(2026, 2, 26, 10, 0)))
         .isInstanceOf(LevelUpCommandInvalidException.class);
   }
 

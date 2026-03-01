@@ -88,7 +88,8 @@ class DefaultGasFeeStrategyTest {
   @Test
   void calculate_treatsZeroBaseFeeAsNonPositive() {
     GasFeeStrategy.FeeInputs inputs =
-        new GasFeeStrategy.FeeInputs(BigInteger.valueOf(21000), BigInteger.valueOf(9), BigInteger.ZERO, null);
+        new GasFeeStrategy.FeeInputs(
+            BigInteger.valueOf(21000), BigInteger.valueOf(9), BigInteger.ZERO, null);
 
     GasFeeStrategy.FeePlan plan = strategy.calculate(inputs);
 
