@@ -19,7 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class GetMyLevelUpHistoriesServiceTest {
@@ -32,7 +31,6 @@ class GetMyLevelUpHistoriesServiceTest {
   @BeforeEach
   void setUp() {
     service = new GetMyLevelUpHistoriesService(levelUpHistoryPort, loadLevelRewardTransactionPort);
-    ReflectionTestUtils.setField(service, "explorerBaseUrl", "https://scan.example");
   }
 
   @Test
@@ -66,8 +64,7 @@ class GetMyLevelUpHistoriesServiceTest {
     assertThat(result.histories()).hasSize(1);
     assertThat(result.histories().getFirst().rewardTxStatus()).isEqualTo(RewardTxStatus.SUCCEEDED);
     assertThat(result.histories().getFirst().rewardStatus()).isEqualTo(RewardStatus.SUCCESS);
-    assertThat(result.histories().getFirst().rewardExplorerUrl())
-        .isEqualTo("https://scan.example/tx/0xabc");
+    assertThat(result.histories().getFirst().rewardExplorerUrl()).isNull();
   }
 
   private LevelUpHistory history(Long id, int fromLevel, int toLevel, int spentXp, int rewardMztk) {

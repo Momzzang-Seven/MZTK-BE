@@ -21,6 +21,16 @@ class CancelQuestionRewardIntentCommandTest {
   }
 
   @Test
+  @DisplayName("validate rejects null postId")
+  void validate_nullPostId_throwsException() {
+    CancelQuestionRewardIntentCommand command = new CancelQuestionRewardIntentCommand(null, 1L);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("postId must be positive");
+  }
+
+  @Test
   @DisplayName("validate rejects non-positive acceptedCommentId when provided")
   void validate_invalidAcceptedCommentId_throwsException() {
     CancelQuestionRewardIntentCommand command = new CancelQuestionRewardIntentCommand(1L, -1L);

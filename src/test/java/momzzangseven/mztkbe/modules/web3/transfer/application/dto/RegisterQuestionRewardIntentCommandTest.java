@@ -24,10 +24,32 @@ class RegisterQuestionRewardIntentCommandTest {
   }
 
   @Test
+  @DisplayName("validate rejects null postId")
+  void validate_nullPostId_throwsException() {
+    RegisterQuestionRewardIntentCommand command =
+        new RegisterQuestionRewardIntentCommand(null, 10L, 1L, 2L, BigInteger.ONE);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("postId must be positive");
+  }
+
+  @Test
   @DisplayName("validate rejects non-positive acceptedCommentId")
   void validate_invalidAcceptedCommentId_throwsException() {
     RegisterQuestionRewardIntentCommand command =
         new RegisterQuestionRewardIntentCommand(100L, 0L, 1L, 2L, BigInteger.ONE);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("acceptedCommentId must be positive");
+  }
+
+  @Test
+  @DisplayName("validate rejects null acceptedCommentId")
+  void validate_nullAcceptedCommentId_throwsException() {
+    RegisterQuestionRewardIntentCommand command =
+        new RegisterQuestionRewardIntentCommand(100L, null, 1L, 2L, BigInteger.ONE);
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(Web3InvalidInputException.class)
@@ -46,6 +68,17 @@ class RegisterQuestionRewardIntentCommandTest {
   }
 
   @Test
+  @DisplayName("validate rejects null amount")
+  void validate_nullAmount_throwsException() {
+    RegisterQuestionRewardIntentCommand command =
+        new RegisterQuestionRewardIntentCommand(100L, 10L, 1L, 2L, null);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("amountWei must be > 0");
+  }
+
+  @Test
   @DisplayName("validate rejects non-positive fromUserId")
   void validate_invalidFromUserId_throwsException() {
     RegisterQuestionRewardIntentCommand command =
@@ -57,10 +90,32 @@ class RegisterQuestionRewardIntentCommandTest {
   }
 
   @Test
+  @DisplayName("validate rejects null fromUserId")
+  void validate_nullFromUserId_throwsException() {
+    RegisterQuestionRewardIntentCommand command =
+        new RegisterQuestionRewardIntentCommand(100L, 10L, null, 2L, BigInteger.ONE);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("fromUserId must be positive");
+  }
+
+  @Test
   @DisplayName("validate rejects non-positive toUserId")
   void validate_invalidToUserId_throwsException() {
     RegisterQuestionRewardIntentCommand command =
         new RegisterQuestionRewardIntentCommand(100L, 10L, 1L, 0L, BigInteger.ONE);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("toUserId must be positive");
+  }
+
+  @Test
+  @DisplayName("validate rejects null toUserId")
+  void validate_nullToUserId_throwsException() {
+    RegisterQuestionRewardIntentCommand command =
+        new RegisterQuestionRewardIntentCommand(100L, 10L, 1L, null, BigInteger.ONE);
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(Web3InvalidInputException.class)

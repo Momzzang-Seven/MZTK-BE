@@ -29,6 +29,13 @@ class SubmitTokenTransferResultTest {
   }
 
   @Test
+  void constructor_throws_whenTxHashNull() {
+    assertThatThrownBy(() -> new SubmitTokenTransferResult(30L, "PENDING", null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("txHash is required");
+  }
+
+  @Test
   void constructor_throws_whenStatusBlank() {
     assertThatThrownBy(() -> new SubmitTokenTransferResult(30L, " ", "0x" + "a".repeat(64)))
         .isInstanceOf(Web3InvalidInputException.class)
@@ -36,8 +43,22 @@ class SubmitTokenTransferResultTest {
   }
 
   @Test
+  void constructor_throws_whenStatusNull() {
+    assertThatThrownBy(() -> new SubmitTokenTransferResult(30L, null, "0x" + "a".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("status is required");
+  }
+
+  @Test
   void constructor_throws_whenTransactionIdInvalid() {
     assertThatThrownBy(() -> new SubmitTokenTransferResult(0L, "PENDING", "0x" + "a".repeat(64)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("transactionId must be positive");
+  }
+
+  @Test
+  void constructor_throws_whenTransactionIdNull() {
+    assertThatThrownBy(() -> new SubmitTokenTransferResult(null, "PENDING", "0x" + "a".repeat(64)))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("transactionId must be positive");
   }

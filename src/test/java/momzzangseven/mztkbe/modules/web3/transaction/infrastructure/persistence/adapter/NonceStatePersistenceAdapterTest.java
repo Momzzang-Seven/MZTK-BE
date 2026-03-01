@@ -38,6 +38,13 @@ class NonceStatePersistenceAdapterTest {
   }
 
   @Test
+  void reserveNextNonce_throws_whenAddressNull() {
+    assertThatThrownBy(() -> adapter.reserveNextNonce(null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("fromAddress is required");
+  }
+
+  @Test
   void reserveNextNonce_returnsAndIncrementsExistingNonce() {
     Web3NonceStateEntity entity =
         Web3NonceStateEntity.builder().fromAddress("0x" + "a".repeat(40)).nextNonce(5L).build();
