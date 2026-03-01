@@ -1,15 +1,26 @@
 package momzzangseven.mztkbe.modules.auth.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
+import momzzangseven.mztkbe.modules.auth.application.port.in.ReactivateUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.user.domain.model.User;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +31,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -52,6 +65,7 @@ class AuthControllerTest {
   // Kakao / Google 외부 API는 MockBean으로 대체 (실제 HTTP 호출 차단)
   @MockBean private KakaoAuthPort kakaoAuthPort;
   @MockBean private GoogleAuthPort googleAuthPort;
+  @MockBean private ReactivateUseCase reactivateUseCase;
 
   // MarkTransactionSucceededService는 @ConditionalOnProperty(web3.reward-token.enabled=true)로
   // 테스트 환경(enabled=false)에서 생성되지 않지만, MarkTransactionSucceededAdapter가 이를 주입하려
@@ -102,6 +116,22 @@ class AuthControllerTest {
   private String extractAccessToken(MvcResult result) throws Exception {
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
     return body.at("/data/accessToken").asText();
+  }
+
+  private LoginResult buildLoginResultForReactivate(String email) {
+    User user =
+        User.builder()
+            .id(1L)
+            .email(email)
+            .nickname("reactivated-user")
+            .authProvider(AuthProvider.LOCAL)
+            .role(UserRole.USER)
+            .status(UserStatus.ACTIVE)
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build();
+    return LoginResult.of(
+        "access-token-reactivate", "refresh-token-reactivate", 900000L, 604800000L, false, user);
   }
 
   // ============================================================
@@ -235,6 +265,72 @@ class AuthControllerTest {
   }
 
   // ============================================================
+  // POST /auth/reactivate
+  // ============================================================
+
+  @Nested
+  @DisplayName("POST /auth/reactivate")
+  class ReactivateTest {
+
+    @Test
+    @DisplayName("유효한 요청 → 200 OK, accessToken/refreshToken 쿠키 반환")
+    void reactivate_validRequest_returns200WithTokens() throws Exception {
+      given(reactivateUseCase.execute(any())).willReturn(buildLoginResultForReactivate(EMAIL));
+
+      MvcResult result =
+          mockMvc
+              .perform(
+                  post("/auth/reactivate")
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(
+                          objectMapper.writeValueAsString(
+                              Map.of(
+                                  "provider", "LOCAL",
+                                  "email", EMAIL,
+                                  "password", PASSWORD))))
+              .andReturn();
+
+      assertThat(result.getResponse().getStatus()).isEqualTo(200);
+      JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+      assertThat(body.at("/status").asText()).isEqualTo("SUCCESS");
+      assertThat(body.at("/data/accessToken").asText()).isNotBlank();
+      assertThat(body.at("/data/grantType").asText()).isEqualTo("Bearer");
+
+      String setCookieHeader = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+      assertThat(setCookieHeader).isNotNull().contains("refreshToken=").contains("HttpOnly");
+    }
+
+    @Test
+    @DisplayName("provider 누락 → 400 Bad Request")
+    void reactivate_missingProvider_returns400() throws Exception {
+      mockMvc
+          .perform(
+              post("/auth/reactivate")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      objectMapper.writeValueAsString(
+                          Map.of("email", EMAIL, "password", PASSWORD))))
+          .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("이메일 형식 오류 → 400 Bad Request")
+    void reactivate_invalidEmail_returns400() throws Exception {
+      mockMvc
+          .perform(
+              post("/auth/reactivate")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      objectMapper.writeValueAsString(
+                          Map.of(
+                              "provider", "LOCAL",
+                              "email", "invalid-email",
+                              "password", PASSWORD))))
+          .andExpect(status().isBadRequest());
+    }
+  }
+
+  // ============================================================
   // POST /auth/reissue
   // ============================================================
 
@@ -312,6 +408,19 @@ class AuthControllerTest {
     void logout_withoutCookie_returns204() throws Exception {
       mockMvc.perform(post("/auth/logout")).andExpect(status().isNoContent());
     }
+
+    @Test
+    @DisplayName("빈 refreshToken 쿠키 → 204 No Content, 쿠키 만료 처리")
+    void logout_blankCookie_returns204AndExpiresCookie() throws Exception {
+      MvcResult logoutResult =
+          mockMvc
+              .perform(post("/auth/logout").cookie(new Cookie("refreshToken", "   ")))
+              .andReturn();
+
+      assertThat(logoutResult.getResponse().getStatus()).isEqualTo(204);
+      String setCookieHeader = logoutResult.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+      assertThat(setCookieHeader).isNotNull().contains("Max-Age=0");
+    }
   }
 
   // ============================================================
@@ -374,6 +483,21 @@ class AuthControllerTest {
                   .header("Authorization", "Bearer " + accessToken)
                   .contentType(MediaType.APPLICATION_JSON)
                   .content(objectMapper.writeValueAsString(Map.of("password", "Wrong@9999"))))
+          .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("인증 객체의 principal이 null이면 401 Unauthorized")
+    void stepup_nullPrincipal_returns401() throws Exception {
+      mockMvc
+          .perform(
+              post("/auth/stepup")
+                  .with(
+                      authentication(
+                          new UsernamePasswordAuthenticationToken(
+                              null, null, List.of(new SimpleGrantedAuthority("ROLE_USER")))))
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(Map.of("password", PASSWORD))))
           .andExpect(status().isUnauthorized());
     }
   }
