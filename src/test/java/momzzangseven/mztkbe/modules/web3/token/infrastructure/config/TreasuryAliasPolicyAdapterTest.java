@@ -22,7 +22,8 @@ class TreasuryAliasPolicyAdapterTest {
     RewardTokenProperties properties = new RewardTokenProperties();
     properties.getTreasury().setWalletAlias(" reward-main ");
 
-    TreasuryAliasPolicyAdapter adapter = new TreasuryAliasPolicyAdapter(properties, " sponsor-main ");
+    TreasuryAliasPolicyAdapter adapter =
+        new TreasuryAliasPolicyAdapter(properties, " sponsor-main ");
 
     assertThat(adapter.allowedAliases()).isEqualTo(Set.of("reward-main", "sponsor-main"));
   }

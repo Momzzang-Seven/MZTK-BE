@@ -144,7 +144,10 @@ class LoadTransactionPortTransactionSnapshotTest {
   }
 
   private LoadTransactionPort.TransactionSnapshot snapshotWith(
-      Long transactionId, String idempotencyKey, Web3ReferenceType referenceType, String referenceId) {
+      Long transactionId,
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId) {
     return new LoadTransactionPort.TransactionSnapshot(
         transactionId,
         idempotencyKey,
@@ -157,4 +160,3 @@ class LoadTransactionPortTransactionSnapshotTest {
         null);
   }
 }
-

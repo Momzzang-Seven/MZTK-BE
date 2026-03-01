@@ -59,8 +59,7 @@ class UserServiceTest {
   @Test
   @DisplayName("loginOrRegisterSocial rejects unsupported provider")
   void loginOrRegisterSocial_withUnsupportedProvider_throws() {
-    assertThatThrownBy(
-            () -> service.loginOrRegisterSocial("NAVER", "pid", "a@b.com", "nick", null))
+    assertThatThrownBy(() -> service.loginOrRegisterSocial("NAVER", "pid", "a@b.com", "nick", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Unsupported social provider: NAVER");
   }

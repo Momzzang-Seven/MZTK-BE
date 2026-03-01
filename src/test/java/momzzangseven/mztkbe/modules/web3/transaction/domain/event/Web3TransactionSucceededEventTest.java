@@ -14,13 +14,7 @@ class Web3TransactionSucceededEventTest {
     assertThatCode(
             () ->
                 new Web3TransactionSucceededEvent(
-                    1L,
-                    "idem-1",
-                    Web3ReferenceType.LEVEL_UP_REWARD,
-                    "101",
-                    1L,
-                    2L,
-                    null))
+                    1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", 1L, 2L, null))
         .doesNotThrowAnyException();
 
     assertThatCode(
@@ -72,21 +66,17 @@ class Web3TransactionSucceededEventTest {
     assertThatThrownBy(
             () ->
                 new Web3TransactionSucceededEvent(
-                    1L,
-                    "idem-1",
-                    Web3ReferenceType.LEVEL_UP_REWARD,
-                    "101",
-                    1L,
-                    2L,
-                    "0x1234"))
+                    1L, "idem-1", Web3ReferenceType.LEVEL_UP_REWARD, "101", 1L, 2L, "0x1234"))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("txHash must be 0x-prefixed 32-byte hex");
   }
 
   private Web3TransactionSucceededEvent eventWith(
-      Long transactionId, String idempotencyKey, Web3ReferenceType referenceType, String referenceId) {
+      Long transactionId,
+      String idempotencyKey,
+      Web3ReferenceType referenceType,
+      String referenceId) {
     return new Web3TransactionSucceededEvent(
         transactionId, idempotencyKey, referenceType, referenceId, 1L, 2L, null);
   }
 }
-

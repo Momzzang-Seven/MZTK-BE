@@ -84,10 +84,7 @@ class TransactionReceiptWorkerTest {
 
     verify(updateTransactionPort)
         .updateStatus(
-            1L,
-            Web3TxStatus.UNCONFIRMED,
-            " ",
-            Web3TxFailureReason.RECEIPT_TIMEOUT.code());
+            1L, Web3TxStatus.UNCONFIRMED, " ", Web3TxFailureReason.RECEIPT_TIMEOUT.code());
     verifyNoInteractions(web3ContractPort, transactionOutcomePublisher);
   }
 
