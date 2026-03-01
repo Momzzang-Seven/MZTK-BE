@@ -63,6 +63,9 @@ public class Post {
     if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
 
     if (type == PostType.QUESTION) {
+      if (title == null || title.isBlank()) {
+        throw new IllegalArgumentException("질문 게시글은 제목이 필요합니다.");
+      }
       if (reward == null || reward <= 0) {
         throw new IllegalArgumentException("질문 게시글은 보상(XP)이 필요합니다.");
       }
@@ -93,6 +96,12 @@ public class Post {
   public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
     var builder = this.toBuilder();
     boolean isUpdated = false;
+
+    if (title != null) {
+      if (title.isBlank()) throw new IllegalArgumentException("수정할 제목은 비워둘 수 없습니다.");
+      builder.title(title);
+      isUpdated = true;
+    }
 
     if (content != null) {
       if (content.isBlank()) throw new IllegalArgumentException("수정할 내용은 비워둘 수 없습니다.");
