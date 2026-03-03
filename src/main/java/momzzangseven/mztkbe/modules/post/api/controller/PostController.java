@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
+import momzzangseven.mztkbe.modules.post.api.dto.CreateQuestionPostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.*;
@@ -31,6 +32,16 @@ public class PostController {
   private final UpdatePostUseCase updatePostUseCase;
   private final DeletePostUseCase deletePostUseCase;
   private final SearchPostsUseCase searchPostsUseCase;
+
+  // [Create] 질문게시글 작성
+  @PostMapping("/question")
+  public ResponseEntity<ApiResponse<CreatePostResult>> createQuestionPost(
+      @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateQuestionPostRequest request) {
+
+    CreatePostCommand command = request.toCommand(userId);
+    CreatePostResult response = createPostUseCase.execute(command);
+    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
+  }
 
   // [Create] 자유게시글 작성
   @PostMapping("/free")
