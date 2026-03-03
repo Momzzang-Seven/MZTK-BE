@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 
 @Getter
@@ -94,6 +95,10 @@ public class Post {
   }
 
   public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
+    if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
+      throw new PostInvalidInputException("채택 완료된 질문게시글은 수정할 수 없습니다.");
+    }
+
     var builder = this.toBuilder();
     boolean isUpdated = false;
 
