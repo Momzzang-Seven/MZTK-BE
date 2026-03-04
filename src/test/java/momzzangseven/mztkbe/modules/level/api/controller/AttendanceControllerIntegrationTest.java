@@ -43,9 +43,11 @@ class AttendanceControllerIntegrationTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected AttendanceLogJpaRepository attendanceLogJpaRepository;
 
-  @org.springframework.beans.factory.annotation.Autowired protected XpPolicyJpaRepository xpPolicyJpaRepository;
+  @org.springframework.beans.factory.annotation.Autowired
+  protected XpPolicyJpaRepository xpPolicyJpaRepository;
 
-  @org.springframework.beans.factory.annotation.Autowired protected XpLedgerJpaRepository xpLedgerJpaRepository;
+  @org.springframework.beans.factory.annotation.Autowired
+  protected XpLedgerJpaRepository xpLedgerJpaRepository;
 
   @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -93,7 +95,8 @@ class AttendanceControllerIntegrationTest {
     LocalDate today = LocalDate.now(appZoneId);
 
     assertThat(attendanceLogJpaRepository.existsByUserIdAndAttendedDate(userId, today)).isFalse();
-    assertThat(xpLedgerJpaRepository.countByUserIdAndTypeAndEarnedOn(userId, XpType.CHECK_IN, today))
+    assertThat(
+            xpLedgerJpaRepository.countByUserIdAndTypeAndEarnedOn(userId, XpType.CHECK_IN, today))
         .isEqualTo(0);
 
     mockMvc
@@ -104,7 +107,8 @@ class AttendanceControllerIntegrationTest {
         .andExpect(jsonPath("$.data.attendedDate").value(today.toString()));
 
     assertThat(attendanceLogJpaRepository.existsByUserIdAndAttendedDate(userId, today)).isTrue();
-    assertThat(xpLedgerJpaRepository.countByUserIdAndTypeAndEarnedOn(userId, XpType.CHECK_IN, today))
+    assertThat(
+            xpLedgerJpaRepository.countByUserIdAndTypeAndEarnedOn(userId, XpType.CHECK_IN, today))
         .isEqualTo(1);
 
     mockMvc
@@ -147,7 +151,8 @@ class AttendanceControllerIntegrationTest {
                 .findByUserIdAndAttendedDateBetweenOrderByAttendedDateAsc(userId, today, today)
                 .size())
         .isEqualTo(1);
-    assertThat(xpLedgerJpaRepository.countByUserIdAndTypeAndEarnedOn(userId, XpType.CHECK_IN, today))
+    assertThat(
+            xpLedgerJpaRepository.countByUserIdAndTypeAndEarnedOn(userId, XpType.CHECK_IN, today))
         .isEqualTo(1);
   }
 
@@ -163,7 +168,7 @@ class AttendanceControllerIntegrationTest {
         new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
     SecurityContext context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-        .securityContext(context);
+    return org.springframework.security.test.web.servlet.request
+        .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 }

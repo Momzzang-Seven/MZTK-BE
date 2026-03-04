@@ -32,7 +32,8 @@ class GlobalExceptionHandlerTest {
   }
 
   @Test
-  void handleHttpMessageNotReadableException_returnsFormatFriendlyMessage_whenDeserializeTextIncluded() {
+  void
+      handleHttpMessageNotReadableException_returnsFormatFriendlyMessage_whenDeserializeTextIncluded() {
     HttpMessageNotReadableException ex =
         new HttpMessageNotReadableException("Cannot deserialize value of type");
 
@@ -56,4 +57,3 @@ class GlobalExceptionHandlerTest {
         .isEqualTo("Invalid request format. Please check your input values.");
   }
 }
-

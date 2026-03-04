@@ -189,4 +189,3 @@ class Eip1559TransferSignerTest {
         BigInteger.valueOf(2_000_000_000L));
   }
 }
-

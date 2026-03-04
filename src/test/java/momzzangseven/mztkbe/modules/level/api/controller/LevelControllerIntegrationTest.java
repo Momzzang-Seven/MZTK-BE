@@ -139,7 +139,7 @@ class LevelControllerIntegrationTest {
         new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
     SecurityContext context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-        .securityContext(context);
+    return org.springframework.security.test.web.servlet.request
+        .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 }

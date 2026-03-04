@@ -293,7 +293,8 @@ class PrepareTokenTransferServiceTest {
 
   @Test
   void execute_throws_whenDomainTypeUnsupportedForUserPrepareFlow() {
-    PrepareTokenTransferCommand command = org.mockito.Mockito.mock(PrepareTokenTransferCommand.class);
+    PrepareTokenTransferCommand command =
+        org.mockito.Mockito.mock(PrepareTokenTransferCommand.class);
     DomainReferenceType domainType = org.mockito.Mockito.mock(DomainReferenceType.class);
     when(command.domainType()).thenReturn(domainType);
     when(command.amountWei()).thenReturn(BigInteger.TEN);
@@ -308,7 +309,8 @@ class PrepareTokenTransferServiceTest {
 
   @Test
   void execute_throws_whenTransferTypeResolvesToServerToUser() {
-    PrepareTokenTransferCommand command = org.mockito.Mockito.mock(PrepareTokenTransferCommand.class);
+    PrepareTokenTransferCommand command =
+        org.mockito.Mockito.mock(PrepareTokenTransferCommand.class);
     DomainReferenceType domainType = org.mockito.Mockito.mock(DomainReferenceType.class);
     when(command.domainType()).thenReturn(domainType);
     when(command.userId()).thenReturn(7L);
@@ -316,10 +318,12 @@ class PrepareTokenTransferServiceTest {
     when(command.toUserId()).thenReturn(22L);
     when(command.amountWei()).thenReturn(BigInteger.TEN);
     when(domainType.isUserPrepareSupported()).thenReturn(true);
-    when(domainType.toTokenTransferReferenceType()).thenReturn(TokenTransferReferenceType.SERVER_TO_USER);
+    when(domainType.toTokenTransferReferenceType())
+        .thenReturn(TokenTransferReferenceType.SERVER_TO_USER);
     when(domainType.name()).thenReturn("CUSTOM_FAKE");
     when(loadTransferRuntimeConfigPort.load()).thenReturn(runtimeConfig());
-    when(transferPreparePersistencePort.findFirstByIdempotencyKey(any())).thenReturn(Optional.empty());
+    when(transferPreparePersistencePort.findFirstByIdempotencyKey(any()))
+        .thenReturn(Optional.empty());
     when(domainRewardResolver.supports(domainType)).thenReturn(true);
     when(domainRewardResolver.resolve(7L, "101"))
         .thenReturn(new ResolvedReward(22L, BigInteger.TEN, 201L));
@@ -345,10 +349,12 @@ class PrepareTokenTransferServiceTest {
         .thenReturn(List.of(wallet(7L, "0x" + "a".repeat(40))));
     when(loadWalletPort.findWalletsByUserIdAndStatus(22L, WalletStatus.ACTIVE))
         .thenReturn(List.of(wallet(22L, "0x" + "b".repeat(40))));
-    when(eip7702ChainPort.loadPendingAccountNonce("0x" + "a".repeat(40))).thenReturn(BigInteger.ONE);
+    when(eip7702ChainPort.loadPendingAccountNonce("0x" + "a".repeat(40)))
+        .thenReturn(BigInteger.ONE);
     when(eip7702AuthorizationPort.buildSigningHashHex(anyLong(), anyString(), any()))
         .thenReturn("0x" + "d".repeat(64));
-    when(transferPreparePersistencePort.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(transferPreparePersistencePort.create(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     PrepareTokenTransferResult result = service.execute(command);
 
@@ -431,10 +437,12 @@ class PrepareTokenTransferServiceTest {
         .thenReturn(List.of(wallet(7L, "0x" + "a".repeat(40))));
     when(loadWalletPort.findWalletsByUserIdAndStatus(22L, WalletStatus.ACTIVE))
         .thenReturn(List.of(wallet(22L, "0x" + "b".repeat(40))));
-    when(eip7702ChainPort.loadPendingAccountNonce("0x" + "a".repeat(40))).thenReturn(BigInteger.ONE);
+    when(eip7702ChainPort.loadPendingAccountNonce("0x" + "a".repeat(40)))
+        .thenReturn(BigInteger.ONE);
     when(eip7702AuthorizationPort.buildSigningHashHex(anyLong(), anyString(), any()))
         .thenReturn("0x" + "d".repeat(64));
-    when(transferPreparePersistencePort.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(transferPreparePersistencePort.create(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     PrepareTokenTransferResult result = service.execute(command);
 
@@ -463,10 +471,12 @@ class PrepareTokenTransferServiceTest {
         .thenReturn(List.of(wallet(7L, "0x" + "a".repeat(40))));
     when(loadWalletPort.findWalletsByUserIdAndStatus(22L, WalletStatus.ACTIVE))
         .thenReturn(List.of(wallet(22L, "0x" + "b".repeat(40))));
-    when(eip7702ChainPort.loadPendingAccountNonce("0x" + "a".repeat(40))).thenReturn(BigInteger.ONE);
+    when(eip7702ChainPort.loadPendingAccountNonce("0x" + "a".repeat(40)))
+        .thenReturn(BigInteger.ONE);
     when(eip7702AuthorizationPort.buildSigningHashHex(anyLong(), anyString(), any()))
         .thenReturn("0x" + "d".repeat(64));
-    when(transferPreparePersistencePort.create(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(transferPreparePersistencePort.create(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     PrepareTokenTransferResult result = service.execute(command);
 

@@ -85,8 +85,7 @@ class EIP712SignatureVerifierTest {
 
   @Test
   void verify_returnsFalse_whenInputMessageBlank() {
-    boolean verified =
-        verifier.verify(" ", "nonce", "0x" + "0".repeat(130), "0x" + "a".repeat(40));
+    boolean verified = verifier.verify(" ", "nonce", "0x" + "0".repeat(130), "0x" + "a".repeat(40));
 
     assertThat(verified).isFalse();
   }
@@ -155,4 +154,3 @@ class EIP712SignatureVerifierTest {
     return mapper.writeValueAsString(root);
   }
 }
-

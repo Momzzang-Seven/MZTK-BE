@@ -142,8 +142,7 @@ class KakaoApiAdapterTest {
         objectMapper.readValue(
             """
             {"id":12345}
-            """,
-            KakaoUserResponse.class);
+            """, KakaoUserResponse.class);
 
     when(webClient.get()).thenReturn(getSpec);
     when(getSpec.uri("https://kakao/userinfo")).thenReturn(headersSpec);
