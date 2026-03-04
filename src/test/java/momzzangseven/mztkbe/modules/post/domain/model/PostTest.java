@@ -90,8 +90,7 @@ class PostTest {
   @Test
   @DisplayName("create QUESTION 게시글에서 title=null이면 예외")
   void createQuestionWithNullTitleThrows() {
-    assertThatThrownBy(
-            () -> Post.create(1L, PostType.QUESTION, null, "content", 10L, null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, null, "content", 10L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("질문 게시글은 제목이 필요합니다.");
   }
