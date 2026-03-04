@@ -132,8 +132,7 @@ class CreatePostServiceTest {
   @Test
   @DisplayName("rejects invalid command before persistence")
   void executeRejectsInvalidCommand() {
-    CreatePostCommand command =
-        CreatePostCommand.of(1L, null, " ", PostType.FREE, 0L, null, null);
+    CreatePostCommand command = CreatePostCommand.of(1L, null, " ", PostType.FREE, 0L, null, null);
 
     assertThatThrownBy(() -> createPostService.execute(command))
         .isInstanceOf(PostInvalidInputException.class);
