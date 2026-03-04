@@ -270,6 +270,48 @@ class UserServiceTest {
     verify(saveUserPort, never()).saveUser(any(User.class));
   }
 
+  @Test
+  @DisplayName("loginOrRegisterSocial - nickname=null이면 자동 생성된 닉네임 사용")
+  void loginOrRegisterSocial_withNullNickname_generatesNickname() {
+    when(loadUserPort.findByProviderAndProviderUserId(AuthProvider.KAKAO, "kakao-null-nick"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.findDeletedByProviderAndProviderUserId(AuthProvider.KAKAO, "kakao-null-nick"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.loadUserByEmail("null-nick@example.com")).thenReturn(Optional.empty());
+    when(loadUserPort.loadDeletedUserByEmail("null-nick@example.com")).thenReturn(Optional.empty());
+    when(saveUserPort.saveUser(any(User.class)))
+        .thenAnswer(
+            invocation -> invocation.getArgument(0, User.class).toBuilder().id(900L).build());
+
+    SocialLoginOutcome outcome =
+        service.loginOrRegisterSocial(
+            "KAKAO", "kakao-null-nick", "null-nick@example.com", null, null);
+
+    ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+    verify(saveUserPort).saveUser(captor.capture());
+    assertThat(captor.getValue().getNickname()).startsWith("kakao_");
+    assertThat(outcome.isNewUser()).isTrue();
+  }
+
+  @Test
+  @DisplayName("loginOrRegisterSocial - LOCAL provider로 신규 등록 시도 시 unsupported 예외")
+  void loginOrRegisterSocial_withLocalProviderAsNewUser_throwsUnsupported() {
+    // LOCAL provider는 enum 파싱은 되지만 신규 생성 로직에서 unsupported 처리됨
+    when(loadUserPort.findByProviderAndProviderUserId(AuthProvider.LOCAL, "local-user"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.findDeletedByProviderAndProviderUserId(AuthProvider.LOCAL, "local-user"))
+        .thenReturn(Optional.empty());
+    when(loadUserPort.loadUserByEmail("local@example.com")).thenReturn(Optional.empty());
+    when(loadUserPort.loadDeletedUserByEmail("local@example.com")).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                service.loginOrRegisterSocial(
+                    "LOCAL", "local-user", "local@example.com", "nick", null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Unsupported social provider: LOCAL");
+  }
+
   private User baseUser(Long id, String email, AuthProvider provider, UserStatus status) {
     LocalDateTime now = LocalDateTime.of(2026, 2, 28, 15, 0);
     return User.builder()
