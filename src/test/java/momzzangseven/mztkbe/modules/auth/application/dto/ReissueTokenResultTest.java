@@ -57,4 +57,34 @@ class ReissueTokenResultTest {
 
     assertThatCode(result::validate).doesNotThrowAnyException();
   }
+
+  @Test
+  @DisplayName("validate rejects null access token")
+  void validate_nullAccessToken_throwsException() {
+    ReissueTokenResult result = new ReissueTokenResult(null, "refresh", "Bearer", 900L, 3600L);
+
+    assertThatThrownBy(result::validate)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Access token cannot be empty");
+  }
+
+  @Test
+  @DisplayName("validate rejects null refresh token")
+  void validate_nullRefreshToken_throwsException() {
+    ReissueTokenResult result = new ReissueTokenResult("access", null, "Bearer", 900L, 3600L);
+
+    assertThatThrownBy(result::validate)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Refresh token cannot be empty");
+  }
+
+  @Test
+  @DisplayName("validate rejects non-positive refreshTokenExpiresIn")
+  void validate_nonPositiveRefreshTokenExpiresIn_throwsException() {
+    ReissueTokenResult result = new ReissueTokenResult("access", "refresh", "Bearer", 900L, 0L);
+
+    assertThatThrownBy(result::validate)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("ExpiresIn must be positive");
+  }
 }

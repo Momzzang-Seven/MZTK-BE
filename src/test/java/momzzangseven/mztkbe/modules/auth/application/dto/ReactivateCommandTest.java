@@ -60,4 +60,35 @@ class ReactivateCommandTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Provider is required");
   }
+
+  @Test
+  @DisplayName("LOCAL provider rejects null email")
+  void validate_localNullEmail_throwsException() {
+    ReactivateCommand command = new ReactivateCommand(AuthProvider.LOCAL, null, "pw", null, null);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Email is required for LOCAL reactivation");
+  }
+
+  @Test
+  @DisplayName("LOCAL provider rejects null password")
+  void validate_localNullPassword_throwsException() {
+    ReactivateCommand command =
+        new ReactivateCommand(AuthProvider.LOCAL, "user@example.com", null, null, null);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Password is required for LOCAL reactivation");
+  }
+
+  @Test
+  @DisplayName("SOCIAL provider rejects null authorizationCode")
+  void validate_socialNullAuthorizationCode_throwsException() {
+    ReactivateCommand command = new ReactivateCommand(AuthProvider.KAKAO, null, null, null, null);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Authorization code is required");
+  }
 }
