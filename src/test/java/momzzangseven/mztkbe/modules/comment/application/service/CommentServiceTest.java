@@ -7,13 +7,18 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
+import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
@@ -97,6 +102,120 @@ class CommentServiceTest {
 
     verify(loadCommentPort, never())
         .loadReplies(any(Long.class), any(org.springframework.data.domain.Pageable.class));
+  }
+
+  @Test
+  @DisplayName("createComment() creates reply when valid parent exists in same post")
+  void createComment_withValidParentId_createsReply() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment parentComment =
+        Comment.builder()
+            .id(10L)
+            .postId(100L)
+            .writerId(99L)
+            .content("parent")
+            .isDeleted(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    CreateCommentCommand command = new CreateCommentCommand(100L, 200L, 10L, "reply content");
+
+    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parentComment));
+    given(saveCommentPort.saveComment(any(Comment.class)))
+        .willAnswer(
+            invocation -> {
+              Comment input = invocation.getArgument(0);
+              return Comment.builder()
+                  .id(2L)
+                  .postId(input.getPostId())
+                  .writerId(input.getWriterId())
+                  .parentId(input.getParentId())
+                  .content(input.getContent())
+                  .isDeleted(false)
+                  .createdAt(now)
+                  .updatedAt(now)
+                  .build();
+            });
+
+    CommentResult result = commentService.createComment(command);
+
+    assertThat(result.parentId()).isEqualTo(10L);
+    assertThat(result.content()).isEqualTo("reply content");
+    verify(loadCommentPort).loadComment(10L);
+  }
+
+  @Test
+  @DisplayName("createComment() throws when parent comment belongs to different post")
+  void createComment_parentPostMismatch_throwsException() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment parentComment =
+        Comment.builder()
+            .id(10L)
+            .postId(999L) // 다른 게시글
+            .writerId(99L)
+            .content("parent")
+            .isDeleted(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    CreateCommentCommand command = new CreateCommentCommand(100L, 200L, 10L, "reply");
+
+    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parentComment));
+
+    assertThatThrownBy(() -> commentService.createComment(command))
+        .isInstanceOf(CommentPostMismatchException.class);
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
+  @Test
+  @DisplayName("createComment() throws when parent comment is deleted")
+  void createComment_deletedParent_throwsException() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment deletedParent =
+        Comment.builder()
+            .id(10L)
+            .postId(100L)
+            .writerId(99L)
+            .content("삭제된 댓글입니다.")
+            .isDeleted(true)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    CreateCommentCommand command = new CreateCommentCommand(100L, 200L, 10L, "reply");
+
+    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(deletedParent));
+
+    assertThatThrownBy(() -> commentService.createComment(command))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT.getMessage());
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
+  @Test
+  @DisplayName("getReplies() returns paged replies when parent exists")
+  void getReplies_parentExists_returnsPaged() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment parent =
+        Comment.builder()
+            .id(10L)
+            .postId(100L)
+            .writerId(99L)
+            .content("parent")
+            .isDeleted(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    Pageable pageable = PageRequest.of(0, 10);
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
+    given(loadCommentPort.loadReplies(10L, pageable)).willReturn(Page.empty(pageable));
+
+    Page<CommentResult> result = commentService.getReplies(new GetRepliesQuery(10L, pageable));
+
+    assertThat(result).isNotNull();
+    verify(loadCommentPort).loadReplies(10L, pageable);
   }
 
   @Test

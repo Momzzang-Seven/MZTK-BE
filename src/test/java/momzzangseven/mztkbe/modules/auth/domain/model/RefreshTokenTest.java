@@ -431,5 +431,53 @@ class RefreshTokenTest {
 
       assertThat(token1).isNotEqualTo(token2);
     }
+
+    @Test
+    @DisplayName("같은 참조(this == o)이면 true 반환")
+    void equals_SameReference_ReturnsTrue() {
+      RefreshToken token = createValidToken();
+      assertThat(token.equals(token)).isTrue();
+    }
+
+    @Test
+    @DisplayName("null과 비교하면 false 반환")
+    void equals_Null_ReturnsFalse() {
+      RefreshToken token = createValidToken();
+      assertThat(token.equals(null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("다른 클래스 객체와 비교하면 false 반환")
+    void equals_DifferentClass_ReturnsFalse() {
+      RefreshToken token = createValidToken();
+      assertThat(token.equals("not a token")).isFalse();
+    }
+
+    @Test
+    @DisplayName("tokenValue가 null인 토큰의 hashCode는 0")
+    void hashCode_NullTokenValue_ReturnsZero() {
+      RefreshToken tokenWithNullValue =
+          RefreshToken.builder()
+              .userId(VALID_USER_ID)
+              .expiresAt(LocalDateTime.now().plusDays(1))
+              .createdAt(LocalDateTime.now())
+              .build();
+
+      assertThat(tokenWithNullValue.hashCode()).isZero();
+    }
+
+    @Test
+    @DisplayName("tokenValue가 null이면 equals는 false 반환")
+    void equals_NullTokenValue_ReturnsFalse() {
+      RefreshToken tokenA =
+          RefreshToken.builder()
+              .userId(VALID_USER_ID)
+              .expiresAt(LocalDateTime.now().plusDays(1))
+              .createdAt(LocalDateTime.now())
+              .build();
+      RefreshToken tokenB = createValidToken();
+
+      assertThat(tokenA.equals(tokenB)).isFalse();
+    }
   }
 }
