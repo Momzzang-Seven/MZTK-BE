@@ -15,11 +15,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
-@DisplayName("ChallengeController 통합 테스트 (MockMvc + H2)")
+@DisplayName("ChallengeController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@org.springframework.transaction.annotation.Transactional
-class ChallengeControllerIntegrationTest {
+class ChallengeControllerTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected org.springframework.test.web.servlet.MockMvc mockMvc;

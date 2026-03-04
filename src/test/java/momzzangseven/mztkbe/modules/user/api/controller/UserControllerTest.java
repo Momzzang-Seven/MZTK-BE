@@ -1,31 +1,28 @@
-package momzzangseven.mztkbe.modules.web3.admin.api.controller;
+package momzzangseven.mztkbe.modules.user.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDateTime;
 import java.util.Map;
-import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
-import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
-import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
+import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
+import momzzangseven.mztkbe.modules.user.application.port.in.UpdateUserRoleUseCase;
+import momzzangseven.mztkbe.modules.user.application.port.in.WithdrawUserUseCase;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.TestPropertySource;
 
-@TestPropertySource(
-    properties = {
-      "web3.reward-token.enabled=true",
-      "web3.reward-token.treasury.provisioning.enabled=true"
-    })
-@DisplayName("TreasuryKeyController 통합 테스트 (MockMvc + H2)")
+@DisplayName("UserController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@org.springframework.transaction.annotation.Transactional
-class TreasuryKeyControllerIntegrationTest {
+class UserControllerTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected org.springframework.test.web.servlet.MockMvc mockMvc;
@@ -53,77 +50,108 @@ class TreasuryKeyControllerIntegrationTest {
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private ProvisionTreasuryKeyUseCase provisionTreasuryKeyUseCase;
+  @MockBean private UpdateUserRoleUseCase updateUserRoleUseCase;
+  @MockBean private WithdrawUserUseCase withdrawUserUseCase;
 
   @Test
-  @DisplayName("POST /admin/web3/treasury-keys/provision 성공")
-  void provision_success() throws Exception {
-    given(provisionTreasuryKeyUseCase.execute(any(ProvisionTreasuryKeyCommand.class)))
-        .willReturn(new ProvisionTreasuryKeyResult("base64-enc-key"));
+  @DisplayName("PATCH /users/me/role 성공")
+  void updateRole_success() throws Exception {
+    given(updateUserRoleUseCase.execute(any(UpdateUserRoleCommand.class)))
+        .willReturn(
+            UpdateUserRoleResult.builder()
+                .id(1L)
+                .email("user@example.com")
+                .name("tester")
+                .nickname("닉네임")
+                .profileImageUrl("https://example.com/profile.png")
+                .role(UserRole.TRAINER)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build());
 
     mockMvc
         .perform(
-            post("/admin/web3/treasury-keys/provision")
-                .with(adminPrincipal(9L))
-                .contentType(APPLICATION_JSON)
-                .content(
-                    json(
-                        Map.of(
-                            "treasuryPrivateKey",
-                            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "walletAlias",
-                            "treasury-main"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.treasuryKeyEncryptionKeyB64").value("base64-enc-key"));
-  }
-
-  @Test
-  @DisplayName("POST /admin/web3/treasury-keys/provision USER 권한이면 403")
-  void provision_forbiddenForUser_returns403() throws Exception {
-    mockMvc
-        .perform(
-            post("/admin/web3/treasury-keys/provision")
+            patch("/users/me/role")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("treasuryPrivateKey", "0xabc"))))
-        .andExpect(status().isForbidden());
+                .content(json(Map.of("role", "TRAINER"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.id").value(1))
+        .andExpect(jsonPath("$.data.role").value("TRAINER"));
   }
 
   @Test
-  @DisplayName("POST /admin/web3/treasury-keys/provision 인증 없으면 401")
-  void provision_unauthenticated_returns401() throws Exception {
+  @DisplayName("PATCH /users/me/role role 누락이면 400")
+  void updateRole_missingRole_returns400() throws Exception {
     mockMvc
-        .perform(post("/admin/web3/treasury-keys/provision"))
+        .perform(
+            patch("/users/me/role")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of())))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("PATCH /users/me/role 인증 없으면 401")
+  void updateRole_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(patch("/users/me/role")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("PATCH /users/me/role 인증 principal이 null이면 401")
+  void updateRole_nullPrincipal_returns401() throws Exception {
+    mockMvc
+        .perform(
+            patch("/users/me/role")
+                .with(nullUserPrincipal())
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("role", "TRAINER"))))
         .andExpect(status().isUnauthorized());
   }
 
   @Test
-  @DisplayName("POST /admin/web3/treasury-keys/provision 키 공백이면 400")
-  void provision_blankPrivateKey_returns400() throws Exception {
+  @DisplayName("PATCH /users/me/role 잘못된 enum 값이면 400")
+  void updateRole_invalidEnum_returns400() throws Exception {
     mockMvc
         .perform(
-            post("/admin/web3/treasury-keys/provision")
-                .with(adminPrincipal(9L))
+            patch("/users/me/role")
+                .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("treasuryPrivateKey", " "))))
+                .content("{\"role\":\"INVALID\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
   }
 
   @Test
-  @DisplayName("POST /admin/web3/treasury-keys/provision principal이 null이면 401")
-  void provision_nullPrincipal_returns401() throws Exception {
+  @DisplayName("POST /users/me/withdrawal ROLE_STEP_UP 권한이면 성공")
+  void withdraw_stepUpRole_success() throws Exception {
     mockMvc
-        .perform(
-            post("/admin/web3/treasury-keys/provision")
-                .with(nullAdminPrincipal())
-                .contentType(APPLICATION_JSON)
-                .content(
-                    json(
-                        Map.of(
-                            "treasuryPrivateKey",
-                            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))))
+        .perform(post("/users/me/withdrawal").with(stepUpPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+  }
+
+  @Test
+  @DisplayName("POST /users/me/withdrawal ROLE_STEP_UP 없으면 403")
+  void withdraw_withoutStepUpRole_returns403() throws Exception {
+    mockMvc
+        .perform(post("/users/me/withdrawal").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("POST /users/me/withdrawal 인증 없으면 401")
+  void withdraw_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(post("/users/me/withdrawal")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("POST /users/me/withdrawal principal이 null이면 401")
+  void withdraw_nullPrincipal_returns401() throws Exception {
+    mockMvc
+        .perform(post("/users/me/withdrawal").with(nullStepUpPrincipal()))
         .andExpect(status().isUnauthorized());
   }
 

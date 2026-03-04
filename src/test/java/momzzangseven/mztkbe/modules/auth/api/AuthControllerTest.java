@@ -13,6 +13,10 @@ import jakarta.servlet.http.Cookie;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import momzzangseven.mztkbe.global.security.JwtTokenProvider;
+import momzzangseven.mztkbe.modules.auth.application.dto.GoogleUserInfo;
+import momzzangseven.mztkbe.modules.auth.application.dto.KakaoUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReactivateUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
@@ -21,6 +25,8 @@ import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
+import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
+import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.UserJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -61,6 +67,8 @@ class AuthControllerTest {
 
   @Autowired private MockMvc mockMvc;
   @Autowired private ObjectMapper objectMapper;
+  @Autowired private JwtTokenProvider jwtTokenProvider;
+  @Autowired private UserJpaRepository userJpaRepository;
 
   // Kakao / Google 외부 API는 MockBean으로 대체 (실제 HTTP 호출 차단)
   @MockBean private KakaoAuthPort kakaoAuthPort;
@@ -116,6 +124,25 @@ class AuthControllerTest {
   private String extractAccessToken(MvcResult result) throws Exception {
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
     return body.at("/data/accessToken").asText();
+  }
+
+  private String uniqueEmail(String prefix) {
+    return prefix + "-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
+  }
+
+  private String createAccessTokenForSocialUser(
+      AuthProvider provider, String providerUserId, String email) {
+    UserEntity saved =
+        userJpaRepository.save(
+            UserEntity.builder()
+                .provider(provider)
+                .providerUserId(providerUserId)
+                .email(email)
+                .role(UserRole.USER)
+                .status(UserStatus.ACTIVE)
+                .nickname(provider.name().toLowerCase() + "-user")
+                .build());
+    return jwtTokenProvider.generateAccessToken(saved.getId(), saved.getEmail(), saved.getRole());
   }
 
   private LoginResult buildLoginResultForReactivate(String email) {
@@ -278,6 +305,86 @@ class AuthControllerTest {
                               "password", PASSWORD))))
           .andExpect(status().isBadRequest());
     }
+
+    @Test
+    @DisplayName("KAKAO 로그인 성공 → 200 OK, accessToken 반환")
+    void login_kakao_success_returns200WithTokenAndCookie() throws Exception {
+      String email = uniqueEmail("kakao-login");
+      given(kakaoAuthPort.getAccessToken("kakao-auth-code")).willReturn("kakao-access-token");
+      given(kakaoAuthPort.getUserInfo("kakao-access-token"))
+          .willReturn(
+              KakaoUserInfo.builder()
+                  .providerUserId("kakao-provider-1")
+                  .email(email)
+                  .nickname("kakao-user")
+                  .build());
+
+      MvcResult result =
+          mockMvc
+              .perform(
+                  post("/auth/login")
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(
+                          objectMapper.writeValueAsString(
+                              Map.of("provider", "KAKAO", "authorizationCode", "kakao-auth-code"))))
+              .andReturn();
+
+      assertThat(result.getResponse().getStatus()).isEqualTo(200);
+      JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+      assertThat(body.at("/data/accessToken").asText()).isNotBlank();
+      assertThat(body.at("/data/userInfo/email").asText()).isEqualTo(email);
+      assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE))
+          .isNotNull()
+          .contains("refreshToken=");
+    }
+
+    @Test
+    @DisplayName("GOOGLE 로그인 성공 → 200 OK, accessToken 반환")
+    void login_google_success_returns200WithTokenAndCookie() throws Exception {
+      String email = uniqueEmail("google-login");
+      given(googleAuthPort.getAccessToken("google-auth-code")).willReturn("google-access-token");
+      given(googleAuthPort.getUserInfo("google-access-token"))
+          .willReturn(
+              GoogleUserInfo.builder()
+                  .providerUserId("google-provider-1")
+                  .email(email)
+                  .nickname("google-user")
+                  .build());
+
+      MvcResult result =
+          mockMvc
+              .perform(
+                  post("/auth/login")
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(
+                          objectMapper.writeValueAsString(
+                              Map.of(
+                                  "provider",
+                                  "GOOGLE",
+                                  "authorizationCode",
+                                  "google-auth-code"))))
+              .andReturn();
+
+      assertThat(result.getResponse().getStatus()).isEqualTo(200);
+      JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+      assertThat(body.at("/data/accessToken").asText()).isNotBlank();
+      assertThat(body.at("/data/userInfo/email").asText()).isEqualTo(email);
+      assertThat(result.getResponse().getHeader(HttpHeaders.SET_COOKIE))
+          .isNotNull()
+          .contains("refreshToken=");
+    }
+
+    @Test
+    @DisplayName("KAKAO 로그인 authorizationCode 누락 → 400 Bad Request")
+    void login_kakao_missingAuthorizationCode_returns400() throws Exception {
+      mockMvc
+          .perform(
+              post("/auth/login")
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(objectMapper.writeValueAsString(Map.of("provider", "KAKAO"))))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
   }
 
   // ============================================================
@@ -384,6 +491,16 @@ class AuthControllerTest {
     @DisplayName("refreshToken 쿠키 없음 → 400 Bad Request (required cookie)")
     void reissue_noCookie_returns400() throws Exception {
       mockMvc.perform(post("/auth/reissue")).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("refreshToken 형식 불일치 → 400, TOKEN_001")
+    void reissue_invalidToken_returns400WithTokenCode() throws Exception {
+      mockMvc
+          .perform(post("/auth/reissue").cookie(new Cookie("refreshToken", "invalid-token-value")))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"))
+          .andExpect(jsonPath("$.code").value("TOKEN_001"));
     }
   }
 
@@ -515,6 +632,60 @@ class AuthControllerTest {
                   .contentType(MediaType.APPLICATION_JSON)
                   .content(objectMapper.writeValueAsString(Map.of("password", PASSWORD))))
           .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("KAKAO 사용자 + authorizationCode → 200 OK")
+    void stepup_kakao_success_returns200() throws Exception {
+      String email = uniqueEmail("kakao-stepup");
+      String providerUserId = "kakao-stepup-provider";
+      String accessToken =
+          createAccessTokenForSocialUser(AuthProvider.KAKAO, providerUserId, email);
+
+      given(kakaoAuthPort.getAccessToken("kakao-stepup-code")).willReturn("kakao-stepup-access");
+      given(kakaoAuthPort.getUserInfo("kakao-stepup-access"))
+          .willReturn(
+              KakaoUserInfo.builder()
+                  .providerUserId(providerUserId)
+                  .email(email)
+                  .nickname("kakao-stepup-user")
+                  .build());
+
+      mockMvc
+          .perform(
+              post("/auth/stepup")
+                  .header("Authorization", "Bearer " + accessToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      objectMapper.writeValueAsString(
+                          Map.of("authorizationCode", "kakao-stepup-code"))))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.accessToken").isString());
+    }
+
+    @Test
+    @DisplayName("KAKAO 사용자 + password 제공 → 400 Bad Request")
+    void stepup_kakao_withPassword_returns400() throws Exception {
+      String email = uniqueEmail("kakao-stepup-invalid");
+      String accessToken =
+          createAccessTokenForSocialUser(
+              AuthProvider.KAKAO, "kakao-stepup-provider-invalid", email);
+
+      mockMvc
+          .perform(
+              post("/auth/stepup")
+                  .header("Authorization", "Bearer " + accessToken)
+                  .contentType(MediaType.APPLICATION_JSON)
+                  .content(
+                      objectMapper.writeValueAsString(
+                          Map.of(
+                              "authorizationCode",
+                              "kakao-stepup-code",
+                              "password",
+                              "Test@1234!"))))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
     }
   }
 }

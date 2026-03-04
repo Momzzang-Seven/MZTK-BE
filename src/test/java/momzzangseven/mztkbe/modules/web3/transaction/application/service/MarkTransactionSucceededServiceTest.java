@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededResult;
@@ -73,6 +74,114 @@ class MarkTransactionSucceededServiceTest {
   }
 
   @Test
+  void execute_throws_whenTransactionNotFound() {
+    when(loadTransactionPort.loadById(22L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.execute(validCommand()))
+        .isInstanceOf(Web3TransactionNotFoundException.class);
+  }
+
+  @Test
+  void execute_throws_whenTxHashMismatchedWithSnapshot() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L))
+        .thenReturn(
+            Optional.of(
+                new LoadTransactionPort.TransactionSnapshot(
+                    22L,
+                    "idem-22",
+                    Web3ReferenceType.USER_TO_USER,
+                    "101",
+                    7L,
+                    9L,
+                    Web3TxStatus.UNCONFIRMED,
+                    "0x" + "b".repeat(64),
+                    null)));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("txHash mismatch");
+  }
+
+  @Test
+  void execute_throws_whenReceiptLookupReturnsRpcError() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L))
+        .thenReturn(
+            Optional.of(
+                new LoadTransactionPort.TransactionSnapshot(
+                    22L,
+                    "idem-22",
+                    Web3ReferenceType.USER_TO_USER,
+                    "101",
+                    7L,
+                    9L,
+                    Web3TxStatus.UNCONFIRMED,
+                    "0x" + "a".repeat(64),
+                    null)));
+    when(web3ContractPort.getReceipt("0x" + "a".repeat(64)))
+        .thenReturn(
+            new Web3ContractPort.ReceiptResult(
+                "0x" + "a".repeat(64), false, null, "main", true, "RPC_UNAVAILABLE"));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("receipt lookup failed");
+  }
+
+  @Test
+  void execute_throws_whenReceiptProofMissing() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L))
+        .thenReturn(
+            Optional.of(
+                new LoadTransactionPort.TransactionSnapshot(
+                    22L,
+                    "idem-22",
+                    Web3ReferenceType.USER_TO_USER,
+                    "101",
+                    7L,
+                    9L,
+                    Web3TxStatus.UNCONFIRMED,
+                    "0x" + "a".repeat(64),
+                    null)));
+    when(web3ContractPort.getReceipt("0x" + "a".repeat(64)))
+        .thenReturn(
+            new Web3ContractPort.ReceiptResult(
+                "0x" + "a".repeat(64), false, null, "main", false, null));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("receipt proof is required");
+  }
+
+  @Test
+  void execute_throws_whenReceiptFoundButStatusNotSuccess() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L))
+        .thenReturn(
+            Optional.of(
+                new LoadTransactionPort.TransactionSnapshot(
+                    22L,
+                    "idem-22",
+                    Web3ReferenceType.USER_TO_USER,
+                    "101",
+                    7L,
+                    9L,
+                    Web3TxStatus.UNCONFIRMED,
+                    "0x" + "a".repeat(64),
+                    null)));
+    when(web3ContractPort.getReceipt("0x" + "a".repeat(64)))
+        .thenReturn(
+            new Web3ContractPort.ReceiptResult(
+                "0x" + "a".repeat(64), true, false, "main", false, null));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("receipt proof is required");
+  }
+
+  @Test
   void execute_marksSucceeded_andRecordsAudit_whenReceiptProofValid() {
     MarkTransactionSucceededCommand command = validCommand();
     when(loadTransactionPort.loadById(22L))
@@ -108,6 +217,35 @@ class MarkTransactionSucceededServiceTest {
     verify(recordTransactionAuditPort).record(captor.capture());
     assertThat(captor.getValue().eventType()).isEqualTo(Web3TransactionAuditEventType.CS_OVERRIDE);
     assertThat(captor.getValue().detail()).containsEntry("toStatus", Web3TxStatus.SUCCEEDED.name());
+  }
+
+  @Test
+  void execute_allowsOverride_whenSnapshotTxHashIsNull() {
+    MarkTransactionSucceededCommand command = validCommand();
+    when(loadTransactionPort.loadById(22L))
+        .thenReturn(
+            Optional.of(
+                new LoadTransactionPort.TransactionSnapshot(
+                    22L,
+                    "idem-22",
+                    Web3ReferenceType.USER_TO_USER,
+                    "101",
+                    7L,
+                    9L,
+                    Web3TxStatus.UNCONFIRMED,
+                    null,
+                    null)));
+    when(web3ContractPort.getReceipt("0x" + "a".repeat(64)))
+        .thenReturn(
+            new Web3ContractPort.ReceiptResult(
+                "0x" + "a".repeat(64), true, true, "main", false, null));
+
+    MarkTransactionSucceededResult result = service.execute(command);
+
+    assertThat(result.status()).isEqualTo(Web3TxStatus.SUCCEEDED);
+    verify(transactionOutcomePublisher)
+        .markSucceededAndPublish(
+            22L, "idem-22", Web3ReferenceType.USER_TO_USER, "101", 7L, 9L, "0x" + "a".repeat(64));
   }
 
   private MarkTransactionSucceededCommand validCommand() {
