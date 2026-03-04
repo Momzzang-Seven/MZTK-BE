@@ -190,12 +190,15 @@ class ReactivateServiceTest {
                 .providerUserId("google-provider-1")
                 .email("google@example.com")
                 .build());
-    given(loadUserPort.findDeletedByProviderAndProviderUserId(AuthProvider.GOOGLE, "google-provider-1"))
+    given(
+            loadUserPort.findDeletedByProviderAndProviderUserId(
+                AuthProvider.GOOGLE, "google-provider-1"))
         .willReturn(Optional.of(deletedUser));
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
     given(tokenIssuer.issue(any(User.class), org.mockito.ArgumentMatchers.eq(false)))
-        .willReturn(LoginResult.of("g-access", "g-refresh", 10L, 20L, false, deletedUser.reactivate()));
+        .willReturn(
+            LoginResult.of("g-access", "g-refresh", 10L, 20L, false, deletedUser.reactivate()));
 
     LoginResult result = reactivateService.execute(command);
 
@@ -224,11 +227,11 @@ class ReactivateServiceTest {
                 .providerUserId("kakao-provider-2")
                 .email("kakao@example.com")
                 .build());
-    given(loadUserPort.findDeletedByProviderAndProviderUserId(AuthProvider.KAKAO, "kakao-provider-2"))
-        .willReturn(Optional.empty());
     given(
-            loadUserPort.findByProviderAndProviderUserId(
+            loadUserPort.findDeletedByProviderAndProviderUserId(
                 AuthProvider.KAKAO, "kakao-provider-2"))
+        .willReturn(Optional.empty());
+    given(loadUserPort.findByProviderAndProviderUserId(AuthProvider.KAKAO, "kakao-provider-2"))
         .willReturn(Optional.of(activeUser));
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
