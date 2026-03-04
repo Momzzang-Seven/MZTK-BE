@@ -43,6 +43,28 @@
 ---
 
 # 패키지 다이어그램
+**📌 NOTE:아래 다이어그램은 예시입니다. 본인이 구현한 모듈의 패키지 구조를 그대로 옮겨서 ```momzzangseven/mztkbe/modules/...``` 하위에 테스트 코드를 작성해주세요.**
+예를 들어, application 하위에 service, dto 뿐만 아니라 delegation, strategy, port/out, resolver 등 실제 구현에 따라 추가되는 패키지가 있을 수 있습니다. 
+- /application 예시: 
+  - modules/auth/application/delegation/RefreshTokenValidatorTest.java 
+  - modules/web3/transfer/application/resolver/QuestionRewardResolverTest.java
+- /domain 예시:
+  - README 기본 예시(model, vo) 외 실제 사용 구조
+    - event
+  - 예시
+    - modules/web3/transaction/domain/event/Web3TransactionSucceededEventTest.java
+    - modules/web3/transaction/domain/event/Web3TransactionSucceededEventTest.java
+- infrastructure 예시:
+  - README 기본 예시(persistence, external) 외 실제 사용 구조 
+    - event
+    - scheduler
+    - config
+    - adapter
+    - google
+    - kakao
+  - 예시:
+    - modules/location/infrastructure/event/LocationUserSoftDeleteEventHandlerTest.java
+    - modules/web3/transfer/infrastructure/scheduler/Eip7702CleanupSchedulerTest.java
 
 ```
 momzzangseven.mztkbe (test root)
@@ -69,7 +91,7 @@ momzzangseven.mztkbe (test root)
         │   └── {기능명}IntegrationTest.java      ← 통합 테스트
         ├── application/
         │   ├── service/               ← Service 단위 테스트 (Mockito)
-        │   │   └── {기능명}ServiceTest.java
+        │   │   └── {기능명/역할}ServiceTest.java
         │   └── dto/                   ← DTO 변환/검증 단위 테스트
         │       └── {Dto명}Test.java
         ├── domain/
