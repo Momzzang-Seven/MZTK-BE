@@ -30,6 +30,14 @@ class UpdateCommentCommandTest {
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.MISSING_REQUIRED_FIELD.getMessage());
 
+    assertThatThrownBy(() -> new UpdateCommentCommand(1L, null, "content"))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.MISSING_REQUIRED_FIELD.getMessage());
+
+    assertThatThrownBy(() -> new UpdateCommentCommand(1L, 2L, null))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.MISSING_REQUIRED_FIELD.getMessage());
+
     assertThatThrownBy(() -> new UpdateCommentCommand(1L, 2L, " "))
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.MISSING_REQUIRED_FIELD.getMessage());
