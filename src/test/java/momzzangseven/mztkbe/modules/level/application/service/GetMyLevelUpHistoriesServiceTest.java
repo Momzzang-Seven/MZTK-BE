@@ -144,8 +144,10 @@ class GetMyLevelUpHistoriesServiceTest {
       when(levelUpHistoryPort.loadLevelUpHistories(1L, 0, 10)).thenReturn(List.of(h));
       when(loadLevelRewardTransactionPort.loadByLevelUpHistoryIds(List.of(40L)))
           .thenReturn(
-              Map.of(40L, new LoadLevelRewardTransactionPort.RewardTxView(
-                  RewardTxStatus.FAILED_ONCHAIN, "0xfail")));
+              Map.of(
+                  40L,
+                  new LoadLevelRewardTransactionPort.RewardTxView(
+                      RewardTxStatus.FAILED_ONCHAIN, "0xfail")));
 
       GetMyLevelUpHistoriesResult result = service.execute(1L, 0, 10);
 
@@ -160,8 +162,10 @@ class GetMyLevelUpHistoriesServiceTest {
       when(levelUpHistoryPort.loadLevelUpHistories(1L, 0, 10)).thenReturn(List.of(h));
       when(loadLevelRewardTransactionPort.loadByLevelUpHistoryIds(List.of(41L)))
           .thenReturn(
-              Map.of(41L, new LoadLevelRewardTransactionPort.RewardTxView(
-                  RewardTxStatus.PENDING, "0xpending")));
+              Map.of(
+                  41L,
+                  new LoadLevelRewardTransactionPort.RewardTxView(
+                      RewardTxStatus.PENDING, "0xpending")));
 
       GetMyLevelUpHistoriesResult result = service.execute(1L, 0, 10);
 
@@ -181,8 +185,10 @@ class GetMyLevelUpHistoriesServiceTest {
     when(levelUpHistoryPort.loadLevelUpHistories(1L, 0, 10)).thenReturn(List.of(h));
     when(loadLevelRewardTransactionPort.loadByLevelUpHistoryIds(List.of(50L)))
         .thenReturn(
-            Map.of(50L, new LoadLevelRewardTransactionPort.RewardTxView(
-                RewardTxStatus.SUCCEEDED, "0xabc123")));
+            Map.of(
+                50L,
+                new LoadLevelRewardTransactionPort.RewardTxView(
+                    RewardTxStatus.SUCCEEDED, "0xabc123")));
 
     GetMyLevelUpHistoriesResult result = service.execute(1L, 0, 10);
 
