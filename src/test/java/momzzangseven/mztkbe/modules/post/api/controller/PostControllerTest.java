@@ -81,8 +81,6 @@ class PostControllerTest {
                 .content(
                     json(
                         Map.of(
-                            "title",
-                            "자유글",
                             "content",
                             "내용",
                             "imageUrls",
@@ -103,21 +101,21 @@ class PostControllerTest {
         .perform(
             post("/posts/free")
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "t", "content", "c"))))
+                .content(json(Map.of("content", "c"))))
         .andExpect(status().isUnauthorized());
 
     verifyNoInteractions(createPostUseCase);
   }
 
   @Test
-  @DisplayName("POST /posts/free 제목 공백이면 400")
-  void createFreePost_blankTitle_returns400() throws Exception {
+  @DisplayName("POST /posts/free 내용 누락이면 400")
+  void createFreePost_missingContent_returns400() throws Exception {
     mockMvc
         .perform(
             post("/posts/free")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", " ", "content", "c"))))
+                .content(json(Map.of("tags", List.of("health")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 
@@ -132,7 +130,7 @@ class PostControllerTest {
             post("/posts/free")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "제목", "content", " "))))
+                .content(json(Map.of("content", " "))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 
@@ -150,7 +148,7 @@ class PostControllerTest {
                 .content(
                     json(
                         Map.of(
-                            "title", "자유글", "content", "내용", "imageUrls", List.of("invalid-url")))))
+                            "content", "내용", "imageUrls", List.of("invalid-url")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 
@@ -165,7 +163,7 @@ class PostControllerTest {
             post("/posts/free")
                 .with(nullUserPrincipal())
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "제목", "content", "내용"))))
+                .content(json(Map.of("content", "내용"))))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("AUTH_006"));
