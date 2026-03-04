@@ -107,4 +107,29 @@ class PostEntityTest {
 
     assertThat(post.getTags()).isEmpty();
   }
+
+  @Test
+  @DisplayName("toDomain은 imageUrls가 null이면 빈 리스트로 방어 처리")
+  void toDomainDefendsNullImageUrls() throws Exception {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(30L)
+            .userId(2L)
+            .type(PostType.FREE)
+            .title("title")
+            .content("body")
+            .imageUrls(List.of("img"))
+            .reward(0L)
+            .isSolved(false)
+            .build();
+
+    // imageUrls 필드를 null로 강제 설정 (JPA 로딩 시 발생 가능한 상황 재현)
+    java.lang.reflect.Field field = PostEntity.class.getDeclaredField("imageUrls");
+    field.setAccessible(true);
+    field.set(entity, null);
+
+    Post post = entity.toDomain(List.of());
+
+    assertThat(post.getImageUrls()).isEmpty();
+  }
 }

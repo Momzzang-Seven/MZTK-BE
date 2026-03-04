@@ -44,4 +44,15 @@ class PostXpServiceTest {
 
     verify(grantPostXpPort).grantCreatePostXp(7L, 99L);
   }
+
+  @Test
+  @DisplayName("XP 부여 결과가 0이면 cap/중복 분기 로그를 타고 0을 반환")
+  void grantCreatePostXpReturnsZeroWhenCapped() {
+    when(grantPostXpPort.grantCreatePostXp(7L, 99L)).thenReturn(0L);
+
+    Long grantedXp = postXpService.grantCreatePostXp(7L, 99L);
+
+    assertThat(grantedXp).isZero();
+    verify(grantPostXpPort).grantCreatePostXp(7L, 99L);
+  }
 }
