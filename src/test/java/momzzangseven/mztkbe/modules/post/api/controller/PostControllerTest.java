@@ -99,9 +99,7 @@ class PostControllerTest {
   void createFreePost_unauthenticated_returns401() throws Exception {
     mockMvc
         .perform(
-            post("/posts/free")
-                .contentType(APPLICATION_JSON)
-                .content(json(Map.of("content", "c"))))
+            post("/posts/free").contentType(APPLICATION_JSON).content(json(Map.of("content", "c"))))
         .andExpect(status().isUnauthorized());
 
     verifyNoInteractions(createPostUseCase);
@@ -145,10 +143,7 @@ class PostControllerTest {
             post("/posts/free")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(
-                    json(
-                        Map.of(
-                            "content", "내용", "imageUrls", List.of("invalid-url")))))
+                .content(json(Map.of("content", "내용", "imageUrls", List.of("invalid-url")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 
