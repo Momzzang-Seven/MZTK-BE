@@ -35,11 +35,29 @@ class CommentTest {
   }
 
   @Test
+  @DisplayName("create() rejects null content")
+  void create_nullContent_throwsBusinessException() {
+    assertThatThrownBy(() -> Comment.create(1L, 2L, null, null))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
+  }
+
+  @Test
   @DisplayName("updateContent() rejects blank content")
   void updateContent_blankContent_throwsBusinessException() {
     Comment comment = Comment.create(1L, 2L, null, "before");
 
     assertThatThrownBy(() -> comment.updateContent(" "))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
+  }
+
+  @Test
+  @DisplayName("updateContent() rejects null content")
+  void updateContent_nullContent_throwsBusinessException() {
+    Comment comment = Comment.create(1L, 2L, null, "before");
+
+    assertThatThrownBy(() -> comment.updateContent(null))
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
   }
