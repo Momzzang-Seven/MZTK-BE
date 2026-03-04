@@ -113,7 +113,9 @@ class TransactionIssuerWorkerTest {
     when(loadTreasuryKeyPort.loadByAlias("reward-treasury", "kek"))
         .thenReturn(Optional.of(keyMaterial));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
-        .thenReturn(new Web3ContractPort.PrevalidateResult(false, true, "RPC_TEMP", null, null, null, Map.of()));
+        .thenReturn(
+            new Web3ContractPort.PrevalidateResult(
+                false, true, "RPC_TEMP", null, null, null, Map.of()));
     when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
         .thenReturn(retryAt);
 
@@ -204,8 +206,7 @@ class TransactionIssuerWorkerTest {
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
-        .thenReturn(
-            new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "sub"));
+        .thenReturn(new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "sub"));
 
     worker.processBatch(1);
 

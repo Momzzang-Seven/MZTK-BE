@@ -42,9 +42,11 @@ class CommentControllerIntegrationTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.beans.factory.annotation.Autowired protected CommentJpaRepository commentJpaRepository;
+  @org.springframework.beans.factory.annotation.Autowired
+  protected CommentJpaRepository commentJpaRepository;
 
-  @org.springframework.beans.factory.annotation.Autowired protected PostJpaRepository postJpaRepository;
+  @org.springframework.beans.factory.annotation.Autowired
+  protected PostJpaRepository postJpaRepository;
 
   @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -142,8 +144,8 @@ class CommentControllerIntegrationTest {
         new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
     SecurityContext context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-        .securityContext(context);
+    return org.springframework.security.test.web.servlet.request
+        .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 
   private String json(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {

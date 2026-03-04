@@ -89,7 +89,9 @@ class NonceStatePersistenceAdapterTest {
     Web3j mainWeb3j = mock(Web3j.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
     EthGetTransactionCount response = new EthGetTransactionCount();
     response.setResult("0xa");
-    when(mainWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(mainWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenReturn(response);
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
 
@@ -110,13 +112,17 @@ class NonceStatePersistenceAdapterTest {
     Web3j mainWeb3j = mock(Web3j.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
     EthGetTransactionCount mainResponse = new EthGetTransactionCount();
     mainResponse.setError(new Response.Error(1, "main error"));
-    when(mainWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(mainWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenReturn(mainResponse);
 
     Web3j subWeb3j = mock(Web3j.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
     EthGetTransactionCount subResponse = new EthGetTransactionCount();
     subResponse.setResult("0x9");
-    when(subWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(subWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenReturn(subResponse);
 
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
@@ -138,7 +144,9 @@ class NonceStatePersistenceAdapterTest {
     Web3j mainWeb3j = mock(Web3j.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
     EthGetTransactionCount response = new EthGetTransactionCount();
     response.setResult("0x5");
-    when(mainWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(mainWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenReturn(response);
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
 
@@ -163,7 +171,9 @@ class NonceStatePersistenceAdapterTest {
             return BigInteger.valueOf(-1);
           }
         };
-    when(mainWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(mainWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenReturn(response);
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
 
@@ -181,7 +191,9 @@ class NonceStatePersistenceAdapterTest {
         .thenReturn(Optional.of(entity));
 
     Web3j mainWeb3j = mock(Web3j.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
-    when(mainWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(mainWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenThrow(new RuntimeException("rpc boom"));
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
 
@@ -199,7 +211,9 @@ class NonceStatePersistenceAdapterTest {
         .thenReturn(Optional.of(entity));
 
     Web3j mainWeb3j = mock(Web3j.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
-    when(mainWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(mainWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenReturn(null);
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
 
@@ -219,7 +233,9 @@ class NonceStatePersistenceAdapterTest {
     Web3j mainWeb3j = mock(Web3j.class, org.mockito.Mockito.RETURNS_DEEP_STUBS);
     EthGetTransactionCount response = new EthGetTransactionCount();
     response.setResult(NumericHex.toQuantityHex(BigInteger.ONE.shiftLeft(80)));
-    when(mainWeb3j.ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING).send())
+    when(mainWeb3j
+            .ethGetTransactionCount("0x" + "a".repeat(40), DefaultBlockParameterName.PENDING)
+            .send())
         .thenReturn(response);
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
 

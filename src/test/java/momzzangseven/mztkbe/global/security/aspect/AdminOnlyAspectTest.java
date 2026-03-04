@@ -251,5 +251,4 @@ class AdminOnlyAspectTest {
   }
 
   private record Payload(String name, String secretKey, int count) {}
-
 }

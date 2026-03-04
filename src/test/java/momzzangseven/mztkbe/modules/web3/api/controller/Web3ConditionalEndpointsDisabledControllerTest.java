@@ -15,9 +15,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.context.TestPropertySource;
 
 @TestPropertySource(
     properties = {
@@ -129,13 +129,9 @@ class Web3ConditionalEndpointsDisabledControllerTest {
                             "prepareId",
                             "123e4567-e89b-12d3-a456-426614174000",
                             "authorizationSignature",
-                            "0x"
-                                + "a".repeat(
-                                    130),
+                            "0x" + "a".repeat(130),
                             "executionSignature",
-                            "0x"
-                                + "b".repeat(
-                                    130)))))
+                            "0x" + "b".repeat(130)))))
         .andExpect(status().isNotFound());
   }
 
@@ -155,8 +151,8 @@ class Web3ConditionalEndpointsDisabledControllerTest {
         new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
     SecurityContext context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-        .securityContext(context);
+    return org.springframework.security.test.web.servlet.request
+        .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 
   private String json(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {
