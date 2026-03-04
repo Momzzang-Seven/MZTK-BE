@@ -199,7 +199,8 @@ class LevelUpServiceTest {
     when(levelUpHistoryPort.saveLevelUpHistory(any()))
         .thenReturn(LevelUpHistory.reconstitute(58L, userId, 10L, 1, 2, 100, 5, now));
     when(rewardMztkPort.reward(any()))
-        .thenThrow(new momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException(userId));
+        .thenThrow(
+            new momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException(userId));
 
     assertThatThrownBy(() -> service.execute(LevelUpCommand.of(userId)))
         .isInstanceOf(BusinessException.class);
