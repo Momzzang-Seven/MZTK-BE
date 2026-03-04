@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.auth.infrastructure.google;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -113,8 +112,7 @@ class GoogleApiAdapterTest {
     when(bodySpec.bodyValue(any())).thenReturn(headersSpec);
     when(headersSpec.retrieve()).thenReturn(responseSpec);
     when(responseSpec.onStatus(any(), any())).thenReturn(responseSpec);
-    when(responseSpec.bodyToMono(GoogleTokenResponse.class))
-        .thenReturn(Mono.just(tokenResponse));
+    when(responseSpec.bodyToMono(GoogleTokenResponse.class)).thenReturn(Mono.just(tokenResponse));
 
     assertThatThrownBy(() -> adapter.getAccessToken("auth-code"))
         .isInstanceOf(BusinessException.class)

@@ -265,7 +265,6 @@ class CommentControllerTest {
     void getReplies_unauthenticated_returns401() throws Exception {
       mockMvc.perform(get("/comments/5/replies")).andExpect(status().isUnauthorized());
     }
-
   }
 
   private CommentResult comment(Long id, String content, boolean isDeleted) {

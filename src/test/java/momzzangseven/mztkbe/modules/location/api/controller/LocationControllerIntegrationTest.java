@@ -125,8 +125,8 @@ class LocationControllerIntegrationTest {
         new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
     SecurityContext context = SecurityContextHolder.createEmptyContext();
     context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-        .securityContext(context);
+    return org.springframework.security.test.web.servlet.request
+        .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 
   private String json(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {

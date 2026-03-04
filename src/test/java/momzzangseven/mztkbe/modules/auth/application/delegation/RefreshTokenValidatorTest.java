@@ -145,7 +145,8 @@ class RefreshTokenValidatorTest {
   @Test
   void inspectSecurityFlaw_runsAllChecksAndReturnsToken_whenTokenSafe() {
     RefreshToken token = validToken(7L);
-    when(loadRefreshTokenPort.findByTokenValueWithLock("token-value")).thenReturn(Optional.of(token));
+    when(loadRefreshTokenPort.findByTokenValueWithLock("token-value"))
+        .thenReturn(Optional.of(token));
     when(saveRefreshTokenPort.save(token)).thenReturn(token);
 
     RefreshToken result = validator.inspectSecurityFlaw("token-value", 7L);
@@ -165,4 +166,3 @@ class RefreshTokenValidatorTest {
         .build();
   }
 }
-

@@ -15,8 +15,6 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
@@ -85,7 +83,8 @@ class Web3jErc20AdapterTest {
 
     assertThat(result.ok()).isFalse();
     assertThat(result.retryable()).isFalse();
-    assertThat(result.failureReason()).isEqualTo(Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code());
+    assertThat(result.failureReason())
+        .isEqualTo(Web3TxFailureReason.PREVALIDATE_INVALID_COMMAND.code());
     assertThat(result.detail()).containsEntry("reason", "INVALID_COMMAND");
   }
 
@@ -93,7 +92,8 @@ class Web3jErc20AdapterTest {
   void prevalidate_returnsInvalidCommand_whenWalletAddressValidationFails() {
     Web3ContractPort.PrevalidateCommand command = command(BigInteger.ONE);
 
-    try (MockedStatic<WalletUtils> walletUtils = mockStatic(WalletUtils.class, CALLS_REAL_METHODS)) {
+    try (MockedStatic<WalletUtils> walletUtils =
+        mockStatic(WalletUtils.class, CALLS_REAL_METHODS)) {
       walletUtils.when(() -> WalletUtils.isValidAddress(FROM)).thenReturn(false);
       walletUtils.when(() -> WalletUtils.isValidAddress(TO)).thenReturn(false);
 
@@ -166,7 +166,8 @@ class Web3jErc20AdapterTest {
   void prevalidate_returnsInvalidCommand_whenToAddressValidationFails() {
     Web3ContractPort.PrevalidateCommand command = command(BigInteger.ONE);
 
-    try (MockedStatic<WalletUtils> walletUtils = mockStatic(WalletUtils.class, CALLS_REAL_METHODS)) {
+    try (MockedStatic<WalletUtils> walletUtils =
+        mockStatic(WalletUtils.class, CALLS_REAL_METHODS)) {
       walletUtils.when(() -> WalletUtils.isValidAddress(FROM)).thenReturn(true);
       walletUtils.when(() -> WalletUtils.isValidAddress(TO)).thenReturn(false);
 
@@ -560,7 +561,8 @@ class Web3jErc20AdapterTest {
 
     assertThat(result.ok()).isTrue();
     assertThat(result.detail()).containsEntry("maxFeeFallback", "strategy_default");
-    assertThat(result.detail()).containsKeys("maxPriorityFeeError", "baseFeeError", "gasPriceError");
+    assertThat(result.detail())
+        .containsKeys("maxPriorityFeeError", "baseFeeError", "gasPriceError");
   }
 
   @Test
@@ -809,7 +811,8 @@ class Web3jErc20AdapterTest {
 
   @Test
   void getReceipt_returnsRpcError_whenBothRpcsFail() throws Exception {
-    when(mainWeb3j.ethGetTransactionReceipt(TX_HASH).send()).thenThrow(new IOException("main down"));
+    when(mainWeb3j.ethGetTransactionReceipt(TX_HASH).send())
+        .thenThrow(new IOException("main down"));
     when(subWeb3j.ethGetTransactionReceipt(TX_HASH).send()).thenThrow(new IOException("sub down"));
 
     Web3ContractPort.ReceiptResult result = adapter.getReceipt(TX_HASH);
@@ -876,7 +879,8 @@ class Web3jErc20AdapterTest {
 
   private EthCall ethCallBool(boolean value) {
     EthCall response = new EthCall();
-    response.setResult(Numeric.toHexStringWithPrefixZeroPadded(value ? BigInteger.ONE : BigInteger.ZERO, 64));
+    response.setResult(
+        Numeric.toHexStringWithPrefixZeroPadded(value ? BigInteger.ONE : BigInteger.ZERO, 64));
     return response;
   }
 

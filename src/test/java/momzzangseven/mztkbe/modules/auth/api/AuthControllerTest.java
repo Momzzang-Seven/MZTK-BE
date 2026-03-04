@@ -359,10 +359,7 @@ class AuthControllerTest {
                       .content(
                           objectMapper.writeValueAsString(
                               Map.of(
-                                  "provider",
-                                  "GOOGLE",
-                                  "authorizationCode",
-                                  "google-auth-code"))))
+                                  "provider", "GOOGLE", "authorizationCode", "google-auth-code"))))
               .andReturn();
 
       assertThat(result.getResponse().getStatus()).isEqualTo(200);
@@ -680,10 +677,7 @@ class AuthControllerTest {
                   .content(
                       objectMapper.writeValueAsString(
                           Map.of(
-                              "authorizationCode",
-                              "kakao-stepup-code",
-                              "password",
-                              "Test@1234!"))))
+                              "authorizationCode", "kakao-stepup-code", "password", "Test@1234!"))))
           .andExpect(status().isBadRequest())
           .andExpect(jsonPath("$.status").value("FAIL"));
     }
