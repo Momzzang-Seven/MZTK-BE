@@ -9,7 +9,6 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -242,8 +241,7 @@ class PostPersistenceAdapterTest {
 
     @BeforeEach
     void setUp() throws Exception {
-      filterByTagIds =
-          PostPersistenceAdapter.class.getDeclaredMethod("filterByTagIds", List.class);
+      filterByTagIds = PostPersistenceAdapter.class.getDeclaredMethod("filterByTagIds", List.class);
       filterByTagIds.setAccessible(true);
     }
 

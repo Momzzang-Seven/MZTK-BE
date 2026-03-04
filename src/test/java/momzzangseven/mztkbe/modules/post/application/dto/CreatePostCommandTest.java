@@ -105,7 +105,8 @@ class CreatePostCommandTest {
   @DisplayName("of() with QUESTION type preserves title")
   void of_questionType_keepsTitleInCommand() {
     CreatePostCommand command =
-        CreatePostCommand.of(1L, "question title", "content", PostType.QUESTION, 10L, List.of(), List.of());
+        CreatePostCommand.of(
+            1L, "question title", "content", PostType.QUESTION, 10L, List.of(), List.of());
 
     assertThat(command.title()).isEqualTo("question title");
     assertThat(command.type()).isEqualTo(PostType.QUESTION);
