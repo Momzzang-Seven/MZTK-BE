@@ -37,6 +37,7 @@ public class PostController {
   public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
 
+<<<<<<< chore/MOM-259-test-integration
     Long validatedUserId = requireUserId(userId);
 
     CreatePostCommand command =
@@ -49,6 +50,9 @@ public class PostController {
             request.imageUrls(),
             request.tags());
 
+=======
+    CreatePostCommand command = request.toCommand(userId);
+>>>>>>> dev
     CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
