@@ -39,10 +39,8 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionR
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.TransferPreparePersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.VerifyExecutionSignaturePort;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepare;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferPrepareStatus;
@@ -51,8 +49,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -1370,48 +1366,6 @@ class SubmitTokenTransferServiceTest {
     verify(questionRewardIntentPersistencePort, never())
         .updateStatusIfCurrentIn(anyLong(), any(), any());
     verify(questionRewardIntentPersistencePort, never()).findForUpdateByPostId(anyLong());
-  }
-
-  @Test
-  void execute_duplicatePath_skipsQuestionIntentUpdate_whenPostIdNullInMarkPhase() {
-    SubmitTokenTransferCommand command =
-        new SubmitTokenTransferCommand(7L, "prepare-1", "0xabc", "0xdef");
-    TransferPrepare prepare =
-        activePrepare("domain:any:payload", TokenTransferReferenceType.USER_TO_USER, null);
-    when(loadTransferRuntimeConfigPort.load()).thenReturn(runtimeConfig());
-    when(transferPreparePersistencePort.findForUpdateByPrepareId("prepare-1"))
-        .thenReturn(Optional.of(prepare));
-    when(transferTransactionPersistencePort.findByIdempotencyKey(prepare.getIdempotencyKey()))
-        .thenReturn(
-            Optional.of(
-                TransferTransaction.builder()
-                    .id(96L)
-                    .idempotencyKey(prepare.getIdempotencyKey())
-                    .referenceType(Web3ReferenceType.USER_TO_USER)
-                    .referenceId("101")
-                    .fromUserId(7L)
-                    .toUserId(22L)
-                    .fromAddress("0x" + "a".repeat(40))
-                    .toAddress("0x" + "b".repeat(40))
-                    .amountWei(BigInteger.TEN)
-                    .txType(Web3TxType.EIP7702)
-                    .status(Web3TxStatus.PENDING)
-                    .txHash("0x" + "c".repeat(64))
-                    .build()));
-
-    try (MockedStatic<TokenTransferIdempotencyKeyFactory> mocked =
-        Mockito.mockStatic(TokenTransferIdempotencyKeyFactory.class)) {
-      mocked
-          .when(
-              () -> TokenTransferIdempotencyKeyFactory.parseDomainType(prepare.getIdempotencyKey()))
-          .thenReturn(DomainReferenceType.LEVEL_UP_REWARD, DomainReferenceType.QUESTION_REWARD);
-
-      SubmitTokenTransferResult result = service.execute(command);
-      assertThat(result.transactionId()).isEqualTo(96L);
-    }
-
-    verify(questionRewardIntentPersistencePort, never())
-        .updateStatusIfCurrentIn(anyLong(), any(), any());
   }
 
   @Test

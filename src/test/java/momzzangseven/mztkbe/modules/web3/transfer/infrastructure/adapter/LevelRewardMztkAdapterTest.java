@@ -3,11 +3,13 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
 import momzzangseven.mztkbe.global.error.level.RewardTreasuryAddressInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
@@ -114,8 +116,106 @@ class LevelRewardMztkAdapterTest {
   }
 
   @Test
+  void reward_rejectsNonPositiveUserId() {
+    assertThatThrownBy(() -> new RewardMztkCommand(0L, 1, 77L, EvmAddress.of(TO_WALLET)))
+        .isInstanceOf(LevelUpCommandInvalidException.class);
+  }
+
+  @Test
+  void reward_rejectsNonPositiveReferenceId() {
+    assertThatThrownBy(() -> new RewardMztkCommand(1L, 1, 0L, EvmAddress.of(TO_WALLET)))
+        .isInstanceOf(LevelUpCommandInvalidException.class);
+  }
+
+  @Test
+  void reward_rejectsNullWalletAddress() {
+    assertThatThrownBy(() -> new RewardMztkCommand(1L, 1, 77L, null))
+        .isInstanceOf(LevelUpCommandInvalidException.class);
+  }
+
+  @Test
+  void reward_rejectsNegativeRewardAmount() {
+    assertThatThrownBy(() -> new RewardMztkCommand(1L, -1, 77L, EvmAddress.of(TO_WALLET)))
+        .isInstanceOf(LevelUpCommandInvalidException.class);
+  }
+
+  @Test
+  void reward_rejectsNonPositiveUserId_whenCommandBypassesRecordValidation() {
+    RewardMztkCommand command = mock(RewardMztkCommand.class);
+    when(command.userId()).thenReturn(0L);
+
+    assertThatThrownBy(() -> adapter.reward(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("userId must be positive");
+  }
+
+  @Test
+  void reward_rejectsNullUserId_whenCommandBypassesRecordValidation() {
+    RewardMztkCommand command = mock(RewardMztkCommand.class);
+    when(command.userId()).thenReturn(null);
+
+    assertThatThrownBy(() -> adapter.reward(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("userId must be positive");
+  }
+
+  @Test
+  void reward_rejectsNonPositiveReferenceId_whenCommandBypassesRecordValidation() {
+    RewardMztkCommand command = mock(RewardMztkCommand.class);
+    when(command.userId()).thenReturn(1L);
+    when(command.referenceId()).thenReturn(0L);
+
+    assertThatThrownBy(() -> adapter.reward(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("referenceId must be positive");
+  }
+
+  @Test
+  void reward_rejectsNullReferenceId_whenCommandBypassesRecordValidation() {
+    RewardMztkCommand command = mock(RewardMztkCommand.class);
+    when(command.userId()).thenReturn(1L);
+    when(command.referenceId()).thenReturn(null);
+
+    assertThatThrownBy(() -> adapter.reward(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("referenceId must be positive");
+  }
+
+  @Test
+  void reward_rejectsNullWalletAddress_whenCommandBypassesRecordValidation() {
+    RewardMztkCommand command = mock(RewardMztkCommand.class);
+    when(command.userId()).thenReturn(1L);
+    when(command.referenceId()).thenReturn(77L);
+    when(command.toWalletAddress()).thenReturn(null);
+
+    assertThatThrownBy(() -> adapter.reward(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("toWalletAddress is required");
+  }
+
+  @Test
+  void reward_rejectsNegativeReward_whenCommandBypassesRecordValidation() {
+    RewardMztkCommand command = mock(RewardMztkCommand.class);
+    when(command.userId()).thenReturn(1L);
+    when(command.referenceId()).thenReturn(77L);
+    when(command.toWalletAddress()).thenReturn(EvmAddress.of(TO_WALLET));
+    when(command.rewardMztk()).thenReturn(-1);
+
+    assertThatThrownBy(() -> adapter.reward(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("rewardMztk must be >= 0");
+  }
+
+  @Test
   void reward_rejectsBlankTreasuryAddress() {
     properties.getTreasury().setTreasuryAddress(" ");
+    assertThatThrownBy(() -> adapter.reward(validCommand(3)))
+        .isInstanceOf(RewardTreasuryAddressInvalidException.class);
+  }
+
+  @Test
+  void reward_rejectsNullTreasuryAddress() {
+    properties.getTreasury().setTreasuryAddress(null);
     assertThatThrownBy(() -> adapter.reward(validCommand(3)))
         .isInstanceOf(RewardTreasuryAddressInvalidException.class);
   }

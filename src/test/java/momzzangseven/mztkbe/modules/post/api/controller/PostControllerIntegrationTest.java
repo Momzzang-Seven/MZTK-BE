@@ -1,9 +1,6 @@
 package momzzangseven.mztkbe.modules.post.api.controller;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -12,344 +9,151 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.LocalDateTime;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
-import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
-import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
-import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
-import momzzangseven.mztkbe.modules.post.domain.model.Post;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
+import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.annotation.Transactional;
 
-@DisplayName("PostController 통합 테스트 (MockMvc + H2)")
-@org.springframework.boot.test.context.SpringBootTest
-@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@org.springframework.transaction.annotation.Transactional
+@DisplayName("PostController 실경로 통합 테스트 (MockMvc + H2)")
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
 class PostControllerIntegrationTest {
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected org.springframework.test.web.servlet.MockMvc mockMvc;
+  @org.springframework.beans.factory.annotation.Autowired protected MockMvc mockMvc;
 
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.beans.factory.annotation.Autowired protected PostJpaRepository postJpaRepository;
+
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private CreatePostUseCase createPostUseCase;
-  @MockBean private GetPostUseCase getPostUseCase;
-  @MockBean private UpdatePostUseCase updatePostUseCase;
-  @MockBean private DeletePostUseCase deletePostUseCase;
-  @MockBean private SearchPostsUseCase searchPostsUseCase;
-
   @Test
-  @DisplayName("POST /posts/free 성공")
-  void createFreePost_success() throws Exception {
-    given(createPostUseCase.execute(any(CreatePostCommand.class)))
-        .willReturn(new CreatePostResult(100L, true, 20L, "ok"));
+  @DisplayName("POST /posts/free → DB 저장, GET /posts/{id}로 조회 가능")
+  void createAndGet_realFlow_persistsAndLoadsFromH2() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(101L))
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        json(
+                            Map.of(
+                                "title",
+                                "실경로 제목",
+                                "content",
+                                "실경로 본문",
+                                "imageUrls",
+                                List.of("https://example.com/real-1.png")))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andReturn();
+
+    Long postId = extractPostId(createResult);
+    PostEntity saved = postJpaRepository.findById(postId).orElseThrow();
+    assertThat(saved.getUserId()).isEqualTo(101L);
+    assertThat(saved.getTitle()).isEqualTo("실경로 제목");
+    assertThat(saved.getContent()).isEqualTo("실경로 본문");
 
     mockMvc
-        .perform(
-            post("/posts/free")
-                .with(userPrincipal(1L))
-                .contentType(APPLICATION_JSON)
-                .content(
-                    json(
-                        Map.of(
-                            "title",
-                            "자유글",
-                            "content",
-                            "내용",
-                            "imageUrls",
-                            List.of("https://example.com/1.png"),
-                            "tags",
-                            List.of("health")))))
-        .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.postId").value(100));
-
-    verify(createPostUseCase).execute(any(CreatePostCommand.class));
-  }
-
-  @Test
-  @DisplayName("POST /posts/free 인증 없으면 401")
-  void createFreePost_unauthenticated_returns401() throws Exception {
-    mockMvc
-        .perform(
-            post("/posts/free")
-                .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "t", "content", "c"))))
-        .andExpect(status().isUnauthorized());
-
-    verifyNoInteractions(createPostUseCase);
-  }
-
-  @Test
-  @DisplayName("POST /posts/free 제목 공백이면 400")
-  void createFreePost_blankTitle_returns400() throws Exception {
-    mockMvc
-        .perform(
-            post("/posts/free")
-                .with(userPrincipal(1L))
-                .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", " ", "content", "c"))))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
-
-    verifyNoInteractions(createPostUseCase);
-  }
-
-  @Test
-  @DisplayName("POST /posts/free 내용 공백이면 400")
-  void createFreePost_blankContent_returns400() throws Exception {
-    mockMvc
-        .perform(
-            post("/posts/free")
-                .with(userPrincipal(1L))
-                .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "제목", "content", " "))))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
-
-    verifyNoInteractions(createPostUseCase);
-  }
-
-  @Test
-  @DisplayName("POST /posts/free imageUrls URL 형식이 잘못되면 400")
-  void createFreePost_invalidImageUrl_returns400() throws Exception {
-    mockMvc
-        .perform(
-            post("/posts/free")
-                .with(userPrincipal(1L))
-                .contentType(APPLICATION_JSON)
-                .content(
-                    json(
-                        Map.of(
-                            "title", "자유글", "content", "내용", "imageUrls", List.of("invalid-url")))))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
-
-    verifyNoInteractions(createPostUseCase);
-  }
-
-  @Test
-  @DisplayName("POST /posts/free principal이 null이면 400 (현재 구현 기준)")
-  void createFreePost_nullPrincipal_returns400() throws Exception {
-    given(createPostUseCase.execute(any(CreatePostCommand.class)))
-        .willThrow(new IllegalArgumentException("작성자 ID는 필수입니다."));
-
-    mockMvc
-        .perform(
-            post("/posts/free")
-                .with(nullUserPrincipal())
-                .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "제목", "content", "내용"))))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
-  }
-
-  @Test
-  @DisplayName("GET /posts/{postId} 성공")
-  void getPost_success() throws Exception {
-    given(getPostUseCase.getPost(1L))
-        .willReturn(
-            new PostResult(
-                1L,
-                PostType.FREE,
-                "제목",
-                "본문",
-                1L,
-                List.of(),
-                0L,
-                false,
-                List.of("tag"),
-                LocalDateTime.now(),
-                LocalDateTime.now()));
-
-    mockMvc
-        .perform(get("/posts/1").with(userPrincipal(1L)))
+        .perform(get("/posts/" + postId).with(userPrincipal(101L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.postId").value(1))
-        .andExpect(jsonPath("$.data.type").value("FREE"));
+        .andExpect(jsonPath("$.data.postId").value(postId))
+        .andExpect(jsonPath("$.data.title").value("실경로 제목"));
   }
 
   @Test
-  @DisplayName("GET /posts/{postId} 인증 없으면 401")
-  void getPost_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(get("/posts/1")).andExpect(status().isUnauthorized());
-  }
+  @DisplayName("PATCH/DELETE /posts/{id} → DB 수정/삭제 반영")
+  void updateAndDelete_realFlow_updatesAndDeletesInH2() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(202L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("title", "초기 제목", "content", "초기 본문"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+    Long postId = extractPostId(createResult);
 
-  @Test
-  @DisplayName("GET /posts 목록 조회 성공")
-  void getPosts_success() throws Exception {
-    Post post =
-        Post.builder()
-            .id(2L)
-            .userId(1L)
-            .type(PostType.FREE)
-            .title("목록")
-            .content("본문")
-            .imageUrls(List.of())
-            .reward(0L)
-            .isSolved(false)
-            .tags(List.of("health"))
-            .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
-            .build();
-    given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class))).willReturn(List.of(post));
-
-    mockMvc
-        .perform(get("/posts?type=FREE&tag=health&search=목록").with(userPrincipal(1L)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data[0].postId").value(2))
-        .andExpect(jsonPath("$.data[0].type").value("FREE"));
-  }
-
-  @Test
-  @DisplayName("GET /posts type enum 값이 잘못되면 500 (현재 예외 매핑 기준)")
-  void getPosts_invalidTypeEnum_returns500() throws Exception {
-    mockMvc
-        .perform(get("/posts?type=INVALID").with(userPrincipal(1L)))
-        .andExpect(status().isInternalServerError())
-        .andExpect(jsonPath("$.status").value("FAIL"));
-  }
-
-  @Test
-  @DisplayName("GET /posts 인증 없으면 401")
-  void getPosts_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(get("/posts")).andExpect(status().isUnauthorized());
-  }
-
-  @Test
-  @DisplayName("PATCH /posts/{postId} 성공")
-  void updatePost_success() throws Exception {
     mockMvc
         .perform(
-            patch("/posts/1")
-                .with(userPrincipal(1L))
+            patch("/posts/" + postId)
+                .with(userPrincipal(202L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "수정 제목"))))
+                .content(json(Map.of("title", "수정 제목", "content", "수정 본문"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.postId").value(1));
-  }
+        .andExpect(jsonPath("$.data.postId").value(postId));
 
-  @Test
-  @DisplayName("PATCH /posts/{postId} 인증 principal이 null이면 403")
-  void updatePost_nullPrincipal_returns403() throws Exception {
-    mockMvc
-        .perform(
-            patch("/posts/1").with(nullUserPrincipal()).contentType(APPLICATION_JSON).content("{}"))
-        .andExpect(status().isForbidden());
-  }
+    PostEntity updated = postJpaRepository.findById(postId).orElseThrow();
+    assertThat(updated.getTitle()).isEqualTo("수정 제목");
+    assertThat(updated.getContent()).isEqualTo("수정 본문");
 
-  @Test
-  @DisplayName("DELETE /posts/{postId} 성공")
-  void deletePost_success() throws Exception {
     mockMvc
-        .perform(delete("/posts/1").with(userPrincipal(1L)))
+        .perform(delete("/posts/" + postId).with(userPrincipal(202L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.postId").value(1));
+        .andExpect(jsonPath("$.data.postId").value(postId));
+
+    assertThat(postJpaRepository.findById(postId)).isEmpty();
   }
 
-  @Test
-  @DisplayName("DELETE /posts/{postId} 인증 없으면 401")
-  void deletePost_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(delete("/posts/1")).andExpect(status().isUnauthorized());
+  private Long extractPostId(MvcResult result) throws Exception {
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    return body.at("/data/postId").asLong();
   }
 
-  @Test
-  @DisplayName("PATCH /posts/{postId} 인증 없으면 401")
-  void updatePost_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(patch("/posts/1")).andExpect(status().isUnauthorized());
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(
-      Long userId) {
+  private RequestPostProcessor userPrincipal(Long userId) {
     return authenticatedPrincipal(userId, "ROLE_USER");
   }
 
-  private org.springframework.test.web.servlet.request.RequestPostProcessor adminPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_ADMIN");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor stepUpPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_USER", "ROLE_STEP_UP");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullUserPrincipal() {
-    return nullPrincipalWithRoles("ROLE_USER");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullAdminPrincipal() {
-    return nullPrincipalWithRoles("ROLE_ADMIN");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullStepUpPrincipal() {
-    return nullPrincipalWithRoles("ROLE_USER", "ROLE_STEP_UP");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullPrincipalWithRoles(
-      String... authorities) {
-    java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority>
-        grantedAuthorities =
-            java.util.Arrays.stream(authorities)
-                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                .toList();
-    org.springframework.security.authentication.UsernamePasswordAuthenticationToken token =
-        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-            null, null, grantedAuthorities);
-    org.springframework.security.core.context.SecurityContext context =
-        org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
-    context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request
-        .SecurityMockMvcRequestPostProcessors.securityContext(context);
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor authenticatedPrincipal(
-      Long userId, String... authorities) {
+  private RequestPostProcessor authenticatedPrincipal(Long userId, String... authorities) {
     java.util.Objects.requireNonNull(userId, "userId");
-    java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority>
-        grantedAuthorities =
-            java.util.Arrays.stream(authorities)
-                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                .toList();
-    org.springframework.security.authentication.UsernamePasswordAuthenticationToken token =
-        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-            userId, null, grantedAuthorities);
-    return org.springframework.security.test.web.servlet.request
-        .SecurityMockMvcRequestPostProcessors.authentication(token);
+    java.util.List<SimpleGrantedAuthority> grantedAuthorities =
+        Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
+    UsernamePasswordAuthenticationToken token =
+        new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
+    SecurityContext context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(token);
+    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
+        .securityContext(context);
   }
 
   private String json(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {

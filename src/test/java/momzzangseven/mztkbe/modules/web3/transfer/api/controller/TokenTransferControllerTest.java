@@ -23,11 +23,10 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
 
 @TestPropertySource(properties = {"web3.reward-token.enabled=true", "web3.eip7702.enabled=true"})
-@DisplayName("TokenTransferController 통합 테스트 (MockMvc + H2)")
+@DisplayName("TokenTransferController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@org.springframework.transaction.annotation.Transactional
-class TokenTransferControllerIntegrationTest {
+class TokenTransferControllerTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected org.springframework.test.web.servlet.MockMvc mockMvc;
@@ -338,6 +337,25 @@ class TokenTransferControllerIntegrationTest {
   @DisplayName("POST /users/me/token-transfers/submit 인증 없으면 401")
   void submit_unauthenticated_returns401() throws Exception {
     mockMvc.perform(post("/users/me/token-transfers/submit")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(submitTokenTransferUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /users/me/token-transfers/submit principal이 null이면 401")
+  void submit_nullPrincipal_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/users/me/token-transfers/submit")
+                .with(nullUserPrincipal())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "prepareId", "123e4567-e89b-12d3-a456-426614174000",
+                            "authorizationSignature", signature("a"),
+                            "executionSignature", signature("b")))))
+        .andExpect(status().isUnauthorized());
 
     verifyNoInteractions(submitTokenTransferUseCase);
   }

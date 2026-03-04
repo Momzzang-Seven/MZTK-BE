@@ -22,11 +22,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
 
-@DisplayName("WalletController 통합 테스트 (MockMvc + H2)")
+@DisplayName("WalletController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@org.springframework.transaction.annotation.Transactional
-class WalletControllerIntegrationTest {
+class WalletControllerTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected org.springframework.test.web.servlet.MockMvc mockMvc;
@@ -198,11 +197,8 @@ class WalletControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("POST /web3/wallets principal이 null이면 400 (현재 구현 기준)")
-  void registerWallet_nullPrincipal_returns400() throws Exception {
-    given(registerWalletUseCase.execute(any(RegisterWalletCommand.class)))
-        .willThrow(new IllegalArgumentException("User ID must be positive"));
-
+  @DisplayName("POST /web3/wallets principal이 null이면 401")
+  void registerWallet_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(
             post("/web3/wallets")
@@ -218,8 +214,11 @@ class WalletControllerIntegrationTest {
                                 + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                             "nonce",
                             "nonce-1"))))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
+
+    verifyNoInteractions(registerWalletUseCase);
   }
 
   @Test
@@ -244,18 +243,17 @@ class WalletControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("DELETE /web3/wallets/{walletAddress} principal이 null이면 400 (현재 구현 기준)")
-  void unlinkWallet_nullPrincipal_returns400() throws Exception {
-    doThrow(new IllegalArgumentException("User ID must be positive"))
-        .when(unlinkWalletUseCase)
-        .execute(any(UnlinkWalletCommand.class));
-
+  @DisplayName("DELETE /web3/wallets/{walletAddress} principal이 null이면 401")
+  void unlinkWallet_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(
             delete("/web3/wallets/0x1111111111111111111111111111111111111111")
                 .with(nullUserPrincipal()))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
+
+    verifyNoInteractions(unlinkWalletUseCase);
   }
 
   @Test
