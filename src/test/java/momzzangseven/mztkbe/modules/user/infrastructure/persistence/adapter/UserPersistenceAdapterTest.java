@@ -201,6 +201,217 @@ class UserPersistenceAdapterTest {
     verify(userJpaRepository).deleteAllByIdInBatch(ids);
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // isDeletedUser() - line 142 (both branches uncovered)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  @Test
+  @DisplayName("loadDeletedUserByEmail - DELETED 엔티티는 반환")
+  void loadDeletedUserByEmail_withDeletedEntity_returnsDomain() {
+    UserEntity entity = baseEntity(3L, UserStatus.DELETED);
+    when(userJpaRepository.findByEmail("deleted@example.com")).thenReturn(Optional.of(entity));
+
+    Optional<User> found = adapter.loadDeletedUserByEmail("deleted@example.com");
+
+    assertThat(found).isPresent();
+    assertThat(found.get().getStatus()).isEqualTo(UserStatus.DELETED);
+  }
+
+  @Test
+  @DisplayName("loadDeletedUserByEmail - ACTIVE 엔티티는 빈 결과 반환")
+  void loadDeletedUserByEmail_withActiveEntity_returnsEmpty() {
+    UserEntity entity = baseEntity(4L, UserStatus.ACTIVE);
+    when(userJpaRepository.findByEmail("active@example.com")).thenReturn(Optional.of(entity));
+
+    Optional<User> found = adapter.loadDeletedUserByEmail("active@example.com");
+
+    assertThat(found).isEmpty();
+  }
+
+  @Test
+  @DisplayName("loadDeletedUserById - DELETED 엔티티는 반환")
+  void loadDeletedUserById_withDeletedEntity_returnsDomain() {
+    UserEntity entity = baseEntity(5L, UserStatus.DELETED);
+    when(userJpaRepository.findById(5L)).thenReturn(Optional.of(entity));
+
+    Optional<User> found = adapter.loadDeletedUserById(5L);
+
+    assertThat(found).isPresent();
+    assertThat(found.get().getStatus()).isEqualTo(UserStatus.DELETED);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // mapToEntity() 분기 (line 178, 179, 196)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  @Test
+  @DisplayName("saveUser - providerUserId가 blank이면 LOCAL 접두사로 파생")
+  void saveUser_withBlankProviderUserId_derivesFromEmail() {
+    User user =
+        User.builder()
+            .id(null)
+            .email("blank@example.com")
+            .authProvider(AuthProvider.LOCAL)
+            .providerUserId("   ")
+            .role(UserRole.USER)
+            .status(UserStatus.ACTIVE)
+            .build();
+
+    when(userJpaRepository.save(any(UserEntity.class)))
+        .thenAnswer(
+            invocation -> {
+              UserEntity e = invocation.getArgument(0);
+              e.setId(60L);
+              return e;
+            });
+
+    adapter.saveUser(user);
+
+    ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
+    verify(userJpaRepository).save(captor.capture());
+    assertThat(captor.getValue().getProviderUserId()).isEqualTo("LOCAL:blank@example.com");
+  }
+
+  @Test
+  @DisplayName("saveUser - providerUserId가 null이지만 KAKAO이면 파생하지 않음")
+  void saveUser_withNullProviderUserIdAndKakao_doesNotDerive() {
+    User user =
+        User.builder()
+            .id(null)
+            .email("kakao@example.com")
+            .authProvider(AuthProvider.KAKAO)
+            .providerUserId(null)
+            .role(UserRole.USER)
+            .status(UserStatus.ACTIVE)
+            .build();
+
+    when(userJpaRepository.save(any(UserEntity.class)))
+        .thenAnswer(
+            invocation -> {
+              UserEntity e = invocation.getArgument(0);
+              e.setId(61L);
+              return e;
+            });
+
+    adapter.saveUser(user);
+
+    ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
+    verify(userJpaRepository).save(captor.capture());
+    assertThat(captor.getValue().getProviderUserId()).isNull();
+  }
+
+  @Test
+  @DisplayName("saveUser - DELETED 신규 유저 생성 시 deletedAt 보존")
+  void saveUser_withNewDeletedUser_preservesDeletedAt() {
+    LocalDateTime deletedAt = LocalDateTime.of(2026, 2, 20, 10, 0);
+    User user =
+        User.builder()
+            .id(null)
+            .email("del@example.com")
+            .authProvider(AuthProvider.KAKAO)
+            .providerUserId("kakao-del")
+            .role(UserRole.USER)
+            .status(UserStatus.DELETED)
+            .deletedAt(deletedAt)
+            .build();
+
+    when(userJpaRepository.save(any(UserEntity.class)))
+        .thenAnswer(
+            invocation -> {
+              UserEntity e = invocation.getArgument(0);
+              e.setId(62L);
+              return e;
+            });
+
+    adapter.saveUser(user);
+
+    ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
+    verify(userJpaRepository).save(captor.capture());
+    assertThat(captor.getValue().getDeletedAt()).isEqualTo(deletedAt);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // updateEntityFromDomain() 분기 (line 205) - null status → ACTIVE 폴백
+  // ─────────────────────────────────────────────────────────────────────────
+
+  @Test
+  @DisplayName("saveUser (update) - status=null이면 ACTIVE로 폴백")
+  void saveUser_updateWithNullStatus_defaultsToActive() {
+    UserEntity managed = baseEntity(10L, UserStatus.ACTIVE);
+    when(userJpaRepository.findById(10L)).thenReturn(Optional.of(managed));
+    when(userJpaRepository.save(managed)).thenReturn(managed);
+
+    User update =
+        User.builder()
+            .id(10L)
+            .email("u@example.com")
+            .authProvider(AuthProvider.LOCAL)
+            .providerUserId("LOCAL:u@example.com")
+            .role(UserRole.USER)
+            .status(null)
+            .build();
+
+    adapter.saveUser(update);
+
+    assertThat(managed.getStatus()).isEqualTo(UserStatus.ACTIVE);
+    assertThat(managed.getDeletedAt()).isNull();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // resolveStatus() 분기 (line 223, 226) - null status 엔티티
+  // ─────────────────────────────────────────────────────────────────────────
+
+  @Test
+  @DisplayName("loadUserByEmail - status=null & deletedAt=null → ACTIVE로 조회")
+  void loadUserByEmail_nullStatusNullDeletedAt_treatedAsActive() {
+    UserEntity entityWithNullStatus =
+        UserEntity.builder()
+            .id(7L)
+            .provider(AuthProvider.KAKAO)
+            .providerUserId("kakao-7")
+            .email("null-status@example.com")
+            .passwordHash("$2a$" + "d".repeat(56))
+            .role(UserRole.USER)
+            .nickname("null-status")
+            .status(null)
+            .deletedAt(null)
+            .build();
+
+    when(userJpaRepository.findByEmail("null-status@example.com"))
+        .thenReturn(Optional.of(entityWithNullStatus));
+
+    Optional<User> found = adapter.loadUserByEmail("null-status@example.com");
+
+    assertThat(found).isPresent();
+    assertThat(found.get().getStatus()).isEqualTo(UserStatus.ACTIVE);
+  }
+
+  @Test
+  @DisplayName("loadUserByEmail - status=null & deletedAt!=null → DELETED로 조회 (필터됨)")
+  void loadUserByEmail_nullStatusNonNullDeletedAt_treatedAsDeleted() {
+    LocalDateTime deletedAt = LocalDateTime.of(2026, 2, 10, 0, 0);
+    UserEntity entityWithNullStatus =
+        UserEntity.builder()
+            .id(8L)
+            .provider(AuthProvider.KAKAO)
+            .providerUserId("kakao-8")
+            .email("null-del@example.com")
+            .passwordHash("$2a$" + "d".repeat(56))
+            .role(UserRole.USER)
+            .nickname("null-del")
+            .status(null)
+            .deletedAt(deletedAt)
+            .build();
+
+    when(userJpaRepository.findByEmail("null-del@example.com"))
+        .thenReturn(Optional.of(entityWithNullStatus));
+
+    // loadUserByEmail filters for ACTIVE; a null-status entity with deletedAt set is DELETED
+    Optional<User> found = adapter.loadUserByEmail("null-del@example.com");
+
+    assertThat(found).isEmpty();
+  }
+
   private UserEntity baseEntity(Long id, UserStatus status) {
     LocalDateTime now = LocalDateTime.of(2026, 2, 28, 9, 0);
     return UserEntity.builder()

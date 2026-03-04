@@ -88,4 +88,27 @@ class UpdateUserRoleResultTest {
 
     assertThatCode(result::validate).doesNotThrowAnyException();
   }
+
+  @Test
+  @DisplayName("validate rejects null id")
+  void validate_nullId_throwsException() {
+    UpdateUserRoleResult result =
+        new UpdateUserRoleResult(
+            null, "user@example.com", null, "nick", null, UserRole.USER, null, null);
+
+    assertThatThrownBy(result::validate)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("User ID must be positive");
+  }
+
+  @Test
+  @DisplayName("validate rejects null email")
+  void validate_nullEmail_throwsException() {
+    UpdateUserRoleResult result =
+        new UpdateUserRoleResult(1L, null, null, "nick", null, UserRole.USER, null, null);
+
+    assertThatThrownBy(result::validate)
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Email cannot be empty");
+  }
 }
