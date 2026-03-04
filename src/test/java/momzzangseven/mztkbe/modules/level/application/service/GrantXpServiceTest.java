@@ -112,6 +112,26 @@ class GrantXpServiceTest {
   }
 
   @Test
+  void execute_shouldReturnDailyCapReachedWhenGrantedTodayReachesPositiveCap() {
+    LocalDateTime occurredAt = LocalDateTime.of(2026, 2, 26, 10, 0);
+    GrantXpCommand command =
+        GrantXpCommand.of(1L, XpType.CHECK_IN, occurredAt, "checkin:1:20260226", "attendance");
+    UserProgress progress = baseProgress(1L, 1, 0, 0);
+    XpPolicy policy = xpPolicy(XpType.CHECK_IN, 10, 3);
+    LocalDate earnedOn = LocalDate.of(2026, 2, 26);
+
+    when(userProgressPort.loadUserProgressWithLock(1L)).thenReturn(progress);
+    when(policyPort.loadXpPolicy(XpType.CHECK_IN, occurredAt)).thenReturn(Optional.of(policy));
+    when(xpLedgerPort.countByUserIdAndTypeAndEarnedOn(1L, XpType.CHECK_IN, earnedOn)).thenReturn(3);
+    when(xpLedgerPort.existsByUserIdAndIdempotencyKey(1L, "checkin:1:20260226")).thenReturn(false);
+
+    GrantXpResult result = service.execute(command);
+
+    assertThat(result.status()).isEqualTo(GrantXpResult.Status.DAILY_CAP_REACHED);
+    verify(xpLedgerPort, never()).trySaveXpLedger(any());
+  }
+
+  @Test
   void execute_shouldGrantXpAndSaveProgressWhenAllChecksPass() {
     LocalDateTime occurredAt = LocalDateTime.of(2026, 2, 26, 10, 0);
     GrantXpCommand command =

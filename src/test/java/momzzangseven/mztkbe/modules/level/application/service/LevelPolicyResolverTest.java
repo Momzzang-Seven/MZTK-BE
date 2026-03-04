@@ -84,6 +84,31 @@ class LevelPolicyResolverTest {
         .hasMessageContaining("No level policies configured");
   }
 
+  @Test
+  void resolveNextLevelInfo_nullAt_throwsIllegalArgumentException() {
+    assertThatThrownBy(() -> resolver.resolveNextLevelInfo(3, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("at must not be null");
+  }
+
+  @Test
+  void resolveNextLevelInfo_policyMissingAndNotMax_throwsIllegalState() {
+    LocalDateTime at = LocalDateTime.of(2026, 2, 26, 10, 0);
+    when(policyPort.loadLevelPolicy(3, at)).thenReturn(Optional.empty());
+    when(policyPort.loadLevelPolicies(at)).thenReturn(List.of(policy(10, 300, 20)));
+
+    assertThatThrownBy(() -> resolver.resolveNextLevelInfo(3, at))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("policy not found");
+  }
+
+  @Test
+  void resolveLevelUpPolicy_nullAt_throwsIllegalArgumentException() {
+    assertThatThrownBy(() -> resolver.resolveLevelUpPolicy(3, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("at must not be null");
+  }
+
   private LevelPolicy policy(int level, int requiredXp, int rewardMztk) {
     return LevelPolicy.builder()
         .id((long) level)

@@ -24,6 +24,14 @@ class GrantXpCommandTest {
   }
 
   @Test
+  void constructor_shouldThrowWhenIdempotencyKeyIsNull() {
+    LocalDateTime occurredAt = LocalDateTime.of(2026, 2, 28, 9, 0);
+
+    assertThatThrownBy(() -> GrantXpCommand.of(1L, XpType.CHECK_IN, occurredAt, null, "src"))
+        .isInstanceOf(LevelUpCommandInvalidException.class);
+  }
+
+  @Test
   void constructor_shouldValidateIdempotencyKeyBoundaries() {
     LocalDateTime occurredAt = LocalDateTime.of(2026, 2, 28, 9, 0);
     String tooLong = "checkin:" + "a".repeat(300);
@@ -57,5 +65,22 @@ class GrantXpCommandTest {
     assertThat(command.userId()).isEqualTo(1L);
     assertThat(command.xpType()).isEqualTo(XpType.WORKOUT);
     assertThat(command.idempotencyKey()).startsWith("workout:");
+  }
+
+  @Test
+  void of_shouldCreateCommandForAllXpTypes() {
+    LocalDateTime occurredAt = LocalDateTime.of(2026, 2, 28, 9, 0);
+
+    GrantXpCommand streak =
+        GrantXpCommand.of(1L, XpType.STREAK_7D, occurredAt, "streak7:1:20260228", "streak");
+    assertThat(streak.xpType()).isEqualTo(XpType.STREAK_7D);
+
+    GrantXpCommand post =
+        GrantXpCommand.of(1L, XpType.POST, occurredAt, "post:123", "post-create:123");
+    assertThat(post.xpType()).isEqualTo(XpType.POST);
+
+    GrantXpCommand comment =
+        GrantXpCommand.of(1L, XpType.COMMENT, occurredAt, "comment:456", "comment-create:456");
+    assertThat(comment.xpType()).isEqualTo(XpType.COMMENT);
   }
 }
