@@ -94,6 +94,12 @@ public class Post {
     }
   }
 
+  public void validateDeletable() {
+    if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
+      throw new PostInvalidInputException("채택 완료된 질문게시글은 삭제할 수 없습니다.");
+    }
+  }
+
   public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
     if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
       throw new PostInvalidInputException("채택 완료된 질문게시글은 수정할 수 없습니다.");
