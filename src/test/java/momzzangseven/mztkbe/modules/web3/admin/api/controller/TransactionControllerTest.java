@@ -19,11 +19,10 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
 
 @TestPropertySource(properties = "web3.reward-token.enabled=true")
-@DisplayName("TransactionController 통합 테스트 (MockMvc + H2)")
+@DisplayName("TransactionController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@org.springframework.transaction.annotation.Transactional
-class TransactionControllerIntegrationTest {
+class TransactionControllerTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected org.springframework.test.web.servlet.MockMvc mockMvc;

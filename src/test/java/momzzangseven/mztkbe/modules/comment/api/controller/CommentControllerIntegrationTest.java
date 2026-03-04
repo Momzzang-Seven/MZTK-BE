@@ -1,315 +1,149 @@
 package momzzangseven.mztkbe.modules.comment.api.controller;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.LocalDateTime;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
-import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
-import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
-import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
-import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery;
-import momzzangseven.mztkbe.modules.comment.application.dto.UpdateCommentCommand;
-import momzzangseven.mztkbe.modules.comment.application.port.in.CreateCommentUseCase;
-import momzzangseven.mztkbe.modules.comment.application.port.in.DeleteCommentUseCase;
-import momzzangseven.mztkbe.modules.comment.application.port.in.GetCommentUseCase;
-import momzzangseven.mztkbe.modules.comment.application.port.in.UpdateCommentUseCase;
+import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
+import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
+import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.annotation.Transactional;
 
-@DisplayName("CommentController 통합 테스트 (MockMvc + H2)")
-@org.springframework.boot.test.context.SpringBootTest
-@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
-@org.springframework.transaction.annotation.Transactional
+@DisplayName("CommentController 실경로 통합 테스트 (MockMvc + H2)")
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
 class CommentControllerIntegrationTest {
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected org.springframework.test.web.servlet.MockMvc mockMvc;
+  @org.springframework.beans.factory.annotation.Autowired protected MockMvc mockMvc;
 
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.beans.factory.annotation.Autowired protected CommentJpaRepository commentJpaRepository;
+
+  @org.springframework.beans.factory.annotation.Autowired protected PostJpaRepository postJpaRepository;
+
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private CreateCommentUseCase createCommentUseCase;
-  @MockBean private GetCommentUseCase getCommentUseCase;
-  @MockBean private UpdateCommentUseCase updateCommentUseCase;
-  @MockBean private DeleteCommentUseCase deleteCommentUseCase;
+  @Test
+  @DisplayName("댓글 생성/조회/삭제가 실제 DB에 반영된다")
+  void createGetDeleteComment_realFlow_reflectsInH2() throws Exception {
+    PostEntity savedPost =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(401L)
+                .type(PostType.FREE)
+                .title("댓글 테스트 제목")
+                .content("댓글 테스트 본문")
+                .imageUrls(List.of())
+                .reward(0L)
+                .isSolved(false)
+                .build());
+    Long postId = savedPost.getId();
 
-  @Nested
-  @DisplayName("POST /posts/{postId}/comments")
-  class CreateComment {
+    MvcResult createCommentResult =
+        mockMvc
+            .perform(
+                post("/posts/" + postId + "/comments")
+                    .with(userPrincipal(401L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "첫 댓글"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.content").value("첫 댓글"))
+            .andReturn();
+    Long commentId = extractLong(createCommentResult, "/data/commentId");
 
-    @Test
-    @DisplayName("정상 요청이면 200과 댓글 데이터를 반환한다")
-    void createComment_success() throws Exception {
-      given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
-          .willReturn(comment(1L, "첫 댓글", false));
+    CommentEntity saved = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(saved.getPostId()).isEqualTo(postId);
+    assertThat(saved.getWriterId()).isEqualTo(401L);
+    assertThat(saved.getContent()).isEqualTo("첫 댓글");
+    assertThat(saved.isDeleted()).isFalse();
 
-      mockMvc
-          .perform(
-              post("/posts/10/comments")
-                  .with(userPrincipal(1L))
-                  .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("content", "첫 댓글"))))
-          .andExpect(status().isOk())
-          .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data.commentId").value(1))
-          .andExpect(jsonPath("$.data.content").value("첫 댓글"));
+    mockMvc
+        .perform(get("/posts/" + postId + "/comments").with(userPrincipal(401L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content[0].commentId").value(commentId))
+        .andExpect(jsonPath("$.data.content[0].content").value("첫 댓글"));
 
-      verify(createCommentUseCase).createComment(any(CreateCommentCommand.class));
-    }
+    mockMvc
+        .perform(delete("/comments/" + commentId).with(userPrincipal(401L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
 
-    @Test
-    @DisplayName("인증 없이 요청하면 401을 반환한다")
-    void createComment_unauthenticated_returns401() throws Exception {
-      mockMvc
-          .perform(
-              post("/posts/10/comments")
-                  .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("content", "댓글"))))
-          .andExpect(status().isUnauthorized());
-    }
+    CommentEntity deleted = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(deleted.isDeleted()).isTrue();
 
-    @Test
-    @DisplayName("인증 객체에 userId가 null이면 401을 반환한다")
-    void createComment_nullPrincipal_returns401() throws Exception {
-      mockMvc
-          .perform(
-              post("/posts/10/comments")
-                  .with(nullUserPrincipal())
-                  .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("content", "댓글"))))
-          .andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("내용이 공백이면 400을 반환한다")
-    void createComment_blankContent_returns400() throws Exception {
-      mockMvc
-          .perform(
-              post("/posts/10/comments")
-                  .with(userPrincipal(1L))
-                  .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("content", "   "))))
-          .andExpect(status().isBadRequest())
-          .andExpect(jsonPath("$.status").value("FAIL"));
-    }
-
-    @Test
-    @DisplayName("내용이 1000자 초과면 400을 반환한다")
-    void createComment_tooLongContent_returns400() throws Exception {
-      String longContent = "a".repeat(1001);
-      mockMvc
-          .perform(
-              post("/posts/10/comments")
-                  .with(userPrincipal(1L))
-                  .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("content", longContent))))
-          .andExpect(status().isBadRequest());
-    }
+    mockMvc
+        .perform(get("/posts/" + postId + "/comments").with(userPrincipal(401L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content[0].commentId").value(commentId))
+        .andExpect(jsonPath("$.data.content[0].isDeleted").value(true))
+        .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."));
   }
 
-  @Nested
-  @DisplayName("PUT /comments/{commentId}")
-  class UpdateComment {
-
-    @Test
-    @DisplayName("정상 수정이면 200을 반환한다")
-    void updateComment_success() throws Exception {
-      given(updateCommentUseCase.updateComment(any(UpdateCommentCommand.class)))
-          .willReturn(comment(7L, "수정된 댓글", false));
-
-      mockMvc
-          .perform(
-              put("/comments/7")
-                  .with(userPrincipal(1L))
-                  .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("content", "수정된 댓글"))))
-          .andExpect(status().isOk())
-          .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data.commentId").value(7))
-          .andExpect(jsonPath("$.data.content").value("수정된 댓글"));
-    }
-
-    @Test
-    @DisplayName("수정 내용이 공백이면 400을 반환한다")
-    void updateComment_blankContent_returns400() throws Exception {
-      mockMvc
-          .perform(
-              put("/comments/7")
-                  .with(userPrincipal(1L))
-                  .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("content", ""))))
-          .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    @DisplayName("인증 없이 수정 요청하면 401을 반환한다")
-    void updateComment_unauthenticated_returns401() throws Exception {
-      mockMvc.perform(put("/comments/7")).andExpect(status().isUnauthorized());
-    }
+  private Long extractLong(MvcResult result, String pointer) throws Exception {
+    JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+    return body.at(pointer).asLong();
   }
 
-  @Nested
-  @DisplayName("DELETE /comments/{commentId}")
-  class DeleteComment {
-
-    @Test
-    @DisplayName("정상 삭제면 200을 반환한다")
-    void deleteComment_success() throws Exception {
-      mockMvc
-          .perform(delete("/comments/3").with(userPrincipal(1L)))
-          .andExpect(status().isOk())
-          .andExpect(jsonPath("$.status").value("SUCCESS"));
-    }
-
-    @Test
-    @DisplayName("인증 없이 삭제 요청하면 401을 반환한다")
-    void deleteComment_unauthenticated_returns401() throws Exception {
-      mockMvc.perform(delete("/comments/3")).andExpect(status().isUnauthorized());
-    }
-  }
-
-  @Nested
-  @DisplayName("GET 조회")
-  class QueryComments {
-
-    @Test
-    @DisplayName("루트 댓글 조회 시 삭제 댓글은 마스킹된다")
-    void getRootComments_deletedCommentMasked() throws Exception {
-      given(getCommentUseCase.getRootComments(any(GetRootCommentsQuery.class)))
-          .willReturn(
-              new PageImpl<>(
-                  java.util.List.of(comment(11L, "원문", true)), PageRequest.of(0, 20), 1));
-
-      mockMvc
-          .perform(get("/posts/10/comments").with(userPrincipal(1L)))
-          .andExpect(status().isOk())
-          .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data.content[0].commentId").value(11))
-          .andExpect(jsonPath("$.data.content[0].isDeleted").value(true))
-          .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."));
-    }
-
-    @Test
-    @DisplayName("인증 없이 루트 댓글 조회 시 401을 반환한다")
-    void getRootComments_unauthenticated_returns401() throws Exception {
-      mockMvc.perform(get("/posts/10/comments")).andExpect(status().isUnauthorized());
-    }
-
-    @Test
-    @DisplayName("대댓글 조회는 200을 반환한다")
-    void getReplies_success() throws Exception {
-      given(getCommentUseCase.getReplies(any(GetRepliesQuery.class)))
-          .willReturn(new PageImpl<>(java.util.List.of(comment(12L, "대댓글", false))));
-
-      mockMvc
-          .perform(get("/comments/5/replies").with(userPrincipal(1L)))
-          .andExpect(status().isOk())
-          .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data.content[0].commentId").value(12));
-    }
-
-    @Test
-    @DisplayName("인증 없이 대댓글 조회 시 401을 반환한다")
-    void getReplies_unauthenticated_returns401() throws Exception {
-      mockMvc.perform(get("/comments/5/replies")).andExpect(status().isUnauthorized());
-    }
-  }
-
-  private CommentResult comment(Long id, String content, boolean isDeleted) {
-    LocalDateTime now = LocalDateTime.now();
-    return new CommentResult(id, content, 1L, null, isDeleted, now, now);
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(
-      Long userId) {
+  private RequestPostProcessor userPrincipal(Long userId) {
     return authenticatedPrincipal(userId, "ROLE_USER");
   }
 
-  private org.springframework.test.web.servlet.request.RequestPostProcessor adminPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_ADMIN");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor stepUpPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_USER", "ROLE_STEP_UP");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullUserPrincipal() {
-    return nullPrincipalWithRoles("ROLE_USER");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullAdminPrincipal() {
-    return nullPrincipalWithRoles("ROLE_ADMIN");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullStepUpPrincipal() {
-    return nullPrincipalWithRoles("ROLE_USER", "ROLE_STEP_UP");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullPrincipalWithRoles(
-      String... authorities) {
-    java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority>
-        grantedAuthorities =
-            java.util.Arrays.stream(authorities)
-                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                .toList();
-    org.springframework.security.authentication.UsernamePasswordAuthenticationToken token =
-        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-            null, null, grantedAuthorities);
-    org.springframework.security.core.context.SecurityContext context =
-        org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
-    context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request
-        .SecurityMockMvcRequestPostProcessors.securityContext(context);
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor authenticatedPrincipal(
-      Long userId, String... authorities) {
+  private RequestPostProcessor authenticatedPrincipal(Long userId, String... authorities) {
     java.util.Objects.requireNonNull(userId, "userId");
-    java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority>
-        grantedAuthorities =
-            java.util.Arrays.stream(authorities)
-                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                .toList();
-    org.springframework.security.authentication.UsernamePasswordAuthenticationToken token =
-        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-            userId, null, grantedAuthorities);
-    return org.springframework.security.test.web.servlet.request
-        .SecurityMockMvcRequestPostProcessors.authentication(token);
+    java.util.List<SimpleGrantedAuthority> grantedAuthorities =
+        Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
+    UsernamePasswordAuthenticationToken token =
+        new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
+    SecurityContext context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(token);
+    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
+        .securityContext(context);
   }
 
   private String json(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {

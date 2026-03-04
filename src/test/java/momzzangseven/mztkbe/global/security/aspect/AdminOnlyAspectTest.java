@@ -211,6 +211,22 @@ class AdminOnlyAspectTest {
     assertThat(captor.getValue().targetId()).isNull();
   }
 
+  @Test
+  void around_whenOperatorIdNonPositive_throwsAuthenticationError() throws Throwable {
+    Method method =
+        DummyAdminMethods.class.getDeclaredMethod(
+            "adminAction", Long.class, String.class, String.class, Payload.class);
+    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
+
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs())
+        .thenReturn(new Object[] {0L, "target-5", "raw-secret", new Payload("erin", "k5", 1)});
+
+    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly))
+        .isInstanceOf(UserNotAuthenticatedException.class);
+  }
+
   private void setAuthentication(String authority) {
     SecurityContextHolder.getContext()
         .setAuthentication(new TestingAuthenticationToken("admin", "pw", authority));
@@ -235,4 +251,5 @@ class AdminOnlyAspectTest {
   }
 
   private record Payload(String name, String secretKey, int count) {}
+
 }

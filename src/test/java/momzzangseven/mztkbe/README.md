@@ -31,6 +31,7 @@
                     - api (전체 통합 테스트: MockMVC + H2 DB)
                         - **📌 NOTE! api 디렉터리에는 .java코드가 들어갑니다.**
                         - **📌 H2 기반의 테스트를 돌림으로써 코드의 문제 검증이 목적입니다.**
+                        - **📌 파일명 규칙: 계약(Contract) 테스트는 `{기능명}ControllerTest.java`, 통합 테스트는 `{기능명}IntegrationTest.java`**
                         - `테스트 코드`
                     - application (Unit Test)
                         - `테스트코드`
@@ -64,7 +65,8 @@ momzzangseven.mztkbe (test root)
 └── modules/                           ← 모듈별 테스트 (단위 + H2 통합)
     └── {모듈명}/                       예) location, web3, auth, level ...
         ├── api/                       ← 전체 통합 테스트 (MockMVC + H2)
-        │   └── {기능명}ControllerTest.java
+        │   ├── {기능명}ControllerTest.java       ← 계약(Contract) 통합 테스트
+        │   └── {기능명}IntegrationTest.java      ← 통합 테스트
         ├── application/
         │   ├── service/               ← Service 단위 테스트 (Mockito)
         │   │   └── {기능명}ServiceTest.java
