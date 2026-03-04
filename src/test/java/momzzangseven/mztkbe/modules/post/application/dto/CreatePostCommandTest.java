@@ -67,4 +67,69 @@ class CreatePostCommandTest {
 
     assertThatCode(command::validate).doesNotThrowAnyException();
   }
+
+  @Test
+  @DisplayName("validate rejects null content")
+  void validate_nullContent_throwsException() {
+    CreatePostCommand command =
+        new CreatePostCommand(1L, null, null, PostType.FREE, 0L, List.of(), List.of());
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Content is required");
+  }
+
+  @Test
+  @DisplayName("validate rejects FREE post with non-null title")
+  void validate_freeBoardWithTitle_throwsException() {
+    CreatePostCommand command =
+        new CreatePostCommand(1L, "title", "content", PostType.FREE, 0L, List.of(), List.of());
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Title must be null for free board");
+  }
+
+  @Test
+  @DisplayName("validate rejects FREE post with non-zero reward")
+  void validate_freeBoardWithNonZeroReward_throwsException() {
+    CreatePostCommand command =
+        new CreatePostCommand(1L, null, "content", PostType.FREE, 10L, List.of(), List.of());
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Free posts must have zero reward");
+  }
+
+  @Test
+  @DisplayName("of() with QUESTION type preserves title")
+  void of_questionType_keepsTitleInCommand() {
+    CreatePostCommand command =
+        CreatePostCommand.of(1L, "question title", "content", PostType.QUESTION, 10L, List.of(), List.of());
+
+    assertThat(command.title()).isEqualTo("question title");
+    assertThat(command.type()).isEqualTo(PostType.QUESTION);
+  }
+
+  @Test
+  @DisplayName("validate rejects QUESTION with null title")
+  void validate_questionWithNullTitle_throwsException() {
+    CreatePostCommand command =
+        new CreatePostCommand(1L, null, "content", PostType.QUESTION, 10L, List.of(), List.of());
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Title is required for question board");
+  }
+
+  @Test
+  @DisplayName("validate rejects QUESTION with negative reward")
+  void validate_questionWithNegativeReward_throwsException() {
+    CreatePostCommand command =
+        new CreatePostCommand(1L, "title", "content", PostType.QUESTION, -1L, List.of(), List.of());
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Questions must have a valid reward");
+  }
 }

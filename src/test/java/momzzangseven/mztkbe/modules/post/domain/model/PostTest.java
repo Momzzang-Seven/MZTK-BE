@@ -80,6 +80,23 @@ class PostTest {
   }
 
   @Test
+  @DisplayName("create rejects null content (blank과 구별)")
+  void createRejectsNullContent() {
+    assertThatThrownBy(() -> Post.create(1L, PostType.FREE, null, null, 0L, null, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("내용을 입력해주세요.");
+  }
+
+  @Test
+  @DisplayName("create QUESTION 게시글에서 title=null이면 예외")
+  void createQuestionWithNullTitleThrows() {
+    assertThatThrownBy(
+            () -> Post.create(1L, PostType.QUESTION, null, "content", 10L, null, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("질문 게시글은 제목이 필요합니다.");
+  }
+
+  @Test
   @DisplayName("ownership validation blocks non-owner")
   void validateOwnership() {
     Post post = basePost();
