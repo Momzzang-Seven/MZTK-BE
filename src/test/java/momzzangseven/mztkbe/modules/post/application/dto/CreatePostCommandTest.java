@@ -17,10 +17,10 @@ class CreatePostCommandTest {
   @DisplayName("of() creates command")
   void of_createsCommand() {
     CreatePostCommand command =
-        CreatePostCommand.of(1L, "title", "content", PostType.FREE, null, List.of(), List.of());
+        CreatePostCommand.of(1L, "title", "content", PostType.FREE, 0L, List.of(), List.of());
 
     assertThat(command.userId()).isEqualTo(1L);
-    assertThat(command.title()).isEqualTo("title");
+    assertThat(command.title()).isNull();
     assertThat(command.content()).isEqualTo("content");
     assertThat(command.type()).isEqualTo(PostType.FREE);
   }
@@ -29,7 +29,7 @@ class CreatePostCommandTest {
   @DisplayName("validate rejects blank title")
   void validate_blankTitle_throwsException() {
     CreatePostCommand command =
-        new CreatePostCommand(1L, " ", "content", PostType.FREE, null, List.of(), List.of());
+        new CreatePostCommand(1L, " ", "content", PostType.QUESTION, 1L, List.of(), List.of());
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(PostInvalidInputException.class)
@@ -40,7 +40,7 @@ class CreatePostCommandTest {
   @DisplayName("validate rejects blank content")
   void validate_blankContent_throwsException() {
     CreatePostCommand command =
-        new CreatePostCommand(1L, "title", " ", PostType.FREE, null, List.of(), List.of());
+        new CreatePostCommand(1L, null, " ", PostType.FREE, 0L, List.of(), List.of());
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(PostInvalidInputException.class)
@@ -61,9 +61,9 @@ class CreatePostCommandTest {
 
   @Test
   @DisplayName("FREE post can omit reward")
-  void validate_freeWithoutReward_doesNotThrow() {
+  void validate_freeWithZeroReward_doesNotThrow() {
     CreatePostCommand command =
-        new CreatePostCommand(1L, "title", "content", PostType.FREE, null, List.of(), List.of());
+        new CreatePostCommand(1L, null, "content", PostType.FREE, 0L, List.of(), List.of());
 
     assertThatCode(command::validate).doesNotThrowAnyException();
   }

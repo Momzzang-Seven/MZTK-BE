@@ -75,8 +75,6 @@ class PostControllerIntegrationTest {
                     .content(
                         json(
                             Map.of(
-                                "title",
-                                "실경로 제목",
                                 "content",
                                 "실경로 본문",
                                 "imageUrls",
@@ -88,15 +86,14 @@ class PostControllerIntegrationTest {
     Long postId = extractPostId(createResult);
     PostEntity saved = postJpaRepository.findById(postId).orElseThrow();
     assertThat(saved.getUserId()).isEqualTo(101L);
-    assertThat(saved.getTitle()).isEqualTo("실경로 제목");
+    assertThat(saved.getTitle()).isNull();
     assertThat(saved.getContent()).isEqualTo("실경로 본문");
 
     mockMvc
         .perform(get("/posts/" + postId).with(userPrincipal(101L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.postId").value(postId))
-        .andExpect(jsonPath("$.data.title").value("실경로 제목"));
+        .andExpect(jsonPath("$.data.postId").value(postId));
   }
 
   @Test
@@ -108,7 +105,7 @@ class PostControllerIntegrationTest {
                 post("/posts/free")
                     .with(userPrincipal(202L))
                     .contentType(APPLICATION_JSON)
-                    .content(json(Map.of("title", "초기 제목", "content", "초기 본문"))))
+                    .content(json(Map.of("content", "초기 본문"))))
             .andExpect(status().isCreated())
             .andReturn();
     Long postId = extractPostId(createResult);

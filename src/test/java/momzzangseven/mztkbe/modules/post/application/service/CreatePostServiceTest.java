@@ -39,14 +39,14 @@ class CreatePostServiceTest {
   void executeSuccessWithTagsAndXpGranted() {
     CreatePostCommand command =
         CreatePostCommand.of(
-            7L, "title", "content", PostType.FREE, 99L, List.of("img1"), List.of("java", "spring"));
+            7L, null, "content", PostType.FREE, 0L, List.of("img1"), List.of("java", "spring"));
 
     Post savedPost =
         Post.builder()
             .id(10L)
             .userId(7L)
             .type(PostType.FREE)
-            .title("title")
+            .title(null)
             .content("content")
             .reward(0L)
             .isSolved(false)
@@ -76,14 +76,14 @@ class CreatePostServiceTest {
   @DisplayName("returns plain success message when tags are empty and no XP granted")
   void executeSuccessWithoutTagsAndNoXpGrant() {
     CreatePostCommand command =
-        CreatePostCommand.of(1L, "title", "content", PostType.FREE, null, null, List.of());
+        CreatePostCommand.of(1L, null, "content", PostType.FREE, 0L, null, List.of());
 
     Post savedPost =
         Post.builder()
             .id(11L)
             .userId(1L)
             .type(PostType.FREE)
-            .title("title")
+            .title(null)
             .content("content")
             .reward(0L)
             .isSolved(false)
@@ -104,14 +104,14 @@ class CreatePostServiceTest {
   @DisplayName("continues when XP service fails")
   void executeContinuesWhenXpGrantFails() {
     CreatePostCommand command =
-        CreatePostCommand.of(4L, "title", "content", PostType.FREE, null, null, List.of("java"));
+        CreatePostCommand.of(4L, null, "content", PostType.FREE, 0L, null, List.of("java"));
 
     Post savedPost =
         Post.builder()
             .id(12L)
             .userId(4L)
             .type(PostType.FREE)
-            .title("title")
+            .title(null)
             .content("content")
             .reward(0L)
             .isSolved(false)
@@ -133,7 +133,7 @@ class CreatePostServiceTest {
   @DisplayName("rejects invalid command before persistence")
   void executeRejectsInvalidCommand() {
     CreatePostCommand command =
-        CreatePostCommand.of(1L, " ", "content", PostType.FREE, 0L, null, null);
+        CreatePostCommand.of(1L, null, " ", PostType.FREE, 0L, null, null);
 
     assertThatThrownBy(() -> createPostService.execute(command))
         .isInstanceOf(PostInvalidInputException.class);
