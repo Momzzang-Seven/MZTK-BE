@@ -17,9 +17,10 @@ class PostTest {
   @Test
   @DisplayName("free post creation forces reward to zero and initializes defaults")
   void createFreePostInitializesDefaults() {
-    Post post = Post.create(1L, PostType.FREE, "title", "content", 99L, null, null);
+    Post post = Post.create(1L, PostType.FREE, null, "content", 99L, null, null);
 
     assertThat(post.getReward()).isZero();
+    assertThat(post.getTitle()).isNull();
     assertThat(post.getIsSolved()).isFalse();
     assertThat(post.getImageUrls()).isEmpty();
     assertThat(post.getTags()).isEmpty();
@@ -69,13 +70,13 @@ class PostTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("게시글 타입은 필수입니다.");
 
-    assertThatThrownBy(() -> Post.create(1L, PostType.FREE, " ", "content", 0L, null, null))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("제목을 입력해주세요.");
-
     assertThatThrownBy(() -> Post.create(1L, PostType.FREE, "title", " ", 0L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("내용을 입력해주세요.");
+
+    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, " ", "content", 10L, null, null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("질문 게시글은 제목이 필요합니다.");
   }
 
   @Test
