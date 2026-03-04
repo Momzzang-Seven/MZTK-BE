@@ -42,6 +42,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
 
     post.validateOwnership(currentUserId);
+    post.validateDeletable();
     postPersistencePort.deletePost(post);
 
     eventPublisher.publishEvent(new PostDeletedEvent(postId));
