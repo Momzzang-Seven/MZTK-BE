@@ -302,8 +302,7 @@ class LocationE2ETest {
   @Order(7)
   @DisplayName("위치 이름 없이 등록 시 400 반환")
   void registerLocation_withoutName_returns400() {
-    Map<String, Object> body =
-        Map.of("latitude", TEST_LATITUDE, "longitude", TEST_LONGITUDE);
+    Map<String, Object> body = Map.of("latitude", TEST_LATITUDE, "longitude", TEST_LONGITUDE);
 
     ResponseEntity<String> response =
         restTemplate.exchange(
@@ -328,9 +327,7 @@ class LocationE2ETest {
             new HttpEntity<>(body, authHeaders()),
             String.class);
 
-    assertThat(response.getStatusCode().is4xxClientError())
-        .as("좌표도 주소도 없으면 에러여야 함")
-        .isTrue();
+    assertThat(response.getStatusCode().is4xxClientError()).as("좌표도 주소도 없으면 에러여야 함").isTrue();
   }
 
   @Test
