@@ -9,7 +9,6 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 public record PostResponse(
     Long postId,
     PostType type,
-    boolean isSolved,
     String title,
     String content,
     int likeCount,
@@ -29,6 +28,7 @@ public record PostResponse(
   // 1. 상세 조회용 (PostResult → Response)
   public static PostResponse from(PostResult result) {
     QuestionInfo questionInfo = null;
+
     if (PostType.QUESTION.equals(result.type())) {
       questionInfo = new QuestionInfo(result.reward(), result.isSolved());
     }
@@ -36,7 +36,6 @@ public record PostResponse(
     return new PostResponse(
         result.postId(),
         result.type(),
-        result.isSolved(),
         result.title(),
         result.content(),
         0,
@@ -55,7 +54,6 @@ public record PostResponse(
     return new PostResponse(
         post.getId(),
         post.getType(),
-        post.getIsSolved() != null ? post.getIsSolved() : false,
         post.getTitle(),
         post.getContent(),
         0,
