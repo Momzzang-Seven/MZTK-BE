@@ -96,26 +96,26 @@ public class Post {
 
   public void validateDeletable() {
     if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
-      throw new PostInvalidInputException("채택 완료된 질문게시글은 삭제할 수 없습니다.");
+      throw new PostInvalidInputException("A solved question post cannot be deleted.");
     }
   }
 
   public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
     if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
-      throw new PostInvalidInputException("채택 완료된 질문게시글은 수정할 수 없습니다.");
+      throw new PostInvalidInputException("A solved question post cannot be edited.");
     }
 
     var builder = this.toBuilder();
     boolean isUpdated = false;
 
     if (title != null) {
-      if (title.isBlank()) throw new IllegalArgumentException("수정할 제목은 비워둘 수 없습니다.");
+      if (title.isBlank()) throw new IllegalArgumentException("The title cannot be blank.");
       builder.title(title);
       isUpdated = true;
     }
 
     if (content != null) {
-      if (content.isBlank()) throw new IllegalArgumentException("수정할 내용은 비워둘 수 없습니다.");
+      if (content.isBlank()) throw new IllegalArgumentException("The content cannot be blank.");
       builder.content(content);
       isUpdated = true;
     }
