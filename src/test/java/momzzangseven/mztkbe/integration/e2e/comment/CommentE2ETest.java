@@ -346,8 +346,6 @@ class CommentE2ETest {
             new HttpEntity<>(updateBody, otherHeaders),
             String.class);
 
-    assertThat(response.getStatusCode().is4xxClientError())
-        .as("타인의 댓글 수정 시 4xx 에러여야 함")
-        .isTrue();
+    assertThat(response.getStatusCode().is4xxClientError()).as("타인의 댓글 수정 시 4xx 에러여야 함").isTrue();
   }
 }
