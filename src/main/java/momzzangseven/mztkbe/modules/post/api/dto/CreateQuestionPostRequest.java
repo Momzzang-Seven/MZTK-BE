@@ -11,7 +11,9 @@ import org.hibernate.validator.constraints.URL;
 public record CreateQuestionPostRequest(
     @NotBlank(message = "Title must not be blank.") String title,
     @NotBlank(message = "Content must not be blank.") String content,
-    @NotNull(message = "Reward must be provided.") @Positive(message = "Reward must be greater than 0.") Long reward,
+    @NotNull(message = "Reward must be provided.")
+        @Positive(message = "Reward must be greater than 0.")
+        Long reward,
     List<@URL(message = "Invalid URL format.") String> imageUrls,
     List<String> tags) {
 
