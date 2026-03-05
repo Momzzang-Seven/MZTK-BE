@@ -6,7 +6,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
-import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.DeleteUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
@@ -22,8 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserPersistenceAdapter
-    implements LoadUserPort, SaveUserPort, DeleteUserPort, LoadPostWriterPort {
+public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, DeleteUserPort {
 
   private final UserJpaRepository userJpaRepository;
 
@@ -132,19 +130,6 @@ public class UserPersistenceAdapter
   @Transactional
   public void deleteAllByIdInBatch(List<Long> userIds) {
     userJpaRepository.deleteAllByIdInBatch(userIds);
-  }
-
-  // ========== LoadPostWriterPort Implementation ==========
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<LoadPostWriterPort.WriterSummary> loadWriterById(Long userId) {
-    return userJpaRepository
-        .findById(userId)
-        .map(
-            entity ->
-                new LoadPostWriterPort.WriterSummary(
-                    entity.getId(), entity.getNickname(), entity.getProfileImageUrl()));
   }
 
   // ========== Mapping Methods (Translator Pattern) ==========
