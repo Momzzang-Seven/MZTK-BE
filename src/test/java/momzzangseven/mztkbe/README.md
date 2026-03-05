@@ -1,50 +1,54 @@
 # 테스트 작성 가이드 문서
+
 이 문서는 팀원 및 AI 에이전트가 테스트코드를 작성할 때 가이드로서 작용하는 문서입니다.
 
 # 테스트 패키지 구조
-- test
-    - java
-        - momzzangseven.mztkbe
-            `README.md`
-            - integration
-                - play_wright (E2E Test, 외부 api 응답까지 확인)
-                    - **📌 NOTE! Playwright 디렉터리는 외부 API까지 연동된 통합테스트가 필요한 경우에만 작성합니다.**
-                    - **📌 외부 API 응답까지 포함한 E2E 테스트 결과물을 .md파일로 작성해야 합니다.**
-                    - **📌 여기에는 .java코드가 들어가지 않습니다. (ts 기반 스크립트)**
-                    - {기능 이름} ex) social-login
-                        1. `Playwright를 위한 스크립트 파일`
-                        2. `Playwright 수행 후 결과 보고서 (.md파일 형식)` 
-                    - .env.example <- 환경변수 템플릿 🌐 공용
-                    - globalSetup.ts <- 서버 헬스체크용  🌐 공용
-                    - package.json <- 의존성 관리 🌐 공용
-                    - package-lock.json <- 버전 고정 🌐 공용
-                    - playwright.config.ts <- 개인 설정 (🙅‍♂️ 개인관리 .gitignore)
-                    - .env <- 자격증명 (🙅‍♂️ 개인관리 .gitignore)
 
-                - e2e (Local server + Local DB)
-                    - **📌 NOTE! e2e 디렉터리에는 .java 코드가 들어갑니다.**
-                    - **📌 로컬 서버와 로컬 DB서버 이용한 "실제 DB 상호작용 테스트" 가 목적입니다.**
-                    - @Tag("e2e") 태그를 꼭 붙여야 합니다.
-                    - `테스트 코드`
-            - modules
-                - {모듈 이름}
-                    - api (전체 통합 테스트: MockMVC + H2 DB)
-                        - **📌 NOTE! api 디렉터리에는 .java코드가 들어갑니다.**
-                        - **📌 H2 기반의 테스트를 돌림으로써 코드의 문제 검증이 목적입니다.**
-                        - **📌 파일명 규칙: 계약(Contract) 테스트는 `{기능명}ControllerTest.java`, 통합 테스트는 `{기능명}IntegrationTest.java`**
-                        - `테스트 코드`
-                    - application (Unit Test)
-                        - `테스트코드`
-                    - domain (Unit Test)
-                        - `테스트코드`
-                    - infrastructure (Unit Test)
-                        - `테스트코드`
+- test
+  - java
+    - momzzangseven.mztkbe
+      `README.md`
+      - integration
+        - play_wright (E2E Test, 외부 api 응답까지 확인)
+          - **📌 NOTE! Playwright 디렉터리는 외부 API까지 연동된 통합테스트가 필요한 경우에만 작성합니다.**
+          - **📌 외부 API 응답까지 포함한 E2E 테스트 결과물을 .md파일로 작성해야 합니다.**
+          - **📌 여기에는 .java코드가 들어가지 않습니다. (ts 기반 스크립트)**
+          - {기능 이름} ex) social-login
+            1. `Playwright를 위한 스크립트 파일`
+            2. `Playwright 수행 후 결과 보고서 (.md파일 형식)`
+          - .env.example <- 환경변수 템플릿 🌐 공용
+          - globalSetup.ts <- 서버 헬스체크용  🌐 공용
+          - package.json <- 의존성 관리 🌐 공용
+          - package-lock.json <- 버전 고정 🌐 공용
+          - tsconfig.json <- TypeScript 컴파일러 설정 파일 🌐 공용
+          - playwright.config.ts <- 개인 설정 (🙅‍♂️ 개인관리 .gitignore)
+          - .env <- 자격증명 (🙅‍♂️ 개인관리 .gitignore)
+        - e2e (Local server + Local DB)
+          - **📌 NOTE! e2e 디렉터리에는 .java 코드가 들어갑니다.**
+          - **📌 로컬 서버와 로컬 DB서버 이용한 "실제 DB 상호작용 테스트" 가 목적입니다.**
+          - @Tag("e2e") 태그를 꼭 붙여야 합니다.
+          - `테스트 코드`
+      - modules
+        - {모듈 이름}
+          - api (전체 통합 테스트: MockMVC + H2 DB)
+            - **📌 NOTE! api 디렉터리에는 .java코드가 들어갑니다.**
+            - **📌 H2 기반의 테스트를 돌림으로써 코드의 문제 검증이 목적입니다.**
+            - **📌 파일명 규칙: 계약(Contract) 테스트는 `{기능명}ControllerTest.java`, 통합 테스트는 `{기능명}IntegrationTest.java`**
+            - `테스트 코드`
+          - application (Unit Test)
+            - `테스트코드`
+          - domain (Unit Test)
+            - `테스트코드`
+          - infrastructure (Unit Test)
+            - `테스트코드`
 
 ---
 
 # 패키지 다이어그램
-**📌 NOTE:아래 다이어그램은 예시입니다. 본인이 구현한 모듈의 패키지 구조를 그대로 옮겨서 ```momzzangseven/mztkbe/modules/...``` 하위에 테스트 코드를 작성해주세요.**
+
+**📌 NOTE:아래 다이어그램은 예시입니다. 본인이 구현한 모듈의 패키지 구조를 그대로 옮겨서 `momzzangseven/mztkbe/modules/...` 하위에 테스트 코드를 작성해주세요.**
 예를 들어, application 하위에 service, dto 뿐만 아니라 delegation, strategy, port/out, resolver 등 실제 구현에 따라 추가되는 패키지가 있을 수 있습니다. 
+
 - /application 예시: 
   - modules/auth/application/delegation/RefreshTokenValidatorTest.java 
   - modules/web3/transfer/application/resolver/QuestionRewardResolverTest.java
@@ -82,6 +86,7 @@ momzzangseven.mztkbe (test root)
 │       ├── .env.example
 │       ├── globalSetup.ts
 │       ├── package.json
+│       ├── tsconfig.json
 │       └── package-lock.json
 │
 └── modules/                           ← 모듈별 테스트 (단위 + H2 통합)
@@ -128,7 +133,7 @@ momzzangseven.mztkbe (test root)
 
 - 카카오 Geocoding API, Google OAuth 등 외부 서비스까지 실제 연동
 - `.spec.ts` 스크립트로 시나리오를 작성하고, 실행 결과를 `.md` 보고서로 저장
-- **`.java` 파일 없음** — TS 기반 스크립트만 존재
+- `**.java` 파일 없음** — TS 기반 스크립트만 존재
 
 ## `modules/{모듈명}/api/`
 
@@ -181,16 +186,18 @@ momzzangseven.mztkbe (test root)
 
 ## 사용 가능한 어노테이션
 
-| 어노테이션 | 설명 |
-|---|---|
-| `@SpringBootTest(webEnvironment = RANDOM_PORT)` | 실제 서버를 랜덤 포트로 기동 |
-| `@ActiveProfiles("integration")` | `application-integration.yml` 기반 설정 사용 |
-| `@LocalServerPort` | 랜덤 포트 값을 주입받아 실제 HTTP 호출 주소 구성 |
-| `@Sql(scripts = "...")` | 테스트 전 SQL 스크립트로 픽스처 데이터 삽입 |
-| `@Tag("e2e")` | `./gradlew e2eTest` 로 선택 실행 |
-| `@TestPropertySource` | 테스트 전용 프로퍼티 오버라이드 |
-| `@MockBean` | 외부 API 어댑터 등 특정 Bean만 Mock 처리 |
-| `TestRestTemplate` | 실제 HTTP 요청/응답 기반 통합 검증 |
+
+| 어노테이션                                           | 설명                                     |
+| ----------------------------------------------- | -------------------------------------- |
+| `@SpringBootTest(webEnvironment = RANDOM_PORT)` | 실제 서버를 랜덤 포트로 기동                       |
+| `@ActiveProfiles("integration")`                | `application-integration.yml` 기반 설정 사용 |
+| `@LocalServerPort`                              | 랜덤 포트 값을 주입받아 실제 HTTP 호출 주소 구성         |
+| `@Sql(scripts = "...")`                         | 테스트 전 SQL 스크립트로 픽스처 데이터 삽입             |
+| `@Tag("e2e")`                                   | `./gradlew e2eTest` 로 선택 실행            |
+| `@TestPropertySource`                           | 테스트 전용 프로퍼티 오버라이드                      |
+| `@MockBean`                                     | 외부 API 어댑터 등 특정 Bean만 Mock 처리          |
+| `TestRestTemplate`                              | 실제 HTTP 요청/응답 기반 통합 검증                 |
+
 
 ## 코드 예시 — 위치 등록 E2E 테스트
 
@@ -256,35 +263,41 @@ class RegisterLocationE2ETest {
 
 ### Service / Infrastructure Adapter 테스트 (Mockito 기반)
 
-| 어노테이션 | 설명 |
-|---|---|
-| `@ExtendWith(MockitoExtension.class)` | Spring 컨텍스트 없이 Mockito만 사용 (필수) |
-| `@Mock` | 인터페이스/클래스를 Mock 객체로 생성 |
-| `@InjectMocks` | `@Mock` 객체들을 주입받는 테스트 대상 클래스 생성 |
-| `@Spy` | 실제 객체를 감싸서 일부 메서드만 Mock |
-| `@Captor` | `ArgumentCaptor` 자동 생성 (호출 인자 검증) |
+
+| 어노테이션                                 | 설명                                |
+| ------------------------------------- | --------------------------------- |
+| `@ExtendWith(MockitoExtension.class)` | Spring 컨텍스트 없이 Mockito만 사용 (필수)   |
+| `@Mock`                               | 인터페이스/클래스를 Mock 객체로 생성            |
+| `@InjectMocks`                        | `@Mock` 객체들을 주입받는 테스트 대상 클래스 생성   |
+| `@Spy`                                | 실제 객체를 감싸서 일부 메서드만 Mock           |
+| `@Captor`                             | `ArgumentCaptor` 자동 생성 (호출 인자 검증) |
+
 
 ### 전체 통합 테스트 (MockMVC + H2)
 
-| 어노테이션 | 설명 |
-|---|---|
-| `@SpringBootTest` | Spring 전체 컨텍스트를 로드하여 애플리케이션 통합 검증 |
-| `@MockBean` | Spring 컨텍스트의 Bean을 Mock으로 대체 |
-| `@WithMockUser(roles = "USER")` | 인증된 사용자 컨텍스트 주입 |
-| `@AutoConfigureMockMvc` | MockMVC 자동 설정 |
-| `@Transactional` | 테스트 종료 후 롤백으로 DB 오염 방지 |
+
+| 어노테이션                           | 설명                                |
+| ------------------------------- | --------------------------------- |
+| `@SpringBootTest`               | Spring 전체 컨텍스트를 로드하여 애플리케이션 통합 검증 |
+| `@MockBean`                     | Spring 컨텍스트의 Bean을 Mock으로 대체      |
+| `@WithMockUser(roles = "USER")` | 인증된 사용자 컨텍스트 주입                   |
+| `@AutoConfigureMockMvc`         | MockMVC 자동 설정                     |
+| `@Transactional`                | 테스트 종료 후 롤백으로 DB 오염 방지            |
+
 
 ### 공통 테스트 구조 어노테이션
 
-| 어노테이션 | 설명 |
-|---|---|
-| `@DisplayName("...")` | 테스트/그룹 이름 지정 (한글 권장) |
-| `@Nested` | 논리적 테스트 그룹 분리 (성공/실패/엣지케이스) |
-| `@Test` | 단일 테스트 메서드 |
-| `@BeforeEach` / `@AfterEach` | 각 테스트 전/후 실행 |
-| `@ParameterizedTest` | 여러 입력값으로 동일 로직 반복 테스트 |
-| `@ValueSource` / `@CsvSource` | 파라미터화 테스트 입력값 소스 |
-| `@NullSource` / `@EmptySource` | null 및 빈값 파라미터화 테스트 |
+
+| 어노테이션                          | 설명                          |
+| ------------------------------ | --------------------------- |
+| `@DisplayName("...")`          | 테스트/그룹 이름 지정 (한글 권장)        |
+| `@Nested`                      | 논리적 테스트 그룹 분리 (성공/실패/엣지케이스) |
+| `@Test`                        | 단일 테스트 메서드                  |
+| `@BeforeEach` / `@AfterEach`   | 각 테스트 전/후 실행                |
+| `@ParameterizedTest`           | 여러 입력값으로 동일 로직 반복 테스트       |
+| `@ValueSource` / `@CsvSource`  | 파라미터화 테스트 입력값 소스            |
+| `@NullSource` / `@EmptySource` | null 및 빈값 파라미터화 테스트         |
+
 
 ## 코드 예시 — Service 단위 테스트
 
@@ -655,3 +668,4 @@ Playwright 실행 후, 아래 양식에 따라 `{기능명}-report.md` 파일을
 # Playwright E2E 실행 (play_wright 디렉터리에서)
 npx playwright test
 ```
+
