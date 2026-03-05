@@ -45,7 +45,7 @@ public record PostResponse(
         result.tags(),
         result.createdAt(),
         result.updatedAt(),
-        new WriterInfo(result.userId(), result.nickname(), null),
+        new WriterInfo(result.userId(), result.nickname(), result.profileImageUrl()),
         result.imageUrls(),
         questionInfo);
   }
