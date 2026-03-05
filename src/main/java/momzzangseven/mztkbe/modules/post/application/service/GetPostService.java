@@ -28,12 +28,12 @@ public class GetPostService implements GetPostUseCase {
     List<String> tags = loadTagPort.findTagNamesByPostId(postId);
     post = post.withTags(tags);
 
-    String nickname =
-        loadPostWriterPort
-            .loadWriterById(post.getUserId())
-            .map(LoadPostWriterPort.WriterSummary::nickname)
-            .orElse("알수없음");
+    LoadPostWriterPort.WriterSummary writer =
+        loadPostWriterPort.loadWriterById(post.getUserId()).orElse(null);
 
-    return PostResult.fromDomain(post, nickname);
+    String nickname = writer != null ? writer.nickname() : "알수없음";
+    String profileImageUrl = writer != null ? writer.profileImageUrl() : null;
+
+    return PostResult.fromDomain(post, nickname, profileImageUrl);
   }
 }
