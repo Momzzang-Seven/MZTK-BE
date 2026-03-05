@@ -12,6 +12,7 @@ public record PostResult(
     String content,
     Long userId,
     String nickname,
+    String profileImageUrl,
     List<String> imageUrls,
     Long reward,
     boolean isSolved,
@@ -19,7 +20,7 @@ public record PostResult(
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
-  public static PostResult fromDomain(Post post, String nickname) {
+  public static PostResult fromDomain(Post post, String nickname, String profileImageUrl) {
     return new PostResult(
         post.getId(),
         post.getType(),
@@ -27,6 +28,7 @@ public record PostResult(
         post.getContent(),
         post.getUserId(),
         nickname,
+        profileImageUrl,
         post.getImageUrls(),
         post.getReward(),
         post.getIsSolved() != null ? post.getIsSolved() : false,
