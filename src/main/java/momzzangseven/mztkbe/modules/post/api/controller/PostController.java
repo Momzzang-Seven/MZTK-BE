@@ -38,7 +38,9 @@ public class PostController {
   public ResponseEntity<ApiResponse<CreatePostResult>> createQuestionPost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateQuestionPostRequest request) {
 
-    CreatePostCommand command = request.toCommand(userId);
+    Long validatedUserId = requireUserId(userId);
+
+    CreatePostCommand command = request.toCommand(validatedUserId);
     CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
@@ -48,7 +50,9 @@ public class PostController {
   public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
 
-    CreatePostCommand command = request.toCommand(userId);
+    Long validatedUserId = requireUserId(userId);
+
+    CreatePostCommand command = request.toCommand(validatedUserId);
     CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
