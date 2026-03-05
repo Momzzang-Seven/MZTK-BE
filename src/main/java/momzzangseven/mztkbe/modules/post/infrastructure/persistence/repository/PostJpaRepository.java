@@ -16,4 +16,8 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       "update PostEntity p set p.isSolved = true"
           + " where p.id = :postId and p.type = :postType and p.isSolved = false")
   int markSolvedByIdIfType(@Param("postId") Long postId, @Param("postType") PostType postType);
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(value = "DELETE FROM post_images WHERE post_id = :postId", nativeQuery = true)
+  void deleteImagesByPostId(@Param("postId") Long postId);
 }
