@@ -190,8 +190,7 @@ class Web3E2ETest {
     StructuredDataEncoder encoder = new StructuredDataEncoder(jsonString);
     byte[] digest = encoder.hashStructuredData();
 
-    Sign.SignatureData sig =
-        Sign.signMessage(digest, credentials.getEcKeyPair(), false);
+    Sign.SignatureData sig = Sign.signMessage(digest, credentials.getEcKeyPair(), false);
 
     byte[] r = sig.getR();
     byte[] s = sig.getS();
@@ -307,8 +306,7 @@ class Web3E2ETest {
     JsonNode root = objectMapper.readTree(response.getBody());
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
     assertThat(root.at("/data/id").asLong()).isPositive();
-    assertThat(root.at("/data/walletAddress").asText())
-        .isEqualToIgnoringCase(TEST_WALLET_ADDRESS);
+    assertThat(root.at("/data/walletAddress").asText()).isEqualToIgnoringCase(TEST_WALLET_ADDRESS);
   }
 
   @Test
@@ -362,9 +360,7 @@ class Web3E2ETest {
             new HttpEntity<>(body, authHeaders()),
             String.class);
 
-    assertThat(response.getStatusCode().is4xxClientError())
-        .as("잘못된 서명으로 등록 시 4xx 에러여야 함")
-        .isTrue();
+    assertThat(response.getStatusCode().is4xxClientError()).as("잘못된 서명으로 등록 시 4xx 에러여야 함").isTrue();
   }
 
   @Test
@@ -400,9 +396,12 @@ class Web3E2ETest {
     noAuthHeaders.setContentType(MediaType.APPLICATION_JSON);
     Map<String, Object> body =
         Map.of(
-            "walletAddress", TEST_WALLET_ADDRESS,
-            "signature", "0x" + "c".repeat(130),
-            "nonce", "test-nonce");
+            "walletAddress",
+            TEST_WALLET_ADDRESS,
+            "signature",
+            "0x" + "c".repeat(130),
+            "nonce",
+            "test-nonce");
 
     ResponseEntity<String> response =
         restTemplate.exchange(
