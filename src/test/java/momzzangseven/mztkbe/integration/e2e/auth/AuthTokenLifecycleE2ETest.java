@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.integration.e2e;
+package momzzangseven.mztkbe.integration.e2e.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
