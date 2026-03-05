@@ -9,10 +9,10 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.hibernate.validator.constraints.URL;
 
 public record CreateQuestionPostRequest(
-    @NotBlank(message = "제목을 입력해주세요.") String title,
-    @NotBlank(message = "내용을 입력해주세요.") String content,
-    @NotNull(message = "보상 MZT를 입력해주세요.") @Positive(message = "보상 MZT는 1 이상이어야 합니다.") Long reward,
-    List<@URL(message = "올바른 이미지 URL 형식이 아닙니다.") String> imageUrls,
+    @NotBlank(message = "Title must not be blank.") String title,
+    @NotBlank(message = "Content must not be blank.") String content,
+    @NotNull(message = "Reward must be provided.") @Positive(message = "Reward must be greater than 0.") Long reward,
+    List<@URL(message = "Invalid URL format.") String> imageUrls,
     List<String> tags) {
 
   public CreatePostCommand toCommand(Long userId) {
