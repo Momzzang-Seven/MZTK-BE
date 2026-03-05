@@ -264,6 +264,12 @@ public enum ErrorCode {
   INVALID_POST_INPUT(
       "POST_003", "Invalid post input", HttpStatus.BAD_REQUEST // 400
       ),
+
+  POST_ALREADY_SOLVED(
+      "POST_004",
+      "The post is already solved and cannot be modified",
+      HttpStatus.CONFLICT // 409
+      ),
   // ========================================
   // Comment Errors (COMMENT_xxx)
   // ========================================
