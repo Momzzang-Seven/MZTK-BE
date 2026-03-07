@@ -8,9 +8,12 @@ import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.answer.api.dto.AnswerResponse;
 import momzzangseven.mztkbe.modules.answer.api.dto.CreateAnswerRequest;
+import momzzangseven.mztkbe.modules.answer.api.dto.UpdateAnswerRequest;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase.CreateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,8 +26,10 @@ public class AnswerController {
 
   private final CreateAnswerUseCase createAnswerUseCase;
   private final GetAnswerUseCase getAnswerUseCase;
+  private final UpdateAnswerUseCase updateAnswerUseCase;
+  private final DeleteAnswerUseCase deleteAnswerUseCase;
 
-  // [Create] 답변 작성 (MOM-209)
+  // [Create] 답변 작성
   @PostMapping
   public ResponseEntity<ApiResponse<Map<String, Long>>> createAnswer(
       @AuthenticationPrincipal Long userId,
@@ -48,6 +53,38 @@ public class AnswerController {
         getAnswerUseCase.getAnswersByPostId(postId).stream().map(AnswerResponse::from).toList();
 
     return ResponseEntity.ok(ApiResponse.success(responses));
+  }
+
+  // [Update] 답변 수정
+  @PutMapping("/{answerId}")
+  public ResponseEntity<ApiResponse<Void>> updateAnswer(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long postId,
+      @PathVariable Long answerId,
+      @RequestBody @Valid UpdateAnswerRequest request) {
+
+    Long validatedUserId = requireUserId(userId);
+    UpdateAnswerUseCase.UpdateAnswerCommand command = request.toCommand(answerId, validatedUserId);
+
+    updateAnswerUseCase.updateAnswer(command);
+
+    return ResponseEntity.ok(ApiResponse.success(null));
+  }
+
+  // [Delete] 답변 삭제
+  @DeleteMapping("/{answerId}")
+  public ResponseEntity<ApiResponse<Void>> deleteAnswer(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long postId,
+      @PathVariable Long answerId) {
+
+    Long validatedUserId = requireUserId(userId);
+    DeleteAnswerUseCase.DeleteAnswerCommand command =
+        new DeleteAnswerUseCase.DeleteAnswerCommand(answerId, validatedUserId);
+
+    deleteAnswerUseCase.deleteAnswer(command);
+
+    return ResponseEntity.ok(ApiResponse.success(null));
   }
 
   private Long requireUserId(Long userId) {
