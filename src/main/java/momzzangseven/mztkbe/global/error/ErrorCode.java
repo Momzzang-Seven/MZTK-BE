@@ -293,6 +293,40 @@ public enum ErrorCode {
       "COMMENT_007",
       "Invalid comment hard-delete configuration",
       HttpStatus.INTERNAL_SERVER_ERROR // 500
+      ),
+  // ========================================
+  // Answer Errors (ANSWER_xxx)
+  // ========================================
+  ANSWER_NOT_FOUND(
+      "ANSWER_001", "Answer not found", HttpStatus.NOT_FOUND // 404
+      ),
+
+  ANSWER_UNAUTHORIZED(
+      "ANSWER_002", "Unauthorized access to answer", HttpStatus.FORBIDDEN // 403
+      ),
+
+  CANNOT_ANSWER_OWN_POST(
+      "ANSWER_003", "Cannot write an answer on your own post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  CANNOT_ANSWER_SOLVED_POST(
+      "ANSWER_004", "Cannot write an answer on a solved post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  CANNOT_UPDATE_ACCEPTED_ANSWER(
+      "ANSWER_005", "Cannot update an accepted answer", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  CANNOT_DELETE_ACCEPTED_ANSWER(
+      "ANSWER_006", "Cannot delete an accepted answer", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  ANSWER_POST_MISMATCH(
+      "ANSWER_007", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  REQUIRE_USER_LOGIN(
+      "ANSWER_008", "User login is required", HttpStatus.UNAUTHORIZED // 401
       );
 
   private final String code;
