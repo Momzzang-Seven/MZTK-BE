@@ -10,7 +10,7 @@
 --   2. 기존 row(id=1) 에 기본 alias 설정     (provisioning API 이전에 삽입된 row 대응)
 --   3. NOT NULL 제약 + UNIQUE 인덱스 추가
 
--- 1. 컬럼 추가 (nullable)
+-- 1. 컬럼 추가 (nullable) -> 기존 row의 wallet_alias는 NULL로 설정됩니다.
 ALTER TABLE web3_treasury_keys
     ADD COLUMN IF NOT EXISTS wallet_alias VARCHAR(64);
 
