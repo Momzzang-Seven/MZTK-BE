@@ -8,15 +8,15 @@ public record UpdatePostCommand(
 
   public void validate() {
     if (title != null && title.isBlank()) {
-      throw new PostInvalidInputException("수정할 제목은 비워둘 수 없습니다.");
+      throw new PostInvalidInputException("Title must not be blank.");
     }
 
     if (content != null && content.isBlank()) {
-      throw new PostInvalidInputException("수정할 내용은 비워둘 수 없습니다.");
+      throw new PostInvalidInputException("Content must not be blank.");
     }
 
     if (title == null && content == null && imageUrls == null && tags == null) {
-      throw new PostInvalidInputException("수정할 값이 없습니다.");
+      throw new PostInvalidInputException("At least one field must be provided for update.");
     }
   }
 

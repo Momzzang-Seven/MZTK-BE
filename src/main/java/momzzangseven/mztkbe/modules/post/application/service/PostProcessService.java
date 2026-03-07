@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
@@ -29,9 +30,16 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     Post post = getPostOrThrow(postId);
     post.validateOwnership(currentUserId);
 
+    // 도메인 레벨 fast-fail (이미 조회 시점에 solved인 경우)
     Post updatedPost =
         post.update(command.title(), command.content(), command.imageUrls(), command.tags());
-    postPersistencePort.savePost(updatedPost);
+
+    // DB 레벨 원자적 보장 (WHERE is_solved = false)
+    int affected = postPersistencePort.updateIfNotSolved(updatedPost);
+    if (affected == 0) {
+      throw new PostAlreadySolvedException();
+    }
+
     if (command.tags() != null) {
       linkTagPort.updateTags(postId, command.tags());
     }
@@ -42,7 +50,14 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
 
     post.validateOwnership(currentUserId);
-    postPersistencePort.deletePost(post);
+    // 도메인 레벨 fast-fail (이미 조회 시점에 solved인 경우)
+    post.validateDeletable();
+
+    // DB 레벨 원자적 보장 (WHERE is_solved = false)
+    int affected = postPersistencePort.deleteIfNotSolved(postId);
+    if (affected == 0) {
+      throw new PostAlreadySolvedException();
+    }
 
     eventPublisher.publishEvent(new PostDeletedEvent(postId));
   }

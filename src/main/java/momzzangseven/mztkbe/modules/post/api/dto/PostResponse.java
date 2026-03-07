@@ -18,12 +18,21 @@ public record PostResponse(
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     WriterInfo writer,
-    List<String> imageUrls) {
+    List<String> imageUrls,
+    QuestionInfo question) {
 
   public record WriterInfo(Long userId, String nickname, String profileImage) {}
 
-  // 1. 상세 조회용 (PostResult -> Response)
+  public record QuestionInfo(Long reward, boolean isSolved) {}
+
+  // 1. 상세 조회용 (PostResult → Response)
   public static PostResponse from(PostResult result) {
+    QuestionInfo questionInfo = null;
+
+    if (PostType.QUESTION.equals(result.type())) {
+      questionInfo = new QuestionInfo(result.reward(), result.isSolved());
+    }
+
     return new PostResponse(
         result.postId(),
         result.type(),
@@ -35,11 +44,12 @@ public record PostResponse(
         result.tags(),
         result.createdAt(),
         result.updatedAt(),
-        new WriterInfo(result.userId(), "알수없음", null),
-        result.imageUrls());
+        new WriterInfo(result.userId(), result.nickname(), result.profileImageUrl()),
+        result.imageUrls(),
+        questionInfo);
   }
 
-  // 2. 목록 조회용 (Domain Post -> Response)
+  // 2. 목록 조회용 (Domain Post → Response)
   public static PostResponse from(Post post) {
     return new PostResponse(
         post.getId(),
@@ -53,6 +63,7 @@ public record PostResponse(
         post.getCreatedAt(),
         post.getUpdatedAt(),
         new WriterInfo(post.getUserId(), "알수없음", null),
-        post.getImageUrls());
+        post.getImageUrls(),
+        null);
   }
 }
