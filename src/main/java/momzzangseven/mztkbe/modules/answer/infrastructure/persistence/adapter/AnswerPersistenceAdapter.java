@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.adapter;
 
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
@@ -11,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort {
+public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort, DeleteAnswerPort {
 
   private final AnswerJpaRepository answerJpaRepository;
 
@@ -32,5 +34,15 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort 
     return answerJpaRepository.findByPostIdOrderByIsAcceptedDescCreatedAtAsc(postId).stream()
         .map(AnswerEntity::toDomain) // Entity -> Domain 변환
         .toList();
+  }
+
+  @Override
+  public Optional<Answer> loadAnswer(Long answerId) {
+    return answerJpaRepository.findById(answerId).map(AnswerEntity::toDomain);
+  }
+
+  @Override
+  public void deleteAnswer(Long answerId) {
+    answerJpaRepository.deleteById(answerId);
   }
 }
