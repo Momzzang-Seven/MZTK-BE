@@ -1,23 +1,29 @@
 package momzzangseven.mztkbe.modules.post.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.hibernate.validator.constraints.URL;
 
-public record CreateFreePostRequest(
+public record CreateQuestionPostRequest(
+    @NotBlank(message = "Title must not be blank.") String title,
     @NotBlank(message = "Content must not be blank.") String content,
-    List<@URL(message = "Invalid image URL format.") String> imageUrls,
+    @NotNull(message = "Reward must be provided.")
+        @Positive(message = "Reward must be greater than 0.")
+        Long reward,
+    List<@URL(message = "Invalid URL format.") String> imageUrls,
     List<String> tags) {
 
   public CreatePostCommand toCommand(Long userId) {
     return CreatePostCommand.of(
         userId,
-        null, // 자유게시판은 제목 없음
+        this.title,
         this.content,
-        PostType.FREE, // PostType 고정
-        0L, // 리워드 0 고정
+        PostType.QUESTION, // PostType 고정
+        this.reward,
         this.imageUrls,
         this.tags);
   }
