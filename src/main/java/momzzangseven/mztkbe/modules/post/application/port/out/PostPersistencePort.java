@@ -11,15 +11,12 @@ public interface PostPersistencePort {
 
   Optional<Post> loadPost(Long postId);
 
+  /** row-level lock(SELECT … FOR UPDATE)을 걸고 게시글을 조회한다. */
+  Optional<Post> loadPostForUpdate(Long postId);
+
   void deletePost(Post post);
 
   List<Post> findPostsByCondition(PostSearchCondition condition, List<Long> filteredPostIds);
 
   int markQuestionPostSolved(Long postId);
-
-  /** WHERE is_solved = false 조건으로 게시글을 원자적으로 수정한다. 영향받은 행 수를 반환한다. */
-  int updateIfNotSolved(Post post);
-
-  /** WHERE is_solved = false 조건으로 게시글을 원자적으로 삭제한다. 영향받은 행 수를 반환한다. */
-  int deleteIfNotSolved(Long postId);
 }
