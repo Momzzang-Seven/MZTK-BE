@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
@@ -37,7 +37,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     // DB 레벨 원자적 보장 (WHERE is_solved = false)
     int affected = postPersistencePort.updateIfNotSolved(updatedPost);
     if (affected == 0) {
-      throw new PostAlreadySolvedException();
+      throw new PostInvalidInputException("A solved question post cannot be edited.");
     }
 
     if (command.tags() != null) {
@@ -56,7 +56,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     // DB 레벨 원자적 보장 (WHERE is_solved = false)
     int affected = postPersistencePort.deleteIfNotSolved(postId);
     if (affected == 0) {
-      throw new PostAlreadySolvedException();
+      throw new PostInvalidInputException("A solved question post cannot be deleted.");
     }
 
     eventPublisher.publishEvent(new PostDeletedEvent(postId));
