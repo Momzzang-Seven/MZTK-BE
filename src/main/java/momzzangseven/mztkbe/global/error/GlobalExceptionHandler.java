@@ -12,6 +12,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -115,6 +116,15 @@ public class GlobalExceptionHandler {
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /** Handle request parameter/path variable type mismatches (e.g., invalid enum query values). */
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatchException(
+      MethodArgumentTypeMismatchException ex) {
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error("Invalid request parameter type", errorCode.getCode()));
   }
 
   /** Handle missing endpoint/static resource requests as 404 instead of 500. */
