@@ -7,6 +7,7 @@ import java.util.List;
 import lombok.*;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import org.hibernate.annotations.BatchSize;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -36,6 +37,7 @@ public class PostEntity {
 
   @ElementCollection
   @CollectionTable(name = "post_images", joinColumns = @JoinColumn(name = "post_id"))
+  @BatchSize(size = 100)
   private List<String> imageUrls = new ArrayList<>();
 
   private Long reward;
