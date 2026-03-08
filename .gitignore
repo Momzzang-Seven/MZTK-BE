@@ -51,6 +51,9 @@ bin/
 ### VS Code ###
 .vscode/
 
+### Cursor ###
+.cursor/
+
 ############################
 # Environment variables
 ############################
@@ -64,7 +67,6 @@ bin/
 *.log
 hs_err_pid*
 replay_pid*
-src/test/*
 
 ############################
 # OS generated files
@@ -77,8 +79,31 @@ Thumbs.db
 ############################
 src/main/generated/
 
+<<<<<<< HEAD
 
 ############################
 # CLAUDE.md
 ############################
 CLAUDE.md
+=======
+############################
+# Seed files with sensitive data
+############################
+# 실제 값은 web3_treasury_keys.sql.example을 복사하여 직접 생성
+src/main/resources/db/seed/web3_treasury_keys.sql
+
+############################
+# PlayWright
+############################
+
+# 개인 설정 파일 (각자 .env.example 을 복사하여 직접 생성)
+src/test/java/momzzangseven/mztkbe/integration/play_wright/*.config.ts
+src/test/java/momzzangseven/mztkbe/integration/play_wright/.env
+
+# npm 설치 산출물
+src/test/java/momzzangseven/mztkbe/integration/play_wright/node_modules/
+
+# 로컬 실행 산출물 (HTML 보고서, 스크린샷, 동영상)
+src/test/java/momzzangseven/mztkbe/integration/play_wright/playwright-report/
+src/test/java/momzzangseven/mztkbe/integration/play_wright/test-results/
+>>>>>>> 7e3f6ad6af4cc895d394904e1e63977530483a59

@@ -50,9 +50,7 @@ public class PostController {
   public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
 
-    Long validatedUserId = requireUserId(userId);
-
-    CreatePostCommand command = request.toCommand(validatedUserId);
+    CreatePostCommand command = request.toCommand(userId);
     CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
