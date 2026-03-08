@@ -59,16 +59,17 @@ public class Post {
       List<String> imageUrls,
       List<String> tags) {
 
-    if (userId == null) throw new IllegalArgumentException("작성자 ID는 필수입니다.");
-    if (type == null) throw new IllegalArgumentException("게시글 타입은 필수입니다.");
-    if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
+    if (userId == null) throw new IllegalArgumentException("Author ID is required.");
+    if (type == null) throw new IllegalArgumentException("Post type is required.");
+    if (content == null || content.isBlank())
+      throw new IllegalArgumentException("Content must not be empty.");
 
     if (type == PostType.QUESTION) {
       if (title == null || title.isBlank()) {
-        throw new IllegalArgumentException("질문 게시글은 제목이 필요합니다.");
+        throw new IllegalArgumentException("A question post requires a title.");
       }
       if (reward == null || reward <= 0) {
-        throw new IllegalArgumentException("질문 게시글은 보상(XP)이 필요합니다.");
+        throw new IllegalArgumentException("A question post requires a reward (XP).");
       }
     } else if (type == PostType.FREE) {
       reward = 0L;
