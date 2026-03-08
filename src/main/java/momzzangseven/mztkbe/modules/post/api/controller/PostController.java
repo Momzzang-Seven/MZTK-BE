@@ -4,7 +4,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
@@ -37,7 +37,8 @@ public class PostController {
   public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
 
-    CreatePostCommand command = request.toCommand(userId);
+    Long validatedUserId = requireUserId(userId);
+    CreatePostCommand command = request.toCommand(validatedUserId);
     CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
@@ -95,7 +96,7 @@ public class PostController {
 
   private Long requireUserId(Long userId) {
     if (userId == null) {
-      throw new PostUnauthorizedException();
+      throw new UserNotAuthenticatedException();
     }
     return userId;
   }
