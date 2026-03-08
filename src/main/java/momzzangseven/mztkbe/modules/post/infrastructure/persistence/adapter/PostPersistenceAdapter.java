@@ -41,6 +41,13 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
   }
 
   @Override
+  public Optional<Post> loadPostForUpdate(Long postId) {
+    return postJpaRepository
+        .findByIdForUpdate(postId)
+        .map(entity -> entity.toDomain(Collections.emptyList()));
+  }
+
+  @Override
   public void deletePost(Post post) {
     postJpaRepository.deleteById(post.getId());
     postJpaRepository.flush();
@@ -73,41 +80,6 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
   @Override
   public int markQuestionPostSolved(Long postId) {
     return postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
-  }
-
-  @Override
-  public int updateIfNotSolved(Post post) {
-    long affected =
-        queryFactory
-            .update(postEntity)
-            .set(postEntity.title, post.getTitle())
-            .set(postEntity.content, post.getContent())
-            .set(postEntity.updatedAt, post.getUpdatedAt())
-            .where(postEntity.id.eq(post.getId()).and(postEntity.isSolved.isFalse()))
-            .execute();
-
-    if (affected == 0) return 0;
-
-    // QueryDSL 벌크 update는 @ElementCollection(post_images)을 건드리지 않으므로
-    // imageUrls 동기화는 JPA merge로 처리한다.
-    postJpaRepository.save(PostEntity.fromDomain(post));
-    return 1;
-  }
-
-  @Override
-  public int deleteIfNotSolved(Long postId) {
-    // @ElementCollection은 QueryDSL 벌크 delete의 cascade 밖이므로 먼저 제거한다.
-    // 이후 조건부 delete가 0건이면 서비스에서 예외를 throw하고
-    // 트랜잭션이 롤백되므로 image rows도 함께 복원된다.
-    postJpaRepository.deleteImagesByPostId(postId);
-
-    long affected =
-        queryFactory
-            .delete(postEntity)
-            .where(postEntity.id.eq(postId).and(postEntity.isSolved.isFalse()))
-            .execute();
-
-    return (int) affected;
   }
 
   // --- 동적 쿼리용 헬퍼 메서드 ---
