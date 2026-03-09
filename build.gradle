@@ -84,20 +84,6 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-def querydslDir = "src/main/generated"
-
-tasks.withType(JavaCompile).configureEach {
-    options.getGeneratedSourceOutputDirectory().set(file(querydslDir))
-}
-
-sourceSets {
-    main.java.srcDirs += [ querydslDir ]
-}
-
-clean {
-    delete file(querydslDir)
-}
-
 spotless {
     java {
         googleJavaFormat()
