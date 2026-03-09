@@ -79,13 +79,11 @@ Thumbs.db
 ############################
 src/main/generated/
 
-<<<<<<< HEAD
-
 ############################
 # CLAUDE.md
 ############################
 CLAUDE.md
-=======
+
 ############################
 # Seed files with sensitive data
 ############################
@@ -106,4 +104,3 @@ src/test/java/momzzangseven/mztkbe/integration/play_wright/node_modules/
 # 로컬 실행 산출물 (HTML 보고서, 스크린샷, 동영상)
 src/test/java/momzzangseven/mztkbe/integration/play_wright/playwright-report/
 src/test/java/momzzangseven/mztkbe/integration/play_wright/test-results/
->>>>>>> 7e3f6ad6af4cc895d394904e1e63977530483a59
