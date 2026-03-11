@@ -76,8 +76,10 @@ class ImagePersistenceAdapterTest {
     @DisplayName("domain → entity 변환 시 referenceType이 String(name())으로 저장된다")
     @SuppressWarnings("unchecked")
     void saveAll_convertsReferenceTypeToString() {
-      Image domain = buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
-      ImageEntity savedEntity = buildEntity(10L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      Image domain =
+          buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      ImageEntity savedEntity =
+          buildEntity(10L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
       given(imageJpaRepository.saveAll(anyList())).willReturn(List.of(savedEntity));
 
       ArgumentCaptor<List<ImageEntity>> captor = ArgumentCaptor.forClass(List.class);
@@ -92,8 +94,10 @@ class ImagePersistenceAdapterTest {
     @DisplayName("domain → entity 변환 시 status가 String(name())으로 저장된다")
     @SuppressWarnings("unchecked")
     void saveAll_convertsStatusToString() {
-      Image domain = buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
-      ImageEntity savedEntity = buildEntity(10L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      Image domain =
+          buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      ImageEntity savedEntity =
+          buildEntity(10L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
       given(imageJpaRepository.saveAll(anyList())).willReturn(List.of(savedEntity));
 
       ArgumentCaptor<List<ImageEntity>> captor = ArgumentCaptor.forClass(List.class);
@@ -135,8 +139,10 @@ class ImagePersistenceAdapterTest {
     @DisplayName("entity → domain 역변환 시 referenceType이 enum으로 복원된다")
     @SuppressWarnings("unchecked")
     void saveAll_reverseConvertReferenceTypeToEnum() {
-      Image domain = buildDomainImage(null, 1L, ImageReferenceType.MARKET_THUMB, ImageStatus.PENDING);
-      ImageEntity savedEntity = buildEntity(10L, 1L, ImageReferenceType.MARKET_THUMB, ImageStatus.PENDING);
+      Image domain =
+          buildDomainImage(null, 1L, ImageReferenceType.MARKET_THUMB, ImageStatus.PENDING);
+      ImageEntity savedEntity =
+          buildEntity(10L, 1L, ImageReferenceType.MARKET_THUMB, ImageStatus.PENDING);
       given(imageJpaRepository.saveAll(anyList())).willReturn(List.of(savedEntity));
 
       List<Image> result = adapter.saveAll(List.of(domain));
@@ -148,8 +154,10 @@ class ImagePersistenceAdapterTest {
     @DisplayName("entity → domain 역변환 시 status가 enum으로 복원된다")
     @SuppressWarnings("unchecked")
     void saveAll_reverseConvertStatusToEnum() {
-      Image domain = buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
-      ImageEntity savedEntity = buildEntity(10L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      Image domain =
+          buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      ImageEntity savedEntity =
+          buildEntity(10L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
       given(imageJpaRepository.saveAll(anyList())).willReturn(List.of(savedEntity));
 
       List<Image> result = adapter.saveAll(List.of(domain));
@@ -161,8 +169,10 @@ class ImagePersistenceAdapterTest {
     @DisplayName("entity → domain 역변환 시 DB 생성 id가 도메인 모델에 반영된다")
     @SuppressWarnings("unchecked")
     void saveAll_reverseConvertPersistenceIdToDomain() {
-      Image domain = buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
-      ImageEntity savedEntity = buildEntity(77L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      Image domain =
+          buildDomainImage(null, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
+      ImageEntity savedEntity =
+          buildEntity(77L, 1L, ImageReferenceType.COMMUNITY_FREE, ImageStatus.PENDING);
       given(imageJpaRepository.saveAll(anyList())).willReturn(List.of(savedEntity));
 
       List<Image> result = adapter.saveAll(List.of(domain));
