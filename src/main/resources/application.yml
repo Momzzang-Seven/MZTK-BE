@@ -269,3 +269,10 @@ cloud:
     credentials:
       access-key: ${AWS_IAM_ACCESS_KEY}
       secret-key: ${AWS_IAM_SECRET_KEY}
+
+image:
+  pending-cleanup:
+    retention-hours: 5
+    batch-size: 100
+    cron: 0 0 0/1 * * *
+    zone: Asia/Seoul
