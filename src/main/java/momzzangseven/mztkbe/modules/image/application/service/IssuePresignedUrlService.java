@@ -17,6 +17,14 @@ import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+// Note on transaction scope:
+// S3Presigner.presignPutObject() performs local HMAC computation only (no network call), so
+// holding the DB connection during Phase 1 has negligible real-world impact. However, to make
+// the intent clear and isolate the failure boundary, the two phases are kept structurally
+// separate. If a true network-bound S3 call is introduced in the future, the presigned-URL
+// generation phase should be moved outside the @Transactional boundary (e.g., via
+// TransactionTemplate or a dedicated non-transactional Spring bean).
+
 /**
  * Orchestrates presigned URL generation and PENDING image record creation.
  *
@@ -50,28 +58,53 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
 
     List<ImageSpec> specs = buildImageSpecs(command);
 
-    List<PresignedUrlItem> items = new ArrayList<>();
-    List<Image> images = new ArrayList<>();
-    int imgOrder = 0;
+    // Phase 1: Generate presigned URLs (local HMAC computation — no network, no DB connection.
+    // Each URL is paired with its tmp object key.
+    List<PresignedUrlItem> items = buildPresignedUrlItems(specs);
 
-    for (ImageSpec spec : specs) {
-      // Get presigned url for each spec
-      String presignedUrl =
-          generatePresignedUrlPort.generatePutPresignedUrl(
-              spec.tmpObjectKey(), resolveContentType(spec.originalFilename()));
-
-      // Build item to return to the client.
-      items.add(new PresignedUrlItem(presignedUrl, spec.tmpObjectKey()));
-
-      // Build image object to save into DB.
-      images.add(
-          Image.createPending(
-              command.userId(), spec.referenceType(), spec.tmpObjectKey(), ++imgOrder));
-    }
-
+    // Phase 2: Persist PENDING image records to DB.
+    List<Image> images = buildPendingImages(command.userId(), specs);
     saveImagePort.saveAll(images);
 
     return IssuePresignedUrlResult.of(items);
+  }
+
+  /**
+   * Generates a presigned PUT URL for every spec and returns the paired result items.
+   *
+   * <p>This is purely a local HMAC computation (no network call). It is separated from the DB
+   * persistence phase to make the intent clear and simplify future refactoring if a real network
+   * bound S3 call is introduced.
+   *
+   * @param specs list of resolved image specs
+   * @return list of {@link PresignedUrlItem} to return to the client
+   */
+  private List<PresignedUrlItem> buildPresignedUrlItems(List<ImageSpec> specs) {
+    List<PresignedUrlItem> items = new ArrayList<>();
+    for (ImageSpec spec : specs) {
+      String presignedUrl =
+          generatePresignedUrlPort.generatePutPresignedUrl(
+              spec.tmpObjectKey(), resolveContentType(spec.originalFilename()));
+      items.add(new PresignedUrlItem(presignedUrl, spec.tmpObjectKey()));
+    }
+    return items;
+  }
+
+  /**
+   * Builds the list of PENDING {@link Image} domain objects from the given specs.
+   *
+   * @param userId authenticated user ID
+   * @param specs list of resolved image specs
+   * @return list of unsaved {@link Image} domain objects
+   */
+  private List<Image> buildPendingImages(Long userId, List<ImageSpec> specs) {
+    List<Image> images = new ArrayList<>();
+    int imgOrder = 0;
+    for (ImageSpec spec : specs) {
+      images.add(
+          Image.createPending(userId, spec.referenceType(), spec.tmpObjectKey(), ++imgOrder));
+    }
+    return images;
   }
 
   /**
