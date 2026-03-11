@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.image.application.dto;
 
 import java.util.List;
-
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.error.image.ImageMaxCountExceedException;
 import momzzangseven.mztkbe.global.error.image.InvalidImageExtensionException;
