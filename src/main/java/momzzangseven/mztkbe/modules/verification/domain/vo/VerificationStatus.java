@@ -1,6 +1,12 @@
 package momzzangseven.mztkbe.modules.verification.domain.vo;
 
-/** Verification lifecycle states. */
+/**
+ * Verification lifecycle states.
+ *
+ * <p>The primary submit path is now synchronous and should usually persist a terminal status
+ * immediately. In-flight statuses remain for transitional compatibility while the old async shape
+ * is being removed.
+ */
 public enum VerificationStatus {
   PENDING,
   ANALYZING,
