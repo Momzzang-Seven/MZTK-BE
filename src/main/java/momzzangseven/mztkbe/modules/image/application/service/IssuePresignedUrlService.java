@@ -51,6 +51,7 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
 
     List<PresignedUrlItem> items = new ArrayList<>();
     List<Image> images = new ArrayList<>();
+    int imgOrder = 0;
 
     for (ImageSpec spec : specs) {
       // Get presigned url for each spec
@@ -62,7 +63,9 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
       items.add(new PresignedUrlItem(presignedUrl, spec.tmpObjectKey()));
 
       // Build image object to save into DB.
-      images.add(Image.createPending(command.userId(), spec.referenceType(), spec.tmpObjectKey()));
+      images.add(
+          Image.createPending(
+              command.userId(), spec.referenceType(), spec.tmpObjectKey(), ++imgOrder));
     }
 
     saveImagePort.saveAll(images);
