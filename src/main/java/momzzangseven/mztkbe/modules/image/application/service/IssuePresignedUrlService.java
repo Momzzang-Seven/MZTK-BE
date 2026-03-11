@@ -154,6 +154,8 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
     return switch (ext) {
       case "png" -> "image/png";
       case "gif" -> "image/gif";
+      case "heif" -> "image/heif";
+      case "heic" -> "image/heic";
       default -> "image/jpeg";
     };
   }

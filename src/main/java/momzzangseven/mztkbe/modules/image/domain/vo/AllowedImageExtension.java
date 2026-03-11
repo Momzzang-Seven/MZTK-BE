@@ -12,7 +12,9 @@ public enum AllowedImageExtension {
   JPG,
   JPEG,
   PNG,
-  GIF;
+  GIF,
+  HEIF,
+  HEIC;
 
   private static final Set<String> ALLOWED =
       Arrays.stream(values())
