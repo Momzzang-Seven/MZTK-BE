@@ -160,9 +160,9 @@ public class SecurityConfig {
                         HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
                     .hasAuthority("ROLE_ADMIN")
 
-                        // --- Image Endpoints ---
-                        .requestMatchers(HttpMethod.POST, "/images/presigned-urls")
-                        .authenticated()
+                    // --- Image Endpoints ---
+                    .requestMatchers(HttpMethod.POST, "/images/presigned-urls")
+                    .authenticated()
 
                     // --- Actuator Endpoints ---
                     .requestMatchers("/actuator/info")
