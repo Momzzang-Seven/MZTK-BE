@@ -1,5 +1,5 @@
 CREATE TABLE images (
-    id               BIGINT    PRIMARY KEY,
+    id               BIGINT    PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     user_id          BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reference_type   VARCHAR(30)  NOT NULL,
     reference_id     BIGINT       NULL,         -- polymorphic ref; no FK constraint
