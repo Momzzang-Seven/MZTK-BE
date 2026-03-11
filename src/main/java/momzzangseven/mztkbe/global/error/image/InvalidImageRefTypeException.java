@@ -5,7 +5,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 
 public class InvalidImageRefTypeException extends BusinessException {
 
-    public InvalidImageRefTypeException(String msg) {
-        super(ErrorCode.IMAGE_REF_TYPE_INVALID, msg);
-    }
+  public InvalidImageRefTypeException(String msg) {
+    super(ErrorCode.IMAGE_REF_TYPE_INVALID, msg);
+  }
 }

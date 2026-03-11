@@ -5,7 +5,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 
 public class InvalidImageFileNameException extends BusinessException {
 
-    public InvalidImageFileNameException(String msg) {
-        super(ErrorCode.IMAGE_FILE_NAME_INVALID, msg);
-    }
+  public InvalidImageFileNameException(String msg) {
+    super(ErrorCode.IMAGE_FILE_NAME_INVALID, msg);
+  }
 }
