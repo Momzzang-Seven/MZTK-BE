@@ -254,3 +254,18 @@ web3:
 location:
   verification:
     radius-meters: 5.0 # Location verification radius; 5m
+
+cloud:
+  aws:
+    region:
+      static: ap-northeast-2
+      auto: false
+    stack:
+      auto: false
+    s3:
+      bucket: ${AWS_S3_BUCKET}
+      presigned-url:
+        expiry-seconds: 300  # 5m
+    credentials:
+      access-key: ${AWS_IAM_ACCESS_KEY}
+      secret-key: ${AWS_IAM_SECRET_KEY}
