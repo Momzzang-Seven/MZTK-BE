@@ -32,3 +32,18 @@ logging:
   level:
     root: WARN
     momzzangseven: INFO
+
+cloud:
+  aws:
+    region:
+      static: ap-northeast-2
+      auto: false
+    stack:
+      auto: false
+    s3:
+      bucket: test-bucket
+      presigned-url:
+        expiry-seconds: 300
+    credentials:
+      access-key: test-access-key
+      secret-key: test-secret-key
