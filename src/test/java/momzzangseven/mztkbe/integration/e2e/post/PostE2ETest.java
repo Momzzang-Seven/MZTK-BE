@@ -46,8 +46,7 @@ import org.springframework.test.context.ActiveProfiles;
  * <ul>
  *   <li>{@code @BeforeEach}: 테스트마다 UUID 기반 고유 이메일로 신규 유저 생성 → 데이터 충돌 방지
  *   <li>{@code @AfterEach}: JdbcTemplate 으로 생성된 post_tags → posts 순서로 삭제 (FK 고려)
- *   <li>유저 데이터는 XP·출석 등 연관 레코드 FK 충돌 가능성이 있으므로 삭제하지 않음
- *       (고유 이메일로 격리)
+ *   <li>유저 데이터는 XP·출석 등 연관 레코드 FK 충돌 가능성이 있으므로 삭제하지 않음 (고유 이메일로 격리)
  * </ul>
  */
 @Tag("e2e")
@@ -95,8 +94,8 @@ class PostE2ETest {
   /**
    * 테스트에서 생성한 게시글을 DB에서 직접 삭제한다.
    *
-   * <p>삭제 순서: post_tags(FK 선행) → posts. RANDOM_PORT 환경에서는 {@code @Transactional} 롤백이 동작하지
-   * 않으므로 JdbcTemplate 으로 명시적 클린업한다.
+   * <p>삭제 순서: post_tags(FK 선행) → posts. RANDOM_PORT 환경에서는 {@code @Transactional} 롤백이 동작하지 않으므로
+   * JdbcTemplate 으로 명시적 클린업한다.
    */
   @AfterEach
   void tearDown() {
@@ -495,8 +494,7 @@ class PostE2ETest {
     @DisplayName("reward = -5 → 400 (VALIDATION_001 or POST_003)")
     void createQuestion_rewardIsNegative_returns400() throws Exception {
       // given: @Positive Bean Validation 또는 커맨드 검증에서 차단
-      Map<String, Object> body =
-          Map.of("title", "질문 제목", "content", "질문 내용", "reward", -5);
+      Map<String, Object> body = Map.of("title", "질문 제목", "content", "질문 내용", "reward", -5);
 
       // when
       ResponseEntity<String> res =
@@ -571,8 +569,7 @@ class PostE2ETest {
     @DisplayName("토큰 없이 요청 → 401 UNAUTHORIZED (AUTH_006)")
     void createQuestion_withoutToken_returns401_auth006() throws Exception {
       // given: 인증 헤더 없음
-      Map<String, Object> body =
-          Map.of("title", "질문 제목", "content", "질문 내용", "reward", 10);
+      Map<String, Object> body = Map.of("title", "질문 제목", "content", "질문 내용", "reward", 10);
 
       // when
       ResponseEntity<String> res =
