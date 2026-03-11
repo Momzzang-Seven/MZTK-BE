@@ -26,7 +26,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   public void updatePost(Long currentUserId, Long postId, UpdatePostCommand command) {
     command.validate();
 
-    Post post = loadPostForUpdateOrThrow(postId);
+    Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
 
     Post updatedPost =
@@ -40,7 +40,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   @Override
   public void deletePost(Long currentUserId, Long postId) {
-    Post post = loadPostForUpdateOrThrow(postId);
+    Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
     post.validateDeletable();
 
@@ -48,7 +48,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     eventPublisher.publishEvent(new PostDeletedEvent(postId));
   }
 
-  private Post loadPostForUpdateOrThrow(Long postId) {
-    return postPersistencePort.loadPostForUpdate(postId).orElseThrow(PostNotFoundException::new);
+  private Post loadPostOrThrow(Long postId) {
+    return postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
   }
 }

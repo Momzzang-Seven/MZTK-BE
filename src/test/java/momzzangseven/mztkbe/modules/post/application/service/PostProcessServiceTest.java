@@ -151,6 +151,54 @@ class PostProcessServiceTest {
     verifyNoInteractions(eventPublisher);
   }
 
+  @Test
+  @DisplayName("Resolved QUESTION posts cannot be updated")
+  void updateSolvedQuestionPostThrows() {
+    Long ownerId = 7L;
+    Long postId = 70L;
+    Post post = solvedQuestionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostInvalidInputException.class);
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(linkTagPort);
+  }
+
+  @Test
+  @DisplayName("Resolved QUESTION posts cannot be deleted")
+  void deleteSolvedQuestionPostThrows() {
+    Long ownerId = 7L;
+    Long postId = 71L;
+    Post post = solvedQuestionPost(ownerId, postId);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
+        .isInstanceOf(PostInvalidInputException.class);
+
+    verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(eventPublisher);
+  }
+
+  private Post solvedQuestionPost(Long ownerId, Long postId) {
+    LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 10, 0);
+    return Post.builder()
+        .id(postId)
+        .userId(ownerId)
+        .type(PostType.QUESTION)
+        .title("질문 제목")
+        .content("질문 내용")
+        .reward(50L)
+        .isSolved(true)
+        .createdAt(updatedAt.minusHours(1))
+        .updatedAt(updatedAt)
+        .build();
+  }
+
   private Post ownedPost(Long ownerId, Long postId) {
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     return Post.builder()
