@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.image.InvalidImageExtensionException;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlResult;
 import momzzangseven.mztkbe.modules.image.application.dto.PresignedUrlItem;
@@ -154,6 +155,9 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
    */
   private String resolveContentType(String filename) {
     String ext = AllowedImageExtension.extractExtension(filename);
+    if (!AllowedImageExtension.isAllowed(filename)) {
+      throw new InvalidImageExtensionException("Unsupported image extension: " + filename + ".");
+    }
     return switch (ext) {
       case "png" -> "image/png";
       case "gif" -> "image/gif";
