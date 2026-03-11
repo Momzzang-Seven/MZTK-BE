@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.image.domain.vo;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.image.InvalidObjectKeyBuildException;
 
 /**
  * Represents the type of entity that an image belongs to.
@@ -54,7 +55,7 @@ public enum ImageReferenceType {
    */
   public String buildTmpObjectKey(String uuid, String extension) {
     if (tmpPathPrefix == null) {
-      throw new IllegalStateException(
+      throw new InvalidObjectKeyBuildException(
           this + " is a virtual reference type and cannot build object keys directly.");
     }
     return tmpPathPrefix + uuid + "." + extension;
