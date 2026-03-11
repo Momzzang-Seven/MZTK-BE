@@ -60,7 +60,8 @@ class AllowedImageExtensionTest {
   class AllowedCases {
 
     @ParameterizedTest
-    @ValueSource(strings = {"file.jpg", "file.jpeg", "file.png", "file.gif", "file.heic", "file.heif"})
+    @ValueSource(
+        strings = {"file.jpg", "file.jpeg", "file.png", "file.gif", "file.heic", "file.heif"})
     @DisplayName("허용된 소문자 확장자는 true를 반환한다")
     void isAllowed_returnsTrue_forAllowedLowercaseExtensions(String filename) {
       assertThat(AllowedImageExtension.isAllowed(filename)).isTrue();

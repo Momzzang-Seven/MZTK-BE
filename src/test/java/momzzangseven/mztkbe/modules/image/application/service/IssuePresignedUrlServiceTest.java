@@ -46,8 +46,7 @@ class IssuePresignedUrlServiceTest {
 
       IssuePresignedUrlResult result =
           service.execute(
-              new IssuePresignedUrlCommand(
-                  1L, ImageReferenceType.MARKET, List.of("product.jpg")));
+              new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg")));
 
       assertThat(result.items()).hasSize(2);
     }
@@ -90,8 +89,7 @@ class IssuePresignedUrlServiceTest {
 
       IssuePresignedUrlResult result =
           service.execute(
-              new IssuePresignedUrlCommand(
-                  1L, ImageReferenceType.MARKET, List.of("product.jpg")));
+              new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg")));
 
       assertThat(result.items().get(0).tmpObjectKey()).startsWith("public/market/thumb/tmp/");
       assertThat(result.items().get(1).tmpObjectKey()).startsWith("public/market/detail/tmp/");
@@ -105,8 +103,7 @@ class IssuePresignedUrlServiceTest {
 
       IssuePresignedUrlResult result =
           service.execute(
-              new IssuePresignedUrlCommand(
-                  1L, ImageReferenceType.MARKET, List.of("product.jpg")));
+              new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg")));
 
       String thumbKey = result.items().get(0).tmpObjectKey();
       String detailKey = result.items().get(1).tmpObjectKey();
@@ -249,8 +246,7 @@ class IssuePresignedUrlServiceTest {
           .willReturn(FAKE_PRESIGNED_URL);
 
       service.execute(
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.jpg")));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.jpg")));
 
       assertThat(contentTypeCaptor.getValue()).isEqualTo("image/jpeg");
     }
@@ -281,8 +277,7 @@ class IssuePresignedUrlServiceTest {
           .willReturn(FAKE_PRESIGNED_URL);
 
       service.execute(
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.png")));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.png")));
 
       assertThat(contentTypeCaptor.getValue()).isEqualTo("image/png");
     }
@@ -297,8 +292,7 @@ class IssuePresignedUrlServiceTest {
           .willReturn(FAKE_PRESIGNED_URL);
 
       service.execute(
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.gif")));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.gif")));
 
       assertThat(contentTypeCaptor.getValue()).isEqualTo("image/gif");
     }
@@ -345,8 +339,7 @@ class IssuePresignedUrlServiceTest {
           .willReturn(FAKE_PRESIGNED_URL);
 
       service.execute(
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("FILE.JPG")));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("FILE.JPG")));
 
       assertThat(contentTypeCaptor.getValue()).isEqualTo("image/jpeg");
     }

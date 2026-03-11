@@ -44,8 +44,8 @@ import org.springframework.test.context.ActiveProfiles;
  * <p>테스트 시나리오:
  *
  * <ul>
- *   <li>[H-1] COMMUNITY_FREE 단일 이미지 → DB 필드 전체 검증 (status, imgOrder, referenceType,
- *       referenceId, tmpObjectKey prefix)
+ *   <li>[H-1] COMMUNITY_FREE 단일 이미지 → DB 필드 전체 검증 (status, imgOrder, referenceType, referenceId,
+ *       tmpObjectKey prefix)
  *   <li>[H-5] WORKOUT 단일 이미지 → tmp/ 미포함 경로를 DB 저장값으로 확인
  *   <li>[H-6] MARKET 단일 이미지 → n+1 확장: DB rows 2개 (MARKET_THUMB + MARKET_DETAIL)
  *   <li>[H-7] MARKET 3장 → DB rows 4개, imgOrder 1~4 연속, 경로/확장자 분기 검증
@@ -79,7 +79,9 @@ class ImagePresignedUrlE2ETest {
   // ============================================================
 
   private static String uniqueEmail() {
-    return "e2e-img-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10) + "@test.com";
+    return "e2e-img-"
+        + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
+        + "@test.com";
   }
 
   private HttpHeaders authHeaders() {
