@@ -21,9 +21,15 @@ public enum AllowedImageExtension {
           .map(e -> e.name().toLowerCase())
           .collect(Collectors.toUnmodifiableSet());
 
-  /** Returns true if the given filename has an allowed extension. */
+  /**
+   * Validate is the filename has appropriate file extension
+   *
+   * @param filename
+   * @return false when the file name is null, OR it doesn't contain '.', OR '.' comes first of file
+   *     name(hidden file).
+   */
   public static boolean isAllowed(String filename) {
-    if (filename == null || !filename.contains(".")) return false;
+    if (filename == null || !filename.contains(".") || filename.lastIndexOf('.') == 0) return false;
     String ext = extractExtension(filename);
     return ALLOWED.contains(ext);
   }
