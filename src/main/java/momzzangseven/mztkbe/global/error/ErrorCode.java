@@ -250,6 +250,10 @@ public enum ErrorCode {
   DATABASE_ERROR(
       "INTERNAL_003", "Database operation failed", HttpStatus.INTERNAL_SERVER_ERROR // 500
       ),
+
+  DATA_INTEGRITY_VIOLATION(
+      "INTERNAL_004", "A data conflict occurred. Please try again.", HttpStatus.CONFLICT // 409
+      ),
   // ========================================
   // Post Errors (POST_xxx)
   // ========================================
