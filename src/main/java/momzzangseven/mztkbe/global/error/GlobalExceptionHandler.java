@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.TokenException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -166,6 +167,21 @@ public class GlobalExceptionHandler {
   // ========================================
   // Generic Exceptions
   // ========================================
+
+  /**
+   * Handle DB unique constraint / FK violations.
+   *
+   * <p>Covers cases such as UUID collision on {@code tmp_object_key}. Returns 409 Conflict so the
+   * client can distinguish this from a generic 500 and retry if appropriate.
+   */
+  @ExceptionHandler(DataIntegrityViolationException.class)
+  public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolationException(
+      DataIntegrityViolationException ex) {
+    log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+    ErrorCode errorCode = ErrorCode.DATA_INTEGRITY_VIOLATION;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
+  }
 
   /** Handle all other uncaught exceptions. This is a catch-all handler for unexpected errors. */
   @ExceptionHandler(Exception.class)
