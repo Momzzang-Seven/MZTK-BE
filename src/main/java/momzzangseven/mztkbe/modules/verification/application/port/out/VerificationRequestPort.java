@@ -5,7 +5,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.verification.domain.model.VerificationRequest;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
 
-/** Outbound port for the verification request SSOT. */
+/** Outbound port for raw verification request records. */
 public interface VerificationRequestPort {
 
   VerificationRequest save(VerificationRequest verificationRequest);
