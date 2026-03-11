@@ -62,14 +62,14 @@ public class Post {
     if (userId == null) throw new IllegalArgumentException("Author ID is required.");
     if (type == null) throw new IllegalArgumentException("Post type is required.");
     if (content == null || content.isBlank())
-      throw new IllegalArgumentException("Content must not be empty.");
+      throw new IllegalArgumentException("Content must not be blank.");
 
     if (type == PostType.QUESTION) {
       if (title == null || title.isBlank()) {
-        throw new IllegalArgumentException("A question post requires a title.");
+        throw new IllegalArgumentException("Title is required for question posts.");
       }
       if (reward == null || reward <= 0) {
-        throw new IllegalArgumentException("A question post requires a reward (XP).");
+        throw new IllegalArgumentException("Reward must be positive for question posts.");
       }
     } else if (type == PostType.FREE) {
       reward = 0L;
@@ -110,13 +110,13 @@ public class Post {
     boolean isUpdated = false;
 
     if (title != null) {
-      if (title.isBlank()) throw new IllegalArgumentException("The title cannot be blank.");
+      if (title.isBlank()) throw new IllegalArgumentException("Title cannot be blank.");
       builder.title(title);
       isUpdated = true;
     }
 
     if (content != null) {
-      if (content.isBlank()) throw new IllegalArgumentException("The content cannot be blank.");
+      if (content.isBlank()) throw new IllegalArgumentException("Content cannot be blank.");
       builder.content(content);
       isUpdated = true;
     }
