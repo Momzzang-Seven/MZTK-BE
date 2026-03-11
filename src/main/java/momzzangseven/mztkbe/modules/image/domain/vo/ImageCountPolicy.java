@@ -8,15 +8,21 @@ import lombok.RequiredArgsConstructor;
  *
  * <p>Each policy entry is mapped to one or more reference types via {@link #of(ImageReferenceType)}
  * and exposes its limit through {@link #getMaxCount()}.
+ *
+ * <p>Note: For MARKET, the limit applies to the number of filenames the client submits. The server
+ * internally generates n+1 image records (thumbnail + detail for the first image, detail-only for
+ * the rest).
  */
 @Getter
 @RequiredArgsConstructor
 public enum ImageCountPolicy {
   WORKOUT_POLICY(1),
 
+  /** Marketplace images: client may submit up to 5 filenames (resulting in up to 6 DB rows). */
+  MARKET_POLICY(5),
+
   // So far, we don't have any business rule demonstrating the max count for community, class, or
-  // review.
-  // If any business rule added, additional entry could be deployed.
+  // review. If any business rule is added, a new entry should be deployed here.
   DEFAULT_POLICY(10);
 
   private final int maxCount;
@@ -28,6 +34,10 @@ public enum ImageCountPolicy {
    * @return the matching {@link ImageCountPolicy}
    */
   public static ImageCountPolicy of(ImageReferenceType referenceType) {
-    return referenceType == ImageReferenceType.WORKOUT ? WORKOUT_POLICY : DEFAULT_POLICY;
+    return switch (referenceType) {
+      case WORKOUT -> WORKOUT_POLICY;
+      case MARKET -> MARKET_POLICY;
+      default -> DEFAULT_POLICY;
+    };
   }
 }
