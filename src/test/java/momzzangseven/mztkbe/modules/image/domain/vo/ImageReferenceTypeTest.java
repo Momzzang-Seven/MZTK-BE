@@ -82,7 +82,9 @@ class ImageReferenceTypeTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = ImageReferenceType.class, names = {"MARKET_THUMB", "MARKET_DETAIL"})
+    @EnumSource(
+        value = ImageReferenceType.class,
+        names = {"MARKET_THUMB", "MARKET_DETAIL"})
     @DisplayName("내부 전용 타입(MARKET_THUMB, MARKET_DETAIL)은 false를 반환한다")
     void isRequestFacing_returnsFalse_forInternalTypes(ImageReferenceType type) {
       assertThat(type.isRequestFacing()).isFalse();

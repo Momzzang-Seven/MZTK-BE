@@ -59,11 +59,7 @@ class ImagePendingCleanupSchedulerTest {
     @Test
     @DisplayName("[C-E-7] batchSize=1 시나리오 — 서비스가 1,1,1,0 반환하면 4회 실행")
     void run_callsRunBatch4Times_whenBatchSize1With3Records() {
-      given(cleanupService.runBatch(any()))
-          .willReturn(1)
-          .willReturn(1)
-          .willReturn(1)
-          .willReturn(0);
+      given(cleanupService.runBatch(any())).willReturn(1).willReturn(1).willReturn(1).willReturn(0);
 
       scheduler.run();
 

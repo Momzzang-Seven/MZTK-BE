@@ -48,8 +48,7 @@ class IssuePresignedUrlCommandTest {
     @DisplayName("내부 전용 타입 MARKET_THUMB 요청 시 InvalidImageRefTypeException 발생")
     void validate_throwsException_whenMarketThumb() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.MARKET_THUMB, List.of("photo.jpg"));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET_THUMB, List.of("photo.jpg"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageRefTypeException.class);
     }
 
@@ -57,8 +56,7 @@ class IssuePresignedUrlCommandTest {
     @DisplayName("내부 전용 타입 MARKET_DETAIL 요청 시 InvalidImageRefTypeException 발생")
     void validate_throwsException_whenMarketDetail() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.MARKET_DETAIL, List.of("photo.jpg"));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET_DETAIL, List.of("photo.jpg"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageRefTypeException.class);
     }
   }
@@ -71,8 +69,7 @@ class IssuePresignedUrlCommandTest {
     @DisplayName("[E-9] 확장자 없는 파일명은 InvalidImageExtensionException 발생")
     void validate_throwsException_whenNoExtension() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("filename"));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("filename"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageExtensionException.class);
     }
 
@@ -88,8 +85,7 @@ class IssuePresignedUrlCommandTest {
     @DisplayName("[E-11] 허용되지 않는 확장자(webp)는 InvalidImageExtensionException 발생")
     void validate_throwsException_whenWebpExtension() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.webp"));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.webp"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageExtensionException.class);
     }
 
@@ -120,16 +116,14 @@ class IssuePresignedUrlCommandTest {
     @DisplayName("[E-14] WORKOUT에 2장 요청 시 ImageMaxCountExceedException 발생")
     void validate_throwsException_whenWorkoutExceedsLimit() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.WORKOUT, List.of("a.jpg", "b.jpg"));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.WORKOUT, List.of("a.jpg", "b.jpg"));
       assertThatThrownBy(command::validate).isInstanceOf(ImageMaxCountExceedException.class);
     }
 
     @Test
     @DisplayName("[E-15] MARKET에 6장 요청 시 ImageMaxCountExceedException 발생")
     void validate_throwsException_whenMarketExceedsLimit() {
-      List<String> filenames =
-          List.of("1.jpg", "2.jpg", "3.jpg", "4.jpg", "5.jpg", "6.jpg");
+      List<String> filenames = List.of("1.jpg", "2.jpg", "3.jpg", "4.jpg", "5.jpg", "6.jpg");
       IssuePresignedUrlCommand command =
           new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, filenames);
       assertThatThrownBy(command::validate).isInstanceOf(ImageMaxCountExceedException.class);
@@ -176,7 +170,8 @@ class IssuePresignedUrlCommandTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"file.jpg", "file.jpeg", "file.png", "file.gif", "file.heic", "file.heif"})
+    @ValueSource(
+        strings = {"file.jpg", "file.jpeg", "file.png", "file.gif", "file.heic", "file.heif"})
     @DisplayName("[H-9] 허용된 모든 확장자는 validate() 통과")
     void validate_passes_forAllAllowedExtensions(String filename) {
       IssuePresignedUrlCommand command =

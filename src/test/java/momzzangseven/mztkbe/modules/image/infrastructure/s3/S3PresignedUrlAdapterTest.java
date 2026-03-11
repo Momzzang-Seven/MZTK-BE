@@ -37,7 +37,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 @DisplayName("S3PresignedUrlAdapter 단위 테스트")
 class S3PresignedUrlAdapterTest {
 
-  private static final String FAKE_URL = "https://test-bucket.s3.amazonaws.com/fake?X-Amz-Signature=abc";
+  private static final String FAKE_URL =
+      "https://test-bucket.s3.amazonaws.com/fake?X-Amz-Signature=abc";
 
   @Mock private S3Presigner s3Presigner;
 

@@ -84,7 +84,8 @@ class IssuePresignedUrlControllerTest {
         .perform(
             post(URL)
                 .contentType(APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"referenceType":"COMMUNITY_FREE","images":["photo.jpg"]}
                     """))
         .andExpect(status().isUnauthorized());
@@ -129,7 +130,8 @@ class IssuePresignedUrlControllerTest {
             post(URL)
                 .with(authentication(authAs(1L)))
                 .contentType(APPLICATION_JSON)
-                .content("""
+                .content(
+                    """
                     {"referenceType":"COMMUNITY_FREE"}
                     """))
         .andExpect(status().isBadRequest());
