@@ -31,7 +31,7 @@ class UpdatePostCommandTest {
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(PostInvalidInputException.class)
-        .hasMessageContaining("수정할 제목은 비워둘 수 없습니다.");
+        .hasMessageContaining("Title cannot be blank.");
   }
 
   @Test
@@ -41,7 +41,7 @@ class UpdatePostCommandTest {
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(PostInvalidInputException.class)
-        .hasMessageContaining("수정할 내용은 비워둘 수 없습니다.");
+        .hasMessageContaining("Content cannot be blank.");
   }
 
   @Test
@@ -51,7 +51,7 @@ class UpdatePostCommandTest {
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(PostInvalidInputException.class)
-        .hasMessageContaining("수정할 값이 없습니다.");
+        .hasMessageContaining("At least one field must be provided for update.");
   }
 
   @Test
