@@ -250,6 +250,10 @@ public enum ErrorCode {
   DATABASE_ERROR(
       "INTERNAL_003", "Database operation failed", HttpStatus.INTERNAL_SERVER_ERROR // 500
       ),
+
+  DATA_INTEGRITY_VIOLATION(
+      "INTERNAL_004", "A data conflict occurred. Please try again.", HttpStatus.CONFLICT // 409
+      ),
   // ========================================
   // Post Errors (POST_xxx)
   // ========================================
@@ -293,7 +297,21 @@ public enum ErrorCode {
       "COMMENT_007",
       "Invalid comment hard-delete configuration",
       HttpStatus.INTERNAL_SERVER_ERROR // 500
-      );
+      ),
+  // ========================================
+  // Image Errors (IMAGE_xxx)
+  // ========================================
+  IMAGE_NOT_FOUND("IMAGE_001", "Image not found", HttpStatus.NOT_FOUND),
+  IMAGE_STATUS_INVALID("IMAGE_002", "Image status transition is not allowed", HttpStatus.CONFLICT),
+  IMAGE_LAMBDA_UNAUTHORIZED("IMAGE_003", "Invalid lambda webhook secret", HttpStatus.UNAUTHORIZED),
+  IMAGE_COUNT_EXCEEDED(
+      "IMAGE_004", "Image count exceeds the allowed limit", HttpStatus.BAD_REQUEST),
+  IMAGE_INVALID_EXTENSION("IMAGE_005", "Unsupported image file extension", HttpStatus.BAD_REQUEST),
+  IMAGE_REF_TYPE_INVALID("IMAGE_006", "Image ref type invalid", HttpStatus.BAD_REQUEST),
+  IMAGE_FILE_NAME_INVALID("IMAGE_007", "Image file name invalid", HttpStatus.BAD_REQUEST),
+  IMAGE_VIRTUAL_REF_TYPE_CANNOT_BUILD_OBJECT_KEY(
+      "IMAGE_008", "Virtual ref type cannot build object key", HttpStatus.INTERNAL_SERVER_ERROR),
+  ;
 
   private final String code;
   private final String message;
