@@ -59,16 +59,17 @@ public class Post {
       List<String> imageUrls,
       List<String> tags) {
 
-    if (userId == null) throw new IllegalArgumentException("작성자 ID는 필수입니다.");
-    if (type == null) throw new IllegalArgumentException("게시글 타입은 필수입니다.");
-    if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
+    if (userId == null) throw new IllegalArgumentException("Author ID is required.");
+    if (type == null) throw new IllegalArgumentException("Post type is required.");
+    if (content == null || content.isBlank())
+      throw new IllegalArgumentException("Content must not be blank.");
 
     if (type == PostType.QUESTION) {
       if (title == null || title.isBlank()) {
-        throw new IllegalArgumentException("질문 게시글은 제목이 필요합니다.");
+        throw new IllegalArgumentException("Title is required for question posts.");
       }
       if (reward == null || reward <= 0) {
-        throw new IllegalArgumentException("질문 게시글은 보상(XP)이 필요합니다.");
+        throw new IllegalArgumentException("Reward must be positive for question posts.");
       }
     } else if (type == PostType.FREE) {
       reward = 0L;
@@ -109,13 +110,13 @@ public class Post {
     boolean isUpdated = false;
 
     if (title != null) {
-      if (title.isBlank()) throw new IllegalArgumentException("The title cannot be blank.");
+      if (title.isBlank()) throw new IllegalArgumentException("Title cannot be blank.");
       builder.title(title);
       isUpdated = true;
     }
 
     if (content != null) {
-      if (content.isBlank()) throw new IllegalArgumentException("The content cannot be blank.");
+      if (content.isBlank()) throw new IllegalArgumentException("Content cannot be blank.");
       builder.content(content);
       isUpdated = true;
     }

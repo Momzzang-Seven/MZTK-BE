@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.wallet.api.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletRequestDTO;
 import momzzangseven.mztkbe.modules.web3.wallet.api.dto.RegisterWalletResponseDTO;
@@ -39,11 +40,15 @@ public class WalletController {
   public ResponseEntity<ApiResponse<RegisterWalletResponseDTO>> registerWallet(
       @AuthenticationPrincipal Long userId, @Valid @RequestBody RegisterWalletRequestDTO request) {
 
-    log.info("Wallet registration request: userId={}, address={}", userId, request.walletAddress());
+    Long validatedUserId = requireUserId(userId);
+    log.info(
+        "Wallet registration request: userId={}, address={}",
+        validatedUserId,
+        request.walletAddress());
 
     RegisterWalletCommand command =
         new RegisterWalletCommand(
-            userId, request.walletAddress(), request.signature(), request.nonce());
+            validatedUserId, request.walletAddress(), request.signature(), request.nonce());
 
     RegisterWalletResult result = registerWalletUseCase.execute(command);
 
@@ -65,11 +70,20 @@ public class WalletController {
   public ResponseEntity<ApiResponse<Void>> unlinkWallet(
       @AuthenticationPrincipal Long userId, @PathVariable("walletAddress") String walletAddress) {
 
-    log.info("Wallet deactivation request: userId={}, walletAddress={}", userId, walletAddress);
+    Long validatedUserId = requireUserId(userId);
+    log.info(
+        "Wallet deactivation request: userId={}, walletAddress={}", validatedUserId, walletAddress);
 
-    UnlinkWalletCommand command = new UnlinkWalletCommand(userId, walletAddress);
+    UnlinkWalletCommand command = new UnlinkWalletCommand(validatedUserId, walletAddress);
     unlinkWalletUseCase.execute(command);
 
     return ResponseEntity.ok(ApiResponse.success(null));
+  }
+
+  private Long requireUserId(Long userId) {
+    if (userId == null) {
+      throw new UserNotAuthenticatedException();
+    }
+    return userId;
   }
 }

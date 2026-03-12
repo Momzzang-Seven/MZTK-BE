@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
@@ -27,18 +26,12 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   public void updatePost(Long currentUserId, Long postId, UpdatePostCommand command) {
     command.validate();
 
-    Post post = getPostOrThrow(postId);
+    Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
 
-    // 도메인 레벨 fast-fail (이미 조회 시점에 solved인 경우)
     Post updatedPost =
         post.update(command.title(), command.content(), command.imageUrls(), command.tags());
-
-    // DB 레벨 원자적 보장 (WHERE is_solved = false)
-    int affected = postPersistencePort.updateIfNotSolved(updatedPost);
-    if (affected == 0) {
-      throw new PostAlreadySolvedException();
-    }
+    postPersistencePort.savePost(updatedPost);
 
     if (command.tags() != null) {
       linkTagPort.updateTags(postId, command.tags());
@@ -47,22 +40,15 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   @Override
   public void deletePost(Long currentUserId, Long postId) {
-    Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
-
+    Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
-    // 도메인 레벨 fast-fail (이미 조회 시점에 solved인 경우)
     post.validateDeletable();
 
-    // DB 레벨 원자적 보장 (WHERE is_solved = false)
-    int affected = postPersistencePort.deleteIfNotSolved(postId);
-    if (affected == 0) {
-      throw new PostAlreadySolvedException();
-    }
-
+    postPersistencePort.deletePost(post);
     eventPublisher.publishEvent(new PostDeletedEvent(postId));
   }
 
-  private Post getPostOrThrow(Long postId) {
+  private Post loadPostOrThrow(Long postId) {
     return postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
   }
 }
