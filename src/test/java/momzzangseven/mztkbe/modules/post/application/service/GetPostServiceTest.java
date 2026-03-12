@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -28,6 +29,7 @@ class GetPostServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private LoadTagPort loadTagPort;
+  @Mock private LoadPostWriterPort loadPostWriterPort;
 
   @InjectMocks private GetPostService getPostService;
 
@@ -50,12 +52,42 @@ class GetPostServiceTest {
 
     when(postPersistencePort.loadPost(20L)).thenReturn(Optional.of(post));
     when(loadTagPort.findTagNamesByPostId(20L)).thenReturn(List.of("java", "spring"));
+    when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
 
     PostResult result = getPostService.getPost(20L);
 
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.tags()).containsExactly("java", "spring");
     assertThat(result.isSolved()).isFalse();
+  }
+
+  @Test
+  @DisplayName("QUESTION 게시글 조회 시 reward와 isSolved 포함")
+  void getQuestionPostReturnsRewardAndIsSolved() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(30L)
+            .userId(5L)
+            .type(PostType.QUESTION)
+            .title("질문 제목")
+            .content("질문 내용")
+            .reward(50L)
+            .isSolved(true)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(30L)).thenReturn(Optional.of(post));
+    when(loadTagPort.findTagNamesByPostId(30L)).thenReturn(List.of());
+    when(loadPostWriterPort.loadWriterById(5L)).thenReturn(Optional.empty());
+
+    PostResult result = getPostService.getPost(30L);
+
+    assertThat(result.type()).isEqualTo(PostType.QUESTION);
+    assertThat(result.title()).isEqualTo("질문 제목");
+    assertThat(result.reward()).isEqualTo(50L);
+    assertThat(result.isSolved()).isTrue();
   }
 
   @Test
