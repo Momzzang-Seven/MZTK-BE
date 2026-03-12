@@ -150,17 +150,17 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("POST /posts/free principal이 null이면 403 (POST_002)")
-  void createFreePost_nullPrincipal_returns403() throws Exception {
+  @DisplayName("POST /posts/free principal이 null이면 401 (AUTH_006)")
+  void createFreePost_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(
             post("/posts/free")
                 .with(nullUserPrincipal())
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("content", "내용"))))
-        .andExpect(status().isForbidden())
+        .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.status").value("FAIL"))
-        .andExpect(jsonPath("$.code").value("POST_002"));
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
 
     verifyNoInteractions(createPostUseCase);
   }
@@ -342,17 +342,17 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("POST /posts/question null principal이면 403 (POST_002)")
-  void createQuestionPost_nullPrincipal_returns403() throws Exception {
+  @DisplayName("POST /posts/question null principal이면 401 (AUTH_006)")
+  void createQuestionPost_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(
             post("/posts/question")
                 .with(nullUserPrincipal())
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("title", "제목", "content", "내용", "reward", 10))))
-        .andExpect(status().isForbidden())
+        .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.status").value("FAIL"))
-        .andExpect(jsonPath("$.code").value("POST_002"));
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
 
     verifyNoInteractions(createPostUseCase);
   }
@@ -430,14 +430,14 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("PATCH /posts/{postId} principal이 null이면 403 (POST_002)")
-  void updatePost_nullPrincipal_returns403() throws Exception {
+  @DisplayName("PATCH /posts/{postId} principal이 null이면 401 (AUTH_006)")
+  void updatePost_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(
             patch("/posts/1").with(nullUserPrincipal()).contentType(APPLICATION_JSON).content("{}"))
-        .andExpect(status().isForbidden())
+        .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.status").value("FAIL"))
-        .andExpect(jsonPath("$.code").value("POST_002"));
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
   }
 
   @Test
@@ -457,13 +457,13 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("DELETE /posts/{postId} principal이 null이면 403 (POST_002)")
-  void deletePost_nullPrincipal_returns403() throws Exception {
+  @DisplayName("DELETE /posts/{postId} principal이 null이면 401 (AUTH_006)")
+  void deletePost_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(delete("/posts/1").with(nullUserPrincipal()))
-        .andExpect(status().isForbidden())
+        .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.status").value("FAIL"))
-        .andExpect(jsonPath("$.code").value("POST_002"));
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
   }
 
   @Test
