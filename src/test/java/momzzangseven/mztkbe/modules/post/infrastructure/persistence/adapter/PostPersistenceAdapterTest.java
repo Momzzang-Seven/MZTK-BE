@@ -80,9 +80,11 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPost returns empty when missing")
+  @DisplayName("loadPost returns empty when missing (write-tx path: findByIdForUpdate)")
   void loadPostReturnsEmptyWhenMissing() {
-    when(postJpaRepository.findById(999L)).thenReturn(Optional.empty());
+    // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
+    // isCurrentTransactionReadOnly() == false → findByIdForUpdate 경로 실행
+    when(postJpaRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
     Optional<Post> result = postPersistenceAdapter.loadPost(999L);
 
@@ -90,7 +92,7 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPost maps found entity with empty tags")
+  @DisplayName("loadPost maps found entity with empty tags (write-tx path: findByIdForUpdate)")
   void loadPostMapsFoundEntity() {
     PostEntity entity =
         PostEntity.builder()
@@ -104,7 +106,9 @@ class PostPersistenceAdapterTest {
             .isSolved(false)
             .build();
 
-    when(postJpaRepository.findById(10L)).thenReturn(Optional.of(entity));
+    // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
+    // isCurrentTransactionReadOnly() == false → findByIdForUpdate 경로 실행
+    when(postJpaRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(entity));
 
     Optional<Post> result = postPersistenceAdapter.loadPost(10L);
 
