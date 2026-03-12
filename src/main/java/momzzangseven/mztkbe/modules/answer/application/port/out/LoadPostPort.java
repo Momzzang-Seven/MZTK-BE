@@ -6,5 +6,5 @@ public interface LoadPostPort {
 
   Optional<PostContext> loadPost(Long postId);
 
-  record PostContext(Long postId, Long writerId, boolean isSolved) {}
+  record PostContext(Long postId, Long writerId, boolean isSolved, boolean questionPost) {}
 }

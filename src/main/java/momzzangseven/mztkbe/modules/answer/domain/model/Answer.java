@@ -5,6 +5,12 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
+import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
 
 @Getter
 @Builder(toBuilder = true)
@@ -39,7 +45,6 @@ public class Answer {
     this.updatedAt = updatedAt;
   }
 
-  // [Create] 도메인 생성
   public static Answer create(
       Long postId,
       Long postWriterId,
@@ -49,15 +54,15 @@ public class Answer {
       List<String> imageUrls) {
 
     if (content == null || content.isBlank()) {
-      throw new IllegalArgumentException("Answer content must not be blank.");
+      throw new AnswerInvalidInputException("Answer content must not be blank.");
     }
 
     if (isPostSolved) {
-      throw new IllegalArgumentException("Cannot add an answer to an already solved post.");
+      throw new CannotAnswerSolvedPostException();
     }
 
     if (postWriterId.equals(answererId)) {
-      throw new IllegalArgumentException("Cannot answer your own post.");
+      throw new CannotAnswerOwnPostException();
     }
 
     return Answer.builder()
@@ -66,40 +71,36 @@ public class Answer {
         .content(content)
         .isAccepted(false)
         .imageUrls(imageUrls != null ? imageUrls : new ArrayList<>())
-        .createdAt(LocalDateTime.now())
-        .updatedAt(LocalDateTime.now())
         .build();
   }
 
-  // [Validate] 소유권 검증
   public void validateOwnership(Long currentUserId) {
     if (!this.userId.equals(currentUserId)) {
-      throw new IllegalArgumentException("Unauthorized access to this answer.");
+      throw new AnswerUnauthorizedException();
     }
   }
 
-  // [Validate] 삭제 가능 여부 검증
   public void validateDeletable(Long requesterId) {
     validateOwnership(requesterId);
     if (this.isAccepted) {
-      throw new IllegalArgumentException("Cannot delete an accepted answer.");
+      throw new CannotDeleteAcceptedAnswerException();
     }
   }
 
-  // [Update] 도메인 수정
   public Answer update(String content, List<String> imageUrls, Long requesterId) {
     validateOwnership(requesterId);
 
     if (this.isAccepted) {
-      throw new IllegalArgumentException("Cannot update an accepted answer.");
+      throw new CannotUpdateAcceptedAnswerException();
     }
 
     var builder = this.toBuilder();
     boolean isUpdated = false;
 
     if (content != null) {
-      if (content.isBlank())
-        throw new IllegalArgumentException("Updated content must not be blank.");
+      if (content.isBlank()) {
+        throw new AnswerInvalidInputException("Updated content must not be blank.");
+      }
       builder.content(content);
       isUpdated = true;
     }
@@ -109,11 +110,6 @@ public class Answer {
       isUpdated = true;
     }
 
-    if (isUpdated) {
-      builder.updatedAt(LocalDateTime.now());
-      return builder.build();
-    }
-
-    return this;
+    return isUpdated ? builder.build() : this;
   }
 }
