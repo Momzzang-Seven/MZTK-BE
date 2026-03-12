@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.user.infrastructure.persistence.adapter;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -76,6 +77,12 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, Delet
   public Optional<User> loadUserById(Long userId) {
     log.debug("Loading user by id: {}", userId);
     return userJpaRepository.findById(userId).filter(this::isActiveUser).map(this::mapToDomain);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<User> loadUsersByIds(Collection<Long> userIds) {
+    return userJpaRepository.findAllById(userIds).stream().map(this::mapToDomain).toList();
   }
 
   @Override

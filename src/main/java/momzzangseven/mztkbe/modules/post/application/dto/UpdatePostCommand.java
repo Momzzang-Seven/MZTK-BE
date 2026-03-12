@@ -8,11 +8,11 @@ public record UpdatePostCommand(
 
   public void validate() {
     if (title != null && title.isBlank()) {
-      throw new PostInvalidInputException("Title must not be blank.");
+      throw new PostInvalidInputException("Title cannot be blank.");
     }
 
     if (content != null && content.isBlank()) {
-      throw new PostInvalidInputException("Content must not be blank.");
+      throw new PostInvalidInputException("Content cannot be blank.");
     }
 
     if (title == null && content == null && imageUrls == null && tags == null) {
