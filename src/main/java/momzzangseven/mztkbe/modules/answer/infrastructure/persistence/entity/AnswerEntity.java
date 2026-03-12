@@ -1,6 +1,15 @@
 package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,7 +17,6 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -63,29 +71,5 @@ public class AnswerEntity {
     this.content = content;
     this.isAccepted = isAccepted != null ? isAccepted : false;
     this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
-  }
-
-  public static AnswerEntity fromDomain(Answer answer) {
-    return AnswerEntity.builder()
-        .id(answer.getId())
-        .postId(answer.getPostId())
-        .userId(answer.getUserId())
-        .content(answer.getContent())
-        .isAccepted(answer.getIsAccepted())
-        .imageUrls(answer.getImageUrls())
-        .build();
-  }
-
-  public Answer toDomain() {
-    return Answer.builder()
-        .id(this.id)
-        .postId(this.postId)
-        .userId(this.userId)
-        .content(this.content)
-        .isAccepted(this.isAccepted)
-        .createdAt(this.createdAt)
-        .updatedAt(this.updatedAt)
-        .imageUrls(this.imageUrls == null ? new ArrayList<>() : new ArrayList<>(this.imageUrls))
-        .build();
   }
 }

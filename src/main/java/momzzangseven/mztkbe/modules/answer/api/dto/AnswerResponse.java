@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.answer.api.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 
 public record AnswerResponse(
     Long answerId,
@@ -12,15 +12,15 @@ public record AnswerResponse(
     List<String> imageUrls,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
-  /** Domain 객체를 Response DTO로 변환하는 정적 팩토리 메서드 */
-  public static AnswerResponse from(Answer answer) {
+
+  public static AnswerResponse from(AnswerResult answer) {
     return new AnswerResponse(
-        answer.getId(),
-        answer.getUserId(),
-        answer.getContent(),
-        answer.getIsAccepted(),
-        answer.getImageUrls() != null ? answer.getImageUrls() : List.of(),
-        answer.getCreatedAt(),
-        answer.getUpdatedAt());
+        answer.answerId(),
+        answer.userId(),
+        answer.content(),
+        answer.accepted(),
+        answer.imageUrls() == null ? List.of() : List.copyOf(answer.imageUrls()),
+        answer.createdAt(),
+        answer.updatedAt());
   }
 }
