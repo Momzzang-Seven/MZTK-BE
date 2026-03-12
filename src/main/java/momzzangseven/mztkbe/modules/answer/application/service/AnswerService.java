@@ -2,6 +2,14 @@ package momzzangseven.mztkbe.modules.answer.application.service;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
+import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
+import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
+import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
+import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
+import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
@@ -27,14 +35,11 @@ public class AnswerService
   @Override
   @Transactional
   public Long createAnswer(CreateAnswerCommand command) {
+    command.validate();
 
-    // 게시글 로드 및 예외 처리
-    LoadPostPort.PostContext post =
-        loadPostPort
-            .loadPost(command.postId())
-            .orElseThrow(() -> new IllegalArgumentException("Post not found."));
+    LoadPostPort.PostContext post = loadPost(command.postId());
+    validateAnswerablePost(post);
 
-    // 도메인 생성
     Answer answer =
         Answer.create(
             post.postId(),
@@ -51,43 +56,57 @@ public class AnswerService
   @Override
   @Transactional(readOnly = true)
   public List<Answer> getAnswersByPostId(Long postId) {
+    if (postId == null) {
+      throw new AnswerInvalidInputException("postId is required.");
+    }
 
-    loadPostPort
-        .loadPost(postId)
-        .orElseThrow(() -> new IllegalArgumentException("Post not found."));
-
+    loadPost(postId);
     return loadAnswerPort.loadAnswersByPostId(postId);
   }
 
   @Override
   @Transactional
-  public void updateAnswer(UpdateAnswerUseCase.UpdateAnswerCommand command) {
-    // 1. 기존 답변 조회
-    Answer answer =
-        loadAnswerPort
-            .loadAnswer(command.answerId())
-            .orElseThrow(() -> new IllegalArgumentException("Answer not found."));
+  public void updateAnswer(UpdateAnswerCommand command) {
+    command.validate();
 
-    // 2. 도메인 객체에 수정 위임 (권한 및 상태 검증은 도메인 내부에서 자동 수행됨)
+    Answer answer = loadAnswer(command.answerId());
+    // Route postId and persisted postId must match to protect nested resource integrity.
+    validateAnswerBelongsToPost(answer, command.postId());
+
     Answer updatedAnswer = answer.update(command.content(), command.imageUrls(), command.userId());
-
-    // 3. 수정된 객체 저장
     saveAnswerPort.saveAnswer(updatedAnswer);
   }
 
   @Override
   @Transactional
   public void deleteAnswer(DeleteAnswerCommand command) {
-    // 기존 답변 조회
-    Answer answer =
-        loadAnswerPort
-            .loadAnswer(command.answerId())
-            .orElseThrow(() -> new IllegalArgumentException("Answer not found."));
+    command.validate();
 
-    // 도메인 내부 검증 로직 호출 (권한 및 채택 여부 확인)
+    Answer answer = loadAnswer(command.answerId());
+    // Reject delete requests routed through a different parent post.
+    validateAnswerBelongsToPost(answer, command.postId());
+
     answer.validateDeletable(command.userId());
-
-    // 삭제 포트 호출
     deleteAnswerPort.deleteAnswer(answer.getId());
+  }
+
+  private LoadPostPort.PostContext loadPost(Long postId) {
+    return loadPostPort.loadPost(postId).orElseThrow(AnswerPostNotFoundException::new);
+  }
+
+  private Answer loadAnswer(Long answerId) {
+    return loadAnswerPort.loadAnswer(answerId).orElseThrow(AnswerNotFoundException::new);
+  }
+
+  private void validateAnswerBelongsToPost(Answer answer, Long postId) {
+    if (!answer.getPostId().equals(postId)) {
+      throw new AnswerPostMismatchException();
+    }
+  }
+
+  private void validateAnswerablePost(LoadPostPort.PostContext post) {
+    if (!post.questionPost()) {
+      throw new AnswerUnsupportedPostTypeException();
+    }
   }
 }

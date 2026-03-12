@@ -9,8 +9,10 @@ import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.answer.api.dto.AnswerResponse;
 import momzzangseven.mztkbe.modules.answer.api.dto.CreateAnswerRequest;
 import momzzangseven.mztkbe.modules.answer.api.dto.UpdateAnswerRequest;
+import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
@@ -64,7 +66,7 @@ public class AnswerController {
       @RequestBody @Valid UpdateAnswerRequest request) {
 
     Long validatedUserId = requireUserId(userId);
-    UpdateAnswerUseCase.UpdateAnswerCommand command = request.toCommand(answerId, validatedUserId);
+    UpdateAnswerCommand command = request.toCommand(postId, answerId, validatedUserId);
 
     updateAnswerUseCase.updateAnswer(command);
 
@@ -79,8 +81,7 @@ public class AnswerController {
       @PathVariable Long answerId) {
 
     Long validatedUserId = requireUserId(userId);
-    DeleteAnswerUseCase.DeleteAnswerCommand command =
-        new DeleteAnswerUseCase.DeleteAnswerCommand(answerId, validatedUserId);
+    DeleteAnswerCommand command = new DeleteAnswerCommand(postId, answerId, validatedUserId);
 
     deleteAnswerUseCase.deleteAnswer(command);
 

@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.answer.api.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
-import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase.CreateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import org.hibernate.validator.constraints.URL;
 
 public record CreateAnswerRequest(
