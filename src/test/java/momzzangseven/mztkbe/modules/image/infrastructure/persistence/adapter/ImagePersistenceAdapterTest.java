@@ -12,7 +12,6 @@ import java.util.List;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
-import momzzangseven.mztkbe.modules.image.infrastructure.persistence.adaptor.ImagePersistenceAdapter;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import org.junit.jupiter.api.DisplayName;
