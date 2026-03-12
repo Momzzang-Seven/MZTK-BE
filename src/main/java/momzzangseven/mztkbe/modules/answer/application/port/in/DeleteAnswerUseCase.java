@@ -4,5 +4,5 @@ import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 
 public interface DeleteAnswerUseCase {
 
-  void deleteAnswer(DeleteAnswerCommand command);
+  void execute(DeleteAnswerCommand command);
 }

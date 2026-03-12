@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.answer.domain.model;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
@@ -40,7 +41,7 @@ public class Answer {
     this.userId = userId;
     this.content = content;
     this.isAccepted = isAccepted != null ? isAccepted : false;
-    this.imageUrls = imageUrls != null ? imageUrls : new ArrayList<>();
+    this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }
@@ -61,6 +62,8 @@ public class Answer {
       throw new CannotAnswerSolvedPostException();
     }
 
+    Objects.requireNonNull(postWriterId, "postWriterId must not be null");
+    Objects.requireNonNull(answererId, "answererId must not be null");
     if (postWriterId.equals(answererId)) {
       throw new CannotAnswerOwnPostException();
     }
@@ -70,11 +73,12 @@ public class Answer {
         .userId(answererId)
         .content(content)
         .isAccepted(false)
-        .imageUrls(imageUrls != null ? imageUrls : new ArrayList<>())
+        .imageUrls(imageUrls == null ? List.of() : List.copyOf(imageUrls))
         .build();
   }
 
   public void validateOwnership(Long currentUserId) {
+    Objects.requireNonNull(currentUserId, "currentUserId must not be null");
     if (!this.userId.equals(currentUserId)) {
       throw new AnswerUnauthorizedException();
     }
@@ -106,7 +110,7 @@ public class Answer {
     }
 
     if (imageUrls != null) {
-      builder.imageUrls(imageUrls);
+      builder.imageUrls(List.copyOf(imageUrls));
       isUpdated = true;
     }
 
