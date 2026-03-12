@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.image.infrastructure.persistence.adaptor;
+package momzzangseven.mztkbe.modules.image.infrastructure.persistence.adapter;
 
 import java.time.Instant;
 import java.util.List;
