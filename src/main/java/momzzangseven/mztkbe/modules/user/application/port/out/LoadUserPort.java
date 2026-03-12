@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.user.application.port.out;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
@@ -30,4 +31,6 @@ public interface LoadUserPort {
       AuthProvider provider, String providerUserId);
 
   List<Long> loadUserIdsForDeletion(UserStatus status, LocalDateTime cutoff, int limit);
+
+  List<User> loadUsersByIds(Collection<Long> userIds);
 }
