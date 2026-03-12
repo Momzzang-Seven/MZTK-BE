@@ -31,7 +31,7 @@ public class GetPostService implements GetPostUseCase {
     LoadPostWriterPort.WriterSummary writer =
         loadPostWriterPort.loadWriterById(post.getUserId()).orElse(null);
 
-    String nickname = writer != null ? writer.nickname() : "알수없음";
+    String nickname = writer != null ? writer.nickname() : null;
     String profileImageUrl = writer != null ? writer.profileImageUrl() : null;
 
     return PostResult.fromDomain(post, nickname, profileImageUrl);
