@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -18,6 +19,7 @@ public class GetPostService implements GetPostUseCase {
 
   private final PostPersistencePort postPersistencePort;
   private final LoadTagPort loadTagPort;
+  private final LoadPostWriterPort loadPostWriterPort;
 
   @Override
   public PostResult getPost(Long postId) {
@@ -26,6 +28,12 @@ public class GetPostService implements GetPostUseCase {
     List<String> tags = loadTagPort.findTagNamesByPostId(postId);
     post = post.withTags(tags);
 
-    return PostResult.fromDomain(post);
+    LoadPostWriterPort.WriterSummary writer =
+        loadPostWriterPort.loadWriterById(post.getUserId()).orElse(null);
+
+    String nickname = writer != null ? writer.nickname() : null;
+    String profileImageUrl = writer != null ? writer.profileImageUrl() : null;
+
+    return PostResult.fromDomain(post, nickname, profileImageUrl);
   }
 }

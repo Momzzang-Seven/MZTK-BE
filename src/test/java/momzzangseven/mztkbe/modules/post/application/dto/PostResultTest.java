@@ -33,7 +33,10 @@ class PostResultTest {
             .updatedAt(updatedAt)
             .build();
 
-    PostResult result = PostResult.fromDomain(post);
+    String nickname = "test nick name";
+    String profileImageUrl = "test/image/url";
+
+    PostResult result = PostResult.fromDomain(post, nickname, profileImageUrl);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
@@ -46,6 +49,8 @@ class PostResultTest {
     assertThat(result.tags()).containsExactly("java");
     assertThat(result.createdAt()).isEqualTo(createdAt);
     assertThat(result.updatedAt()).isEqualTo(updatedAt);
+    assertThat(result.nickname()).isEqualTo(nickname);
+    assertThat(result.profileImageUrl()).isEqualTo(profileImageUrl);
   }
 
   @Test
@@ -62,7 +67,10 @@ class PostResultTest {
             .isSolved(true)
             .build();
 
-    PostResult result = PostResult.fromDomain(post);
+    String nickname = "test nick name";
+    String profileImageUrl = "test/image/url";
+
+    PostResult result = PostResult.fromDomain(post, nickname, profileImageUrl);
 
     assertThat(result.isSolved()).isTrue();
   }

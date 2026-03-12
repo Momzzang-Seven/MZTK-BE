@@ -7,7 +7,10 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -25,6 +28,7 @@ class SearchPostsServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private LoadTagPort loadTagPort;
+  @Mock private LoadPostWriterPort loadPostWriterPort;
 
   @InjectMocks private SearchPostsService searchPostsService;
 
@@ -35,7 +39,7 @@ class SearchPostsServiceTest {
 
     when(loadTagPort.findPostIdsByTagName("java")).thenReturn(List.of());
 
-    List<Post> results = searchPostsService.searchPosts(condition);
+    List<PostResult> results = searchPostsService.searchPosts(condition);
 
     assertThat(results).isEmpty();
     verify(postPersistencePort, never()).findPostsByCondition(condition, List.of());
@@ -49,11 +53,12 @@ class SearchPostsServiceTest {
 
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of(post));
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L))).thenReturn(Map.of());
+    when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
 
-    List<Post> results = searchPostsService.searchPosts(condition);
+    List<PostResult> results = searchPostsService.searchPosts(condition);
 
     assertThat(results).hasSize(1);
-    assertThat(results.getFirst().getTags()).isEmpty();
+    assertThat(results.getFirst().tags()).isEmpty();
     verify(loadTagPort, never()).findPostIdsByTagName("   ");
   }
 
@@ -69,12 +74,13 @@ class SearchPostsServiceTest {
         .thenReturn(List.of(first, second));
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L, 2L)))
         .thenReturn(Map.of(1L, List.of("java"), 2L, List.of("spring", "kotlin")));
+    when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
 
-    List<Post> results = searchPostsService.searchPosts(condition);
+    List<PostResult> results = searchPostsService.searchPosts(condition);
 
     assertThat(results).hasSize(2);
-    assertThat(results.get(0).getTags()).containsExactly("java");
-    assertThat(results.get(1).getTags()).containsExactly("spring", "kotlin");
+    assertThat(results.get(0).tags()).containsExactly("java");
+    assertThat(results.get(1).tags()).containsExactly("spring", "kotlin");
   }
 
   @Test
@@ -84,7 +90,7 @@ class SearchPostsServiceTest {
 
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of());
 
-    List<Post> results = searchPostsService.searchPosts(condition);
+    List<PostResult> results = searchPostsService.searchPosts(condition);
 
     assertThat(results).isEmpty();
     verify(loadTagPort, never()).findTagsByPostIdsIn(List.of());

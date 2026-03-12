@@ -1,7 +1,9 @@
-package momzzangseven.mztkbe.modules.image.infrastructure.persistence.adaptor;
+package momzzangseven.mztkbe.modules.image.infrastructure.persistence.adapter;
 
+import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.SaveImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
@@ -16,13 +18,22 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-public class ImagePersistenceAdapter implements SaveImagePort {
+public class ImagePersistenceAdapter implements SaveImagePort, DeleteImagePort {
   private final ImageJpaRepository imageJpaRepository;
+
+  // ========== SaveImagePort Implementation ==========
 
   @Override
   public List<Image> saveAll(List<Image> images) {
     List<ImageEntity> entities = images.stream().map(this::toEntity).toList();
     return imageJpaRepository.saveAll(entities).stream().map(this::toDomain).toList();
+  }
+
+  // ========== DeleteImagePort Implementation ==========
+
+  @Override
+  public int deletePendingImagesBefore(Instant cutoff, int batchSize) {
+    return imageJpaRepository.deletePendingBefore(cutoff, batchSize);
   }
 
   /**
