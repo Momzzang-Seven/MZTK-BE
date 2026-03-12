@@ -141,6 +141,43 @@ class CreatePostServiceTest {
   }
 
   @Test
+  @DisplayName("QUESTION 게시글 생성 성공 - title, reward 포함")
+  void executeSuccessWithQuestionPost() {
+    CreatePostCommand command =
+        CreatePostCommand.of(
+            3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, List.of(), List.of("java"));
+
+    Post savedPost =
+        Post.builder()
+            .id(20L)
+            .userId(3L)
+            .type(PostType.QUESTION)
+            .title("질문 제목")
+            .content("질문 내용")
+            .reward(50L)
+            .isSolved(false)
+            .imageUrls(List.of())
+            .tags(List.of("java"))
+            .build();
+
+    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
+    when(postXpService.grantCreatePostXp(3L, 20L)).thenReturn(0L);
+
+    CreatePostResult result = createPostService.execute(command);
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort).savePost(postCaptor.capture());
+    Post captured = postCaptor.getValue();
+    assertThat(captured.getType()).isEqualTo(PostType.QUESTION);
+    assertThat(captured.getTitle()).isEqualTo("질문 제목");
+    assertThat(captured.getReward()).isEqualTo(50L);
+    assertThat(captured.getIsSolved()).isFalse();
+
+    verify(linkTagPort).linkTagsToPost(20L, List.of("java"));
+    assertThat(result.postId()).isEqualTo(20L);
+  }
+
+  @Test
   @DisplayName("question post with zero reward is blocked by domain invariant")
   void executeRejectsQuestionWithZeroReward() {
     CreatePostCommand command =
@@ -148,7 +185,7 @@ class CreatePostServiceTest {
 
     assertThatThrownBy(() -> createPostService.execute(command))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("보상");
+        .hasMessageContaining("Reward must be positive for question posts.");
 
     verifyNoInteractions(postPersistencePort, postXpService, linkTagPort);
   }
