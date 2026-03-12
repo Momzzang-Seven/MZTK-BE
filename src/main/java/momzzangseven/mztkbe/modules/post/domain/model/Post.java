@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 
 @Getter
@@ -58,16 +59,17 @@ public class Post {
       List<String> imageUrls,
       List<String> tags) {
 
-    if (userId == null) throw new IllegalArgumentException("작성자 ID는 필수입니다.");
-    if (type == null) throw new IllegalArgumentException("게시글 타입은 필수입니다.");
-    if (content == null || content.isBlank()) throw new IllegalArgumentException("내용을 입력해주세요.");
+    if (userId == null) throw new IllegalArgumentException("Author ID is required.");
+    if (type == null) throw new IllegalArgumentException("Post type is required.");
+    if (content == null || content.isBlank())
+      throw new IllegalArgumentException("Content must not be blank.");
 
     if (type == PostType.QUESTION) {
       if (title == null || title.isBlank()) {
-        throw new IllegalArgumentException("질문 게시글은 제목이 필요합니다.");
+        throw new IllegalArgumentException("Title is required for question posts.");
       }
       if (reward == null || reward <= 0) {
-        throw new IllegalArgumentException("질문 게시글은 보상(XP)이 필요합니다.");
+        throw new IllegalArgumentException("Reward must be positive for question posts.");
       }
     } else if (type == PostType.FREE) {
       reward = 0L;
@@ -93,18 +95,28 @@ public class Post {
     }
   }
 
+  public void validateDeletable() {
+    if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
+      throw new PostInvalidInputException("A solved question post cannot be deleted.");
+    }
+  }
+
   public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
+    if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
+      throw new PostInvalidInputException("A solved question post cannot be edited.");
+    }
+
     var builder = this.toBuilder();
     boolean isUpdated = false;
 
     if (title != null) {
-      if (title.isBlank()) throw new IllegalArgumentException("수정할 제목은 비워둘 수 없습니다.");
+      if (title.isBlank()) throw new IllegalArgumentException("Title cannot be blank.");
       builder.title(title);
       isUpdated = true;
     }
 
     if (content != null) {
-      if (content.isBlank()) throw new IllegalArgumentException("수정할 내용은 비워둘 수 없습니다.");
+      if (content.isBlank()) throw new IllegalArgumentException("Content cannot be blank.");
       builder.content(content);
       isUpdated = true;
     }

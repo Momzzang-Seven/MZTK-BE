@@ -24,7 +24,6 @@ import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
-import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -151,7 +150,7 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("POST /posts/free principal이 null이면 401")
+  @DisplayName("POST /posts/free principal이 null이면 401 (AUTH_006)")
   void createFreePost_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(
@@ -177,6 +176,8 @@ class PostControllerTest {
                 "제목",
                 "본문",
                 1L,
+                "닉네임",
+                null,
                 List.of(),
                 0L,
                 false,
@@ -201,21 +202,23 @@ class PostControllerTest {
   @Test
   @DisplayName("GET /posts 목록 조회 성공")
   void getPosts_success() throws Exception {
-    Post post =
-        Post.builder()
-            .id(2L)
-            .userId(1L)
-            .type(PostType.FREE)
-            .title("목록")
-            .content("본문")
-            .imageUrls(List.of())
-            .reward(0L)
-            .isSolved(false)
-            .tags(List.of("health"))
-            .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
-            .build();
-    given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class))).willReturn(List.of(post));
+    PostResult postResult =
+        new PostResult(
+            2L,
+            PostType.FREE,
+            "목록",
+            "본문",
+            1L,
+            "닉네임",
+            null,
+            List.of(),
+            0L,
+            false,
+            List.of("health"),
+            LocalDateTime.now(),
+            LocalDateTime.now());
+    given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class)))
+        .willReturn(List.of(postResult));
 
     mockMvc
         .perform(get("/posts?type=FREE&tag=health&search=목록").with(userPrincipal(1L)))
@@ -242,6 +245,177 @@ class PostControllerTest {
   }
 
   @Test
+  @DisplayName("POST /posts/question 성공")
+  void createQuestionPost_success() throws Exception {
+    given(createPostUseCase.execute(any(CreatePostCommand.class)))
+        .willReturn(new CreatePostResult(200L, true, 50L, "ok"));
+
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "title", "질문 제목",
+                            "content", "질문 내용",
+                            "reward", 50))))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(200));
+
+    verify(createPostUseCase).execute(any(CreatePostCommand.class));
+  }
+
+  @Test
+  @DisplayName("POST /posts/question 인증 없으면 401")
+  void createQuestionPost_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "t", "content", "c", "reward", 10))))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/question 제목 누락이면 400")
+  void createQuestionPost_missingTitle_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "내용", "reward", 10))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/question 내용 누락이면 400")
+  void createQuestionPost_missingContent_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "제목", "reward", 10))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/question reward 누락이면 400")
+  void createQuestionPost_missingReward_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "제목", "content", "내용"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/question reward가 0 이하이면 400")
+  void createQuestionPost_nonPositiveReward_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "제목", "content", "내용", "reward", 0))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/question null principal이면 401 (AUTH_006)")
+  void createQuestionPost_nullPrincipal_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(nullUserPrincipal())
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "제목", "content", "내용", "reward", 10))))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("GET /posts/{postId} QUESTION 타입이면 question 필드 포함")
+  void getPost_questionType_includesQuestionInfo() throws Exception {
+    given(getPostUseCase.getPost(5L))
+        .willReturn(
+            new PostResult(
+                5L,
+                PostType.QUESTION,
+                "질문 제목",
+                "질문 내용",
+                1L,
+                "닉네임",
+                null,
+                List.of(),
+                50L,
+                false,
+                List.of(),
+                LocalDateTime.now(),
+                LocalDateTime.now()));
+
+    mockMvc
+        .perform(get("/posts/5").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.type").value("QUESTION"))
+        .andExpect(jsonPath("$.data.question.reward").value(50))
+        .andExpect(jsonPath("$.data.question.isSolved").value(false));
+  }
+
+  @Test
+  @DisplayName("GET /posts?type=QUESTION 질문 게시글 목록 조회 성공")
+  void getPosts_questionType_success() throws Exception {
+    PostResult questionResult =
+        new PostResult(
+            3L,
+            PostType.QUESTION,
+            "질문 제목",
+            "질문 내용",
+            1L,
+            "닉네임",
+            null,
+            List.of(),
+            30L,
+            false,
+            List.of(),
+            LocalDateTime.now(),
+            LocalDateTime.now());
+    given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class)))
+        .willReturn(List.of(questionResult));
+
+    mockMvc
+        .perform(get("/posts?type=QUESTION").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data[0].type").value("QUESTION"))
+        .andExpect(jsonPath("$.data[0].question.reward").value(30));
+  }
+
+  @Test
   @DisplayName("PATCH /posts/{postId} 성공")
   void updatePost_success() throws Exception {
     mockMvc
@@ -256,7 +430,7 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("PATCH /posts/{postId} 인증 principal이 null이면 401")
+  @DisplayName("PATCH /posts/{postId} principal이 null이면 401 (AUTH_006)")
   void updatePost_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(
@@ -283,11 +457,13 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("DELETE /posts/{postId} principal이 null이면 401")
+  @DisplayName("DELETE /posts/{postId} principal이 null이면 401 (AUTH_006)")
   void deletePost_nullPrincipal_returns401() throws Exception {
     mockMvc
         .perform(delete("/posts/1").with(nullUserPrincipal()))
-        .andExpect(status().isUnauthorized());
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
   }
 
   @Test

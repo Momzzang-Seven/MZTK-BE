@@ -7,8 +7,8 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.hibernate.validator.constraints.URL;
 
 public record CreateFreePostRequest(
-    @NotBlank(message = "내용을 입력해주세요.") String content,
-    List<@URL(message = "올바른 이미지 URL 형식이 아닙니다.") String> imageUrls,
+    @NotBlank(message = "Content must not be blank.") String content,
+    List<@URL(message = "Invalid image URL format.") String> imageUrls,
     List<String> tags) {
 
   public CreatePostCommand toCommand(Long userId) {
