@@ -3,7 +3,8 @@ package momzzangseven.mztkbe.modules.answer.application.dto;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 
-public record CreateAnswerCommand(Long postId, Long userId, String content, List<String> imageUrls) {
+public record CreateAnswerCommand(
+    Long postId, Long userId, String content, List<String> imageUrls) {
 
   public CreateAnswerCommand {
     imageUrls = imageUrls == null ? List.of() : List.copyOf(imageUrls);
