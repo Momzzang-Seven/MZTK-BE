@@ -33,12 +33,25 @@ public class PostController {
   private final DeletePostUseCase deletePostUseCase;
   private final SearchPostsUseCase searchPostsUseCase;
 
+  // [Create] 질문게시글 작성
+  @PostMapping("/question")
+  public ResponseEntity<ApiResponse<CreatePostResult>> createQuestionPost(
+      @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateQuestionPostRequest request) {
+
+    Long validatedUserId = requireUserId(userId);
+
+    CreatePostCommand command = request.toCommand(validatedUserId);
+    CreatePostResult response = createPostUseCase.execute(command);
+    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
+  }
+
   // [Create] 자유게시글 작성
   @PostMapping("/free")
   public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
 
     Long validatedUserId = requireUserId(userId);
+
     CreatePostCommand command = request.toCommand(validatedUserId);
     CreatePostResult response = createPostUseCase.execute(command);
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
