@@ -8,11 +8,11 @@ import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateQuestionPostRequest;
-import momzzangseven.mztkbe.modules.post.api.dto.PostResponse;
+import momzzangseven.mztkbe.modules.post.api.dto.PostDetailResponse;
+import momzzangseven.mztkbe.modules.post.api.dto.PostListResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.*;
 import momzzangseven.mztkbe.modules.post.application.port.in.*;
-import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -59,14 +59,14 @@ public class PostController {
 
   // [Read] 게시글 상세 조회
   @GetMapping("/{postId}")
-  public ResponseEntity<ApiResponse<PostResponse>> getPost(@PathVariable Long postId) {
+  public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(@PathVariable Long postId) {
     PostResult result = getPostUseCase.getPost(postId);
-    return ResponseEntity.ok(ApiResponse.success(PostResponse.from(result)));
+    return ResponseEntity.ok(ApiResponse.success(PostDetailResponse.from(result)));
   }
 
   // [Read] 게시글 목록 조회
   @GetMapping
-  public ResponseEntity<ApiResponse<List<PostResponse>>> getPosts(
+  public ResponseEntity<ApiResponse<List<PostListResponse>>> getPosts(
       @RequestParam(required = false) PostType type,
       @RequestParam(required = false) String tag,
       @RequestParam(required = false) String search,
@@ -75,8 +75,8 @@ public class PostController {
     PostSearchCondition condition =
         PostSearchCondition.of(type, tag, search, pageable.getPageNumber(), pageable.getPageSize());
 
-    List<Post> posts = searchPostsUseCase.searchPosts(condition);
-    List<PostResponse> response = posts.stream().map(PostResponse::from).toList();
+    List<PostResult> results = searchPostsUseCase.searchPosts(condition);
+    List<PostListResponse> response = results.stream().map(PostListResponse::from).toList();
 
     return ResponseEntity.ok(ApiResponse.success(response));
   }
@@ -104,6 +104,7 @@ public class PostController {
       @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
 
     Long validatedUserId = requireUserId(userId);
+
     deletePostUseCase.deletePost(validatedUserId, postId);
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
   }

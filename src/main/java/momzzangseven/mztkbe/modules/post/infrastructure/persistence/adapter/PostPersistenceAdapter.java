@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Component
@@ -32,12 +33,29 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
     return savedEntity.toDomain();
   }
 
+  /**
+   * 호출 트랜잭션의 읽기/쓰기 여부에 따라 락 전략을 자동으로 결정한다.
+   *
+   * <ul>
+   *   <li>읽기 전용 트랜잭션 (readOnly=true, e.g. GetPostService) → 락 없이 조회
+   *   <li>쓰기 트랜잭션 (e.g. PostProcessService) → PESSIMISTIC_WRITE 락을 걸고 조회
+   * </ul>
+   *
+   * 이를 통해 서비스 레이어는 단일 {@code loadPost} 포트에 의존하면서도, 수정·삭제 시나리오에서 동시성 정합성을 보장한다.
+   */
   @Override
   public Optional<Post> loadPost(Long postId) {
-    PostEntity entity = postJpaRepository.findById(postId).orElse(null);
-    if (entity == null) return Optional.empty();
+    boolean readOnly = TransactionSynchronizationManager.isCurrentTransactionReadOnly();
+    Optional<PostEntity> entityOpt =
+        readOnly ? postJpaRepository.findById(postId) : postJpaRepository.findByIdForUpdate(postId);
+    return entityOpt.map(entity -> entity.toDomain(Collections.emptyList()));
+  }
 
-    return Optional.of(entity.toDomain(Collections.emptyList()));
+  @Override
+  public Optional<Post> loadPostForUpdate(Long postId) {
+    return postJpaRepository
+        .findByIdForUpdate(postId)
+        .map(entity -> entity.toDomain(Collections.emptyList()));
   }
 
   @Override
@@ -73,41 +91,6 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
   @Override
   public int markQuestionPostSolved(Long postId) {
     return postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
-  }
-
-  @Override
-  public int updateIfNotSolved(Post post) {
-    long affected =
-        queryFactory
-            .update(postEntity)
-            .set(postEntity.title, post.getTitle())
-            .set(postEntity.content, post.getContent())
-            .set(postEntity.updatedAt, post.getUpdatedAt())
-            .where(postEntity.id.eq(post.getId()).and(postEntity.isSolved.isFalse()))
-            .execute();
-
-    if (affected == 0) return 0;
-
-    // QueryDSL 벌크 update는 @ElementCollection(post_images)을 건드리지 않으므로
-    // imageUrls 동기화는 JPA merge로 처리한다.
-    postJpaRepository.save(PostEntity.fromDomain(post));
-    return 1;
-  }
-
-  @Override
-  public int deleteIfNotSolved(Long postId) {
-    // @ElementCollection은 QueryDSL 벌크 delete의 cascade 밖이므로 먼저 제거한다.
-    // 이후 조건부 delete가 0건이면 서비스에서 예외를 throw하고
-    // 트랜잭션이 롤백되므로 image rows도 함께 복원된다.
-    postJpaRepository.deleteImagesByPostId(postId);
-
-    long affected =
-        queryFactory
-            .delete(postEntity)
-            .where(postEntity.id.eq(postId).and(postEntity.isSolved.isFalse()))
-            .execute();
-
-    return (int) affected;
   }
 
   // --- 동적 쿼리용 헬퍼 메서드 ---
