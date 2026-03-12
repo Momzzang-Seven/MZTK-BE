@@ -80,6 +80,11 @@ Thumbs.db
 src/main/generated/
 
 ############################
+# CLAUDE.md
+############################
+CLAUDE.md
+
+############################
 # Seed files with sensitive data
 ############################
 # 실제 값은 web3_treasury_keys.sql.example을 복사하여 직접 생성

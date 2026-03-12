@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.image.InvalidImageExtensionException;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlResult;
 import momzzangseven.mztkbe.modules.image.application.dto.PresignedUrlItem;
@@ -12,122 +13,189 @@ import momzzangseven.mztkbe.modules.image.application.port.out.GeneratePresigned
 import momzzangseven.mztkbe.modules.image.application.port.out.SaveImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.AllowedImageExtension;
+import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+// Note on transaction scope:
+// S3Presigner.presignPutObject() performs local HMAC computation only (no network call), so
+// holding the DB connection during Phase 1 has negligible real-world impact. However, to make
+// the intent clear and isolate the failure boundary, the two phases are kept structurally
+// separate. If a true network-bound S3 call is introduced in the future, the presigned-URL
+// generation phase should be moved outside the @Transactional boundary (e.g., via
+// TransactionTemplate or a dedicated non-transactional Spring bean).
 
 /**
  * Orchestrates presigned URL generation and PENDING image record creation.
  *
- * <p>Flow: 1. Validate command (count limit, extension whitelist) 2. Generate tmp object keys
- * (referenceType prefix + UUID + ext) 3. Call S3 to generate presigned PUT URLs 4. Persist PENDING
- * ImageEntity records to DB 5. Return assembled result
+ * <p>Standard flow (non-MARKET): 1. Validate command (count limit, extension whitelist) 2. Build
+ * one ImageSpec per filename (referenceType + UUID-based tmp key) 3. Generate presigned PUT URLs
+ * for each spec 4. Persist PENDING Image records 5. Return assembled result
+ *
+ * <p>MARKET flow: The first filename is expanded into two specs — one for the
+ * thumbnail(MARKET_THUMB) and one for the detail view (MARKET_DETAIL). All remaining filenames
+ * produce a single MARKET_DETAIL spec each. For n input filenames, n+1 presigned URLs and DB rows
+ * are produced (n <= 5).
  */
 @Service
 @RequiredArgsConstructor
 public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
+
   private final GeneratePresignedUrlPort generatePresignedUrlPort;
   private final SaveImagePort saveImagePort;
+
+  /**
+   * Internal value object that pairs a resolved reference type and tmp object key with its source
+   * filename. Used to decouple key-building from URL generation and DB persistence.
+   */
+  private record ImageSpec(
+      ImageReferenceType referenceType, String tmpObjectKey, String originalFilename) {}
 
   @Override
   @Transactional
   public IssuePresignedUrlResult execute(IssuePresignedUrlCommand command) {
-    // Command validation.
     command.validate();
 
-    // Make tmp object key for each image.
-    List<String> tmpObjectKeys = buildTmpObjectKeys(command);
+    List<ImageSpec> specs = buildImageSpecs(command);
 
-    // Get presigned Url for each image.
-    List<String> presignedUrls = generatePresignedUrls(tmpObjectKeys, command.imageFilenames());
+    // Phase 1: Generate presigned URLs (local HMAC computation — no network, no DB connection.
+    // Each URL is paired with its tmp object key.
+    List<PresignedUrlItem> items = buildPresignedUrlItems(specs);
 
-    // Make list of image objects, status=PENDING.
-    List<Image> images = buildPendingImages(command, tmpObjectKeys);
-
-    // Save the images to DB.
+    // Phase 2: Persist PENDING image records to DB.
+    List<Image> images = buildPendingImages(command.userId(), specs);
     saveImagePort.saveAll(images);
-
-    // Assemble Item object, contains pairs of presignedUrl and tmpObjectkey.
-    List<PresignedUrlItem> items = assembleItems(presignedUrls, tmpObjectKeys);
 
     return IssuePresignedUrlResult.of(items);
   }
 
   /**
-   * Helper method making tmp object key. The key doesn't contain raw filename. every key is made up
-   * of UUID.
+   * Generates a presigned PUT URL for every spec and returns the paired result items.
    *
-   * @param command
-   * @return List of tmp object keys
-   */
-  private List<String> buildTmpObjectKeys(IssuePresignedUrlCommand command) {
-    List<String> keys = new ArrayList<>();
-    for (String filename : command.imageFilenames()) {
-      String uuid = UUID.randomUUID().toString();
-      String ext = AllowedImageExtension.extractExtension(filename);
-      String key = command.referenceType().buildTmpObjectKey(uuid, ext);
-      keys.add(key);
-    }
-    return keys;
-  }
-
-  /**
-   * Helper method generating presigned urls for each image.
+   * <p>This is purely a local HMAC computation (no network call). It is separated from the DB
+   * persistence phase to make the intent clear and simplify future refactoring if a real network
+   * bound S3 call is introduced.
    *
-   * @param objectKeys List of object keys
-   * @param filenames List of filenames
-   * @return List of presigned urls
+   * @param specs list of resolved image specs
+   * @return list of {@link PresignedUrlItem} to return to the client
    */
-  private List<String> generatePresignedUrls(List<String> objectKeys, List<String> filenames) {
-    List<String> urls = new ArrayList<>();
-    for (int i = 0; i < objectKeys.size(); i++) {
-      String contentType = resolveContentType(filenames.get(i));
-      urls.add(generatePresignedUrlPort.generatePutPresignedUrl(objectKeys.get(i), contentType));
-    }
-    return urls;
-  }
-
-  /**
-   * Helper method building pending images.
-   *
-   * @param command Command object
-   * @param tmpObjectKeys List of tmp object keys
-   * @return List of pending images
-   */
-  private List<Image> buildPendingImages(
-      IssuePresignedUrlCommand command, List<String> tmpObjectKeys) {
-    List<Image> images = new ArrayList<>();
-    for (String key : tmpObjectKeys) {
-      images.add(Image.createPending(command.userId(), command.referenceType(), key));
-    }
-    return images;
-  }
-
-  /**
-   * Helper method assembling presigned url items.
-   *
-   * @param urls List of presigned urls
-   * @param keys List of tmp object keys
-   * @return List of presigned url items
-   */
-  private List<PresignedUrlItem> assembleItems(List<String> urls, List<String> keys) {
+  private List<PresignedUrlItem> buildPresignedUrlItems(List<ImageSpec> specs) {
     List<PresignedUrlItem> items = new ArrayList<>();
-    for (int i = 0; i < urls.size(); i++) {
-      items.add(new PresignedUrlItem(urls.get(i), keys.get(i)));
+    for (ImageSpec spec : specs) {
+      String presignedUrl =
+          generatePresignedUrlPort.generatePutPresignedUrl(
+              spec.tmpObjectKey(), resolveContentType(spec.originalFilename()));
+      items.add(new PresignedUrlItem(presignedUrl, spec.tmpObjectKey()));
     }
     return items;
   }
 
   /**
-   * Helper method resolving content type from filename.
+   * Builds the list of PENDING {@link Image} domain objects from the given specs.
    *
-   * @param filename Filename
-   * @return Content type
+   * @param userId authenticated user ID
+   * @param specs list of resolved image specs
+   * @return list of unsaved {@link Image} domain objects
+   */
+  private List<Image> buildPendingImages(Long userId, List<ImageSpec> specs) {
+    List<Image> images = new ArrayList<>();
+    int imgOrder = 0;
+    for (ImageSpec spec : specs) {
+      images.add(
+          Image.createPending(userId, spec.referenceType(), spec.tmpObjectKey(), ++imgOrder));
+    }
+    return images;
+  }
+
+  /**
+   * Dispatches to the appropriate spec-building strategy based on the reference type.
+   *
+   * @param command validated command
+   * @return list of ImageSpec entries (could be larger than the input filename count for MARKET)
+   */
+  private List<ImageSpec> buildImageSpecs(IssuePresignedUrlCommand command) {
+    if (command.referenceType() == ImageReferenceType.MARKET) {
+      return buildMarketSpecs(command.imageFilenames());
+    }
+    return buildStandardSpecs(command.referenceType(), command.imageFilenames());
+  }
+
+  /**
+   * Builds one ImageSpec per filename using the same reference type for all entries.
+   *
+   * @param refType reference type to use for every spec
+   * @param filenames list of original filenames from the request
+   * @return list of ImageSpec, one per filename
+   */
+  private List<ImageSpec> buildStandardSpecs(ImageReferenceType refType, List<String> filenames) {
+    List<ImageSpec> specs = new ArrayList<>();
+    for (String filename : filenames) {
+      String uuid = UUID.randomUUID().toString();
+      String ext = AllowedImageExtension.extractExtension(filename);
+      specs.add(new ImageSpec(refType, refType.buildTmpObjectKey(uuid, ext), filename));
+    }
+    return specs;
+  }
+
+  /**
+   * Builds n+1 ImageSpec entries for n marketplace filenames.
+   *
+   * <ul>
+   *   <li>First filename → MARKET_THUMB spec + MARKET_DETAIL spec (2 entries)
+   *   <li>Each remaining filename → MARKET_DETAIL spec (1 entry each)
+   * </ul>
+   *
+   * @param filenames list of original filenames from the request (size 1–5)
+   * @return list of ImageSpec entries with size = filenames.size() + 1
+   */
+  private List<ImageSpec> buildMarketSpecs(List<String> filenames) {
+    List<ImageSpec> specs = new ArrayList<>();
+
+    String firstFile = filenames.get(0);
+    String firstExt = AllowedImageExtension.extractExtension(firstFile);
+
+    specs.add(
+        new ImageSpec(
+            ImageReferenceType.MARKET_THUMB,
+            ImageReferenceType.MARKET_THUMB.buildTmpObjectKey(
+                UUID.randomUUID().toString(), firstExt),
+            firstFile));
+    specs.add(
+        new ImageSpec(
+            ImageReferenceType.MARKET_DETAIL,
+            ImageReferenceType.MARKET_DETAIL.buildTmpObjectKey(
+                UUID.randomUUID().toString(), firstExt),
+            firstFile));
+
+    for (int i = 1; i < filenames.size(); i++) {
+      String file = filenames.get(i);
+      String ext = AllowedImageExtension.extractExtension(file);
+      specs.add(
+          new ImageSpec(
+              ImageReferenceType.MARKET_DETAIL,
+              ImageReferenceType.MARKET_DETAIL.buildTmpObjectKey(UUID.randomUUID().toString(), ext),
+              file));
+    }
+
+    return specs;
+  }
+
+  /**
+   * Resolves the MIME content type from a filename extension.
+   *
+   * @param filename original filename
+   * @return MIME type string
    */
   private String resolveContentType(String filename) {
     String ext = AllowedImageExtension.extractExtension(filename);
+    if (!AllowedImageExtension.isAllowed(filename)) {
+      throw new InvalidImageExtensionException("Unsupported image extension: " + filename + ".");
+    }
     return switch (ext) {
       case "png" -> "image/png";
       case "gif" -> "image/gif";
+      case "heif" -> "image/heif";
+      case "heic" -> "image/heic";
       default -> "image/jpeg";
     };
   }

@@ -33,7 +33,7 @@ public class Image {
 
   /** Factory method for new PENDING images before S3 upload. */
   public static Image createPending(
-      Long userId, ImageReferenceType referenceType, String tmpObjectKey) {
+      Long userId, ImageReferenceType referenceType, String tmpObjectKey, int imgOrder) {
     return Image.builder()
         .userId(userId)
         .referenceType(referenceType)
@@ -41,7 +41,7 @@ public class Image {
         .status(ImageStatus.PENDING)
         .tmpObjectKey(tmpObjectKey)
         .finalObjectKey(null)
-        .imgOrder(null)
+        .imgOrder(imgOrder)
         .build();
   }
 }

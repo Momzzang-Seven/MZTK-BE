@@ -22,9 +22,14 @@ public record IssuePresignedUrlCommand(
     if (userId == null || userId <= 0) {
       throw new UserNotAuthenticatedException("User ID must be positive");
     }
-    // Enum type forces the refrenceType must be one of ImageReferenceType.
+    // Enum type guarantees referenceType is valid if non-null.
     if (referenceType == null) {
       throw new InvalidImageRefTypeException("referenceType must not be null");
+    }
+    // MARKET_THUMB and MARKET_DETAIL are internal-only types managed by the server.
+    if (!referenceType.isRequestFacing()) {
+      throw new InvalidImageRefTypeException(
+          referenceType + " is an internal reference type and cannot be used in requests.");
     }
     if (imageFilenames == null || imageFilenames.isEmpty()) {
       throw new InvalidImageFileNameException("imageFilenames must not be empty");
