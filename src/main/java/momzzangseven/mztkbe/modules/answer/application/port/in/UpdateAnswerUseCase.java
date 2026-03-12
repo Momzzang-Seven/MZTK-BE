@@ -4,5 +4,5 @@ import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 
 public interface UpdateAnswerUseCase {
 
-  void updateAnswer(UpdateAnswerCommand command);
+  void execute(UpdateAnswerCommand command);
 }

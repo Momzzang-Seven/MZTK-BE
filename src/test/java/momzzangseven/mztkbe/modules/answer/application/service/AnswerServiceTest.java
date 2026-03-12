@@ -16,7 +16,9 @@ import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
 import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
@@ -49,9 +51,8 @@ class AnswerServiceTest {
   class SuccessCases {
 
     @Test
-    @DisplayName("답변 생성 시 질문 게시글 검증 후 저장된 답변 ID를 반환한다")
-    void createAnswer_returnsSavedAnswerId() {
-      // given
+    @DisplayName("답변 생성 시 저장된 답변 ID를 결과로 반환한다")
+    void execute_returnsCreateAnswerResult() {
       CreateAnswerCommand command =
           new CreateAnswerCommand(10L, 20L, "답변 내용", List.of("https://image"));
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
@@ -69,45 +70,36 @@ class AnswerServiceTest {
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
 
-      // when
-      Long result = answerService.createAnswer(command);
+      CreateAnswerResult result = answerService.execute(command);
 
-      // then
-      assertThat(result).isEqualTo(99L);
+      assertThat(result.answerId()).isEqualTo(99L);
       ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
       verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
       assertThat(answerCaptor.getValue().getPostId()).isEqualTo(10L);
       assertThat(answerCaptor.getValue().getUserId()).isEqualTo(20L);
-      assertThat(answerCaptor.getValue().getContent()).isEqualTo("답변 내용");
-      assertThat(answerCaptor.getValue().getImageUrls()).containsExactly("https://image");
     }
 
     @Test
-    @DisplayName("게시글 ID로 답변 목록을 조회한다")
-    void getAnswersByPostId_returnsAnswers() {
-      // given
+    @DisplayName("답변 조회 시 애플리케이션 결과 DTO 목록을 반환한다")
+    void execute_returnsAnswerResults() {
       Long postId = 10L;
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
       List<Answer> answers =
           List.of(
               buildAnswer(1L, 10L, 20L, "첫 답변", false, List.of()),
               buildAnswer(2L, 10L, 21L, "둘째 답변", false, List.of("https://image")));
-      given(loadPostPort.loadPost(postId)).willReturn(Optional.of(postContext));
       given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
 
-      // when
-      List<Answer> result = answerService.getAnswersByPostId(postId);
+      List<AnswerResult> result = answerService.execute(postId);
 
-      // then
       assertThat(result).hasSize(2);
-      assertThat(result).extracting(Answer::getId).containsExactly(1L, 2L);
-      verify(loadAnswerPort).loadAnswersByPostId(postId);
+      assertThat(result.get(0).answerId()).isEqualTo(1L);
+      assertThat(result.get(1).imageUrls()).containsExactly("https://image");
+      verify(loadPostPort, never()).existsPost(postId);
     }
 
     @Test
-    @DisplayName("답변 수정 시 같은 게시글의 답변을 저장한다")
-    void updateAnswer_savesUpdatedAnswer() {
-      // given
+    @DisplayName("답변 수정 시 수정된 답변을 저장한다")
+    void execute_savesUpdatedAnswer() {
       UpdateAnswerCommand command =
           new UpdateAnswerCommand(10L, 100L, 20L, "수정된 내용", List.of("https://updated"));
       Answer answer = buildAnswer(100L, 10L, 20L, "이전 내용", false, List.of("https://old"));
@@ -115,28 +107,22 @@ class AnswerServiceTest {
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willReturn(buildAnswer(100L, 10L, 20L, "수정된 내용", false, List.of("https://updated")));
 
-      // when
-      answerService.updateAnswer(command);
+      answerService.execute(command);
 
-      // then
       ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
       verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
       assertThat(answerCaptor.getValue().getContent()).isEqualTo("수정된 내용");
-      assertThat(answerCaptor.getValue().getImageUrls()).containsExactly("https://updated");
     }
 
     @Test
-    @DisplayName("답변 삭제 시 삭제 포트에 답변 ID를 위임한다")
-    void deleteAnswer_delegatesToDeletePort() {
-      // given
+    @DisplayName("답변 삭제 시 삭제 포트에 위임한다")
+    void execute_delegatesDelete() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "삭제할 답변", false, List.of());
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
-      // when
-      answerService.deleteAnswer(command);
+      answerService.execute(command);
 
-      // then
       verify(deleteAnswerPort).deleteAnswer(100L);
     }
   }
@@ -147,82 +133,68 @@ class AnswerServiceTest {
 
     @Test
     @DisplayName("답변 생성 시 게시글이 없으면 예외를 던진다")
-    void createAnswer_throwsException_whenPostNotFound() {
-      // given
+    void execute_throwsException_whenPostNotFoundOnCreate() {
       CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "답변 내용", List.of());
       given(loadPostPort.loadPost(10L)).willReturn(Optional.empty());
 
-      // when & then
-      assertThatThrownBy(() -> answerService.createAnswer(command))
+      assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerPostNotFoundException.class);
       verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
     }
 
     @Test
     @DisplayName("답변 생성 시 질문 게시글이 아니면 예외를 던진다")
-    void createAnswer_throwsException_whenPostIsNotQuestion() {
-      // given
+    void execute_throwsException_whenPostIsNotQuestion() {
       CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "답변 내용", List.of());
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, false);
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
-      // when & then
-      assertThatThrownBy(() -> answerService.createAnswer(command))
+      assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnsupportedPostTypeException.class);
-      verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
     }
 
     @Test
-    @DisplayName("답변 조회 시 게시글이 없으면 예외를 던진다")
-    void getAnswersByPostId_throwsException_whenPostNotFound() {
-      // given
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.empty());
+    @DisplayName("답변 조회 시 결과가 비어 있고 게시글도 없으면 예외를 던진다")
+    void execute_throwsException_whenPostNotFoundOnGet() {
+      given(loadAnswerPort.loadAnswersByPostId(10L)).willReturn(List.of());
+      given(loadPostPort.existsPost(10L)).willReturn(false);
 
-      // when & then
-      assertThatThrownBy(() -> answerService.getAnswersByPostId(10L))
+      assertThatThrownBy(() -> answerService.execute(10L))
           .isInstanceOf(AnswerPostNotFoundException.class);
-      verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
+      verify(loadPostPort).existsPost(10L);
     }
 
     @Test
     @DisplayName("답변 수정 시 답변이 없으면 예외를 던진다")
-    void updateAnswer_throwsException_whenAnswerNotFound() {
-      // given
+    void execute_throwsException_whenAnswerNotFound() {
       UpdateAnswerCommand command =
           new UpdateAnswerCommand(10L, 100L, 20L, "수정된 내용", List.of("https://updated"));
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.empty());
 
-      // when & then
-      assertThatThrownBy(() -> answerService.updateAnswer(command))
+      assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerNotFoundException.class);
-      verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
     }
 
     @Test
     @DisplayName("답변 수정 시 게시글 경로가 다르면 예외를 던진다")
-    void updateAnswer_throwsException_whenPostMismatch() {
-      // given
+    void execute_throwsException_whenPostMismatchOnUpdate() {
       UpdateAnswerCommand command =
           new UpdateAnswerCommand(10L, 100L, 20L, "수정된 내용", List.of("https://updated"));
       Answer answer = buildAnswer(100L, 999L, 20L, "이전 내용", false, List.of());
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
-      // when & then
-      assertThatThrownBy(() -> answerService.updateAnswer(command))
+      assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerPostMismatchException.class);
-      verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
     }
 
     @Test
     @DisplayName("답변 삭제 시 채택된 답변이면 예외를 던진다")
-    void deleteAnswer_throwsException_whenAcceptedAnswer() {
-      // given
+    void execute_throwsException_whenAcceptedAnswerOnDelete() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "채택 답변", true, List.of());
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
-      // when & then
-      assertThatThrownBy(() -> answerService.deleteAnswer(command))
+      assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
     }

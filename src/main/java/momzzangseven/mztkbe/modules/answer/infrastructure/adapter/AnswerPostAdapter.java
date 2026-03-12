@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
+package momzzangseven.mztkbe.modules.answer.infrastructure.adapter;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -24,5 +24,10 @@ public class AnswerPostAdapter implements LoadPostPort {
                     postEntity.getUserId(),
                     postEntity.getIsSolved(),
                     PostType.QUESTION.equals(postEntity.getType())));
+  }
+
+  @Override
+  public boolean existsPost(Long postId) {
+    return postJpaRepository.existsById(postId);
   }
 }

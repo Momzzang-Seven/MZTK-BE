@@ -19,30 +19,49 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
 
   @Override
   public Answer saveAnswer(Answer answer) {
-    // 1. Domain -> Entity 변환
-    AnswerEntity entity = AnswerEntity.fromDomain(answer);
-
-    // 2. 답변 저장
+    AnswerEntity entity = toEntity(answer);
     AnswerEntity savedEntity = answerJpaRepository.save(entity);
-
-    // 3. Entity -> Domain 변환 후 반환
-    return savedEntity.toDomain();
+    return toDomain(savedEntity);
   }
 
   @Override
   public List<Answer> loadAnswersByPostId(Long postId) {
     return answerJpaRepository.findByPostIdOrderByIsAcceptedDescCreatedAtAsc(postId).stream()
-        .map(AnswerEntity::toDomain) // Entity -> Domain 변환
+        .map(this::toDomain)
         .toList();
   }
 
   @Override
   public Optional<Answer> loadAnswer(Long answerId) {
-    return answerJpaRepository.findById(answerId).map(AnswerEntity::toDomain);
+    return answerJpaRepository.findById(answerId).map(this::toDomain);
   }
 
   @Override
   public void deleteAnswer(Long answerId) {
     answerJpaRepository.deleteById(answerId);
+  }
+
+  private AnswerEntity toEntity(Answer answer) {
+    return AnswerEntity.builder()
+        .id(answer.getId())
+        .postId(answer.getPostId())
+        .userId(answer.getUserId())
+        .content(answer.getContent())
+        .isAccepted(answer.getIsAccepted())
+        .imageUrls(answer.getImageUrls())
+        .build();
+  }
+
+  private Answer toDomain(AnswerEntity entity) {
+    return Answer.builder()
+        .id(entity.getId())
+        .postId(entity.getPostId())
+        .userId(entity.getUserId())
+        .content(entity.getContent())
+        .isAccepted(entity.getIsAccepted())
+        .imageUrls(entity.getImageUrls())
+        .createdAt(entity.getCreatedAt())
+        .updatedAt(entity.getUpdatedAt())
+        .build();
   }
 }
