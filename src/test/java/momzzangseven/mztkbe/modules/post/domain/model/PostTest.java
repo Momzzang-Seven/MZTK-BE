@@ -34,11 +34,11 @@ class PostTest {
     assertThatThrownBy(
             () -> Post.create(1L, PostType.QUESTION, "title", "content", null, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("질문 게시글은 보상(XP)이 필요합니다.");
+        .hasMessageContaining("Reward must be positive for question posts.");
 
     assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, "title", "content", 0L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("질문 게시글은 보상(XP)이 필요합니다.");
+        .hasMessageContaining("Reward must be positive for question posts.");
   }
 
   @Test
@@ -64,19 +64,19 @@ class PostTest {
   void createValidatesMandatoryFields() {
     assertThatThrownBy(() -> Post.create(null, PostType.FREE, "title", "content", 0L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("작성자 ID는 필수입니다.");
+        .hasMessageContaining("Author ID is required.");
 
     assertThatThrownBy(() -> Post.create(1L, null, "title", "content", 0L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("게시글 타입은 필수입니다.");
+        .hasMessageContaining("Post type is required.");
 
     assertThatThrownBy(() -> Post.create(1L, PostType.FREE, "title", " ", 0L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("내용을 입력해주세요.");
+        .hasMessageContaining("Content must not be blank.");
 
     assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, " ", "content", 10L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("질문 게시글은 제목이 필요합니다.");
+        .hasMessageContaining("Title is required for question posts.");
   }
 
   @Test
@@ -84,7 +84,7 @@ class PostTest {
   void createRejectsNullContent() {
     assertThatThrownBy(() -> Post.create(1L, PostType.FREE, null, null, 0L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("내용을 입력해주세요.");
+        .hasMessageContaining("Content must not be blank.");
   }
 
   @Test
@@ -92,7 +92,7 @@ class PostTest {
   void createQuestionWithNullTitleThrows() {
     assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, null, "content", 10L, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("질문 게시글은 제목이 필요합니다.");
+        .hasMessageContaining("Title is required for question posts.");
   }
 
   @Test
@@ -131,11 +131,11 @@ class PostTest {
 
     assertThatThrownBy(() -> post.update(" ", null, null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("수정할 제목은 비워둘 수 없습니다.");
+        .hasMessageContaining("Title cannot be blank.");
 
     assertThatThrownBy(() -> post.update(null, " ", null, null))
         .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("수정할 내용은 비워둘 수 없습니다.");
+        .hasMessageContaining("Content cannot be blank.");
   }
 
   @Test
