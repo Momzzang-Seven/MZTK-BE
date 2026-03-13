@@ -90,24 +90,47 @@ class SubmitWorkoutPhotoVerificationServiceTest {
         new VerificationTimePolicy(
             ZoneId.of("Asia/Seoul"),
             Clock.fixed(Instant.parse("2026-03-13T01:00:00Z"), ZoneId.of("Asia/Seoul")));
-    service =
-        new SubmitWorkoutPhotoVerificationService(
-            verificationRequestPort,
-            workoutUploadLookupPort,
-            objectStoragePort,
-            prepareOriginalImagePort,
-            prepareAnalysisImagePort,
-            exifMetadataPort,
-            workoutImageAiPort,
-            grantXpPort,
-            xpLedgerQueryPort,
-            imageCodecSupportPort,
-            timePolicy,
-            verificationImagePolicy);
     lenient().when(imageCodecSupportPort.isHeifDecodeAvailable()).thenReturn(true);
     lenient()
         .when(prepareOriginalImagePort.prepare(anyString(), anyString()))
         .thenReturn(PreparedOriginalImage.noop(Path.of("original.jpg")));
+
+    VerificationSubmissionValidator validator =
+        new VerificationSubmissionValidator(verificationImagePolicy, imageCodecSupportPort);
+    VerificationSourceImageService sourceImageService =
+        new VerificationSourceImageService(
+            objectStoragePort, exifMetadataPort, prepareOriginalImagePort, verificationImagePolicy);
+    VerificationSubmissionResultFactory resultFactory =
+        new VerificationSubmissionResultFactory(timePolicy);
+    VerificationSubmissionAccessService accessService =
+        new VerificationSubmissionAccessService(
+            verificationRequestPort,
+            workoutUploadLookupPort,
+            objectStoragePort,
+            validator,
+            timePolicy);
+    VerificationAnalysisService analysisService =
+        new VerificationAnalysisService(
+            sourceImageService,
+            prepareAnalysisImagePort,
+            workoutImageAiPort,
+            validator,
+            timePolicy);
+    VerificationCompletionService completionService =
+        new VerificationCompletionService(
+            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy, resultFactory);
+    VerificationSubmissionOrchestrator orchestrator =
+        new VerificationSubmissionOrchestrator(
+            verificationRequestPort,
+            xpLedgerQueryPort,
+            timePolicy,
+            validator,
+            accessService,
+            analysisService,
+            completionService);
+    service =
+        new SubmitWorkoutPhotoVerificationService(
+            orchestrator, new WorkoutPhotoVerificationPolicy());
   }
 
   @Test
@@ -212,7 +235,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             pending.toAnalyzing(),
             pending.toVerified(LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0)));
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
-        .thenReturn(Optional.of(pending));
+        .thenReturn(Optional.of(pending), Optional.of(pending.toAnalyzing()));
     when(objectStoragePort.exists("private/workout/a.jpg")).thenReturn(true);
     stubOpenStream("private/workout/a.jpg", "image/jpeg");
     when(exifMetadataPort.extract(any()))
@@ -718,19 +741,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             ZoneId.of("Asia/Seoul"),
             Clock.fixed(Instant.parse("2026-03-13T01:00:00Z"), ZoneId.of("Asia/Seoul")));
     SubmitWorkoutPhotoVerificationService disabledService =
-        new SubmitWorkoutPhotoVerificationService(
-            verificationRequestPort,
-            workoutUploadLookupPort,
-            objectStoragePort,
-            prepareOriginalImagePort,
-            prepareAnalysisImagePort,
-            exifMetadataPort,
-            workoutImageAiPort,
-            grantXpPort,
-            xpLedgerQueryPort,
-            imageCodecSupportPort,
-            timePolicy,
-            disabledPolicy);
+        createService(disabledPolicy, timePolicy);
     when(xpLedgerQueryPort.findTodayWorkoutReward(1L, LocalDate.of(2026, 3, 13)))
         .thenReturn(TodayRewardSnapshot.none(LocalDate.of(2026, 3, 13)));
 
@@ -756,19 +767,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             ZoneId.of("Asia/Seoul"),
             Clock.fixed(Instant.parse("2026-03-13T01:00:00Z"), ZoneId.of("Asia/Seoul")));
     SubmitWorkoutPhotoVerificationService disabledService =
-        new SubmitWorkoutPhotoVerificationService(
-            verificationRequestPort,
-            workoutUploadLookupPort,
-            objectStoragePort,
-            prepareOriginalImagePort,
-            prepareAnalysisImagePort,
-            exifMetadataPort,
-            workoutImageAiPort,
-            grantXpPort,
-            xpLedgerQueryPort,
-            imageCodecSupportPort,
-            timePolicy,
-            disabledPolicy);
+        createService(disabledPolicy, timePolicy);
     VerificationRequest existing =
         VerificationRequest.builder()
             .verificationId("existing-heic")
@@ -914,5 +913,44 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             invocation ->
                 new StorageObjectStream(
                     new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, contentType));
+  }
+
+  private SubmitWorkoutPhotoVerificationService createService(
+      VerificationImagePolicy imagePolicy, VerificationTimePolicy timePolicy) {
+    VerificationSubmissionValidator validator =
+        new VerificationSubmissionValidator(imagePolicy, imageCodecSupportPort);
+    VerificationSourceImageService sourceImageService =
+        new VerificationSourceImageService(
+            objectStoragePort, exifMetadataPort, prepareOriginalImagePort, imagePolicy);
+    VerificationSubmissionResultFactory resultFactory =
+        new VerificationSubmissionResultFactory(timePolicy);
+    VerificationSubmissionAccessService accessService =
+        new VerificationSubmissionAccessService(
+            verificationRequestPort,
+            workoutUploadLookupPort,
+            objectStoragePort,
+            validator,
+            timePolicy);
+    VerificationAnalysisService analysisService =
+        new VerificationAnalysisService(
+            sourceImageService,
+            prepareAnalysisImagePort,
+            workoutImageAiPort,
+            validator,
+            timePolicy);
+    VerificationCompletionService completionService =
+        new VerificationCompletionService(
+            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy, resultFactory);
+    VerificationSubmissionOrchestrator orchestrator =
+        new VerificationSubmissionOrchestrator(
+            verificationRequestPort,
+            xpLedgerQueryPort,
+            timePolicy,
+            validator,
+            accessService,
+            analysisService,
+            completionService);
+    return new SubmitWorkoutPhotoVerificationService(
+        orchestrator, new WorkoutPhotoVerificationPolicy());
   }
 }
