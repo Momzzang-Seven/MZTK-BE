@@ -1,14 +1,17 @@
 package momzzangseven.mztkbe.modules.image.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlResult;
 import momzzangseven.mztkbe.modules.image.application.port.out.GeneratePresignedUrlPort;
+import momzzangseven.mztkbe.modules.image.application.port.out.PresignedUrlWithKey;
 import momzzangseven.mztkbe.modules.image.application.port.out.SaveImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
@@ -22,17 +25,43 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * IssuePresignedUrlService 단위 테스트.
+ *
+ * <p>리팩터링 후 서비스는 (referenceType, uuid, extension)을 Port에 위임하고, 경로 조립과 Content-Type 결정은
+ * S3PresignedUrlAdapter(인프라)가 담당한다.
+ *
+ * <p>따라서 이 테스트에서 검증하는 핵심:
+ *
+ * <ul>
+ *   <li>MARKET 확장 로직 — 포트에 MARKET_THUMB/MARKET_DETAIL이 올바른 순서로 전달되는지
+ *   <li>각 referenceType별 올바른 extension이 포트에 전달되는지
+ *   <li>imgOrder가 스펙 순서대로 부여되는지
+ *   <li>PENDING Image 생성 시 필드 값(status, userId, tmpObjectKey)이 올바른지
+ * </ul>
+ *
+ * <p>Content-Type 매핑은 어댑터 관심사이므로 S3PresignedUrlAdapterTest에서 검증한다.
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("IssuePresignedUrlService 단위 테스트")
 class IssuePresignedUrlServiceTest {
 
   private static final String FAKE_PRESIGNED_URL = "https://s3.presigned.url/fake";
+  private static final String FAKE_OBJECT_KEY = "fake/key/uuid.jpg";
 
   @Mock private GeneratePresignedUrlPort generatePresignedUrlPort;
 
   @Mock private SaveImagePort saveImagePort;
 
   @InjectMocks private IssuePresignedUrlService service;
+
+  /** 기본 stub 설정 헬퍼 — 모든 호출에 대해 고정 PresignedUrlWithKey를 반환한다. */
+  private void stubPort() {
+    given(
+            generatePresignedUrlPort.generatePutPresignedUrl(
+                any(ImageReferenceType.class), anyString(), anyString()))
+        .willReturn(new PresignedUrlWithKey(FAKE_PRESIGNED_URL, FAKE_OBJECT_KEY));
+  }
 
   @Nested
   @DisplayName("[D-5] MARKET 확장 로직 — n+1 구조 검증")
@@ -41,8 +70,7 @@ class IssuePresignedUrlServiceTest {
     @Test
     @DisplayName("MARKET 1장 입력 → items 2개(THUMB+DETAIL) 생성")
     void execute_market1Image_produces2Items() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
 
       IssuePresignedUrlResult result =
           service.execute(
@@ -54,8 +82,7 @@ class IssuePresignedUrlServiceTest {
     @Test
     @DisplayName("MARKET 3장 입력 → items 4개(n+1) 생성")
     void execute_market3Images_produces4Items() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
 
       IssuePresignedUrlResult result =
           service.execute(
@@ -68,8 +95,7 @@ class IssuePresignedUrlServiceTest {
     @Test
     @DisplayName("MARKET 5장 입력 → items 6개(n+1) 생성")
     void execute_market5Images_produces6Items() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
 
       IssuePresignedUrlResult result =
           service.execute(
@@ -82,40 +108,41 @@ class IssuePresignedUrlServiceTest {
     }
 
     @Test
-    @DisplayName("MARKET 첫 번째 파일 → items[0]은 THUMB prefix, items[1]은 DETAIL prefix")
-    void execute_market_firstFileGeneratesThumbAndDetail() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+    @DisplayName("MARKET 첫 번째 파일 → 포트에 MARKET_THUMB, MARKET_DETAIL 순으로 전달된다")
+    void execute_market_firstFilePassesThumbThenDetailToPort() {
+      stubPort();
+      ArgumentCaptor<ImageReferenceType> refTypeCaptor =
+          ArgumentCaptor.forClass(ImageReferenceType.class);
 
-      IssuePresignedUrlResult result =
-          service.execute(
-              new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg")));
+      service.execute(
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg")));
 
-      assertThat(result.items().get(0).tmpObjectKey()).startsWith("public/market/thumb/tmp/");
-      assertThat(result.items().get(1).tmpObjectKey()).startsWith("public/market/detail/tmp/");
+      verify(generatePresignedUrlPort, times(2))
+          .generatePutPresignedUrl(refTypeCaptor.capture(), anyString(), anyString());
+      assertThat(refTypeCaptor.getAllValues().get(0)).isEqualTo(ImageReferenceType.MARKET_THUMB);
+      assertThat(refTypeCaptor.getAllValues().get(1)).isEqualTo(ImageReferenceType.MARKET_DETAIL);
     }
 
     @Test
-    @DisplayName("MARKET 첫 번째 파일에서 생성된 THUMB key와 DETAIL key는 서로 다른 UUID를 가진다")
+    @DisplayName("MARKET 첫 번째 파일에서 THUMB와 DETAIL에 전달되는 uuid는 서로 다르다")
     void execute_market_thumbAndDetailHaveDifferentUuids() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
+      ArgumentCaptor<String> uuidCaptor = ArgumentCaptor.forClass(String.class);
 
-      IssuePresignedUrlResult result =
-          service.execute(
-              new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg")));
+      service.execute(
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg")));
 
-      String thumbKey = result.items().get(0).tmpObjectKey();
-      String detailKey = result.items().get(1).tmpObjectKey();
-      assertThat(thumbKey).isNotEqualTo(detailKey);
+      verify(generatePresignedUrlPort, times(2))
+          .generatePutPresignedUrl(
+              any(ImageReferenceType.class), uuidCaptor.capture(), anyString());
+      assertThat(uuidCaptor.getAllValues().get(0)).isNotEqualTo(uuidCaptor.getAllValues().get(1));
     }
 
     @Test
     @DisplayName("MARKET DB 저장 시 MARKET 타입은 없고 MARKET_THUMB/MARKET_DETAIL만 저장된다")
     @SuppressWarnings("unchecked")
     void execute_market_savesOnlyThumbAndDetailReferenceTypes() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
       ArgumentCaptor<List<Image>> captor = ArgumentCaptor.forClass(List.class);
 
       service.execute(
@@ -129,22 +156,21 @@ class IssuePresignedUrlServiceTest {
     }
 
     @Test
-    @DisplayName("MARKET 3장: items[2]은 d1.png 기반 DETAIL, items[3]은 d2.heic 기반 DETAIL")
-    void execute_market3Images_verifyDetailOrder() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+    @DisplayName(
+        "MARKET 3장: 두 번째 파일(d1.png)은 extension=png, 세 번째 파일(d2.heic)은 extension=heic으로 포트에 전달된다")
+    void execute_market3Images_verifyExtensionOrder() {
+      stubPort();
+      ArgumentCaptor<String> extCaptor = ArgumentCaptor.forClass(String.class);
 
-      IssuePresignedUrlResult result =
-          service.execute(
-              new IssuePresignedUrlCommand(
-                  1L, ImageReferenceType.MARKET, List.of("main.jpg", "d1.png", "d2.heic")));
+      service.execute(
+          new IssuePresignedUrlCommand(
+              1L, ImageReferenceType.MARKET, List.of("main.jpg", "d1.png", "d2.heic")));
 
-      assertThat(result.items().get(2).tmpObjectKey())
-          .startsWith("public/market/detail/tmp/")
-          .endsWith(".png");
-      assertThat(result.items().get(3).tmpObjectKey())
-          .startsWith("public/market/detail/tmp/")
-          .endsWith(".heic");
+      // 포트 호출 순서: [0]=jpg(THUMB), [1]=jpg(DETAIL), [2]=png(DETAIL), [3]=heic(DETAIL)
+      verify(generatePresignedUrlPort, times(4))
+          .generatePutPresignedUrl(any(ImageReferenceType.class), anyString(), extCaptor.capture());
+      assertThat(extCaptor.getAllValues().get(2)).isEqualTo("png");
+      assertThat(extCaptor.getAllValues().get(3)).isEqualTo("heic");
     }
   }
 
@@ -156,8 +182,7 @@ class IssuePresignedUrlServiceTest {
     @DisplayName("COMMUNITY_FREE 3장 요청 시 img_order = 1, 2, 3 (gap 없이 연속)")
     @SuppressWarnings("unchecked")
     void execute_communityFree3Images_imgOrderIsSequential() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
       ArgumentCaptor<List<Image>> captor = ArgumentCaptor.forClass(List.class);
 
       service.execute(
@@ -175,8 +200,7 @@ class IssuePresignedUrlServiceTest {
     @DisplayName("MARKET 3장 입력(스펙 4개) 시 img_order = 1, 2, 3, 4 (gap 없이 연속)")
     @SuppressWarnings("unchecked")
     void execute_market3Images_imgOrderIsSequentialFor4Specs() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
       ArgumentCaptor<List<Image>> captor = ArgumentCaptor.forClass(List.class);
 
       service.execute(
@@ -195,8 +219,7 @@ class IssuePresignedUrlServiceTest {
     @DisplayName("MARKET 1장 — THUMB(img_order=1), DETAIL(img_order=2) 순서")
     @SuppressWarnings("unchecked")
     void execute_market_thumbIsOrder1_firstDetailIsOrder2() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
       ArgumentCaptor<List<Image>> captor = ArgumentCaptor.forClass(List.class);
 
       service.execute(
@@ -212,136 +235,27 @@ class IssuePresignedUrlServiceTest {
   }
 
   @Nested
-  @DisplayName("[H-5] WORKOUT S3 경로 매핑")
-  class WorkoutPathTests {
+  @DisplayName("[H-5] WORKOUT — 포트에 올바른 referenceType과 extension이 전달되는지")
+  class WorkoutPortCallTests {
 
     @Test
-    @DisplayName("WORKOUT 단일 이미지 → private/workout/{uuid}.jpg 경로 (tmp/ 없음)")
-    void execute_workout_usesPrivatePathWithoutTmpSubfolder() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+    @DisplayName("WORKOUT 단일 이미지 → 포트에 WORKOUT 타입, jpg 확장자 전달")
+    void execute_workout_passesWorkoutRefTypeAndExtensionToPort() {
+      stubPort();
+      ArgumentCaptor<ImageReferenceType> refTypeCaptor =
+          ArgumentCaptor.forClass(ImageReferenceType.class);
+      ArgumentCaptor<String> extCaptor = ArgumentCaptor.forClass(String.class);
 
       IssuePresignedUrlResult result =
           service.execute(
               new IssuePresignedUrlCommand(
                   1L, ImageReferenceType.WORKOUT, List.of("exercise.jpg")));
 
+      verify(generatePresignedUrlPort)
+          .generatePutPresignedUrl(refTypeCaptor.capture(), anyString(), extCaptor.capture());
       assertThat(result.items()).hasSize(1);
-      assertThat(result.items().get(0).tmpObjectKey()).startsWith("private/workout/");
-      assertThat(result.items().get(0).tmpObjectKey()).doesNotContain("tmp/");
-    }
-  }
-
-  @Nested
-  @DisplayName("[H-9] Content-Type 매핑 검증")
-  class ContentTypeTests {
-
-    @Test
-    @DisplayName("jpg 파일 → image/jpeg Content-Type으로 presigned URL 요청")
-    void execute_jpg_usesImageJpegContentType() {
-      ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
-      given(
-              generatePresignedUrlPort.generatePutPresignedUrl(
-                  anyString(), contentTypeCaptor.capture()))
-          .willReturn(FAKE_PRESIGNED_URL);
-
-      service.execute(
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.jpg")));
-
-      assertThat(contentTypeCaptor.getValue()).isEqualTo("image/jpeg");
-    }
-
-    @Test
-    @DisplayName("jpeg 파일 → image/jpeg Content-Type으로 presigned URL 요청")
-    void execute_jpeg_usesImageJpegContentType() {
-      ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
-      given(
-              generatePresignedUrlPort.generatePutPresignedUrl(
-                  anyString(), contentTypeCaptor.capture()))
-          .willReturn(FAKE_PRESIGNED_URL);
-
-      service.execute(
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.jpeg")));
-
-      assertThat(contentTypeCaptor.getValue()).isEqualTo("image/jpeg");
-    }
-
-    @Test
-    @DisplayName("png 파일 → image/png Content-Type으로 presigned URL 요청")
-    void execute_png_usesImagePngContentType() {
-      ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
-      given(
-              generatePresignedUrlPort.generatePutPresignedUrl(
-                  anyString(), contentTypeCaptor.capture()))
-          .willReturn(FAKE_PRESIGNED_URL);
-
-      service.execute(
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.png")));
-
-      assertThat(contentTypeCaptor.getValue()).isEqualTo("image/png");
-    }
-
-    @Test
-    @DisplayName("gif 파일 → image/gif Content-Type으로 presigned URL 요청")
-    void execute_gif_usesImageGifContentType() {
-      ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
-      given(
-              generatePresignedUrlPort.generatePutPresignedUrl(
-                  anyString(), contentTypeCaptor.capture()))
-          .willReturn(FAKE_PRESIGNED_URL);
-
-      service.execute(
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.gif")));
-
-      assertThat(contentTypeCaptor.getValue()).isEqualTo("image/gif");
-    }
-
-    @Test
-    @DisplayName("heic 파일 → image/heic Content-Type으로 presigned URL 요청")
-    void execute_heic_usesImageHeicContentType() {
-      ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
-      given(
-              generatePresignedUrlPort.generatePutPresignedUrl(
-                  anyString(), contentTypeCaptor.capture()))
-          .willReturn(FAKE_PRESIGNED_URL);
-
-      service.execute(
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.heic")));
-
-      assertThat(contentTypeCaptor.getValue()).isEqualTo("image/heic");
-    }
-
-    @Test
-    @DisplayName("heif 파일 → image/heif Content-Type으로 presigned URL 요청")
-    void execute_heif_usesImageHeifContentType() {
-      ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
-      given(
-              generatePresignedUrlPort.generatePutPresignedUrl(
-                  anyString(), contentTypeCaptor.capture()))
-          .willReturn(FAKE_PRESIGNED_URL);
-
-      service.execute(
-          new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.heif")));
-
-      assertThat(contentTypeCaptor.getValue()).isEqualTo("image/heif");
-    }
-
-    @Test
-    @DisplayName("대문자 확장자(.JPG) → image/jpeg Content-Type으로 presigned URL 요청")
-    void execute_upperCaseJpg_usesImageJpegContentType() {
-      ArgumentCaptor<String> contentTypeCaptor = ArgumentCaptor.forClass(String.class);
-      given(
-              generatePresignedUrlPort.generatePutPresignedUrl(
-                  anyString(), contentTypeCaptor.capture()))
-          .willReturn(FAKE_PRESIGNED_URL);
-
-      service.execute(
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("FILE.JPG")));
-
-      assertThat(contentTypeCaptor.getValue()).isEqualTo("image/jpeg");
+      assertThat(refTypeCaptor.getValue()).isEqualTo(ImageReferenceType.WORKOUT);
+      assertThat(extCaptor.getValue()).isEqualTo("jpg");
     }
   }
 
@@ -353,8 +267,7 @@ class IssuePresignedUrlServiceTest {
     @DisplayName("생성된 Image는 status=PENDING, referenceId=null, userId 일치")
     @SuppressWarnings("unchecked")
     void execute_createdImages_havePendingStatusAndNullReferenceId() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
       ArgumentCaptor<List<Image>> captor = ArgumentCaptor.forClass(List.class);
 
       service.execute(
@@ -372,8 +285,7 @@ class IssuePresignedUrlServiceTest {
     @DisplayName("응답 items와 DB 저장 개수가 일치한다")
     @SuppressWarnings("unchecked")
     void execute_responseItemCountMatchesSavedImageCount() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      stubPort();
       ArgumentCaptor<List<Image>> captor = ArgumentCaptor.forClass(List.class);
 
       IssuePresignedUrlResult result =
@@ -389,8 +301,10 @@ class IssuePresignedUrlServiceTest {
     @DisplayName("응답 tmpObjectKey와 DB 저장 tmpObjectKey가 일치한다")
     @SuppressWarnings("unchecked")
     void execute_responseTmpObjectKeyMatchesSavedKey() {
-      given(generatePresignedUrlPort.generatePutPresignedUrl(anyString(), anyString()))
-          .willReturn(FAKE_PRESIGNED_URL);
+      given(
+              generatePresignedUrlPort.generatePutPresignedUrl(
+                  any(ImageReferenceType.class), anyString(), anyString()))
+          .willReturn(new PresignedUrlWithKey(FAKE_PRESIGNED_URL, "specific/key/photo.jpg"));
       ArgumentCaptor<List<Image>> captor = ArgumentCaptor.forClass(List.class);
 
       IssuePresignedUrlResult result =
@@ -400,7 +314,8 @@ class IssuePresignedUrlServiceTest {
 
       verify(saveImagePort).saveAll(captor.capture());
       assertThat(result.items().get(0).tmpObjectKey())
-          .isEqualTo(captor.getValue().get(0).getTmpObjectKey());
+          .isEqualTo(captor.getValue().get(0).getTmpObjectKey())
+          .isEqualTo("specific/key/photo.jpg");
     }
   }
 }

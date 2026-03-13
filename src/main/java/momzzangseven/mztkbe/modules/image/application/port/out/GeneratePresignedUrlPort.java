@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.image.application.port.out;
 
+import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
+
 /**
  * Hexagonal Architecture: OUTPUT PORT. Abstraction for generating S3 pre-signed PUT URLs.
  * Implemented by S3PresignedUrlAdapter in the infrastructure layer.
@@ -7,11 +9,13 @@ package momzzangseven.mztkbe.modules.image.application.port.out;
 public interface GeneratePresignedUrlPort {
 
   /**
-   * Generates a pre-signed PUT URL for the given S3 object key.
+   * Generate a pre-signed PUT URL for the given information
    *
-   * @param objectKey the full S3 object key (e.g. "public/community/free/tmp/{uuid}.jpg")
-   * @param contentType MIME type of the file (e.g. "image/jpeg")
-   * @return a time-limited presigned URL string
+   * @param referenceType reference type
+   * @param uuid uuid
+   * @param extension extension
+   * @return PresignedUrlWithKey
    */
-  String generatePutPresignedUrl(String objectKey, String contentType);
+  PresignedUrlWithKey generatePutPresignedUrl(
+      ImageReferenceType referenceType, String uuid, String extension);
 }
