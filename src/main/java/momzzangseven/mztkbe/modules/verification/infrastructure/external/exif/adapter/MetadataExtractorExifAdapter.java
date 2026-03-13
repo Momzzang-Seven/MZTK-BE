@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.Optional;
+import java.util.TimeZone;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ExifMetadataPort;
@@ -27,7 +28,7 @@ public class MetadataExtractorExifAdapter implements ExifMetadataPort {
       if (directory == null) {
         return Optional.empty();
       }
-      Date originalDate = directory.getDateOriginal();
+      Date originalDate = directory.getDateOriginal(TimeZone.getTimeZone(appZoneId));
       if (originalDate == null) {
         return Optional.empty();
       }
