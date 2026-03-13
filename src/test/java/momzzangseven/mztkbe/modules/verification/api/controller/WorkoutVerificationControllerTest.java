@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDate;
 import java.util.Arrays;
+import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyCompletedTodayException;
 import momzzangseven.mztkbe.modules.verification.application.dto.LatestVerificationItem;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationCommand;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationResult;
@@ -214,6 +215,31 @@ class WorkoutVerificationControllerTest {
     mockMvc
         .perform(get("/users/me/workout-completion/today").with(nullUserPrincipal()))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("already completed today 예외는 설계된 FAIL data payload를 반환한다")
+  void submitWorkoutPhoto_alreadyCompletedToday_returnsErrorPayload() throws Exception {
+    given(
+            submitWorkoutPhotoVerificationUseCase.execute(
+                new SubmitWorkoutVerificationCommand(
+                    1L, "private/workout/photo.jpg", VerificationKind.WORKOUT_PHOTO)))
+        .willThrow(
+            new VerificationAlreadyCompletedTodayException(
+                CompletedMethod.LOCATION, LocalDate.of(2026, 3, 13), 0));
+
+    mockMvc
+        .perform(
+            post("/users/me/workout-photo-verifications")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(java.util.Map.of("tmpObjectKey", "private/workout/photo.jpg"))))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VERIFICATION_006"))
+        .andExpect(jsonPath("$.data.completedMethod").value("LOCATION"))
+        .andExpect(jsonPath("$.data.earnedDate").value("2026-03-13"))
+        .andExpect(jsonPath("$.data.grantedXp").value(0));
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(
