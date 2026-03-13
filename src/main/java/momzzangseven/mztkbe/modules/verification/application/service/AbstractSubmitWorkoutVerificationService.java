@@ -124,6 +124,7 @@ public abstract class AbstractSubmitWorkoutVerificationService {
       SubmitWorkoutVerificationCommand command,
       TodayRewardSnapshot todayReward,
       VerificationRequest existing) {
+    validateExistingOwnership(command.userId(), existing);
     if (existing.getVerificationKind() != command.kind()) {
       throw new VerificationKindMismatchException();
     }
@@ -197,7 +198,18 @@ public abstract class AbstractSubmitWorkoutVerificationService {
         try (PreparedAnalysisImage analysisImage =
             prepareAnalysisImagePort.prepare(
                 originalImage.path(), analysisMaxLongEdge(), analysisWebpQuality())) {
-          AiVerificationDecision decision = analyzeWithAi(analysisImage.path());
+          AiVerificationDecision decision;
+          try {
+            decision = analyzeWithAi(analysisImage.path());
+          } catch (AiTimeoutException ex) {
+            return fail(analyzing, FailureCode.EXTERNAL_AI_TIMEOUT);
+          } catch (AiMalformedResponseException ex) {
+            return fail(analyzing, FailureCode.EXTERNAL_AI_MALFORMED_RESPONSE);
+          } catch (AiResponseSchemaInvalidException ex) {
+            return fail(analyzing, FailureCode.AI_RESPONSE_SCHEMA_INVALID);
+          } catch (AiUnavailableException ex) {
+            return fail(analyzing, FailureCode.EXTERNAL_AI_UNAVAILABLE);
+          }
           if (!decision.approved()) {
             if (decision.rejectionReasonCode() == null) {
               return fail(analyzing, FailureCode.AI_RESPONSE_SCHEMA_INVALID);
@@ -234,19 +246,14 @@ public abstract class AbstractSubmitWorkoutVerificationService {
           return mapResult(verified, grantedXp, completedMethodSourceRef);
         } catch (IOException ioException) {
           return fail(analyzing, FailureCode.ANALYSIS_IMAGE_GENERATION_FAILED);
-        } catch (AiTimeoutException ex) {
-          return fail(analyzing, FailureCode.EXTERNAL_AI_TIMEOUT);
-        } catch (AiMalformedResponseException ex) {
-          return fail(analyzing, FailureCode.EXTERNAL_AI_MALFORMED_RESPONSE);
-        } catch (AiResponseSchemaInvalidException ex) {
-          return fail(analyzing, FailureCode.AI_RESPONSE_SCHEMA_INVALID);
-        } catch (AiUnavailableException ex) {
-          return fail(analyzing, FailureCode.EXTERNAL_AI_UNAVAILABLE);
-        } catch (RuntimeException ex) {
-          return fail(analyzing, FailureCode.EXTERNAL_AI_UNAVAILABLE);
         }
+      } catch (IOException ex) {
+        VerificationRequest failed =
+            verificationRequestPort.save(
+                analyzing.toFailed(FailureCode.ORIGINAL_IMAGE_READ_FAILED));
+        return mapResult(failed, 0, null);
       }
-    } catch (IOException | RuntimeException ex) {
+    } catch (IOException ex) {
       VerificationRequest failed =
           verificationRequestPort.save(analyzing.toFailed(FailureCode.ORIGINAL_IMAGE_READ_FAILED));
       return mapResult(failed, 0, null);
@@ -381,6 +388,12 @@ public abstract class AbstractSubmitWorkoutVerificationService {
 
   private void validateUploadOwnership(Long userId, WorkoutUploadReference upload) {
     if (!userId.equals(upload.ownerUserId())) {
+      throw new VerificationUploadForbiddenException();
+    }
+  }
+
+  private void validateExistingOwnership(Long userId, VerificationRequest request) {
+    if (!userId.equals(request.getUserId())) {
       throw new VerificationUploadForbiddenException();
     }
   }
