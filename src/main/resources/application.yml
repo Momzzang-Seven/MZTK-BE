@@ -1,6 +1,9 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE}
+  ai:
+    model:
+      chat: none
 
   datasource:
     url: ${DB_URL}
@@ -276,3 +279,17 @@ image:
     batch-size: 100
     cron: 0 0 0/1 * * *
     zone: Asia/Seoul
+
+verification:
+  ai:
+    api-key: ${GEMINI_API_KEY:}
+    model: gemini-2.5-flash-lite
+    timeout-seconds: 12
+    retry-count: 2
+    stub-enabled: true
+  heif:
+    enabled: true
+    decoder-policy: requires-imageio-plugin
+  image:
+    max-original-bytes: 5242880
+    max-pixels: 25000000
