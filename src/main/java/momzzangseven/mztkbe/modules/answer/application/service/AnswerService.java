@@ -61,13 +61,11 @@ public class AnswerService
     if (postId == null) {
       throw new AnswerInvalidInputException("postId is required.");
     }
-
-    List<Answer> answers = loadAnswerPort.loadAnswersByPostId(postId);
-    if (answers.isEmpty() && !loadPostPort.existsPost(postId)) {
+    if (!loadPostPort.existsPost(postId)) {
       throw new AnswerPostNotFoundException();
     }
 
-    return answers.stream().map(AnswerResult::from).toList();
+    return loadAnswerPort.loadAnswersByPostId(postId).stream().map(AnswerResult::from).toList();
   }
 
   @Override
@@ -92,6 +90,15 @@ public class AnswerService
 
     answer.validateDeletable(command.userId());
     deleteAnswerPort.deleteAnswer(answer.getId());
+  }
+
+  @Override
+  @Transactional
+  public void deleteAnswersByPostId(Long postId) {
+    if (postId == null) {
+      throw new AnswerInvalidInputException("postId is required.");
+    }
+    deleteAnswerPort.deleteAnswersByPostId(postId);
   }
 
   private LoadPostPort.PostContext loadPost(Long postId) {

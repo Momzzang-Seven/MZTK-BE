@@ -9,4 +9,6 @@ import org.springframework.stereotype.Repository;
 public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
 
   List<AnswerEntity> findByPostIdOrderByIsAcceptedDescCreatedAtAsc(Long postId);
+
+  void deleteAllByPostId(Long postId);
 }
