@@ -311,6 +311,21 @@ public enum ErrorCode {
   IMAGE_FILE_NAME_INVALID("IMAGE_007", "Image file name invalid", HttpStatus.BAD_REQUEST),
   IMAGE_VIRTUAL_REF_TYPE_CANNOT_BUILD_OBJECT_KEY(
       "IMAGE_008", "Virtual ref type cannot build object key", HttpStatus.INTERNAL_SERVER_ERROR),
+  // ========================================
+  // Verification Errors (VERIFICATION_xxx)
+  // ========================================
+  VERIFICATION_INVALID_TMP_OBJECT_KEY(
+      "VERIFICATION_001", "Invalid tmp object key", HttpStatus.BAD_REQUEST),
+  VERIFICATION_INVALID_IMAGE_EXTENSION(
+      "VERIFICATION_002", "Invalid image extension for verification", HttpStatus.BAD_REQUEST),
+  VERIFICATION_UPLOAD_NOT_FOUND("VERIFICATION_003", "Upload not found", HttpStatus.NOT_FOUND),
+  VERIFICATION_UPLOAD_FORBIDDEN(
+      "VERIFICATION_004", "Upload does not belong to user", HttpStatus.FORBIDDEN),
+  VERIFICATION_KIND_MISMATCH(
+      "VERIFICATION_005", "Verification kind does not match existing request", HttpStatus.CONFLICT),
+  VERIFICATION_ALREADY_COMPLETED_TODAY(
+      "VERIFICATION_006", "Workout already completed today", HttpStatus.CONFLICT),
+  VERIFICATION_NOT_FOUND("VERIFICATION_007", "Verification not found", HttpStatus.NOT_FOUND),
   ;
 
   private final String code;
