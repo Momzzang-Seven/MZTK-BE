@@ -131,14 +131,14 @@ class WorkoutVerificationControllerIntegrationTest {
         .thenReturn(AiVerificationDecision.builder().approved(true).exerciseDate(today).build());
 
     MvcResult first =
-        submit("/users/me/workout-photo-verifications", 901L, tmpObjectKey)
+        submit("/verification/photo", 901L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("FAILED"))
             .andExpect(jsonPath("$.data.exerciseDate").doesNotExist())
             .andExpect(jsonPath("$.data.completedMethod").doesNotExist())
             .andReturn();
     MvcResult second =
-        submit("/users/me/workout-photo-verifications", 901L, tmpObjectKey)
+        submit("/verification/photo", 901L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("VERIFIED"))
             .andExpect(jsonPath("$.data.exerciseDate").doesNotExist())
@@ -198,13 +198,13 @@ class WorkoutVerificationControllerIntegrationTest {
         .thenReturn(AiVerificationDecision.builder().approved(true).exerciseDate(today).build());
 
     MvcResult first =
-        submit("/users/me/workout-record-verifications", 902L, tmpObjectKey)
+        submit("/verification/record", 902L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("FAILED"))
             .andExpect(jsonPath("$.data.completedMethod").doesNotExist())
             .andReturn();
     MvcResult second =
-        submit("/users/me/workout-record-verifications", 902L, tmpObjectKey)
+        submit("/verification/record", 902L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("VERIFIED"))
             .andExpect(jsonPath("$.data.exerciseDate").value(today.toString()))
@@ -242,7 +242,7 @@ class WorkoutVerificationControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("GET /users/me/verifications/{verificationId}는 저장된 verification row를 조회한다")
+  @DisplayName("GET /verification/{verificationId}는 저장된 verification row를 조회한다")
   void getVerificationDetail_realFlow_returnsSeededRow() throws Exception {
     VerificationRequestEntity saved =
         verificationRequestJpaRepository.save(
@@ -259,7 +259,7 @@ class WorkoutVerificationControllerIntegrationTest {
 
     mockMvc
         .perform(
-            get("/users/me/verifications/" + saved.getVerificationId()).with(userPrincipal(501L)))
+            get("/verification/" + saved.getVerificationId()).with(userPrincipal(501L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.verificationId").value(saved.getVerificationId()))
@@ -269,7 +269,7 @@ class WorkoutVerificationControllerIntegrationTest {
 
   @Test
   @DisplayName(
-      "GET /users/me/workout-completion/today는 xp source_ref와 latest verification을 함께 반영한다")
+      "GET /verification/today-completion은 xp source_ref와 latest verification을 함께 반영한다")
   void getTodayCompletion_realFlow_derivesCompletedMethodAndLatestVerification() throws Exception {
     LocalDate today = LocalDate.now(KST);
     verificationRequestJpaRepository.save(
@@ -296,7 +296,7 @@ class WorkoutVerificationControllerIntegrationTest {
             .build());
 
     mockMvc
-        .perform(get("/users/me/workout-completion/today").with(userPrincipal(777L)))
+        .perform(get("/verification/today-completion").with(userPrincipal(777L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.todayCompleted").value(true))
@@ -322,7 +322,7 @@ class WorkoutVerificationControllerIntegrationTest {
             .updatedAt(Instant.now())
             .build());
 
-    submit("/users/me/workout-photo-verifications", 903L, tmpObjectKey)
+    submit("/verification/photo", 903L, tmpObjectKey)
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("VERIFICATION_005"));
@@ -343,7 +343,7 @@ class WorkoutVerificationControllerIntegrationTest {
             .updatedAt(Instant.now())
             .build());
 
-    submit("/users/me/workout-photo-verifications", 904L, tmpObjectKey)
+    submit("/verification/photo", 904L, tmpObjectKey)
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("VERIFICATION_004"));
@@ -375,7 +375,7 @@ class WorkoutVerificationControllerIntegrationTest {
     entityManager.flush();
     entityManager.clear();
 
-    submit("/users/me/workout-photo-verifications", 905L, tmpObjectKey)
+    submit("/verification/photo", 905L, tmpObjectKey)
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.verificationId").value("old-failed-id"))
         .andExpect(jsonPath("$.data.verificationStatus").value("FAILED"))
@@ -408,7 +408,7 @@ class WorkoutVerificationControllerIntegrationTest {
             .createdAt(LocalDateTime.now(KST))
             .build());
 
-    submit("/users/me/workout-photo-verifications", 906L, tmpObjectKey)
+    submit("/verification/photo", 906L, tmpObjectKey)
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("VERIFICATION_006"))
@@ -419,7 +419,7 @@ class WorkoutVerificationControllerIntegrationTest {
   @Test
   @DisplayName("tmpObjectKey가 image 테이블에 없으면 submit은 404(VERIFICATION_003)이다")
   void submit_whenUploadRowIsMissing_returnsUploadNotFound() throws Exception {
-    submit("/users/me/workout-photo-verifications", 907L, "private/workout/no-image-row.jpg")
+    submit("/verification/photo", 907L, "private/workout/no-image-row.jpg")
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("VERIFICATION_003"));
@@ -440,7 +440,7 @@ class WorkoutVerificationControllerIntegrationTest {
             .updatedAt(Instant.now())
             .build());
 
-    submit("/users/me/workout-photo-verifications", 908L, tmpObjectKey)
+    submit("/verification/photo", 908L, tmpObjectKey)
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.verificationId").value("existing-verified-id"))

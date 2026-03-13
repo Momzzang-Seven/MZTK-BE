@@ -67,7 +67,7 @@ class WorkoutVerificationControllerTest {
       txSignedRecoveryWorker;
 
   @Test
-  @DisplayName("POST /users/me/workout-photo-verifications 성공")
+  @DisplayName("POST /verification/photo 성공")
   void submitWorkoutPhoto_success() throws Exception {
     given(
             submitWorkoutPhotoVerificationUseCase.execute(
@@ -85,7 +85,7 @@ class WorkoutVerificationControllerTest {
 
     mockMvc
         .perform(
-            post("/users/me/workout-photo-verifications")
+            post("/verification/photo")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(java.util.Map.of("tmpObjectKey", "private/workout/photo.jpg"))))
@@ -104,7 +104,7 @@ class WorkoutVerificationControllerTest {
   }
 
   @Test
-  @DisplayName("POST /users/me/workout-record-verifications 성공")
+  @DisplayName("POST /verification/record 성공")
   void submitWorkoutRecord_success() throws Exception {
     given(
             submitWorkoutRecordVerificationUseCase.execute(
@@ -122,7 +122,7 @@ class WorkoutVerificationControllerTest {
 
     mockMvc
         .perform(
-            post("/users/me/workout-record-verifications")
+            post("/verification/record")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(java.util.Map.of("tmpObjectKey", "private/workout/record.png"))))
@@ -141,7 +141,7 @@ class WorkoutVerificationControllerTest {
   }
 
   @Test
-  @DisplayName("GET /users/me/verifications/{verificationId} 성공")
+  @DisplayName("GET /verification/{verificationId} 성공")
   void getVerificationDetail_success() throws Exception {
     given(getVerificationDetailUseCase.execute(1L, "verification-1"))
         .willReturn(
@@ -152,7 +152,7 @@ class WorkoutVerificationControllerTest {
                 .build());
 
     mockMvc
-        .perform(get("/users/me/verifications/verification-1").with(userPrincipal(1L)))
+        .perform(get("/verification/verification-1").with(userPrincipal(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.verificationId").value("verification-1"))
@@ -161,7 +161,7 @@ class WorkoutVerificationControllerTest {
   }
 
   @Test
-  @DisplayName("GET /users/me/workout-completion/today 성공")
+  @DisplayName("GET /verification/today-completion 성공")
   void returnsTodayCompletion() throws Exception {
     given(getTodayWorkoutCompletionUseCase.execute(1L))
         .willReturn(
@@ -180,7 +180,7 @@ class WorkoutVerificationControllerTest {
                 .build());
 
     mockMvc
-        .perform(get("/users/me/workout-completion/today").with(userPrincipal(1L)))
+        .perform(get("/verification/today-completion").with(userPrincipal(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.todayCompleted").value(true))
@@ -193,7 +193,7 @@ class WorkoutVerificationControllerTest {
   void submitWorkoutPhoto_blankTmpObjectKey_returns400() throws Exception {
     mockMvc
         .perform(
-            post("/users/me/workout-photo-verifications")
+            post("/verification/photo")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(java.util.Map.of("tmpObjectKey", ""))))
@@ -205,7 +205,7 @@ class WorkoutVerificationControllerTest {
   void submitWorkoutPhoto_unauthenticated_returns401() throws Exception {
     mockMvc
         .perform(
-            post("/users/me/workout-photo-verifications")
+            post("/verification/photo")
                 .contentType(APPLICATION_JSON)
                 .content(json(java.util.Map.of("tmpObjectKey", "private/workout/photo.jpg"))))
         .andExpect(status().isUnauthorized());
@@ -215,7 +215,7 @@ class WorkoutVerificationControllerTest {
   @DisplayName("principal이 null이면 401")
   void getTodayCompletion_nullPrincipal_returns401() throws Exception {
     mockMvc
-        .perform(get("/users/me/workout-completion/today").with(nullUserPrincipal()))
+        .perform(get("/verification/today-completion").with(nullUserPrincipal()))
         .andExpect(status().isUnauthorized());
   }
 
@@ -232,7 +232,7 @@ class WorkoutVerificationControllerTest {
 
     mockMvc
         .perform(
-            post("/users/me/workout-photo-verifications")
+            post("/verification/photo")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(java.util.Map.of("tmpObjectKey", "private/workout/photo.jpg"))))

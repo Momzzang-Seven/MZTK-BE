@@ -1093,7 +1093,7 @@ async function submitPhoto(
 ): Promise<TimedApiResult<SubmitVerificationData>> {
   const startedAt = Date.now();
   const response = await request.post(
-    `${ENV.BACKEND_URL}/users/me/workout-photo-verifications`,
+    `${ENV.BACKEND_URL}/verification/photo`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1120,7 +1120,7 @@ async function submitRecord(
 ): Promise<TimedApiResult<SubmitVerificationData>> {
   const startedAt = Date.now();
   const response = await request.post(
-    `${ENV.BACKEND_URL}/users/me/workout-record-verifications`,
+    `${ENV.BACKEND_URL}/verification/record`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1145,7 +1145,7 @@ async function getVerificationDetail(
   verificationId: string
 ): Promise<{ status: number; body: ApiEnvelope<VerificationDetailData> }> {
   const response = await request.get(
-    `${ENV.BACKEND_URL}/users/me/verifications/${verificationId}`,
+    `${ENV.BACKEND_URL}/verification/${verificationId}`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       failOnStatusCode: false,
@@ -1159,7 +1159,7 @@ async function getTodayCompletion(
   accessToken: string
 ): Promise<{ status: number; body: ApiEnvelope<TodayCompletionData> }> {
   const response = await request.get(
-    `${ENV.BACKEND_URL}/users/me/workout-completion/today`,
+    `${ENV.BACKEND_URL}/verification/today-completion`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       failOnStatusCode: false,

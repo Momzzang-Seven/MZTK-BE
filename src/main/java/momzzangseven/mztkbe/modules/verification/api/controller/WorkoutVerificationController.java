@@ -34,7 +34,7 @@ public class WorkoutVerificationController {
   private final GetVerificationDetailUseCase getVerificationDetailUseCase;
   private final GetTodayWorkoutCompletionUseCase getTodayWorkoutCompletionUseCase;
 
-  @PostMapping("/users/me/workout-photo-verifications")
+  @PostMapping("/verification/photo")
   public ResponseEntity<ApiResponse<SubmitWorkoutVerificationResponseDTO>> submitWorkoutPhoto(
       @AuthenticationPrincipal Long userId,
       @Valid @RequestBody SubmitWorkoutVerificationRequestDTO request) {
@@ -45,7 +45,7 @@ public class WorkoutVerificationController {
         submitWorkoutPhotoVerificationUseCase::execute);
   }
 
-  @PostMapping("/users/me/workout-record-verifications")
+  @PostMapping("/verification/record")
   public ResponseEntity<ApiResponse<SubmitWorkoutVerificationResponseDTO>> submitWorkoutRecord(
       @AuthenticationPrincipal Long userId,
       @Valid @RequestBody SubmitWorkoutVerificationRequestDTO request) {
@@ -56,7 +56,7 @@ public class WorkoutVerificationController {
         submitWorkoutRecordVerificationUseCase::execute);
   }
 
-  @GetMapping("/users/me/verifications/{verificationId}")
+  @GetMapping("/verification/{verificationId}")
   public ResponseEntity<ApiResponse<VerificationDetailResponseDTO>> getVerificationDetail(
       @AuthenticationPrincipal Long userId, @PathVariable String verificationId) {
     userId = requireUserId(userId);
@@ -64,7 +64,7 @@ public class WorkoutVerificationController {
     return ResponseEntity.ok(ApiResponse.success(VerificationDetailResponseDTO.from(result)));
   }
 
-  @GetMapping("/users/me/workout-completion/today")
+  @GetMapping("/verification/today-completion")
   public ResponseEntity<ApiResponse<TodayWorkoutCompletionResponseDTO>> getTodayWorkoutCompletion(
       @AuthenticationPrincipal Long userId) {
     userId = requireUserId(userId);
