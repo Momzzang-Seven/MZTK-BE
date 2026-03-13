@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.verification.InvalidVerificationImageExtensionException;
 import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyCompletedTodayException;
 import momzzangseven.mztkbe.global.error.verification.VerificationKindMismatchException;
+import momzzangseven.mztkbe.global.error.verification.VerificationUploadForbiddenException;
 import momzzangseven.mztkbe.modules.verification.application.config.VerificationRuntimeProperties;
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
@@ -157,6 +159,32 @@ class SubmitWorkoutPhotoVerificationServiceTest {
 
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(VerificationKindMismatchException.class);
+  }
+
+  @Test
+  @DisplayName("다른 사용자의 기존 verification row는 재사용하지 않고 403을 반환한다")
+  void rejectsExistingVerificationOwnedByAnotherUser() {
+    SubmitWorkoutVerificationCommand command =
+        new SubmitWorkoutVerificationCommand(
+            1L, "private/workout/a.jpg", VerificationKind.WORKOUT_PHOTO);
+    VerificationRequest existing =
+        VerificationRequest.builder()
+            .verificationId("verified-by-other-user")
+            .userId(2L)
+            .verificationKind(VerificationKind.WORKOUT_PHOTO)
+            .status(VerificationStatus.VERIFIED)
+            .tmpObjectKey("private/workout/a.jpg")
+            .build();
+    when(xpLedgerQueryPort.findTodayWorkoutReward(1L, LocalDate.of(2026, 3, 13)))
+        .thenReturn(TodayRewardSnapshot.none(LocalDate.of(2026, 3, 13)));
+    when(verificationRequestPort.findByTmpObjectKey("private/workout/a.jpg"))
+        .thenReturn(Optional.of(existing));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(VerificationUploadForbiddenException.class);
+
+    verifyNoInteractions(workoutUploadLookupPort, prepareAnalysisImagePort, workoutImageAiPort);
+    verifyNoInteractions(grantXpPort);
   }
 
   @Test
@@ -827,6 +855,34 @@ class SubmitWorkoutPhotoVerificationServiceTest {
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.FAILED);
     assertThat(result.failureCode()).isEqualTo(FailureCode.EXTERNAL_AI_TIMEOUT);
+  }
+
+  @Test
+  @DisplayName("XP 지급 예외는 FAILED로 삼키지 않고 그대로 전파한다")
+  void propagatesGrantXpRuntimeException() throws Exception {
+    SubmitWorkoutVerificationCommand command =
+        new SubmitWorkoutVerificationCommand(
+            1L, "private/workout/a.jpg", VerificationKind.WORKOUT_PHOTO);
+    VerificationRequest pending =
+        VerificationRequest.newPending(1L, VerificationKind.WORKOUT_PHOTO, "private/workout/a.jpg");
+    VerificationRequest verified =
+        pending.toAnalyzing().toVerified(null, LocalDateTime.of(2026, 3, 13, 10, 0));
+    stubSuccessfulPreAiFlow(command, pending);
+    when(workoutImageAiPort.analyzeWorkoutPhoto(any()))
+        .thenReturn(AiVerificationDecision.builder().approved(true).build());
+    when(verificationRequestPort.save(any())).thenReturn(pending, pending.toAnalyzing(), verified);
+    when(grantXpPort.grantWorkoutXp(
+            1L,
+            VerificationKind.WORKOUT_PHOTO,
+            pending.getVerificationId(),
+            "workout-photo-verification:" + pending.getVerificationId()))
+        .thenThrow(new IllegalStateException("xp down"));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("xp down");
+
+    verify(verificationRequestPort, times(3)).save(any());
   }
 
   private void stubSuccessfulPreAiFlow(
