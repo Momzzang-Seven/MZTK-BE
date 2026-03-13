@@ -34,10 +34,12 @@ import momzzangseven.mztkbe.modules.level.infrastructure.repository.XpPolicyJpaR
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.PreparedOriginalImage;
 import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ExifMetadataPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAnalysisImagePort;
+import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.verification.infrastructure.persistence.entity.VerificationRequestEntity;
 import momzzangseven.mztkbe.modules.verification.infrastructure.persistence.repository.VerificationRequestJpaRepository;
@@ -78,6 +80,7 @@ class WorkoutVerificationE2ETest {
   @MockBean private GoogleAuthPort googleAuthPort;
   @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
   @MockBean private ObjectStoragePort objectStoragePort;
+  @MockBean private PrepareOriginalImagePort prepareOriginalImagePort;
   @MockBean private PrepareAnalysisImagePort prepareAnalysisImagePort;
   @MockBean private ExifMetadataPort exifMetadataPort;
   @MockBean private WorkoutImageAiPort workoutImageAiPort;
@@ -105,6 +108,8 @@ class WorkoutVerificationE2ETest {
 
     when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
     stubOpenStream(tmpObjectKey, "image/jpeg");
+    when(prepareOriginalImagePort.prepare(tmpObjectKey, "jpg"))
+        .thenReturn(PreparedOriginalImage.noop(Path.of("original.jpg")));
     when(prepareAnalysisImagePort.prepare(any(Path.class), any(Integer.class), anyDouble()))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(exifMetadataPort.extract(any()))
@@ -139,6 +144,10 @@ class WorkoutVerificationE2ETest {
 
       assertThat(firstResponse.getStatusCode().is2xxSuccessful()).isTrue();
       assertThat(secondResponse.getStatusCode().is2xxSuccessful()).isTrue();
+      assertThat(objectMapper.readTree(firstResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+          .isTrue();
+      assertThat(objectMapper.readTree(secondResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+          .isTrue();
 
       String firstVerificationId =
           objectMapper.readTree(firstResponse.getBody()).at("/data/verificationId").asText();
@@ -206,6 +215,8 @@ class WorkoutVerificationE2ETest {
 
     when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
     stubOpenStream(tmpObjectKey, "image/jpeg");
+    when(prepareOriginalImagePort.prepare(tmpObjectKey, "jpg"))
+        .thenReturn(PreparedOriginalImage.noop(Path.of("original.jpg")));
     when(prepareAnalysisImagePort.prepare(any(Path.class), any(Integer.class), anyDouble()))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(exifMetadataPort.extract(any()))
@@ -243,6 +254,10 @@ class WorkoutVerificationE2ETest {
 
       assertThat(firstResponse.getStatusCode().is2xxSuccessful()).isTrue();
       assertThat(secondResponse.getStatusCode().is2xxSuccessful()).isTrue();
+      assertThat(objectMapper.readTree(firstResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+          .isTrue();
+      assertThat(objectMapper.readTree(secondResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+          .isTrue();
 
       String firstVerificationId =
           objectMapper.readTree(firstResponse.getBody()).at("/data/verificationId").asText();

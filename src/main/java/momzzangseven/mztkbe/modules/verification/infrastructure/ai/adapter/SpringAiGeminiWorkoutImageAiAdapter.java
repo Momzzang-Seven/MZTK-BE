@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Path;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.verification.application.config.VerificationRuntimeProperties;
@@ -13,6 +12,7 @@ import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationD
 import momzzangseven.mztkbe.modules.verification.application.exception.AiMalformedResponseException;
 import momzzangseven.mztkbe.modules.verification.application.exception.AiResponseSchemaInvalidException;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
+import momzzangseven.mztkbe.modules.verification.application.service.VerificationTimePolicy;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.infrastructure.ai.client.VerificationAiJsonClient;
 import momzzangseven.mztkbe.modules.verification.infrastructure.config.VerificationPromptProvider;
@@ -40,15 +40,12 @@ public class SpringAiGeminiWorkoutImageAiAdapter implements WorkoutImageAiPort {
   private final VerificationPromptProvider promptProvider;
   private final VerificationAiJsonClient aiJsonClient;
   private final ObjectMapper objectMapper;
-  private final ZoneId appZoneId;
+  private final VerificationTimePolicy verificationTimePolicy;
 
   @Override
   public AiVerificationDecision analyzeWorkoutPhoto(Path analysisImagePath) {
     if (runtimeProperties.ai().stubEnabled()) {
-      return AiVerificationDecision.builder()
-          .approved(true)
-          .exerciseDate(LocalDate.now(appZoneId))
-          .build();
+      return AiVerificationDecision.builder().approved(true).build();
     }
     ensurePromptLoaded(
         promptProvider.getWorkoutPhotoSystemInstruction(),
@@ -84,7 +81,7 @@ public class SpringAiGeminiWorkoutImageAiAdapter implements WorkoutImageAiPort {
     if (runtimeProperties.ai().stubEnabled()) {
       return AiVerificationDecision.builder()
           .approved(true)
-          .exerciseDate(LocalDate.now(appZoneId))
+          .exerciseDate(verificationTimePolicy.today())
           .build();
     }
     ensurePromptLoaded(
@@ -119,7 +116,7 @@ public class SpringAiGeminiWorkoutImageAiAdapter implements WorkoutImageAiPort {
       if (exerciseDate == null) {
         throw new AiResponseSchemaInvalidException("workoutRecord=true requires exerciseDate");
       }
-      if (!exerciseDate.equals(LocalDate.now(appZoneId))) {
+      if (!verificationTimePolicy.isToday(exerciseDate)) {
         return AiVerificationDecision.builder()
             .approved(false)
             .exerciseDate(exerciseDate)

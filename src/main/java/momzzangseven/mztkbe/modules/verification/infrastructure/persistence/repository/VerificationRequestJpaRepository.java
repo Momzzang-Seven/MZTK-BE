@@ -4,7 +4,6 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.verification.infrastructure.persistence.entity.VerificationRequestEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -31,18 +30,4 @@ public interface VerificationRequestJpaRepository
   Optional<VerificationRequestEntity>
       findFirstByUserIdAndUpdatedAtGreaterThanEqualAndUpdatedAtLessThanOrderByUpdatedAtDesc(
           Long userId, java.time.Instant start, java.time.Instant end);
-
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query(
-      value =
-          """
-          update verification_requests
-             set status = 'ANALYZING',
-                 failure_code = null,
-                 updated_at = CURRENT_TIMESTAMP
-           where verification_id = :verificationId
-             and status = 'FAILED'
-          """,
-      nativeQuery = true)
-  int transitionFailedToAnalyzing(@Param("verificationId") String verificationId);
 }

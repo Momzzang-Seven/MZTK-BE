@@ -55,7 +55,6 @@ class VerificationRequestTest {
                 LocalDateTime.of(2026, 3, 12, 23, 59));
 
     assertThat(rejected.getStatus()).isEqualTo(VerificationStatus.REJECTED);
-    assertThat(rejected.getRejectionReasonCode())
-        .isEqualTo(RejectionReasonCode.EXIF_DATE_MISMATCH);
+    assertThat(rejected.getRejectionReasonCode()).isEqualTo(RejectionReasonCode.EXIF_DATE_MISMATCH);
   }
 }

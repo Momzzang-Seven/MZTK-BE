@@ -26,11 +26,13 @@ import momzzangseven.mztkbe.modules.level.infrastructure.repository.XpPolicyJpaR
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.PreparedOriginalImage;
 import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.exception.AiUnavailableException;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ExifMetadataPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAnalysisImagePort;
+import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
@@ -92,6 +94,7 @@ class WorkoutVerificationControllerIntegrationTest {
       txSignedRecoveryWorker;
 
   @MockBean private ObjectStoragePort objectStoragePort;
+  @MockBean private PrepareOriginalImagePort prepareOriginalImagePort;
   @MockBean private PrepareAnalysisImagePort prepareAnalysisImagePort;
   @MockBean private ExifMetadataPort exifMetadataPort;
   @MockBean private WorkoutImageAiPort workoutImageAiPort;
@@ -106,6 +109,8 @@ class WorkoutVerificationControllerIntegrationTest {
 
     org.mockito.Mockito.when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
     stubOpenStream(tmpObjectKey, "image/jpeg");
+    org.mockito.Mockito.when(prepareOriginalImagePort.prepare(tmpObjectKey, "jpg"))
+        .thenReturn(PreparedOriginalImage.noop(Path.of("photo-original.jpg")));
     org.mockito.Mockito.when(exifMetadataPort.extract(org.mockito.ArgumentMatchers.any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.now(KST))));
     org.mockito.Mockito.when(
@@ -123,11 +128,14 @@ class WorkoutVerificationControllerIntegrationTest {
         submit("/users/me/workout-photo-verifications", 901L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("FAILED"))
+            .andExpect(jsonPath("$.data.exerciseDate").doesNotExist())
+            .andExpect(jsonPath("$.data.completedMethod").doesNotExist())
             .andReturn();
     MvcResult second =
         submit("/users/me/workout-photo-verifications", 901L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("VERIFIED"))
+            .andExpect(jsonPath("$.data.exerciseDate").doesNotExist())
             .andExpect(jsonPath("$.data.completedMethod").value("WORKOUT_PHOTO"))
             .andReturn();
 
@@ -170,7 +178,8 @@ class WorkoutVerificationControllerIntegrationTest {
     ensureWorkoutXpPolicy(today);
 
     org.mockito.Mockito.when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
-    stubOpenStream(tmpObjectKey, "image/png");
+    org.mockito.Mockito.when(prepareOriginalImagePort.prepare(tmpObjectKey, "png"))
+        .thenReturn(PreparedOriginalImage.noop(Path.of("record-original.png")));
     org.mockito.Mockito.when(
             prepareAnalysisImagePort.prepare(
                 org.mockito.ArgumentMatchers.any(),
@@ -186,11 +195,13 @@ class WorkoutVerificationControllerIntegrationTest {
         submit("/users/me/workout-record-verifications", 902L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("FAILED"))
+            .andExpect(jsonPath("$.data.completedMethod").doesNotExist())
             .andReturn();
     MvcResult second =
         submit("/users/me/workout-record-verifications", 902L, tmpObjectKey)
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.verificationStatus").value("VERIFIED"))
+            .andExpect(jsonPath("$.data.exerciseDate").value(today.toString()))
             .andExpect(jsonPath("$.data.completedMethod").value("WORKOUT_RECORD"))
             .andReturn();
 
