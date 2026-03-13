@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -70,109 +71,287 @@ class AnswerControllerIntegrationTest {
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @Test
-  void createGetUpdateAndDeleteAnswer_realFlow_works() throws Exception {
-    PostEntity savedPost = saveQuestionPost(501L, false);
-    Long postId = savedPost.getId();
+  @Nested
+  @DisplayName("Success cases")
+  class SuccessCases {
 
-    MvcResult createResult =
-        mockMvc
-            .perform(
-                post("/questions/" + postId + "/answers")
-                    .with(userPrincipal(502L))
-                    .contentType(APPLICATION_JSON)
-                    .content(
-                        json(
-                            Map.of(
-                                "content",
-                                "integration answer",
-                                "imageUrls",
-                                List.of("https://example.com/answer-1.png")))))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.status").value("SUCCESS"))
-            .andReturn();
+    @Test
+    @DisplayName("CRUD flow persists and updates answers through HTTP")
+    void createGetUpdateAndDeleteAnswer_realFlow_works() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      Long postId = savedPost.getId();
 
-    Long answerId = extractLong(createResult, "/data/answerId");
-    AnswerEntity savedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
-    assertThat(savedAnswer.getPostId()).isEqualTo(postId);
-    assertThat(savedAnswer.getUserId()).isEqualTo(502L);
-    assertThat(savedAnswer.getContent()).isEqualTo("integration answer");
-    assertThat(savedAnswer.getImageUrls()).containsExactly("https://example.com/answer-1.png");
-    assertThat(savedAnswer.getIsAccepted()).isFalse();
+      MvcResult createResult =
+          mockMvc
+              .perform(
+                  post("/questions/" + postId + "/answers")
+                      .with(userPrincipal(502L))
+                      .contentType(APPLICATION_JSON)
+                      .content(
+                          json(
+                              Map.of(
+                                  "content",
+                                  "integration answer",
+                                  "imageUrls",
+                                  List.of("https://example.com/answer-1.png")))))
+              .andExpect(status().isCreated())
+              .andExpect(jsonPath("$.status").value("SUCCESS"))
+              .andReturn();
 
-    mockMvc
-        .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data[0].answerId").value(answerId))
-        .andExpect(jsonPath("$.data[0].userId").value(502L))
-        .andExpect(jsonPath("$.data[0].content").value("integration answer"))
-        .andExpect(jsonPath("$.data[0].imageUrls[0]").value("https://example.com/answer-1.png"));
+      Long answerId = extractLong(createResult, "/data/answerId");
+      AnswerEntity savedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
+      assertThat(savedAnswer.getPostId()).isEqualTo(postId);
+      assertThat(savedAnswer.getUserId()).isEqualTo(502L);
+      assertThat(savedAnswer.getContent()).isEqualTo("integration answer");
 
-    mockMvc
-        .perform(
-            put("/questions/" + postId + "/answers/" + answerId)
-                .with(userPrincipal(502L))
-                .contentType(APPLICATION_JSON)
-                .content(json(Map.of("content", "updated answer"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
+      mockMvc
+          .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data[0].answerId").value(answerId))
+          .andExpect(jsonPath("$.data[0].userId").value(502L))
+          .andExpect(jsonPath("$.data[0].content").value("integration answer"))
+          .andExpect(jsonPath("$.data[0].imageUrls[0]").value("https://example.com/answer-1.png"));
 
-    AnswerEntity updatedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
-    assertThat(updatedAnswer.getContent()).isEqualTo("updated answer");
-    assertThat(updatedAnswer.getImageUrls()).containsExactly("https://example.com/answer-1.png");
+      mockMvc
+          .perform(
+              put("/questions/" + postId + "/answers/" + answerId)
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "updated answer"))))
+          .andExpect(status().isOk());
 
-    mockMvc
-        .perform(
-            put("/questions/" + postId + "/answers/" + answerId)
-                .with(userPrincipal(502L))
-                .contentType(APPLICATION_JSON)
-                .content(json(Map.of("imageUrls", List.of("https://example.com/answer-2.png")))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
+      mockMvc
+          .perform(
+              put("/questions/" + postId + "/answers/" + answerId)
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("imageUrls", List.of("https://example.com/answer-2.png")))))
+          .andExpect(status().isOk());
 
-    AnswerEntity imageOnlyUpdatedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
-    assertThat(imageOnlyUpdatedAnswer.getContent()).isEqualTo("updated answer");
-    assertThat(imageOnlyUpdatedAnswer.getImageUrls())
-        .containsExactly("https://example.com/answer-2.png");
+      AnswerEntity updatedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
+      assertThat(updatedAnswer.getContent()).isEqualTo("updated answer");
+      assertThat(updatedAnswer.getImageUrls()).containsExactly("https://example.com/answer-2.png");
 
-    mockMvc
-        .perform(delete("/questions/" + postId + "/answers/" + answerId).with(userPrincipal(502L)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
+      mockMvc
+          .perform(
+              delete("/questions/" + postId + "/answers/" + answerId).with(userPrincipal(502L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"));
 
-    assertThat(answerJpaRepository.findById(answerId)).isEmpty();
+      assertThat(answerJpaRepository.findById(answerId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("GET answers returns accepted answers first")
+    void getAnswers_returnsAcceptedAnswerFirst() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      Long postId = savedPost.getId();
+
+      answerJpaRepository.save(buildAnswerEntity(postId, 502L, "regular", false, List.of()));
+      answerJpaRepository.save(buildAnswerEntity(postId, 503L, "accepted", true, List.of()));
+
+      mockMvc
+          .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data[0].content").value("accepted"))
+          .andExpect(jsonPath("$.data[0].isAccepted").value(true));
+    }
+
+    @Test
+    @DisplayName("Deleting a question post removes orphan answers through the event handler")
+    void deletingQuestionPost_removesAnswersThroughEventHandler() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      Long postId = savedPost.getId();
+      Long firstAnswerId = createAnswer(postId, 502L, "first", List.of());
+      Long secondAnswerId =
+          createAnswer(postId, 503L, "second", List.of("https://example.com/2.png"));
+
+      mockMvc
+          .perform(delete("/posts/" + postId).with(userPrincipal(501L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+      assertThat(postJpaRepository.findById(postId)).isEmpty();
+      assertThat(answerJpaRepository.findById(firstAnswerId)).isEmpty();
+      assertThat(answerJpaRepository.findById(secondAnswerId)).isEmpty();
+    }
   }
 
-  @Test
-  void deletingQuestionPost_removesAnswersThroughEventHandler() throws Exception {
-    PostEntity savedPost = saveQuestionPost(501L, false);
-    Long postId = savedPost.getId();
-    Long firstAnswerId = createAnswer(postId, 502L, "first", List.of());
-    Long secondAnswerId =
-        createAnswer(postId, 503L, "second", List.of("https://example.com/2.png"));
+  @Nested
+  @DisplayName("Failure cases")
+  class FailureCases {
 
-    mockMvc
-        .perform(delete("/posts/" + postId).with(userPrincipal(501L)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
+    @Test
+    @DisplayName("POST answer returns 401 when unauthenticated")
+    void createAnswer_returns401_whenUnauthenticated() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
 
-    assertThat(postJpaRepository.findById(postId)).isEmpty();
-    assertThat(answerJpaRepository.findById(firstAnswerId)).isEmpty();
-    assertThat(answerJpaRepository.findById(secondAnswerId)).isEmpty();
+      mockMvc
+          .perform(
+              post("/questions/" + savedPost.getId() + "/answers")
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "answer content"))))
+          .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST answer returns 400 when the request body has blank content")
+    void createAnswer_returns400_whenBlankContent() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+
+      mockMvc
+          .perform(
+              post("/questions/" + savedPost.getId() + "/answers")
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", " "))))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("POST answer returns 400 when the question is already solved")
+    void createAnswer_returns400_whenPostIsSolved() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, true);
+
+      mockMvc
+          .perform(
+              post("/questions/" + savedPost.getId() + "/answers")
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "answer content"))))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("POST answer returns 400 when the requester answers his or her own post")
+    void createAnswer_returns400_whenAnswerOwnPost() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+
+      mockMvc
+          .perform(
+              post("/questions/" + savedPost.getId() + "/answers")
+                  .with(userPrincipal(501L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "answer content"))))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("POST answer returns 400 when the target post is not a question")
+    void createAnswer_returns400_whenPostIsNotQuestion() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.FREE, false);
+
+      mockMvc
+          .perform(
+              post("/questions/" + savedPost.getId() + "/answers")
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "answer content"))))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("GET answers returns 404 when the post does not exist")
+    void getAnswers_returns404_whenPostNotFound() throws Exception {
+      mockMvc
+          .perform(get("/questions/999999/answers").with(userPrincipal(501L)))
+          .andExpect(status().isNotFound())
+          .andExpect(jsonPath("$.status").value("FAIL"))
+          .andExpect(jsonPath("$.code").value("POST_001"));
+    }
+
+    @Test
+    @DisplayName("PUT answer returns 403 when the requester is not the owner")
+    void updateAnswer_returns403_whenNotOwner() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      Long answerId = createAnswer(savedPost.getId(), 502L, "answer content", List.of());
+
+      mockMvc
+          .perform(
+              put("/questions/" + savedPost.getId() + "/answers/" + answerId)
+                  .with(userPrincipal(503L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "updated"))))
+          .andExpect(status().isForbidden())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("DELETE answer returns 403 when the requester is not the owner")
+    void deleteAnswer_returns403_whenNotOwner() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      Long answerId = createAnswer(savedPost.getId(), 502L, "answer content", List.of());
+
+      mockMvc
+          .perform(
+              delete("/questions/" + savedPost.getId() + "/answers/" + answerId)
+                  .with(userPrincipal(503L)))
+          .andExpect(status().isForbidden())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("PUT answer returns 400 when the answer is accepted")
+    void updateAnswer_returns400_whenAnswerIsAccepted() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      AnswerEntity answer =
+          answerJpaRepository.save(
+              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true, List.of()));
+
+      mockMvc
+          .perform(
+              put("/questions/" + savedPost.getId() + "/answers/" + answer.getId())
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "updated"))))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("DELETE answer returns 400 when the answer is accepted")
+    void deleteAnswer_returns400_whenAnswerIsAccepted() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      AnswerEntity answer =
+          answerJpaRepository.save(
+              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true, List.of()));
+
+      mockMvc
+          .perform(
+              delete("/questions/" + savedPost.getId() + "/answers/" + answer.getId())
+                  .with(userPrincipal(502L)))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
   }
 
-  private PostEntity saveQuestionPost(Long userId, boolean isSolved) {
+  private PostEntity savePost(Long userId, PostType type, boolean isSolved) {
     return postJpaRepository.save(
         PostEntity.builder()
             .userId(userId)
-            .type(PostType.QUESTION)
-            .title("question title")
-            .content("question content")
+            .type(type)
+            .title(type == PostType.QUESTION ? "question title" : null)
+            .content("post content")
             .imageUrls(List.of())
-            .reward(100L)
+            .reward(type == PostType.QUESTION ? 100L : 0L)
             .isSolved(isSolved)
             .build());
+  }
+
+  private AnswerEntity buildAnswerEntity(
+      Long postId, Long userId, String content, boolean isAccepted, List<String> imageUrls) {
+    return AnswerEntity.builder()
+        .postId(postId)
+        .userId(userId)
+        .content(content)
+        .isAccepted(isAccepted)
+        .imageUrls(imageUrls)
+        .build();
   }
 
   private Long createAnswer(Long postId, Long userId, String content, List<String> imageUrls)
@@ -204,7 +383,6 @@ class AnswerControllerIntegrationTest {
   }
 
   private RequestPostProcessor authenticatedPrincipal(Long userId, String... authorities) {
-    java.util.Objects.requireNonNull(userId, "userId");
     List<SimpleGrantedAuthority> grantedAuthorities =
         Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
     UsernamePasswordAuthenticationToken token =
