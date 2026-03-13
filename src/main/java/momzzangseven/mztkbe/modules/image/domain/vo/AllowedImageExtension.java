@@ -28,10 +28,15 @@ public enum AllowedImageExtension {
    * @return false when the file name is null, OR it doesn't contain '.', OR '.' comes first of file
    *     name(hidden file).
    */
-  public static boolean isAllowed(String filename) {
+  public static boolean isAllowedWithFileName(String filename) {
     if (filename == null || !filename.contains(".") || filename.lastIndexOf('.') == 0) return false;
     String ext = extractExtension(filename);
     return ALLOWED.contains(ext);
+  }
+
+  public static boolean isAllowedWithExtension(String extension) {
+    if (extension == null || extension.isEmpty()) return false;
+    return ALLOWED.contains(extension.toLowerCase());
   }
 
   /** Extracts the lowercase extension from a filename. */

@@ -42,7 +42,7 @@ public record IssuePresignedUrlCommand(
     }
 
     for (String filename : imageFilenames) {
-      if (!AllowedImageExtension.isAllowed(filename)) {
+      if (!AllowedImageExtension.isAllowedWithFileName(filename)) {
         throw new InvalidImageExtensionException("Unsupported image extension: " + filename + ".");
       }
     }
