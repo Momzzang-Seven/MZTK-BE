@@ -1,4 +1,3 @@
-// src/test/java/momzzangseven/mztkbe/modules/answer/infrastructure/persistence/adapter/AnswerPersistenceAdapterTest.java
 package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,7 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("AnswerPersistenceAdapter 단위 테스트")
+@DisplayName("AnswerPersistenceAdapter")
 class AnswerPersistenceAdapterTest {
 
   @Mock private AnswerJpaRepository answerJpaRepository;
@@ -30,83 +29,100 @@ class AnswerPersistenceAdapterTest {
   @InjectMocks private AnswerPersistenceAdapter answerPersistenceAdapter;
 
   @Nested
-  @DisplayName("성공 케이스")
+  @DisplayName("Success cases")
   class SuccessCases {
 
     @Test
-    @DisplayName("답변 저장 시 도메인을 엔티티로 변환해 저장하고 다시 도메인으로 반환한다")
+    @DisplayName("saveAnswer() converts a domain object to an entity and back")
     void saveAnswer_convertsDomainAndReturnsSavedDomain() {
-      // given
-      Answer answer = buildAnswer(null, 10L, 20L, "답변 내용", false, List.of("https://image"));
+      Answer answer =
+          buildAnswer(null, 10L, 20L, "answer content", false, List.of("https://image"));
       AnswerEntity savedEntity =
-          buildEntity(99L, 10L, 20L, "답변 내용", false, List.of("https://image"));
+          buildEntity(99L, 10L, 20L, "answer content", false, List.of("https://image"));
       given(answerJpaRepository.save(any(AnswerEntity.class))).willReturn(savedEntity);
 
-      // when
       Answer result = answerPersistenceAdapter.saveAnswer(answer);
 
-      // then
       assertThat(result.getId()).isEqualTo(99L);
       assertThat(result.getPostId()).isEqualTo(10L);
       assertThat(result.getUserId()).isEqualTo(20L);
       ArgumentCaptor<AnswerEntity> entityCaptor = ArgumentCaptor.forClass(AnswerEntity.class);
       verify(answerJpaRepository).save(entityCaptor.capture());
       assertThat(entityCaptor.getValue().getPostId()).isEqualTo(10L);
-      assertThat(entityCaptor.getValue().getContent()).isEqualTo("답변 내용");
+      assertThat(entityCaptor.getValue().getContent()).isEqualTo("answer content");
       assertThat(entityCaptor.getValue().getImageUrls()).containsExactly("https://image");
     }
 
     @Test
-    @DisplayName("게시글 ID로 답변 목록 조회 시 엔티티 목록을 도메인 목록으로 변환한다")
+    @DisplayName("loadAnswersByPostId() maps entities to domain objects in repository order")
     void loadAnswersByPostId_mapsEntitiesToDomains() {
-      // given
       Long postId = 10L;
       List<AnswerEntity> entities =
           List.of(
-              buildEntity(1L, 10L, 20L, "첫 답변", true, List.of()),
-              buildEntity(2L, 10L, 21L, "둘째 답변", false, List.of("https://image")));
+              buildEntity(1L, 10L, 20L, "accepted", true, List.of()),
+              buildEntity(2L, 10L, 21L, "regular", false, List.of("https://image")));
       given(answerJpaRepository.findByPostIdOrderByIsAcceptedDescCreatedAtAsc(postId))
           .willReturn(entities);
 
-      // when
       List<Answer> result = answerPersistenceAdapter.loadAnswersByPostId(postId);
 
-      // then
       assertThat(result).hasSize(2);
       assertThat(result.get(0).getIsAccepted()).isTrue();
+      assertThat(result.get(0).getId()).isEqualTo(1L);
       assertThat(result.get(1).getImageUrls()).containsExactly("https://image");
     }
 
     @Test
-    @DisplayName("답변 단건 조회 시 엔티티를 도메인으로 변환한다")
+    @DisplayName("loadAnswersByPostId() returns an empty list when there are no answers")
+    void loadAnswersByPostId_returnsEmpty_whenNoAnswers() {
+      given(answerJpaRepository.findByPostIdOrderByIsAcceptedDescCreatedAtAsc(10L))
+          .willReturn(List.of());
+
+      List<Answer> result = answerPersistenceAdapter.loadAnswersByPostId(10L);
+
+      assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("loadAnswer() maps an entity to a domain object")
     void loadAnswer_mapsEntityToDomain() {
-      // given
-      AnswerEntity entity = buildEntity(1L, 10L, 20L, "답변 내용", false, List.of());
+      AnswerEntity entity = buildEntity(1L, 10L, 20L, "answer content", false, List.of());
       given(answerJpaRepository.findById(1L)).willReturn(Optional.of(entity));
 
-      // when
       Optional<Answer> result = answerPersistenceAdapter.loadAnswer(1L);
 
-      // then
       assertThat(result).isPresent();
-      assertThat(result.orElseThrow().getContent()).isEqualTo("답변 내용");
+      assertThat(result.orElseThrow().getContent()).isEqualTo("answer content");
+    }
+
+    @Test
+    @DisplayName("deleteAnswer() delegates to deleteById")
+    void deleteAnswer_deletesById() {
+      answerPersistenceAdapter.deleteAnswer(100L);
+
+      verify(answerJpaRepository).deleteById(100L);
+    }
+
+    @Test
+    @DisplayName("deleteAnswersByPostId() delegates to deleteAllByPostId")
+    void deleteAnswersByPostId_deletesAllByPostId() {
+      answerPersistenceAdapter.deleteAnswersByPostId(10L);
+
+      verify(answerJpaRepository).deleteAllByPostId(10L);
     }
   }
 
   @Nested
-  @DisplayName("실패 케이스")
+  @DisplayName("Failure cases")
   class FailureCases {
 
     @Test
-    @DisplayName("답변 단건 조회 시 엔티티가 없으면 빈 결과를 반환한다")
+    @DisplayName("loadAnswer() returns empty when the entity does not exist")
     void loadAnswer_returnsEmpty_whenEntityNotFound() {
-      // given
       given(answerJpaRepository.findById(1L)).willReturn(Optional.empty());
 
-      // when
       Optional<Answer> result = answerPersistenceAdapter.loadAnswer(1L);
 
-      // then
       assertThat(result).isEmpty();
     }
   }
