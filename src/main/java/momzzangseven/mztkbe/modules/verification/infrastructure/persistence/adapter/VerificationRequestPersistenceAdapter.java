@@ -65,11 +65,6 @@ public class VerificationRequestPersistenceAdapter implements VerificationReques
   }
 
   @Override
-  public boolean transitionFailedToAnalyzing(String verificationId) {
-    return verificationRequestJpaRepository.transitionFailedToAnalyzing(verificationId) == 1;
-  }
-
-  @Override
   public VerificationRequest save(VerificationRequest request) {
     return verificationRequestJpaRepository
         .save(VerificationRequestEntity.from(request))

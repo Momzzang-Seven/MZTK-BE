@@ -18,7 +18,5 @@ public interface VerificationRequestPort {
 
   Optional<VerificationRequest> findLatestUpdatedToday(Long userId, LocalDate today);
 
-  boolean transitionFailedToAnalyzing(String verificationId);
-
   VerificationRequest save(VerificationRequest request);
 }

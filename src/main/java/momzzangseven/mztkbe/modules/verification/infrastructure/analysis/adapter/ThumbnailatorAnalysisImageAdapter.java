@@ -26,8 +26,8 @@ public class ThumbnailatorAnalysisImageAdapter implements PrepareAnalysisImagePo
   private final ImageCodecSupportPort imageCodecSupportPort;
 
   @Override
-  public PreparedAnalysisImage prepare(
-      Path originalPath, int maxLongEdge, double webpQuality) throws IOException {
+  public PreparedAnalysisImage prepare(Path originalPath, int maxLongEdge, double webpQuality)
+      throws IOException {
     Path tempDir = originalPath.getParent();
     String normalizedExtension = extractExtension(originalPath);
     Path analysisPath = tempDir.resolve("analysis.webp");
@@ -51,7 +51,7 @@ public class ThumbnailatorAnalysisImageAdapter implements PrepareAnalysisImagePo
           Thumbnails.of(source).size(targetWidth, targetHeight).asBufferedImage();
       byte[] encodedWebp = WebPCodec.encodeImage(analysisImage, (float) (webpQuality * 100.0d));
       Files.write(analysisPath, encodedWebp, StandardOpenOption.CREATE_NEW);
-      return PreparedAnalysisImage.noop(analysisPath);
+      return new PreparedAnalysisImage(analysisPath, () -> cleanup(analysisPath));
     } catch (IllegalArgumentException validationException) {
       cleanup(analysisPath);
       throw new IOException(validationException.getMessage(), validationException);
@@ -83,7 +83,8 @@ public class ThumbnailatorAnalysisImageAdapter implements PrepareAnalysisImagePo
   }
 
   private String extractExtension(Path originalPath) {
-    String filename = originalPath.getFileName() == null ? "" : originalPath.getFileName().toString();
+    String filename =
+        originalPath.getFileName() == null ? "" : originalPath.getFileName().toString();
     int dot = filename.lastIndexOf('.');
     if (dot < 0 || dot == filename.length() - 1) {
       throw new IllegalArgumentException("Original image extension is required");

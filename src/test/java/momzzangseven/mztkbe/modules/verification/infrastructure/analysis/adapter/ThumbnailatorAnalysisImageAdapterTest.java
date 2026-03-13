@@ -67,7 +67,7 @@ class ThumbnailatorAnalysisImageAdapterTest {
       assertThat(Math.max(rendered.getWidth(), rendered.getHeight())).isEqualTo(1024);
     }
 
-    assertThat(Files.exists(analysisPath)).isTrue();
+    assertThat(Files.exists(analysisPath)).isFalse();
     assertThat(Files.exists(originalPath)).isTrue();
   }
 

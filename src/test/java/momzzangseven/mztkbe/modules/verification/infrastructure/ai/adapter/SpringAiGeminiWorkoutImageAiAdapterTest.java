@@ -5,16 +5,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.ZoneId;
 import momzzangseven.mztkbe.modules.verification.application.config.VerificationRuntimeProperties;
 import momzzangseven.mztkbe.modules.verification.application.exception.AiMalformedResponseException;
 import momzzangseven.mztkbe.modules.verification.application.exception.AiResponseSchemaInvalidException;
+import momzzangseven.mztkbe.modules.verification.application.service.VerificationTimePolicy;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.infrastructure.ai.client.VerificationAiJsonClient;
 import momzzangseven.mztkbe.modules.verification.infrastructure.config.VerificationPromptProvider;
 import org.junit.jupiter.api.Test;
 
 class SpringAiGeminiWorkoutImageAiAdapterTest {
+
+  private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
   @Test
   void returnsApprovedResultInStubMode() {
@@ -29,12 +34,12 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
             new VerificationPromptProvider(),
             unavailableClient(),
             new ObjectMapper(),
-            ZoneId.of("Asia/Seoul"));
+            fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutPhoto(Path.of("analysis.webp"));
 
     assertThat(result.approved()).isTrue();
-    assertThat(result.exerciseDate()).isNotNull();
+    assertThat(result.exerciseDate()).isNull();
   }
 
   @Test
@@ -53,7 +58,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 {"workoutPhoto":false,"rejectionReasonCode":"NO_PERSON_VISIBLE","confidenceScore":0.12}
                 """),
             new ObjectMapper(),
-            ZoneId.of("Asia/Seoul"));
+            fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutPhoto(Path.of("analysis.webp"));
 
@@ -77,7 +82,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 {"workoutRecord":true,"rejectionReasonCode":null,"dateVisible":true,"exerciseDate":"2026-03-12","confidenceScore":0.98}
                 """),
             new ObjectMapper(),
-            ZoneId.of("Asia/Seoul"));
+            fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutRecord(Path.of("analysis.webp"));
 
@@ -101,7 +106,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 {"workoutRecord":false,"rejectionReasonCode":"DATE_NOT_VISIBLE","dateVisible":false,"exerciseDate":null,"confidenceScore":0.21}
                 """),
             new ObjectMapper(),
-            ZoneId.of("Asia/Seoul"));
+            fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutRecord(Path.of("analysis.webp"));
 
@@ -122,7 +127,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
             new VerificationPromptProvider(),
             fixedPhotoResponse("not-json"),
             new ObjectMapper(),
-            ZoneId.of("Asia/Seoul"));
+            fixedTimePolicy());
 
     assertThatThrownBy(() -> adapter.analyzeWorkoutPhoto(Path.of("analysis.webp")))
         .isInstanceOf(AiMalformedResponseException.class);
@@ -144,7 +149,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 {"workoutRecord":true,"rejectionReasonCode":null,"exerciseDate":"2026-03-13","confidenceScore":0.98}
                 """),
             new ObjectMapper(),
-            ZoneId.of("Asia/Seoul"));
+            fixedTimePolicy());
 
     assertThatThrownBy(() -> adapter.analyzeWorkoutRecord(Path.of("analysis.webp")))
         .isInstanceOf(AiResponseSchemaInvalidException.class);
@@ -214,5 +219,10 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
         return response;
       }
     };
+  }
+
+  private VerificationTimePolicy fixedTimePolicy() {
+    return new VerificationTimePolicy(
+        KST, Clock.fixed(Instant.parse("2026-03-12T15:00:00Z"), KST));
   }
 }
