@@ -7,9 +7,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,6 +46,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -72,6 +75,9 @@ class WorkoutVerificationControllerIntegrationTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected XpPolicyJpaRepository xpPolicyJpaRepository;
+
+  @org.springframework.beans.factory.annotation.Autowired protected JdbcTemplate jdbcTemplate;
+  @org.springframework.beans.factory.annotation.Autowired protected EntityManager entityManager;
 
   @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -299,6 +305,146 @@ class WorkoutVerificationControllerIntegrationTest {
         .andExpect(
             jsonPath("$.data.latestVerification.verificationId").value("verification-today-1"))
         .andExpect(jsonPath("$.data.latestVerification.verificationStatus").value("VERIFIED"));
+  }
+
+  @Test
+  @DisplayName("기존 verification kind가 다르면 submit은 409(VERIFICATION_005)로 실패한다")
+  void submit_whenExistingKindDiffers_returnsConflict() throws Exception {
+    String tmpObjectKey = "private/workout/kind-mismatch.jpg";
+    verificationRequestJpaRepository.save(
+        VerificationRequestEntity.builder()
+            .verificationId("kind-mismatch-existing")
+            .userId(903L)
+            .verificationKind(VerificationKind.WORKOUT_RECORD.name())
+            .status(VerificationStatus.REJECTED.name())
+            .tmpObjectKey(tmpObjectKey)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build());
+
+    submit("/users/me/workout-photo-verifications", 903L, tmpObjectKey)
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VERIFICATION_005"));
+  }
+
+  @Test
+  @DisplayName("기존 verification row 소유자가 다르면 submit은 403(VERIFICATION_004)로 실패한다")
+  void submit_whenExistingRowBelongsToOtherUser_returnsForbidden() throws Exception {
+    String tmpObjectKey = "private/workout/forbidden-existing.jpg";
+    verificationRequestJpaRepository.save(
+        VerificationRequestEntity.builder()
+            .verificationId("forbidden-existing")
+            .userId(1904L)
+            .verificationKind(VerificationKind.WORKOUT_PHOTO.name())
+            .status(VerificationStatus.REJECTED.name())
+            .tmpObjectKey(tmpObjectKey)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build());
+
+    submit("/users/me/workout-photo-verifications", 904L, tmpObjectKey)
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VERIFICATION_004"));
+  }
+
+  @Test
+  @DisplayName("어제 생성된 FAILED row는 재시도하지 않고 기존 FAILED 결과를 반환한다")
+  void submit_whenFailedRowCreatedYesterday_returnsExistingFailedWithoutRetry() throws Exception {
+    LocalDate today = LocalDate.now(KST);
+    String tmpObjectKey = "private/workout/old-failed-no-retry.jpg";
+    seedWorkoutImage(905L, tmpObjectKey);
+    ensureWorkoutXpPolicy(today);
+    VerificationRequestEntity failed =
+        verificationRequestJpaRepository.save(
+            VerificationRequestEntity.builder()
+                .verificationId("old-failed-id")
+                .userId(905L)
+                .verificationKind(VerificationKind.WORKOUT_PHOTO.name())
+                .status(VerificationStatus.FAILED.name())
+                .tmpObjectKey(tmpObjectKey)
+                .failureCode("EXTERNAL_AI_UNAVAILABLE")
+                .updatedAt(Instant.now())
+                .build());
+    Instant oldCreatedAt = Instant.now().minusSeconds(60L * 60 * 24 * 2);
+    jdbcTemplate.update(
+        "update verification_requests set created_at = ? where verification_id = ?",
+        Timestamp.from(oldCreatedAt),
+        failed.getVerificationId());
+    entityManager.flush();
+    entityManager.clear();
+
+    submit("/users/me/workout-photo-verifications", 905L, tmpObjectKey)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.verificationId").value("old-failed-id"))
+        .andExpect(jsonPath("$.data.verificationStatus").value("FAILED"))
+        .andExpect(jsonPath("$.data.failureCode").value("EXTERNAL_AI_UNAVAILABLE"))
+        .andExpect(jsonPath("$.data.completedMethod").doesNotExist());
+
+    VerificationRequestEntity refreshed =
+        verificationRequestJpaRepository.findByVerificationId("old-failed-id").orElseThrow();
+    assertThat(refreshed.getStatus()).isEqualTo(VerificationStatus.FAILED.name());
+    assertThat(refreshed.getUpdatedAt()).isEqualTo(failed.getUpdatedAt());
+    assertThat(refreshed.getCreatedAt()).isBefore(Instant.now().minusSeconds(60L * 60 * 24));
+  }
+
+  @Test
+  @DisplayName("오늘 workout XP가 이미 존재하면 submit은 선차단 409(VERIFICATION_006)이다")
+  void submit_whenTodayRewardAlreadyGranted_returnsConflictPrecheck() throws Exception {
+    LocalDate today = LocalDate.now(KST);
+    String tmpObjectKey = "private/workout/precheck-blocked.jpg";
+    seedWorkoutImage(906L, tmpObjectKey);
+    ensureWorkoutXpPolicy(today);
+    xpLedgerJpaRepository.save(
+        XpLedgerEntity.builder()
+            .userId(906L)
+            .type(XpType.WORKOUT)
+            .xpAmount(100)
+            .earnedOn(today)
+            .occurredAt(LocalDateTime.now(KST))
+            .idempotencyKey("workout:photo-verification:already-rewarded")
+            .sourceRef("workout-photo-verification:already-rewarded")
+            .createdAt(LocalDateTime.now(KST))
+            .build());
+
+    submit("/users/me/workout-photo-verifications", 906L, tmpObjectKey)
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VERIFICATION_006"))
+        .andExpect(jsonPath("$.data.completedMethod").value("WORKOUT_PHOTO"))
+        .andExpect(jsonPath("$.data.earnedDate").value(today.toString()));
+  }
+
+  @Test
+  @DisplayName("tmpObjectKey가 image 테이블에 없으면 submit은 404(VERIFICATION_003)이다")
+  void submit_whenUploadRowIsMissing_returnsUploadNotFound() throws Exception {
+    submit("/users/me/workout-photo-verifications", 907L, "private/workout/no-image-row.jpg")
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VERIFICATION_003"));
+  }
+
+  @Test
+  @DisplayName("기존 VERIFIED row가 있으면 image/object 여부와 무관하게 기존 결과를 즉시 반환한다")
+  void submit_whenExistingVerifiedRowPresent_returnsExistingWithoutUploadLookup() throws Exception {
+    String tmpObjectKey = "private/workout/existing-only.jpg";
+    verificationRequestJpaRepository.save(
+        VerificationRequestEntity.builder()
+            .verificationId("existing-verified-id")
+            .userId(908L)
+            .verificationKind(VerificationKind.WORKOUT_PHOTO.name())
+            .status(VerificationStatus.VERIFIED.name())
+            .tmpObjectKey(tmpObjectKey)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build());
+
+    submit("/users/me/workout-photo-verifications", 908L, tmpObjectKey)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.verificationId").value("existing-verified-id"))
+        .andExpect(jsonPath("$.data.verificationStatus").value("VERIFIED"));
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {

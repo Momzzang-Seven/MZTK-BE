@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.integration.e2e;
+package momzzangseven.mztkbe.integration.e2e.verification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -55,8 +56,10 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 @Tag("e2e")
@@ -75,6 +78,7 @@ class WorkoutVerificationE2ETest {
   @Autowired private VerificationRequestJpaRepository verificationRequestJpaRepository;
   @Autowired private XpLedgerJpaRepository xpLedgerJpaRepository;
   @Autowired private XpPolicyJpaRepository xpPolicyJpaRepository;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockBean private KakaoAuthPort kakaoAuthPort;
   @MockBean private GoogleAuthPort googleAuthPort;
@@ -300,6 +304,131 @@ class WorkoutVerificationE2ETest {
     }
   }
 
+  @Test
+  @DisplayName("기존 verification kind가 다르면 submit은 409(VERIFICATION_005)를 반환한다")
+  void submitPhoto_withExistingDifferentKind_returnsConflict() throws Exception {
+    String baseUrl = "http://localhost:" + port;
+    String email = uniqueEmail();
+    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃종류충돌E2E");
+    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+
+    String tmpObjectKey = "private/workout/e2e-kind-mismatch-" + UUID.randomUUID() + ".jpg";
+    imageJpaRepository.save(
+        ImageEntity.builder()
+            .userId(userId)
+            .referenceType("WORKOUT")
+            .status("COMPLETED")
+            .tmpObjectKey(tmpObjectKey)
+            .finalObjectKey(tmpObjectKey)
+            .build());
+    verificationRequestJpaRepository.save(
+        VerificationRequestEntity.builder()
+            .verificationId(UUID.randomUUID().toString())
+            .userId(userId)
+            .verificationKind("WORKOUT_RECORD")
+            .status("REJECTED")
+            .tmpObjectKey(tmpObjectKey)
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
+            .build());
+
+    ResponseEntity<String> response = submitPhoto(baseUrl, accessToken, tmpObjectKey);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(objectMapper.readTree(response.getBody()).at("/status").asText()).isEqualTo("FAIL");
+    assertThat(objectMapper.readTree(response.getBody()).at("/code").asText())
+        .isEqualTo("VERIFICATION_005");
+    assertThat(
+            verificationRequestJpaRepository.findAll().stream()
+                .filter(v -> tmpObjectKey.equals(v.getTmpObjectKey()))
+                .count())
+        .isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("어제 생성된 FAILED row는 재시도 없이 기존 FAILED를 그대로 반환한다")
+  void submitPhoto_withOldFailedRow_returnsExistingFailedWithoutRetry() throws Exception {
+    String baseUrl = "http://localhost:" + port;
+    String email = uniqueEmail();
+    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃실패재사용E2E");
+    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+
+    String tmpObjectKey = "private/workout/e2e-old-failed-" + UUID.randomUUID() + ".jpg";
+    Instant createdAt = Instant.now().minusSeconds(60L * 60 * 24 * 2);
+    VerificationRequestEntity failed =
+        verificationRequestJpaRepository.save(
+            VerificationRequestEntity.builder()
+                .verificationId(UUID.randomUUID().toString())
+                .userId(userId)
+                .verificationKind("WORKOUT_PHOTO")
+                .status("FAILED")
+                .tmpObjectKey(tmpObjectKey)
+                .failureCode("EXTERNAL_AI_UNAVAILABLE")
+                .updatedAt(Instant.now())
+                .build());
+    jdbcTemplate.update(
+        "update verification_requests set created_at = ? where verification_id = ?",
+        Timestamp.from(createdAt),
+        failed.getVerificationId());
+
+    ResponseEntity<String> response = submitPhoto(baseUrl, accessToken, tmpObjectKey);
+
+    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    assertThat(objectMapper.readTree(response.getBody()).at("/data/verificationStatus").asText())
+        .isEqualTo("FAILED");
+    assertThat(objectMapper.readTree(response.getBody()).at("/data/failureCode").asText())
+        .isEqualTo("EXTERNAL_AI_UNAVAILABLE");
+    assertThat(
+            objectMapper.readTree(response.getBody()).at("/data/completedMethod").isMissingNode())
+        .isTrue();
+    assertThat(
+            xpLedgerJpaRepository.findAll().stream()
+                .filter(it -> it.getUserId().equals(userId))
+                .filter(it -> it.getType() == XpType.WORKOUT)
+                .count())
+        .isZero();
+  }
+
+  @Test
+  @DisplayName("오늘 workout 보상이 이미 있으면 submit은 409(VERIFICATION_006)으로 선차단된다")
+  void submitPhoto_whenTodayRewardExists_returnsConflictPrecheck() throws Exception {
+    String baseUrl = "http://localhost:" + port;
+    String email = uniqueEmail();
+    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃선차단E2E");
+    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+
+    LocalDate today = LocalDate.now(KST);
+    ensureWorkoutXpPolicy(today);
+    String tmpObjectKey = "private/workout/e2e-precheck-" + UUID.randomUUID() + ".jpg";
+    imageJpaRepository.save(
+        ImageEntity.builder()
+            .userId(userId)
+            .referenceType("WORKOUT")
+            .status("COMPLETED")
+            .tmpObjectKey(tmpObjectKey)
+            .finalObjectKey(tmpObjectKey)
+            .build());
+    xpLedgerJpaRepository.save(
+        momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpLedgerEntity
+            .builder()
+            .userId(userId)
+            .type(XpType.WORKOUT)
+            .xpAmount(100)
+            .earnedOn(today)
+            .occurredAt(LocalDateTime.now(KST))
+            .idempotencyKey("workout:photo-verification:precheck")
+            .sourceRef("workout-photo-verification:precheck")
+            .createdAt(LocalDateTime.now(KST))
+            .build());
+
+    ResponseEntity<String> response = submitPhoto(baseUrl, accessToken, tmpObjectKey);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(objectMapper.readTree(response.getBody()).at("/status").asText()).isEqualTo("FAIL");
+    assertThat(objectMapper.readTree(response.getBody()).at("/code").asText())
+        .isEqualTo("VERIFICATION_006");
+  }
+
   private static String uniqueEmail() {
     return "e2e-workout-"
         + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
@@ -338,6 +467,18 @@ class WorkoutVerificationE2ETest {
       String baseUrl, String accessToken, String tmpObjectKey, CyclicBarrier startBarrier)
       throws Exception {
     startBarrier.await(5, TimeUnit.SECONDS);
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.setBearerAuth(accessToken);
+    return restTemplate.exchange(
+        baseUrl + "/users/me/workout-photo-verifications",
+        HttpMethod.POST,
+        new HttpEntity<>(Map.of("tmpObjectKey", tmpObjectKey), headers),
+        String.class);
+  }
+
+  private ResponseEntity<String> submitPhoto(
+      String baseUrl, String accessToken, String tmpObjectKey) {
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(accessToken);

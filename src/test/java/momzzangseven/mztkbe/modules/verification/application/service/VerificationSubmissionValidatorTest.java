@@ -58,6 +58,13 @@ class VerificationSubmissionValidatorTest {
   }
 
   @Test
+  void rejectsBlankTmpObjectKey() {
+    assertThatThrownBy(
+            () -> validator.validateSubmitInput("   ", new WorkoutPhotoVerificationPolicy()))
+        .isInstanceOf(InvalidTmpObjectKeyException.class);
+  }
+
+  @Test
   void rejectsMissingOrTrailingExtension() {
     assertThatThrownBy(() -> validator.extractExtension("private/workout/noext"))
         .isInstanceOf(InvalidVerificationImageExtensionException.class);
@@ -79,6 +86,13 @@ class VerificationSubmissionValidatorTest {
                 validator.validateSubmitInput(
                     "private/workout/a.heif", new WorkoutPhotoVerificationPolicy()))
         .isInstanceOf(InvalidVerificationImageExtensionException.class);
+  }
+
+  @Test
+  void acceptsHeifWhenDecoderIsAvailableAndPolicyEnabled() {
+    when(imageCodecSupportPort.isHeifDecodeAvailable()).thenReturn(true);
+
+    validator.validateSubmitInput("private/workout/a.heif", new WorkoutPhotoVerificationPolicy());
   }
 
   @Test
