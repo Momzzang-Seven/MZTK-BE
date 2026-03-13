@@ -73,24 +73,47 @@ class SubmitWorkoutRecordVerificationServiceTest {
         new VerificationTimePolicy(
             ZoneId.of("Asia/Seoul"),
             Clock.fixed(Instant.parse("2026-03-13T01:00:00Z"), ZoneId.of("Asia/Seoul")));
-    service =
-        new SubmitWorkoutRecordVerificationService(
-            verificationRequestPort,
-            workoutUploadLookupPort,
-            objectStoragePort,
-            prepareOriginalImagePort,
-            prepareAnalysisImagePort,
-            exifMetadataPort,
-            workoutImageAiPort,
-            grantXpPort,
-            xpLedgerQueryPort,
-            imageCodecSupportPort,
-            timePolicy,
-            verificationImagePolicy);
     lenient().when(imageCodecSupportPort.isHeifDecodeAvailable()).thenReturn(true);
     lenient()
         .when(prepareOriginalImagePort.prepare(anyString(), anyString()))
         .thenReturn(PreparedOriginalImage.noop(Path.of("original.png")));
+
+    VerificationSubmissionValidator validator =
+        new VerificationSubmissionValidator(verificationImagePolicy, imageCodecSupportPort);
+    VerificationSourceImageService sourceImageService =
+        new VerificationSourceImageService(
+            objectStoragePort, exifMetadataPort, prepareOriginalImagePort, verificationImagePolicy);
+    VerificationSubmissionResultFactory resultFactory =
+        new VerificationSubmissionResultFactory(timePolicy);
+    VerificationSubmissionAccessService accessService =
+        new VerificationSubmissionAccessService(
+            verificationRequestPort,
+            workoutUploadLookupPort,
+            objectStoragePort,
+            validator,
+            timePolicy);
+    VerificationAnalysisService analysisService =
+        new VerificationAnalysisService(
+            sourceImageService,
+            prepareAnalysisImagePort,
+            workoutImageAiPort,
+            validator,
+            timePolicy);
+    VerificationCompletionService completionService =
+        new VerificationCompletionService(
+            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy, resultFactory);
+    VerificationSubmissionOrchestrator orchestrator =
+        new VerificationSubmissionOrchestrator(
+            verificationRequestPort,
+            xpLedgerQueryPort,
+            timePolicy,
+            validator,
+            accessService,
+            analysisService,
+            completionService);
+    service =
+        new SubmitWorkoutRecordVerificationService(
+            orchestrator, new WorkoutRecordVerificationPolicy());
   }
 
   @Test

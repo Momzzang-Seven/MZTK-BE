@@ -43,14 +43,14 @@ public class VerificationRequest {
         .build();
   }
 
-  public VerificationRequest toAnalyzing() {
+  public VerificationRequest beginAnalysis() {
     if (status != VerificationStatus.PENDING && status != VerificationStatus.FAILED) {
       return this;
     }
     return toBuilder().status(VerificationStatus.ANALYZING).failureCode(null).build();
   }
 
-  public VerificationRequest toVerified(LocalDate exerciseDate, LocalDateTime shotAtKst) {
+  public VerificationRequest verify(LocalDate exerciseDate, LocalDateTime shotAtKst) {
     return toBuilder()
         .status(VerificationStatus.VERIFIED)
         .exerciseDate(exerciseDate)
@@ -61,7 +61,7 @@ public class VerificationRequest {
         .build();
   }
 
-  public VerificationRequest toRejected(
+  public VerificationRequest reject(
       RejectionReasonCode rejectionReasonCode,
       String rejectionReasonDetail,
       LocalDate exerciseDate,
@@ -76,7 +76,41 @@ public class VerificationRequest {
         .build();
   }
 
-  public VerificationRequest toFailed(FailureCode failureCode) {
+  public VerificationRequest rejectForMissingExif() {
+    return reject(
+        RejectionReasonCode.MISSING_EXIF_METADATA, "EXIF metadata is required", null, null);
+  }
+
+  public VerificationRequest rejectForExifDateMismatch(
+      LocalDate exerciseDate, LocalDateTime shotAtKst) {
+    return reject(
+        RejectionReasonCode.EXIF_DATE_MISMATCH,
+        "EXIF shot date must be today in KST",
+        exerciseDate,
+        shotAtKst);
+  }
+
+  public VerificationRequest fail(FailureCode failureCode) {
     return toBuilder().status(VerificationStatus.FAILED).failureCode(failureCode).build();
+  }
+
+  public VerificationRequest toAnalyzing() {
+    return beginAnalysis();
+  }
+
+  public VerificationRequest toVerified(LocalDate exerciseDate, LocalDateTime shotAtKst) {
+    return verify(exerciseDate, shotAtKst);
+  }
+
+  public VerificationRequest toRejected(
+      RejectionReasonCode rejectionReasonCode,
+      String rejectionReasonDetail,
+      LocalDate exerciseDate,
+      LocalDateTime shotAtKst) {
+    return reject(rejectionReasonCode, rejectionReasonDetail, exerciseDate, shotAtKst);
+  }
+
+  public VerificationRequest toFailed(FailureCode failureCode) {
+    return fail(failureCode);
   }
 }
