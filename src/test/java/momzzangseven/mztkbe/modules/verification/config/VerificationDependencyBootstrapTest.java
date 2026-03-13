@@ -24,7 +24,10 @@ class VerificationDependencyBootstrapTest {
   @Test
   @DisplayName("fixed user prompt가 계약과 일치한다")
   void fixedUserPromptMatchesContract() throws Exception {
-    String expected = "Analyze this image and return the result JSON.";
+    String photoExpected =
+        "Analyze the attached normalized workout-photo candidate and return only the result JSON.";
+    String recordExpected =
+        "Analyze the attached normalized workout-record candidate and return only the result JSON.";
     String photoPrompt =
         new ClassPathResource("prompts/verification/workout-photo-user-prompt.txt")
             .getContentAsString(StandardCharsets.UTF_8)
@@ -34,8 +37,8 @@ class VerificationDependencyBootstrapTest {
             .getContentAsString(StandardCharsets.UTF_8)
             .trim();
 
-    assertThat(photoPrompt).isEqualTo(expected);
-    assertThat(recordPrompt).isEqualTo(expected);
+    assertThat(photoPrompt).isEqualTo(photoExpected);
+    assertThat(recordPrompt).isEqualTo(recordExpected);
   }
 
   private void assertResourceExists(String path) {

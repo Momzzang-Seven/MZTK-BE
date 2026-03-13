@@ -10,6 +10,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
@@ -24,6 +26,7 @@ import momzzangseven.mztkbe.modules.verification.application.config.Verification
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationCommand;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationResult;
 import momzzangseven.mztkbe.modules.verification.application.dto.TodayRewardSnapshot;
@@ -172,11 +175,13 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             pending,
             pending.toAnalyzing(),
             pending.toVerified(LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0)));
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists("private/workout/a.jpg")).thenReturn(true);
-    when(objectStoragePort.readBytes("private/workout/a.jpg")).thenReturn(new byte[] {1, 2, 3});
+    stubOpenStream("private/workout/a.jpg", "image/jpeg");
     when(exifMetadataPort.extract(any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.of(2026, 3, 13, 10, 0))));
-    when(prepareAnalysisImagePort.prepare(any(), eq("jpg"), eq(1024), eq(0.80d)))
+    when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1024), eq(0.80d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(workoutImageAiPort.analyzeWorkoutPhoto(any()))
         .thenReturn(
@@ -238,7 +243,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     stubSuccessfulPreAiFlow(command, pending);
     java.util.concurrent.atomic.AtomicBoolean closed =
         new java.util.concurrent.atomic.AtomicBoolean();
-    when(prepareAnalysisImagePort.prepare(any(), eq("jpg"), eq(1024), eq(0.80d)))
+    when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1024), eq(0.80d)))
         .thenReturn(new PreparedAnalysisImage(Path.of("analysis.webp"), () -> closed.set(true)));
     when(workoutImageAiPort.analyzeWorkoutPhoto(any()))
         .thenReturn(
@@ -268,7 +273,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     stubSuccessfulPreAiFlow(command, pending);
     java.util.concurrent.atomic.AtomicBoolean closed =
         new java.util.concurrent.atomic.AtomicBoolean();
-    when(prepareAnalysisImagePort.prepare(any(), eq("jpg"), eq(1024), eq(0.80d)))
+    when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1024), eq(0.80d)))
         .thenReturn(new PreparedAnalysisImage(Path.of("analysis.webp"), () -> closed.set(true)));
     when(workoutImageAiPort.analyzeWorkoutPhoto(any()))
         .thenThrow(new AiTimeoutException("timeout"));
@@ -308,8 +313,8 @@ class SubmitWorkoutPhotoVerificationServiceTest {
   }
 
   @Test
-  @DisplayName("EXIF가 없으면 REJECTED(EXIF_MISSING)로 저장한다")
-  void rejectsWhenExifIsMissing() {
+  @DisplayName("EXIF가 없으면 REJECTED(MISSING_EXIF_METADATA)로 저장한다")
+  void rejectsWhenExifIsMissing() throws Exception {
     SubmitWorkoutVerificationCommand command =
         new SubmitWorkoutVerificationCommand(
             1L, "private/workout/no-exif.jpg", VerificationKind.WORKOUT_PHOTO);
@@ -332,21 +337,26 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             pending,
             pending.toAnalyzing(),
             pending.toRejected(
-                RejectionReasonCode.EXIF_MISSING, "EXIF metadata is required", null, null));
+                RejectionReasonCode.MISSING_EXIF_METADATA,
+                "EXIF metadata is required",
+                null,
+                null));
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists(command.tmpObjectKey())).thenReturn(true);
-    when(objectStoragePort.readBytes(command.tmpObjectKey())).thenReturn(new byte[] {1, 2, 3});
+    stubOpenStream(command.tmpObjectKey(), "image/jpeg");
     when(exifMetadataPort.extract(any())).thenReturn(Optional.empty());
 
     SubmitWorkoutVerificationResult result = service.execute(command);
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.REJECTED);
-    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.EXIF_MISSING);
+    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.MISSING_EXIF_METADATA);
     verifyNoInteractions(prepareAnalysisImagePort);
   }
 
   @Test
-  @DisplayName("EXIF 촬영일이 오늘이 아니면 REJECTED(EXIF_NOT_TODAY)로 저장한다")
-  void rejectsWhenExifShotDateIsNotToday() {
+  @DisplayName("EXIF 촬영일이 오늘이 아니면 REJECTED(EXIF_DATE_MISMATCH)로 저장한다")
+  void rejectsWhenExifShotDateIsNotToday() throws Exception {
     SubmitWorkoutVerificationCommand command =
         new SubmitWorkoutVerificationCommand(
             1L, "private/workout/old-exif.jpg", VerificationKind.WORKOUT_PHOTO);
@@ -369,25 +379,27 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             pending,
             pending.toAnalyzing(),
             pending.toRejected(
-                RejectionReasonCode.EXIF_NOT_TODAY,
+                RejectionReasonCode.EXIF_DATE_MISMATCH,
                 "EXIF shot date must be today in KST",
                 LocalDate.of(2026, 3, 12),
                 LocalDateTime.of(2026, 3, 12, 23, 59)));
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists(command.tmpObjectKey())).thenReturn(true);
-    when(objectStoragePort.readBytes(command.tmpObjectKey())).thenReturn(new byte[] {1, 2, 3});
+    stubOpenStream(command.tmpObjectKey(), "image/jpeg");
     when(exifMetadataPort.extract(any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.of(2026, 3, 12, 23, 59))));
 
     SubmitWorkoutVerificationResult result = service.execute(command);
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.REJECTED);
-    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.EXIF_NOT_TODAY);
+    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.EXIF_DATE_MISMATCH);
     verifyNoInteractions(prepareAnalysisImagePort);
   }
 
   @Test
   @DisplayName("원본 object read가 실패하면 FAILED(ORIGINAL_IMAGE_READ_FAILED)로 저장한다")
-  void failsWhenOriginalImageCannotBeRead() {
+  void failsWhenOriginalImageCannotBeRead() throws Exception {
     SubmitWorkoutVerificationCommand command =
         new SubmitWorkoutVerificationCommand(
             1L, "private/workout/read-fail.jpg", VerificationKind.WORKOUT_PHOTO);
@@ -408,9 +420,10 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     when(verificationRequestPort.findByTmpObjectKeyForUpdate(command.tmpObjectKey()))
         .thenReturn(Optional.empty());
     when(verificationRequestPort.save(any())).thenReturn(pending, pending.toAnalyzing(), failed);
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists(command.tmpObjectKey())).thenReturn(true);
-    when(objectStoragePort.readBytes(command.tmpObjectKey()))
-        .thenThrow(new RuntimeException("boom"));
+    when(objectStoragePort.openStream(command.tmpObjectKey())).thenThrow(new IOException("boom"));
 
     SubmitWorkoutVerificationResult result = service.execute(command);
 
@@ -421,7 +434,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
   }
 
   @Test
-  @DisplayName("AI가 운동 사진이 아니라고 판단하면 REJECTED(NOT_EXERCISE_PHOTO)로 저장한다")
+  @DisplayName("AI가 운동 사진이 아니라고 판단하면 REJECTED(LOW_CONFIDENCE)로 저장한다")
   void rejectsWhenAiDeniesExercisePhoto() throws Exception {
     SubmitWorkoutVerificationCommand command =
         new SubmitWorkoutVerificationCommand(
@@ -434,6 +447,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
         .thenReturn(
             AiVerificationDecision.builder()
                 .approved(false)
+                .rejectionReasonCode(RejectionReasonCode.LOW_CONFIDENCE)
                 .rejectionReasonDetail("not workout")
                 .build());
     when(verificationRequestPort.save(any()))
@@ -441,7 +455,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             pending,
             pending.toAnalyzing(),
             pending.toRejected(
-                RejectionReasonCode.NOT_EXERCISE_PHOTO,
+                RejectionReasonCode.LOW_CONFIDENCE,
                 "not workout",
                 null,
                 LocalDateTime.of(2026, 3, 13, 10, 0)));
@@ -449,7 +463,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     SubmitWorkoutVerificationResult result = service.execute(command);
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.REJECTED);
-    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.NOT_EXERCISE_PHOTO);
+    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.LOW_CONFIDENCE);
   }
 
   @Test
@@ -462,7 +476,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
         VerificationRequest.newPending(
             1L, VerificationKind.WORKOUT_PHOTO, "private/workout/prepare-fail.jpg");
     stubSuccessfulPreAiFlow(command, pending);
-    when(prepareAnalysisImagePort.prepare(any(), eq("jpg"), eq(1024), eq(0.80d)))
+    when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1024), eq(0.80d)))
         .thenThrow(new java.io.IOException("encode fail"));
     VerificationRequest failed =
         pending.toAnalyzing().toFailed(FailureCode.ANALYSIS_IMAGE_GENERATION_FAILED);
@@ -503,12 +517,13 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             pending,
             pending.toAnalyzing(),
             pending.toVerified(LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0)));
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists("private/workout/source-ref.jpg")).thenReturn(true);
-    when(objectStoragePort.readBytes("private/workout/source-ref.jpg"))
-        .thenReturn(new byte[] {1, 2, 3});
+    stubOpenStream("private/workout/source-ref.jpg", "image/jpeg");
     when(exifMetadataPort.extract(any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.of(2026, 3, 13, 10, 0))));
-    when(prepareAnalysisImagePort.prepare(any(), eq("jpg"), eq(1024), eq(0.80d)))
+    when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1024), eq(0.80d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(workoutImageAiPort.analyzeWorkoutPhoto(any()))
         .thenReturn(
@@ -608,8 +623,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
                 new WorkoutUploadReference(
                     1L, "private/workout/retry.jpg", "private/workout/retry.jpg")));
     when(objectStoragePort.exists("private/workout/retry.jpg")).thenReturn(true);
-    when(verificationRequestPort.transitionFailedToAnalyzing("retry-id")).thenReturn(false);
-    when(verificationRequestPort.findByVerificationId("retry-id"))
+    when(verificationRequestPort.findByVerificationIdForUpdate("retry-id"))
         .thenReturn(Optional.of(verifiedAfterLock));
 
     SubmitWorkoutVerificationResult result = service.execute(command);
@@ -649,7 +663,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
 
     assertThat(result.verificationId()).isEqualTo("old-failed-id");
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.FAILED);
-    verify(verificationRequestPort, never()).transitionFailedToAnalyzing(any());
+    verify(verificationRequestPort, never()).findByVerificationIdForUpdate(any());
     verifyNoInteractions(workoutUploadLookupPort, prepareAnalysisImagePort, workoutImageAiPort);
   }
 
@@ -766,11 +780,21 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     when(verificationRequestPort.findByTmpObjectKeyForUpdate(command.tmpObjectKey()))
         .thenReturn(Optional.empty());
     when(objectStoragePort.exists(command.tmpObjectKey())).thenReturn(true);
-    when(objectStoragePort.readBytes(command.tmpObjectKey())).thenReturn(new byte[] {1, 2, 3});
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
+    stubOpenStream(command.tmpObjectKey(), "image/jpeg");
     when(exifMetadataPort.extract(any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.of(2026, 3, 13, 10, 0))));
     lenient()
-        .when(prepareAnalysisImagePort.prepare(any(), eq("jpg"), eq(1024), eq(0.80d)))
+        .when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1024), eq(0.80d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
+  }
+
+  private void stubOpenStream(String objectKey, String contentType) throws IOException {
+    when(objectStoragePort.openStream(objectKey))
+        .thenAnswer(
+            invocation ->
+                new StorageObjectStream(
+                    new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, contentType));
   }
 }

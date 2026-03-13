@@ -3,13 +3,16 @@ package momzzangseven.mztkbe.modules.verification.infrastructure.storage.adapter
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.Field;
+import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.http.AbortableInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -32,13 +35,19 @@ class VerificationObjectStorageAdapterTest {
   }
 
   @Test
-  void readsBytesFromObjectStorage() {
-    ResponseBytes<GetObjectResponse> bytes =
-        ResponseBytes.fromByteArray(GetObjectResponse.builder().build(), new byte[] {1, 2, 3});
-    when(s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket("bucket").key("k").build()))
-        .thenReturn(bytes);
+  void opensStreamFromObjectStorage() throws Exception {
+    ResponseInputStream<GetObjectResponse> stream =
+        new ResponseInputStream<>(
+            GetObjectResponse.builder().contentLength(3L).contentType("image/jpeg").build(),
+            AbortableInputStream.create(new ByteArrayInputStream(new byte[] {1, 2, 3})));
+    when(s3Client.getObject(GetObjectRequest.builder().bucket("bucket").key("k").build()))
+        .thenReturn(stream);
 
-    assertThat(adapter.readBytes("k")).containsExactly(1, 2, 3);
+    try (StorageObjectStream opened = adapter.openStream("k")) {
+      assertThat(opened.contentLength()).isEqualTo(3L);
+      assertThat(opened.contentType()).isEqualTo("image/jpeg");
+      assertThat(opened.stream().readAllBytes()).containsExactly(1, 2, 3);
+    }
   }
 
   @Test

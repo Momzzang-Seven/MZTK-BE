@@ -64,7 +64,7 @@ class GlobalExceptionHandlerTest {
   void handleAlreadyCompletedTodayException_returnsFailPayloadWithData() {
     VerificationAlreadyCompletedTodayException ex =
         new VerificationAlreadyCompletedTodayException(
-            CompletedMethod.LOCATION, LocalDate.of(2026, 3, 13), 0);
+            CompletedMethod.LOCATION, LocalDate.of(2026, 3, 13));
 
     ResponseEntity<ApiResponse<VerificationAlreadyCompletedTodayException.ErrorData>> response =
         handler.handleVerificationAlreadyCompletedTodayException(ex);

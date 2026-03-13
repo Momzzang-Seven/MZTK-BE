@@ -13,12 +13,14 @@ class VerificationPromptProviderTest {
 
     assertThat(provider.getWorkoutPhotoSystemInstruction()).isNotBlank();
     assertThat(provider.getWorkoutPhotoUserPrompt().trim())
-        .isEqualTo("Analyze this image and return the result JSON.");
+        .isEqualTo(
+            "Analyze the attached normalized workout-photo candidate and return only the result JSON.");
     assertThat(provider.getWorkoutPhotoResponseSchema()).contains("workoutPhoto");
 
     assertThat(provider.getWorkoutRecordSystemInstruction()).isNotBlank();
     assertThat(provider.getWorkoutRecordUserPrompt().trim())
-        .isEqualTo("Analyze this image and return the result JSON.");
+        .isEqualTo(
+            "Analyze the attached normalized workout-record candidate and return only the result JSON.");
     assertThat(provider.getWorkoutRecordResponseSchema()).contains("workoutRecord");
   }
 }

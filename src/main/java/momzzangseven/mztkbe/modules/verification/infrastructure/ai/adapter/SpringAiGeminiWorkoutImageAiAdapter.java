@@ -34,8 +34,6 @@ public class SpringAiGeminiWorkoutImageAiAdapter implements WorkoutImageAiPort {
       Set.of(
           RejectionReasonCode.NOT_WORKOUT_RECORD,
           RejectionReasonCode.DATE_NOT_VISIBLE,
-          RejectionReasonCode.MISSING_OR_INVALID_DATE,
-          RejectionReasonCode.NOT_TODAY_EXERCISE,
           RejectionReasonCode.LOW_CONFIDENCE);
 
   private final VerificationRuntimeProperties runtimeProperties;
@@ -125,7 +123,8 @@ public class SpringAiGeminiWorkoutImageAiAdapter implements WorkoutImageAiPort {
         return AiVerificationDecision.builder()
             .approved(false)
             .exerciseDate(exerciseDate)
-            .rejectionReasonCode(RejectionReasonCode.NOT_TODAY_EXERCISE)
+            .rejectionReasonCode(RejectionReasonCode.DATE_MISMATCH)
+            .rejectionReasonDetail("visible date is not today")
             .build();
       }
       return AiVerificationDecision.builder().approved(true).exerciseDate(exerciseDate).build();

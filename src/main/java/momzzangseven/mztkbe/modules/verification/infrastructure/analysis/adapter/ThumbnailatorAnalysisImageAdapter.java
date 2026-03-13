@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Locale;
-import java.util.UUID;
 import javax.imageio.ImageIO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,15 +27,13 @@ public class ThumbnailatorAnalysisImageAdapter implements PrepareAnalysisImagePo
 
   @Override
   public PreparedAnalysisImage prepare(
-      byte[] bytes, String extension, int maxLongEdge, double webpQuality) throws IOException {
-    Path tempDir = createRequestTempDirectory();
-    String normalizedExtension = normalizeExtension(extension);
-    Path originalPath = tempDir.resolve("original." + normalizedExtension);
+      Path originalPath, int maxLongEdge, double webpQuality) throws IOException {
+    Path tempDir = originalPath.getParent();
+    String normalizedExtension = extractExtension(originalPath);
     Path analysisPath = tempDir.resolve("analysis.webp");
 
     try {
       validateCodecAvailability(normalizedExtension);
-      Files.write(originalPath, bytes, StandardOpenOption.CREATE_NEW);
       BufferedImage source = ImageIO.read(originalPath.toFile());
       if (source == null) {
         throw new IllegalArgumentException("Unable to decode source image");
@@ -54,23 +51,14 @@ public class ThumbnailatorAnalysisImageAdapter implements PrepareAnalysisImagePo
           Thumbnails.of(source).size(targetWidth, targetHeight).asBufferedImage();
       byte[] encodedWebp = WebPCodec.encodeImage(analysisImage, (float) (webpQuality * 100.0d));
       Files.write(analysisPath, encodedWebp, StandardOpenOption.CREATE_NEW);
-      return new PreparedAnalysisImage(
-          analysisPath, () -> cleanup(analysisPath, originalPath, tempDir));
+      return PreparedAnalysisImage.noop(analysisPath);
     } catch (IllegalArgumentException validationException) {
-      cleanup(analysisPath, originalPath, tempDir);
+      cleanup(analysisPath);
       throw new IOException(validationException.getMessage(), validationException);
     } catch (IOException | RuntimeException ex) {
-      cleanup(analysisPath, originalPath, tempDir);
+      cleanup(analysisPath);
       throw ex;
     }
-  }
-
-  protected Path createRequestTempDirectory() throws IOException {
-    Path root = Path.of(System.getProperty("java.io.tmpdir"), "mztk", "verification");
-    Files.createDirectories(root);
-    Path requestDir = root.resolve(UUID.randomUUID().toString());
-    Files.createDirectory(requestDir);
-    return requestDir;
   }
 
   protected void deletePathIfExists(Path path) throws IOException {
@@ -94,10 +82,17 @@ public class ThumbnailatorAnalysisImageAdapter implements PrepareAnalysisImagePo
     return extension.toLowerCase(Locale.ROOT);
   }
 
-  private void cleanup(Path analysisPath, Path originalPath, Path tempDir) {
+  private String extractExtension(Path originalPath) {
+    String filename = originalPath.getFileName() == null ? "" : originalPath.getFileName().toString();
+    int dot = filename.lastIndexOf('.');
+    if (dot < 0 || dot == filename.length() - 1) {
+      throw new IllegalArgumentException("Original image extension is required");
+    }
+    return normalizeExtension(filename.substring(dot + 1));
+  }
+
+  private void cleanup(Path analysisPath) {
     deleteWithWarning(analysisPath);
-    deleteWithWarning(originalPath);
-    deleteWithWarning(tempDir);
   }
 
   private void deleteWithWarning(Path path) {

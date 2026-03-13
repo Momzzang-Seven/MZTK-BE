@@ -62,7 +62,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
   }
 
   @Test
-  void interpretsRecordDateMismatchAsNotTodayExercise() {
+  void interpretsRecordDateMismatchAsDateMismatch() {
     VerificationRuntimeProperties properties =
         new VerificationRuntimeProperties(
             new VerificationRuntimeProperties.Ai("gemini-2.5-flash-lite", 12, 2, false),
@@ -82,7 +82,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
     var result = adapter.analyzeWorkoutRecord(Path.of("analysis.webp"));
 
     assertThat(result.approved()).isFalse();
-    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.NOT_TODAY_EXERCISE);
+    assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.DATE_MISMATCH);
   }
 
   @Test

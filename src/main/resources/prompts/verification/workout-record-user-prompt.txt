@@ -1,1 +1,1 @@
-Analyze this image and return the result JSON.
+Analyze the attached normalized workout-record candidate and return only the result JSON.
