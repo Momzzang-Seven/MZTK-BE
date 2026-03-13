@@ -15,8 +15,12 @@ import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
+import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
@@ -50,9 +54,11 @@ class AnswerServiceTest {
   @InjectMocks private AnswerService answerService;
 
   @Nested
+  @DisplayName("Success cases")
   class SuccessCases {
 
     @Test
+    @DisplayName("execute(CreateAnswerCommand) returns the saved answer id")
     void createAnswer_returnsSavedId() {
       CreateAnswerCommand command =
           new CreateAnswerCommand(10L, 20L, "answer content", List.of("https://image"));
@@ -73,6 +79,7 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(Long) returns writer summary fields with answer results")
     void getAnswers_returnsDtos_whenPostExists() {
       Long postId = 10L;
       List<Answer> answers =
@@ -98,6 +105,7 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(UpdateAnswerCommand) preserves images when imageUrls is omitted")
     void updateAnswer_preservesImages_whenCommandOmitsThem() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false, List.of("https://old"));
@@ -115,25 +123,7 @@ class AnswerServiceTest {
     }
 
     @Test
-    void deleteAnswer_delegatesToPort() {
-      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
-      Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false, List.of());
-
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
-
-      answerService.execute(command);
-
-      verify(deleteAnswerPort).deleteAnswer(100L);
-    }
-
-    @Test
-    void deleteAnswersByPostId_delegatesToPort() {
-      answerService.deleteByPostId(10L);
-
-      verify(deleteAnswerPort).deleteAnswersByPostId(10L);
-    }
-
-    @Test
+    @DisplayName("execute(UpdateAnswerCommand) supports image-only updates")
     void updateAnswer_allowsImageOnlyUpdate() {
       UpdateAnswerCommand command =
           new UpdateAnswerCommand(10L, 100L, 20L, null, List.of("https://new-image"));
@@ -150,12 +140,35 @@ class AnswerServiceTest {
       assertThat(answerCaptor.getValue().getContent()).isEqualTo("before");
       assertThat(answerCaptor.getValue().getImageUrls()).containsExactly("https://new-image");
     }
+
+    @Test
+    @DisplayName("execute(DeleteAnswerCommand) delegates deletion to the delete port")
+    void deleteAnswer_delegatesToPort() {
+      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
+      Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false, List.of());
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+
+      answerService.execute(command);
+
+      verify(deleteAnswerPort).deleteAnswer(100L);
+    }
+
+    @Test
+    @DisplayName("deleteByPostId() delegates cascade deletion to the delete port")
+    void deleteByPostId_delegatesToPort() {
+      answerService.deleteByPostId(10L);
+
+      verify(deleteAnswerPort).deleteAnswersByPostId(10L);
+    }
   }
 
   @Nested
+  @DisplayName("Failure cases")
   class FailureCases {
 
     @Test
+    @DisplayName("execute(CreateAnswerCommand) throws when the post does not exist")
     void createAnswer_throws_whenPostNotFound() {
       CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
 
@@ -167,6 +180,7 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(CreateAnswerCommand) throws when the post is not a question")
     void createAnswer_throws_whenPostIsNotQuestion() {
       CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, false);
@@ -178,6 +192,38 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(CreateAnswerCommand) throws when the question is solved")
+    void createAnswer_throws_whenPostIsSolved() {
+      CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, true, true);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(CannotAnswerSolvedPostException.class);
+    }
+
+    @Test
+    @DisplayName("execute(CreateAnswerCommand) throws when the user answers his or her own post")
+    void createAnswer_throws_whenAnswerOwnPost() {
+      CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 20L, false, true);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(CannotAnswerOwnPostException.class);
+    }
+
+    @Test
+    @DisplayName("execute(Long) throws when postId is null")
+    void getAnswers_throws_whenPostIdIsNull() {
+      assertThatThrownBy(() -> answerService.execute((Long) null))
+          .isInstanceOf(AnswerInvalidInputException.class);
+    }
+
+    @Test
+    @DisplayName("execute(Long) throws when the post does not exist")
     void getAnswers_throws_whenPostNotFound() {
       given(loadPostPort.existsPost(10L)).willReturn(false);
 
@@ -187,6 +233,7 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(UpdateAnswerCommand) throws when the answer does not exist")
     void updateAnswer_throws_whenAnswerNotFound() {
       UpdateAnswerCommand command =
           new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
@@ -198,6 +245,7 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(UpdateAnswerCommand) throws when the answer does not belong to the post")
     void updateAnswer_throws_whenPostMismatch() {
       UpdateAnswerCommand command =
           new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
@@ -210,6 +258,75 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(UpdateAnswerCommand) throws when the requester is not the owner")
+    void updateAnswer_throws_whenRequesterIsNotOwner() {
+      UpdateAnswerCommand command =
+          new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
+      Answer answer = buildAnswer(100L, 10L, 99L, "before", false, List.of());
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(AnswerUnauthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("execute(UpdateAnswerCommand) throws when the answer is accepted")
+    void updateAnswer_throws_whenAnswerIsAccepted() {
+      UpdateAnswerCommand command =
+          new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", true, List.of());
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(CannotUpdateAcceptedAnswerException.class);
+    }
+
+    @Test
+    @DisplayName("execute(UpdateAnswerCommand) throws when no fields are provided")
+    void updateAnswer_throws_whenNothingProvided() {
+      assertThatThrownBy(() -> new UpdateAnswerCommand(10L, 100L, 20L, null, null))
+          .isInstanceOf(AnswerInvalidInputException.class);
+    }
+
+    @Test
+    @DisplayName("execute(DeleteAnswerCommand) throws when the answer does not exist")
+    void deleteAnswer_throws_whenAnswerNotFound() {
+      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.empty());
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(AnswerNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("execute(DeleteAnswerCommand) throws when the answer does not belong to the post")
+    void deleteAnswer_throws_whenPostMismatch() {
+      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
+      Answer answer = buildAnswer(100L, 999L, 20L, "before", false, List.of());
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(AnswerPostMismatchException.class);
+    }
+
+    @Test
+    @DisplayName("execute(DeleteAnswerCommand) throws when the requester is not the owner")
+    void deleteAnswer_throws_whenRequesterIsNotOwner() {
+      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
+      Answer answer = buildAnswer(100L, 10L, 99L, "before", false, List.of());
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(AnswerUnauthorizedException.class);
+    }
+
+    @Test
+    @DisplayName("execute(DeleteAnswerCommand) throws when the answer is accepted")
     void deleteAnswer_throws_whenAccepted() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "accepted", true, List.of());
@@ -219,12 +336,6 @@ class AnswerServiceTest {
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
-    }
-
-    @Test
-    void updateAnswer_throws_whenNothingProvided() {
-      assertThatThrownBy(() -> new UpdateAnswerCommand(10L, 100L, 20L, null, null))
-          .isInstanceOf(AnswerInvalidInputException.class);
     }
   }
 
