@@ -7,7 +7,7 @@ public record UpdateAnswerCommand(
     Long postId, Long answerId, Long userId, String content, List<String> imageUrls) {
 
   public UpdateAnswerCommand {
-    imageUrls = imageUrls == null ? List.of() : List.copyOf(imageUrls);
+    imageUrls = imageUrls == null ? null : List.copyOf(imageUrls);
     validate(postId, answerId, userId, content);
   }
 

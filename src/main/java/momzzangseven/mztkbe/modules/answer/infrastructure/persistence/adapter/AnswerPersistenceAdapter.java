@@ -41,6 +41,11 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
     answerJpaRepository.deleteById(answerId);
   }
 
+  @Override
+  public void deleteAnswersByPostId(Long postId) {
+    answerJpaRepository.deleteAllByPostId(postId);
+  }
+
   private AnswerEntity toEntity(Answer answer) {
     return AnswerEntity.builder()
         .id(answer.getId())

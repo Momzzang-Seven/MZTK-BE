@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.answer.api.controller;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.answer.api.dto.AnswerResponse;
 import momzzangseven.mztkbe.modules.answer.api.dto.CreateAnswerRequest;
@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/posts/{postId}/answers")
+@RequestMapping("/questions/{postId}/answers")
 @RequiredArgsConstructor
 public class AnswerController {
 
@@ -90,7 +90,7 @@ public class AnswerController {
 
   private Long requireUserId(Long userId) {
     if (userId == null) {
-      throw new AnswerUnauthorizedException();
+      throw new UserNotAuthenticatedException();
     }
     return userId;
   }

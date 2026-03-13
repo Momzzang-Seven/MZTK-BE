@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
@@ -32,22 +33,22 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
-@DisplayName("AnswerController 실경로 통합 테스트 (MockMvc + H2)")
+@DisplayName("AnswerControllerIntegrationTest")
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
 class AnswerControllerIntegrationTest {
 
-  @org.springframework.beans.factory.annotation.Autowired protected MockMvc mockMvc;
+  @org.springframework.beans.factory.annotation.Autowired private MockMvc mockMvc;
 
   @org.springframework.beans.factory.annotation.Autowired
-  protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+  private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
   @org.springframework.beans.factory.annotation.Autowired
-  protected AnswerJpaRepository answerJpaRepository;
+  private AnswerJpaRepository answerJpaRepository;
 
   @org.springframework.beans.factory.annotation.Autowired
-  protected PostJpaRepository postJpaRepository;
+  private PostJpaRepository postJpaRepository;
 
   @MockBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -70,32 +71,21 @@ class AnswerControllerIntegrationTest {
       txSignedRecoveryWorker;
 
   @Test
-  @DisplayName("답변 생성/조회/수정/삭제가 실제 DB에 반영된다")
-  void createGetUpdateDeleteAnswer_realFlow_reflectsInH2() throws Exception {
-    PostEntity savedPost =
-        postJpaRepository.save(
-            PostEntity.builder()
-                .userId(501L)
-                .type(PostType.QUESTION)
-                .title("답변 테스트 질문")
-                .content("어떻게 테스트하나요?")
-                .imageUrls(List.of())
-                .reward(100L)
-                .isSolved(false)
-                .build());
+  void createGetUpdateAndDeleteAnswer_realFlow_works() throws Exception {
+    PostEntity savedPost = saveQuestionPost(501L, false);
     Long postId = savedPost.getId();
 
     MvcResult createResult =
         mockMvc
             .perform(
-                post("/posts/" + postId + "/answers")
+                post("/questions/" + postId + "/answers")
                     .with(userPrincipal(502L))
                     .contentType(APPLICATION_JSON)
                     .content(
                         json(
                             Map.of(
                                 "content",
-                                "이렇게 통합 테스트합니다.",
+                                "integration answer",
                                 "imageUrls",
                                 List.of("https://example.com/answer-1.png")))))
             .andExpect(status().isCreated())
@@ -106,47 +96,88 @@ class AnswerControllerIntegrationTest {
     AnswerEntity savedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
     assertThat(savedAnswer.getPostId()).isEqualTo(postId);
     assertThat(savedAnswer.getUserId()).isEqualTo(502L);
-    assertThat(savedAnswer.getContent()).isEqualTo("이렇게 통합 테스트합니다.");
+    assertThat(savedAnswer.getContent()).isEqualTo("integration answer");
     assertThat(savedAnswer.getImageUrls()).containsExactly("https://example.com/answer-1.png");
     assertThat(savedAnswer.getIsAccepted()).isFalse();
 
     mockMvc
-        .perform(get("/posts/" + postId + "/answers").with(userPrincipal(501L)))
+        .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data[0].answerId").value(answerId))
         .andExpect(jsonPath("$.data[0].userId").value(502L))
-        .andExpect(jsonPath("$.data[0].content").value("이렇게 통합 테스트합니다."))
+        .andExpect(jsonPath("$.data[0].content").value("integration answer"))
         .andExpect(jsonPath("$.data[0].imageUrls[0]").value("https://example.com/answer-1.png"));
 
     mockMvc
         .perform(
-            put("/posts/" + postId + "/answers/" + answerId)
+            put("/questions/" + postId + "/answers/" + answerId)
                 .with(userPrincipal(502L))
                 .contentType(APPLICATION_JSON)
-                .content(
-                    json(
-                        Map.of(
-                            "content",
-                            "수정된 답변입니다.",
-                            "imageUrls",
-                            List.of(
-                                "https://example.com/answer-2.png",
-                                "https://example.com/answer-3.png")))))
+                .content(json(Map.of("content", "updated answer"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"));
 
     AnswerEntity updatedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
-    assertThat(updatedAnswer.getContent()).isEqualTo("수정된 답변입니다.");
-    assertThat(updatedAnswer.getImageUrls())
-        .containsExactly("https://example.com/answer-2.png", "https://example.com/answer-3.png");
+    assertThat(updatedAnswer.getContent()).isEqualTo("updated answer");
+    assertThat(updatedAnswer.getImageUrls()).containsExactly("https://example.com/answer-1.png");
 
     mockMvc
-        .perform(delete("/posts/" + postId + "/answers/" + answerId).with(userPrincipal(502L)))
+        .perform(delete("/questions/" + postId + "/answers/" + answerId).with(userPrincipal(502L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"));
 
     assertThat(answerJpaRepository.findById(answerId)).isEmpty();
+  }
+
+  @Test
+  void deletingQuestionPost_removesAnswersThroughEventHandler() throws Exception {
+    PostEntity savedPost = saveQuestionPost(501L, false);
+    Long postId = savedPost.getId();
+    Long firstAnswerId = createAnswer(postId, 502L, "first", List.of());
+    Long secondAnswerId =
+        createAnswer(postId, 503L, "second", List.of("https://example.com/2.png"));
+
+    mockMvc
+        .perform(delete("/posts/" + postId).with(userPrincipal(501L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    assertThat(postJpaRepository.findById(postId)).isEmpty();
+    assertThat(answerJpaRepository.findById(firstAnswerId)).isEmpty();
+    assertThat(answerJpaRepository.findById(secondAnswerId)).isEmpty();
+  }
+
+  private PostEntity saveQuestionPost(Long userId, boolean isSolved) {
+    return postJpaRepository.save(
+        PostEntity.builder()
+            .userId(userId)
+            .type(PostType.QUESTION)
+            .title("question title")
+            .content("question content")
+            .imageUrls(List.of())
+            .reward(100L)
+            .isSolved(isSolved)
+            .build());
+  }
+
+  private Long createAnswer(Long postId, Long userId, String content, List<String> imageUrls)
+      throws Exception {
+    LinkedHashMap<String, Object> request = new LinkedHashMap<>();
+    request.put("content", content);
+    request.put("imageUrls", imageUrls);
+
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/questions/" + postId + "/answers")
+                    .with(userPrincipal(userId))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(request)))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+    return extractLong(createResult, "/data/answerId");
   }
 
   private Long extractLong(MvcResult result, String pointer) throws Exception {
@@ -160,7 +191,7 @@ class AnswerControllerIntegrationTest {
 
   private RequestPostProcessor authenticatedPrincipal(Long userId, String... authorities) {
     java.util.Objects.requireNonNull(userId, "userId");
-    java.util.List<SimpleGrantedAuthority> grantedAuthorities =
+    List<SimpleGrantedAuthority> grantedAuthorities =
         Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
     UsernamePasswordAuthenticationToken token =
         new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
