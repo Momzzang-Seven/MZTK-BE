@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.verification.application.service;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationCommand;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationResult;
@@ -10,6 +11,7 @@ import momzzangseven.mztkbe.modules.verification.application.port.out.GrantXpPor
 import momzzangseven.mztkbe.modules.verification.application.port.out.ImageCodecSupportPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAnalysisImagePort;
+import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.VerificationRequestPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutUploadLookupPort;
@@ -26,6 +28,7 @@ public class SubmitWorkoutPhotoVerificationService extends AbstractSubmitWorkout
       VerificationRequestPort verificationRequestPort,
       WorkoutUploadLookupPort workoutUploadLookupPort,
       ObjectStoragePort objectStoragePort,
+      PrepareOriginalImagePort prepareOriginalImagePort,
       PrepareAnalysisImagePort prepareAnalysisImagePort,
       ExifMetadataPort exifMetadataPort,
       WorkoutImageAiPort workoutImageAiPort,
@@ -38,6 +41,7 @@ public class SubmitWorkoutPhotoVerificationService extends AbstractSubmitWorkout
         verificationRequestPort,
         workoutUploadLookupPort,
         objectStoragePort,
+        prepareOriginalImagePort,
         prepareAnalysisImagePort,
         exifMetadataPort,
         workoutImageAiPort,
@@ -74,6 +78,11 @@ public class SubmitWorkoutPhotoVerificationService extends AbstractSubmitWorkout
   @Override
   protected AiVerificationDecision analyzeWithAi(Path analysisImagePath) {
     return workoutImageAiPort.analyzeWorkoutPhoto(analysisImagePath);
+  }
+
+  @Override
+  protected LocalDate resolveVerifiedExerciseDate(AiVerificationDecision decision) {
+    return null;
   }
 
   @Override

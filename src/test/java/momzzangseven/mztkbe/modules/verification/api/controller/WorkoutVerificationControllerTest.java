@@ -78,7 +78,6 @@ class WorkoutVerificationControllerTest {
                 .verificationId("photo-1")
                 .verificationKind(VerificationKind.WORKOUT_PHOTO)
                 .verificationStatus(VerificationStatus.VERIFIED)
-                .exerciseDate(LocalDate.of(2026, 3, 13))
                 .completionStatus(CompletionStatus.COMPLETED)
                 .grantedXp(100)
                 .completedMethod(CompletedMethod.WORKOUT_PHOTO)
@@ -95,6 +94,7 @@ class WorkoutVerificationControllerTest {
         .andExpect(jsonPath("$.data.verificationId").value("photo-1"))
         .andExpect(jsonPath("$.data.verificationKind").value("WORKOUT_PHOTO"))
         .andExpect(jsonPath("$.data.verificationStatus").value("VERIFIED"))
+        .andExpect(jsonPath("$.data.exerciseDate").doesNotExist())
         .andExpect(jsonPath("$.data.completedMethod").value("WORKOUT_PHOTO"));
 
     verify(submitWorkoutPhotoVerificationUseCase)
@@ -130,7 +130,9 @@ class WorkoutVerificationControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.verificationId").value("record-1"))
         .andExpect(jsonPath("$.data.verificationKind").value("WORKOUT_RECORD"))
-        .andExpect(jsonPath("$.data.verificationStatus").value("REJECTED"));
+        .andExpect(jsonPath("$.data.verificationStatus").value("REJECTED"))
+        .andExpect(jsonPath("$.data.exerciseDate").doesNotExist())
+        .andExpect(jsonPath("$.data.completedMethod").doesNotExist());
 
     verify(submitWorkoutRecordVerificationUseCase)
         .execute(

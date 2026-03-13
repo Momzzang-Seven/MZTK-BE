@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,7 @@ import momzzangseven.mztkbe.modules.verification.application.config.Verification
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.PreparedOriginalImage;
 import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationCommand;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationResult;
@@ -39,6 +41,7 @@ import momzzangseven.mztkbe.modules.verification.application.port.out.GrantXpPor
 import momzzangseven.mztkbe.modules.verification.application.port.out.ImageCodecSupportPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAnalysisImagePort;
+import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.VerificationRequestPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutUploadLookupPort;
@@ -62,6 +65,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
   @Mock private VerificationRequestPort verificationRequestPort;
   @Mock private WorkoutUploadLookupPort workoutUploadLookupPort;
   @Mock private ObjectStoragePort objectStoragePort;
+  @Mock private PrepareOriginalImagePort prepareOriginalImagePort;
   @Mock private PrepareAnalysisImagePort prepareAnalysisImagePort;
   @Mock private ExifMetadataPort exifMetadataPort;
   @Mock private WorkoutImageAiPort workoutImageAiPort;
@@ -73,7 +77,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
   private VerificationImagePolicy verificationImagePolicy;
 
   @BeforeEach
-  void setUp() {
+  void setUp() throws Exception {
     verificationImagePolicy =
         new VerificationImagePolicy(
             new VerificationRuntimeProperties(
@@ -89,6 +93,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             verificationRequestPort,
             workoutUploadLookupPort,
             objectStoragePort,
+            prepareOriginalImagePort,
             prepareAnalysisImagePort,
             exifMetadataPort,
             workoutImageAiPort,
@@ -98,6 +103,9 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             timePolicy,
             verificationImagePolicy);
     lenient().when(imageCodecSupportPort.isHeifDecodeAvailable()).thenReturn(true);
+    lenient()
+        .when(prepareOriginalImagePort.prepare(anyString(), anyString()))
+        .thenReturn(PreparedOriginalImage.noop(Path.of("original.jpg")));
   }
 
   @Test
@@ -199,6 +207,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     SubmitWorkoutVerificationResult result = service.execute(command);
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.VERIFIED);
+    assertThat(result.exerciseDate()).isNull();
     assertThat(result.completionStatus()).isEqualTo(CompletionStatus.COMPLETED);
     assertThat(result.grantedXp()).isEqualTo(100);
   }
@@ -685,6 +694,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             verificationRequestPort,
             workoutUploadLookupPort,
             objectStoragePort,
+            prepareOriginalImagePort,
             prepareAnalysisImagePort,
             exifMetadataPort,
             workoutImageAiPort,
@@ -702,6 +712,57 @@ class SubmitWorkoutPhotoVerificationServiceTest {
                     new SubmitWorkoutVerificationCommand(
                         1L, "private/workout/a.heic", VerificationKind.WORKOUT_PHOTO)))
         .isInstanceOf(InvalidVerificationImageExtensionException.class);
+  }
+
+  @Test
+  @DisplayName("HEIF 정책이 비활성화되어도 기존 heic verification 결과는 재사용한다")
+  void reusesExistingHeicVerificationWhenPolicyDisabled() {
+    VerificationImagePolicy disabledPolicy =
+        new VerificationImagePolicy(
+            new VerificationRuntimeProperties(
+                new VerificationRuntimeProperties.Ai("gemini-2.5-flash-lite", 12, 2, true),
+                new VerificationRuntimeProperties.Heif(false, "requires-imageio-plugin"),
+                new VerificationRuntimeProperties.Image(5242880L, 25000000L)));
+    VerificationTimePolicy timePolicy =
+        new VerificationTimePolicy(
+            ZoneId.of("Asia/Seoul"),
+            Clock.fixed(Instant.parse("2026-03-13T01:00:00Z"), ZoneId.of("Asia/Seoul")));
+    SubmitWorkoutPhotoVerificationService disabledService =
+        new SubmitWorkoutPhotoVerificationService(
+            verificationRequestPort,
+            workoutUploadLookupPort,
+            objectStoragePort,
+            prepareOriginalImagePort,
+            prepareAnalysisImagePort,
+            exifMetadataPort,
+            workoutImageAiPort,
+            grantXpPort,
+            xpLedgerQueryPort,
+            imageCodecSupportPort,
+            timePolicy,
+            disabledPolicy);
+    VerificationRequest existing =
+        VerificationRequest.builder()
+            .verificationId("existing-heic")
+            .userId(1L)
+            .verificationKind(VerificationKind.WORKOUT_PHOTO)
+            .status(VerificationStatus.VERIFIED)
+            .tmpObjectKey("private/workout/a.heic")
+            .build();
+    when(xpLedgerQueryPort.findTodayWorkoutReward(1L, LocalDate.of(2026, 3, 13)))
+        .thenReturn(TodayRewardSnapshot.none(LocalDate.of(2026, 3, 13)));
+    when(verificationRequestPort.findByTmpObjectKey("private/workout/a.heic"))
+        .thenReturn(Optional.of(existing));
+
+    SubmitWorkoutVerificationResult result =
+        disabledService.execute(
+            new SubmitWorkoutVerificationCommand(
+                1L, "private/workout/a.heic", VerificationKind.WORKOUT_PHOTO));
+
+    assertThat(result.verificationId()).isEqualTo("existing-heic");
+    assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.VERIFIED);
+    assertThat(result.exerciseDate()).isNull();
+    verifyNoInteractions(workoutUploadLookupPort, prepareAnalysisImagePort, workoutImageAiPort);
   }
 
   @Test
@@ -723,6 +784,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.FAILED);
     assertThat(result.failureCode()).isEqualTo(FailureCode.EXTERNAL_AI_MALFORMED_RESPONSE);
+    assertThat(result.completedMethod()).isNull();
     verify(grantXpPort, never()).grantWorkoutXp(any(), any(), any(), any());
   }
 

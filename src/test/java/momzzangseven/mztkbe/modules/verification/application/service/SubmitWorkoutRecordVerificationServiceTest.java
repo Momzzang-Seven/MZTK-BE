@@ -3,12 +3,12 @@ package momzzangseven.mztkbe.modules.verification.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import momzzangseven.mztkbe.modules.verification.application.config.VerificationRuntimeProperties;
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
-import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
+import momzzangseven.mztkbe.modules.verification.application.dto.PreparedOriginalImage;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationCommand;
 import momzzangseven.mztkbe.modules.verification.application.dto.TodayRewardSnapshot;
 import momzzangseven.mztkbe.modules.verification.application.dto.WorkoutUploadReference;
@@ -29,6 +29,7 @@ import momzzangseven.mztkbe.modules.verification.application.port.out.GrantXpPor
 import momzzangseven.mztkbe.modules.verification.application.port.out.ImageCodecSupportPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAnalysisImagePort;
+import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.VerificationRequestPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutUploadLookupPort;
@@ -50,6 +51,7 @@ class SubmitWorkoutRecordVerificationServiceTest {
   @Mock private VerificationRequestPort verificationRequestPort;
   @Mock private WorkoutUploadLookupPort workoutUploadLookupPort;
   @Mock private ObjectStoragePort objectStoragePort;
+  @Mock private PrepareOriginalImagePort prepareOriginalImagePort;
   @Mock private PrepareAnalysisImagePort prepareAnalysisImagePort;
   @Mock private ExifMetadataPort exifMetadataPort;
   @Mock private WorkoutImageAiPort workoutImageAiPort;
@@ -61,7 +63,7 @@ class SubmitWorkoutRecordVerificationServiceTest {
   private VerificationImagePolicy verificationImagePolicy;
 
   @BeforeEach
-  void setUp() {
+  void setUp() throws Exception {
     verificationImagePolicy =
         new VerificationImagePolicy(
             new VerificationRuntimeProperties(
@@ -77,6 +79,7 @@ class SubmitWorkoutRecordVerificationServiceTest {
             verificationRequestPort,
             workoutUploadLookupPort,
             objectStoragePort,
+            prepareOriginalImagePort,
             prepareAnalysisImagePort,
             exifMetadataPort,
             workoutImageAiPort,
@@ -86,6 +89,9 @@ class SubmitWorkoutRecordVerificationServiceTest {
             timePolicy,
             verificationImagePolicy);
     lenient().when(imageCodecSupportPort.isHeifDecodeAvailable()).thenReturn(true);
+    lenient()
+        .when(prepareOriginalImagePort.prepare(anyString(), anyString()))
+        .thenReturn(PreparedOriginalImage.noop(Path.of("original.png")));
   }
 
   @Test
@@ -114,7 +120,6 @@ class SubmitWorkoutRecordVerificationServiceTest {
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
         .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists("private/workout/a.png")).thenReturn(true);
-    stubOpenStream("private/workout/a.png", "image/png");
     when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1536), eq(0.85d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(workoutImageAiPort.analyzeWorkoutRecord(any()))
@@ -127,6 +132,7 @@ class SubmitWorkoutRecordVerificationServiceTest {
     var result = service.execute(command);
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.VERIFIED);
+    assertThat(result.exerciseDate()).isEqualTo(LocalDate.of(2026, 3, 13));
     verify(exifMetadataPort, never()).extract(any());
   }
 
@@ -158,7 +164,6 @@ class SubmitWorkoutRecordVerificationServiceTest {
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
         .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists("private/workout/a.png")).thenReturn(true);
-    stubOpenStream("private/workout/a.png", "image/png");
     AtomicBoolean closed = new AtomicBoolean();
     when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1536), eq(0.85d)))
         .thenReturn(new PreparedAnalysisImage(Path.of("analysis.webp"), () -> closed.set(true)));
@@ -172,16 +177,10 @@ class SubmitWorkoutRecordVerificationServiceTest {
     var result = service.execute(command);
 
     assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.REJECTED);
+    assertThat(result.exerciseDate()).isNull();
+    assertThat(result.completedMethod()).isNull();
     assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.DATE_NOT_VISIBLE);
     assertThat(closed.get()).isTrue();
     verify(exifMetadataPort, never()).extract(any());
-  }
-
-  private void stubOpenStream(String objectKey, String contentType) throws IOException {
-    when(objectStoragePort.openStream(objectKey))
-        .thenAnswer(
-            invocation ->
-                new StorageObjectStream(
-                    new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, contentType));
   }
 }
