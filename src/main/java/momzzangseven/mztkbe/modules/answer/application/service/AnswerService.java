@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.answer.application.service;
 
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
@@ -14,10 +15,12 @@ import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
@@ -27,13 +30,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class AnswerService
-    implements CreateAnswerUseCase, GetAnswerUseCase, UpdateAnswerUseCase, DeleteAnswerUseCase {
+    implements CreateAnswerUseCase,
+        GetAnswerUseCase,
+        UpdateAnswerUseCase,
+        DeleteAnswerUseCase,
+        DeleteAnswersByPostUseCase {
 
   private final SaveAnswerPort saveAnswerPort;
   private final LoadPostPort loadPostPort;
   private final LoadAnswerPort loadAnswerPort;
   private final DeleteAnswerPort deleteAnswerPort;
+  private final LoadAnswerWriterPort loadAnswerWriterPort;
 
+  /** Creates a new answer for a question post. */
   @Override
   @Transactional
   public CreateAnswerResult execute(CreateAnswerCommand command) {
@@ -55,6 +64,7 @@ public class AnswerService
     return new CreateAnswerResult(savedAnswer.getId());
   }
 
+  /** Loads answers for a question post together with writer summary fields used by the API. */
   @Override
   @Transactional(readOnly = true)
   public List<AnswerResult> execute(Long postId) {
@@ -65,9 +75,17 @@ public class AnswerService
       throw new AnswerPostNotFoundException();
     }
 
-    return loadAnswerPort.loadAnswersByPostId(postId).stream().map(AnswerResult::from).toList();
+    List<Answer> answers = loadAnswerPort.loadAnswersByPostId(postId);
+    Map<Long, LoadAnswerWriterPort.WriterSummary> writers =
+        answers.isEmpty()
+            ? Map.of()
+            : loadAnswerWriterPort.loadWritersByIds(
+                answers.stream().map(Answer::getUserId).distinct().toList());
+
+    return answers.stream().map(answer -> toResult(answer, writers)).toList();
   }
 
+  /** Updates mutable answer fields. Omitted fields are preserved. */
   @Override
   @Transactional
   public void execute(UpdateAnswerCommand command) {
@@ -80,6 +98,7 @@ public class AnswerService
     saveAnswerPort.saveAnswer(updatedAnswer);
   }
 
+  /** Deletes a single answer requested by its owner. */
   @Override
   @Transactional
   public void execute(DeleteAnswerCommand command) {
@@ -92,9 +111,10 @@ public class AnswerService
     deleteAnswerPort.deleteAnswer(answer.getId());
   }
 
+  /** Deletes all answers belonging to a post after an internal post-deleted event. */
   @Override
   @Transactional
-  public void deleteAnswersByPostId(Long postId) {
+  public void deleteByPostId(Long postId) {
     if (postId == null) {
       throw new AnswerInvalidInputException("postId is required.");
     }
@@ -107,6 +127,15 @@ public class AnswerService
 
   private Answer loadAnswer(Long answerId) {
     return loadAnswerPort.loadAnswer(answerId).orElseThrow(AnswerNotFoundException::new);
+  }
+
+  private AnswerResult toResult(
+      Answer answer, Map<Long, LoadAnswerWriterPort.WriterSummary> writers) {
+    LoadAnswerWriterPort.WriterSummary writer = writers.get(answer.getUserId());
+    return AnswerResult.from(
+        answer,
+        writer != null ? writer.nickname() : null,
+        writer != null ? writer.profileImageUrl() : null);
   }
 
   private void validateAnswerBelongsToPost(Answer answer, Long postId) {

@@ -7,6 +7,8 @@ import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 public record AnswerResponse(
     Long answerId,
     Long userId,
+    String nickname,
+    String profileImageUrl,
     String content,
     boolean isAccepted,
     List<String> imageUrls,
@@ -17,6 +19,8 @@ public record AnswerResponse(
     return new AnswerResponse(
         answer.answerId(),
         answer.userId(),
+        answer.nickname(),
+        answer.profileImageUrl(),
         answer.content(),
         answer.accepted(),
         answer.imageUrls() == null ? List.of() : List.copyOf(answer.imageUrls()),
