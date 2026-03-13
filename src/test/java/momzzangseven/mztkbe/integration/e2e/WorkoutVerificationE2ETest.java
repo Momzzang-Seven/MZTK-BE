@@ -144,9 +144,17 @@ class WorkoutVerificationE2ETest {
 
       assertThat(firstResponse.getStatusCode().is2xxSuccessful()).isTrue();
       assertThat(secondResponse.getStatusCode().is2xxSuccessful()).isTrue();
-      assertThat(objectMapper.readTree(firstResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+      assertThat(
+              objectMapper
+                  .readTree(firstResponse.getBody())
+                  .at("/data/exerciseDate")
+                  .isMissingNode())
           .isTrue();
-      assertThat(objectMapper.readTree(secondResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+      assertThat(
+              objectMapper
+                  .readTree(secondResponse.getBody())
+                  .at("/data/exerciseDate")
+                  .isMissingNode())
           .isTrue();
 
       String firstVerificationId =
@@ -254,9 +262,17 @@ class WorkoutVerificationE2ETest {
 
       assertThat(firstResponse.getStatusCode().is2xxSuccessful()).isTrue();
       assertThat(secondResponse.getStatusCode().is2xxSuccessful()).isTrue();
-      assertThat(objectMapper.readTree(firstResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+      assertThat(
+              objectMapper
+                  .readTree(firstResponse.getBody())
+                  .at("/data/exerciseDate")
+                  .isMissingNode())
           .isTrue();
-      assertThat(objectMapper.readTree(secondResponse.getBody()).at("/data/exerciseDate").isMissingNode())
+      assertThat(
+              objectMapper
+                  .readTree(secondResponse.getBody())
+                  .at("/data/exerciseDate")
+                  .isMissingNode())
           .isTrue();
 
       String firstVerificationId =
