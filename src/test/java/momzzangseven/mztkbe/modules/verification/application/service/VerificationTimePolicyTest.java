@@ -37,5 +37,17 @@ class VerificationTimePolicyTest {
     assertThat(policy.today()).isEqualTo(LocalDate.of(2026, 3, 13));
     assertThat(policy.isToday(Instant.parse("2026-03-13T01:00:00Z"))).isTrue();
     assertThat(policy.isToday(Instant.parse("2026-03-11T14:59:59Z"))).isFalse();
+    assertThat(policy.isToday(LocalDate.of(2026, 3, 13))).isTrue();
+    assertThat(policy.isToday((LocalDate) null)).isFalse();
+  }
+
+  @Test
+  @DisplayName("blank/null source_ref는 UNKNOWN으로 처리한다")
+  void deriveCompletedMethodForBlankOrNullSourceRef() {
+    VerificationTimePolicy policy =
+        new VerificationTimePolicy(KST, Clock.fixed(Instant.parse("2026-03-12T15:00:00Z"), KST));
+
+    assertThat(policy.deriveCompletedMethod(null).name()).isEqualTo("UNKNOWN");
+    assertThat(policy.deriveCompletedMethod(" ").name()).isEqualTo("UNKNOWN");
   }
 }
