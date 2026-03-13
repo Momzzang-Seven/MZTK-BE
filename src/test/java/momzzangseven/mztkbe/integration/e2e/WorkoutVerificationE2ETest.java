@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -32,6 +34,7 @@ import momzzangseven.mztkbe.modules.level.infrastructure.repository.XpPolicyJpaR
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ExifMetadataPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAnalysisImagePort;
@@ -101,9 +104,8 @@ class WorkoutVerificationE2ETest {
             .build());
 
     when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
-    when(objectStoragePort.readBytes(tmpObjectKey)).thenReturn(new byte[] {1, 2, 3});
-    when(prepareAnalysisImagePort.prepare(
-            any(), any(String.class), any(Integer.class), anyDouble()))
+    stubOpenStream(tmpObjectKey, "image/jpeg");
+    when(prepareAnalysisImagePort.prepare(any(Path.class), any(Integer.class), anyDouble()))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(exifMetadataPort.extract(any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.now(KST))));
@@ -203,9 +205,8 @@ class WorkoutVerificationE2ETest {
     Instant beforeRetryUpdatedAt = failed.getUpdatedAt();
 
     when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
-    when(objectStoragePort.readBytes(tmpObjectKey)).thenReturn(new byte[] {1, 2, 3});
-    when(prepareAnalysisImagePort.prepare(
-            any(), any(String.class), any(Integer.class), anyDouble()))
+    stubOpenStream(tmpObjectKey, "image/jpeg");
+    when(prepareAnalysisImagePort.prepare(any(Path.class), any(Integer.class), anyDouble()))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(exifMetadataPort.extract(any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.now(KST))));
@@ -334,5 +335,13 @@ class WorkoutVerificationE2ETest {
             .effectiveFrom(effectiveFrom.minusDays(1))
             .enabled(true)
             .build());
+  }
+
+  private void stubOpenStream(String objectKey, String contentType) throws IOException {
+    when(objectStoragePort.openStream(objectKey))
+        .thenAnswer(
+            invocation ->
+                new StorageObjectStream(
+                    new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, contentType));
   }
 }

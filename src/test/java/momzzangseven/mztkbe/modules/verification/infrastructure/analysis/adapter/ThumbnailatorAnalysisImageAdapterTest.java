@@ -13,6 +13,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 import javax.imageio.ImageIO;
 import momzzangseven.mztkbe.modules.verification.application.config.VerificationRuntimeProperties;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ImageCodecSupportPort;
@@ -25,67 +29,78 @@ class ThumbnailatorAnalysisImageAdapterTest {
 
   private final Logger logger =
       (Logger) LoggerFactory.getLogger(ThumbnailatorAnalysisImageAdapter.class);
+  private final List<Path> tempDirs = new ArrayList<>();
   private ListAppender<ILoggingEvent> logAppender;
 
   @AfterEach
-  void tearDown() {
+  void tearDown() throws IOException {
     if (logAppender != null) {
       logger.detachAppender(logAppender);
+    }
+
+    for (Path tempDir : tempDirs) {
+      if (Files.notExists(tempDir)) {
+        continue;
+      }
+      try (Stream<Path> stream = Files.walk(tempDir)) {
+        stream.sorted(Comparator.reverseOrder()).forEach(this::deleteQuietly);
+      }
     }
   }
 
   @Test
-  void preparesStrictWebpInRequestScopedDirectoryAndDeletesItOnClose() throws Exception {
+  void preparesStrictWebpNextToOriginalPath() throws Exception {
     ThumbnailatorAnalysisImageAdapter adapter =
         new ThumbnailatorAnalysisImageAdapter(imagePolicy(5242880L, 25000000L), codecSupport(true));
+    Path originalPath = writeTempImage("original.png", createPngBytes(2048, 1024));
 
     Path analysisPath;
-    Path originalPath;
-    try (var prepared = adapter.prepare(createPngBytes(2048, 1024), "png", 1024, 0.8d)) {
+    try (var prepared = adapter.prepare(originalPath, 1024, 0.8d)) {
       analysisPath = prepared.path();
-      originalPath = analysisPath.getParent().resolve("original.png");
       assertThat(Files.exists(analysisPath)).isTrue();
       assertThat(Files.exists(originalPath)).isTrue();
       assertThat(analysisPath.getFileName().toString()).isEqualTo("analysis.webp");
-      assertThat(analysisPath.getParent().toString()).contains("mztk").contains("verification");
+      assertThat(analysisPath.getParent()).isEqualTo(originalPath.getParent());
       assertThat(new String(Files.readAllBytes(analysisPath), 0, 4, ISO_8859_1)).isEqualTo("RIFF");
       assertThat(new String(Files.readAllBytes(analysisPath), 8, 4, ISO_8859_1)).isEqualTo("WEBP");
       BufferedImage rendered = WebPCodec.decodeImage(Files.readAllBytes(analysisPath));
       assertThat(Math.max(rendered.getWidth(), rendered.getHeight())).isEqualTo(1024);
     }
 
-    assertThat(Files.exists(analysisPath)).isFalse();
-    assertThat(Files.exists(originalPath)).isFalse();
-    assertThat(Files.exists(analysisPath.getParent())).isFalse();
+    assertThat(Files.exists(analysisPath)).isTrue();
+    assertThat(Files.exists(originalPath)).isTrue();
   }
 
   @Test
-  void rejectsUndecodableSourceImage() {
+  void rejectsUndecodableSourceImage() throws Exception {
     ThumbnailatorAnalysisImageAdapter adapter =
         new ThumbnailatorAnalysisImageAdapter(imagePolicy(5242880L, 25000000L), codecSupport(true));
+    Path originalPath = writeTempImage("original.jpg", new byte[] {1, 2, 3});
 
-    assertThatThrownBy(() -> adapter.prepare(new byte[] {1, 2, 3}, "jpg", 1024, 0.8d))
+    assertThatThrownBy(() -> adapter.prepare(originalPath, 1024, 0.8d))
         .isInstanceOf(IOException.class)
         .hasMessageContaining("decode");
   }
 
   @Test
-  void rejectsOversizedPixelCount() {
+  void rejectsOversizedPixelCount() throws Exception {
     ThumbnailatorAnalysisImageAdapter adapter =
         new ThumbnailatorAnalysisImageAdapter(imagePolicy(5242880L, 10L), codecSupport(true));
+    Path originalPath = writeTempImage("original.png", createPngBytes(100, 100));
 
-    assertThatThrownBy(() -> adapter.prepare(createPngBytes(100, 100), "png", 1024, 0.8d))
+    assertThatThrownBy(() -> adapter.prepare(originalPath, 1024, 0.8d))
         .isInstanceOf(IOException.class)
         .hasMessageContaining("pixel");
   }
 
   @Test
-  void rejectsHeifWhenRuntimeDecoderIsUnavailable() {
+  void rejectsHeifWhenRuntimeDecoderIsUnavailable() throws Exception {
     ThumbnailatorAnalysisImageAdapter adapter =
         new ThumbnailatorAnalysisImageAdapter(
             imagePolicy(5242880L, 25000000L), codecSupport(false));
+    Path originalPath = writeTempImage("original.heic", new byte[] {1, 2, 3});
 
-    assertThatThrownBy(() -> adapter.prepare(new byte[] {1, 2, 3}, "heic", 1024, 0.8d))
+    assertThatThrownBy(() -> adapter.prepare(originalPath, 1024, 0.8d))
         .isInstanceOf(IOException.class)
         .hasMessageContaining("HEIF");
   }
@@ -98,14 +113,13 @@ class ThumbnailatorAnalysisImageAdapterTest {
 
     RecordingDeleteAdapter adapter =
         new RecordingDeleteAdapter(imagePolicy(5242880L, 25000000L), codecSupport(true));
+    Path originalPath = writeTempImage("original.jpg", new byte[] {1, 2, 3});
 
-    try (var prepared = adapter.prepare(createPngBytes(64, 64), "png", 1024, 0.8d)) {
-      // close through try-with-resources
-    }
+    assertThatThrownBy(() -> adapter.prepare(originalPath, 1024, 0.8d))
+        .isInstanceOf(IOException.class)
+        .hasMessageContaining("decode");
 
-    assertThat(adapter.deletedNames()).hasSize(3);
-    assertThat(adapter.deletedNames().get(0)).isEqualTo("analysis.webp");
-    assertThat(adapter.deletedNames().get(1)).isEqualTo("original.png");
+    assertThat(adapter.deletedNames()).containsExactly("analysis.webp");
     assertThat(
             logAppender.list.stream()
                 .map(ILoggingEvent::getFormattedMessage)
@@ -116,7 +130,7 @@ class ThumbnailatorAnalysisImageAdapterTest {
   private VerificationImagePolicy imagePolicy(long maxOriginalBytes, long maxPixels) {
     return new VerificationImagePolicy(
         new VerificationRuntimeProperties(
-            new VerificationRuntimeProperties.Ai("gemini-2.5-flash-lite", 12, 2, true),
+            new VerificationRuntimeProperties.Ai("gemini-2.5-flash-lite", 12, 2, false),
             new VerificationRuntimeProperties.Heif(true, "requires-imageio-plugin"),
             new VerificationRuntimeProperties.Image(maxOriginalBytes, maxPixels)));
   }
@@ -142,9 +156,25 @@ class ThumbnailatorAnalysisImageAdapterTest {
     return out.toByteArray();
   }
 
+  private Path writeTempImage(String filename, byte[] bytes) throws IOException {
+    Path tempDir = Files.createTempDirectory("verification-analysis-test-");
+    tempDirs.add(tempDir);
+    Path imagePath = tempDir.resolve(filename);
+    Files.write(imagePath, bytes);
+    return imagePath;
+  }
+
+  private void deleteQuietly(Path path) {
+    try {
+      Files.deleteIfExists(path);
+    } catch (IOException ignored) {
+      // best-effort cleanup for temp test files
+    }
+  }
+
   private static final class RecordingDeleteAdapter extends ThumbnailatorAnalysisImageAdapter {
 
-    private final java.util.List<String> deletedNames = new java.util.ArrayList<>();
+    private final List<String> deletedNames = new ArrayList<>();
 
     private RecordingDeleteAdapter(
         VerificationImagePolicy verificationImagePolicy,
@@ -155,13 +185,10 @@ class ThumbnailatorAnalysisImageAdapterTest {
     @Override
     protected void deletePathIfExists(Path path) throws IOException {
       deletedNames.add(path.getFileName().toString());
-      if ("analysis.webp".equals(path.getFileName().toString())) {
-        throw new IOException("boom");
-      }
-      super.deletePathIfExists(path);
+      throw new IOException("boom");
     }
 
-    private java.util.List<String> deletedNames() {
+    private List<String> deletedNames() {
       return deletedNames;
     }
   }

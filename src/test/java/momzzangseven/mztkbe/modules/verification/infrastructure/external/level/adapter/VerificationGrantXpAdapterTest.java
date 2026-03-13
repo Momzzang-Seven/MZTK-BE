@@ -5,6 +5,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
@@ -27,7 +31,11 @@ class VerificationGrantXpAdapterTest {
 
   @BeforeEach
   void setUp() {
-    adapter = new VerificationGrantXpAdapter(grantXpUseCase);
+    adapter =
+        new VerificationGrantXpAdapter(
+            grantXpUseCase,
+            Clock.fixed(Instant.parse("2026-03-13T00:30:00Z"), ZoneId.of("UTC")),
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Test
@@ -51,6 +59,7 @@ class VerificationGrantXpAdapterTest {
     GrantXpCommand command = captor.getValue();
     assertThat(command.userId()).isEqualTo(1L);
     assertThat(command.xpType()).isEqualTo(XpType.WORKOUT);
+    assertThat(command.occurredAt()).isEqualTo(LocalDateTime.of(2026, 3, 13, 9, 30));
     assertThat(command.idempotencyKey())
         .isEqualTo("workout:photo-verification:verification-photo-1");
     assertThat(command.sourceRef()).isEqualTo("workout-photo-verification:verification-photo-1");

@@ -265,3 +265,7 @@ management:
     health:
       show-details: when_authorized
       roles: ROLE_ADMIN
+
+verification:
+  ai:
+    stub-enabled: true

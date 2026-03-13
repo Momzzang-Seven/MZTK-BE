@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.verification.infrastructure.external.exif.a
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
-import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -20,9 +20,9 @@ public class MetadataExtractorExifAdapter implements ExifMetadataPort {
   private final ZoneId appZoneId;
 
   @Override
-  public Optional<ExifMetadataInfo> extract(byte[] bytes) {
+  public Optional<ExifMetadataInfo> extract(InputStream inputStream) {
     try {
-      Metadata metadata = ImageMetadataReader.readMetadata(new ByteArrayInputStream(bytes));
+      Metadata metadata = ImageMetadataReader.readMetadata(inputStream);
       ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
       if (directory == null) {
         return Optional.empty();

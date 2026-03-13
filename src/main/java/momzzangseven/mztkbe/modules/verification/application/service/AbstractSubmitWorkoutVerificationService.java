@@ -1,10 +1,14 @@
 package momzzangseven.mztkbe.modules.verification.application.service;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.verification.InvalidTmpObjectKeyException;
 import momzzangseven.mztkbe.global.error.verification.InvalidVerificationImageExtensionException;
@@ -15,6 +19,7 @@ import momzzangseven.mztkbe.global.error.verification.VerificationUploadNotFound
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationCommand;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationResult;
 import momzzangseven.mztkbe.modules.verification.application.dto.TodayRewardSnapshot;
@@ -40,6 +45,7 @@ import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @RequiredArgsConstructor
 @Transactional
 public abstract class AbstractSubmitWorkoutVerificationService {
@@ -62,9 +68,7 @@ public abstract class AbstractSubmitWorkoutVerificationService {
         xpLedgerQueryPort.findTodayWorkoutReward(command.userId(), today);
     if (todayReward.rewarded()) {
       throw new VerificationAlreadyCompletedTodayException(
-          verificationTimePolicy.deriveCompletedMethod(todayReward.sourceRef()),
-          todayReward.earnedDate(),
-          todayReward.grantedXp());
+          verificationTimePolicy.deriveCompletedMethod(todayReward.sourceRef()), todayReward.earnedDate());
     }
     validateTmpObjectKey(command.tmpObjectKey());
     String extension = extractExtension(command.tmpObjectKey());
@@ -107,7 +111,12 @@ public abstract class AbstractSubmitWorkoutVerificationService {
           xpLedgerQueryPort.findTodayWorkoutReward(command.userId(), today);
       return handleExisting(command, refreshedTodayReward, existing);
     }
-    return analyzeAndComplete(command, pending, lockedUpload);
+    VerificationRequest analyzing = lockAndTransitionToAnalyzing(pending.getVerificationId());
+    if (analyzing.getStatus() != VerificationStatus.ANALYZING) {
+      return mapResult(
+          analyzing, 0, resolveCompletedMethodSourceRef(command.userId(), todayReward, analyzing));
+    }
+    return analyzeAndComplete(command, analyzing, lockedUpload);
   }
 
   private SubmitWorkoutVerificationResult handleExisting(
@@ -133,114 +142,189 @@ public abstract class AbstractSubmitWorkoutVerificationService {
     validateUploadOwnership(command.userId(), lockedUpload);
     ensureObjectExists(lockedUpload.readObjectKey());
 
-    if (!verificationRequestPort.transitionFailedToAnalyzing(existing.getVerificationId())) {
-      VerificationRequest current =
-          verificationRequestPort
-              .findByVerificationId(existing.getVerificationId())
-              .orElse(existing);
+    VerificationRequest locked =
+        verificationRequestPort
+            .findByVerificationIdForUpdate(existing.getVerificationId())
+            .orElse(existing);
+    if (!isRetryableFailedToday(locked)) {
       TodayRewardSnapshot refreshedTodayReward =
           xpLedgerQueryPort.findTodayWorkoutReward(
               command.userId(), verificationTimePolicy.today());
       return mapResult(
-          current,
+          locked,
           0,
-          resolveCompletedMethodSourceRef(command.userId(), refreshedTodayReward, current));
+          resolveCompletedMethodSourceRef(command.userId(), refreshedTodayReward, locked));
     }
-    VerificationRequest locked =
-        verificationRequestPort
-            .findByVerificationIdForUpdate(existing.getVerificationId())
-            .orElse(existing.toAnalyzing());
-    return analyzeAndComplete(command, locked, lockedUpload);
+    VerificationRequest analyzing = verificationRequestPort.save(locked.toAnalyzing());
+    return analyzeAndComplete(command, analyzing, lockedUpload);
   }
 
   private SubmitWorkoutVerificationResult analyzeAndComplete(
       SubmitWorkoutVerificationCommand command,
-      VerificationRequest target,
+      VerificationRequest analyzing,
       WorkoutUploadReference validatedUpload) {
-    VerificationRequest analyzing = verificationRequestPort.save(target.toAnalyzing());
-
-    byte[] bytes;
+    String extension = extractExtension(command.tmpObjectKey());
+    Path tempDir = null;
+    Path originalPath = null;
+    Path analysisPath = null;
+    Optional<ExifMetadataInfo> exif = Optional.empty();
     try {
-      bytes = objectStoragePort.readBytes(validatedUpload.readObjectKey());
-      verificationImagePolicy.validateOriginalSize(bytes);
-    } catch (RuntimeException ex) {
+      tempDir = createRequestTempDirectory();
+      originalPath = tempDir.resolve("original." + extension);
+
+      if (needsExifValidation()) {
+        exif = extractExif(validatedUpload.readObjectKey(), extension);
+        if (exif.isEmpty()) {
+          VerificationRequest rejected =
+              verificationRequestPort.save(
+                  analyzing.toRejected(
+                      RejectionReasonCode.MISSING_EXIF_METADATA,
+                      "EXIF metadata is required",
+                      null,
+                      null));
+          return mapResult(rejected, 0, null);
+        }
+        if (!verificationTimePolicy.isToday(exif.get().shotAtKst().toLocalDate())) {
+          VerificationRequest rejected =
+              verificationRequestPort.save(
+                  analyzing.toRejected(
+                      RejectionReasonCode.EXIF_DATE_MISMATCH,
+                      "EXIF shot date must be today in KST",
+                      exif.get().shotAtKst().toLocalDate(),
+                      exif.get().shotAtKst()));
+          return mapResult(rejected, 0, null);
+        }
+      }
+
+      downloadOriginalToFile(validatedUpload.readObjectKey(), extension, originalPath);
+
+      try (PreparedAnalysisImage analysisImage =
+          prepareAnalysisImagePort.prepare(
+              originalPath, analysisMaxLongEdge(), analysisWebpQuality())) {
+        analysisPath = analysisImage.path();
+        AiVerificationDecision decision = analyzeWithAi(analysisImage.path());
+        if (!decision.approved()) {
+          if (decision.rejectionReasonCode() == null) {
+            return fail(analyzing, FailureCode.AI_RESPONSE_SCHEMA_INVALID);
+          }
+          VerificationRequest rejected =
+              verificationRequestPort.save(
+                  analyzing.toRejected(
+                      decision.rejectionReasonCode(),
+                      decision.rejectionReasonDetail(),
+                      decision.exerciseDate(),
+                      exif.map(ExifMetadataInfo::shotAtKst).orElse(null)));
+          return mapResult(rejected, 0, null);
+        }
+
+        LocalDate exerciseDate =
+            defaultIfNull(decision.exerciseDate(), verificationTimePolicy.today());
+        VerificationRequest verified =
+            verificationRequestPort.save(
+                analyzing.toVerified(
+                    exerciseDate, exif.map(ExifMetadataInfo::shotAtKst).orElse(null)));
+        String sourceRef = sourceRefPrefix() + verified.getVerificationId();
+        int grantedXp =
+            grantXpPort.grantWorkoutXp(
+                command.userId(),
+                verified.getVerificationKind(),
+                verified.getVerificationId(),
+                sourceRef);
+        String completedMethodSourceRef = sourceRef;
+        if (grantedXp == 0) {
+          TodayRewardSnapshot rewardSnapshot =
+              xpLedgerQueryPort.findTodayWorkoutReward(
+                  command.userId(), verificationTimePolicy.today());
+          completedMethodSourceRef = rewardSnapshot.sourceRef();
+        }
+        return mapResult(verified, grantedXp, completedMethodSourceRef);
+      } catch (IOException ioException) {
+        return fail(analyzing, FailureCode.ANALYSIS_IMAGE_GENERATION_FAILED);
+      } catch (AiTimeoutException ex) {
+        return fail(analyzing, FailureCode.EXTERNAL_AI_TIMEOUT);
+      } catch (AiMalformedResponseException ex) {
+        return fail(analyzing, FailureCode.EXTERNAL_AI_MALFORMED_RESPONSE);
+      } catch (AiResponseSchemaInvalidException ex) {
+        return fail(analyzing, FailureCode.AI_RESPONSE_SCHEMA_INVALID);
+      } catch (AiUnavailableException ex) {
+        return fail(analyzing, FailureCode.EXTERNAL_AI_UNAVAILABLE);
+      } catch (RuntimeException ex) {
+        return fail(analyzing, FailureCode.EXTERNAL_AI_UNAVAILABLE);
+      }
+    } catch (IOException | RuntimeException ex) {
       VerificationRequest failed =
           verificationRequestPort.save(analyzing.toFailed(FailureCode.ORIGINAL_IMAGE_READ_FAILED));
       return mapResult(failed, 0, null);
+    } finally {
+      cleanupWorkspace(analysisPath, originalPath, tempDir);
     }
+  }
 
-    Optional<ExifMetadataInfo> exif =
-        needsExifValidation() ? exifMetadataPort.extract(bytes) : Optional.empty();
-    if (needsExifValidation() && exif.isEmpty()) {
-      VerificationRequest rejected =
-          verificationRequestPort.save(
-              analyzing.toRejected(
-                  RejectionReasonCode.EXIF_MISSING, "EXIF metadata is required", null, null));
-      return mapResult(rejected, 0, null);
+  private Optional<ExifMetadataInfo> extractExif(String objectKey, String extension) throws IOException {
+    try (StorageObjectStream objectStream = openValidatedObjectStream(objectKey, extension)) {
+      return exifMetadataPort.extract(objectStream.stream());
     }
-    if (needsExifValidation()
-        && !verificationTimePolicy.isToday(exif.get().shotAtKst().toLocalDate())) {
-      VerificationRequest rejected =
-          verificationRequestPort.save(
-              analyzing.toRejected(
-                  RejectionReasonCode.EXIF_NOT_TODAY,
-                  "EXIF shot date must be today in KST",
-                  exif.get().shotAtKst().toLocalDate(),
-                  exif.get().shotAtKst()));
-      return mapResult(rejected, 0, null);
+  }
+
+  private void downloadOriginalToFile(String objectKey, String extension, Path originalPath)
+      throws IOException {
+    try (StorageObjectStream objectStream = openValidatedObjectStream(objectKey, extension)) {
+      Files.copy(objectStream.stream(), originalPath, StandardCopyOption.REPLACE_EXISTING);
     }
+  }
 
-    try (PreparedAnalysisImage analysisImage =
-        prepareAnalysisImagePort.prepare(
-            bytes,
-            extractExtension(command.tmpObjectKey()),
-            analysisMaxLongEdge(),
-            analysisWebpQuality())) {
-      AiVerificationDecision decision = analyzeWithAi(analysisImage.path());
-      if (!decision.approved()) {
-        VerificationRequest rejected =
-            verificationRequestPort.save(
-                analyzing.toRejected(
-                    defaultIfNull(decision.rejectionReasonCode(), defaultRejectCode()),
-                    decision.rejectionReasonDetail(),
-                    decision.exerciseDate(),
-                    exif.map(ExifMetadataInfo::shotAtKst).orElse(null)));
-        return mapResult(rejected, 0, null);
-      }
-
-      LocalDate exerciseDate =
-          defaultIfNull(decision.exerciseDate(), verificationTimePolicy.today());
-      VerificationRequest verified =
-          verificationRequestPort.save(
-              analyzing.toVerified(
-                  exerciseDate, exif.map(ExifMetadataInfo::shotAtKst).orElse(null)));
-      String sourceRef = sourceRefPrefix() + verified.getVerificationId();
-      int grantedXp =
-          grantXpPort.grantWorkoutXp(
-              command.userId(),
-              verified.getVerificationKind(),
-              verified.getVerificationId(),
-              sourceRef);
-      String completedMethodSourceRef = sourceRef;
-      if (grantedXp == 0) {
-        TodayRewardSnapshot rewardSnapshot =
-            xpLedgerQueryPort.findTodayWorkoutReward(
-                command.userId(), verificationTimePolicy.today());
-        completedMethodSourceRef = rewardSnapshot.sourceRef();
-      }
-      return mapResult(verified, grantedXp, completedMethodSourceRef);
-    } catch (IOException ioException) {
-      return fail(analyzing, FailureCode.ANALYSIS_IMAGE_GENERATION_FAILED);
-    } catch (AiTimeoutException ex) {
-      return fail(analyzing, FailureCode.EXTERNAL_AI_TIMEOUT);
-    } catch (AiMalformedResponseException ex) {
-      return fail(analyzing, FailureCode.EXTERNAL_AI_MALFORMED_RESPONSE);
-    } catch (AiResponseSchemaInvalidException ex) {
-      return fail(analyzing, FailureCode.AI_RESPONSE_SCHEMA_INVALID);
-    } catch (AiUnavailableException ex) {
-      return fail(analyzing, FailureCode.EXTERNAL_AI_UNAVAILABLE);
+  private StorageObjectStream openValidatedObjectStream(String objectKey, String extension)
+      throws IOException {
+    StorageObjectStream objectStream = objectStoragePort.openStream(objectKey);
+    try {
+      verificationImagePolicy.validateObjectMetadata(
+          objectStream.contentLength(), objectStream.contentType(), extension);
+      return objectStream;
     } catch (RuntimeException ex) {
-      return fail(analyzing, FailureCode.EXTERNAL_AI_UNAVAILABLE);
+      try {
+        objectStream.close();
+      } catch (IOException closeEx) {
+        log.warn("Failed to close verification object stream: {}", objectKey, closeEx);
+      }
+      throw new IOException("Stored object violates image policy", ex);
+    }
+  }
+
+  private VerificationRequest lockAndTransitionToAnalyzing(String verificationId) {
+    VerificationRequest locked =
+        verificationRequestPort
+            .findByVerificationIdForUpdate(verificationId)
+            .orElseThrow(
+                () -> new IllegalStateException("verification row must exist before analysis"));
+    if (locked.getStatus() == VerificationStatus.PENDING
+        || locked.getStatus() == VerificationStatus.FAILED) {
+      return verificationRequestPort.save(locked.toAnalyzing());
+    }
+    return locked;
+  }
+
+  private Path createRequestTempDirectory() throws IOException {
+    Path root = Path.of(System.getProperty("java.io.tmpdir"), "mztk", "verification");
+    Files.createDirectories(root);
+    Path requestDir = root.resolve(UUID.randomUUID().toString());
+    Files.createDirectory(requestDir);
+    return requestDir;
+  }
+
+  private void cleanupWorkspace(Path analysisPath, Path originalPath, Path tempDir) {
+    deleteWithWarning(analysisPath);
+    deleteWithWarning(originalPath);
+    deleteWithWarning(tempDir);
+  }
+
+  private void deleteWithWarning(Path path) {
+    if (path == null) {
+      return;
+    }
+    try {
+      Files.deleteIfExists(path);
+    } catch (IOException ex) {
+      log.warn("Failed to delete verification temp path: {}", path, ex);
     }
   }
 
@@ -334,8 +418,6 @@ public abstract class AbstractSubmitWorkoutVerificationService {
   protected abstract boolean isAllowedExtension(String extension);
 
   protected abstract boolean needsExifValidation();
-
-  protected abstract RejectionReasonCode defaultRejectCode();
 
   protected abstract String sourceRefPrefix();
 

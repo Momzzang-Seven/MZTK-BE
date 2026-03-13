@@ -1,10 +1,12 @@
 package momzzangseven.mztkbe.modules.verification.infrastructure.storage.adapter;
 
+import java.io.IOException;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import software.amazon.awssdk.core.ResponseBytes;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
@@ -31,9 +33,10 @@ public class VerificationObjectStorageAdapter implements ObjectStoragePort {
   }
 
   @Override
-  public byte[] readBytes(String objectKey) {
-    ResponseBytes<GetObjectResponse> bytes =
-        s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(bucket).key(objectKey).build());
-    return bytes.asByteArray();
+  public StorageObjectStream openStream(String objectKey) throws IOException {
+    ResponseInputStream<GetObjectResponse> stream =
+        s3Client.getObject(GetObjectRequest.builder().bucket(bucket).key(objectKey).build());
+    GetObjectResponse response = stream.response();
+    return new StorageObjectStream(stream, response.contentLength(), response.contentType());
   }
 }

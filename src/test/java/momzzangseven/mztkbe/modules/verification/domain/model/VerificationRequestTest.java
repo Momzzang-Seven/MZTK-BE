@@ -49,12 +49,13 @@ class VerificationRequestTest {
         VerificationRequest.newPending(1L, VerificationKind.WORKOUT_PHOTO, "private/workout/a.heic")
             .toAnalyzing()
             .toRejected(
-                RejectionReasonCode.EXIF_NOT_TODAY,
+                RejectionReasonCode.EXIF_DATE_MISMATCH,
                 "EXIF shot date must be today in KST",
                 LocalDate.of(2026, 3, 12),
                 LocalDateTime.of(2026, 3, 12, 23, 59));
 
     assertThat(rejected.getStatus()).isEqualTo(VerificationStatus.REJECTED);
-    assertThat(rejected.getRejectionReasonCode()).isEqualTo(RejectionReasonCode.EXIF_NOT_TODAY);
+    assertThat(rejected.getRejectionReasonCode())
+        .isEqualTo(RejectionReasonCode.EXIF_DATE_MISMATCH);
   }
 }

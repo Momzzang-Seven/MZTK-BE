@@ -10,17 +10,15 @@ class RejectionReasonCodeTest {
   void containsContractCodes() {
     assertThat(RejectionReasonCode.values())
         .contains(
+            RejectionReasonCode.MISSING_EXIF_METADATA,
+            RejectionReasonCode.EXIF_DATE_MISMATCH,
             RejectionReasonCode.SCREEN_OR_UI,
             RejectionReasonCode.NO_PERSON_VISIBLE,
             RejectionReasonCode.EQUIPMENT_ONLY,
             RejectionReasonCode.INSUFFICIENT_WORKOUT_CONTEXT,
             RejectionReasonCode.LOW_CONFIDENCE,
-            RejectionReasonCode.NOT_EXERCISE_PHOTO,
             RejectionReasonCode.NOT_WORKOUT_RECORD,
             RejectionReasonCode.DATE_NOT_VISIBLE,
-            RejectionReasonCode.MISSING_OR_INVALID_DATE,
-            RejectionReasonCode.NOT_TODAY_EXERCISE,
-            RejectionReasonCode.EXIF_MISSING,
-            RejectionReasonCode.EXIF_NOT_TODAY);
+            RejectionReasonCode.DATE_MISMATCH);
   }
 }

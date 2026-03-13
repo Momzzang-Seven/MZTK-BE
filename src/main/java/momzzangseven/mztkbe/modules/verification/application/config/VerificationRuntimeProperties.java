@@ -7,7 +7,7 @@ public record VerificationRuntimeProperties(Ai ai, Heif heif, Image image) {
 
   public VerificationRuntimeProperties {
     if (ai == null) {
-      ai = new Ai("gemini-2.5-flash-lite", 12, 2, true);
+      ai = new Ai("gemini-2.5-flash-lite", 12, 2, false);
     }
     if (heif == null) {
       heif = new Heif(true, "requires-imageio-plugin");
