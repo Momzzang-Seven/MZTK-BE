@@ -122,13 +122,13 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/submit")
                     .authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/workout-photo-verifications")
+                    .requestMatchers(HttpMethod.POST, "/verification/photo")
                     .authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/workout-record-verifications")
+                    .requestMatchers(HttpMethod.POST, "/verification/record")
                     .authenticated()
-                    .requestMatchers(HttpMethod.GET, "/users/me/verifications/{verificationId}")
+                    .requestMatchers(HttpMethod.GET, "/verification/{verificationId}")
                     .authenticated()
-                    .requestMatchers(HttpMethod.GET, "/users/me/workout-completion/today")
+                    .requestMatchers(HttpMethod.GET, "/verification/today-completion")
                     .authenticated()
 
                     // --- Level Policies ---

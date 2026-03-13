@@ -471,7 +471,7 @@ class WorkoutVerificationE2ETest {
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(accessToken);
     return restTemplate.exchange(
-        baseUrl + "/users/me/workout-photo-verifications",
+        baseUrl + "/verification/photo",
         HttpMethod.POST,
         new HttpEntity<>(Map.of("tmpObjectKey", tmpObjectKey), headers),
         String.class);
@@ -483,7 +483,7 @@ class WorkoutVerificationE2ETest {
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(accessToken);
     return restTemplate.exchange(
-        baseUrl + "/users/me/workout-photo-verifications",
+        baseUrl + "/verification/photo",
         HttpMethod.POST,
         new HttpEntity<>(Map.of("tmpObjectKey", tmpObjectKey), headers),
         String.class);
