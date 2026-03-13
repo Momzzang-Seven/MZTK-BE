@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.verification.application.dto;
 
 import java.time.LocalDate;
 import lombok.Builder;
+import momzzangseven.mztkbe.modules.verification.domain.model.VerificationRequest;
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
@@ -15,4 +16,17 @@ public record VerificationDetailResult(
     LocalDate exerciseDate,
     RejectionReasonCode rejectionReasonCode,
     String rejectionReasonDetail,
-    FailureCode failureCode) {}
+    FailureCode failureCode) {
+
+  public static VerificationDetailResult from(VerificationRequest request) {
+    return VerificationDetailResult.builder()
+        .verificationId(request.getVerificationId())
+        .verificationKind(request.getVerificationKind())
+        .verificationStatus(request.getStatus())
+        .exerciseDate(request.getExerciseDate())
+        .rejectionReasonCode(request.getRejectionReasonCode())
+        .rejectionReasonDetail(request.getRejectionReasonDetail())
+        .failureCode(request.getFailureCode())
+        .build();
+  }
+}

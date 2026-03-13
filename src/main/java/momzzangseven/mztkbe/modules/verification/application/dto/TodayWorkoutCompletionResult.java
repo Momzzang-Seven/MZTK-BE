@@ -11,4 +11,19 @@ public record TodayWorkoutCompletionResult(
     boolean rewardGrantedToday,
     int grantedXp,
     LocalDate earnedDate,
-    LatestVerificationItem latestVerification) {}
+    LatestVerificationItem latestVerification) {
+
+  public static TodayWorkoutCompletionResult from(
+      TodayRewardSnapshot reward,
+      CompletedMethod completedMethod,
+      LatestVerificationItem latestVerification) {
+    return TodayWorkoutCompletionResult.builder()
+        .todayCompleted(reward.rewarded())
+        .completedMethod(completedMethod)
+        .rewardGrantedToday(reward.rewarded())
+        .grantedXp(reward.grantedXp())
+        .earnedDate(reward.earnedDate())
+        .latestVerification(latestVerification)
+        .build();
+  }
+}
