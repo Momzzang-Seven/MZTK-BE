@@ -14,7 +14,6 @@ import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerExcept
 import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
 
 @Getter
-@Builder(toBuilder = true)
 public class Answer {
 
   private final Long id;
@@ -26,8 +25,8 @@ public class Answer {
   private final LocalDateTime createdAt;
   private final LocalDateTime updatedAt;
 
-  @Builder
-  public Answer(
+  @Builder(toBuilder = true)
+  private Answer(
       Long id,
       Long postId,
       Long userId,
@@ -54,18 +53,17 @@ public class Answer {
       String content,
       List<String> imageUrls) {
 
-    if (content == null || content.isBlank()) {
-      throw new AnswerInvalidInputException("Answer content must not be blank.");
-    }
+    Objects.requireNonNull(postWriterId, "postWriterId must not be null");
+    Objects.requireNonNull(answererId, "answererId must not be null");
 
     if (isPostSolved) {
       throw new CannotAnswerSolvedPostException();
     }
-
-    Objects.requireNonNull(postWriterId, "postWriterId must not be null");
-    Objects.requireNonNull(answererId, "answererId must not be null");
     if (postWriterId.equals(answererId)) {
       throw new CannotAnswerOwnPostException();
+    }
+    if (content == null || content.isBlank()) {
+      throw new AnswerInvalidInputException("Answer content must not be blank.");
     }
 
     return Answer.builder()

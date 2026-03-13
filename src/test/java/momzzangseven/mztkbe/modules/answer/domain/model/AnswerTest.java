@@ -79,6 +79,12 @@ class AnswerTest {
     }
 
     @Test
+    void create_prioritizesBusinessRuleOverBlankContent_whenPostIsSolved() {
+      assertThatThrownBy(() -> Answer.create(10L, 30L, true, 20L, " ", List.of()))
+          .isInstanceOf(CannotAnswerSolvedPostException.class);
+    }
+
+    @Test
     void create_throws_whenWriterAnswersOwnPost() {
       assertThatThrownBy(() -> Answer.create(10L, 20L, false, 20L, "answer content", List.of()))
           .isInstanceOf(CannotAnswerOwnPostException.class);

@@ -123,6 +123,20 @@ class AnswerControllerIntegrationTest {
     assertThat(updatedAnswer.getImageUrls()).containsExactly("https://example.com/answer-1.png");
 
     mockMvc
+        .perform(
+            put("/questions/" + postId + "/answers/" + answerId)
+                .with(userPrincipal(502L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("imageUrls", List.of("https://example.com/answer-2.png")))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    AnswerEntity imageOnlyUpdatedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
+    assertThat(imageOnlyUpdatedAnswer.getContent()).isEqualTo("updated answer");
+    assertThat(imageOnlyUpdatedAnswer.getImageUrls())
+        .containsExactly("https://example.com/answer-2.png");
+
+    mockMvc
         .perform(delete("/questions/" + postId + "/answers/" + answerId).with(userPrincipal(502L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"));
