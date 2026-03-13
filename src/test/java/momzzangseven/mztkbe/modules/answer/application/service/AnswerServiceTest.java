@@ -9,7 +9,9 @@ import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
@@ -22,6 +24,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
@@ -42,6 +45,7 @@ class AnswerServiceTest {
   @Mock private LoadPostPort loadPostPort;
   @Mock private LoadAnswerPort loadAnswerPort;
   @Mock private DeleteAnswerPort deleteAnswerPort;
+  @Mock private LoadAnswerWriterPort loadAnswerWriterPort;
 
   @InjectMocks private AnswerService answerService;
 
@@ -78,11 +82,17 @@ class AnswerServiceTest {
 
       given(loadPostPort.existsPost(postId)).willReturn(true);
       given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
+      given(loadAnswerWriterPort.loadWritersByIds(List.of(20L, 21L)))
+          .willReturn(
+              Map.of(
+                  20L, new LoadAnswerWriterPort.WriterSummary(20L, "writer-a", "profile-a"),
+                  21L, new LoadAnswerWriterPort.WriterSummary(21L, "writer-b", "profile-b")));
 
       List<AnswerResult> result = answerService.execute(postId);
 
       assertThat(result).hasSize(2);
       assertThat(result.get(0).answerId()).isEqualTo(1L);
+      assertThat(result.get(0).nickname()).isEqualTo("writer-a");
       assertThat(result.get(1).imageUrls()).containsExactly("https://image");
       verify(loadPostPort).existsPost(postId);
     }
@@ -118,9 +128,27 @@ class AnswerServiceTest {
 
     @Test
     void deleteAnswersByPostId_delegatesToPort() {
-      answerService.deleteAnswersByPostId(10L);
+      answerService.deleteByPostId(10L);
 
       verify(deleteAnswerPort).deleteAnswersByPostId(10L);
+    }
+
+    @Test
+    void updateAnswer_allowsImageOnlyUpdate() {
+      UpdateAnswerCommand command =
+          new UpdateAnswerCommand(10L, 100L, 20L, null, List.of("https://new-image"));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false, List.of("https://old"));
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(saveAnswerPort.saveAnswer(any(Answer.class)))
+          .willAnswer(invocation -> invocation.getArgument(0));
+
+      answerService.execute(command);
+
+      ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
+      verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
+      assertThat(answerCaptor.getValue().getContent()).isEqualTo("before");
+      assertThat(answerCaptor.getValue().getImageUrls()).containsExactly("https://new-image");
     }
   }
 
@@ -191,6 +219,12 @@ class AnswerServiceTest {
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
+    }
+
+    @Test
+    void updateAnswer_throws_whenNothingProvided() {
+      assertThatThrownBy(() -> new UpdateAnswerCommand(10L, 100L, 20L, null, null))
+          .isInstanceOf(AnswerInvalidInputException.class);
     }
   }
 
