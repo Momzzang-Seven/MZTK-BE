@@ -49,7 +49,8 @@ class VerificationOriginalImageAdapterTest {
   void rejectsInvalidStoredObjectMetadata() throws Exception {
     when(objectStoragePort.openStream("k"))
         .thenReturn(
-            new StorageObjectStream(new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, "text/plain"));
+            new StorageObjectStream(
+                new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, "text/plain"));
 
     VerificationOriginalImageAdapter adapter =
         new VerificationOriginalImageAdapter(objectStoragePort, imagePolicy(5242880L, 25000000L));

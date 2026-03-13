@@ -222,7 +222,6 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
   }
 
   private VerificationTimePolicy fixedTimePolicy() {
-    return new VerificationTimePolicy(
-        KST, Clock.fixed(Instant.parse("2026-03-12T15:00:00Z"), KST));
+    return new VerificationTimePolicy(KST, Clock.fixed(Instant.parse("2026-03-12T15:00:00Z"), KST));
   }
 }
