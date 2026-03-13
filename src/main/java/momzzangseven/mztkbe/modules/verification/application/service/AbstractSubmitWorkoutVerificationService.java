@@ -61,7 +61,10 @@ public abstract class AbstractSubmitWorkoutVerificationService {
     TodayRewardSnapshot todayReward =
         xpLedgerQueryPort.findTodayWorkoutReward(command.userId(), today);
     if (todayReward.rewarded()) {
-      throw new VerificationAlreadyCompletedTodayException();
+      throw new VerificationAlreadyCompletedTodayException(
+          verificationTimePolicy.deriveCompletedMethod(todayReward.sourceRef()),
+          todayReward.earnedDate(),
+          todayReward.grantedXp());
     }
     validateTmpObjectKey(command.tmpObjectKey());
     String extension = extractExtension(command.tmpObjectKey());
@@ -77,15 +80,14 @@ public abstract class AbstractSubmitWorkoutVerificationService {
         workoutUploadLookupPort
             .findByTmpObjectKeyForUpdate(command.tmpObjectKey())
             .orElseThrow(VerificationUploadNotFoundException::new);
-    if (!command.userId().equals(lockedUpload.ownerUserId())) {
-      throw new VerificationUploadForbiddenException();
-    }
+    validateUploadOwnership(command.userId(), lockedUpload);
 
     Optional<VerificationRequest> lockedExistingOpt =
         verificationRequestPort.findByTmpObjectKeyForUpdate(command.tmpObjectKey());
     if (lockedExistingOpt.isPresent()) {
       return handleExisting(command, todayReward, lockedExistingOpt.get());
     }
+    ensureObjectExists(lockedUpload.readObjectKey());
 
     VerificationRequest pending;
     try {
@@ -124,6 +126,13 @@ public abstract class AbstractSubmitWorkoutVerificationService {
 
   private SubmitWorkoutVerificationResult retryFailed(
       SubmitWorkoutVerificationCommand command, VerificationRequest existing) {
+    WorkoutUploadReference lockedUpload =
+        workoutUploadLookupPort
+            .findByTmpObjectKeyForUpdate(command.tmpObjectKey())
+            .orElseThrow(VerificationUploadNotFoundException::new);
+    validateUploadOwnership(command.userId(), lockedUpload);
+    ensureObjectExists(lockedUpload.readObjectKey());
+
     if (!verificationRequestPort.transitionFailedToAnalyzing(existing.getVerificationId())) {
       VerificationRequest current =
           verificationRequestPort
@@ -141,33 +150,18 @@ public abstract class AbstractSubmitWorkoutVerificationService {
         verificationRequestPort
             .findByVerificationIdForUpdate(existing.getVerificationId())
             .orElse(existing.toAnalyzing());
-    return analyzeAndComplete(command, locked, null);
+    return analyzeAndComplete(command, locked, lockedUpload);
   }
 
   private SubmitWorkoutVerificationResult analyzeAndComplete(
       SubmitWorkoutVerificationCommand command,
       VerificationRequest target,
-      WorkoutUploadReference preloadedUpload) {
+      WorkoutUploadReference validatedUpload) {
     VerificationRequest analyzing = verificationRequestPort.save(target.toAnalyzing());
-
-    WorkoutUploadReference upload = preloadedUpload;
-    if (upload == null) {
-      upload =
-          workoutUploadLookupPort
-              .findByTmpObjectKey(command.tmpObjectKey())
-              .orElseThrow(VerificationUploadNotFoundException::new);
-    }
-
-    if (!command.userId().equals(upload.ownerUserId())) {
-      throw new VerificationUploadForbiddenException();
-    }
-    if (!objectStoragePort.exists(upload.readObjectKey())) {
-      throw new VerificationUploadNotFoundException();
-    }
 
     byte[] bytes;
     try {
-      bytes = objectStoragePort.readBytes(upload.readObjectKey());
+      bytes = objectStoragePort.readBytes(validatedUpload.readObjectKey());
       verificationImagePolicy.validateOriginalSize(bytes);
     } catch (RuntimeException ex) {
       VerificationRequest failed =
@@ -290,7 +284,8 @@ public abstract class AbstractSubmitWorkoutVerificationService {
 
   protected boolean isRetryableFailedToday(VerificationRequest existing) {
     return existing.getStatus() == VerificationStatus.FAILED
-        && verificationTimePolicy.isToday(existing.getUpdatedAt());
+        && existing.getCreatedAt() != null
+        && verificationTimePolicy.isToday(existing.getCreatedAt());
   }
 
   private void validateTmpObjectKey(String tmpObjectKey) {
@@ -317,6 +312,18 @@ public abstract class AbstractSubmitWorkoutVerificationService {
     }
     if (!isAllowedExtension(extension)) {
       throw new InvalidVerificationImageExtensionException();
+    }
+  }
+
+  private void validateUploadOwnership(Long userId, WorkoutUploadReference upload) {
+    if (!userId.equals(upload.ownerUserId())) {
+      throw new VerificationUploadForbiddenException();
+    }
+  }
+
+  private void ensureObjectExists(String readObjectKey) {
+    if (!objectStoragePort.exists(readObjectKey)) {
+      throw new VerificationUploadNotFoundException();
     }
   }
 
