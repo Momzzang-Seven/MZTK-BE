@@ -199,6 +199,35 @@ class SubmitWorkoutPhotoVerificationServiceTest {
   }
 
   @Test
+  @DisplayName("원본 object가 없으면 verification row를 만들지 않고 FAIL 예외를 반환한다")
+  void failsBeforeCreatingVerificationRowWhenObjectDoesNotExist() {
+    SubmitWorkoutVerificationCommand command =
+        new SubmitWorkoutVerificationCommand(
+            1L, "private/workout/missing-object.jpg", VerificationKind.WORKOUT_PHOTO);
+
+    when(xpLedgerQueryPort.findTodayWorkoutReward(1L, LocalDate.of(2026, 3, 13)))
+        .thenReturn(TodayRewardSnapshot.none(LocalDate.of(2026, 3, 13)));
+    when(verificationRequestPort.findByTmpObjectKey(command.tmpObjectKey()))
+        .thenReturn(Optional.empty());
+    when(workoutUploadLookupPort.findByTmpObjectKeyForUpdate(command.tmpObjectKey()))
+        .thenReturn(
+            Optional.of(
+                new WorkoutUploadReference(1L, command.tmpObjectKey(), command.tmpObjectKey())));
+    when(verificationRequestPort.findByTmpObjectKeyForUpdate(command.tmpObjectKey()))
+        .thenReturn(Optional.empty());
+    when(objectStoragePort.exists(command.tmpObjectKey())).thenReturn(false);
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(
+            momzzangseven.mztkbe.global.error.verification.VerificationUploadNotFoundException
+                .class);
+
+    verify(verificationRequestPort, never()).save(any());
+    verifyNoInteractions(
+        exifMetadataPort, prepareAnalysisImagePort, workoutImageAiPort, grantXpPort);
+  }
+
+  @Test
   @DisplayName("인증 성공 후 prepared analysis image는 정리된다")
   void closesPreparedImageOnSuccess() throws Exception {
     SubmitWorkoutVerificationCommand command =
@@ -560,6 +589,7 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             .verificationKind(VerificationKind.WORKOUT_PHOTO)
             .status(VerificationStatus.FAILED)
             .tmpObjectKey("private/workout/retry.jpg")
+            .createdAt(Instant.parse("2026-03-13T00:30:00Z"))
             .updatedAt(Instant.parse("2026-03-13T01:00:00Z"))
             .build();
     VerificationRequest verifiedAfterLock =
@@ -572,6 +602,12 @@ class SubmitWorkoutPhotoVerificationServiceTest {
                 true, 100, LocalDate.of(2026, 3, 13), "workout-photo-verification:retry-id"));
     when(verificationRequestPort.findByTmpObjectKey("private/workout/retry.jpg"))
         .thenReturn(Optional.of(failed));
+    when(workoutUploadLookupPort.findByTmpObjectKeyForUpdate("private/workout/retry.jpg"))
+        .thenReturn(
+            Optional.of(
+                new WorkoutUploadReference(
+                    1L, "private/workout/retry.jpg", "private/workout/retry.jpg")));
+    when(objectStoragePort.exists("private/workout/retry.jpg")).thenReturn(true);
     when(verificationRequestPort.transitionFailedToAnalyzing("retry-id")).thenReturn(false);
     when(verificationRequestPort.findByVerificationId("retry-id"))
         .thenReturn(Optional.of(verifiedAfterLock));
@@ -583,6 +619,38 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     verifyNoInteractions(prepareAnalysisImagePort);
     verify(workoutImageAiPort, never()).analyzeWorkoutPhoto(any());
     verify(grantXpPort, never()).grantWorkoutXp(any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("FAILED 재시도 기준은 updatedAt이 아니라 createdAt의 오늘 여부다")
+  void doesNotRetryFailedRowCreatedBeforeTodayEvenIfUpdatedToday() {
+    SubmitWorkoutVerificationCommand command =
+        new SubmitWorkoutVerificationCommand(
+            1L, "private/workout/old-failed.jpg", VerificationKind.WORKOUT_PHOTO);
+    VerificationRequest oldFailed =
+        VerificationRequest.builder()
+            .id(8L)
+            .verificationId("old-failed-id")
+            .userId(1L)
+            .verificationKind(VerificationKind.WORKOUT_PHOTO)
+            .status(VerificationStatus.FAILED)
+            .tmpObjectKey("private/workout/old-failed.jpg")
+            .createdAt(Instant.parse("2026-03-11T23:30:00Z"))
+            .updatedAt(Instant.parse("2026-03-13T01:00:00Z"))
+            .failureCode(FailureCode.EXTERNAL_AI_UNAVAILABLE)
+            .build();
+
+    when(xpLedgerQueryPort.findTodayWorkoutReward(1L, LocalDate.of(2026, 3, 13)))
+        .thenReturn(TodayRewardSnapshot.none(LocalDate.of(2026, 3, 13)));
+    when(verificationRequestPort.findByTmpObjectKey("private/workout/old-failed.jpg"))
+        .thenReturn(Optional.of(oldFailed));
+
+    SubmitWorkoutVerificationResult result = service.execute(command);
+
+    assertThat(result.verificationId()).isEqualTo("old-failed-id");
+    assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.FAILED);
+    verify(verificationRequestPort, never()).transitionFailedToAnalyzing(any());
+    verifyNoInteractions(workoutUploadLookupPort, prepareAnalysisImagePort, workoutImageAiPort);
   }
 
   @Test
