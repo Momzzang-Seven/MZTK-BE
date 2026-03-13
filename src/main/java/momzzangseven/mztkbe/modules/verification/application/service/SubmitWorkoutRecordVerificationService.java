@@ -14,7 +14,6 @@ import momzzangseven.mztkbe.modules.verification.application.port.out.Verificati
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutUploadLookupPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.XpLedgerQueryPort;
-import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,11 +65,6 @@ public class SubmitWorkoutRecordVerificationService extends AbstractSubmitWorkou
   @Override
   protected boolean needsExifValidation() {
     return false;
-  }
-
-  @Override
-  protected RejectionReasonCode defaultRejectCode() {
-    return RejectionReasonCode.NOT_WORKOUT_RECORD;
   }
 
   @Override

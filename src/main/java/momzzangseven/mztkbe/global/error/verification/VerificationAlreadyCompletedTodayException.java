@@ -10,9 +10,9 @@ public class VerificationAlreadyCompletedTodayException extends BusinessExceptio
   private final ErrorData data;
 
   public VerificationAlreadyCompletedTodayException(
-      CompletedMethod completedMethod, LocalDate earnedDate, int grantedXp) {
+      CompletedMethod completedMethod, LocalDate earnedDate) {
     super(ErrorCode.VERIFICATION_ALREADY_COMPLETED_TODAY);
-    this.data = new ErrorData(completedMethod, earnedDate, grantedXp);
+    this.data = new ErrorData(completedMethod, earnedDate, 0);
   }
 
   public ErrorData getData() {

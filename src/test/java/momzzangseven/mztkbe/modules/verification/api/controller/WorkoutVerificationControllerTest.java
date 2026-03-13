@@ -226,7 +226,7 @@ class WorkoutVerificationControllerTest {
                     1L, "private/workout/photo.jpg", VerificationKind.WORKOUT_PHOTO)))
         .willThrow(
             new VerificationAlreadyCompletedTodayException(
-                CompletedMethod.LOCATION, LocalDate.of(2026, 3, 13), 0));
+                CompletedMethod.LOCATION, LocalDate.of(2026, 3, 13)));
 
     mockMvc
         .perform(

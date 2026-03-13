@@ -8,6 +8,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
@@ -18,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import momzzangseven.mztkbe.modules.verification.application.config.VerificationRuntimeProperties;
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationCommand;
 import momzzangseven.mztkbe.modules.verification.application.dto.TodayRewardSnapshot;
 import momzzangseven.mztkbe.modules.verification.application.dto.WorkoutUploadReference;
@@ -108,9 +111,11 @@ class SubmitWorkoutRecordVerificationServiceTest {
     when(verificationRequestPort.save(any()))
         .thenReturn(
             pending, pending.toAnalyzing(), pending.toVerified(LocalDate.of(2026, 3, 13), null));
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists("private/workout/a.png")).thenReturn(true);
-    when(objectStoragePort.readBytes("private/workout/a.png")).thenReturn(new byte[] {1, 2, 3});
-    when(prepareAnalysisImagePort.prepare(any(), eq("png"), eq(1536), eq(0.85d)))
+    stubOpenStream("private/workout/a.png", "image/png");
+    when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1536), eq(0.85d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
     when(workoutImageAiPort.analyzeWorkoutRecord(any()))
         .thenReturn(
@@ -150,10 +155,12 @@ class SubmitWorkoutRecordVerificationServiceTest {
             pending,
             pending.toAnalyzing(),
             pending.toRejected(RejectionReasonCode.DATE_NOT_VISIBLE, null, null, null));
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending));
     when(objectStoragePort.exists("private/workout/a.png")).thenReturn(true);
-    when(objectStoragePort.readBytes("private/workout/a.png")).thenReturn(new byte[] {1, 2, 3});
+    stubOpenStream("private/workout/a.png", "image/png");
     AtomicBoolean closed = new AtomicBoolean();
-    when(prepareAnalysisImagePort.prepare(any(), eq("png"), eq(1536), eq(0.85d)))
+    when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1536), eq(0.85d)))
         .thenReturn(new PreparedAnalysisImage(Path.of("analysis.webp"), () -> closed.set(true)));
     when(workoutImageAiPort.analyzeWorkoutRecord(any()))
         .thenReturn(
@@ -168,5 +175,13 @@ class SubmitWorkoutRecordVerificationServiceTest {
     assertThat(result.rejectionReasonCode()).isEqualTo(RejectionReasonCode.DATE_NOT_VISIBLE);
     assertThat(closed.get()).isTrue();
     verify(exifMetadataPort, never()).extract(any());
+  }
+
+  private void stubOpenStream(String objectKey, String contentType) throws IOException {
+    when(objectStoragePort.openStream(objectKey))
+        .thenAnswer(
+            invocation ->
+                new StorageObjectStream(
+                    new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, contentType));
   }
 }

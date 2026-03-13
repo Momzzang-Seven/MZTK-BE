@@ -286,7 +286,7 @@ verification:
     model: gemini-2.5-flash-lite
     timeout-seconds: 12
     retry-count: 2
-    stub-enabled: true
+    stub-enabled: false
   heif:
     enabled: true
     decoder-policy: requires-imageio-plugin

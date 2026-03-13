@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -24,6 +26,7 @@ import momzzangseven.mztkbe.modules.level.infrastructure.repository.XpPolicyJpaR
 import momzzangseven.mztkbe.modules.verification.application.dto.AiVerificationDecision;
 import momzzangseven.mztkbe.modules.verification.application.dto.ExifMetadataInfo;
 import momzzangseven.mztkbe.modules.verification.application.dto.PreparedAnalysisImage;
+import momzzangseven.mztkbe.modules.verification.application.dto.StorageObjectStream;
 import momzzangseven.mztkbe.modules.verification.application.exception.AiUnavailableException;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ExifMetadataPort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.ObjectStoragePort;
@@ -102,14 +105,12 @@ class WorkoutVerificationControllerIntegrationTest {
     ensureWorkoutXpPolicy(today);
 
     org.mockito.Mockito.when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
-    org.mockito.Mockito.when(objectStoragePort.readBytes(tmpObjectKey))
-        .thenReturn(new byte[] {1, 2, 3});
+    stubOpenStream(tmpObjectKey, "image/jpeg");
     org.mockito.Mockito.when(exifMetadataPort.extract(org.mockito.ArgumentMatchers.any()))
         .thenReturn(Optional.of(new ExifMetadataInfo(LocalDateTime.now(KST))));
     org.mockito.Mockito.when(
             prepareAnalysisImagePort.prepare(
                 org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.eq("jpg"),
                 org.mockito.ArgumentMatchers.eq(1024),
                 org.mockito.ArgumentMatchers.eq(0.80d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("photo-analysis.webp")));
@@ -169,12 +170,10 @@ class WorkoutVerificationControllerIntegrationTest {
     ensureWorkoutXpPolicy(today);
 
     org.mockito.Mockito.when(objectStoragePort.exists(tmpObjectKey)).thenReturn(true);
-    org.mockito.Mockito.when(objectStoragePort.readBytes(tmpObjectKey))
-        .thenReturn(new byte[] {1, 2, 3});
+    stubOpenStream(tmpObjectKey, "image/png");
     org.mockito.Mockito.when(
             prepareAnalysisImagePort.prepare(
                 org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.eq("png"),
                 org.mockito.ArgumentMatchers.eq(1536),
                 org.mockito.ArgumentMatchers.eq(0.85d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("record-analysis.webp")));
@@ -343,5 +342,13 @@ class WorkoutVerificationControllerIntegrationTest {
             .effectiveFrom(today.atStartOfDay().minusDays(1))
             .enabled(true)
             .build());
+  }
+
+  private void stubOpenStream(String objectKey, String contentType) throws IOException {
+    org.mockito.Mockito.when(objectStoragePort.openStream(objectKey))
+        .thenAnswer(
+            invocation ->
+                new StorageObjectStream(
+                    new ByteArrayInputStream(new byte[] {1, 2, 3}), 3L, contentType));
   }
 }
