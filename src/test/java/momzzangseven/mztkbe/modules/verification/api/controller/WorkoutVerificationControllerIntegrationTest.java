@@ -258,8 +258,7 @@ class WorkoutVerificationControllerIntegrationTest {
                 .build());
 
     mockMvc
-        .perform(
-            get("/verification/" + saved.getVerificationId()).with(userPrincipal(501L)))
+        .perform(get("/verification/" + saved.getVerificationId()).with(userPrincipal(501L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.verificationId").value(saved.getVerificationId()))
@@ -268,8 +267,7 @@ class WorkoutVerificationControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName(
-      "GET /verification/today-completion은 xp source_ref와 latest verification을 함께 반영한다")
+  @DisplayName("GET /verification/today-completion은 xp source_ref와 latest verification을 함께 반영한다")
   void getTodayCompletion_realFlow_derivesCompletedMethodAndLatestVerification() throws Exception {
     LocalDate today = LocalDate.now(KST);
     verificationRequestJpaRepository.save(
