@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.image.UnexpectedException;
+import momzzangseven.mztkbe.global.error.image.DataProcessingMismatchException;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlResult;
 import momzzangseven.mztkbe.modules.image.application.dto.PresignedUrlItem;
@@ -104,7 +104,7 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
   private List<Image> buildPendingImages(
       Long userId, List<ImageSpec> specs, List<PresignedUrlItem> items) {
     if (specs.size() != items.size()) {
-      throw new UnexpectedException(
+      throw new DataProcessingMismatchException(
           "Specs and Items do not match. This could not be happened in any case.");
     }
 
