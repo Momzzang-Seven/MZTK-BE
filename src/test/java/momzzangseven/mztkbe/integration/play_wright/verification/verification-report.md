@@ -6,11 +6,11 @@
 
 - 공통 선차단/계약 오류
 - 기존 verification row 재사용
-- `GET /users/me/verifications/{verificationId}`
-- `GET /users/me/workout-completion/today`
+- `GET /verification/{verificationId}`
+- `GET /verification/today-completion`
 - 실제 presigned URL 발급 + S3 PUT 업로드 이후 verification submit
 - 실제 자산 기반 AI 승인/거절 시나리오
-- `workout-photo-verifications`, `workout-record-verifications` submit 응답 시간 측정
+- `verification/photo`, `verification/record` submit 응답 시간 측정
 
 테스트 파일:
 - `src/test/java/momzzangseven/mztkbe/integration/play_wright/verification/verification.spec.ts`
@@ -29,8 +29,8 @@
 | `TC-V-A-06` | 기존 verification kind mismatch | `409` / `VERIFICATION_005` |
 | `TC-V-A-07` | 오늘 WORKOUT XP 선차단 | `409` / `VERIFICATION_006` |
 | `TC-V-A-08` | detail not found | `404` / `VERIFICATION_007` |
-| `TC-V-A-P-*` | photo 허용 포맷 `jpg/jpeg/heif/heic` | `jpg/jpeg` 는 최소 `upload lookup` 단계까지 진입, `heif/heic` 는 런타임 decoder 유무에 따라 `404` 또는 `400 VERIFICATION_002` |
-| `TC-V-A-R-*` | record 허용 포맷 `jpg/jpeg/png/heif/heic` | `jpg/jpeg/png` 는 최소 `upload lookup` 단계까지 진입, `heif/heic` 는 런타임 decoder 유무에 따라 `404` 또는 `400 VERIFICATION_002` |
+| `TC-V-A-P-*` | photo 허용 포맷 `jpg/jpeg/heif/heic` 최종 응답 바디 검증 | 기존 `REJECTED` row 재사용으로 포맷별 최종 응답 계약 확인 |
+| `TC-V-A-R-*` | record 허용 포맷 `jpg/jpeg/png/heif/heic` 최종 응답 바디 검증 | 기존 `REJECTED` row 재사용으로 포맷별 최종 응답 계약 확인 |
 
 ### Suite B — Existing Row Reuse and Read Models
 
