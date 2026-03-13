@@ -4,12 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.image.InvalidImageExtensionException;
+import momzzangseven.mztkbe.global.error.image.UnexpectedException;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlResult;
 import momzzangseven.mztkbe.modules.image.application.dto.PresignedUrlItem;
 import momzzangseven.mztkbe.modules.image.application.port.in.IssuePresignedUrlUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.out.GeneratePresignedUrlPort;
+import momzzangseven.mztkbe.modules.image.application.port.out.PresignedUrlWithKey;
 import momzzangseven.mztkbe.modules.image.application.port.out.SaveImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.AllowedImageExtension;
@@ -45,11 +46,11 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
   private final SaveImagePort saveImagePort;
 
   /**
-   * Internal value object that pairs a resolved reference type and tmp object key with its source
-   * filename. Used to decouple key-building from URL generation and DB persistence.
+   * ImageSpec is a value object that ties up a resolved reference type, uuid, extension, and
+   * original filename.
    */
   private record ImageSpec(
-      ImageReferenceType referenceType, String tmpObjectKey, String originalFilename) {}
+      ImageReferenceType referenceType, String uuid, String extension, String originalFilename) {}
 
   @Override
   @Transactional
@@ -63,7 +64,7 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
     List<PresignedUrlItem> items = buildPresignedUrlItems(specs);
 
     // Phase 2: Persist PENDING image records to DB.
-    List<Image> images = buildPendingImages(command.userId(), specs);
+    List<Image> images = buildPendingImages(command.userId(), specs, items);
     saveImagePort.saveAll(images);
 
     return IssuePresignedUrlResult.of(items);
@@ -82,10 +83,13 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
   private List<PresignedUrlItem> buildPresignedUrlItems(List<ImageSpec> specs) {
     List<PresignedUrlItem> items = new ArrayList<>();
     for (ImageSpec spec : specs) {
-      String presignedUrl =
+      PresignedUrlWithKey presignedUrlWithKey =
           generatePresignedUrlPort.generatePutPresignedUrl(
-              spec.tmpObjectKey(), resolveContentType(spec.originalFilename()));
-      items.add(new PresignedUrlItem(presignedUrl, spec.tmpObjectKey()));
+              spec.referenceType(), spec.uuid(), spec.extension());
+
+      items.add(
+          new PresignedUrlItem(
+              presignedUrlWithKey.presignedUrl(), presignedUrlWithKey.tmpObjectKey()));
     }
     return items;
   }
@@ -97,12 +101,21 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
    * @param specs list of resolved image specs
    * @return list of unsaved {@link Image} domain objects
    */
-  private List<Image> buildPendingImages(Long userId, List<ImageSpec> specs) {
+  private List<Image> buildPendingImages(
+      Long userId, List<ImageSpec> specs, List<PresignedUrlItem> items) {
+    if (specs.size() != items.size()) {
+      throw new UnexpectedException(
+          "Specs and Items do not match. This could not be happened in any case.");
+    }
+
     List<Image> images = new ArrayList<>();
     int imgOrder = 0;
-    for (ImageSpec spec : specs) {
+    for (int i = 0; i < specs.size(); i++) {
+      ImageSpec spec = specs.get(i);
+      PresignedUrlItem item = items.get(i);
+
       images.add(
-          Image.createPending(userId, spec.referenceType(), spec.tmpObjectKey(), ++imgOrder));
+          Image.createPending(userId, spec.referenceType(), item.tmpObjectKey(), ++imgOrder));
     }
     return images;
   }
@@ -129,10 +142,11 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
    */
   private List<ImageSpec> buildStandardSpecs(ImageReferenceType refType, List<String> filenames) {
     List<ImageSpec> specs = new ArrayList<>();
+
     for (String filename : filenames) {
       String uuid = UUID.randomUUID().toString();
       String ext = AllowedImageExtension.extractExtension(filename);
-      specs.add(new ImageSpec(refType, refType.buildTmpObjectKey(uuid, ext), filename));
+      specs.add(new ImageSpec(refType, uuid, ext, filename));
     }
     return specs;
   }
@@ -156,47 +170,18 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
 
     specs.add(
         new ImageSpec(
-            ImageReferenceType.MARKET_THUMB,
-            ImageReferenceType.MARKET_THUMB.buildTmpObjectKey(
-                UUID.randomUUID().toString(), firstExt),
-            firstFile));
+            ImageReferenceType.MARKET_THUMB, UUID.randomUUID().toString(), firstExt, firstFile));
     specs.add(
         new ImageSpec(
-            ImageReferenceType.MARKET_DETAIL,
-            ImageReferenceType.MARKET_DETAIL.buildTmpObjectKey(
-                UUID.randomUUID().toString(), firstExt),
-            firstFile));
+            ImageReferenceType.MARKET_DETAIL, UUID.randomUUID().toString(), firstExt, firstFile));
 
     for (int i = 1; i < filenames.size(); i++) {
       String file = filenames.get(i);
       String ext = AllowedImageExtension.extractExtension(file);
       specs.add(
-          new ImageSpec(
-              ImageReferenceType.MARKET_DETAIL,
-              ImageReferenceType.MARKET_DETAIL.buildTmpObjectKey(UUID.randomUUID().toString(), ext),
-              file));
+          new ImageSpec(ImageReferenceType.MARKET_DETAIL, UUID.randomUUID().toString(), ext, file));
     }
 
     return specs;
-  }
-
-  /**
-   * Resolves the MIME content type from a filename extension.
-   *
-   * @param filename original filename
-   * @return MIME type string
-   */
-  private String resolveContentType(String filename) {
-    String ext = AllowedImageExtension.extractExtension(filename);
-    if (!AllowedImageExtension.isAllowed(filename)) {
-      throw new InvalidImageExtensionException("Unsupported image extension: " + filename + ".");
-    }
-    return switch (ext) {
-      case "png" -> "image/png";
-      case "gif" -> "image/gif";
-      case "heif" -> "image/heif";
-      case "heic" -> "image/heic";
-      default -> "image/jpeg";
-    };
   }
 }
