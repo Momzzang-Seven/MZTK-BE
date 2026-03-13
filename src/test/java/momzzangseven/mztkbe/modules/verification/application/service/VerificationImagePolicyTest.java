@@ -110,6 +110,7 @@ class VerificationImagePolicyTest {
                 new VerificationRuntimeProperties.Image(5242880L, 25000000L)));
 
     policy.validateObjectMetadata(100L, null, "jpg");
+    policy.validateObjectMetadata(100L, "   ", "jpg");
     policy.validateObjectMetadata(100L, "application/octet-stream", "jpg");
   }
 
