@@ -33,7 +33,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
             properties,
             new VerificationPromptProvider(),
             unavailableClient(),
-            new ObjectMapper(),
+            parser(),
             fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutPhoto(Path.of("analysis.webp"));
@@ -57,7 +57,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 """
                 {"workoutPhoto":false,"rejectionReasonCode":"NO_PERSON_VISIBLE","confidenceScore":0.12}
                 """),
-            new ObjectMapper(),
+            parser(),
             fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutPhoto(Path.of("analysis.webp"));
@@ -81,7 +81,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 """
                 {"workoutRecord":true,"rejectionReasonCode":null,"dateVisible":true,"exerciseDate":"2026-03-12","confidenceScore":0.98}
                 """),
-            new ObjectMapper(),
+            parser(),
             fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutRecord(Path.of("analysis.webp"));
@@ -105,7 +105,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 """
                 {"workoutRecord":false,"rejectionReasonCode":"DATE_NOT_VISIBLE","dateVisible":false,"exerciseDate":null,"confidenceScore":0.21}
                 """),
-            new ObjectMapper(),
+            parser(),
             fixedTimePolicy());
 
     var result = adapter.analyzeWorkoutRecord(Path.of("analysis.webp"));
@@ -126,7 +126,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
             properties,
             new VerificationPromptProvider(),
             fixedPhotoResponse("not-json"),
-            new ObjectMapper(),
+            parser(),
             fixedTimePolicy());
 
     assertThatThrownBy(() -> adapter.analyzeWorkoutPhoto(Path.of("analysis.webp")))
@@ -148,7 +148,7 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
                 """
                 {"workoutRecord":true,"rejectionReasonCode":null,"exerciseDate":"2026-03-13","confidenceScore":0.98}
                 """),
-            new ObjectMapper(),
+            parser(),
             fixedTimePolicy());
 
     assertThatThrownBy(() -> adapter.analyzeWorkoutRecord(Path.of("analysis.webp")))
@@ -223,5 +223,9 @@ class SpringAiGeminiWorkoutImageAiAdapterTest {
 
   private VerificationTimePolicy fixedTimePolicy() {
     return new VerificationTimePolicy(KST, Clock.fixed(Instant.parse("2026-03-12T15:00:00Z"), KST));
+  }
+
+  private VerificationAiResponseParser parser() {
+    return new VerificationAiResponseParser(new ObjectMapper());
   }
 }

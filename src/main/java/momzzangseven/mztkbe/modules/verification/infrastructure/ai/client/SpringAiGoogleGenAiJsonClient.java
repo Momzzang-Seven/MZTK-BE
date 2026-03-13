@@ -57,23 +57,9 @@ public class SpringAiGoogleGenAiJsonClient implements VerificationAiJsonClient {
       String userPrompt,
       String responseSchemaJson) {
     Future<ChatResponse> future =
-        executor.submit(
-            () ->
-                chatModel.call(
-                    buildPrompt(
-                        analysisImagePath, systemInstruction, userPrompt, responseSchemaJson)));
+        submitChatCall(analysisImagePath, systemInstruction, userPrompt, responseSchemaJson);
     try {
-      ChatResponse response = future.get(runtimeProperties.ai().timeoutSeconds(), TimeUnit.SECONDS);
-      String text =
-          response == null
-                  || response.getResult() == null
-                  || response.getResult().getOutput() == null
-              ? null
-              : response.getResult().getOutput().getText();
-      if (text == null || text.isBlank()) {
-        throw new AiMalformedResponseException("Gemini returned empty text response");
-      }
-      return text;
+      return extractText(awaitResponse(future));
     } catch (TimeoutException ex) {
       future.cancel(true);
       throw new AiTimeoutException("Gemini call timed out", ex);
@@ -87,28 +73,51 @@ public class SpringAiGoogleGenAiJsonClient implements VerificationAiJsonClient {
     }
   }
 
+  private Future<ChatResponse> submitChatCall(
+      Path analysisImagePath,
+      String systemInstruction,
+      String userPrompt,
+      String responseSchemaJson) {
+    return executor.submit(
+        () ->
+            chatModel.call(
+                buildPrompt(analysisImagePath, systemInstruction, userPrompt, responseSchemaJson)));
+  }
+
+  private ChatResponse awaitResponse(Future<ChatResponse> future)
+      throws InterruptedException, ExecutionException, TimeoutException {
+    return future.get(runtimeProperties.ai().timeoutSeconds(), TimeUnit.SECONDS);
+  }
+
   private Prompt buildPrompt(
       Path analysisImagePath,
       String systemInstruction,
       String userPrompt,
       String responseSchemaJson) {
-    UserMessage userMessage =
-        UserMessage.builder()
-            .text(userPrompt)
-            .media(
-                Media.builder()
-                    .mimeType(resolveMimeType(analysisImagePath))
-                    .data(new FileSystemResource(analysisImagePath))
-                    .build())
-            .build();
-    GoogleGenAiChatOptions options =
-        GoogleGenAiChatOptions.builder()
-            .model(runtimeProperties.ai().model())
-            .temperature(0D)
-            .responseMimeType(JSON_MIME_TYPE)
-            .responseSchema(responseSchemaJson)
-            .build();
-    return new Prompt(List.of(new SystemMessage(systemInstruction), userMessage), options);
+    return new Prompt(
+        List.of(
+            new SystemMessage(systemInstruction), buildUserMessage(analysisImagePath, userPrompt)),
+        buildChatOptions(responseSchemaJson));
+  }
+
+  private UserMessage buildUserMessage(Path analysisImagePath, String userPrompt) {
+    return UserMessage.builder()
+        .text(userPrompt)
+        .media(
+            Media.builder()
+                .mimeType(resolveMimeType(analysisImagePath))
+                .data(new FileSystemResource(analysisImagePath))
+                .build())
+        .build();
+  }
+
+  private GoogleGenAiChatOptions buildChatOptions(String responseSchemaJson) {
+    return GoogleGenAiChatOptions.builder()
+        .model(runtimeProperties.ai().model())
+        .temperature(0D)
+        .responseMimeType(JSON_MIME_TYPE)
+        .responseSchema(responseSchemaJson)
+        .build();
   }
 
   private MimeType resolveMimeType(Path analysisImagePath) {
@@ -137,6 +146,17 @@ public class SpringAiGoogleGenAiJsonClient implements VerificationAiJsonClient {
       return MimeTypeUtils.IMAGE_PNG_VALUE;
     }
     return MimeTypeUtils.IMAGE_JPEG_VALUE;
+  }
+
+  private String extractText(ChatResponse response) {
+    String text =
+        response == null || response.getResult() == null || response.getResult().getOutput() == null
+            ? null
+            : response.getResult().getOutput().getText();
+    if (text == null || text.isBlank()) {
+      throw new AiMalformedResponseException("Gemini returned empty text response");
+    }
+    return text;
   }
 
   private RuntimeException mapFailure(Throwable cause) {
