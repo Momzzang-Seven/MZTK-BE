@@ -5,7 +5,6 @@ import momzzangseven.mztkbe.global.error.verification.VerificationNotFoundExcept
 import momzzangseven.mztkbe.modules.verification.application.dto.VerificationDetailResult;
 import momzzangseven.mztkbe.modules.verification.application.port.in.GetVerificationDetailUseCase;
 import momzzangseven.mztkbe.modules.verification.application.port.out.VerificationRequestPort;
-import momzzangseven.mztkbe.modules.verification.domain.model.VerificationRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,18 +17,9 @@ public class VerificationQueryService implements GetVerificationDetailUseCase {
 
   @Override
   public VerificationDetailResult execute(Long userId, String verificationId) {
-    VerificationRequest request =
-        verificationRequestPort
-            .findByVerificationIdAndUserId(verificationId, userId)
-            .orElseThrow(VerificationNotFoundException::new);
-    return VerificationDetailResult.builder()
-        .verificationId(request.getVerificationId())
-        .verificationKind(request.getVerificationKind())
-        .verificationStatus(request.getStatus())
-        .exerciseDate(request.getExerciseDate())
-        .rejectionReasonCode(request.getRejectionReasonCode())
-        .rejectionReasonDetail(request.getRejectionReasonDetail())
-        .failureCode(request.getFailureCode())
-        .build();
+    return verificationRequestPort
+        .findByVerificationIdAndUserId(verificationId, userId)
+        .map(VerificationDetailResult::from)
+        .orElseThrow(VerificationNotFoundException::new);
   }
 }

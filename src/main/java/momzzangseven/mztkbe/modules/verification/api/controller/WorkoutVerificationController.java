@@ -4,8 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.verification.api.dto.SubmitWorkoutPhotoVerificationRequestDTO;
-import momzzangseven.mztkbe.modules.verification.api.dto.SubmitWorkoutRecordVerificationRequestDTO;
+import momzzangseven.mztkbe.modules.verification.api.dto.SubmitWorkoutVerificationRequestDTO;
 import momzzangseven.mztkbe.modules.verification.api.dto.SubmitWorkoutVerificationResponseDTO;
 import momzzangseven.mztkbe.modules.verification.api.dto.TodayWorkoutCompletionResponseDTO;
 import momzzangseven.mztkbe.modules.verification.api.dto.VerificationDetailResponseDTO;
@@ -38,28 +37,23 @@ public class WorkoutVerificationController {
   @PostMapping("/users/me/workout-photo-verifications")
   public ResponseEntity<ApiResponse<SubmitWorkoutVerificationResponseDTO>> submitWorkoutPhoto(
       @AuthenticationPrincipal Long userId,
-      @Valid @RequestBody SubmitWorkoutPhotoVerificationRequestDTO request) {
-    userId = requireUserId(userId);
-    SubmitWorkoutVerificationCommand command =
-        new SubmitWorkoutVerificationCommand(
-            userId, request.tmpObjectKey(), VerificationKind.WORKOUT_PHOTO);
-    SubmitWorkoutVerificationResult result = submitWorkoutPhotoVerificationUseCase.execute(command);
-    return ResponseEntity.ok(
-        ApiResponse.success(SubmitWorkoutVerificationResponseDTO.from(result)));
+      @Valid @RequestBody SubmitWorkoutVerificationRequestDTO request) {
+    return submitVerification(
+        userId,
+        request,
+        VerificationKind.WORKOUT_PHOTO,
+        submitWorkoutPhotoVerificationUseCase::execute);
   }
 
   @PostMapping("/users/me/workout-record-verifications")
   public ResponseEntity<ApiResponse<SubmitWorkoutVerificationResponseDTO>> submitWorkoutRecord(
       @AuthenticationPrincipal Long userId,
-      @Valid @RequestBody SubmitWorkoutRecordVerificationRequestDTO request) {
-    userId = requireUserId(userId);
-    SubmitWorkoutVerificationCommand command =
-        new SubmitWorkoutVerificationCommand(
-            userId, request.tmpObjectKey(), VerificationKind.WORKOUT_RECORD);
-    SubmitWorkoutVerificationResult result =
-        submitWorkoutRecordVerificationUseCase.execute(command);
-    return ResponseEntity.ok(
-        ApiResponse.success(SubmitWorkoutVerificationResponseDTO.from(result)));
+      @Valid @RequestBody SubmitWorkoutVerificationRequestDTO request) {
+    return submitVerification(
+        userId,
+        request,
+        VerificationKind.WORKOUT_RECORD,
+        submitWorkoutRecordVerificationUseCase::execute);
   }
 
   @GetMapping("/users/me/verifications/{verificationId}")
@@ -83,5 +77,23 @@ public class WorkoutVerificationController {
       throw new UserNotAuthenticatedException();
     }
     return userId;
+  }
+
+  private ResponseEntity<ApiResponse<SubmitWorkoutVerificationResponseDTO>> submitVerification(
+      Long userId,
+      SubmitWorkoutVerificationRequestDTO request,
+      VerificationKind kind,
+      SubmitWorkoutVerificationExecutor executor) {
+    SubmitWorkoutVerificationResult result =
+        executor.execute(
+            new SubmitWorkoutVerificationCommand(
+                requireUserId(userId), request.tmpObjectKey(), kind));
+    return ResponseEntity.ok(
+        ApiResponse.success(SubmitWorkoutVerificationResponseDTO.from(result)));
+  }
+
+  @FunctionalInterface
+  private interface SubmitWorkoutVerificationExecutor {
+    SubmitWorkoutVerificationResult execute(SubmitWorkoutVerificationCommand command);
   }
 }
