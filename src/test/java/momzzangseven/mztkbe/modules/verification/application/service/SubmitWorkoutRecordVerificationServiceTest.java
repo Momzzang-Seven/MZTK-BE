@@ -147,8 +147,7 @@ class SubmitWorkoutRecordVerificationServiceTest {
     VerificationRequest verified = analyzing.toVerified(LocalDate.of(2026, 3, 13), null);
     VerificationRequest rewarded =
         verified.rewardSucceeded("workout-record-verification:" + pending.getVerificationId());
-    when(verificationRequestPort.save(any()))
-        .thenReturn(pending, analyzing, verified, rewarded);
+    when(verificationRequestPort.save(any())).thenReturn(pending, analyzing, verified, rewarded);
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
         .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified));
     when(objectStoragePort.exists("private/workout/a.png")).thenReturn(true);
