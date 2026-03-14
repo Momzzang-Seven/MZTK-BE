@@ -11,6 +11,7 @@ import lombok.Getter;
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 
 @Getter
@@ -26,6 +27,8 @@ public class VerificationRequest {
   private final LocalDate exerciseDate;
   private final LocalDateTime shotAtKst;
   private final String tmpObjectKey;
+  @Builder.Default private final VerificationRewardStatus rewardStatus = VerificationRewardStatus.NOT_REQUESTED;
+  private final String rewardSourceRef;
   private final RejectionReasonCode rejectionReasonCode;
   private final String rejectionReasonDetail;
   private final FailureCode failureCode;
@@ -40,6 +43,7 @@ public class VerificationRequest {
         .verificationKind(kind)
         .status(VerificationStatus.PENDING)
         .tmpObjectKey(tmpObjectKey)
+        .rewardStatus(VerificationRewardStatus.NOT_REQUESTED)
         .build();
   }
 
@@ -55,6 +59,8 @@ public class VerificationRequest {
         .status(VerificationStatus.VERIFIED)
         .exerciseDate(exerciseDate)
         .shotAtKst(shotAtKst)
+        .rewardStatus(VerificationRewardStatus.PENDING)
+        .rewardSourceRef(null)
         .rejectionReasonCode(null)
         .rejectionReasonDetail(null)
         .failureCode(null)
@@ -70,6 +76,8 @@ public class VerificationRequest {
         .status(VerificationStatus.REJECTED)
         .exerciseDate(exerciseDate)
         .shotAtKst(shotAtKst)
+        .rewardStatus(VerificationRewardStatus.NOT_REQUESTED)
+        .rewardSourceRef(null)
         .rejectionReasonCode(rejectionReasonCode)
         .rejectionReasonDetail(rejectionReasonDetail)
         .failureCode(null)
@@ -91,7 +99,32 @@ public class VerificationRequest {
   }
 
   public VerificationRequest fail(FailureCode failureCode) {
-    return toBuilder().status(VerificationStatus.FAILED).failureCode(failureCode).build();
+    return toBuilder()
+        .status(VerificationStatus.FAILED)
+        .rewardStatus(VerificationRewardStatus.NOT_REQUESTED)
+        .rewardSourceRef(null)
+        .failureCode(failureCode)
+        .build();
+  }
+
+  public VerificationRequest rewardSucceeded(String rewardSourceRef) {
+    return toBuilder()
+        .rewardStatus(VerificationRewardStatus.SUCCEEDED)
+        .rewardSourceRef(rewardSourceRef)
+        .build();
+  }
+
+  public VerificationRequest rewardFailed() {
+    return toBuilder()
+        .rewardStatus(VerificationRewardStatus.FAILED)
+        .rewardSourceRef(null)
+        .build();
+  }
+
+  public boolean isRewardRetryable() {
+    return status == VerificationStatus.VERIFIED
+        && (rewardStatus == VerificationRewardStatus.PENDING
+            || rewardStatus == VerificationRewardStatus.FAILED);
   }
 
   public VerificationRequest toAnalyzing() {

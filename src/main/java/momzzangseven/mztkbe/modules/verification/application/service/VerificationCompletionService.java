@@ -4,21 +4,19 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.verification.application.dto.SubmitWorkoutVerificationResult;
 import momzzangseven.mztkbe.modules.verification.application.dto.TodayRewardSnapshot;
 import momzzangseven.mztkbe.modules.verification.application.dto.VerificationEvaluationResult;
-import momzzangseven.mztkbe.modules.verification.application.port.out.GrantXpPort;
-import momzzangseven.mztkbe.modules.verification.application.port.out.VerificationRequestPort;
+import momzzangseven.mztkbe.modules.verification.application.dto.VerificationRewardProcessingResult;
 import momzzangseven.mztkbe.modules.verification.application.port.out.XpLedgerQueryPort;
 import momzzangseven.mztkbe.modules.verification.domain.model.VerificationRequest;
-import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class VerificationCompletionService {
 
-  private final VerificationRequestPort verificationRequestPort;
-  private final GrantXpPort grantXpPort;
+  private final VerificationStateTransitionService verificationStateTransitionService;
+  private final VerificationRewardService verificationRewardService;
   private final XpLedgerQueryPort xpLedgerQueryPort;
   private final VerificationTimePolicy verificationTimePolicy;
   private final VerificationSubmissionResultFactory verificationSubmissionResultFactory;
@@ -29,74 +27,55 @@ public class VerificationCompletionService {
         request, 0, resolveCompletedMethodSourceRef(userId, todayReward, request));
   }
 
-  @Transactional
   public SubmitWorkoutVerificationResult complete(
       Long userId,
       TodayRewardSnapshot todayReward,
       String verificationId,
       VerificationEvaluationResult evaluation,
       VerificationSubmissionPolicy policy) {
-    VerificationRequest locked =
-        verificationRequestPort
-            .findByVerificationIdForUpdate(verificationId)
-            .orElseThrow(
-                () -> new IllegalStateException("verification row must exist before completion"));
+    VerificationRequest completed =
+        verificationStateTransitionService.applyEvaluation(verificationId, evaluation);
 
-    if (locked.getStatus() == VerificationStatus.VERIFIED
-        || locked.getStatus() == VerificationStatus.REJECTED) {
-      return existingResult(userId, todayReward, locked);
+    if (completed.getStatus() != VerificationStatus.VERIFIED) {
+      return verificationSubmissionResultFactory.from(completed, 0, null);
     }
 
-    if (evaluation.failed()) {
-      VerificationRequest failed =
-          verificationRequestPort.save(locked.fail(evaluation.failureCode()));
-      return verificationSubmissionResultFactory.from(failed, 0, null);
+    if (completed.getRewardStatus() == VerificationRewardStatus.SUCCEEDED) {
+      return existingResult(userId, todayReward, completed);
     }
 
-    if (evaluation.rejected()) {
-      VerificationRequest rejected =
-          verificationRequestPort.save(applyRejection(locked, evaluation));
-      return verificationSubmissionResultFactory.from(rejected, 0, null);
-    }
-
-    VerificationRequest verified =
-        verificationRequestPort.save(
-            locked.verify(evaluation.exerciseDate(), evaluation.shotAtKst()));
-    String sourceRef = policy.sourceRefPrefix() + verified.getVerificationId();
-    int grantedXp =
-        grantXpPort.grantWorkoutXp(
-            userId, verified.getVerificationKind(), verified.getVerificationId(), sourceRef);
-    String completedMethodSourceRef =
-        grantedXp == 0
-            ? xpLedgerQueryPort
-                .findTodayWorkoutReward(userId, verificationTimePolicy.today())
-                .sourceRef()
-            : sourceRef;
-    return verificationSubmissionResultFactory.from(verified, grantedXp, completedMethodSourceRef);
+    VerificationRewardProcessingResult rewardResult =
+        verificationRewardService.process(userId, verificationId, policy);
+    return verificationSubmissionResultFactory.from(
+        rewardResult.request(), rewardResult.grantedXp(), rewardResult.completedMethodSourceRef());
   }
 
-  private VerificationRequest applyRejection(
-      VerificationRequest request, VerificationEvaluationResult evaluation) {
-    if (evaluation.rejectionReasonCode() == RejectionReasonCode.MISSING_EXIF_METADATA) {
-      return request.rejectForMissingExif();
-    }
-    if (evaluation.rejectionReasonCode() == RejectionReasonCode.EXIF_DATE_MISMATCH) {
-      return request.rejectForExifDateMismatch(evaluation.exerciseDate(), evaluation.shotAtKst());
-    }
-    return request.reject(
-        evaluation.rejectionReasonCode(),
-        evaluation.rejectionReasonDetail(),
-        evaluation.exerciseDate(),
-        evaluation.shotAtKst());
+  public SubmitWorkoutVerificationResult retryReward(
+      Long userId,
+      TodayRewardSnapshot todayReward,
+      String verificationId,
+      VerificationSubmissionPolicy policy) {
+    VerificationRewardProcessingResult rewardResult =
+        verificationRewardService.process(userId, verificationId, policy);
+    String completedMethodSourceRef =
+        rewardResult.completedMethodSourceRef() != null
+            ? rewardResult.completedMethodSourceRef()
+            : resolveCompletedMethodSourceRef(userId, todayReward, rewardResult.request());
+    return verificationSubmissionResultFactory.from(
+        rewardResult.request(), rewardResult.grantedXp(), completedMethodSourceRef);
   }
 
   private String resolveCompletedMethodSourceRef(
       Long userId, TodayRewardSnapshot todayReward, VerificationRequest request) {
-    if (request.getStatus() != VerificationStatus.VERIFIED) {
+    if (request.getStatus() != VerificationStatus.VERIFIED
+        || request.getRewardStatus() != VerificationRewardStatus.SUCCEEDED) {
       return null;
     }
     if (todayReward.rewarded()) {
       return todayReward.sourceRef();
+    }
+    if (request.getRewardSourceRef() != null && !request.getRewardSourceRef().isBlank()) {
+      return request.getRewardSourceRef();
     }
     return xpLedgerQueryPort
         .findTodayWorkoutReward(userId, verificationTimePolicy.today())

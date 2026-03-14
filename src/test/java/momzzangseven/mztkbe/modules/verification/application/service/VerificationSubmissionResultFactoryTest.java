@@ -9,6 +9,7 @@ import java.time.ZoneId;
 import momzzangseven.mztkbe.modules.verification.domain.model.VerificationRequest;
 import momzzangseven.mztkbe.modules.verification.domain.vo.CompletionStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,7 @@ class VerificationSubmissionResultFactoryTest {
             .userId(1L)
             .verificationKind(VerificationKind.WORKOUT_PHOTO)
             .status(VerificationStatus.VERIFIED)
+            .rewardStatus(VerificationRewardStatus.SUCCEEDED)
             .exerciseDate(LocalDate.of(2026, 3, 13))
             .tmpObjectKey("private/workout/a.jpg")
             .build();
@@ -61,6 +63,7 @@ class VerificationSubmissionResultFactoryTest {
             .userId(1L)
             .verificationKind(VerificationKind.WORKOUT_RECORD)
             .status(VerificationStatus.VERIFIED)
+            .rewardStatus(VerificationRewardStatus.SUCCEEDED)
             .exerciseDate(LocalDate.of(2026, 3, 13))
             .tmpObjectKey("private/workout/a.png")
             .build();

@@ -99,9 +99,16 @@ class SubmitWorkoutRecordVerificationServiceTest {
             workoutImageAiPort,
             validator,
             timePolicy);
+    VerificationStateTransitionService stateTransitionService =
+        new VerificationStateTransitionService(verificationRequestPort);
+    VerificationRewardTransactionalService rewardTransactionalService =
+        new VerificationRewardTransactionalService(
+            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy);
+    VerificationRewardService rewardService =
+        new VerificationRewardService(rewardTransactionalService);
     VerificationCompletionService completionService =
         new VerificationCompletionService(
-            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy, resultFactory);
+            stateTransitionService, rewardService, xpLedgerQueryPort, timePolicy, resultFactory);
     VerificationSubmissionOrchestrator orchestrator =
         new VerificationSubmissionOrchestrator(
             verificationRequestPort,
@@ -136,11 +143,14 @@ class SubmitWorkoutRecordVerificationServiceTest {
     VerificationRequest pending =
         VerificationRequest.newPending(
             1L, VerificationKind.WORKOUT_RECORD, "private/workout/a.png");
+    VerificationRequest analyzing = pending.toAnalyzing();
+    VerificationRequest verified = analyzing.toVerified(LocalDate.of(2026, 3, 13), null);
+    VerificationRequest rewarded =
+        verified.rewardSucceeded("workout-record-verification:" + pending.getVerificationId());
     when(verificationRequestPort.save(any()))
-        .thenReturn(
-            pending, pending.toAnalyzing(), pending.toVerified(LocalDate.of(2026, 3, 13), null));
+        .thenReturn(pending, analyzing, verified, rewarded);
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
-        .thenReturn(Optional.of(pending));
+        .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified));
     when(objectStoragePort.exists("private/workout/a.png")).thenReturn(true);
     when(prepareAnalysisImagePort.prepare(any(Path.class), eq(1536), eq(0.85d)))
         .thenReturn(PreparedAnalysisImage.noop(Path.of("analysis.webp")));
@@ -150,6 +160,12 @@ class SubmitWorkoutRecordVerificationServiceTest {
                 .approved(true)
                 .exerciseDate(LocalDate.of(2026, 3, 13))
                 .build());
+    when(grantXpPort.grantWorkoutXp(
+            1L,
+            VerificationKind.WORKOUT_RECORD,
+            pending.getVerificationId(),
+            "workout-record-verification:" + pending.getVerificationId()))
+        .thenReturn(100);
 
     var result = service.execute(command);
 
