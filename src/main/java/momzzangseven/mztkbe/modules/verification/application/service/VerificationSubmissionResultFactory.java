@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.verification.domain.model.VerificationReques
 import momzzangseven.mztkbe.modules.verification.domain.vo.CompletedMethod;
 import momzzangseven.mztkbe.modules.verification.domain.vo.CompletionStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 import org.springframework.stereotype.Component;
 
@@ -22,9 +23,11 @@ public class VerificationSubmissionResultFactory {
         .verificationId(request.getVerificationId())
         .verificationKind(request.getVerificationKind())
         .verificationStatus(request.getStatus())
+        .rewardStatus(request.getRewardStatus())
         .exerciseDate(exposedExerciseDate(request))
         .completionStatus(
             request.getStatus() == VerificationStatus.VERIFIED
+                    && request.getRewardStatus() == VerificationRewardStatus.SUCCEEDED
                 ? CompletionStatus.COMPLETED
                 : CompletionStatus.NOT_COMPLETED)
         .grantedXp(grantedXp)

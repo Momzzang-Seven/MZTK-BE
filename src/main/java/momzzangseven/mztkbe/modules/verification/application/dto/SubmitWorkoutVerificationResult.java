@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.verification.domain.vo.CompletionStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 
 @Builder
@@ -14,6 +15,7 @@ public record SubmitWorkoutVerificationResult(
     String verificationId,
     VerificationKind verificationKind,
     VerificationStatus verificationStatus,
+    VerificationRewardStatus rewardStatus,
     LocalDate exerciseDate,
     CompletionStatus completionStatus,
     int grantedXp,

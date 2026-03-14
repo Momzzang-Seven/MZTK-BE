@@ -71,6 +71,10 @@ public class VerificationSubmissionOrchestrator {
     if (existing.getVerificationKind() != command.kind()) {
       throw new VerificationKindMismatchException();
     }
+    if (existing.isRewardRetryable()) {
+      return verificationCompletionService.retryReward(
+          command.userId(), todayReward, existing.getVerificationId(), policy);
+    }
     if (!verificationSubmissionAccessService.isRetryableFailedToday(existing)) {
       return verificationCompletionService.existingResult(command.userId(), todayReward, existing);
     }

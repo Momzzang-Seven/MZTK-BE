@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.verification.domain.vo.CompletionStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -17,6 +18,7 @@ public record SubmitWorkoutVerificationResponseDTO(
     String verificationId,
     VerificationKind verificationKind,
     VerificationStatus verificationStatus,
+    VerificationRewardStatus rewardStatus,
     LocalDate exerciseDate,
     CompletionStatus completionStatus,
     int grantedXp,
@@ -30,6 +32,7 @@ public record SubmitWorkoutVerificationResponseDTO(
         .verificationId(result.verificationId())
         .verificationKind(result.verificationKind())
         .verificationStatus(result.verificationStatus())
+        .rewardStatus(result.rewardStatus())
         .exerciseDate(
             result.verificationKind() == VerificationKind.WORKOUT_RECORD
                 ? result.exerciseDate()

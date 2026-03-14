@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.verification.domain.vo.CompletedMethod;
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 
 @Builder
@@ -24,6 +25,7 @@ public record TodayWorkoutCompletionResponseDTO(
       String verificationId,
       VerificationKind verificationKind,
       VerificationStatus verificationStatus,
+      VerificationRewardStatus rewardStatus,
       RejectionReasonCode rejectionReasonCode,
       FailureCode failureCode) {
 
@@ -35,6 +37,7 @@ public record TodayWorkoutCompletionResponseDTO(
           .verificationId(item.verificationId())
           .verificationKind(item.verificationKind())
           .verificationStatus(item.verificationStatus())
+          .rewardStatus(item.rewardStatus())
           .rejectionReasonCode(item.rejectionReasonCode())
           .failureCode(item.failureCode())
           .build();
