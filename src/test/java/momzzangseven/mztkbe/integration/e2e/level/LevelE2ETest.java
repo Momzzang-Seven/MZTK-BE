@@ -4,11 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -27,6 +33,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
@@ -62,6 +69,7 @@ class LevelE2ETest {
 
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private ObjectMapper objectMapper;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockBean private KakaoAuthPort kakaoAuthPort;
   @MockBean private GoogleAuthPort googleAuthPort;
@@ -69,6 +77,7 @@ class LevelE2ETest {
 
   private String baseUrl;
   private String accessToken;
+  private String currentUserEmail;
 
   // ============================================================
   // Helper Methods
@@ -113,9 +122,30 @@ class LevelE2ETest {
   @BeforeEach
   void setUp() throws Exception {
     baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "레벨E2E유저");
-    accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    currentUserEmail = uniqueEmail();
+    signup(currentUserEmail, "Test@1234!", "레벨E2E유저");
+    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
+  }
+
+  @AfterEach
+  void tearDown() {
+    String byEmail = "(SELECT id FROM users WHERE email = ?)";
+
+    // 1. 출석 로그 삭제 (FK: attendance_logs.user_id → users.id)
+    jdbcTemplate.update("DELETE FROM attendance_logs WHERE user_id = " + byEmail, currentUserEmail);
+
+    // 2. XP 원장 삭제 (FK: xp_ledger.user_id → users.id)
+    jdbcTemplate.update("DELETE FROM xp_ledger WHERE user_id = " + byEmail, currentUserEmail);
+
+    // 3. 레벨업 이력 삭제 (FK: level_up_histories.user_id → users.id)
+    jdbcTemplate.update(
+        "DELETE FROM level_up_histories WHERE user_id = " + byEmail, currentUserEmail);
+
+    // 4. 유저 진행 상태 삭제 (FK: user_progress.user_id → users.id)
+    jdbcTemplate.update("DELETE FROM user_progress WHERE user_id = " + byEmail, currentUserEmail);
+
+    // 5. 현재 테스트 유저 삭제
+    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
   }
 
   // ============================================================
@@ -154,8 +184,8 @@ class LevelE2ETest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode root = objectMapper.readTree(response.getBody());
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
-    assertThat(root.at("/data/policies").isArray()).isTrue();
-    assertThat(root.at("/data/policies").size()).isPositive();
+    assertThat(root.at("/data/levelPolicies").isArray()).isTrue();
+    assertThat(root.at("/data/xpPolicies").size()).isEqualTo(5);
   }
 
   @Test
@@ -299,15 +329,20 @@ class LevelE2ETest {
             new HttpEntity<>(authHeaders()),
             String.class);
 
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+    LocalDate fromDate = today.minusDays(6);
+
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode root = objectMapper.readTree(response.getBody());
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
     assertThat(root.at("/data").isMissingNode()).isFalse();
+    assertThat(root.at("/data/range").get("from").asText()).isEqualTo(fromDate.toString());
+    assertThat(root.at("/data/range").get("to").asText()).isEqualTo(today.toString());
   }
 
   @Test
   @Order(11)
-  @DisplayName("같은 날 중복 체크인 → 4xx 에러 반환")
+  @DisplayName("같은 날 중복 체크인 → OK, body/data/success에 false 저장.")
   void checkIn_sameDay_returnsError() throws Exception {
     restTemplate.exchange(
         baseUrl + "/users/me/attendance",
@@ -322,8 +357,11 @@ class LevelE2ETest {
             new HttpEntity<>(authHeaders()),
             String.class);
 
-    assertThat(secondResponse.getStatusCode().is4xxClientError())
-        .as("같은 날 중복 체크인 시 4xx 에러여야 함")
-        .isTrue();
+    assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(secondResponse.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data").isMissingNode()).isFalse();
+    assertThat(root.at("/data/success").asBoolean()).isFalse();
+    assertThat(root.at("/data/message").asText()).isEqualTo("ALREADY_CHECKED_IN");
   }
 }
