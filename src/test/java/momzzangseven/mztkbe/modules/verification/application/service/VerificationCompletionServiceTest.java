@@ -163,7 +163,8 @@ class VerificationCompletionServiceTest {
         VerificationRequest.newPending(1L, VerificationKind.WORKOUT_PHOTO, "private/workout/a.jpg")
             .toAnalyzing();
     VerificationRequest verified = locked.toVerified(LocalDate.of(2026, 3, 13), null);
-    VerificationRequest rewarded = verified.rewardSucceeded("workout-record-verification:ledger-created");
+    VerificationRequest rewarded =
+        verified.rewardSucceeded("workout-record-verification:ledger-created");
     when(verificationRequestPort.findByVerificationIdForUpdate(locked.getVerificationId()))
         .thenReturn(Optional.of(locked), Optional.of(verified));
     when(verificationRequestPort.save(any())).thenReturn(verified, rewarded);

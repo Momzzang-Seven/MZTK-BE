@@ -18,7 +18,8 @@ public class VerificationRewardService {
       return verificationRewardTransactionalService.processRewardAttempt(
           userId, verificationId, policy);
     } catch (RuntimeException ex) {
-      log.warn("Verification reward failed: verificationId={}, userId={}", verificationId, userId, ex);
+      log.warn(
+          "Verification reward failed: verificationId={}, userId={}", verificationId, userId, ex);
       return verificationRewardTransactionalService.markRewardFailed(verificationId);
     }
   }

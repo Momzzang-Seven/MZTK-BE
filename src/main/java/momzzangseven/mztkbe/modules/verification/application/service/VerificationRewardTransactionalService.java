@@ -61,8 +61,9 @@ public class VerificationRewardTransactionalService {
         verificationRequestPort
             .findByVerificationIdForUpdate(verificationId)
             .orElseThrow(
-                () -> new IllegalStateException(
-                    "verification row must exist before reward failure handling"));
+                () ->
+                    new IllegalStateException(
+                        "verification row must exist before reward failure handling"));
 
     if (!locked.isRewardRetryable()) {
       return new VerificationRewardProcessingResult(locked, 0, locked.getRewardSourceRef());
