@@ -36,4 +36,4 @@ jobs:
         run: ./gradlew checkstyleMain --no-daemon
 
       - name: Run tests
-        run: ./gradlew test --no-daemon
+        run: ./gradlew test e2eTest --no-daemon

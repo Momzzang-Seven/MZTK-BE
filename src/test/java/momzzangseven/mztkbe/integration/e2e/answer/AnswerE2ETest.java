@@ -48,6 +48,7 @@ class AnswerE2ETest {
 
   private final List<Long> createdPostIds = new ArrayList<>();
   private final List<Long> createdAnswerIds = new ArrayList<>();
+  private final List<String> createdUserEmails = new ArrayList<>();
 
   private String baseUrl() {
     return "http://localhost:" + port;
@@ -88,6 +89,20 @@ class AnswerE2ETest {
       }
     }
     createdPostIds.clear();
+
+    for (String email : createdUserEmails) {
+      try {
+        jdbcTemplate.update(
+            "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+            email);
+      } catch (Exception ignored) {
+      }
+      try {
+        jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
+      } catch (Exception ignored) {
+      }
+    }
+    createdUserEmails.clear();
   }
 
   @Nested
@@ -373,6 +388,7 @@ class AnswerE2ETest {
 
   private TestUser signupAndLogin(String nicknamePrefix) throws Exception {
     String email = uniqueEmail();
+    createdUserEmails.add(email);
     String nickname = nicknamePrefix + "-" + UUID.randomUUID().toString().substring(0, 6);
     String password = "Test@1234!";
 
