@@ -29,6 +29,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
@@ -63,6 +64,7 @@ class ImagePresignedUrlE2ETest {
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private ObjectMapper objectMapper;
   @Autowired private ImageJpaRepository imageJpaRepository;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockBean private KakaoAuthPort kakaoAuthPort;
   @MockBean private GoogleAuthPort googleAuthPort;
@@ -70,6 +72,7 @@ class ImagePresignedUrlE2ETest {
 
   private String baseUrl;
   private String accessToken;
+  private String currentUserEmail;
 
   /** 테스트 중 생성된 tmpObjectKey 추적 — @AfterEach 에서 DB 정리에 사용. */
   private final List<String> createdKeys = new ArrayList<>();
@@ -138,16 +141,24 @@ class ImagePresignedUrlE2ETest {
   @BeforeEach
   void setUp() throws Exception {
     baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "이미지E2E유저");
-    accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    currentUserEmail = uniqueEmail();
+    signup(currentUserEmail, "Test@1234!", "이미지E2E유저");
+    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
   }
 
   @AfterEach
   void cleanup() {
+    // 1. 테스트 중 생성된 images 행 삭제
     createdKeys.forEach(
         key -> imageJpaRepository.findByTmpObjectKey(key).ifPresent(imageJpaRepository::delete));
     createdKeys.clear();
+
+    // 2. 유저 진행 상태 삭제 (FK: user_progress.user_id → users.id)
+    jdbcTemplate.update(
+        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+        currentUserEmail);
+    // 3. 현재 테스트 유저 삭제
+    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
   }
 
   // ============================================================
