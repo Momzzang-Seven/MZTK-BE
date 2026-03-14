@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.location.application.dto.AddressInfo;
 import momzzangseven.mztkbe.modules.location.application.dto.CoordinatesInfo;
 import momzzangseven.mztkbe.modules.location.application.port.out.GeocodingPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -33,6 +34,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
@@ -75,6 +77,7 @@ class LocationE2ETest {
 
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private ObjectMapper objectMapper;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockBean private KakaoAuthPort kakaoAuthPort;
   @MockBean private GoogleAuthPort googleAuthPort;
@@ -83,6 +86,7 @@ class LocationE2ETest {
 
   private String baseUrl;
   private String accessToken;
+  private String currentUserEmail;
 
   // ============================================================
   // Helper Methods
@@ -149,9 +153,23 @@ class LocationE2ETest {
     given(geocodingPort.reverseGeocode(anyDouble(), anyDouble()))
         .willReturn(AddressInfo.of(TEST_ADDRESS, TEST_POSTAL_CODE));
 
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "위치E2E유저");
-    accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    currentUserEmail = uniqueEmail();
+    signup(currentUserEmail, "Test@1234!", "위치E2E유저");
+    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
+  }
+
+  @AfterEach
+  void tearDown() {
+    // 1. 현재 테스트 유저의 위치 데이터 삭제 (FK: locations.user_id → users.id)
+    jdbcTemplate.update(
+        "DELETE FROM locations WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+        currentUserEmail);
+    // 2. 유저 진행 상태 삭제 (FK: user_progress.user_id → users.id)
+    jdbcTemplate.update(
+        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+        currentUserEmail);
+    // 3. 현재 테스트 유저 삭제
+    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
   }
 
   // ============================================================
