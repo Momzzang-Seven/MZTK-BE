@@ -8,7 +8,7 @@ docs/
 ############################
 .gradle/
 build/
-
+.gradle-local/
 # Keep Gradle Wrapper
 !gradle/wrapper/gradle-wrapper.jar
 

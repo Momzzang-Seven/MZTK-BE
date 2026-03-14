@@ -1,0 +1,117 @@
+package momzzangseven.mztkbe.modules.answer.domain.model;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import lombok.Builder;
+import lombok.Getter;
+import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
+import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
+
+@Getter
+public class Answer {
+
+  private final Long id;
+  private final Long postId;
+  private final Long userId;
+  private final String content;
+  private final Boolean isAccepted;
+  private final List<String> imageUrls;
+  private final LocalDateTime createdAt;
+  private final LocalDateTime updatedAt;
+
+  @Builder(toBuilder = true)
+  private Answer(
+      Long id,
+      Long postId,
+      Long userId,
+      String content,
+      Boolean isAccepted,
+      List<String> imageUrls,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this.id = id;
+    this.postId = postId;
+    this.userId = userId;
+    this.content = content;
+    this.isAccepted = isAccepted != null ? isAccepted : false;
+    this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+
+  public static Answer create(
+      Long postId,
+      Long postWriterId,
+      boolean isPostSolved,
+      Long answererId,
+      String content,
+      List<String> imageUrls) {
+
+    Objects.requireNonNull(postWriterId, "postWriterId must not be null");
+    Objects.requireNonNull(answererId, "answererId must not be null");
+
+    if (isPostSolved) {
+      throw new CannotAnswerSolvedPostException();
+    }
+    if (postWriterId.equals(answererId)) {
+      throw new CannotAnswerOwnPostException();
+    }
+    if (content == null || content.isBlank()) {
+      throw new AnswerInvalidInputException("Answer content must not be blank.");
+    }
+
+    return Answer.builder()
+        .postId(postId)
+        .userId(answererId)
+        .content(content)
+        .isAccepted(false)
+        .imageUrls(imageUrls == null ? List.of() : List.copyOf(imageUrls))
+        .build();
+  }
+
+  public void validateOwnership(Long currentUserId) {
+    Objects.requireNonNull(currentUserId, "currentUserId must not be null");
+    if (!this.userId.equals(currentUserId)) {
+      throw new AnswerUnauthorizedException();
+    }
+  }
+
+  public void validateDeletable(Long requesterId) {
+    validateOwnership(requesterId);
+    if (this.isAccepted) {
+      throw new CannotDeleteAcceptedAnswerException();
+    }
+  }
+
+  public Answer update(String content, List<String> imageUrls, Long requesterId) {
+    validateOwnership(requesterId);
+
+    if (this.isAccepted) {
+      throw new CannotUpdateAcceptedAnswerException();
+    }
+
+    var builder = this.toBuilder();
+    boolean isUpdated = false;
+
+    if (content != null) {
+      if (content.isBlank()) {
+        throw new AnswerInvalidInputException("Updated content must not be blank.");
+      }
+      builder.content(content);
+      isUpdated = true;
+    }
+
+    if (imageUrls != null) {
+      builder.imageUrls(List.copyOf(imageUrls));
+      isUpdated = true;
+    }
+
+    return isUpdated ? builder.build() : this;
+  }
+}
