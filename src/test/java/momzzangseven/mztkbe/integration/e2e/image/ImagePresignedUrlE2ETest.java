@@ -13,7 +13,6 @@ import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +29,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
