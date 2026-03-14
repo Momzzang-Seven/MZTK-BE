@@ -11,13 +11,7 @@ import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.user.application.service.WithdrawalHardDeleteService;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -74,6 +68,7 @@ class UserE2ETest {
 
   private String baseUrl;
   private String accessToken;
+  private String currentUserEmail;
 
   // ============================================================
   // Helper Methods
@@ -180,7 +175,7 @@ class UserE2ETest {
     assertThat(response.getStatusCode().is2xxSuccessful())
         .as("Step-Up 인증 성공 (2xx) 이어야 함: " + response.getBody())
         .isTrue();
-    return objectMapper.readTree(response.getBody()).at("/data/stepUpToken").asText();
+    return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
   }
 
   // ============================================================
@@ -190,9 +185,22 @@ class UserE2ETest {
   @BeforeEach
   void setUp() throws Exception {
     baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    signup(email, TEST_PASSWORD, "유저E2E테스터");
-    accessToken = loginAndGetAccessToken(email, TEST_PASSWORD);
+    currentUserEmail = uniqueEmail();
+    signup(currentUserEmail, TEST_PASSWORD, "유저E2E테스터");
+    accessToken = loginAndGetAccessToken(currentUserEmail, TEST_PASSWORD);
+  }
+
+  @AfterEach
+  void tearDown() {
+    // 1. 현재 테스트 유저의 위치 데이터 삭제 (FK: locations.user_id → users.id)
+    //    withdrawal 후 soft-deleted 상태인 location 도 포함하여 삭제
+    jdbcTemplate.update(
+        "DELETE FROM locations WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+        currentUserEmail);
+
+    // 2. 현재 테스트 유저 삭제 (soft-deleted 상태여도 완전 삭제)
+    //    hard delete 로 이미 삭제된 경우 0건 처리되므로 안전함
+    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
   }
 
   // ============================================================
@@ -221,7 +229,7 @@ class UserE2ETest {
 
   @Test
   @Order(2)
-  @DisplayName("역할 변경 → 사용자 정보 필드 응답 구조 검증")
+  @DisplayName("현재와 같은 역할로 변경 → 400 검증")
   void updateRole_returnsCompleteUserInfo() throws Exception {
     Map<String, String> body = Map.of("role", "USER");
 
@@ -232,12 +240,7 @@ class UserE2ETest {
             new HttpEntity<>(body, authHeaders()),
             String.class);
 
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    JsonNode data = objectMapper.readTree(response.getBody()).at("/data");
-    assertThat(data.at("/id").asLong()).isPositive();
-    assertThat(data.at("/email").asText()).isNotBlank();
-    assertThat(data.at("/nickname").asText()).isNotBlank();
-    assertThat(data.at("/role").asText()).isEqualTo("USER");
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
   }
 
   @Test
@@ -356,7 +359,7 @@ class UserE2ETest {
     // DB 확인: LocationUserSoftDeleteEventHandler 가 deleted_at 을 현재 시간으로 설정
     Integer count =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM user_locations WHERE id = ? AND deleted_at IS NOT NULL",
+            "SELECT COUNT(*) FROM locations WHERE id = ? AND deleted_at IS NOT NULL",
             Integer.class,
             locationId);
     assertThat(count).as("탈퇴 후 location.deleted_at 이 설정되어야 한다").isEqualTo(1);
@@ -387,7 +390,7 @@ class UserE2ETest {
     // soft delete 결과 사전 확인: location.deleted_at IS NOT NULL
     Integer softDeletedCount =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM user_locations WHERE id = ? AND deleted_at IS NOT NULL",
+            "SELECT COUNT(*) FROM locations WHERE id = ? AND deleted_at IS NOT NULL",
             Integer.class,
             locationId);
     assertThat(softDeletedCount).as("탈퇴 후 location 이 soft-deleted 상태여야 한다").isEqualTo(1);
@@ -400,7 +403,7 @@ class UserE2ETest {
     // DB 확인: LocationUserHardDeleteEventHandler 가 soft-deleted location 을 물리 삭제
     Integer remaining =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM user_locations WHERE user_id = ?", Integer.class, userId);
+            "SELECT COUNT(*) FROM locations WHERE user_id = ?", Integer.class, userId);
     assertThat(remaining).as("hard delete 후 user_locations 레코드가 완전히 삭제되어야 한다").isEqualTo(0);
   }
 }

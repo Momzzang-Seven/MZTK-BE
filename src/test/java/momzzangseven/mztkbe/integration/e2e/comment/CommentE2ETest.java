@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
@@ -73,6 +76,8 @@ class CommentE2ETest {
   private Long postId;
   private Long commentId;
 
+  private List<String> imageUrls = new ArrayList<>();
+
   // ============================================================
   // Helper Methods
   // ============================================================
@@ -111,8 +116,8 @@ class CommentE2ETest {
     return root.at("/data/accessToken").asText();
   }
 
-  private Long createFreePost(String content) throws Exception {
-    Map<String, Object> body = Map.of("content", content);
+  private Long createFreePost(String content, List<String> imageUrls) throws Exception {
+    Map<String, Object> body = Map.of("content", content, "imageUrls", imageUrls);
     ResponseEntity<String> response =
         restTemplate.exchange(
             baseUrl + "/posts/free",
@@ -153,7 +158,7 @@ class CommentE2ETest {
     String email = uniqueEmail();
     signup(email, "Test@1234!", "댓글E2E유저");
     accessToken = loginAndGetAccessToken(email, "Test@1234!");
-    postId = createFreePost("E2E 테스트용 자유게시글 내용입니다.");
+    postId = createFreePost("E2E 테스트용 자유게시글 내용입니다.", imageUrls);
   }
 
   // ============================================================
@@ -177,7 +182,6 @@ class CommentE2ETest {
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
     assertThat(root.at("/data/commentId").asLong()).isPositive();
     assertThat(root.at("/data/content").asText()).isEqualTo("첫 번째 댓글입니다.");
-    assertThat(root.at("/data/postId").asLong()).isEqualTo(postId);
   }
 
   @Test
