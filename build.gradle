@@ -127,6 +127,8 @@ tasks.named('jacocoTestReport') {
 tasks.register('e2eTest', Test) {
     description = 'Runs @Tag("e2e") integration tests against a real PostgreSQL instance.'
     group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform {
         includeTags 'e2e'
     }
