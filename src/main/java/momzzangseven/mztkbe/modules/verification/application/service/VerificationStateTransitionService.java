@@ -37,7 +37,8 @@ public class VerificationStateTransitionService {
       return verificationRequestPort.save(applyRejection(locked, evaluation));
     }
 
-    return verificationRequestPort.save(locked.verify(evaluation.exerciseDate(), evaluation.shotAtKst()));
+    return verificationRequestPort.save(
+        locked.verify(evaluation.exerciseDate(), evaluation.shotAtKst()));
   }
 
   private VerificationRequest applyRejection(

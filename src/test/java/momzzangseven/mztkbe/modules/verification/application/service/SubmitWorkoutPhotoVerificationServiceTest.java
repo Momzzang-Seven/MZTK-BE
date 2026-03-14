@@ -238,12 +238,10 @@ class SubmitWorkoutPhotoVerificationServiceTest {
         VerificationRequest.newPending(1L, VerificationKind.WORKOUT_PHOTO, "private/workout/a.jpg");
     VerificationRequest analyzing = pending.toAnalyzing();
     VerificationRequest verified =
-        analyzing.toVerified(
-            LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0));
+        analyzing.toVerified(LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0));
     VerificationRequest rewarded =
         verified.rewardSucceeded("workout-photo-verification:" + pending.getVerificationId());
-    when(verificationRequestPort.save(any()))
-        .thenReturn(pending, analyzing, verified, rewarded);
+    when(verificationRequestPort.save(any())).thenReturn(pending, analyzing, verified, rewarded);
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
         .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified));
     when(objectStoragePort.exists("private/workout/a.jpg")).thenReturn(true);
@@ -584,12 +582,9 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             1L, VerificationKind.WORKOUT_PHOTO, "private/workout/source-ref.jpg");
     VerificationRequest analyzing = pending.toAnalyzing();
     VerificationRequest verified =
-        analyzing.toVerified(
-            LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0));
-    VerificationRequest rewarded =
-        verified.rewardSucceeded("workout-record-verification:other-id");
-    when(verificationRequestPort.save(any()))
-        .thenReturn(pending, analyzing, verified, rewarded);
+        analyzing.toVerified(LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0));
+    VerificationRequest rewarded = verified.rewardSucceeded("workout-record-verification:other-id");
+    when(verificationRequestPort.save(any())).thenReturn(pending, analyzing, verified, rewarded);
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
         .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified));
     when(objectStoragePort.exists("private/workout/source-ref.jpg")).thenReturn(true);
@@ -632,7 +627,9 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             .userId(1L)
             .verificationKind(VerificationKind.WORKOUT_PHOTO)
             .status(VerificationStatus.VERIFIED)
-            .rewardStatus(momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus.SUCCEEDED)
+            .rewardStatus(
+                momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus
+                    .SUCCEEDED)
             .rewardSourceRef("workout-photo-verification:verified-id")
             .exerciseDate(LocalDate.of(2026, 3, 13))
             .tmpObjectKey("private/workout/race.jpg")
@@ -885,9 +882,14 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     stubSuccessfulPreAiFlow(command, pending);
     when(workoutImageAiPort.analyzeWorkoutPhoto(any()))
         .thenReturn(AiVerificationDecision.builder().approved(true).build());
-    when(verificationRequestPort.save(any())).thenReturn(pending, analyzing, verified, rewardFailed);
+    when(verificationRequestPort.save(any()))
+        .thenReturn(pending, analyzing, verified, rewardFailed);
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
-        .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified), Optional.of(verified));
+        .thenReturn(
+            Optional.of(pending),
+            Optional.of(analyzing),
+            Optional.of(verified),
+            Optional.of(verified));
     when(grantXpPort.grantWorkoutXp(
             1L,
             VerificationKind.WORKOUT_PHOTO,

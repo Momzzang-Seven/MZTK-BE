@@ -27,7 +27,10 @@ public class VerificationRequest {
   private final LocalDate exerciseDate;
   private final LocalDateTime shotAtKst;
   private final String tmpObjectKey;
-  @Builder.Default private final VerificationRewardStatus rewardStatus = VerificationRewardStatus.NOT_REQUESTED;
+
+  @Builder.Default
+  private final VerificationRewardStatus rewardStatus = VerificationRewardStatus.NOT_REQUESTED;
+
   private final String rewardSourceRef;
   private final RejectionReasonCode rejectionReasonCode;
   private final String rejectionReasonDetail;
@@ -115,10 +118,7 @@ public class VerificationRequest {
   }
 
   public VerificationRequest rewardFailed() {
-    return toBuilder()
-        .rewardStatus(VerificationRewardStatus.FAILED)
-        .rewardSourceRef(null)
-        .build();
+    return toBuilder().rewardStatus(VerificationRewardStatus.FAILED).rewardSourceRef(null).build();
   }
 
   public boolean isRewardRetryable() {
