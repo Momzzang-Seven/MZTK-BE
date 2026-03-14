@@ -11,6 +11,7 @@ import java.util.UUID;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -29,6 +30,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.web3j.crypto.Credentials;
 import org.web3j.crypto.Sign;
@@ -78,6 +80,7 @@ class Web3E2ETest {
 
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private ObjectMapper objectMapper;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockBean private KakaoAuthPort kakaoAuthPort;
   @MockBean private GoogleAuthPort googleAuthPort;
@@ -85,6 +88,7 @@ class Web3E2ETest {
 
   private String baseUrl;
   private String accessToken;
+  private String currentUserEmail;
 
   // ============================================================
   // Helper Methods
@@ -211,9 +215,24 @@ class Web3E2ETest {
   @BeforeEach
   void setUp() throws Exception {
     baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "Web3E2E유저");
-    accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    currentUserEmail = uniqueEmail();
+    signup(currentUserEmail, "Test@1234!", "Web3E2E유저");
+    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
+  }
+
+  @AfterEach
+  void tearDown() {
+    // 1. TEST_WALLET_ADDRESS 로 등록된 지갑을 먼저 삭제 (소유 유저와 무관하게 전체 삭제)
+    jdbcTemplate.update(
+        "DELETE FROM user_wallets WHERE LOWER(wallet_address) = LOWER(?)", TEST_WALLET_ADDRESS);
+
+    // 2. 현재 테스트 유저가 생성한 챌린지 삭제
+    jdbcTemplate.update(
+        "DELETE FROM challenges WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+        currentUserEmail);
+
+    // 3. 현재 테스트 유저 삭제
+    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
   }
 
   // ============================================================

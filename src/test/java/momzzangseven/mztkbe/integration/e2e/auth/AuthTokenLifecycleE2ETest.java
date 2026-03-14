@@ -4,11 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -23,6 +26,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
@@ -57,6 +61,7 @@ class AuthTokenLifecycleE2ETest {
 
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private ObjectMapper objectMapper;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockBean private KakaoAuthPort kakaoAuthPort;
   @MockBean private GoogleAuthPort googleAuthPort;
@@ -67,10 +72,28 @@ class AuthTokenLifecycleE2ETest {
   @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private String baseUrl;
+  private final List<String> createdUserEmails = new ArrayList<>();
 
   @BeforeEach
   void setUp() {
     baseUrl = "http://localhost:" + port;
+  }
+
+  @AfterEach
+  void tearDown() {
+    for (String email : createdUserEmails) {
+      // 1. 해당 유저의 리프레시 토큰 삭제 (FK: refresh_tokens.user_id → users.id)
+      jdbcTemplate.update(
+          "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+          email);
+      // 2. 유저 진행 상태 삭제 (FK: user_progress.user_id → users.id)
+      jdbcTemplate.update(
+          "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
+          email);
+      // 3. 유저 삭제
+      jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
+    }
+    createdUserEmails.clear();
   }
 
   // ============================================================
@@ -83,6 +106,7 @@ class AuthTokenLifecycleE2ETest {
   }
 
   private ResponseEntity<String> signup(String email, String password, String nickname) {
+    createdUserEmails.add(email);
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
