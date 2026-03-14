@@ -116,9 +116,16 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             workoutImageAiPort,
             validator,
             timePolicy);
+    VerificationStateTransitionService stateTransitionService =
+        new VerificationStateTransitionService(verificationRequestPort);
+    VerificationRewardTransactionalService rewardTransactionalService =
+        new VerificationRewardTransactionalService(
+            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy);
+    VerificationRewardService rewardService =
+        new VerificationRewardService(rewardTransactionalService);
     VerificationCompletionService completionService =
         new VerificationCompletionService(
-            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy, resultFactory);
+            stateTransitionService, rewardService, xpLedgerQueryPort, timePolicy, resultFactory);
     VerificationSubmissionOrchestrator orchestrator =
         new VerificationSubmissionOrchestrator(
             verificationRequestPort,
@@ -229,13 +236,16 @@ class SubmitWorkoutPhotoVerificationServiceTest {
 
     VerificationRequest pending =
         VerificationRequest.newPending(1L, VerificationKind.WORKOUT_PHOTO, "private/workout/a.jpg");
+    VerificationRequest analyzing = pending.toAnalyzing();
+    VerificationRequest verified =
+        analyzing.toVerified(
+            LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0));
+    VerificationRequest rewarded =
+        verified.rewardSucceeded("workout-photo-verification:" + pending.getVerificationId());
     when(verificationRequestPort.save(any()))
-        .thenReturn(
-            pending,
-            pending.toAnalyzing(),
-            pending.toVerified(LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0)));
+        .thenReturn(pending, analyzing, verified, rewarded);
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
-        .thenReturn(Optional.of(pending), Optional.of(pending.toAnalyzing()));
+        .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified));
     when(objectStoragePort.exists("private/workout/a.jpg")).thenReturn(true);
     stubOpenStream("private/workout/a.jpg", "image/jpeg");
     when(exifMetadataPort.extract(any()))
@@ -572,13 +582,16 @@ class SubmitWorkoutPhotoVerificationServiceTest {
     VerificationRequest pending =
         VerificationRequest.newPending(
             1L, VerificationKind.WORKOUT_PHOTO, "private/workout/source-ref.jpg");
+    VerificationRequest analyzing = pending.toAnalyzing();
+    VerificationRequest verified =
+        analyzing.toVerified(
+            LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0));
+    VerificationRequest rewarded =
+        verified.rewardSucceeded("workout-record-verification:other-id");
     when(verificationRequestPort.save(any()))
-        .thenReturn(
-            pending,
-            pending.toAnalyzing(),
-            pending.toVerified(LocalDate.of(2026, 3, 13), LocalDateTime.of(2026, 3, 13, 10, 0)));
+        .thenReturn(pending, analyzing, verified, rewarded);
     when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
-        .thenReturn(Optional.of(pending));
+        .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified));
     when(objectStoragePort.exists("private/workout/source-ref.jpg")).thenReturn(true);
     stubOpenStream("private/workout/source-ref.jpg", "image/jpeg");
     when(exifMetadataPort.extract(any()))
@@ -619,6 +632,8 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             .userId(1L)
             .verificationKind(VerificationKind.WORKOUT_PHOTO)
             .status(VerificationStatus.VERIFIED)
+            .rewardStatus(momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus.SUCCEEDED)
+            .rewardSourceRef("workout-photo-verification:verified-id")
             .exerciseDate(LocalDate.of(2026, 3, 13))
             .tmpObjectKey("private/workout/race.jpg")
             .updatedAt(Instant.parse("2026-03-13T01:00:00Z"))
@@ -857,19 +872,22 @@ class SubmitWorkoutPhotoVerificationServiceTest {
   }
 
   @Test
-  @DisplayName("XP 지급 예외는 FAILED로 삼키지 않고 그대로 전파한다")
-  void propagatesGrantXpRuntimeException() throws Exception {
+  @DisplayName("XP 지급 예외가 나도 VERIFIED는 유지하고 reward FAILED로 남긴다")
+  void marksRewardFailedWhenGrantXpThrows() throws Exception {
     SubmitWorkoutVerificationCommand command =
         new SubmitWorkoutVerificationCommand(
             1L, "private/workout/a.jpg", VerificationKind.WORKOUT_PHOTO);
     VerificationRequest pending =
         VerificationRequest.newPending(1L, VerificationKind.WORKOUT_PHOTO, "private/workout/a.jpg");
-    VerificationRequest verified =
-        pending.toAnalyzing().toVerified(null, LocalDateTime.of(2026, 3, 13, 10, 0));
+    VerificationRequest analyzing = pending.toAnalyzing();
+    VerificationRequest verified = analyzing.toVerified(null, LocalDateTime.of(2026, 3, 13, 10, 0));
+    VerificationRequest rewardFailed = verified.rewardFailed();
     stubSuccessfulPreAiFlow(command, pending);
     when(workoutImageAiPort.analyzeWorkoutPhoto(any()))
         .thenReturn(AiVerificationDecision.builder().approved(true).build());
-    when(verificationRequestPort.save(any())).thenReturn(pending, pending.toAnalyzing(), verified);
+    when(verificationRequestPort.save(any())).thenReturn(pending, analyzing, verified, rewardFailed);
+    when(verificationRequestPort.findByVerificationIdForUpdate(pending.getVerificationId()))
+        .thenReturn(Optional.of(pending), Optional.of(analyzing), Optional.of(verified), Optional.of(verified));
     when(grantXpPort.grantWorkoutXp(
             1L,
             VerificationKind.WORKOUT_PHOTO,
@@ -877,11 +895,15 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             "workout-photo-verification:" + pending.getVerificationId()))
         .thenThrow(new IllegalStateException("xp down"));
 
-    assertThatThrownBy(() -> service.execute(command))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("xp down");
+    SubmitWorkoutVerificationResult result = service.execute(command);
 
-    verify(verificationRequestPort, times(3)).save(any());
+    assertThat(result.verificationStatus()).isEqualTo(VerificationStatus.VERIFIED);
+    assertThat(result.rewardStatus())
+        .isEqualTo(
+            momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus.FAILED);
+    assertThat(result.completionStatus()).isEqualTo(CompletionStatus.NOT_COMPLETED);
+    assertThat(result.grantedXp()).isZero();
+    verify(verificationRequestPort, times(4)).save(any());
   }
 
   private void stubSuccessfulPreAiFlow(
@@ -938,9 +960,16 @@ class SubmitWorkoutPhotoVerificationServiceTest {
             workoutImageAiPort,
             validator,
             timePolicy);
+    VerificationStateTransitionService stateTransitionService =
+        new VerificationStateTransitionService(verificationRequestPort);
+    VerificationRewardTransactionalService rewardTransactionalService =
+        new VerificationRewardTransactionalService(
+            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy);
+    VerificationRewardService rewardService =
+        new VerificationRewardService(rewardTransactionalService);
     VerificationCompletionService completionService =
         new VerificationCompletionService(
-            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy, resultFactory);
+            stateTransitionService, rewardService, xpLedgerQueryPort, timePolicy, resultFactory);
     VerificationSubmissionOrchestrator orchestrator =
         new VerificationSubmissionOrchestrator(
             verificationRequestPort,

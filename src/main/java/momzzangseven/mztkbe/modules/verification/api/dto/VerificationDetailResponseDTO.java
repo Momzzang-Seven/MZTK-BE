@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.modules.verification.application.dto.VerificationDet
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 
 @Builder
@@ -13,6 +14,7 @@ public record VerificationDetailResponseDTO(
     String verificationId,
     VerificationKind verificationKind,
     VerificationStatus verificationStatus,
+    VerificationRewardStatus rewardStatus,
     LocalDate exerciseDate,
     RejectionReasonCode rejectionReasonCode,
     String rejectionReasonDetail,
@@ -23,6 +25,7 @@ public record VerificationDetailResponseDTO(
         .verificationId(result.verificationId())
         .verificationKind(result.verificationKind())
         .verificationStatus(result.verificationStatus())
+        .rewardStatus(result.rewardStatus())
         .exerciseDate(result.exerciseDate())
         .rejectionReasonCode(result.rejectionReasonCode())
         .rejectionReasonDetail(result.rejectionReasonDetail())

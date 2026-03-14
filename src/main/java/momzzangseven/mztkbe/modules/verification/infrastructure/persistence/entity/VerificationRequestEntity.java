@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.verification.domain.model.VerificationReques
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -55,6 +56,13 @@ public class VerificationRequestEntity {
   @Column(name = "tmp_object_key", nullable = false, unique = true, length = 512)
   private String tmpObjectKey;
 
+  @Builder.Default
+  @Column(name = "reward_status", nullable = false, length = 20)
+  private String rewardStatus = VerificationRewardStatus.NOT_REQUESTED.name();
+
+  @Column(name = "reward_source_ref", length = 255)
+  private String rewardSourceRef;
+
   @Column(name = "rejection_reason_code", length = 50)
   private String rejectionReasonCode;
 
@@ -82,6 +90,8 @@ public class VerificationRequestEntity {
         .exerciseDate(request.getExerciseDate())
         .shotAtKst(request.getShotAtKst())
         .tmpObjectKey(request.getTmpObjectKey())
+        .rewardStatus(request.getRewardStatus().name())
+        .rewardSourceRef(request.getRewardSourceRef())
         .rejectionReasonCode(
             request.getRejectionReasonCode() == null
                 ? null
@@ -103,6 +113,11 @@ public class VerificationRequestEntity {
         .exerciseDate(exerciseDate)
         .shotAtKst(shotAtKst)
         .tmpObjectKey(tmpObjectKey)
+        .rewardStatus(
+            rewardStatus == null
+                ? VerificationRewardStatus.NOT_REQUESTED
+                : VerificationRewardStatus.valueOf(rewardStatus))
+        .rewardSourceRef(rewardSourceRef)
         .rejectionReasonCode(
             rejectionReasonCode == null ? null : RejectionReasonCode.valueOf(rejectionReasonCode))
         .rejectionReasonDetail(rejectionReasonDetail)

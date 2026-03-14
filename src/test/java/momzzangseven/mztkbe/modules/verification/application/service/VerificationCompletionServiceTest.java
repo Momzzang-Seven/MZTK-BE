@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.verification.domain.model.VerificationReques
 import momzzangseven.mztkbe.modules.verification.domain.vo.FailureCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.RejectionReasonCode;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationKind;
+import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationRewardStatus;
 import momzzangseven.mztkbe.modules.verification.domain.vo.VerificationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,9 +48,16 @@ class VerificationCompletionServiceTest {
             Clock.fixed(Instant.parse("2026-03-13T00:00:00Z"), ZoneId.of("Asia/Seoul")));
     VerificationSubmissionResultFactory resultFactory =
         new VerificationSubmissionResultFactory(timePolicy);
+    VerificationStateTransitionService stateTransitionService =
+        new VerificationStateTransitionService(verificationRequestPort);
+    VerificationRewardTransactionalService rewardTransactionalService =
+        new VerificationRewardTransactionalService(
+            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy);
+    VerificationRewardService rewardService =
+        new VerificationRewardService(rewardTransactionalService);
     service =
         new VerificationCompletionService(
-            verificationRequestPort, grantXpPort, xpLedgerQueryPort, timePolicy, resultFactory);
+            stateTransitionService, rewardService, xpLedgerQueryPort, timePolicy, resultFactory);
   }
 
   @Test
@@ -155,9 +163,10 @@ class VerificationCompletionServiceTest {
         VerificationRequest.newPending(1L, VerificationKind.WORKOUT_PHOTO, "private/workout/a.jpg")
             .toAnalyzing();
     VerificationRequest verified = locked.toVerified(LocalDate.of(2026, 3, 13), null);
+    VerificationRequest rewarded = verified.rewardSucceeded("workout-record-verification:ledger-created");
     when(verificationRequestPort.findByVerificationIdForUpdate(locked.getVerificationId()))
-        .thenReturn(Optional.of(locked));
-    when(verificationRequestPort.save(any())).thenReturn(verified);
+        .thenReturn(Optional.of(locked), Optional.of(verified));
+    when(verificationRequestPort.save(any())).thenReturn(verified, rewarded);
     when(grantXpPort.grantWorkoutXp(any(), any(), any(), any())).thenReturn(0);
     when(xpLedgerQueryPort.findTodayWorkoutReward(1L, LocalDate.of(2026, 3, 13)))
         .thenReturn(
@@ -181,12 +190,8 @@ class VerificationCompletionServiceTest {
   }
 
   @Test
-  void existingResultLoadsTodayRewardWhenSnapshotIsNone() {
+  void existingResultUsesStoredRewardSourceRefWhenSnapshotIsNone() {
     VerificationRequest verified = existingRequest("verification-3", VerificationStatus.VERIFIED);
-    when(xpLedgerQueryPort.findTodayWorkoutReward(1L, LocalDate.of(2026, 3, 13)))
-        .thenReturn(
-            new TodayRewardSnapshot(
-                true, 100, LocalDate.of(2026, 3, 13), "workout-photo-verification:v3"));
 
     SubmitWorkoutVerificationResult result =
         service.existingResult(1L, TodayRewardSnapshot.none(LocalDate.of(2026, 3, 13)), verified);
@@ -217,6 +222,14 @@ class VerificationCompletionServiceTest {
         .userId(1L)
         .verificationKind(VerificationKind.WORKOUT_PHOTO)
         .status(status)
+        .rewardStatus(
+            status == VerificationStatus.VERIFIED
+                ? VerificationRewardStatus.SUCCEEDED
+                : VerificationRewardStatus.NOT_REQUESTED)
+        .rewardSourceRef(
+            status == VerificationStatus.VERIFIED
+                ? "workout-photo-verification:" + verificationId
+                : null)
         .tmpObjectKey("private/workout/a.jpg")
         .build();
   }
