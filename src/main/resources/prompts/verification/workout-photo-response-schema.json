@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "required": ["workoutPhoto", "rejectionReasonCode", "confidenceScore"],
+  "properties": {
+    "workoutPhoto": {"type": "boolean"},
+    "rejectionReasonCode": {
+      "nullable": true,
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "SCREEN_OR_UI",
+            "NO_PERSON_VISIBLE",
+            "EQUIPMENT_ONLY",
+            "INSUFFICIENT_WORKOUT_CONTEXT",
+            "LOW_CONFIDENCE"
+          ]
+        },
+        {"type": "null"}
+      ]
+    },
+    "confidenceScore": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}

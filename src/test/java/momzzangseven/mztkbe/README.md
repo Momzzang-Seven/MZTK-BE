@@ -77,7 +77,8 @@ momzzangseven.mztkbe (test root)
 │
 ├── integration/                       ← 통합 테스트 (레이어 간 실제 연동 검증)
 │   ├── e2e/                           ← Local server + Local DB 통합 테스트 (Java)
-│   │   └── {기능명}E2ETest.java
+│   │   └── {기능명}
+│   │        └── {기능명}E2ETest.java
 │   │
 │   └── play_wright/                    ← 외부 API 연동 E2E (ts 스크립트 + MD 보고서)
 │       ├── {기능 명}
