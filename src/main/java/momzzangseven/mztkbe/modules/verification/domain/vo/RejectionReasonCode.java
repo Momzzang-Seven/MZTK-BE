@@ -1,0 +1,14 @@
+package momzzangseven.mztkbe.modules.verification.domain.vo;
+
+public enum RejectionReasonCode {
+  MISSING_EXIF_METADATA,
+  EXIF_DATE_MISMATCH,
+  SCREEN_OR_UI,
+  NO_PERSON_VISIBLE,
+  EQUIPMENT_ONLY,
+  INSUFFICIENT_WORKOUT_CONTEXT,
+  LOW_CONFIDENCE,
+  NOT_WORKOUT_RECORD,
+  DATE_NOT_VISIBLE,
+  DATE_MISMATCH
+}
