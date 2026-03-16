@@ -4,12 +4,17 @@ import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
   Optional<ImageEntity> findByTmpObjectKey(String tmpObjectKey);
+
+  @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+  @Query("select i from ImageEntity i where i.tmpObjectKey = :tmpObjectKey")
+  Optional<ImageEntity> findByTmpObjectKeyForUpdate(@Param("tmpObjectKey") String tmpObjectKey);
 
   /**
    * Deletes up to {@code batchSize} PENDING image records created before the given cutoff.
