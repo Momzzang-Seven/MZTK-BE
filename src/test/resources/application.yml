@@ -269,3 +269,7 @@ management:
 verification:
   ai:
     stub-enabled: true
+
+lambda:
+  webhook:
+    secret: test-lambda-webhook-secret # gitleaks:allow
