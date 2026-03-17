@@ -2,8 +2,10 @@ package momzzangseven.mztkbe.modules.image.infrastructure.persistence.adapter;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
+import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.SaveImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
@@ -18,7 +20,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-public class ImagePersistenceAdapter implements SaveImagePort, DeleteImagePort {
+public class ImagePersistenceAdapter implements SaveImagePort, DeleteImagePort, LoadImagePort {
   private final ImageJpaRepository imageJpaRepository;
 
   // ========== SaveImagePort Implementation ==========
@@ -34,6 +36,16 @@ public class ImagePersistenceAdapter implements SaveImagePort, DeleteImagePort {
   @Override
   public int deletePendingImagesBefore(Instant cutoff, int batchSize) {
     return imageJpaRepository.deletePendingBefore(cutoff, batchSize);
+  }
+
+  @Override
+  public Optional<Image> findByTmpObjectKey(String tmpObjectKey) {
+    return imageJpaRepository.findByTmpObjectKey(tmpObjectKey).map(this::toDomain);
+  }
+
+  @Override
+  public Optional<Image> findByTmpObjectKeyForUpdate(String tmpObjectKey) {
+    return imageJpaRepository.findByTmpObjectKeyForUpdate(tmpObjectKey).map(this::toDomain);
   }
 
   /**

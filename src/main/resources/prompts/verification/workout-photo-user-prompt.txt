@@ -1,0 +1,1 @@
+Analyze the attached normalized workout-photo candidate and return only the result JSON.

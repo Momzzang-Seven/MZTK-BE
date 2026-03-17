@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.level.infrastructure.repository;
 
 import java.time.LocalDate;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.XpLedgerEntity;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +13,9 @@ public interface XpLedgerJpaRepository extends JpaRepository<XpLedgerEntity, Lon
   boolean existsByUserIdAndIdempotencyKey(Long userId, String idempotencyKey);
 
   int countByUserIdAndTypeAndEarnedOn(Long userId, XpType type, LocalDate earnedOn);
+
+  Optional<XpLedgerEntity> findTopByUserIdAndTypeAndEarnedOnOrderByCreatedAtDesc(
+      Long userId, XpType type, LocalDate earnedOn);
 
   Slice<XpLedgerEntity> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 }
