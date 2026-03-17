@@ -136,6 +136,8 @@ jobs:
             export WEB3_EXPLORER_API_KEY="${{ secrets.WEB3_EXPLORER_API_KEY }}"
             export TREASURY_KEY_ENCRYPTION_KEY_B64="${{ secrets.TREASURY_KEY_ENCRYPTION_KEY_B64 }}"
             export SPONSOR_KEY_ENCRYPTION_KEY_B64="${{ secrets.SPONSOR_KEY_ENCRYPTION_KEY_B64 }}"
+            export LAMBDA_WEBHOOK_SECRET = "${{secrets.LAMBDA_WEBHOOK_SECRET}}"
+            export GEMINI_API_KEY = "${{secrets.GEMINI_API_KEY}}"
             
             # Docker Hub 로그인 (Private Repository 접근용)
             echo "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
@@ -178,8 +180,6 @@ jobs:
               -e WEB3_EIP7702_NONCE_TRACKER_ADDRESS="$WEB3_EIP7702_NONCE_TRACKER_ADDRESS" \
               -e WEB3_EIP7702_BATCH_IMPL_ADDRESS="$WEB3_EIP7702_BATCH_IMPL_ADDRESS" \
               -e WEB3_EIP7702_DEFAULT_RECEIVER_ADDRESS="$WEB3_EIP7702_DEFAULT_RECEIVER_ADDRESS" \
-              -e SPONSOR_KEY_ENCRYPTION_KEY_B64="$SPONSOR_KEY_ENCRYPTION_KEY_B64" \
-              -e LAMBDA_WEBHOOK_SECRET="$LAMBDA_WEBHOOK_SECRET" \
               ${{ secrets.DOCKER_HUB_USERNAME }}/mztk-be:latest
             
             # 오래된 이미지 정리
