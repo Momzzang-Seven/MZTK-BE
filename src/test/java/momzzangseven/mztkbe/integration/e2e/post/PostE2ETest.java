@@ -76,6 +76,7 @@ class PostE2ETest {
   private String baseUrl;
   private String accessToken;
   private final List<Long> createdPostIds = new ArrayList<>();
+  private List<String> imageUrls = new ArrayList<>();
 
   // ============================================================
   // Setup / Teardown
@@ -166,7 +167,7 @@ class PostE2ETest {
   }
 
   private Long createFreePost(String content) throws Exception {
-    Map<String, Object> body = Map.of("content", content);
+    Map<String, Object> body = Map.of("content", content, "imageUrls", imageUrls);
     ResponseEntity<String> res =
         restTemplate.exchange(
             baseUrl + "/posts/free",
@@ -227,7 +228,7 @@ class PostE2ETest {
   @DisplayName("자유 게시글 작성 → 201 응답 및 postId 반환")
   void createFreePost_success_returns201WithPostId() throws Exception {
     // given
-    Map<String, Object> body = Map.of("content", "E2E 자유 게시글 내용");
+    Map<String, Object> body = Map.of("content", "E2E 자유 게시글 내용", "imageUrls", imageUrls);
 
     // when
     ResponseEntity<String> res =
@@ -253,7 +254,7 @@ class PostE2ETest {
     Long postId = createFreePost("수정 전 내용");
 
     // when
-    Map<String, Object> updateBody = Map.of("content", "수정 후 내용 E2E");
+    Map<String, Object> updateBody = Map.of("content", "수정 후 내용 E2E", "imageUrls", imageUrls);
     ResponseEntity<String> res =
         restTemplate.exchange(
             baseUrl + "/posts/" + postId,
@@ -338,6 +339,7 @@ class PostE2ETest {
     JsonNode root = parse(res);
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
     assertThat(root.at("/data").isArray()).isTrue();
+    assertThat(root.at("/data").get(0).get("content").asText()).isEqualTo("목록 조회 E2E 게시글");
   }
 
   @Test

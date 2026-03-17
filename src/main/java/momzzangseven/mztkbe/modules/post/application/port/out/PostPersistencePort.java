@@ -16,6 +16,8 @@ public interface PostPersistencePort {
 
   void deletePost(Post post);
 
+  boolean existsPost(Long postId);
+
   List<Post> findPostsByCondition(PostSearchCondition condition, List<Long> filteredPostIds);
 
   int markQuestionPostSolved(Long postId);

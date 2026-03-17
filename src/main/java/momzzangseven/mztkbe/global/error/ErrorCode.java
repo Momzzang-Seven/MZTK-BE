@@ -299,6 +299,40 @@ public enum ErrorCode {
       HttpStatus.INTERNAL_SERVER_ERROR // 500
       ),
   // ========================================
+  // Answer Errors (ANSWER_xxx)
+  // ========================================
+  ANSWER_NOT_FOUND(
+      "ANSWER_001", "Answer not found", HttpStatus.NOT_FOUND // 404
+      ),
+
+  ANSWER_UNAUTHORIZED(
+      "ANSWER_002", "Unauthorized access to answer", HttpStatus.FORBIDDEN // 403
+      ),
+
+  CANNOT_ANSWER_OWN_POST(
+      "ANSWER_003", "Cannot write an answer on your own post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  CANNOT_ANSWER_SOLVED_POST(
+      "ANSWER_004", "Cannot write an answer on a solved post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  CANNOT_UPDATE_ACCEPTED_ANSWER(
+      "ANSWER_005", "Cannot update an accepted answer", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  CANNOT_DELETE_ACCEPTED_ANSWER(
+      "ANSWER_006", "Cannot delete an accepted answer", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  ANSWER_POST_MISMATCH(
+      "ANSWER_007", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  REQUIRE_USER_LOGIN(
+      "ANSWER_008", "User login is required", HttpStatus.UNAUTHORIZED // 401
+      ),
+  // ========================================
   // Image Errors (IMAGE_xxx)
   // ========================================
   IMAGE_NOT_FOUND("IMAGE_001", "Image not found", HttpStatus.NOT_FOUND),
@@ -311,6 +345,21 @@ public enum ErrorCode {
   IMAGE_FILE_NAME_INVALID("IMAGE_007", "Image file name invalid", HttpStatus.BAD_REQUEST),
   IMAGE_VIRTUAL_REF_TYPE_CANNOT_BUILD_OBJECT_KEY(
       "IMAGE_008", "Virtual ref type cannot build object key", HttpStatus.INTERNAL_SERVER_ERROR),
+  // ========================================
+  // Verification Errors (VERIFICATION_xxx)
+  // ========================================
+  VERIFICATION_INVALID_TMP_OBJECT_KEY(
+      "VERIFICATION_001", "Invalid tmp object key", HttpStatus.BAD_REQUEST),
+  VERIFICATION_INVALID_IMAGE_EXTENSION(
+      "VERIFICATION_002", "Invalid image extension for verification", HttpStatus.BAD_REQUEST),
+  VERIFICATION_UPLOAD_NOT_FOUND("VERIFICATION_003", "Upload not found", HttpStatus.NOT_FOUND),
+  VERIFICATION_UPLOAD_FORBIDDEN(
+      "VERIFICATION_004", "Upload does not belong to user", HttpStatus.FORBIDDEN),
+  VERIFICATION_KIND_MISMATCH(
+      "VERIFICATION_005", "Verification kind does not match existing request", HttpStatus.CONFLICT),
+  VERIFICATION_ALREADY_COMPLETED_TODAY(
+      "VERIFICATION_006", "Workout already completed today", HttpStatus.CONFLICT),
+  VERIFICATION_NOT_FOUND("VERIFICATION_007", "Verification not found", HttpStatus.NOT_FOUND),
   ;
 
   private final String code;

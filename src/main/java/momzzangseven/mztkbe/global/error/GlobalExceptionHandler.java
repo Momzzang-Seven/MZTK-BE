@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.TokenException;
+import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyCompletedTodayException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -64,6 +65,20 @@ public class GlobalExceptionHandler {
     // Get HTTP status from ErrorCode
     return ResponseEntity.status(ex.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
+  }
+
+  @ExceptionHandler(VerificationAlreadyCompletedTodayException.class)
+  public ResponseEntity<ApiResponse<VerificationAlreadyCompletedTodayException.ErrorData>>
+      handleVerificationAlreadyCompletedTodayException(
+          VerificationAlreadyCompletedTodayException ex) {
+    log.warn(
+        "Business exception: {} (code: {}, status: {})",
+        ex.getMessage(),
+        ex.getCode(),
+        ex.getHttpStatus());
+
+    return ResponseEntity.status(ex.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), ex.getCode(), ex.getData()));
   }
 
   /**
