@@ -31,6 +31,7 @@ public class Image {
   private final Integer imgOrder;
   private final Instant createdAt;
   private final Instant updatedAt;
+  private final String errorReason;
 
   /** Factory method for new PENDING images before S3 upload. */
   public static Image createPending(
@@ -43,6 +44,7 @@ public class Image {
         .tmpObjectKey(tmpObjectKey)
         .finalObjectKey(null)
         .imgOrder(imgOrder)
+        .errorReason(null)
         .build();
   }
 
@@ -64,10 +66,10 @@ public class Image {
    *
    * @return new Image instance with FAILED status
    */
-  public Image fail() {
+  public Image fail(String errorReason) {
     if (this.status != ImageStatus.PENDING) {
       throw new ImageStatusInvalidException("Cannot fail image with status: " + this.status);
     }
-    return toBuilder().status(ImageStatus.FAILED).build();
+    return toBuilder().status(ImageStatus.FAILED).errorReason(errorReason).build();
   }
 }

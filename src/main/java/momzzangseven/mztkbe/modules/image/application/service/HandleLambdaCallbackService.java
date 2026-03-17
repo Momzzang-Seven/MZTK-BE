@@ -46,7 +46,7 @@ public class HandleLambdaCallbackService implements HandleLambdaCallbackUseCase 
     if (command.status() == LambdaCallbackStatus.COMPLETED) {
       updated = image.complete(command.finalObjectKey());
     } else {
-      updated = image.fail();
+      updated = image.fail(command.errorReason());
     }
 
     updateImagePort.update(updated);
