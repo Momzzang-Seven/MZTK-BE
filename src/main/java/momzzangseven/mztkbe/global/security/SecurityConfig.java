@@ -170,6 +170,10 @@ public class SecurityConfig {
                     .requestMatchers("/actuator/**")
                     .hasAuthority("ROLE_ADMIN")
 
+                    // --- Internal Endpoints ---
+                    .requestMatchers("/internal/**")
+                    .permitAll()
+
                     // Fallback
                     .anyRequest()
                     .authenticated());
