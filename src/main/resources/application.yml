@@ -293,3 +293,7 @@ verification:
   image:
     max-original-bytes: 5242880
     max-pixels: 25000000
+
+lambda:
+  webhook:
+    secret: ${LAMBDA_WEBHOOK_SECRET}
