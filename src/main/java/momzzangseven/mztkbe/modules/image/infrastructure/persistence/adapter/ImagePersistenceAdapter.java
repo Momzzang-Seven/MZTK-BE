@@ -56,8 +56,8 @@ public class ImagePersistenceAdapter
 
   @Override
   public Image update(Image image) {
-    imageJpaRepository.updateStatusAndFinalKey(
-        image.getId(), image.getStatus().name(), image.getFinalObjectKey());
+    imageJpaRepository.updateStatusFinalKeyAndErrorReason(
+        image.getId(), image.getStatus().name(), image.getFinalObjectKey(), image.getErrorReason());
 
     return imageJpaRepository
         .findById(image.getId())
@@ -82,6 +82,7 @@ public class ImagePersistenceAdapter
         .tmpObjectKey(domain.getTmpObjectKey())
         .finalObjectKey(domain.getFinalObjectKey())
         .imgOrder(domain.getImgOrder())
+        .errorReason(domain.getErrorReason())
         .build();
   }
 
@@ -101,6 +102,7 @@ public class ImagePersistenceAdapter
         .tmpObjectKey(entity.getTmpObjectKey())
         .finalObjectKey(entity.getFinalObjectKey())
         .imgOrder(entity.getImgOrder())
+        .errorReason(entity.getErrorReason())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();
