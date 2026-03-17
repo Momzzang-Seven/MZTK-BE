@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
 import momzzangseven.mztkbe.modules.level.domain.model.XpLedgerEntry;
@@ -30,6 +31,15 @@ public class XpLedgerPersistenceAdapter implements XpLedgerPort {
   @Transactional(readOnly = true)
   public int countByUserIdAndTypeAndEarnedOn(Long userId, XpType type, LocalDate earnedOn) {
     return xpLedgerJpaRepository.countByUserIdAndTypeAndEarnedOn(userId, type, earnedOn);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<XpLedgerEntry> findLatestByUserIdAndTypeAndEarnedOn(
+      Long userId, XpType type, LocalDate earnedOn) {
+    return xpLedgerJpaRepository
+        .findTopByUserIdAndTypeAndEarnedOnOrderByCreatedAtDesc(userId, type, earnedOn)
+        .map(XpLedgerEntity::toDomain);
   }
 
   @Override

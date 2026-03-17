@@ -10,11 +10,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
+import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -62,6 +66,14 @@ class PostControllerIntegrationTest {
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
+
+  @MockBean private GrantXpUseCase grantXpUseCase;
+
+  @BeforeEach
+  void setUp() {
+    org.mockito.BDDMockito.given(grantXpUseCase.execute(org.mockito.ArgumentMatchers.any()))
+        .willReturn(GrantXpResult.granted(20, 10, 1, LocalDate.of(2026, 3, 12)));
+  }
 
   @Test
   @DisplayName("POST /posts/free → DB 저장, GET /posts/{id}로 조회 가능")
@@ -136,6 +148,59 @@ class PostControllerIntegrationTest {
   private Long extractPostId(MvcResult result) throws Exception {
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
     return body.at("/data/postId").asLong();
+  }
+
+  @Test
+  @DisplayName(
+      "GET /posts with question type, tag, and title search returns only matching question post")
+  void searchQuestionPostsByTypeTagAndTitle_returnsFilteredPosts() throws Exception {
+    Long expectedPostId =
+        createQuestionPost(301L, "Spring boot tag search", "match content", 50L, List.of("java"));
+    createQuestionPost(302L, "JPA query tuning", "other title", 50L, List.of("java"));
+
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(303L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "free content", "tags", List.of("java")))))
+        .andExpect(status().isCreated());
+
+    createQuestionPost(
+        304L, "Spring boot different tag", "different tag content", 50L, List.of("spring"));
+
+    mockMvc
+        .perform(get("/posts?type=QUESTION&tag=java&search=Spring").with(userPrincipal(301L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].postId").value(expectedPostId))
+        .andExpect(jsonPath("$.data[0].type").value("QUESTION"))
+        .andExpect(jsonPath("$.data[0].title").value("Spring boot tag search"))
+        .andExpect(jsonPath("$.data[0].tags[0]").value("java"))
+        .andExpect(jsonPath("$.data[0].question.reward").value(50))
+        .andExpect(jsonPath("$.data[0].question.isSolved").value(false));
+  }
+
+  private Long createQuestionPost(
+      Long userId, String title, String content, Long reward, List<String> tags) throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/question")
+                    .with(userPrincipal(userId))
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        json(
+                            Map.of(
+                                "title", title,
+                                "content", content,
+                                "reward", reward,
+                                "tags", tags))))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+    return extractPostId(createResult);
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {
