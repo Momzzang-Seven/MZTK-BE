@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -114,6 +115,15 @@ public class GlobalExceptionHandler {
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error("Validation failed", errorCode.getCode(), fieldErrors));
+  }
+
+  /** Handle missing required request headers (e.g., X-Lambda-Webhook-Secret not present). */
+  @ExceptionHandler(MissingRequestHeaderException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMissingRequestHeaderException(
+      MissingRequestHeaderException ex) {
+    ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
   }
 
   /** Handle missing cookies (e.g., refresh token cookie not present). */
