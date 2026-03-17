@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.image.ImageNotFoundException;
 import momzzangseven.mztkbe.modules.image.application.dto.LambdaCallbackCommand;
-import momzzangseven.mztkbe.modules.image.application.port.in.HandleLambdaCalbackUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.in.HandleLambdaCallbackUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.UpdateImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
@@ -20,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class HandleLambdaCallbackService implements HandleLambdaCalbackUseCase {
+public class HandleLambdaCallbackService implements HandleLambdaCallbackUseCase {
 
   private final LoadImagePort loadImagePort;
   private final UpdateImagePort updateImagePort;
