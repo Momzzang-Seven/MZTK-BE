@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.SaveImagePort;
+import momzzangseven.mztkbe.modules.image.application.port.out.UpdateImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
@@ -20,7 +21,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-public class ImagePersistenceAdapter implements SaveImagePort, DeleteImagePort, LoadImagePort {
+public class ImagePersistenceAdapter
+    implements SaveImagePort, DeleteImagePort, LoadImagePort, UpdateImagePort {
   private final ImageJpaRepository imageJpaRepository;
 
   // ========== SaveImagePort Implementation ==========
@@ -38,6 +40,8 @@ public class ImagePersistenceAdapter implements SaveImagePort, DeleteImagePort, 
     return imageJpaRepository.deletePendingBefore(cutoff, batchSize);
   }
 
+  // ========== LoadImagePort Implementation ==========
+
   @Override
   public Optional<Image> findByTmpObjectKey(String tmpObjectKey) {
     return imageJpaRepository.findByTmpObjectKey(tmpObjectKey).map(this::toDomain);
@@ -46,6 +50,20 @@ public class ImagePersistenceAdapter implements SaveImagePort, DeleteImagePort, 
   @Override
   public Optional<Image> findByTmpObjectKeyForUpdate(String tmpObjectKey) {
     return imageJpaRepository.findByTmpObjectKeyForUpdate(tmpObjectKey).map(this::toDomain);
+  }
+
+  // ========== UpdateImagePort Implementation ==========
+
+  @Override
+  public Image update(Image image) {
+    imageJpaRepository.updateStatusAndFinalKey(
+        image.getId(), image.getStatus().name(), image.getFinalObjectKey());
+
+    return imageJpaRepository
+        .findById(image.getId())
+        .map(this::toDomain)
+        .orElseThrow(
+            () -> new IllegalStateException("Image not found after update: " + image.getId()));
   }
 
   /**
