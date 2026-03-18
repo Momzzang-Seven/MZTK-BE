@@ -411,7 +411,10 @@ test.describe("Lambda 콜백 전체 흐름 E2E", () => {
   //   1. Presigned URL 발급
   //   2. S3 PUT 업로드
   //   3. S3 GET tmp 경로 → 업로드 확인
-  //   4. Lambda 콜백 FAILED → BE 200 OK + status=FAILED, errorReason 저장 확인
+  //   4. Lambda 콜백 FAILED → BE 200 OK + {"status":"SUCCESS"} 확인
+  //   5. Spring 처리 결과 검증 (간접)
+  //      5-1. S3 final_object_key 경로 미존재 (WebP 변환 없음)
+  //      5-2. 동일 key FAILED 재전송 → 409 IMAGE_002 (DB=FAILED 간접 확인)
   // ════════════════════════════════════════════════════════════════════════════
   test("TC-2: FAILED 콜백 흐름", async ({ request }) => {
     // ── Step 1: Presigned URL 발급 ──────────────────────────────────────────
@@ -448,10 +451,61 @@ test.describe("Lambda 콜백 전체 흐름 E2E", () => {
       "Lambda FAILED"
     );
 
+    // ── Step 5: Spring 처리 결과 검증 ──────────────────────────────────────────
+    console.log("\n━━━ Step 5: Spring 처리 결과 검증 ━━━");
+
+    // 5-1. final_object_key 경로 미존재 확인
+    //      Lambda FAILED 이므로 WebP 변환이 일어나지 않았고,
+    //      final_object_key 경로에 파일이 없어야 합니다.
+    const finalObjectKey = expectedFinalObjectKey(tmpObjectKey);
+    const s3BucketBase = s3BucketBaseOf(presignedUrl);
+    const finalObjectUrl = `${s3BucketBase}/${finalObjectKey}`;
+
+    const finalGet = await getS3Object(
+      request,
+      finalObjectUrl,
+      "S3 GET final (should NOT exist after FAILED)"
+    );
+    expect(
+      finalGet.status,
+      `FAILED 콜백 후 final_object_key(${finalObjectKey}) 가 HTTP 200 으로 조회됩니다.\n` +
+        "Lambda FAILED 시 WebP 변환 파일이 없어야 합니다."
+    ).not.toBe(200);
+    console.log(`  final_object_key 미존재 확인 ✅  (HTTP ${finalGet.status})`);
+
+    // 5-2. 동일 tmpObjectKey 로 FAILED 재전송 → 409 CONFLICT (DB=FAILED 간접 확인)
+    //      Spring 이 DB 를 FAILED 로 정상 갱신했다면:
+    //        image.fail() 호출 → ImageStatusInvalidException → 409 IMAGE_002
+    //      DB 가 아직 PENDING 이라면:
+    //        재전송이 200 으로 성공 → Spring 처리 실패를 의미
+    console.log("\n  [재전송 검증] 동일 key FAILED 재전송 → 409 기대 (DB=FAILED 간접 확인)");
+    const retryRes = await request.post(LAMBDA_CALLBACK_URL, {
+      headers: {
+        "Content-Type": "application/json",
+        [WEBHOOK_SECRET_HEADER]: ENV.LAMBDA_WEBHOOK_SECRET,
+      },
+      data: { status: "FAILED", tmpObjectKey, errorReason },
+      failOnStatusCode: false,
+    });
+    const retryBody = await retryRes.json().catch(() => ({}));
+    expect(
+      retryRes.status(),
+      `FAILED 재전송 시 409 가 아닙니다 (HTTP ${retryRes.status()}).\n` +
+        "Spring 이 DB 상태를 FAILED 로 갱신하지 못했을 가능성이 있습니다.\n" +
+        `응답: ${JSON.stringify(retryBody)}`
+    ).toBe(409);
+    expect(
+      (retryBody as Record<string, string>).code,
+      "FAILED 재전송 에러 코드가 IMAGE_002 가 아닙니다"
+    ).toBe("IMAGE_002");
+    console.log(`  DB status=FAILED 간접 확인 ✅  (재전송 → HTTP 409 IMAGE_002)`);
+
     console.log(
       `\n[TC-2] FAILED 콜백 전체 흐름 완료 ✅\n` +
-        `  · tmpObjectKey: ${tmpObjectKey}\n` +
-        `  · errorReason:  ${errorReason}`
+        `  · tmpObjectKey:   ${tmpObjectKey}\n` +
+        `  · errorReason:    ${errorReason}\n` +
+        `  · final path:     미존재 (HTTP ${finalGet.status})\n` +
+        `  · DB status 검증: FAILED 갱신 확인 (재전송 → 409 IMAGE_002)`
     );
   });
 
