@@ -40,6 +40,9 @@ public class ImageEntity {
   @Column(name = "img_order")
   private Integer imgOrder;
 
+  @Column(name = "error_reason", length = 1024)
+  private String errorReason;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;

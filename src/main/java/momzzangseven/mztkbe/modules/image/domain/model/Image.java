@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.image.ImageStatusInvalidException;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
 
@@ -30,6 +31,7 @@ public class Image {
   private final Integer imgOrder;
   private final Instant createdAt;
   private final Instant updatedAt;
+  private final String errorReason;
 
   /** Factory method for new PENDING images before S3 upload. */
   public static Image createPending(
@@ -42,6 +44,32 @@ public class Image {
         .tmpObjectKey(tmpObjectKey)
         .finalObjectKey(null)
         .imgOrder(imgOrder)
+        .errorReason(null)
         .build();
+  }
+
+  /**
+   * Transitions the image to COMPLETED status and sets the final S3 object key.
+   *
+   * @param finalObjectKey S3 key of the converted WebP image
+   * @return new Image instance with COMPLETED status
+   */
+  public Image complete(String finalObjectKey) {
+    if (this.status != ImageStatus.PENDING) {
+      throw new ImageStatusInvalidException("Cannot complete image with status: " + this.status);
+    }
+    return toBuilder().status(ImageStatus.COMPLETED).finalObjectKey(finalObjectKey).build();
+  }
+
+  /**
+   * Transitions the image to FAILED status.
+   *
+   * @return new Image instance with FAILED status
+   */
+  public Image fail(String errorReason) {
+    if (this.status != ImageStatus.PENDING) {
+      throw new ImageStatusInvalidException("Cannot fail image with status: " + this.status);
+    }
+    return toBuilder().status(ImageStatus.FAILED).errorReason(errorReason).build();
   }
 }

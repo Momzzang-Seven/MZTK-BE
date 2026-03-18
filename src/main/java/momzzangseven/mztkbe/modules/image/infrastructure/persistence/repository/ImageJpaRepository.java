@@ -38,5 +38,24 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
       nativeQuery = true)
   int deletePendingBefore(@Param("cutoff") Instant cutoff, @Param("batchSize") int batchSize);
 
-  // findByFinalObjectKey() method is not implemented in this branch.
+  /**
+   * Update the status, final object key, and error reason of an image.
+   *
+   * @param id the id of the image
+   * @param status the new status (COMPLETED or FAILED)
+   * @param finalObjectKey the S3 key of the converted image; null when status is FAILED
+   * @param errorReason the reason for failure; null when status is COMPLETED
+   * @return the number of rows updated
+   */
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          "UPDATE images SET status = :status, final_object_key = :finalObjectKey, "
+              + "error_reason = :errorReason, updated_at = NOW() WHERE id = :id",
+      nativeQuery = true)
+  int updateStatusFinalKeyAndErrorReason(
+      @Param("id") Long id,
+      @Param("status") String status,
+      @Param("finalObjectKey") String finalObjectKey,
+      @Param("errorReason") String errorReason);
 }
