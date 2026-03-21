@@ -45,7 +45,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     post.validateDeletable();
 
     postPersistencePort.deletePost(post);
-    eventPublisher.publishEvent(new PostDeletedEvent(postId));
+    eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
   }
 
   private Post loadPostOrThrow(Long postId) {
