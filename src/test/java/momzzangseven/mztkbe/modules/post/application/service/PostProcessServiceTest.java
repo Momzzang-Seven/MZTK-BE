@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -35,6 +36,7 @@ class PostProcessServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private ApplicationEventPublisher eventPublisher;
   @Mock private LinkTagPort linkTagPort;
+  @Mock private UpdatePostImagesPort updatePostImagesPort;
 
   @InjectMocks private PostProcessService postProcessService;
 
@@ -57,11 +59,12 @@ class PostProcessServiceTest {
     Post saved = postCaptor.getValue();
     assertThat(saved.getTitle()).isEqualTo("new title");
     assertThat(saved.getContent()).isEqualTo("new content");
-    assertThat(saved.getImageUrls()).containsExactly("new-img");
+    assertThat(saved.getImageUrls()).containsExactly("old-img");
     assertThat(saved.getTags()).containsExactly("java");
     assertThat(saved.getUpdatedAt()).isAfter(post.getUpdatedAt());
 
     verify(linkTagPort).updateTags(postId, List.of("java"));
+    verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of(1L));
   }
 
   @Test
