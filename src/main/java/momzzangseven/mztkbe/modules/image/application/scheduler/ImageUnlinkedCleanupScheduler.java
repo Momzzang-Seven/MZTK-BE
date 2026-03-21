@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li>Post deleted — images unlinked by {@code PostDeletedEventHandler}.
- *   <li>Post updated — removed images unlinked by {@code UpdatePostImagesService}.
+ *   <li>Post updated — removed images unlinked by {@code UpsertImagesByReferenceService}.
  *   <li>Presigned URL issued but post never created within the retention window.
  * </ul>
  */

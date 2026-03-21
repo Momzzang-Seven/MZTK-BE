@@ -23,9 +23,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * <p>Why REQUIRES_NEW: AFTER_COMMIT fires after the original transaction has already closed, so a
  * new transaction is needed to execute the unlink UPDATE.
  *
- * <p>Failure handling: if unlinking fails, images remain linked with referenceId=postId. The {@code
- * ImageUnlinkedCleanupScheduler} filters by referenceId IS NULL, so these orphaned images will NOT
- * be auto-collected. Monitor the ERROR log and investigate manually.
+ * <p>Failure handling: if unlinking fails, images remain linked with referenceId=referenceId. The
+ * {@code ImageUnlinkedCleanupScheduler} filters by referenceId IS NULL, so these orphaned images
+ * will NOT be auto-collected. Monitor the ERROR log and investigate manually.
  */
 @Slf4j
 @Component
@@ -41,7 +41,7 @@ public class PostDeletedEventHandler {
         new UnlinkImagesByReferenceCommand(refType, event.postId());
     try {
       unlinkImagesByReferenceUseCase.execute(command);
-      log.debug("Successfully unlinked images for deleted post: postId={}", event.postId());
+      log.debug("Successfully unlinked images for deleted post: referenceId={}", event.postId());
     } catch (Exception e) {
       log.error(
           "Failed to unlink images for deleted post {}: {}", event.postId(), e.getMessage(), e);
