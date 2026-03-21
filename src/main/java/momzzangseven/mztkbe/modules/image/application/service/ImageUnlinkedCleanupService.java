@@ -22,7 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ul>
  *   <li>A post is deleted — all associated images are unlinked via {@code PostDeletedEvent}.
- *   <li>A post is updated — removed images are unlinked by {@code UpdatePostImagesService}.
+ *   <li>A post is updated — removed images are unlinked by {@code UpsertImagesByReferenceService}.
  *   <li>A presigned URL is issued but the post is never created within the retention window.
  * </ul>
  *

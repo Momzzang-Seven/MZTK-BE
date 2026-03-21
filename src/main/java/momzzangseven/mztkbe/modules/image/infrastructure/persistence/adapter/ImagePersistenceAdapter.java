@@ -76,7 +76,7 @@ public class ImagePersistenceAdapter
   @Override
   public List<Image> findImagesByReference(ImageReferenceType referenceType, Long referenceId) {
     return imageJpaRepository
-        .findAllByReferenceTypeAndReferenceId(referenceType.name(), referenceId)
+        .findAllByReferenceTypeAndReferenceIdOrderByImgOrder(referenceType.name(), referenceId)
         .stream()
         .map(this::toDomain)
         .toList();

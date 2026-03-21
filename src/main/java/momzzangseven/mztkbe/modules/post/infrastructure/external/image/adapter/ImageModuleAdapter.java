@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.post.infrastructure.external.image.adapter;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.image.application.dto.UpdatePostImagesCommand;
-import momzzangseven.mztkbe.modules.image.application.port.in.UpdatePostImagesUseCase;
+import momzzangseven.mztkbe.modules.image.application.dto.UpsertImagesByReferenceCommand;
+import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -13,12 +13,12 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ImageModuleAdapter implements UpdatePostImagesPort {
 
-  private final UpdatePostImagesUseCase updatePostImagesUseCase;
+  private final UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
 
   @Override
   public void updateImages(Long userId, Long postId, PostType postType, List<Long> imageIds) {
     ImageReferenceType refType = resolveReferenceType(postType);
-    updatePostImagesUseCase.execute(new UpdatePostImagesCommand(userId, postId, refType, imageIds));
+    upsertImagesByReferenceUseCase.execute(new UpsertImagesByReferenceCommand(userId, postId, refType, imageIds));
   }
 
   /**
