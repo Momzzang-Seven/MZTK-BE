@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,9 +13,42 @@ import org.springframework.data.repository.query.Param;
 public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
   Optional<ImageEntity> findByTmpObjectKey(String tmpObjectKey);
 
+  // ========== SELECT ========== //
+
   @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
   @Query("select i from ImageEntity i where i.tmpObjectKey = :tmpObjectKey")
   Optional<ImageEntity> findByTmpObjectKeyForUpdate(@Param("tmpObjectKey") String tmpObjectKey);
+
+  /** Returns all images linked to the given referenceType + referenceId combination. */
+  List<ImageEntity> findAllByReferenceTypeAndReferenceId(String referenceType, Long referenceId);
+
+  /** Returns images matching the given IDs (no lock). */
+  List<ImageEntity> findAllByIdIn(List<Long> ids);
+
+  /** Returns images matching the given IDs under PESSIMISTIC_WRITE lock. */
+  @Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT i FROM ImageEntity i WHERE i.id IN :ids")
+  List<ImageEntity> findAllByIdInForUpdate(@Param("ids") List<Long> ids);
+
+  /**
+   * Returns up to {@code batchSize} unlinked images (reference_type IS NULL AND reference_id IS
+   * NULL) created before the given cutoff, ordered by id ascending.
+   *
+   * <p>Uses a native query for the IS NULL predicate which is not expressible via derived query
+   * method names in Spring Data JPA.
+   */
+  @Query(
+      value =
+          "SELECT * FROM images "
+              + "WHERE reference_type IS NULL AND reference_id IS NULL "
+              + "AND created_at < :cutoff "
+              + "ORDER BY id "
+              + "LIMIT :batchSize",
+      nativeQuery = true)
+  List<ImageEntity> findUnlinkedBefore(
+      @Param("cutoff") Instant cutoff, @Param("batchSize") int batchSize);
+
+  // ========== DELETE ========== //
 
   /**
    * Deletes up to {@code batchSize} PENDING image records created before the given cutoff.
@@ -39,6 +73,16 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
   int deletePendingBefore(@Param("cutoff") Instant cutoff, @Param("batchSize") int batchSize);
 
   /**
+   * Permanently removes image records by ID. Called by the cleanup service after the corresponding
+   * S3 objects have been removed.
+   */
+  @Modifying(clearAutomatically = true)
+  @Query(value = "DELETE FROM images WHERE id IN (:ids)", nativeQuery = true)
+  void deleteByIdIn(@Param("ids") List<Long> ids);
+
+  // ========== UPDATE ========== //
+
+  /**
    * Update the status, final object key, and error reason of an image.
    *
    * @param id the id of the image
@@ -58,4 +102,31 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
       @Param("status") String status,
       @Param("finalObjectKey") String finalObjectKey,
       @Param("errorReason") String errorReason);
+
+  /**
+   * Sets reference_type and reference_id to NULL for all images matching the given reference. Does
+   * not physically delete the row.
+   */
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          "UPDATE images "
+              + "SET reference_type = NULL, reference_id = NULL, updated_at = NOW() "
+              + "WHERE reference_type = :referenceType AND reference_id = :referenceId",
+      nativeQuery = true)
+  void unlinkByReferenceTypeAndReferenceId(
+      @Param("referenceType") String referenceType, @Param("referenceId") Long referenceId);
+
+  /**
+   * Sets reference_type and reference_id to NULL for the specified image IDs. Does not physically
+   * delete the rows.
+   */
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          "UPDATE images "
+              + "SET reference_type = NULL, reference_id = NULL, updated_at = NOW() "
+              + "WHERE id IN (:ids)",
+      nativeQuery = true)
+  void unlinkByIdIn(@Param("ids") List<Long> ids);
 }
