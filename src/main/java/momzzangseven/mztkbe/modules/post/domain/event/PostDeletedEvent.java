@@ -1,3 +1,5 @@
 package momzzangseven.mztkbe.modules.post.domain.event;
 
-public record PostDeletedEvent(Long postId) {}
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+
+public record PostDeletedEvent(Long postId, PostType postType) {}
