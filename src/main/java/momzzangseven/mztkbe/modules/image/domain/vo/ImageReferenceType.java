@@ -30,13 +30,25 @@ public enum ImageReferenceType {
   /** Internal type: detail-view variant of marketplace images. */
   MARKET_DETAIL,
 
+  /**
+   * Request-facing type for marketplace store images. Expanded internally into MARKET_STORE_THUMB +
+   * MARKET_STORE_DETAIL. Has no tmpPathPrefix of its own.
+   */
+  MARKET_STORE,
+  MARKET_STORE_THUMB,
+  MARKET_STORE_DETAIL,
+
   WORKOUT;
 
   /**
    * Returns true if this reference type can be sent directly by the client. MARKET_THUMB and
-   * MARKET_DETAIL are internal-only types managed by the server.
+   * MARKET_DETAIL, MARKET_STORE_THUMB, MARKET_STORE_DETAIL are internal-only types managed by the
+   * server.
    */
   public boolean isRequestFacing() {
-    return this != MARKET_THUMB && this != MARKET_DETAIL;
+    return this != MARKET_THUMB
+        && this != MARKET_DETAIL
+        && this != MARKET_STORE_THUMB
+        && this != MARKET_STORE_DETAIL;
   }
 }
