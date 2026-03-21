@@ -30,7 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Execution phases:
  *
  * <ol>
- *   <li>Delete phase — unlink images removed from the reference; best-effort S3 delete for COMPLETED.
+ *   <li>Delete phase — unlink images removed from the reference; best-effort S3 delete for
+ *       COMPLETED.
  *   <li>Validate phase — verify ownership, duplicate-link prevention, and count policy.
  *   <li>Order phase — reassign img_order and reference metadata for all retained/new images.
  * </ol>

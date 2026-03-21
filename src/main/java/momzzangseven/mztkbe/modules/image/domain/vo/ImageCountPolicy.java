@@ -36,7 +36,7 @@ public enum ImageCountPolicy {
   public static ImageCountPolicy of(ImageReferenceType referenceType) {
     return switch (referenceType) {
       case WORKOUT -> WORKOUT_POLICY;
-      case MARKET -> MARKET_POLICY;
+      case MARKET, MARKET_STORE -> MARKET_POLICY;
       default -> DEFAULT_POLICY;
     };
   }

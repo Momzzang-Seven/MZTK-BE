@@ -20,7 +20,8 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
   Optional<ImageEntity> findByTmpObjectKeyForUpdate(@Param("tmpObjectKey") String tmpObjectKey);
 
   /** Returns all images linked to the given referenceType + referenceId combination. */
-  List<ImageEntity> findAllByReferenceTypeAndReferenceId(String referenceType, Long referenceId);
+  List<ImageEntity> findAllByReferenceTypeAndReferenceIdOrderByImgOrder(
+      String referenceType, Long referenceId);
 
   /** Returns images matching the given IDs (no lock). */
   List<ImageEntity> findAllByIdIn(List<Long> ids);
