@@ -40,8 +40,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
     // Delegate image sync to the output port; run only when imageIds is explicitly provided.
     if (command.imageIds() != null) {
-      updatePostImagesPort.updateImages(
-              currentUserId, postId, post.getType(), command.imageIds());
+      updatePostImagesPort.updateImages(currentUserId, postId, post.getType(), command.imageIds());
     }
   }
 
