@@ -18,7 +18,8 @@ public class ImageModuleAdapter implements UpdatePostImagesPort {
   @Override
   public void updateImages(Long userId, Long postId, PostType postType, List<Long> imageIds) {
     ImageReferenceType refType = resolveReferenceType(postType);
-    upsertImagesByReferenceUseCase.execute(new UpsertImagesByReferenceCommand(userId, postId, refType, imageIds));
+    upsertImagesByReferenceUseCase.execute(
+        new UpsertImagesByReferenceCommand(userId, postId, refType, imageIds));
   }
 
   /**
