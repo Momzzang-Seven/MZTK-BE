@@ -4,7 +4,7 @@ import java.util.List;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 
 public record UpdatePostCommand(
-        String title, String content, List<Long> imageIds, List<String> tags) {
+    String title, String content, List<Long> imageIds, List<String> tags) {
 
   public void validate() {
     if (title != null && title.isBlank()) {
@@ -21,7 +21,7 @@ public record UpdatePostCommand(
   }
 
   public static UpdatePostCommand of(
-          String title, String content, List<Long> imageIds, List<String> tags) {
+      String title, String content, List<Long> imageIds, List<String> tags) {
     return new UpdatePostCommand(title, content, imageIds, tags);
   }
 }
