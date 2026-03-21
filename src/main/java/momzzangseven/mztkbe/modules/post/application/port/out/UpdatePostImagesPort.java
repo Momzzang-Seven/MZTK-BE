@@ -14,7 +14,7 @@ public interface UpdatePostImagesPort {
    *
    * @param userId ID of the post owner (used for ownership validation)
    * @param postId ID of the post being modified
-   * @param postType string representation of the post type (e.g., "FREE", "QUESTION")
+   * @param postType post type (e.g., PostType.FREE, PostType.QUESTION)
    * @param imageIds ordered list of image IDs to keep; empty list removes all images
    */
   void updateImages(Long userId, Long postId, PostType postType, List<Long> imageIds);
