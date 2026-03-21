@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.image.application.service;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceCommand;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult.ImageItem;
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
@@ -18,8 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>Validate the command
  *   <li>Load the images
- *   <li>Validate the ownership
- *   <li>Return the image final object keys
+ *   <li>Return COMPLETED images wrapped in {@link GetImagesByReferenceResult}
  * </ol>
  */
 @Service
@@ -30,26 +31,18 @@ public class GetImagesByReferenceService implements GetImagesByReferenceUseCase 
   private final LoadImagePort loadImagePort;
 
   @Override
-  public List<String> execute(GetImagesByReferenceCommand command) {
-
+  public GetImagesByReferenceResult execute(GetImagesByReferenceCommand command) {
     command.validate();
 
     List<Image> images =
         loadImagePort.findImagesByReference(command.referenceType(), command.referenceId());
 
-    return getFinalObjectKeyFromImages(images);
-  }
+    List<ImageItem> items =
+        images.stream()
+            .filter(img -> img.getStatus() == ImageStatus.COMPLETED)
+            .map(ImageItem::from)
+            .toList();
 
-  /**
-   * Get the final object keys from the images.
-   *
-   * @param images images to get the final object keys from
-   * @return List of image final object keys
-   */
-  private List<String> getFinalObjectKeyFromImages(List<Image> images) {
-    return images.stream()
-        .filter(img -> img.getStatus() == ImageStatus.COMPLETED)
-        .map(Image::getFinalObjectKey)
-        .toList();
+    return GetImagesByReferenceResult.of(items);
   }
 }
