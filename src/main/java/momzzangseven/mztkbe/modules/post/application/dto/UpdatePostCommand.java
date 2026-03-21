@@ -4,7 +4,7 @@ import java.util.List;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 
 public record UpdatePostCommand(
-    String title, String content, List<String> imageUrls, List<String> tags) {
+        String title, String content, List<Long> imageIds, List<String> tags) {
 
   public void validate() {
     if (title != null && title.isBlank()) {
@@ -15,13 +15,13 @@ public record UpdatePostCommand(
       throw new PostInvalidInputException("Content cannot be blank.");
     }
 
-    if (title == null && content == null && imageUrls == null && tags == null) {
+    if (title == null && content == null && imageIds == null && tags == null) {
       throw new PostInvalidInputException("At least one field must be provided for update.");
     }
   }
 
   public static UpdatePostCommand of(
-      String title, String content, List<String> imageUrls, List<String> tags) {
-    return new UpdatePostCommand(title, content, imageUrls, tags);
+          String title, String content, List<Long> imageIds, List<String> tags) {
+    return new UpdatePostCommand(title, content, imageIds, tags);
   }
 }

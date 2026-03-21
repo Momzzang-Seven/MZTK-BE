@@ -16,11 +16,11 @@ class UpdatePostCommandTest {
   @DisplayName("of() creates command")
   void of_createsCommand() {
     UpdatePostCommand command =
-        UpdatePostCommand.of("new title", null, List.of("img1"), List.of("tag1"));
+        UpdatePostCommand.of("new title", null, List.of(Long.valueOf(1)), List.of("tag1"));
 
     assertThat(command.title()).isEqualTo("new title");
     assertThat(command.content()).isNull();
-    assertThat(command.imageUrls()).containsExactly("img1");
+    assertThat(command.imageIds()).containsExactly(Long.valueOf(1));
     assertThat(command.tags()).containsExactly("tag1");
   }
 
@@ -65,7 +65,7 @@ class UpdatePostCommandTest {
   @Test
   @DisplayName("validate accepts image-only update")
   void validate_imageOnlyUpdate_doesNotThrow() {
-    UpdatePostCommand command = new UpdatePostCommand(null, null, List.of("img1"), null);
+    UpdatePostCommand command = new UpdatePostCommand(null, null, List.of(Long.valueOf(1)), null);
 
     assertThatCode(command::validate).doesNotThrowAnyException();
   }

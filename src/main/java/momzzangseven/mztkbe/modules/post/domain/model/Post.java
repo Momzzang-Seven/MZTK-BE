@@ -101,7 +101,7 @@ public class Post {
     }
   }
 
-  public Post update(String title, String content, List<String> imageUrls, List<String> tags) {
+  public Post update(String title, String content, List<String> tags) {
     if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
       throw new PostInvalidInputException("A solved question post cannot be edited.");
     }
@@ -118,11 +118,6 @@ public class Post {
     if (content != null) {
       if (content.isBlank()) throw new IllegalArgumentException("Content cannot be blank.");
       builder.content(content);
-      isUpdated = true;
-    }
-
-    if (imageUrls != null) {
-      builder.imageUrls(imageUrls);
       isUpdated = true;
     }
 
