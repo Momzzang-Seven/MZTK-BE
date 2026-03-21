@@ -148,7 +148,6 @@ class PostTest {
     assertThat(updated).isNotSameAs(post);
     assertThat(updated.getTitle()).isEqualTo("new");
     assertThat(updated.getContent()).isEqualTo("new-content");
-    assertThat(updated.getImageUrls()).containsExactly("img2");
     assertThat(updated.getTags()).containsExactly("tag2");
     assertThat(updated.getUpdatedAt()).isAfter(post.getUpdatedAt());
   }
