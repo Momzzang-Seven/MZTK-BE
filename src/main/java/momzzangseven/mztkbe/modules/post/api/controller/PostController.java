@@ -92,7 +92,7 @@ public class PostController {
 
     UpdatePostCommand command =
         UpdatePostCommand.of(
-            request.title(), request.content(), request.imageUrls(), request.tags());
+            request.title(), request.content(), request.imageIds(), request.tags());
 
     updatePostUseCase.updatePost(validatedUserId, postId, command);
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));

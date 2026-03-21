@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import org.springframework.context.ApplicationEventPublisher;
@@ -21,6 +22,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   private final PostPersistencePort postPersistencePort;
   private final ApplicationEventPublisher eventPublisher;
   private final LinkTagPort linkTagPort;
+  private final UpdatePostImagesPort updatePostImagesPort;
 
   @Override
   public void updatePost(Long currentUserId, Long postId, UpdatePostCommand command) {
@@ -29,12 +31,17 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
 
-    Post updatedPost =
-        post.update(command.title(), command.content(), command.imageUrls(), command.tags());
+    Post updatedPost = post.update(command.title(), command.content(), command.tags());
     postPersistencePort.savePost(updatedPost);
 
     if (command.tags() != null) {
       linkTagPort.updateTags(postId, command.tags());
+    }
+
+    // Delegate image sync to the output port; run only when imageIds is explicitly provided.
+    if (command.imageIds() != null) {
+      updatePostImagesPort.updateImages(
+              currentUserId, postId, post.getType(), command.imageIds());
     }
   }
 
