@@ -151,8 +151,7 @@ class CreatePostCommandTest {
   @DisplayName("validate rejects duplicate imageIds on create")
   void validate_duplicateImageIds_throwsException() {
     CreatePostCommand command =
-        new CreatePostCommand(
-            1L, null, "content", PostType.FREE, 0L, List.of(1L, 1L), List.of());
+        new CreatePostCommand(1L, null, "content", PostType.FREE, 0L, List.of(1L, 1L), List.of());
 
     assertThatThrownBy(command::validate)
         .isInstanceOf(PostInvalidInputException.class)

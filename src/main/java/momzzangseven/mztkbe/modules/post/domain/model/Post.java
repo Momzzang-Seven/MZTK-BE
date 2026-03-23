@@ -48,12 +48,7 @@ public class Post {
   }
 
   public static Post create(
-      Long userId,
-      PostType type,
-      String title,
-      String content,
-      Long reward,
-      List<String> tags) {
+      Long userId, PostType type, String title, String content, Long reward, List<String> tags) {
 
     if (userId == null) throw new IllegalArgumentException("Author ID is required.");
     if (type == null) throw new IllegalArgumentException("Post type is required.");
