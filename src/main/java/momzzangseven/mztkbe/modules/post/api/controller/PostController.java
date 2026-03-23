@@ -60,7 +60,7 @@ public class PostController {
   // [Read] 게시글 상세 조회
   @GetMapping("/{postId}")
   public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(@PathVariable Long postId) {
-    PostResult result = getPostUseCase.getPost(postId);
+    PostDetailResult result = getPostUseCase.getPost(postId);
     return ResponseEntity.ok(ApiResponse.success(PostDetailResponse.from(result)));
   }
 
@@ -75,7 +75,7 @@ public class PostController {
     PostSearchCondition condition =
         PostSearchCondition.of(type, tag, search, pageable.getPageNumber(), pageable.getPageSize());
 
-    List<PostResult> results = searchPostsUseCase.searchPosts(condition);
+    List<PostListResult> results = searchPostsUseCase.searchPosts(condition);
     List<PostListResponse> response = results.stream().map(PostListResponse::from).toList();
 
     return ResponseEntity.ok(ApiResponse.success(response));

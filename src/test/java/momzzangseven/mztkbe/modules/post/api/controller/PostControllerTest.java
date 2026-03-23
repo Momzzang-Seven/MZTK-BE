@@ -17,7 +17,8 @@ import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
@@ -82,8 +83,8 @@ class PostControllerTest {
                         Map.of(
                             "content",
                             "내용",
-                            "imageUrls",
-                            List.of("https://example.com/1.png"),
+                            "imageIds",
+                            List.of(1L, 2L),
                             "tags",
                             List.of("health")))))
         .andExpect(status().isCreated())
@@ -135,14 +136,41 @@ class PostControllerTest {
   }
 
   @Test
-  @DisplayName("POST /posts/free imageUrls URL 형식이 잘못되면 400")
-  void createFreePost_invalidImageUrl_returns400() throws Exception {
+  @DisplayName("POST /posts/free imageIds가 유효하면 201")
+  void createFreePost_validImageIds_returns201() throws Exception {
+    given(createPostUseCase.execute(any(CreatePostCommand.class)))
+        .willReturn(new CreatePostResult(100L, false, 0L, "게시글 작성 완료"));
+
     mockMvc
         .perform(
             post("/posts/free")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("content", "내용", "imageUrls", List.of("invalid-url")))))
+                .content(
+                    json(
+                        Map.of(
+                            "content",
+                            "내용",
+                            "imageIds",
+                            List.of(1L, 2L),
+                            "tags",
+                            List.of("health")))))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(100));
+
+    verify(createPostUseCase).execute(any(CreatePostCommand.class));
+  }
+
+  @Test
+  @DisplayName("POST /posts/free imageIds에 음수가 있으면 400")
+  void createFreePost_negativeImageId_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "내용", "imageIds", List.of(-1L)))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 
@@ -170,7 +198,7 @@ class PostControllerTest {
   void getPost_success() throws Exception {
     given(getPostUseCase.getPost(1L))
         .willReturn(
-            new PostResult(
+            new PostDetailResult(
                 1L,
                 PostType.FREE,
                 "제목",
@@ -202,8 +230,8 @@ class PostControllerTest {
   @Test
   @DisplayName("GET /posts 목록 조회 성공")
   void getPosts_success() throws Exception {
-    PostResult postResult =
-        new PostResult(
+    PostListResult postResult =
+        new PostListResult(
             2L,
             PostType.FREE,
             "목록",
@@ -211,7 +239,6 @@ class PostControllerTest {
             1L,
             "닉네임",
             null,
-            List.of(),
             0L,
             false,
             List.of("health"),
@@ -241,7 +268,7 @@ class PostControllerTest {
   @Test
   @DisplayName("GET /posts 인증 없으면 401")
   void getPosts_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(get("/posts")).andExpect(status().isUnauthorized());
+    mockMvc.perform(get("/posts?type=FREE")).andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -362,7 +389,7 @@ class PostControllerTest {
   void getPost_questionType_includesQuestionInfo() throws Exception {
     given(getPostUseCase.getPost(5L))
         .willReturn(
-            new PostResult(
+            new PostDetailResult(
                 5L,
                 PostType.QUESTION,
                 "질문 제목",
@@ -389,8 +416,8 @@ class PostControllerTest {
   @Test
   @DisplayName("GET /posts?type=QUESTION 질문 게시글 목록 조회 성공")
   void getPosts_questionType_success() throws Exception {
-    PostResult questionResult =
-        new PostResult(
+    PostListResult questionResult =
+        new PostListResult(
             3L,
             PostType.QUESTION,
             "질문 제목",
@@ -398,7 +425,6 @@ class PostControllerTest {
             1L,
             "닉네임",
             null,
-            List.of(),
             30L,
             false,
             List.of(),
@@ -427,6 +453,21 @@ class PostControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(1));
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{postId} imageIds에 음수가 있으면 400")
+  void updatePost_negativeImageId_returns400() throws Exception {
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("imageIds", List.of(-1L)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(updatePostUseCase);
   }
 
   @Test
