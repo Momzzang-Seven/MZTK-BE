@@ -119,7 +119,7 @@ class PostTest {
   void updateReturnsSameInstanceWhenNothingProvided() {
     Post post = basePost();
 
-    Post updated = post.update(null, null, null, null);
+    Post updated = post.update(null, null, null);
 
     assertThat(updated).isSameAs(post);
   }
@@ -129,11 +129,11 @@ class PostTest {
   void updateRejectsBlankValues() {
     Post post = basePost();
 
-    assertThatThrownBy(() -> post.update(" ", null, null, null))
+    assertThatThrownBy(() -> post.update(" ", null, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Title cannot be blank.");
 
-    assertThatThrownBy(() -> post.update(null, " ", null, null))
+    assertThatThrownBy(() -> post.update(null, " ", null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Content cannot be blank.");
   }
@@ -143,12 +143,11 @@ class PostTest {
   void updateChangesFields() {
     Post post = basePost();
 
-    Post updated = post.update("new", "new-content", List.of("img2"), List.of("tag2"));
+    Post updated = post.update("new", "new-content", List.of("tag2"));
 
     assertThat(updated).isNotSameAs(post);
     assertThat(updated.getTitle()).isEqualTo("new");
     assertThat(updated.getContent()).isEqualTo("new-content");
-    assertThat(updated.getImageUrls()).containsExactly("img2");
     assertThat(updated.getTags()).containsExactly("tag2");
     assertThat(updated.getUpdatedAt()).isAfter(post.getUpdatedAt());
   }

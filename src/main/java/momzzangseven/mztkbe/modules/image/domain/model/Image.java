@@ -33,7 +33,10 @@ public class Image {
   private final Instant updatedAt;
   private final String errorReason;
 
-  /** Factory method for new PENDING images before S3 upload. */
+  /**
+   * Factory method for new PENDING images before S3 upload. It doesn't set id field, so that the
+   * JPA repository automatically generate id and INSERT it.
+   */
   public static Image createPending(
       Long userId, ImageReferenceType referenceType, String tmpObjectKey, int imgOrder) {
     return Image.builder()
@@ -71,5 +74,27 @@ public class Image {
       throw new ImageStatusInvalidException("Cannot fail image with status: " + this.status);
     }
     return toBuilder().status(ImageStatus.FAILED).errorReason(errorReason).build();
+  }
+
+  /**
+   * Updates the reference (owner entity) of this image. Used when linking a newly uploaded image to
+   * a post/class, or unlinking during deletion.
+   *
+   * @param referenceType the type of the owning entity, or null to unlink
+   * @param referenceId the ID of the owning entity, or null to unlink
+   * @return new Image instance with updated reference fields
+   */
+  public Image updateReference(ImageReferenceType referenceType, Long referenceId) {
+    return toBuilder().referenceType(referenceType).referenceId(referenceId).build();
+  }
+
+  /**
+   * Updates the display order of this image within its reference context.
+   *
+   * @param imgOrder 1-based order index
+   * @return new Image instance with updated imgOrder
+   */
+  public Image updateImageOrder(int imgOrder) {
+    return toBuilder().imgOrder(imgOrder).build();
   }
 }
