@@ -176,11 +176,13 @@ class ImagePresignedUrlE2ETest {
     JsonNode items = objectMapper.readTree(response.getBody()).at("/data/items");
     assertThat(items.size()).isEqualTo(1);
 
+    long imageId = items.get(0).at("/imageId").asLong();
     String tmpObjectKey = items.get(0).at("/tmpObjectKey").asText();
     String presignedUrl = items.get(0).at("/presignedUrl").asText();
     createdKeys.add(tmpObjectKey);
 
     // 응답: tmpObjectKey prefix, 확장자, presignedUrl 비어있지 않음
+    assertThat(imageId).isPositive();
     assertThat(tmpObjectKey).startsWith("public/community/free/tmp/");
     assertThat(tmpObjectKey).endsWith(".jpg");
     assertThat(presignedUrl).isNotBlank();
@@ -194,6 +196,7 @@ class ImagePresignedUrlE2ETest {
     assertThat(saved.getTmpObjectKey()).isEqualTo(tmpObjectKey);
     assertThat(saved.getFinalObjectKey()).isNull();
     assertThat(saved.getCreatedAt()).isNotNull();
+    assertThat(saved.getId()).isEqualTo(imageId);
   }
 
   @Test
@@ -207,10 +210,12 @@ class ImagePresignedUrlE2ETest {
     JsonNode items = objectMapper.readTree(response.getBody()).at("/data/items");
     assertThat(items.size()).isEqualTo(1);
 
+    long imageId = items.get(0).at("/imageId").asLong();
     String tmpObjectKey = items.get(0).at("/tmpObjectKey").asText();
     createdKeys.add(tmpObjectKey);
 
     // WORKOUT: private/workout/{uuid}.jpg — tmp/ 서브폴더 없음
+    assertThat(imageId).isPositive();
     assertThat(tmpObjectKey).startsWith("private/workout/");
     assertThat(tmpObjectKey).endsWith(".jpg");
     assertThat(tmpObjectKey).doesNotContain("/tmp/");
@@ -221,6 +226,7 @@ class ImagePresignedUrlE2ETest {
     assertThat(saved.getStatus()).isEqualTo("PENDING");
     assertThat(saved.getReferenceId()).isNull();
     assertThat(saved.getImgOrder()).isEqualTo(1);
+    assertThat(saved.getId()).isEqualTo(imageId);
   }
 
   @Test
@@ -234,11 +240,16 @@ class ImagePresignedUrlE2ETest {
     JsonNode items = objectMapper.readTree(response.getBody()).at("/data/items");
     assertThat(items.size()).isEqualTo(2);
 
+    long thumbImageId = items.get(0).at("/imageId").asLong();
+    long detailImageId = items.get(1).at("/imageId").asLong();
     String thumbKey = items.get(0).at("/tmpObjectKey").asText();
     String detailKey = items.get(1).at("/tmpObjectKey").asText();
     createdKeys.addAll(List.of(thumbKey, detailKey));
 
     // 응답: prefix 분기 + 확장자 유지 + UUID가 서로 다름
+    assertThat(thumbImageId).isPositive();
+    assertThat(detailImageId).isPositive();
+    assertThat(thumbImageId).isNotEqualTo(detailImageId);
     assertThat(thumbKey).startsWith("public/market/thumb/tmp/");
     assertThat(thumbKey).endsWith(".jpg");
     assertThat(detailKey).startsWith("public/market/detail/tmp/");
@@ -253,11 +264,13 @@ class ImagePresignedUrlE2ETest {
     assertThat(thumbRow.getStatus()).isEqualTo("PENDING");
     assertThat(thumbRow.getImgOrder()).isEqualTo(1);
     assertThat(thumbRow.getReferenceId()).isNull();
+    assertThat(thumbRow.getId()).isEqualTo(thumbImageId);
 
     assertThat(detailRow.getReferenceType()).isEqualTo("MARKET_DETAIL");
     assertThat(detailRow.getStatus()).isEqualTo("PENDING");
     assertThat(detailRow.getImgOrder()).isEqualTo(2);
     assertThat(detailRow.getReferenceId()).isNull();
+    assertThat(detailRow.getId()).isEqualTo(detailImageId);
   }
 
   @Test
@@ -272,6 +285,10 @@ class ImagePresignedUrlE2ETest {
     JsonNode items = objectMapper.readTree(response.getBody()).at("/data/items");
     assertThat(items.size()).isEqualTo(4);
 
+    long id0 = items.get(0).at("/imageId").asLong();
+    long id1 = items.get(1).at("/imageId").asLong();
+    long id2 = items.get(2).at("/imageId").asLong();
+    long id3 = items.get(3).at("/imageId").asLong();
     String key0 = items.get(0).at("/tmpObjectKey").asText(); // MARKET_THUMB, main.jpg
     String key1 = items.get(1).at("/tmpObjectKey").asText(); // MARKET_DETAIL, main.jpg
     String key2 = items.get(2).at("/tmpObjectKey").asText(); // MARKET_DETAIL, d1.png
@@ -279,6 +296,8 @@ class ImagePresignedUrlE2ETest {
     createdKeys.addAll(List.of(key0, key1, key2, key3));
 
     // 응답: prefix + 확장자 분기
+    assertThat(List.of(id0, id1, id2, id3)).allMatch(id -> id > 0);
+    assertThat(List.of(id0, id1, id2, id3)).doesNotHaveDuplicates();
     assertThat(key0).startsWith("public/market/thumb/tmp/").endsWith(".jpg");
     assertThat(key1).startsWith("public/market/detail/tmp/").endsWith(".jpg");
     assertThat(key2).startsWith("public/market/detail/tmp/").endsWith(".png");
@@ -294,6 +313,10 @@ class ImagePresignedUrlE2ETest {
     assertThat(row1.getReferenceType()).isEqualTo("MARKET_DETAIL");
     assertThat(row2.getReferenceType()).isEqualTo("MARKET_DETAIL");
     assertThat(row3.getReferenceType()).isEqualTo("MARKET_DETAIL");
+    assertThat(row0.getId()).isEqualTo(id0);
+    assertThat(row1.getId()).isEqualTo(id1);
+    assertThat(row2.getId()).isEqualTo(id2);
+    assertThat(row3.getId()).isEqualTo(id3);
 
     assertThat(row0.getImgOrder()).isEqualTo(1);
     assertThat(row1.getImgOrder()).isEqualTo(2);

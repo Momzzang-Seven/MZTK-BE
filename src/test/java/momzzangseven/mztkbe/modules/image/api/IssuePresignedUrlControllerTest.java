@@ -69,6 +69,7 @@ class IssuePresignedUrlControllerTest {
             .mapToObj(
                 i ->
                     new PresignedUrlItem(
+                        (long) i + 1,
                         "https://s3.presigned.url/fake-" + i,
                         "public/community/free/tmp/uuid-" + i + ".jpg"))
             .toList();
@@ -202,6 +203,7 @@ class IssuePresignedUrlControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.items").isArray())
         .andExpect(jsonPath("$.data.items.length()").value(1))
+        .andExpect(jsonPath("$.data.items[0].imageId").isNumber())
         .andExpect(jsonPath("$.data.items[0].presignedUrl").isString())
         .andExpect(jsonPath("$.data.items[0].tmpObjectKey").isString());
   }
