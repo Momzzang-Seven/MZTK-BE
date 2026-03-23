@@ -8,7 +8,6 @@ import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceRe
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
-import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,7 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>Validate the command
  *   <li>Load the images
- *   <li>Return COMPLETED images wrapped in {@link GetImagesByReferenceResult}
+ *   <li>Return all images wrapped in {@link GetImagesByReferenceResult}; {@code finalObjectKey} is
+ *       {@code null} for PENDING/FAILED images
  * </ol>
  */
 @Service
@@ -37,11 +37,7 @@ public class GetImagesByReferenceService implements GetImagesByReferenceUseCase 
     List<Image> images =
         loadImagePort.findImagesByReference(command.referenceType(), command.referenceId());
 
-    List<ImageItem> items =
-        images.stream()
-            .filter(img -> img.getStatus() == ImageStatus.COMPLETED)
-            .map(ImageItem::from)
-            .toList();
+    List<ImageItem> items = images.stream().map(ImageItem::from).toList();
 
     return GetImagesByReferenceResult.of(items);
   }
