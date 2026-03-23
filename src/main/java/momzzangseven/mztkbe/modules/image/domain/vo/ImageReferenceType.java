@@ -14,21 +14,23 @@ package momzzangseven.mztkbe.modules.image.domain.vo;
  * Spring does not need to assemble it.
  */
 public enum ImageReferenceType {
+
+  /** USER */
+  USER_PROFILE,
+
+  /** COMMUNITY */
   COMMUNITY_FREE,
   COMMUNITY_QUESTION,
   COMMUNITY_ANSWER,
 
+  /** MARKET */
   /**
    * Request-facing type for marketplace images. Expanded internally into MARKET_THUMB +
    * MARKET_DETAIL. Has no tmpPathPrefix of its own.
    */
-  MARKET,
-
-  /** Internal type: thumbnail variant of the first marketplace image. */
-  MARKET_THUMB,
-
-  /** Internal type: detail-view variant of marketplace images. */
-  MARKET_DETAIL,
+  MARKET_CLASS,
+  MARKET_CLASS_THUMB,
+  MARKET_CLASS_DETAIL,
 
   /**
    * Request-facing type for marketplace store images. Expanded internally into MARKET_STORE_THUMB +
@@ -38,6 +40,7 @@ public enum ImageReferenceType {
   MARKET_STORE_THUMB,
   MARKET_STORE_DETAIL,
 
+  /** WORKOUT */
   WORKOUT;
 
   /**
@@ -46,8 +49,8 @@ public enum ImageReferenceType {
    * server.
    */
   public boolean isRequestFacing() {
-    return this != MARKET_THUMB
-        && this != MARKET_DETAIL
+    return this != MARKET_CLASS_THUMB
+        && this != MARKET_CLASS_DETAIL
         && this != MARKET_STORE_THUMB
         && this != MARKET_STORE_DETAIL;
   }
