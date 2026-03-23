@@ -161,8 +161,11 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
    * @return list of ImageSpec entries (could be larger than the input filename count for MARKET)
    */
   private List<ImageSpec> buildImageSpecs(IssuePresignedUrlCommand command) {
-    if (command.referenceType() == ImageReferenceType.MARKET) {
-      return buildMarketSpecs(command.imageFilenames());
+    if (command.referenceType() == ImageReferenceType.MARKET_CLASS) {
+      return buildMarketClassSpecs(command.imageFilenames());
+    }
+    if (command.referenceType() == ImageReferenceType.MARKET_STORE) {
+      return buildMarketStoreSpecs(command.imageFilenames());
     }
     return buildStandardSpecs(command.referenceType(), command.imageFilenames());
   }
@@ -186,17 +189,17 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
   }
 
   /**
-   * Builds n+1 ImageSpec entries for n marketplace filenames.
+   * Builds n+1 ImageSpec entries for n marketplace class filenames.
    *
    * <ul>
-   *   <li>First filename → MARKET_THUMB spec + MARKET_DETAIL spec (2 entries)
-   *   <li>Each remaining filename → MARKET_DETAIL spec (1 entry each)
+   *   <li>First filename → MARKET_CLASS_THUMB spec + MARKET_CLASS_DETAIL spec (2 entries)
+   *   <li>Each remaining filename → MARKET_CLASS_DETAIL spec (1 entry each)
    * </ul>
    *
    * @param filenames list of original filenames from the request (size 1–5)
    * @return list of ImageSpec entries with size = filenames.size() + 1
    */
-  private List<ImageSpec> buildMarketSpecs(List<String> filenames) {
+  private List<ImageSpec> buildMarketClassSpecs(List<String> filenames) {
     List<ImageSpec> specs = new ArrayList<>();
 
     String firstFile = filenames.get(0);
@@ -204,16 +207,64 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
 
     specs.add(
         new ImageSpec(
-            ImageReferenceType.MARKET_THUMB, UUID.randomUUID().toString(), firstExt, firstFile));
+            ImageReferenceType.MARKET_CLASS_THUMB,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
     specs.add(
         new ImageSpec(
-            ImageReferenceType.MARKET_DETAIL, UUID.randomUUID().toString(), firstExt, firstFile));
+            ImageReferenceType.MARKET_CLASS_DETAIL,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
 
     for (int i = 1; i < filenames.size(); i++) {
       String file = filenames.get(i);
       String ext = AllowedImageExtension.extractExtension(file);
       specs.add(
-          new ImageSpec(ImageReferenceType.MARKET_DETAIL, UUID.randomUUID().toString(), ext, file));
+          new ImageSpec(
+              ImageReferenceType.MARKET_CLASS_DETAIL, UUID.randomUUID().toString(), ext, file));
+    }
+
+    return specs;
+  }
+
+  /**
+   * Builds n+1 ImageSpec entries for n marketplace store filenames.
+   *
+   * <ul>
+   *   <li>First filename → MARKET_STORE_THUMB spec + MARKET_STORE_DETAIL spec (2 entries)
+   *   <li>Each remaining filename → MARKET_STORE_DETAIL spec (1 entry each)
+   * </ul>
+   *
+   * @param filenames list of original filenames from the request (size 1–5)
+   * @return list of ImageSpec entries with size = filenames.size() + 1
+   */
+  private List<ImageSpec> buildMarketStoreSpecs(List<String> filenames) {
+    List<ImageSpec> specs = new ArrayList<>();
+
+    String firstFile = filenames.get(0);
+    String firstExt = AllowedImageExtension.extractExtension(firstFile);
+
+    specs.add(
+        new ImageSpec(
+            ImageReferenceType.MARKET_STORE_THUMB,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
+    specs.add(
+        new ImageSpec(
+            ImageReferenceType.MARKET_STORE_DETAIL,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
+
+    for (int i = 1; i < filenames.size(); i++) {
+      String file = filenames.get(i);
+      String ext = AllowedImageExtension.extractExtension(file);
+      specs.add(
+          new ImageSpec(
+              ImageReferenceType.MARKET_STORE_DETAIL, UUID.randomUUID().toString(), ext, file));
     }
 
     return specs;
