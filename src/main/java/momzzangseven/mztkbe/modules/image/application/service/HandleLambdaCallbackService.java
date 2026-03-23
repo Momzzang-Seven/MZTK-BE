@@ -30,8 +30,11 @@ public class HandleLambdaCallbackService implements HandleLambdaCallbackUseCase 
   public void execute(LambdaCallbackCommand command) {
     command.validate();
     log.info(
-            "Lambda callback status={}, tmpObjectKey={}, finalObjectKey={}, errorReason={}", command.status(), command.tmpObjectKey(), command.finalObjectKey(), command.errorReason()
-    );
+        "Lambda callback status={}, tmpObjectKey={}, finalObjectKey={}, errorReason={}",
+        command.status(),
+        command.tmpObjectKey(),
+        command.finalObjectKey(),
+        command.errorReason());
 
     Image image =
         loadImagePort
