@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.post.api.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public record PostListResponse(
@@ -17,14 +17,13 @@ public record PostListResponse(
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     WriterInfo writer,
-    List<String> imageUrls,
     QuestionInfo question) {
 
   public record WriterInfo(Long userId, String nickname, String profileImage) {}
 
   public record QuestionInfo(Long reward, boolean isSolved) {}
 
-  public static PostListResponse from(PostResult result) {
+  public static PostListResponse from(PostListResult result) {
     QuestionInfo questionInfo = null;
 
     if (PostType.QUESTION.equals(result.type())) {
@@ -43,7 +42,6 @@ public record PostListResponse(
         result.createdAt(),
         result.updatedAt(),
         new WriterInfo(result.userId(), result.nickname(), result.profileImageUrl()),
-        result.imageUrls(),
         questionInfo);
   }
 }

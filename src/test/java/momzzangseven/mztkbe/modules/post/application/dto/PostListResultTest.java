@@ -9,11 +9,11 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("PostResult unit test")
-class PostResultTest {
+@DisplayName("PostListResult unit test")
+class PostListResultTest {
 
   @Test
-  @DisplayName("fromDomain maps all fields and defaults null solved to false")
+  @DisplayName("fromDomain maps list fields and defaults null solved to false")
   void fromDomainMapsAndDefaultsSolved() {
     LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 12, 0);
@@ -25,7 +25,6 @@ class PostResultTest {
             .type(PostType.QUESTION)
             .title("title")
             .content("content")
-            .imageUrls(List.of("img1"))
             .reward(50L)
             .isSolved(null)
             .tags(List.of("java"))
@@ -36,14 +35,13 @@ class PostResultTest {
     String nickname = "test nick name";
     String profileImageUrl = "test/image/url";
 
-    PostResult result = PostResult.fromDomain(post, nickname, profileImageUrl);
+    PostListResult result = PostListResult.fromDomain(post, nickname, profileImageUrl);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
     assertThat(result.type()).isEqualTo(PostType.QUESTION);
     assertThat(result.title()).isEqualTo("title");
     assertThat(result.content()).isEqualTo("content");
-    assertThat(result.imageUrls()).containsExactly("img1");
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isFalse();
     assertThat(result.tags()).containsExactly("java");
@@ -51,27 +49,5 @@ class PostResultTest {
     assertThat(result.updatedAt()).isEqualTo(updatedAt);
     assertThat(result.nickname()).isEqualTo(nickname);
     assertThat(result.profileImageUrl()).isEqualTo(profileImageUrl);
-  }
-
-  @Test
-  @DisplayName("fromDomain keeps solved true")
-  void fromDomainKeepsSolvedTrue() {
-    Post post =
-        Post.builder()
-            .id(1L)
-            .userId(2L)
-            .type(PostType.FREE)
-            .title("t")
-            .content("c")
-            .reward(0L)
-            .isSolved(true)
-            .build();
-
-    String nickname = "test nick name";
-    String profileImageUrl = "test/image/url";
-
-    PostResult result = PostResult.fromDomain(post, nickname, profileImageUrl);
-
-    assertThat(result.isSolved()).isTrue();
   }
 }

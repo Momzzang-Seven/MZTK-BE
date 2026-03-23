@@ -14,15 +14,16 @@ import org.junit.jupiter.api.Test;
 class CreatePostCommandTest {
 
   @Test
-  @DisplayName("of() creates command")
+  @DisplayName("of() creates command with imageIds")
   void of_createsCommand() {
     CreatePostCommand command =
-        CreatePostCommand.of(1L, "title", "content", PostType.FREE, 0L, List.of(), List.of());
+        CreatePostCommand.of(1L, "title", "content", PostType.FREE, 0L, List.of(1L, 2L), List.of());
 
     assertThat(command.userId()).isEqualTo(1L);
     assertThat(command.title()).isNull();
     assertThat(command.content()).isEqualTo("content");
     assertThat(command.type()).isEqualTo(PostType.FREE);
+    assertThat(command.imageIds()).containsExactly(1L, 2L);
   }
 
   @Test
@@ -48,7 +49,7 @@ class CreatePostCommandTest {
   }
 
   @Test
-  @DisplayName("QUESTION post requires non-negative reward")
+  @DisplayName("QUESTION post requires positive reward")
   void validate_questionWithoutReward_throwsException() {
     CreatePostCommand command =
         new CreatePostCommand(
@@ -106,10 +107,11 @@ class CreatePostCommandTest {
   void of_questionType_keepsTitleInCommand() {
     CreatePostCommand command =
         CreatePostCommand.of(
-            1L, "question title", "content", PostType.QUESTION, 10L, List.of(), List.of());
+            1L, "question title", "content", PostType.QUESTION, 10L, List.of(1L), List.of());
 
     assertThat(command.title()).isEqualTo("question title");
     assertThat(command.type()).isEqualTo(PostType.QUESTION);
+    assertThat(command.imageIds()).containsExactly(1L);
   }
 
   @Test
@@ -124,6 +126,17 @@ class CreatePostCommandTest {
   }
 
   @Test
+  @DisplayName("validate rejects QUESTION with zero reward")
+  void validate_questionWithZeroReward_throwsException() {
+    CreatePostCommand command =
+        new CreatePostCommand(1L, "title", "content", PostType.QUESTION, 0L, List.of(), List.of());
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Questions must have a valid reward");
+  }
+
+  @Test
   @DisplayName("validate rejects QUESTION with negative reward")
   void validate_questionWithNegativeReward_throwsException() {
     CreatePostCommand command =
@@ -132,5 +145,17 @@ class CreatePostCommandTest {
     assertThatThrownBy(command::validate)
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("Questions must have a valid reward");
+  }
+
+  @Test
+  @DisplayName("validate rejects duplicate imageIds on create")
+  void validate_duplicateImageIds_throwsException() {
+    CreatePostCommand command =
+        new CreatePostCommand(
+            1L, null, "content", PostType.FREE, 0L, List.of(1L, 1L), List.of());
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Duplicate image IDs are not allowed");
   }
 }

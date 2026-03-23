@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
-import org.hibernate.validator.constraints.URL;
 
 public record CreateQuestionPostRequest(
     @NotBlank(message = "Title must not be blank.")
@@ -17,7 +16,11 @@ public record CreateQuestionPostRequest(
     @NotNull(message = "Reward must be provided.")
         @Positive(message = "Reward must be greater than 0.")
         Long reward,
-    List<@URL(message = "Invalid URL format.") String> imageUrls,
+    List<
+            @NotNull(message = "Image ID must not be null.")
+            @Positive(message = "Image ID must be positive.")
+            Long>
+        imageIds,
     List<String> tags) {
 
   public CreatePostCommand toCommand(Long userId) {
@@ -27,7 +30,7 @@ public record CreateQuestionPostRequest(
         this.content,
         PostType.QUESTION, // PostType 고정
         this.reward,
-        this.imageUrls,
+        this.imageIds,
         this.tags);
   }
 
