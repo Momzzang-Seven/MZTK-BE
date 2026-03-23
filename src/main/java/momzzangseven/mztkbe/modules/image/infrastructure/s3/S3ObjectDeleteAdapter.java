@@ -20,6 +20,7 @@ public class S3ObjectDeleteAdapter implements DeleteS3ObjectPort {
   @Override
   public void deleteObject(String objectKey) {
     try {
+      log.info("[S3 Delete] Deleting object {}", objectKey);
       s3Client.deleteObject(
           DeleteObjectRequest.builder().bucket(bucketName).key(objectKey).build());
     } catch (Exception e) {
