@@ -29,6 +29,9 @@ public class HandleLambdaCallbackService implements HandleLambdaCallbackUseCase 
   @Transactional
   public void execute(LambdaCallbackCommand command) {
     command.validate();
+    log.info(
+            "Lambda callback status={}, tmpObjectKey={}, finalObjectKey={}, errorReason={}", command.status(), command.tmpObjectKey(), command.finalObjectKey(), command.errorReason()
+    );
 
     Image image =
         loadImagePort
