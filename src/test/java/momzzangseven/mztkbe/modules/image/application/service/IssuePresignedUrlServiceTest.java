@@ -2,12 +2,14 @@ package momzzangseven.mztkbe.modules.image.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
+import java.util.stream.IntStream;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlResult;
 import momzzangseven.mztkbe.modules.image.application.port.out.GeneratePresignedUrlPort;
@@ -47,7 +49,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class IssuePresignedUrlServiceTest {
 
   private static final String FAKE_PRESIGNED_URL = "https://s3.presigned.url/fake";
-  private static final String FAKE_OBJECT_KEY = "fake/key/uuid.jpg";
 
   @Mock private GeneratePresignedUrlPort generatePresignedUrlPort;
 
@@ -55,12 +56,26 @@ class IssuePresignedUrlServiceTest {
 
   @InjectMocks private IssuePresignedUrlService service;
 
-  /** 기본 stub 설정 헬퍼 — 모든 호출에 대해 고정 PresignedUrlWithKey를 반환한다. */
+  /** 기본 stub 설정 헬퍼 — 각 호출마다 uuid/extension 기반의 고유 PresignedUrlWithKey를 반환한다. */
   private void stubPort() {
     given(
             generatePresignedUrlPort.generatePutPresignedUrl(
                 any(ImageReferenceType.class), anyString(), anyString()))
-        .willReturn(new PresignedUrlWithKey(FAKE_PRESIGNED_URL, FAKE_OBJECT_KEY));
+        .willAnswer(
+            invocation -> {
+              String uuid = invocation.getArgument(1);
+              String ext = invocation.getArgument(2);
+              String objectKey = "fake/key/" + uuid + "." + ext;
+              return new PresignedUrlWithKey(FAKE_PRESIGNED_URL + "/" + uuid, objectKey);
+            });
+    given(saveImagePort.saveAll(anyList()))
+        .willAnswer(
+            invocation -> {
+              List<Image> pending = invocation.getArgument(0);
+              return IntStream.range(0, pending.size())
+                  .mapToObj(i -> pending.get(i).toBuilder().id((long) i + 1).build())
+                  .toList();
+            });
   }
 
   @Nested
@@ -301,6 +316,14 @@ class IssuePresignedUrlServiceTest {
     @DisplayName("응답 tmpObjectKey와 DB 저장 tmpObjectKey가 일치한다")
     @SuppressWarnings("unchecked")
     void execute_responseTmpObjectKeyMatchesSavedKey() {
+      given(saveImagePort.saveAll(anyList()))
+          .willAnswer(
+              invocation -> {
+                List<Image> pending = invocation.getArgument(0);
+                return IntStream.range(0, pending.size())
+                    .mapToObj(i -> pending.get(i).toBuilder().id((long) i + 1).build())
+                    .toList();
+              });
       given(
               generatePresignedUrlPort.generatePutPresignedUrl(
                   any(ImageReferenceType.class), anyString(), anyString()))
