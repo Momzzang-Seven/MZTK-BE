@@ -120,29 +120,68 @@ class S3PresignedUrlAdapterTest {
     }
 
     @Test
-    @DisplayName("MARKET_THUMB → public/market/thumb/tmp/{uuid}.jpg")
-    void generatePutPresignedUrl_marketThumb_assemblesCorrectObjectKey() {
+    @DisplayName("MARKET_CLASS_THUMB → public/market/class/thumb/tmp/{uuid}.jpg")
+    void generatePutPresignedUrl_marketClassThumb_assemblesCorrectObjectKey() {
       ArgumentCaptor<PutObjectPresignRequest> captor =
           ArgumentCaptor.forClass(PutObjectPresignRequest.class);
 
-      adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_THUMB, TEST_UUID, "jpg");
+      adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_CLASS_THUMB, TEST_UUID, "jpg");
 
       verify(s3Presigner).presignPutObject(captor.capture());
       assertThat(captor.getValue().putObjectRequest().key())
-          .isEqualTo("public/market/thumb/tmp/" + TEST_UUID + ".jpg");
+          .isEqualTo("public/market/class/thumb/tmp/" + TEST_UUID + ".jpg");
     }
 
     @Test
-    @DisplayName("MARKET_DETAIL → public/market/detail/tmp/{uuid}.png")
-    void generatePutPresignedUrl_marketDetail_assemblesCorrectObjectKey() {
+    @DisplayName("MARKET_CLASS_DETAIL → public/market/class/detail/tmp/{uuid}.png")
+    void generatePutPresignedUrl_marketClassDetail_assemblesCorrectObjectKey() {
       ArgumentCaptor<PutObjectPresignRequest> captor =
           ArgumentCaptor.forClass(PutObjectPresignRequest.class);
 
-      adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_DETAIL, TEST_UUID, "png");
+      adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_CLASS_DETAIL, TEST_UUID, "png");
 
       verify(s3Presigner).presignPutObject(captor.capture());
       assertThat(captor.getValue().putObjectRequest().key())
-          .isEqualTo("public/market/detail/tmp/" + TEST_UUID + ".png");
+          .isEqualTo("public/market/class/detail/tmp/" + TEST_UUID + ".png");
+    }
+
+    @Test
+    @DisplayName("MARKET_STORE_THUMB → public/market/store/thumb/tmp/{uuid}.jpg")
+    void generatePutPresignedUrl_marketStoreThumb_assemblesCorrectObjectKey() {
+      ArgumentCaptor<PutObjectPresignRequest> captor =
+          ArgumentCaptor.forClass(PutObjectPresignRequest.class);
+
+      adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_STORE_THUMB, TEST_UUID, "jpg");
+
+      verify(s3Presigner).presignPutObject(captor.capture());
+      assertThat(captor.getValue().putObjectRequest().key())
+          .isEqualTo("public/market/store/thumb/tmp/" + TEST_UUID + ".jpg");
+    }
+
+    @Test
+    @DisplayName("MARKET_STORE_DETAIL → public/market/store/detail/tmp/{uuid}.png")
+    void generatePutPresignedUrl_marketStoreDetail_assemblesCorrectObjectKey() {
+      ArgumentCaptor<PutObjectPresignRequest> captor =
+          ArgumentCaptor.forClass(PutObjectPresignRequest.class);
+
+      adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_STORE_DETAIL, TEST_UUID, "png");
+
+      verify(s3Presigner).presignPutObject(captor.capture());
+      assertThat(captor.getValue().putObjectRequest().key())
+          .isEqualTo("public/market/store/detail/tmp/" + TEST_UUID + ".png");
+    }
+
+    @Test
+    @DisplayName("USER_PROFILE → public/user/profile/tmp/{uuid}.jpg")
+    void generatePutPresignedUrl_userProfile_assemblesCorrectObjectKey() {
+      ArgumentCaptor<PutObjectPresignRequest> captor =
+          ArgumentCaptor.forClass(PutObjectPresignRequest.class);
+
+      adapter.generatePutPresignedUrl(ImageReferenceType.USER_PROFILE, TEST_UUID, "jpg");
+
+      verify(s3Presigner).presignPutObject(captor.capture());
+      assertThat(captor.getValue().putObjectRequest().key())
+          .isEqualTo("public/user/profile/tmp/" + TEST_UUID + ".jpg");
     }
 
     @Test
@@ -160,10 +199,22 @@ class S3PresignedUrlAdapterTest {
     }
 
     @Test
-    @DisplayName("MARKET(virtual type)에는 prefix가 없으므로 InvalidImageRefTypeException 발생")
-    void generatePutPresignedUrl_marketVirtualType_throwsInvalidImageRefTypeException() {
+    @DisplayName("MARKET_CLASS(virtual type)에는 prefix가 없으므로 InvalidImageRefTypeException 발생")
+    void generatePutPresignedUrl_marketClassVirtualType_throwsInvalidImageRefTypeException() {
       assertThatThrownBy(
-              () -> adapter.generatePutPresignedUrl(ImageReferenceType.MARKET, TEST_UUID, "jpg"))
+              () ->
+                  adapter.generatePutPresignedUrl(
+                      ImageReferenceType.MARKET_CLASS, TEST_UUID, "jpg"))
+          .isInstanceOf(InvalidImageRefTypeException.class);
+    }
+
+    @Test
+    @DisplayName("MARKET_STORE(virtual type)에는 prefix가 없으므로 InvalidImageRefTypeException 발생")
+    void generatePutPresignedUrl_marketStoreVirtualType_throwsInvalidImageRefTypeException() {
+      assertThatThrownBy(
+              () ->
+                  adapter.generatePutPresignedUrl(
+                      ImageReferenceType.MARKET_STORE, TEST_UUID, "jpg"))
           .isInstanceOf(InvalidImageRefTypeException.class);
     }
   }
@@ -284,12 +335,13 @@ class S3PresignedUrlAdapterTest {
     }
 
     @Test
-    @DisplayName("MARKET_THUMB: tmpObjectKey에 thumb prefix와 uuid가 포함된다")
-    void generatePutPresignedUrl_marketThumb_returnsTmpObjectKeyWithThumbPrefixAndUuid() {
+    @DisplayName("MARKET_CLASS_THUMB: tmpObjectKey에 class/thumb prefix와 uuid가 포함된다")
+    void generatePutPresignedUrl_marketClassThumb_returnsTmpObjectKeyWithClassThumbPrefixAndUuid() {
       PresignedUrlWithKey result =
-          adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_THUMB, TEST_UUID, "png");
+          adapter.generatePutPresignedUrl(ImageReferenceType.MARKET_CLASS_THUMB, TEST_UUID, "png");
 
-      assertThat(result.tmpObjectKey()).isEqualTo("public/market/thumb/tmp/" + TEST_UUID + ".png");
+      assertThat(result.tmpObjectKey())
+          .isEqualTo("public/market/class/thumb/tmp/" + TEST_UUID + ".png");
     }
 
     @Test

@@ -45,18 +45,20 @@ class IssuePresignedUrlCommandTest {
   class InternalReferenceTypeValidation {
 
     @Test
-    @DisplayName("내부 전용 타입 MARKET_THUMB 요청 시 InvalidImageRefTypeException 발생")
-    void validate_throwsException_whenMarketThumb() {
+    @DisplayName("내부 전용 타입 MARKET_CLASS_THUMB 요청 시 InvalidImageRefTypeException 발생")
+    void validate_throwsException_whenMarketClassThumb() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET_THUMB, List.of("photo.jpg"));
+          new IssuePresignedUrlCommand(
+              1L, ImageReferenceType.MARKET_CLASS_THUMB, List.of("photo.jpg"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageRefTypeException.class);
     }
 
     @Test
-    @DisplayName("내부 전용 타입 MARKET_DETAIL 요청 시 InvalidImageRefTypeException 발생")
-    void validate_throwsException_whenMarketDetail() {
+    @DisplayName("내부 전용 타입 MARKET_CLASS_DETAIL 요청 시 InvalidImageRefTypeException 발생")
+    void validate_throwsException_whenMarketClassDetail() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET_DETAIL, List.of("photo.jpg"));
+          new IssuePresignedUrlCommand(
+              1L, ImageReferenceType.MARKET_CLASS_DETAIL, List.of("photo.jpg"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageRefTypeException.class);
     }
   }
@@ -121,11 +123,11 @@ class IssuePresignedUrlCommandTest {
     }
 
     @Test
-    @DisplayName("[E-15] MARKET에 6장 요청 시 ImageMaxCountExceedException 발생")
-    void validate_throwsException_whenMarketExceedsLimit() {
+    @DisplayName("[E-15] MARKET_CLASS에 6장 요청 시 ImageMaxCountExceedException 발생")
+    void validate_throwsException_whenMarketClassExceedsLimit() {
       List<String> filenames = List.of("1.jpg", "2.jpg", "3.jpg", "4.jpg", "5.jpg", "6.jpg");
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, filenames);
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET_CLASS, filenames);
       assertThatThrownBy(command::validate).isInstanceOf(ImageMaxCountExceedException.class);
     }
 
@@ -152,11 +154,11 @@ class IssuePresignedUrlCommandTest {
     }
 
     @Test
-    @DisplayName("[H-8] MARKET 5장(최대) validate() 통과")
-    void validate_passes_forMarketMaxImages() {
+    @DisplayName("[H-8] MARKET_CLASS 5장(최대) validate() 통과")
+    void validate_passes_forMarketClassMaxImages() {
       List<String> filenames = List.of("1.jpg", "2.jpg", "3.jpg", "4.jpg", "5.jpg");
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, filenames);
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET_CLASS, filenames);
       assertThatCode(command::validate).doesNotThrowAnyException();
     }
 
@@ -180,10 +182,10 @@ class IssuePresignedUrlCommandTest {
     }
 
     @Test
-    @DisplayName("MARKET 타입은 요청 가능 타입이므로 validate() 통과")
-    void validate_passes_forMarketType() {
+    @DisplayName("MARKET_CLASS 타입은 요청 가능 타입이므로 validate() 통과")
+    void validate_passes_forMarketClassType() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET, List.of("product.jpg"));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.MARKET_CLASS, List.of("product.jpg"));
       assertThatCode(command::validate).doesNotThrowAnyException();
     }
   }
