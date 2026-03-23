@@ -31,8 +31,7 @@ class PostTest {
   @Test
   @DisplayName("question post requires positive reward")
   void createQuestionRequiresPositiveReward() {
-    assertThatThrownBy(
-            () -> Post.create(1L, PostType.QUESTION, "title", "content", null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, "title", "content", null, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Reward must be positive for question posts.");
 
@@ -45,7 +44,8 @@ class PostTest {
   @DisplayName("question post keeps provided positive reward")
   void createQuestionWithPositiveReward() {
     Post post =
-        Post.create(1L, PostType.QUESTION, "question title", "question content", 25L, List.of("tag1"));
+        Post.create(
+            1L, PostType.QUESTION, "question title", "question content", 25L, List.of("tag1"));
 
     assertThat(post.getReward()).isEqualTo(25L);
     assertThat(post.getType()).isEqualTo(PostType.QUESTION);

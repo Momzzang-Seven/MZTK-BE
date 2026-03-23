@@ -18,8 +18,7 @@ public record CreateQuestionPostRequest(
         Long reward,
     List<
             @NotNull(message = "Image ID must not be null.")
-            @Positive(message = "Image ID must be positive.")
-            Long>
+            @Positive(message = "Image ID must be positive.") Long>
         imageIds,
     List<String> tags) {
 
