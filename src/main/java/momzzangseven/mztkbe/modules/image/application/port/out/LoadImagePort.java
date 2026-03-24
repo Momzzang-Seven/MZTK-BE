@@ -12,10 +12,12 @@ public interface LoadImagePort {
   Optional<Image> findByTmpObjectKeyForUpdate(String tmpObjectKey);
 
   /**
-   * Finds all images belonging to a specific reference entity and type(s). Used to identify
-   * existing images before update or delete operations.
+   * Finds all images belonging to a specific reference entity. {@code referenceTypes} should be the
+   * result of {@link ImageReferenceType#expand()} so that virtual types (e.g. MARKET_CLASS) are
+   * automatically resolved to their concrete DB-stored subtypes (e.g. MARKET_CLASS_THUMB,
+   * MARKET_CLASS_DETAIL).
    */
-  List<Image> findImagesByReference(ImageReferenceType referenceType, Long referenceId);
+  List<Image> findImagesByReference(List<ImageReferenceType> referenceTypes, Long referenceId);
 
   /** Finds images by their IDs. Used to validate and load the final image set on post update. */
   List<Image> findImagesByIdIn(List<Long> ids);

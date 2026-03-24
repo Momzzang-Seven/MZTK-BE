@@ -52,7 +52,8 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
 
     // ---- Phase 1: Unlink images no longer in the reference ----
     List<Image> existingImages =
-        loadImagePort.findImagesByReference(command.referenceType(), command.referenceId());
+        loadImagePort.findImagesByReference(
+            command.referenceType().expand(), command.referenceId());
 
     Set<Long> retainIds = Set.copyOf(command.imageIds());
     List<Image> toDelete =
@@ -84,9 +85,12 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
 
     // ---- Phase 2: Validate the final image set ----
     // Acquire a pessimistic write lock to prevent concurrent modification of the same rows.
-    List<Image> finalImages = loadImagePort.findImagesByIdInForUpdate(command.imageIds());
-    validateOwnership(finalImages, command.userId(), command.referenceId());
+    List<Image> finalImages =
+        loadImagePort.findImagesByIdInForUpdate(command.imageIds()); // 최종적으로 있어야 할 이미지들. 순서가 없음.
+    validateOwnership(
+        finalImages, command.userId(), command.referenceType(), command.referenceId());
     validateCount(command.imageIds().size(), command.referenceType());
+    validateMarketOrder(finalImages, command.referenceType(), command.imageIds());
 
     // ---- Phase 3: Reassign order and reference ----
     List<Image> updated = buildOrderedImages(finalImages, command);
@@ -101,17 +105,67 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
    * @param userId ID of the user performing the update
    * @param referenceId ID of the reference being updated
    */
-  private void validateOwnership(List<Image> images, Long userId, Long referenceId) {
+  private void validateOwnership(
+      List<Image> images, Long userId, ImageReferenceType referenceType, Long referenceId) {
     for (Image img : images) {
       // Verify every images that it belongs to the user requested reference update
       if (!userId.equals(img.getUserId())) {
         throw new ImageNotBelongsToUserException(
             "Image " + img.getId() + " does not belong to user " + userId);
       }
-      // Verify only retained images that it belongs to the original reference
-      if (img.getReferenceId() != null && !referenceId.equals(img.getReferenceId())) {
+      // Verify only retained images that they belong to the original reference (type+id pair).
+      // referenceType.expand() resolves virtual types (e.g. MARKET_CLASS → [THUMB, DETAIL]) so
+      // that concrete DB-stored subtypes are accepted without false positives.
+      if (img.getReferenceId() != null
+          && !(referenceType.expand().contains(img.getReferenceType())
+              && referenceId.equals(img.getReferenceId()))) {
         throw new InvalidImageRefTypeException(
             "Image " + img.getId() + " is already linked to a different entity");
+      }
+    }
+  }
+
+  /**
+   * For virtual MARKET types, verifies that the ordered image set satisfies the layout rule: the
+   * first image must be the THUMB subtype and every subsequent image must be the DETAIL subtype.
+   *
+   * <p>Non-virtual types (e.g. {@code COMMUNITY_*}) are skipped entirely.
+   *
+   * @param images unordered images loaded for the final set
+   * @param referenceType the command's reference type (may be virtual)
+   * @param orderedIds caller-supplied ordered list of image IDs
+   */
+  private void validateMarketOrder(
+      List<Image> images, ImageReferenceType referenceType, List<Long> orderedIds) {
+    if (!referenceType.isVirtual()) {
+      return;
+    }
+
+    List<ImageReferenceType> expanded = referenceType.expand();
+    ImageReferenceType thumbType = expanded.get(0);
+    ImageReferenceType detailType = expanded.get(1);
+
+    Map<Long, Image> imageById =
+        images.stream().collect(Collectors.toMap(Image::getId, img -> img));
+
+    for (int i = 0; i < orderedIds.size(); i++) {
+      Image img = imageById.get(orderedIds.get(i)); // 첫번째 순서 id : 1 => img = 1Img
+      if (img == null) {
+        continue; // null case is caught later in buildOrderedImages
+      }
+      ImageReferenceType expectedType = (i == 0) ? thumbType : detailType;
+      if (!expectedType.equals(img.getReferenceType())) {
+        throw new InvalidImageRefTypeException(
+            "Image "
+                + img.getId()
+                + " at position "
+                + (i + 1)
+                + " has type "
+                + img.getReferenceType()
+                + " but expected "
+                + expectedType
+                + " for reference type "
+                + referenceType);
       }
     }
   }
@@ -157,9 +211,14 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
       if (img == null) {
         throw new ImageNotFoundException("Requested image not found: id=" + id);
       }
-      result.add(
-          img.updateReference(command.referenceType(), command.referenceId())
-              .updateImageOrder(i + 1));
+      // For virtual types (MARKET_CLASS, MARKET_STORE), the concrete subtype (THUMB/DETAIL)
+      // is already stored on the image from IssuePresignedUrlService. Preserve it so we do
+      // not overwrite a concrete type with its virtual parent in the DB.
+      ImageReferenceType concreteType =
+          command.referenceType().isVirtual() // MARKET_STORE -> concreteType =
+              ? img.getReferenceType()
+              : command.referenceType();
+      result.add(img.updateReference(concreteType, command.referenceId()).updateImageOrder(i + 1));
     }
 
     return result;

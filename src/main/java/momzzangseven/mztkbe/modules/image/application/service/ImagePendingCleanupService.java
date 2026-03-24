@@ -4,8 +4,9 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.image.application.config.ImagePendingCleanupProperties;
+import momzzangseven.mztkbe.modules.image.application.port.in.RunPendingImageCleanupBatchUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
+import momzzangseven.mztkbe.modules.image.infrastructure.config.ImagePendingCleanupProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ImagePendingCleanupService {
+public class ImagePendingCleanupService implements RunPendingImageCleanupBatchUseCase {
   private final DeleteImagePort deleteImagePort;
   private final ImagePendingCleanupProperties props;
 
@@ -28,6 +29,7 @@ public class ImagePendingCleanupService {
    * @param now the reference time for computing the cutoff (passed in for testability)
    * @return the number of rows deleted; {@code 0} signals that no more work remains
    */
+  @Override
   @Transactional
   public int runBatch(Instant now) {
     Instant cutoff = now.minus(props.getRetentionHours(), ChronoUnit.HOURS);
