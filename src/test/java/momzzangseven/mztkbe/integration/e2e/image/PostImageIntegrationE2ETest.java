@@ -318,9 +318,11 @@ class PostImageIntegrationE2ETest {
     createdPostIds.remove(postId); // 이미 삭제됨
 
     // 검증: AFTER_COMMIT 이벤트 처리 후 이미지 unlink
+    // referenceType·status는 재사용 허용을 위해 보존되고, referenceId만 null로 변환된다.
     ImageEntity unlinked = findImageOrFail(img.tmpObjectKey());
     assertThat(unlinked.getReferenceId()).isNull();
-    assertThat(unlinked.getReferenceType()).isNull();
+    assertThat(unlinked.getReferenceType()).isEqualTo("COMMUNITY_FREE");
+    assertThat(unlinked.getStatus()).isEqualTo("COMPLETED");
   }
 
   @Test

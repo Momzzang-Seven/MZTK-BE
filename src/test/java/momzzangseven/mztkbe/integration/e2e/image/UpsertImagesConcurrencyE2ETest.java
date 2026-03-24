@@ -45,6 +45,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <ul>
  *   <li>[TC-LOCK-001] 동시 UpsertImagesByReferenceService — 같은 imageId 목록으로 2개 스레드 동시 실행
+ *   <li>[TC-LOCK-002] 교차 삭제/유지 — T1이 유지하는 이미지를 T2가 삭제하고 그 역도 성립 → 데드락 없이 순차 처리
  *   <li>[TC-LOCK-004] 중복 PostDeletedEvent — UnlinkImagesByReferenceService 2회 동시 실행 → 멱등 처리
  * </ul>
  */
@@ -105,7 +106,7 @@ class UpsertImagesConcurrencyE2ETest {
           ImageEntity entity =
               ImageEntity.builder()
                   .userId(userId)
-                  .referenceType(null)
+                  .referenceType(FREE.name())
                   .referenceId(null)
                   .status("PENDING")
                   .tmpObjectKey(tmpKey)
@@ -238,6 +239,75 @@ class UpsertImagesConcurrencyE2ETest {
 
     // 검증: 두 스레드 모두 정상 처리 (예외 없음)
     assertThat(errors).isEmpty();
+  }
+
+  // ===================================================================
+  // TC-LOCK-002: 교차 삭제/유지 — 데드락 재현 케이스
+  // ===================================================================
+
+  @Test
+  @DisplayName(
+      "[TC-LOCK-002] 교차 삭제/유지 — T1이 유지하는 이미지를 T2가 삭제하고, T2가 유지하는 이미지를 T1이 삭제 → 데드락 없이 순차 처리")
+  void concurrentUpsert_crossingDeleteRetain_noDeadlock() throws InterruptedException {
+    // 준비: 4개 이미지를 모두 REF_ID에 연결 (COMPLETED, finalObjectKey=null → S3 삭제 스킵)
+    Long id1 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
+    Long id2 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
+    Long id3 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
+    Long id4 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
+
+    // T1: [id1, id2] 유지 — id3, id4 삭제
+    // T2: [id3, id4] 유지 — id1, id2 삭제
+    //
+    // Phase 0 선행락(findImagesByReferenceForUpdate) 없이 실행할 경우 재현되는 데드락:
+    //   T1이 Phase 1에서 id1,id2에 SELECT FOR UPDATE 잠금 획득
+    //   T2가 Phase 1에서 id3,id4에 SELECT FOR UPDATE 잠금 획득
+    //   T1이 Phase 2에서 id3,id4 UPDATE(unlink) 시도 → T2가 보유 중이므로 대기
+    //   T2가 Phase 2에서 id1,id2 UPDATE(unlink) 시도 → T1이 보유 중이므로 대기
+    //   → DEADLOCK
+    //
+    // Phase 0에서 reference 단위로 전체 행을 먼저 잠그면(id1..id4 일괄 lock) 두 트랜잭션이
+    // 동일한 락 집합을 경쟁하여 하나가 순서대로 처리되고 데드락이 발생하지 않는다.
+    UpsertImagesByReferenceCommand commandT1 =
+        new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(id1, id2));
+    UpsertImagesByReferenceCommand commandT2 =
+        new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(id3, id4));
+
+    CountDownLatch startLatch = new CountDownLatch(1);
+    CountDownLatch doneLatch = new CountDownLatch(2);
+    List<Throwable> errors = new CopyOnWriteArrayList<>();
+
+    for (UpsertImagesByReferenceCommand cmd : List.of(commandT1, commandT2)) {
+      new Thread(
+              () -> {
+                try {
+                  startLatch.await();
+                  upsertImagesByReferenceUseCase.execute(cmd);
+                } catch (Exception e) {
+                  errors.add(e);
+                } finally {
+                  doneLatch.countDown();
+                }
+              })
+          .start();
+    }
+
+    startLatch.countDown();
+    doneLatch.await(15, TimeUnit.SECONDS);
+
+    // 검증: 데드락 없이 두 트랜잭션 모두 정상 완료 (예외 없음)
+    assertThat(errors).as("교차 삭제/유지 시 데드락이 발생하면 예외가 등록됨").isEmpty();
+
+    // 검증: 최종 상태는 [id1, id2] 또는 [id3, id4] 중 하나 (last-write-wins)
+    List<ImageEntity> linked =
+        imageJpaRepository.findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
+            List.of(FREE.name()), REF_ID);
+    assertThat(linked).hasSize(2);
+    List<Long> linkedIds = linked.stream().map(ImageEntity::getId).toList();
+    boolean t1Wins = linkedIds.containsAll(List.of(id1, id2));
+    boolean t2Wins = linkedIds.containsAll(List.of(id3, id4));
+    assertThat(t1Wins || t2Wins)
+        .as("최종 상태는 T1([%d,%d]) 또는 T2([%d,%d]) 결과 중 하나여야 함 (실제: %s)", id1, id2, id3, id4, linkedIds)
+        .isTrue();
   }
 
   // ===================================================================

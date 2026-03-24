@@ -19,6 +19,13 @@ public interface LoadImagePort {
    */
   List<Image> findImagesByReference(List<ImageReferenceType> referenceTypes, Long referenceId);
 
+  /**
+   * Same as {@link #findImagesByReference} but acquires a PESSIMISTIC_WRITE lock on every returned
+   * row.
+   */
+  List<Image> findImagesByReferenceForUpdate(
+      List<ImageReferenceType> referenceTypes, Long referenceId);
+
   /** Finds images by their IDs. Used to validate and load the final image set on post update. */
   List<Image> findImagesByIdIn(List<Long> ids);
 
@@ -29,13 +36,16 @@ public interface LoadImagePort {
   List<Image> findImagesByIdInForUpdate(List<Long> ids);
 
   /**
-   * Finds unlinked images (reference_type IS NULL AND reference_id IS NULL) created before the
-   * given cutoff, up to batchSize rows, ordered by id ascending. Used exclusively by {@code
+   * Finds non-PENDING images with {@code referenceId = null} whose {@code updated_at} is before the
+   * given cutoff, up to {@code batchSize} rows ordered by id ascending. Used exclusively by {@code
    * ImageUnlinkedCleanupService}.
    *
-   * @param cutoff only images created before this instant are eligible
+   * <p>PENDING images whose {@code referenceId} was cleared remain in PENDING status and are
+   * handled by {@code ImagePendingCleanupService}, not by this query.
+   *
+   * @param cutoff only images updated before this instant are eligible
    * @param batchSize maximum number of rows to return
-   * @return batch of unlinked images ready for permanent removal
+   * @return batch of non-PENDING unlinked images ready for permanent removal
    */
   List<Image> findUnlinkedImagesBefore(Instant cutoff, int batchSize);
 }

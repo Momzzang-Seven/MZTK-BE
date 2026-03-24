@@ -27,9 +27,11 @@ public interface DeleteImagePort {
   void deleteImagesByIdIn(List<Long> ids);
 
   /**
-   * Unlinks all images associated with the given reference by setting referenceType and referenceId
-   * to null. Does NOT physically delete the DB row or the S3 object. The
-   * ImageUnlinkedCleanupScheduler handles actual cleanup asynchronously.
+   * Unlinks all images associated with the given reference by setting {@code referenceId = null}.
+   * {@code referenceType} and {@code status} are preserved so that PENDING images can still receive
+   * Lambda callbacks and COMPLETED images can be re-linked by the same user. Does NOT physically
+   * delete the DB row or the S3 object — {@code ImageUnlinkedCleanupService} handles deferred
+   * cleanup of non-PENDING images once the retention window expires.
    *
    * <p>{@code referenceTypes} should be the result of {@link ImageReferenceType#expand()} so that
    * virtual types (e.g. MARKET_CLASS) are resolved to their concrete subtypes.
