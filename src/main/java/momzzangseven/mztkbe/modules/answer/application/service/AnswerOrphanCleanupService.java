@@ -25,6 +25,7 @@ public class AnswerOrphanCleanupService implements RunOrphanAnswerCleanupBatchUs
   @Override
   @Transactional
   public int runBatch() {
+    validateProperties();
     List<Long> orphanAnswerIds = loadAnswerPort.loadOrphanAnswerIds(props.getBatchSize());
     if (orphanAnswerIds.isEmpty()) {
       return 0;
@@ -36,5 +37,11 @@ public class AnswerOrphanCleanupService implements RunOrphanAnswerCleanupBatchUs
 
     log.info("Orphan answer cleanup batch: deleted={}", orphanAnswerIds.size());
     return orphanAnswerIds.size();
+  }
+
+  private void validateProperties() {
+    if (props.getBatchSize() <= 0) {
+      throw new IllegalStateException("answer.orphan-cleanup.batch-size must be positive");
+    }
   }
 }

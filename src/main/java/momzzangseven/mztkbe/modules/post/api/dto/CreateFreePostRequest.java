@@ -13,7 +13,7 @@ public record CreateFreePostRequest(
             @NotNull(message = "Image ID must not be null.")
             @Positive(message = "Image ID must be positive.") Long>
         imageIds,
-    List<String> tags) {
+    List<@NotBlank(message = "Tag must not be blank.") String> tags) {
 
   public CreatePostCommand toCommand(Long userId) {
     return CreatePostCommand.of(

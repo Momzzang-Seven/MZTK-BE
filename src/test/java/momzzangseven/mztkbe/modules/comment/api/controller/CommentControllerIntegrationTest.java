@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
@@ -123,6 +124,37 @@ class CommentControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].commentId").value(commentId))
         .andExpect(jsonPath("$.data.content[0].isDeleted").value(true))
         .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."));
+  }
+
+  @Test
+  @DisplayName("존재하지 않는 게시글의 루트 댓글 조회는 404를 반환한다")
+  void getRootComments_missingPost_returns404() throws Exception {
+    mockMvc
+        .perform(get("/posts/999999/comments").with(userPrincipal(401L)))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_001"));
+  }
+
+  @Test
+  @DisplayName("부모 댓글의 게시글이 존재하지 않으면 대댓글 조회는 404를 반환한다")
+  void getReplies_missingParentPost_returns404() throws Exception {
+    CommentEntity orphanParent =
+        commentJpaRepository.save(
+            CommentEntity.builder()
+                .postId(999999L)
+                .writerId(401L)
+                .content("orphan parent")
+                .isDeleted(false)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build());
+
+    mockMvc
+        .perform(get("/comments/" + orphanParent.getId() + "/replies").with(userPrincipal(401L)))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_001"));
   }
 
   private Long extractLong(MvcResult result, String pointer) throws Exception {

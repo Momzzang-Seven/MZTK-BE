@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.answer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -59,5 +60,19 @@ class AnswerOrphanCleanupServiceTest {
     verify(deleteAnswerPort).deleteAnswersByIds(List.of(10L, 11L));
     verify(eventPublisher).publishEvent(new AnswerDeletedEvent(10L));
     verify(eventPublisher).publishEvent(new AnswerDeletedEvent(11L));
+  }
+
+  @Test
+  @DisplayName("batch size가 0 이하이면 예외를 던지고 cleanup을 수행하지 않는다")
+  void runBatch_invalidBatchSize_throwsIllegalStateException() {
+    given(props.getBatchSize()).willReturn(0);
+
+    assertThatThrownBy(() -> cleanupService.runBatch())
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("answer.orphan-cleanup.batch-size must be positive");
+
+    verify(loadAnswerPort, never()).loadOrphanAnswerIds(any(Integer.class));
+    verify(deleteAnswerPort, never()).deleteAnswersByIds(any());
+    verify(eventPublisher, never()).publishEvent(any());
   }
 }
