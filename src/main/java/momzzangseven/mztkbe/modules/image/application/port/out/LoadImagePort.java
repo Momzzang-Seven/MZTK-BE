@@ -48,4 +48,7 @@ public interface LoadImagePort {
 
   /** Finds images still linked to COMMUNITY_ANSWER rows whose answer no longer exists. */
   List<Image> findOrphanAnswerImages(int batchSize);
+
+  /** Finds images still linked to post rows whose post no longer exists. */
+  List<Image> findOrphanPostImages(int batchSize);
 }

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
+import java.util.HashSet;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 
@@ -13,6 +14,10 @@ public record UpdatePostCommand(
 
     if (content != null && content.isBlank()) {
       throw new PostInvalidInputException("Content cannot be blank.");
+    }
+
+    if (imageIds != null && new HashSet<>(imageIds).size() != imageIds.size()) {
+      throw new PostInvalidInputException("Duplicate image IDs are not allowed");
     }
 
     if (title == null && content == null && imageIds == null && tags == null) {

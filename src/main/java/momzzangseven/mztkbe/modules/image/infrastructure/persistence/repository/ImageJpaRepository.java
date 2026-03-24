@@ -67,6 +67,18 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
       nativeQuery = true)
   List<ImageEntity> findOrphanAnswerImages(@Param("batchSize") int batchSize);
 
+  @Query(
+      value =
+          "SELECT i.* FROM images i "
+              + "LEFT JOIN posts p ON p.id = i.reference_id "
+              + "WHERE i.reference_type IN ('COMMUNITY_FREE', 'COMMUNITY_QUESTION') "
+              + "AND i.reference_id IS NOT NULL "
+              + "AND p.id IS NULL "
+              + "ORDER BY i.id "
+              + "LIMIT :batchSize",
+      nativeQuery = true)
+  List<ImageEntity> findOrphanPostImages(@Param("batchSize") int batchSize);
+
   // ========== DELETE ========== //
 
   /**
