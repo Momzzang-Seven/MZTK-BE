@@ -6,6 +6,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.image.application.service.ImagePendingCleanupService;
+import momzzangseven.mztkbe.modules.image.infrastructure.scheduler.ImagePendingCleanupScheduler;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

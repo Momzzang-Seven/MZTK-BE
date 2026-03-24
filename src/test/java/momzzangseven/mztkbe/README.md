@@ -618,6 +618,10 @@ npx playwright test wallet-registration.spec.ts
 
 # 결과를 HTML 리포트로 시각화
 npx playwright show-report
+
+# 만약 AWS Lambda의 동작이 테스트케이스에 필요하다면, ngrok 포트포워딩 필요
+# 결과로 나오는 Forwarding 중간의 항목을 AWS Lambda Environment variables/SPRING_BE_BASE_URL에 넣어줘야 함.
+ngrok http 8080
 ```
 
 ## 7. 결과 보고서 작성 규칙

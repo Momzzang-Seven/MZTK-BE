@@ -9,8 +9,8 @@ import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import momzzangseven.mztkbe.modules.image.application.config.ImagePendingCleanupProperties;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
+import momzzangseven.mztkbe.modules.image.infrastructure.config.ImagePendingCleanupProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

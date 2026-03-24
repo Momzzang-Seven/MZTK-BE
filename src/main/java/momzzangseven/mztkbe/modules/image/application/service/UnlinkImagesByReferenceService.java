@@ -17,6 +17,7 @@ public class UnlinkImagesByReferenceService implements UnlinkImagesByReferenceUs
   @Transactional
   public void execute(UnlinkImagesByReferenceCommand command) {
     command.validate();
-    deleteImagePort.unlinkImagesByReference(command.referenceType(), command.referenceId());
+    deleteImagePort.unlinkImagesByReference(
+        command.referenceType().expand(), command.referenceId());
   }
 }

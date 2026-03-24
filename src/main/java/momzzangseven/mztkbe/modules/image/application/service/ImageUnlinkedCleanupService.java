@@ -5,12 +5,13 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.image.application.config.ImageUnlinkedCleanupProperties;
+import momzzangseven.mztkbe.modules.image.application.port.in.RunUnlinkedImageCleanupBatchUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteS3ObjectPort;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
+import momzzangseven.mztkbe.modules.image.infrastructure.config.ImageUnlinkedCleanupProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ImageUnlinkedCleanupService {
+public class ImageUnlinkedCleanupService implements RunUnlinkedImageCleanupBatchUseCase {
   private final LoadImagePort loadImagePort;
   private final DeleteImagePort deleteImagePort;
   private final DeleteS3ObjectPort deleteS3ObjectPort;
@@ -44,6 +45,7 @@ public class ImageUnlinkedCleanupService {
    * @param now reference time used to compute the cutoff (injected for testability)
    * @return number of records deleted; {@code 0} signals that no more work remains
    */
+  @Override
   @Transactional
   public int runBatch(Instant now) {
     Instant cutoff = now.minus(props.getRetentionHours(), ChronoUnit.HOURS);

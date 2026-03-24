@@ -19,5 +19,9 @@ public record UpsertImagesByReferenceCommand(
       throw new IllegalArgumentException("referenceId must be positive");
     if (referenceType == null) throw new IllegalArgumentException("referenceType must not be null");
     if (imageIds == null) throw new IllegalArgumentException("imageIds must not be null");
+    for (int i = 0; i < imageIds.size(); i++) {
+      Long id = imageIds.get(i);
+      if (id == null || id <= 0) throw new IllegalArgumentException("imageIds must be positive");
+    }
   }
 }
