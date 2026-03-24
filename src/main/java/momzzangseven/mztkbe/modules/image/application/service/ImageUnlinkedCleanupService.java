@@ -9,26 +9,25 @@ import momzzangseven.mztkbe.modules.image.application.port.in.RunUnlinkedImageCl
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteS3ObjectPort;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
+import momzzangseven.mztkbe.modules.image.application.port.out.LoadUnlinkedImageCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
-import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
-import momzzangseven.mztkbe.modules.image.infrastructure.config.ImageUnlinkedCleanupProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Application service that permanently removes unlinked image records (reference_type IS NULL AND
- * reference_id IS NULL) in fixed-size batches.
+ * Application service that permanently removes non-PENDING images with {@code referenceId = null}
+ * in fixed-size batches.
  *
- * <p>An image becomes unlinked when:
+ * <p>An image's {@code referenceId} is set to {@code null} when its owning reference is deleted or
+ * updated. The image's {@code status} and {@code referenceType} are intentionally preserved:
  *
  * <ul>
- *   <li>A post is deleted — all associated images are unlinked via {@code PostDeletedEvent}.
- *   <li>A post is updated — removed images are unlinked by {@code UpsertImagesByReferenceService}.
- *   <li>A presigned URL is issued but the post is never created within the retention window.
+ *   <li>PENDING images remain available for an in-flight Lambda callback and are handled separately
+ *       by {@code ImagePendingCleanupService} — this service ignores them.
+ *   <li>COMPLETED/FAILED images with {@code referenceId = null} are cleaned up here after the
+ *       retention window (default 5 hours). The {@code referenceType} is preserved so the image can
+ *       still be re-linked by the same user before the window expires.
  * </ul>
- *
- * <p>The retention window (default 5 hours) provides enough buffer for Lambda to finish processing
- * (max Lambda timeout is 15 minutes) before the record is permanently removed.
  */
 @Slf4j
 @Service
@@ -37,10 +36,12 @@ public class ImageUnlinkedCleanupService implements RunUnlinkedImageCleanupBatch
   private final LoadImagePort loadImagePort;
   private final DeleteImagePort deleteImagePort;
   private final DeleteS3ObjectPort deleteS3ObjectPort;
-  private final ImageUnlinkedCleanupProperties props;
+  private final LoadUnlinkedImageCleanupPolicyPort cleanupPolicyPort;
 
   /**
-   * Processes one batch of unlinked images older than the retention window.
+   * Processes one batch of non-PENDING images with {@code referenceId = null} that are older than
+   * the retention window. For each candidate the final S3 object is deleted if present, then the DB
+   * row is permanently removed.
    *
    * @param now reference time used to compute the cutoff (injected for testability)
    * @return number of records deleted; {@code 0} signals that no more work remains
@@ -48,21 +49,22 @@ public class ImageUnlinkedCleanupService implements RunUnlinkedImageCleanupBatch
   @Override
   @Transactional
   public int runBatch(Instant now) {
-    Instant cutoff = now.minus(props.getRetentionHours(), ChronoUnit.HOURS);
-    List<Image> candidates = loadImagePort.findUnlinkedImagesBefore(cutoff, props.getBatchSize());
+    Instant cutoff = now.minus(cleanupPolicyPort.getRetentionHours(), ChronoUnit.HOURS);
+    List<Image> candidates =
+        loadImagePort.findUnlinkedImagesBefore(cutoff, cleanupPolicyPort.getBatchSize());
 
     if (candidates.isEmpty()) {
       return 0;
     }
 
     for (Image image : candidates) {
-      if (image.getStatus() == ImageStatus.COMPLETED && image.getFinalObjectKey() != null) {
+      if (image.getFinalObjectKey() != null) {
         // The final (WebP) object in S3 must be removed explicitly;
         // it is not covered by any S3 lifecycle rule on the tmp/ prefix.
+        // Images that were still PENDING when unlinked have no finalObjectKey, so their
+        // tmp/ object is reclaimed by the bucket's 1-day lifecycle rule automatically.
         deleteS3ObjectPort.deleteObject(image.getFinalObjectKey());
       }
-      // PENDING / FAILED: the tmp S3 object resides under tmp/ and is reclaimed
-      // by the bucket's 1-day lifecycle rule — no explicit deletion needed here.
     }
 
     List<Long> ids = candidates.stream().map(Image::getId).toList();
