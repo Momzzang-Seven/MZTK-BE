@@ -19,9 +19,6 @@ public interface LoadImagePort {
    */
   List<Image> findImagesByReference(List<ImageReferenceType> referenceTypes, Long referenceId);
 
-  List<Image> findImagesByReferenceIds(
-      List<ImageReferenceType> referenceTypes, List<Long> referenceIds);
-
   /** Finds images by their IDs. Used to validate and load the final image set on post update. */
   List<Image> findImagesByIdIn(List<Long> ids);
 

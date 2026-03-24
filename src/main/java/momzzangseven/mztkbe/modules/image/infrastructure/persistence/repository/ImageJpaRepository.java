@@ -23,9 +23,6 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
   List<ImageEntity> findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
       List<String> referenceTypes, Long referenceId);
 
-  List<ImageEntity> findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
-      List<String> referenceTypes, List<Long> referenceIds);
-
   /** Returns images matching the given IDs (no lock). */
   List<ImageEntity> findAllByIdIn(List<Long> ids);
 

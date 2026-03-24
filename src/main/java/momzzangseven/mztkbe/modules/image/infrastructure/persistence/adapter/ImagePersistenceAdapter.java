@@ -88,22 +88,6 @@ public class ImagePersistenceAdapter
   }
 
   @Override
-  public List<Image> findImagesByReferenceIds(
-      List<ImageReferenceType> referenceTypes, List<Long> referenceIds) {
-    if (referenceIds == null || referenceIds.isEmpty()) {
-      return List.of();
-    }
-    assertNoVirtualTypes(referenceTypes);
-    List<String> typeNames = referenceTypes.stream().map(Enum::name).toList();
-    return imageJpaRepository
-        .findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
-            typeNames, referenceIds)
-        .stream()
-        .map(this::toDomain)
-        .toList();
-  }
-
-  @Override
   public List<Image> findImagesByIdIn(List<Long> ids) {
     return imageJpaRepository.findAllByIdIn(ids).stream().map(this::toDomain).toList();
   }
