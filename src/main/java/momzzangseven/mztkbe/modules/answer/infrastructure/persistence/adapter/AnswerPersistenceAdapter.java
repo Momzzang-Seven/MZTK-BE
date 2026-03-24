@@ -37,6 +37,11 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
   }
 
   @Override
+  public List<Long> loadAnswerIdsByPostId(Long postId) {
+    return answerJpaRepository.findIdsByPostId(postId);
+  }
+
+  @Override
   public void deleteAnswer(Long answerId) {
     answerJpaRepository.deleteById(answerId);
   }
@@ -53,7 +58,6 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
         .userId(answer.getUserId())
         .content(answer.getContent())
         .isAccepted(answer.getIsAccepted())
-        .imageUrls(answer.getImageUrls())
         .build();
   }
 
@@ -64,7 +68,6 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
         .userId(entity.getUserId())
         .content(entity.getContent())
         .isAccepted(entity.getIsAccepted())
-        .imageUrls(entity.getImageUrls())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();

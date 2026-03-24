@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,16 +23,21 @@ import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
 import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -39,7 +46,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AnswerService")
@@ -50,6 +59,10 @@ class AnswerServiceTest {
   @Mock private LoadAnswerPort loadAnswerPort;
   @Mock private DeleteAnswerPort deleteAnswerPort;
   @Mock private LoadAnswerWriterPort loadAnswerWriterPort;
+  @Mock private LoadAnswerImagesPort loadAnswerImagesPort;
+  @Mock private UpdateAnswerImagesPort updateAnswerImagesPort;
+  @Mock private ApplicationEventPublisher eventPublisher;
+  @Spy private AnswerReadAssembler answerReadAssembler = new AnswerReadAssembler();
 
   @InjectMocks private AnswerService answerService;
 
@@ -58,13 +71,12 @@ class AnswerServiceTest {
   class SuccessCases {
 
     @Test
-    @DisplayName("execute(CreateAnswerCommand) returns the saved answer id")
-    void createAnswer_returnsSavedId() {
+    @DisplayName("execute(CreateAnswerCommand) returns the saved answer id and syncs images")
+    void createAnswer_returnsSavedId_andSyncsImages() {
       CreateAnswerCommand command =
-          new CreateAnswerCommand(10L, 20L, "answer content", List.of("https://image"));
+          new CreateAnswerCommand(10L, 20L, "answer content", List.of(1L, 2L));
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
-      Answer savedAnswer =
-          buildAnswer(99L, 10L, 20L, "answer content", false, List.of("https://image"));
+      Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
@@ -72,20 +84,47 @@ class AnswerServiceTest {
       CreateAnswerResult result = answerService.execute(command);
 
       assertThat(result.answerId()).isEqualTo(99L);
-      ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
-      verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
-      assertThat(answerCaptor.getValue().getPostId()).isEqualTo(10L);
-      assertThat(answerCaptor.getValue().getUserId()).isEqualTo(20L);
+      verify(updateAnswerImagesPort).updateImages(20L, 99L, List.of(1L, 2L));
     }
 
     @Test
-    @DisplayName("execute(Long) returns writer summary fields with answer results")
+    @DisplayName("create with null imageIds skips image sync")
+    void createAnswer_skipsSync_whenImageIdsAreNull() {
+      CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", null);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+
+      answerService.execute(command);
+
+      verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("create with empty imageIds skips image sync")
+    void createAnswer_skipsSync_whenImageIdsAreEmpty() {
+      CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+
+      answerService.execute(command);
+
+      verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("execute(Long) returns writer summary and image urls loaded in batch")
     void getAnswers_returnsDtos_whenPostExists() {
       Long postId = 10L;
       List<Answer> answers =
           List.of(
-              buildAnswer(1L, 10L, 20L, "first", false, List.of()),
-              buildAnswer(2L, 10L, 21L, "second", false, List.of("https://image")));
+              buildAnswer(1L, 10L, 20L, "first", false),
+              buildAnswer(2L, 10L, 21L, "second", false));
 
       given(loadPostPort.existsPost(postId)).willReturn(true);
       given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
@@ -94,21 +133,30 @@ class AnswerServiceTest {
               Map.of(
                   20L, new LoadAnswerWriterPort.WriterSummary(20L, "writer-a", "profile-a"),
                   21L, new LoadAnswerWriterPort.WriterSummary(21L, "writer-b", "profile-b")));
+      given(loadAnswerImagesPort.loadImagesByAnswerIds(List.of(1L, 2L)))
+          .willReturn(
+              Map.of(
+                  2L,
+                  new AnswerImageResult(
+                      List.of(
+                          new AnswerImageSlot(101L, "https://cdn.example.com/a.webp"),
+                          new AnswerImageSlot(102L, null)))));
 
       List<AnswerResult> result = answerService.execute(postId);
 
       assertThat(result).hasSize(2);
       assertThat(result.get(0).answerId()).isEqualTo(1L);
       assertThat(result.get(0).nickname()).isEqualTo("writer-a");
-      assertThat(result.get(1).imageUrls()).containsExactly("https://image");
-      verify(loadPostPort).existsPost(postId);
+      assertThat(result.get(0).imageUrls()).isEmpty();
+      assertThat(result.get(1).imageUrls()).containsExactly("https://cdn.example.com/a.webp", null);
+      verify(loadAnswerImagesPort).loadImagesByAnswerIds(List.of(1L, 2L));
     }
 
     @Test
-    @DisplayName("execute(UpdateAnswerCommand) preserves images when imageUrls is omitted")
-    void updateAnswer_preservesImages_whenCommandOmitsThem() {
+    @DisplayName("update with null imageIds saves content only")
+    void updateAnswer_updatesContent_whenImageIdsAreNull() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
-      Answer answer = buildAnswer(100L, 10L, 20L, "before", false, List.of("https://old"));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
@@ -119,15 +167,28 @@ class AnswerServiceTest {
       ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
       verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
       assertThat(answerCaptor.getValue().getContent()).isEqualTo("updated");
-      assertThat(answerCaptor.getValue().getImageUrls()).containsExactly("https://old");
+      verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
     }
 
     @Test
-    @DisplayName("execute(UpdateAnswerCommand) supports image-only updates")
+    @DisplayName("update with imageIds only syncs images without saving answer row")
     void updateAnswer_allowsImageOnlyUpdate() {
-      UpdateAnswerCommand command =
-          new UpdateAnswerCommand(10L, 100L, 20L, null, List.of("https://new-image"));
-      Answer answer = buildAnswer(100L, 10L, 20L, "before", false, List.of("https://old"));
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(9L));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+
+      answerService.execute(command);
+
+      verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
+      verify(updateAnswerImagesPort).updateImages(20L, 100L, List.of(9L));
+    }
+
+    @Test
+    @DisplayName("update with empty imageIds requests explicit image removal")
+    void updateAnswer_withEmptyImageIds_callsImageSync() {
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of());
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
@@ -135,31 +196,33 @@ class AnswerServiceTest {
 
       answerService.execute(command);
 
-      ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
-      verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
-      assertThat(answerCaptor.getValue().getContent()).isEqualTo("before");
-      assertThat(answerCaptor.getValue().getImageUrls()).containsExactly("https://new-image");
+      verify(updateAnswerImagesPort).updateImages(20L, 100L, List.of());
     }
 
     @Test
-    @DisplayName("execute(DeleteAnswerCommand) delegates deletion to the delete port")
-    void deleteAnswer_delegatesToPort() {
+    @DisplayName("delete answer delegates deletion and publishes AnswerDeletedEvent")
+    void deleteAnswer_delegatesToPort_andPublishesEvent() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
-      Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false, List.of());
+      Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
       answerService.execute(command);
 
       verify(deleteAnswerPort).deleteAnswer(100L);
+      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(100L));
     }
 
     @Test
-    @DisplayName("deleteByPostId() delegates cascade deletion to the delete port")
-    void deleteByPostId_delegatesToPort() {
+    @DisplayName("deleteByPostId deletes answers and publishes one event per answer")
+    void deleteByPostId_delegatesToPort_andPublishesEvents() {
+      given(loadAnswerPort.loadAnswerIdsByPostId(10L)).willReturn(List.of(100L, 101L));
+
       answerService.deleteByPostId(10L);
 
       verify(deleteAnswerPort).deleteAnswersByPostId(10L);
+      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(100L));
+      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(101L));
     }
   }
 
@@ -177,6 +240,7 @@ class AnswerServiceTest {
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerPostNotFoundException.class);
       verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
+      verifyNoInteractions(updateAnswerImagesPort);
     }
 
     @Test
@@ -216,6 +280,25 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(CreateAnswerCommand) propagates image sync failure")
+    void createAnswer_throws_whenImageSyncFails() {
+      CreateAnswerCommand command =
+          new CreateAnswerCommand(10L, 20L, "answer content", List.of(1L));
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+      willThrow(new RuntimeException("sync failed"))
+          .given(updateAnswerImagesPort)
+          .updateImages(20L, 99L, List.of(1L));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessageContaining("sync failed");
+    }
+
+    @Test
     @DisplayName("execute(Long) throws when postId is null")
     void getAnswers_throws_whenPostIdIsNull() {
       assertThatThrownBy(() -> answerService.execute((Long) null))
@@ -230,13 +313,13 @@ class AnswerServiceTest {
       assertThatThrownBy(() -> answerService.execute(10L))
           .isInstanceOf(AnswerPostNotFoundException.class);
       verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
+      verifyNoInteractions(loadAnswerImagesPort);
     }
 
     @Test
     @DisplayName("execute(UpdateAnswerCommand) throws when the answer does not exist")
     void updateAnswer_throws_whenAnswerNotFound() {
-      UpdateAnswerCommand command =
-          new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.empty());
 
@@ -247,9 +330,8 @@ class AnswerServiceTest {
     @Test
     @DisplayName("execute(UpdateAnswerCommand) throws when the answer does not belong to the post")
     void updateAnswer_throws_whenPostMismatch() {
-      UpdateAnswerCommand command =
-          new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
-      Answer answer = buildAnswer(100L, 999L, 20L, "before", false, List.of());
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
+      Answer answer = buildAnswer(100L, 999L, 20L, "before", false);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
@@ -260,9 +342,8 @@ class AnswerServiceTest {
     @Test
     @DisplayName("execute(UpdateAnswerCommand) throws when the requester is not the owner")
     void updateAnswer_throws_whenRequesterIsNotOwner() {
-      UpdateAnswerCommand command =
-          new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
-      Answer answer = buildAnswer(100L, 10L, 99L, "before", false, List.of());
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
+      Answer answer = buildAnswer(100L, 10L, 99L, "before", false);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
@@ -273,14 +354,30 @@ class AnswerServiceTest {
     @Test
     @DisplayName("execute(UpdateAnswerCommand) throws when the answer is accepted")
     void updateAnswer_throws_whenAnswerIsAccepted() {
-      UpdateAnswerCommand command =
-          new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of("https://updated"));
-      Answer answer = buildAnswer(100L, 10L, 20L, "before", true, List.of());
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", true);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotUpdateAcceptedAnswerException.class);
+      verifyNoInteractions(updateAnswerImagesPort);
+    }
+
+    @Test
+    @DisplayName("execute(UpdateAnswerCommand) propagates image sync failure")
+    void updateAnswer_throws_whenImageSyncFails() {
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(1L));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      willThrow(new RuntimeException("sync failed"))
+          .given(updateAnswerImagesPort)
+          .updateImages(20L, 100L, List.of(1L));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessageContaining("sync failed");
     }
 
     @Test
@@ -305,7 +402,7 @@ class AnswerServiceTest {
     @DisplayName("execute(DeleteAnswerCommand) throws when the answer does not belong to the post")
     void deleteAnswer_throws_whenPostMismatch() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
-      Answer answer = buildAnswer(100L, 999L, 20L, "before", false, List.of());
+      Answer answer = buildAnswer(100L, 999L, 20L, "before", false);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
@@ -317,7 +414,7 @@ class AnswerServiceTest {
     @DisplayName("execute(DeleteAnswerCommand) throws when the requester is not the owner")
     void deleteAnswer_throws_whenRequesterIsNotOwner() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
-      Answer answer = buildAnswer(100L, 10L, 99L, "before", false, List.of());
+      Answer answer = buildAnswer(100L, 10L, 99L, "before", false);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
@@ -329,30 +426,25 @@ class AnswerServiceTest {
     @DisplayName("execute(DeleteAnswerCommand) throws when the answer is accepted")
     void deleteAnswer_throws_whenAccepted() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
-      Answer answer = buildAnswer(100L, 10L, 20L, "accepted", true, List.of());
+      Answer answer = buildAnswer(100L, 10L, 20L, "accepted", true);
 
       given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
+      verifyNoInteractions(eventPublisher);
     }
   }
 
   private Answer buildAnswer(
-      Long id,
-      Long postId,
-      Long userId,
-      String content,
-      boolean isAccepted,
-      List<String> imageUrls) {
+      Long id, Long postId, Long userId, String content, boolean isAccepted) {
     return Answer.builder()
         .id(id)
         .postId(postId)
         .userId(userId)
         .content(content)
         .isAccepted(isAccepted)
-        .imageUrls(imageUrls)
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();

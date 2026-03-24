@@ -31,10 +31,13 @@ public interface DeleteImagePort {
    * to null. Does NOT physically delete the DB row or the S3 object. The
    * ImageUnlinkedCleanupScheduler handles actual cleanup asynchronously.
    *
-   * @param referenceType the reference type filter
+   * <p>{@code referenceTypes} should be the result of {@link ImageReferenceType#expand()} so that
+   * virtual types (e.g. MARKET_CLASS) are resolved to their concrete subtypes.
+   *
+   * @param referenceTypes the concrete reference type(s) to match
    * @param referenceId the owning entity ID
    */
-  void unlinkImagesByReference(ImageReferenceType referenceType, Long referenceId);
+  void unlinkImagesByReference(List<ImageReferenceType> referenceTypes, Long referenceId);
 
   /**
    * Unlinks specific images by ID. Used during post update to unlink only removed images.

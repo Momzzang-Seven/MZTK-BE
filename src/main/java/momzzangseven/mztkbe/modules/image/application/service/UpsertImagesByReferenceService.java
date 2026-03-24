@@ -52,7 +52,8 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
 
     // ---- Phase 1: Unlink images no longer in the reference ----
     List<Image> existingImages =
-        loadImagePort.findImagesByReference(command.referenceType(), command.referenceId());
+        loadImagePort.findImagesByReference(
+            command.referenceType().expand(), command.referenceId());
 
     Set<Long> retainIds = Set.copyOf(command.imageIds());
     List<Image> toDelete =

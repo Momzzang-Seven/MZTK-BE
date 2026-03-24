@@ -1,18 +1,13 @@
 package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity;
 
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -44,11 +39,6 @@ public class AnswerEntity {
   @Column(name = "is_accepted", nullable = false)
   private Boolean isAccepted = false;
 
-  @ElementCollection
-  @CollectionTable(name = "answer_images", joinColumns = @JoinColumn(name = "answer_id"))
-  @Column(name = "image_url")
-  private List<String> imageUrls = new ArrayList<>();
-
   @CreatedDate
   @Column(name = "created_at", updatable = false)
   private LocalDateTime createdAt;
@@ -58,18 +48,11 @@ public class AnswerEntity {
   private LocalDateTime updatedAt;
 
   @Builder
-  public AnswerEntity(
-      Long id,
-      Long postId,
-      Long userId,
-      String content,
-      Boolean isAccepted,
-      List<String> imageUrls) {
+  public AnswerEntity(Long id, Long postId, Long userId, String content, Boolean isAccepted) {
     this.id = id;
     this.postId = postId;
     this.userId = userId;
     this.content = content;
     this.isAccepted = isAccepted != null ? isAccepted : false;
-    this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
   }
 }

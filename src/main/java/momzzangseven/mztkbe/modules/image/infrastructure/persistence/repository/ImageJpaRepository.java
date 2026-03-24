@@ -19,9 +19,12 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
   @Query("select i from ImageEntity i where i.tmpObjectKey = :tmpObjectKey")
   Optional<ImageEntity> findByTmpObjectKeyForUpdate(@Param("tmpObjectKey") String tmpObjectKey);
 
-  /** Returns all images linked to the given referenceType + referenceId combination. */
-  List<ImageEntity> findAllByReferenceTypeAndReferenceIdOrderByImgOrder(
-      String referenceType, Long referenceId);
+  /** Returns all images whose referenceType is in the given set and referenceId matches. */
+  List<ImageEntity> findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
+      List<String> referenceTypes, Long referenceId);
+
+  List<ImageEntity> findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
+      List<String> referenceTypes, List<Long> referenceIds);
 
   /** Returns images matching the given IDs (no lock). */
   List<ImageEntity> findAllByIdIn(List<Long> ids);
@@ -105,18 +108,19 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
       @Param("errorReason") String errorReason);
 
   /**
-   * Sets reference_type and reference_id to NULL for all images matching the given reference. Does
-   * not physically delete the row.
+   * Sets reference_type and reference_id to NULL for all images whose referenceType is in the given
+   * set and referenceId matches. Does not physically delete the rows.
    */
   @Modifying(clearAutomatically = true)
   @Query(
       value =
           "UPDATE images "
               + "SET reference_type = NULL, reference_id = NULL, updated_at = NOW() "
-              + "WHERE reference_type = :referenceType AND reference_id = :referenceId",
+              + "WHERE reference_type IN (:referenceTypes) AND reference_id = :referenceId",
       nativeQuery = true)
-  void unlinkByReferenceTypeAndReferenceId(
-      @Param("referenceType") String referenceType, @Param("referenceId") Long referenceId);
+  void unlinkByReferenceTypeInAndReferenceId(
+      @Param("referenceTypes") List<String> referenceTypes,
+      @Param("referenceId") Long referenceId);
 
   /**
    * Sets reference_type and reference_id to NULL for the specified image IDs. Does not physically

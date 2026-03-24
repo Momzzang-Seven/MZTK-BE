@@ -51,4 +51,24 @@ public enum ImageReferenceType {
         && this != MARKET_STORE_THUMB
         && this != MARKET_STORE_DETAIL;
   }
+
+  /**
+   * Returns {@code true} if this type is a virtual request-facing aggregate that has no direct DB
+   * representation and must be expanded before persistence operations.
+   */
+  public boolean isVirtual() {
+    return this == MARKET || this == MARKET_STORE;
+  }
+
+  /**
+   * Expands a virtual type into its concrete DB-stored subtypes. Non-virtual types return
+   * themselves as a singleton list.
+   */
+  public java.util.List<ImageReferenceType> expand() {
+    return switch (this) {
+      case MARKET -> java.util.List.of(MARKET_THUMB, MARKET_DETAIL);
+      case MARKET_STORE -> java.util.List.of(MARKET_STORE_THUMB, MARKET_STORE_DETAIL);
+      default -> java.util.List.of(this);
+    };
+  }
 }

@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
@@ -19,11 +20,15 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPo
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +46,10 @@ public class AnswerService
   private final LoadAnswerPort loadAnswerPort;
   private final DeleteAnswerPort deleteAnswerPort;
   private final LoadAnswerWriterPort loadAnswerWriterPort;
+  private final LoadAnswerImagesPort loadAnswerImagesPort;
+  private final UpdateAnswerImagesPort updateAnswerImagesPort;
+  private final AnswerReadAssembler answerReadAssembler;
+  private final ApplicationEventPublisher eventPublisher;
 
   /** Creates a new answer for a question post. */
   @Override
@@ -53,14 +62,15 @@ public class AnswerService
 
     Answer answer =
         Answer.create(
-            post.postId(),
-            post.writerId(),
-            post.isSolved(),
-            command.userId(),
-            command.content(),
-            command.imageUrls());
+            post.postId(), post.writerId(), post.isSolved(), command.userId(), command.content());
 
     Answer savedAnswer = saveAnswerPort.saveAnswer(answer);
+
+    if (command.imageIds() != null && !command.imageIds().isEmpty()) {
+      updateAnswerImagesPort.updateImages(
+          savedAnswer.getUserId(), savedAnswer.getId(), command.imageIds());
+    }
+
     return new CreateAnswerResult(savedAnswer.getId());
   }
 
@@ -81,8 +91,13 @@ public class AnswerService
             ? Map.of()
             : loadAnswerWriterPort.loadWritersByIds(
                 answers.stream().map(Answer::getUserId).distinct().toList());
+    Map<Long, AnswerImageResult> imagesByAnswerId =
+        answers.isEmpty()
+            ? Map.of()
+            : loadAnswerImagesPort.loadImagesByAnswerIds(
+                answers.stream().map(Answer::getId).toList());
 
-    return answers.stream().map(answer -> toResult(answer, writers)).toList();
+    return answers.stream().map(answer -> toResult(answer, writers, imagesByAnswerId)).toList();
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */
@@ -94,8 +109,14 @@ public class AnswerService
     Answer answer = loadAnswer(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
 
-    Answer updatedAnswer = answer.update(command.content(), command.imageUrls(), command.userId());
-    saveAnswerPort.saveAnswer(updatedAnswer);
+    Answer updatedAnswer = answer.update(command.content(), command.userId());
+    if (updatedAnswer != answer) {
+      saveAnswerPort.saveAnswer(updatedAnswer);
+    }
+
+    if (command.imageIds() != null) {
+      updateAnswerImagesPort.updateImages(command.userId(), command.answerId(), command.imageIds());
+    }
   }
 
   /** Deletes a single answer requested by its owner. */
@@ -109,6 +130,7 @@ public class AnswerService
 
     answer.validateDeletable(command.userId());
     deleteAnswerPort.deleteAnswer(answer.getId());
+    eventPublisher.publishEvent(new AnswerDeletedEvent(answer.getId()));
   }
 
   /** Deletes all answers belonging to a post after an internal post-deleted event. */
@@ -118,7 +140,9 @@ public class AnswerService
     if (postId == null) {
       throw new AnswerInvalidInputException("postId is required.");
     }
+    List<Long> answerIds = loadAnswerPort.loadAnswerIdsByPostId(postId);
     deleteAnswerPort.deleteAnswersByPostId(postId);
+    answerIds.forEach(answerId -> eventPublisher.publishEvent(new AnswerDeletedEvent(answerId)));
   }
 
   private LoadPostPort.PostContext loadPost(Long postId) {
@@ -130,12 +154,11 @@ public class AnswerService
   }
 
   private AnswerResult toResult(
-      Answer answer, Map<Long, LoadAnswerWriterPort.WriterSummary> writers) {
-    LoadAnswerWriterPort.WriterSummary writer = writers.get(answer.getUserId());
-    return AnswerResult.from(
-        answer,
-        writer != null ? writer.nickname() : null,
-        writer != null ? writer.profileImageUrl() : null);
+      Answer answer,
+      Map<Long, LoadAnswerWriterPort.WriterSummary> writers,
+      Map<Long, AnswerImageResult> imagesByAnswerId) {
+    return answerReadAssembler.assemble(
+        answer, writers.get(answer.getUserId()), imagesByAnswerId.get(answer.getId()));
   }
 
   private void validateAnswerBelongsToPost(Answer answer, Long postId) {
