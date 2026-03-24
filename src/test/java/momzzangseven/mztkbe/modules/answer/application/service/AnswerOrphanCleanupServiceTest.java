@@ -3,15 +3,17 @@ package momzzangseven.mztkbe.modules.answer.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.util.List;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerOrphanCleanupBatchSizePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.PublishAnswerDeletedEventPort;
 import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
-import momzzangseven.mztkbe.modules.answer.infrastructure.config.AnswerOrphanCleanupProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AnswerOrphanCleanupService 단위 테스트")
@@ -27,14 +28,14 @@ class AnswerOrphanCleanupServiceTest {
 
   @Mock private LoadAnswerPort loadAnswerPort;
   @Mock private DeleteAnswerPort deleteAnswerPort;
-  @Mock private ApplicationEventPublisher eventPublisher;
-  @Mock private AnswerOrphanCleanupProperties props;
+  @Mock private PublishAnswerDeletedEventPort publishAnswerDeletedEventPort;
+  @Mock private LoadAnswerOrphanCleanupBatchSizePort loadBatchSizePort;
 
   @InjectMocks private AnswerOrphanCleanupService cleanupService;
 
   @BeforeEach
   void setUp() {
-    given(props.getBatchSize()).willReturn(100);
+    given(loadBatchSizePort.loadBatchSize()).willReturn(100);
   }
 
   @Test
@@ -46,7 +47,7 @@ class AnswerOrphanCleanupServiceTest {
 
     assertThat(result).isZero();
     verify(deleteAnswerPort, never()).deleteAnswersByIds(any());
-    verify(eventPublisher, never()).publishEvent(any());
+    verify(publishAnswerDeletedEventPort, never()).publish(any());
   }
 
   @Test
@@ -58,21 +59,21 @@ class AnswerOrphanCleanupServiceTest {
 
     assertThat(result).isEqualTo(2);
     verify(deleteAnswerPort).deleteAnswersByIds(List.of(10L, 11L));
-    verify(eventPublisher).publishEvent(new AnswerDeletedEvent(10L));
-    verify(eventPublisher).publishEvent(new AnswerDeletedEvent(11L));
+    verify(publishAnswerDeletedEventPort).publish(new AnswerDeletedEvent(10L));
+    verify(publishAnswerDeletedEventPort).publish(new AnswerDeletedEvent(11L));
   }
 
   @Test
   @DisplayName("batch size가 0 이하이면 예외를 던지고 cleanup을 수행하지 않는다")
   void runBatch_invalidBatchSize_throwsIllegalStateException() {
-    given(props.getBatchSize()).willReturn(0);
+    given(loadBatchSizePort.loadBatchSize()).willReturn(0);
 
     assertThatThrownBy(() -> cleanupService.runBatch())
         .isInstanceOf(IllegalStateException.class)
         .hasMessage("answer.orphan-cleanup.batch-size must be positive");
 
-    verify(loadAnswerPort, never()).loadOrphanAnswerIds(any(Integer.class));
+    verify(loadAnswerPort, never()).loadOrphanAnswerIds(anyInt());
     verify(deleteAnswerPort, never()).deleteAnswersByIds(any());
-    verify(eventPublisher, never()).publishEvent(any());
+    verify(publishAnswerDeletedEventPort, never()).publish(any());
   }
 }
