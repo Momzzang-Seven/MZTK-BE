@@ -127,6 +127,11 @@ public class ImagePersistenceAdapter
         .toList();
   }
 
+  @Override
+  public List<Image> findOrphanPostImages(int batchSize) {
+    return imageJpaRepository.findOrphanPostImages(batchSize).stream().map(this::toDomain).toList();
+  }
+
   // ========== UpdateImagePort Implementation ==========
 
   @Override

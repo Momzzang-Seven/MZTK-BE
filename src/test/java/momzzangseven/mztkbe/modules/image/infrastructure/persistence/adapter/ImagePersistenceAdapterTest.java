@@ -280,5 +280,29 @@ class ImagePersistenceAdapterTest {
       assertThat(result.get(0).getId()).isEqualTo(20L);
       verify(imageJpaRepository).findOrphanAnswerImages(100);
     }
+
+    @Test
+    @DisplayName("findOrphanPostImages() delegates to orphan post image repository query")
+    void findOrphanPostImages_delegatesToRepository() {
+      given(imageJpaRepository.findOrphanPostImages(100))
+          .willReturn(
+              List.of(
+                  ImageEntity.builder()
+                      .id(30L)
+                      .userId(1L)
+                      .referenceType("COMMUNITY_FREE")
+                      .referenceId(41L)
+                      .status("COMPLETED")
+                      .tmpObjectKey("tmp/30.jpg")
+                      .finalObjectKey("final/30.webp")
+                      .imgOrder(1)
+                      .build()));
+
+      List<Image> result = adapter.findOrphanPostImages(100);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).getId()).isEqualTo(30L);
+      verify(imageJpaRepository).findOrphanPostImages(100);
+    }
   }
 }

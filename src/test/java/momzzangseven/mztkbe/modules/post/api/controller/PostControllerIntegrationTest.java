@@ -243,6 +243,31 @@ class PostControllerIntegrationTest {
         .updateImages(206L, postId, PostType.FREE, List.of());
   }
 
+  @Test
+  @DisplayName("PATCH /posts/{id} duplicate imageIds는 400")
+  void updatePost_duplicateImageIds_returns400() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(207L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "초기 본문"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+    Long postId = extractPostId(createResult);
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(207L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("imageIds", List.of(1L, 1L)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
+  }
+
   private Long extractPostId(MvcResult result) throws Exception {
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
     return body.at("/data/postId").asLong();

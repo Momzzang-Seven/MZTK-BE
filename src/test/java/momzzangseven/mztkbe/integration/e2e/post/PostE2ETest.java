@@ -289,6 +289,22 @@ class PostE2ETest {
   }
 
   @Test
+  @DisplayName("자유 게시글 수정 시 duplicate imageIds → 400 BAD_REQUEST")
+  void updateFreePost_duplicateImageIds_returns400() throws Exception {
+    Long postId = createFreePost("중복 수정 테스트");
+    Map<String, Object> body = Map.of("imageIds", List.of(1, 1));
+
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            baseUrl + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(body, authHeaders()),
+            String.class);
+
+    assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
   @DisplayName("자유 게시글 삭제 → 200 응답 및 DB에서 행 제거 확인")
   void deleteFreePost_success_and_removedFromDb() throws Exception {
     // given
