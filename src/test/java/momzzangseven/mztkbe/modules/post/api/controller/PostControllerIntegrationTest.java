@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
+import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,10 +71,22 @@ class PostControllerIntegrationTest {
 
   @MockBean private GrantXpUseCase grantXpUseCase;
 
+  @MockBean
+  private momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort
+      updatePostImagesPort;
+
+  @MockBean
+  private momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort
+      loadPostImagesPort;
+
   @BeforeEach
   void setUp() {
     org.mockito.BDDMockito.given(grantXpUseCase.execute(org.mockito.ArgumentMatchers.any()))
         .willReturn(GrantXpResult.granted(20, 10, 1, LocalDate.of(2026, 3, 12)));
+    org.mockito.BDDMockito.given(
+            loadPostImagesPort.loadImages(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        .willReturn(PostImageResult.empty());
   }
 
   @Test
@@ -84,13 +98,7 @@ class PostControllerIntegrationTest {
                 post("/posts/free")
                     .with(userPrincipal(101L))
                     .contentType(APPLICATION_JSON)
-                    .content(
-                        json(
-                            Map.of(
-                                "content",
-                                "실경로 본문",
-                                "imageUrls",
-                                List.of("https://example.com/real-1.png")))))
+                    .content(json(Map.of("content", "실경로 본문", "imageIds", List.of(1L)))))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.status").value("SUCCESS"))
             .andReturn();
@@ -100,12 +108,43 @@ class PostControllerIntegrationTest {
     assertThat(saved.getUserId()).isEqualTo(101L);
     assertThat(saved.getTitle()).isNull();
     assertThat(saved.getContent()).isEqualTo("실경로 본문");
+    org.mockito.Mockito.verify(updatePostImagesPort)
+        .updateImages(101L, postId, PostType.FREE, List.of(1L));
 
     mockMvc
         .perform(get("/posts/" + postId).with(userPrincipal(101L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(postId));
+  }
+
+  @Test
+  @DisplayName("GET /posts/{id} 상세 조회는 imageUrls를 응답에 포함")
+  void getPost_detailIncludesImageUrls() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(111L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "이미지 포함 상세"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+
+    Long postId = extractPostId(createResult);
+    org.mockito.BDDMockito.given(loadPostImagesPort.loadImages(PostType.FREE, postId))
+        .willReturn(
+            new PostImageResult(
+                List.of(
+                    new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/images/a.webp"),
+                    new PostImageResult.PostImageSlot(
+                        2L, "https://cdn.example.com/images/b.webp"))));
+
+    mockMvc
+        .perform(get("/posts/" + postId).with(userPrincipal(111L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.imageUrls[0]").value("https://cdn.example.com/images/a.webp"))
+        .andExpect(jsonPath("$.data.imageUrls[1]").value("https://cdn.example.com/images/b.webp"));
   }
 
   @Test
@@ -135,6 +174,7 @@ class PostControllerIntegrationTest {
     PostEntity updated = postJpaRepository.findById(postId).orElseThrow();
     assertThat(updated.getTitle()).isEqualTo("수정 제목");
     assertThat(updated.getContent()).isEqualTo("수정 본문");
+    org.mockito.Mockito.verifyNoInteractions(updatePostImagesPort);
 
     mockMvc
         .perform(delete("/posts/" + postId).with(userPrincipal(202L)))
@@ -143,6 +183,64 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.postId").value(postId));
 
     assertThat(postJpaRepository.findById(postId)).isEmpty();
+  }
+
+  @Test
+  @DisplayName("POST /posts/free duplicate imageIds는 400")
+  void createFreePost_duplicateImageIds_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(101L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "중복 이미지", "imageIds", List.of(1L, 1L)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
+  }
+
+  @Test
+  @DisplayName("POST /posts/free empty imageIds는 생성되지만 image sync는 호출하지 않음")
+  void createFreePost_emptyImageIds_skipsImageSync() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(105L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "빈 이미지", "imageIds", List.of()))))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    org.mockito.Mockito.verifyNoInteractions(updatePostImagesPort);
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{id} empty imageIds는 image sync 제거 요청으로 전달")
+  void updatePost_emptyImageIds_callsImageSync() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(206L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "초기 본문"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+    Long postId = extractPostId(createResult);
+
+    org.mockito.Mockito.clearInvocations(updatePostImagesPort);
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(206L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "수정 본문", "imageIds", List.of()))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    org.mockito.Mockito.verify(updatePostImagesPort)
+        .updateImages(206L, postId, PostType.FREE, List.of());
   }
 
   private Long extractPostId(MvcResult result) throws Exception {

@@ -12,10 +12,12 @@ class ImageCountPolicyTest {
   @ParameterizedTest(name = "{0} → {1}, maxCount={2}")
   @CsvSource({
     "WORKOUT, WORKOUT_POLICY, 1",
-    "MARKET, MARKET_POLICY, 5",
+    "MARKET_CLASS, MARKET_POLICY, 5",
+    "MARKET_STORE, MARKET_POLICY, 5",
     "COMMUNITY_FREE, DEFAULT_POLICY, 10",
     "COMMUNITY_QUESTION, DEFAULT_POLICY, 10",
-    "COMMUNITY_ANSWER, DEFAULT_POLICY, 10"
+    "COMMUNITY_ANSWER, DEFAULT_POLICY, 10",
+    "USER_PROFILE, USER_PROFILE_POLICY, 1"
   })
   @DisplayName("[D-4] of() — referenceType별 정책 매핑 및 maxCount 검증")
   void of_returnsCorrectPolicyAndMaxCount(

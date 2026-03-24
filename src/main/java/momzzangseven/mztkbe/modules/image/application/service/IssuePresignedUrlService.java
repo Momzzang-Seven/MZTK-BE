@@ -2,7 +2,9 @@ package momzzangseven.mztkbe.modules.image.application.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.image.DataProcessingMismatchException;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
@@ -59,39 +61,39 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
 
     List<ImageSpec> specs = buildImageSpecs(command);
 
-    // Phase 1: Generate presigned URLs (local HMAC computation — no network, no DB connection.
+    // Phase 1: Generate presigned URLs (local HMAC computation — no network, no DB connection).
     // Each URL is paired with its tmp object key.
-    List<PresignedUrlItem> items = buildPresignedUrlItems(specs);
+    List<PresignedUrlWithKey> presignedUrls = generatePresignedUrls(specs);
 
     // Phase 2: Persist PENDING image records to DB.
-    List<Image> images = buildPendingImages(command.userId(), specs, items);
-    saveImagePort.saveAll(images);
+    // saveAll returns the persisted images with DB-generated IDs.
+    List<Image> pendingImages = buildPendingImages(command.userId(), specs, presignedUrls);
+    List<Image> savedImages = saveImagePort.saveAll(pendingImages);
+
+    // Phase 3: Assemble final result items, pairing each saved image ID with its presigned URL.
+    List<PresignedUrlItem> items = assembleItems(savedImages, presignedUrls);
 
     return IssuePresignedUrlResult.of(items);
   }
 
   /**
-   * Generates a presigned PUT URL for every spec and returns the paired result items.
+   * Generates a presigned PUT URL for every spec.
    *
    * <p>This is purely a local HMAC computation (no network call). It is separated from the DB
    * persistence phase to make the intent clear and simplify future refactoring if a real network
    * bound S3 call is introduced.
    *
    * @param specs list of resolved image specs
-   * @return list of {@link PresignedUrlItem} to return to the client
+   * @return list of {@link PresignedUrlWithKey}, one per spec
    */
-  private List<PresignedUrlItem> buildPresignedUrlItems(List<ImageSpec> specs) {
-    List<PresignedUrlItem> items = new ArrayList<>();
+  private List<PresignedUrlWithKey> generatePresignedUrls(List<ImageSpec> specs) {
+    List<PresignedUrlWithKey> urls = new ArrayList<>();
     for (ImageSpec spec : specs) {
-      PresignedUrlWithKey presignedUrlWithKey =
+      urls.add(
           generatePresignedUrlPort.generatePutPresignedUrl(
-              spec.referenceType(), spec.uuid(), spec.extension());
-
-      items.add(
-          new PresignedUrlItem(
-              presignedUrlWithKey.presignedUrl(), presignedUrlWithKey.tmpObjectKey()));
+              spec.referenceType(), spec.uuid(), spec.extension()));
     }
-    return items;
+    return urls;
   }
 
   /**
@@ -99,25 +101,57 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
    *
    * @param userId authenticated user ID
    * @param specs list of resolved image specs
+   * @param presignedUrls presigned URL results providing the tmp object key per spec
    * @return list of unsaved {@link Image} domain objects
    */
   private List<Image> buildPendingImages(
-      Long userId, List<ImageSpec> specs, List<PresignedUrlItem> items) {
-    if (specs.size() != items.size()) {
+      Long userId, List<ImageSpec> specs, List<PresignedUrlWithKey> presignedUrls) {
+    if (specs.size() != presignedUrls.size()) {
       throw new DataProcessingMismatchException(
-          "Specs and Items do not match. This could not be happened in any case.");
+          "Specs and presigned URLs do not match. This could not be happened in any case.");
     }
 
     List<Image> images = new ArrayList<>();
     int imgOrder = 0;
     for (int i = 0; i < specs.size(); i++) {
       ImageSpec spec = specs.get(i);
-      PresignedUrlItem item = items.get(i);
-
-      images.add(
-          Image.createPending(userId, spec.referenceType(), item.tmpObjectKey(), ++imgOrder));
+      String tmpObjectKey = presignedUrls.get(i).tmpObjectKey();
+      images.add(Image.createPending(userId, spec.referenceType(), tmpObjectKey, ++imgOrder));
     }
     return images;
+  }
+
+  /**
+   * Assembles the final result items by correlating each saved image with its presigned URL via
+   * {@code tmpObjectKey}.
+   *
+   * <p>Uses {@code tmpObjectKey} as a natural correlation key rather than relying on index-based
+   * ordering, which would implicitly depend on the undefined ordering contract of {@code
+   * SaveImagePort.saveAll}.
+   *
+   * @param savedImages persisted images with DB-generated IDs
+   * @param presignedUrls presigned URL results, each carrying its tmpObjectKey
+   * @return list of {@link PresignedUrlItem} containing imageId, presignedUrl, and tmpObjectKey,
+   *     ordered to match the presignedUrls input list
+   */
+  private List<PresignedUrlItem> assembleItems(
+      List<Image> savedImages, List<PresignedUrlWithKey> presignedUrls) {
+    Map<String, Long> imageIdByTmpKey =
+        savedImages.stream().collect(Collectors.toMap(Image::getTmpObjectKey, Image::getId));
+
+    return presignedUrls.stream()
+        .map(
+            url -> {
+              Long imageId = imageIdByTmpKey.get(url.tmpObjectKey());
+              if (imageId == null) {
+                throw new DataProcessingMismatchException(
+                    "No saved image found for tmpObjectKey: "
+                        + url.tmpObjectKey()
+                        + ". This could not be happened in any case.");
+              }
+              return new PresignedUrlItem(imageId, url.presignedUrl(), url.tmpObjectKey());
+            })
+        .toList();
   }
 
   /**
@@ -127,8 +161,11 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
    * @return list of ImageSpec entries (could be larger than the input filename count for MARKET)
    */
   private List<ImageSpec> buildImageSpecs(IssuePresignedUrlCommand command) {
-    if (command.referenceType() == ImageReferenceType.MARKET) {
-      return buildMarketSpecs(command.imageFilenames());
+    if (command.referenceType() == ImageReferenceType.MARKET_CLASS) {
+      return buildMarketClassSpecs(command.imageFilenames());
+    }
+    if (command.referenceType() == ImageReferenceType.MARKET_STORE) {
+      return buildMarketStoreSpecs(command.imageFilenames());
     }
     return buildStandardSpecs(command.referenceType(), command.imageFilenames());
   }
@@ -152,17 +189,17 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
   }
 
   /**
-   * Builds n+1 ImageSpec entries for n marketplace filenames.
+   * Builds n+1 ImageSpec entries for n marketplace class filenames.
    *
    * <ul>
-   *   <li>First filename → MARKET_THUMB spec + MARKET_DETAIL spec (2 entries)
-   *   <li>Each remaining filename → MARKET_DETAIL spec (1 entry each)
+   *   <li>First filename → MARKET_CLASS_THUMB spec + MARKET_CLASS_DETAIL spec (2 entries)
+   *   <li>Each remaining filename → MARKET_CLASS_DETAIL spec (1 entry each)
    * </ul>
    *
    * @param filenames list of original filenames from the request (size 1–5)
    * @return list of ImageSpec entries with size = filenames.size() + 1
    */
-  private List<ImageSpec> buildMarketSpecs(List<String> filenames) {
+  private List<ImageSpec> buildMarketClassSpecs(List<String> filenames) {
     List<ImageSpec> specs = new ArrayList<>();
 
     String firstFile = filenames.get(0);
@@ -170,16 +207,64 @@ public class IssuePresignedUrlService implements IssuePresignedUrlUseCase {
 
     specs.add(
         new ImageSpec(
-            ImageReferenceType.MARKET_THUMB, UUID.randomUUID().toString(), firstExt, firstFile));
+            ImageReferenceType.MARKET_CLASS_THUMB,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
     specs.add(
         new ImageSpec(
-            ImageReferenceType.MARKET_DETAIL, UUID.randomUUID().toString(), firstExt, firstFile));
+            ImageReferenceType.MARKET_CLASS_DETAIL,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
 
     for (int i = 1; i < filenames.size(); i++) {
       String file = filenames.get(i);
       String ext = AllowedImageExtension.extractExtension(file);
       specs.add(
-          new ImageSpec(ImageReferenceType.MARKET_DETAIL, UUID.randomUUID().toString(), ext, file));
+          new ImageSpec(
+              ImageReferenceType.MARKET_CLASS_DETAIL, UUID.randomUUID().toString(), ext, file));
+    }
+
+    return specs;
+  }
+
+  /**
+   * Builds n+1 ImageSpec entries for n marketplace store filenames.
+   *
+   * <ul>
+   *   <li>First filename → MARKET_STORE_THUMB spec + MARKET_STORE_DETAIL spec (2 entries)
+   *   <li>Each remaining filename → MARKET_STORE_DETAIL spec (1 entry each)
+   * </ul>
+   *
+   * @param filenames list of original filenames from the request (size 1–5)
+   * @return list of ImageSpec entries with size = filenames.size() + 1
+   */
+  private List<ImageSpec> buildMarketStoreSpecs(List<String> filenames) {
+    List<ImageSpec> specs = new ArrayList<>();
+
+    String firstFile = filenames.get(0);
+    String firstExt = AllowedImageExtension.extractExtension(firstFile);
+
+    specs.add(
+        new ImageSpec(
+            ImageReferenceType.MARKET_STORE_THUMB,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
+    specs.add(
+        new ImageSpec(
+            ImageReferenceType.MARKET_STORE_DETAIL,
+            UUID.randomUUID().toString(),
+            firstExt,
+            firstFile));
+
+    for (int i = 1; i < filenames.size(); i++) {
+      String file = filenames.get(i);
+      String ext = AllowedImageExtension.extractExtension(file);
+      specs.add(
+          new ImageSpec(
+              ImageReferenceType.MARKET_STORE_DETAIL, UUID.randomUUID().toString(), ext, file));
     }
 
     return specs;

@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.image.application.port.out;
 
 import java.time.Instant;
+import java.util.List;
+import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 
 /**
  * Hexagonal Architecture: OUTPUT PORT. Abstraction for deleting image records from the persistence
@@ -15,4 +17,34 @@ public interface DeleteImagePort {
    * @return the number of rows actually deleted
    */
   int deletePendingImagesBefore(Instant cutoff, int batchSize);
+
+  /**
+   * Physically deletes image records by their IDs. Called by {@code ImageUnlinkedCleanupService}
+   * after the corresponding S3 objects have been deleted (or confirmed absent).
+   *
+   * @param ids list of image IDs to permanently remove
+   */
+  void deleteImagesByIdIn(List<Long> ids);
+
+  /**
+   * Unlinks all images associated with the given reference by setting {@code referenceId = null}.
+   * {@code referenceType} and {@code status} are preserved so that PENDING images can still receive
+   * Lambda callbacks and COMPLETED images can be re-linked by the same user. Does NOT physically
+   * delete the DB row or the S3 object — {@code ImageUnlinkedCleanupService} handles deferred
+   * cleanup of non-PENDING images once the retention window expires.
+   *
+   * <p>{@code referenceTypes} should be the result of {@link ImageReferenceType#expand()} so that
+   * virtual types (e.g. MARKET_CLASS) are resolved to their concrete subtypes.
+   *
+   * @param referenceTypes the concrete reference type(s) to match
+   * @param referenceId the owning entity ID
+   */
+  void unlinkImagesByReference(List<ImageReferenceType> referenceTypes, Long referenceId);
+
+  /**
+   * Unlinks specific images by ID. Used during post update to unlink only removed images.
+   *
+   * @param ids list of image IDs to unlink
+   */
+  void unlinkImagesByIdIn(List<Long> ids);
 }

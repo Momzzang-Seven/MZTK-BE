@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
@@ -31,15 +32,16 @@ class CreatePostServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private PostXpService postXpService;
   @Mock private LinkTagPort linkTagPort;
+  @Mock private UpdatePostImagesPort updatePostImagesPort;
 
   @InjectMocks private CreatePostService createPostService;
 
   @Test
-  @DisplayName("creates post, links tags, and includes granted XP message")
+  @DisplayName("creates post, syncs images, links tags, and includes granted XP message")
   void executeSuccessWithTagsAndXpGranted() {
     CreatePostCommand command =
         CreatePostCommand.of(
-            7L, null, "content", PostType.FREE, 0L, List.of("img1"), List.of("java", "spring"));
+            7L, null, "content", PostType.FREE, 0L, List.of(1L, 2L), List.of("java", "spring"));
 
     Post savedPost =
         Post.builder()
@@ -50,7 +52,6 @@ class CreatePostServiceTest {
             .content("content")
             .reward(0L)
             .isSolved(false)
-            .imageUrls(List.of("img1"))
             .tags(List.of("java", "spring"))
             .build();
 
@@ -63,6 +64,8 @@ class CreatePostServiceTest {
     verify(postPersistencePort).savePost(postCaptor.capture());
     assertThat(postCaptor.getValue().getReward()).isEqualTo(0L);
 
+    // Verify image sync is called
+    verify(updatePostImagesPort).updateImages(7L, 10L, PostType.FREE, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(10L, List.of("java", "spring"));
     verify(postXpService).grantCreatePostXp(7L, 10L);
 
@@ -73,7 +76,7 @@ class CreatePostServiceTest {
   }
 
   @Test
-  @DisplayName("returns plain success message when tags are empty and no XP granted")
+  @DisplayName("returns plain success message when tags are empty and image sync is skipped")
   void executeSuccessWithoutTagsAndNoXpGrant() {
     CreatePostCommand command =
         CreatePostCommand.of(1L, null, "content", PostType.FREE, 0L, null, List.of());
@@ -94,6 +97,7 @@ class CreatePostServiceTest {
 
     CreatePostResult result = createPostService.execute(command);
 
+    verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort, never()).linkTagsToPost(any(), any());
     assertThat(result.isXpGranted()).isFalse();
     assertThat(result.grantedXp()).isZero();
@@ -101,10 +105,36 @@ class CreatePostServiceTest {
   }
 
   @Test
-  @DisplayName("continues when XP service fails")
+  @DisplayName("empty imageIds skips image sync but still links tags")
+  void executeSuccessWithEmptyImageIdsSkipsImageSync() {
+    CreatePostCommand command =
+        CreatePostCommand.of(2L, null, "content", PostType.FREE, 0L, List.of(), List.of("java"));
+
+    Post savedPost =
+        Post.builder()
+            .id(13L)
+            .userId(2L)
+            .type(PostType.FREE)
+            .title(null)
+            .content("content")
+            .reward(0L)
+            .isSolved(false)
+            .build();
+
+    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
+    when(postXpService.grantCreatePostXp(2L, 13L)).thenReturn(0L);
+
+    createPostService.execute(command);
+
+    verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
+    verify(linkTagPort).linkTagsToPost(13L, List.of("java"));
+  }
+
+  @Test
+  @DisplayName("continues when XP service fails but image sync succeeded")
   void executeContinuesWhenXpGrantFails() {
     CreatePostCommand command =
-        CreatePostCommand.of(4L, null, "content", PostType.FREE, 0L, null, List.of("java"));
+        CreatePostCommand.of(4L, null, "content", PostType.FREE, 0L, List.of(1L), List.of("java"));
 
     Post savedPost =
         Post.builder()
@@ -122,6 +152,7 @@ class CreatePostServiceTest {
 
     CreatePostResult result = createPostService.execute(command);
 
+    verify(updatePostImagesPort).updateImages(4L, 12L, PostType.FREE, List.of(1L));
     verify(linkTagPort).linkTagsToPost(12L, List.of("java"));
     assertThat(result.postId()).isEqualTo(12L);
     assertThat(result.isXpGranted()).isFalse();
@@ -137,15 +168,15 @@ class CreatePostServiceTest {
     assertThatThrownBy(() -> createPostService.execute(command))
         .isInstanceOf(PostInvalidInputException.class);
 
-    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort);
+    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
   }
 
   @Test
-  @DisplayName("QUESTION 게시글 생성 성공 - title, reward 포함")
+  @DisplayName("QUESTION 게시글 생성 성공 - title, reward 포함 및 이미지 sync")
   void executeSuccessWithQuestionPost() {
     CreatePostCommand command =
         CreatePostCommand.of(
-            3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, List.of(), List.of("java"));
+            3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, List.of(1L, 2L), List.of("java"));
 
     Post savedPost =
         Post.builder()
@@ -156,7 +187,6 @@ class CreatePostServiceTest {
             .content("질문 내용")
             .reward(50L)
             .isSolved(false)
-            .imageUrls(List.of())
             .tags(List.of("java"))
             .build();
 
@@ -173,20 +203,22 @@ class CreatePostServiceTest {
     assertThat(captured.getReward()).isEqualTo(50L);
     assertThat(captured.getIsSolved()).isFalse();
 
+    // Verify image sync for QUESTION type
+    verify(updatePostImagesPort).updateImages(3L, 20L, PostType.QUESTION, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(20L, List.of("java"));
     assertThat(result.postId()).isEqualTo(20L);
   }
 
   @Test
-  @DisplayName("question post with zero reward is blocked by domain invariant")
+  @DisplayName("question post with zero reward is blocked by command validation")
   void executeRejectsQuestionWithZeroReward() {
     CreatePostCommand command =
         CreatePostCommand.of(2L, "title", "content", PostType.QUESTION, 0L, null, null);
 
     assertThatThrownBy(() -> createPostService.execute(command))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("Reward must be positive for question posts.");
+        .isInstanceOf(momzzangseven.mztkbe.global.error.post.PostInvalidInputException.class)
+        .hasMessageContaining("Questions must have a valid reward");
 
-    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort);
+    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
   }
 }

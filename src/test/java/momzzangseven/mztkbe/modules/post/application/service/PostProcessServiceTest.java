@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -35,6 +36,7 @@ class PostProcessServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private ApplicationEventPublisher eventPublisher;
   @Mock private LinkTagPort linkTagPort;
+  @Mock private UpdatePostImagesPort updatePostImagesPort;
 
   @InjectMocks private PostProcessService postProcessService;
 
@@ -45,7 +47,7 @@ class PostProcessServiceTest {
     Long postId = 50L;
     Post post = ownedPost(ownerId, postId);
     UpdatePostCommand command =
-        UpdatePostCommand.of("new title", "new content", List.of("new-img"), List.of("java"));
+        UpdatePostCommand.of("new title", "new content", List.of(Long.valueOf(1)), List.of("java"));
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
 
@@ -57,11 +59,11 @@ class PostProcessServiceTest {
     Post saved = postCaptor.getValue();
     assertThat(saved.getTitle()).isEqualTo("new title");
     assertThat(saved.getContent()).isEqualTo("new content");
-    assertThat(saved.getImageUrls()).containsExactly("new-img");
     assertThat(saved.getTags()).containsExactly("java");
     assertThat(saved.getUpdatedAt()).isAfter(post.getUpdatedAt());
 
     verify(linkTagPort).updateTags(postId, List.of("java"));
+    verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of(1L));
   }
 
   @Test
@@ -78,6 +80,23 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(linkTagPort, never()).updateTags(postId, null);
+    verify(updatePostImagesPort, never()).updateImages(ownerId, postId, post.getType(), null);
+  }
+
+  @Test
+  @DisplayName("update with empty imageIds delegates explicit image removal sync")
+  void updatePostWithEmptyImageIdsCallsImageSync() {
+    Long ownerId = 7L;
+    Long postId = 53L;
+    Post post = ownedPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "new content", List.of(), null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    postProcessService.updatePost(ownerId, postId, command);
+
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of());
   }
 
   @Test
@@ -122,7 +141,7 @@ class PostProcessServiceTest {
 
     ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
     verify(eventPublisher).publishEvent(eventCaptor.capture());
-    assertThat(eventCaptor.getValue()).isEqualTo(new PostDeletedEvent(postId));
+    assertThat(eventCaptor.getValue()).isEqualTo(new PostDeletedEvent(postId, PostType.FREE));
   }
 
   @Test
@@ -207,7 +226,6 @@ class PostProcessServiceTest {
         .type(PostType.FREE)
         .title("old title")
         .content("old content")
-        .imageUrls(List.of("old-img"))
         .reward(0L)
         .isSolved(false)
         .tags(List.of("old-tag"))

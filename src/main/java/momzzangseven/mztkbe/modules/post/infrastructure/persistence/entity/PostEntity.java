@@ -7,7 +7,6 @@ import java.util.List;
 import lombok.*;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
-import org.hibernate.annotations.BatchSize;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
@@ -35,11 +34,6 @@ public class PostEntity {
   @Column(columnDefinition = "TEXT", nullable = false)
   private String content;
 
-  @ElementCollection
-  @CollectionTable(name = "post_images", joinColumns = @JoinColumn(name = "post_id"))
-  @BatchSize(size = 100)
-  private List<String> imageUrls = new ArrayList<>();
-
   private Long reward;
 
   @Column(nullable = false)
@@ -60,7 +54,6 @@ public class PostEntity {
       PostType type,
       String title,
       String content,
-      List<String> imageUrls,
       Long reward,
       Boolean isSolved) {
     this.id = id;
@@ -68,7 +61,6 @@ public class PostEntity {
     this.type = type;
     this.title = title;
     this.content = content;
-    this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
     this.reward = reward;
     this.isSolved = isSolved != null ? isSolved : false;
   }
@@ -80,7 +72,6 @@ public class PostEntity {
         .type(post.getType())
         .title(post.getTitle())
         .content(post.getContent())
-        .imageUrls(post.getImageUrls())
         .reward(post.getReward())
         .isSolved(post.getIsSolved())
         .build();
@@ -93,7 +84,6 @@ public class PostEntity {
         .type(this.type)
         .title(this.title)
         .content(this.content)
-        .imageUrls(this.imageUrls == null ? new ArrayList<>() : new ArrayList<>(this.imageUrls))
         .reward(this.reward)
         .isSolved(this.isSolved)
         .tags(tags)

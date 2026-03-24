@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ public class CreatePostService implements CreatePostUseCase {
   private final PostPersistencePort postPersistencePort;
   private final PostXpService postXpService;
   private final LinkTagPort linkTagPort;
+  private final UpdatePostImagesPort updatePostImagesPort;
 
   @Override
   @Transactional
@@ -34,13 +36,17 @@ public class CreatePostService implements CreatePostUseCase {
             command.title(),
             command.content(),
             command.reward(),
-            command.imageUrls(),
             command.tags());
 
     // 2. 게시글 저장
     Post savedPost = postPersistencePort.savePost(post);
 
-    // 3.태그 모듈 호출
+    // 3. image module/tag module orchestration
+    if (command.imageIds() != null && !command.imageIds().isEmpty()) {
+      updatePostImagesPort.updateImages(
+          savedPost.getUserId(), savedPost.getId(), savedPost.getType(), command.imageIds());
+    }
+
     if (command.tags() != null && !command.tags().isEmpty()) {
       linkTagPort.linkTagsToPost(savedPost.getId(), command.tags());
     }

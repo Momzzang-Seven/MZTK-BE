@@ -267,6 +267,7 @@ cloud:
       auto: false
     s3:
       bucket: ${AWS_S3_BUCKET}
+      url-prefix: https://${AWS_S3_BUCKET}.s3.ap-northeast-2.amazonaws.com/
       presigned-url:
         expiry-seconds: 300  # 5m
     credentials:
@@ -278,6 +279,11 @@ image:
     retention-hours: 5
     batch-size: 100
     cron: 0 0 0/1 * * *
+    zone: Asia/Seoul
+  unlinked-cleanup:
+    retention-hours: 5
+    batch-size: 100
+    cron: 0 0 3 * * *
     zone: Asia/Seoul
 
 verification:

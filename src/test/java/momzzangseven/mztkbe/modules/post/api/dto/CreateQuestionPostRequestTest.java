@@ -46,10 +46,10 @@ class CreateQuestionPostRequestTest {
   class ToCommand {
 
     @Test
-    @DisplayName("userId를 주입하고 QUESTION 타입, title, reward를 포함한 커맨드 생성")
+    @DisplayName("toCommand_mapsQuestionPostFields")
     void toCommand_mapsQuestionPostFields() {
       CreateQuestionPostRequest request =
-          new CreateQuestionPostRequest("질문 제목", "질문 내용", 50L, List.of(), List.of("java"));
+          new CreateQuestionPostRequest("질문 제목", "질문 내용", 50L, List.of(1L, 2L), List.of("java"));
 
       CreatePostCommand command = request.toCommand(42L);
 
@@ -58,18 +58,19 @@ class CreateQuestionPostRequestTest {
       assertThat(command.content()).isEqualTo("질문 내용");
       assertThat(command.type()).isEqualTo(PostType.QUESTION);
       assertThat(command.reward()).isEqualTo(50L);
+      assertThat(command.imageIds()).containsExactly(1L, 2L);
       assertThat(command.tags()).containsExactly("java");
     }
 
     @Test
-    @DisplayName("imageUrls=null이면 커맨드의 imageUrls도 null")
-    void toCommand_nullImageUrls_passedThrough() {
+    @DisplayName("imageIds=null이면 커맨드의 imageIds도 null")
+    void toCommand_nullImageIds_passedThrough() {
       CreateQuestionPostRequest request =
           new CreateQuestionPostRequest("제목", "내용", 10L, null, null);
 
       CreatePostCommand command = request.toCommand(1L);
 
-      assertThat(command.imageUrls()).isNull();
+      assertThat(command.imageIds()).isNull();
     }
 
     @Test

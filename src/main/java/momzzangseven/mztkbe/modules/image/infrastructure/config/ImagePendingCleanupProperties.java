@@ -1,7 +1,8 @@
-package momzzangseven.mztkbe.modules.image.application.config;
+package momzzangseven.mztkbe.modules.image.infrastructure.config;
 
 import lombok.Getter;
 import lombok.Setter;
+import momzzangseven.mztkbe.modules.image.application.port.out.LoadPendingImageCleanupPolicyPort;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -12,7 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "image.pending-cleanup")
-public class ImagePendingCleanupProperties {
+public class ImagePendingCleanupProperties implements LoadPendingImageCleanupPolicyPort {
   /** Number of hours after which a PENDING image is considered orphaned. Defaults to 5 hours. */
   private int retentionHours = 5;
 

@@ -22,7 +22,7 @@ public class ImageEntity {
   @Column(name = "user_id", nullable = false)
   private Long userId;
 
-  @Column(name = "reference_type", nullable = false, length = 30)
+  @Column(name = "reference_type", length = 30)
   private String referenceType;
 
   @Column(name = "reference_id")

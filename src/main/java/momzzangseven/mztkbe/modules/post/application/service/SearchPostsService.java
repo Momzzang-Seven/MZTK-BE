@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
@@ -28,7 +28,7 @@ public class SearchPostsService implements SearchPostsUseCase {
   private final LoadPostWriterPort loadPostWriterPort;
 
   @Override
-  public List<PostResult> searchPosts(PostSearchCondition condition) {
+  public List<PostListResult> searchPosts(PostSearchCondition condition) {
     List<Long> filteredPostIds = null;
     if (StringUtils.hasText(condition.tagName())) {
       filteredPostIds = loadTagPort.findPostIdsByTagName(condition.tagName());
@@ -51,7 +51,7 @@ public class SearchPostsService implements SearchPostsUseCase {
     Set<Long> userIds = posts.stream().map(Post::getUserId).collect(Collectors.toSet());
     Map<Long, WriterSummary> writerMap = loadPostWriterPort.loadWritersByIds(userIds);
 
-    // 5. 메모리에서 PostResult 조립
+    // 5. 메모리에서 PostListResult 조립
     return posts.stream()
         .map(
             post -> {
@@ -59,7 +59,7 @@ public class SearchPostsService implements SearchPostsUseCase {
               WriterSummary writer = writerMap.get(post.getUserId());
               String nickname = writer != null ? writer.nickname() : null;
               String profileImageUrl = writer != null ? writer.profileImageUrl() : null;
-              return PostResult.fromDomain(post.withTags(tags), nickname, profileImageUrl);
+              return PostListResult.fromDomain(post.withTags(tags), nickname, profileImageUrl);
             })
         .toList();
   }

@@ -26,12 +26,24 @@ public class S3PresignedUrlAdapter implements GeneratePresignedUrlPort {
 
   private static final Map<ImageReferenceType, String> PATH_PREFIX_MAP =
       Map.of(
-          ImageReferenceType.COMMUNITY_FREE, "public/community/free/tmp/",
-          ImageReferenceType.COMMUNITY_QUESTION, "public/community/question/tmp/",
-          ImageReferenceType.COMMUNITY_ANSWER, "public/community/answer/tmp/",
-          ImageReferenceType.MARKET_THUMB, "public/market/thumb/tmp/",
-          ImageReferenceType.MARKET_DETAIL, "public/market/detail/tmp/",
-          ImageReferenceType.WORKOUT, "private/workout/");
+          ImageReferenceType.USER_PROFILE,
+          "public/user/profile/tmp/",
+          ImageReferenceType.COMMUNITY_FREE,
+          "public/community/free/tmp/",
+          ImageReferenceType.COMMUNITY_QUESTION,
+          "public/community/question/tmp/",
+          ImageReferenceType.COMMUNITY_ANSWER,
+          "public/community/answer/tmp/",
+          ImageReferenceType.MARKET_CLASS_THUMB,
+          "public/market/class/thumb/tmp/",
+          ImageReferenceType.MARKET_CLASS_DETAIL,
+          "public/market/class/detail/tmp/",
+          ImageReferenceType.MARKET_STORE_THUMB,
+          "public/market/store/thumb/tmp/",
+          ImageReferenceType.MARKET_STORE_DETAIL,
+          "public/market/store/detail/tmp/",
+          ImageReferenceType.WORKOUT,
+          "private/workout/");
 
   private final S3Presigner s3Presigner;
 

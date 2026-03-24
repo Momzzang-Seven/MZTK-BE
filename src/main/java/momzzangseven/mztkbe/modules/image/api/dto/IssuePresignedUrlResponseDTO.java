@@ -21,10 +21,10 @@ public record IssuePresignedUrlResponseDTO(List<PresignedUrlItemDTO> items) {
   }
 
   /** Nested DTO for presigned url item. */
-  public record PresignedUrlItemDTO(String presignedUrl, String tmpObjectKey) {
+  public record PresignedUrlItemDTO(Long imageId, String presignedUrl, String tmpObjectKey) {
 
     public static PresignedUrlItemDTO from(PresignedUrlItem item) {
-      return new PresignedUrlItemDTO(item.presignedUrl(), item.tmpObjectKey());
+      return new PresignedUrlItemDTO(item.imageId(), item.presignedUrl(), item.tmpObjectKey());
     }
   }
 }
