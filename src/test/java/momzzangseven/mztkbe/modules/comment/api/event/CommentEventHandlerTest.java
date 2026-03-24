@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.comment.api.event;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.comment.application.port.in.DeleteCommentUseCase;
@@ -28,5 +30,18 @@ class CommentEventHandlerTest {
     commentEventHandler.handlePostDeletedEvent(event);
 
     verify(deleteCommentUseCase).deleteCommentsByPostId(100L);
+  }
+
+  @Test
+  @DisplayName("handlePostDeletedEvent() swallows exception because comment cleanup is post-commit")
+  void handlePostDeletedEvent_swallowsException() {
+    PostDeletedEvent event = new PostDeletedEvent(200L, PostType.FREE);
+    doThrow(new RuntimeException("db fail"))
+        .when(deleteCommentUseCase)
+        .deleteCommentsByPostId(200L);
+
+    assertThatCode(() -> commentEventHandler.handlePostDeletedEvent(event))
+        .doesNotThrowAnyException();
+    verify(deleteCommentUseCase).deleteCommentsByPostId(200L);
   }
 }
