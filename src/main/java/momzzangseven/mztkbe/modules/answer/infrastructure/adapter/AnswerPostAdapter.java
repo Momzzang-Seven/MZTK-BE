@@ -25,9 +25,4 @@ public class AnswerPostAdapter implements LoadPostPort {
                     Boolean.TRUE.equals(post.getIsSolved()),
                     PostType.QUESTION.equals(post.getType())));
   }
-
-  @Override
-  public boolean existsPost(Long postId) {
-    return postPersistencePort.existsPost(postId);
-  }
 }

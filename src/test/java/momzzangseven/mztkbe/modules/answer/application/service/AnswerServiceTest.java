@@ -125,8 +125,9 @@ class AnswerServiceTest {
           List.of(
               buildAnswer(1L, 10L, 20L, "first", false),
               buildAnswer(2L, 10L, 21L, "second", false));
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
-      given(loadPostPort.existsPost(postId)).willReturn(true);
+      given(loadPostPort.loadPost(postId)).willReturn(Optional.of(postContext));
       given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
       given(loadAnswerWriterPort.loadWritersByIds(List.of(20L, 21L)))
           .willReturn(
@@ -308,10 +309,23 @@ class AnswerServiceTest {
     @Test
     @DisplayName("execute(Long) throws when the post does not exist")
     void getAnswers_throws_whenPostNotFound() {
-      given(loadPostPort.existsPost(10L)).willReturn(false);
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.empty());
 
       assertThatThrownBy(() -> answerService.execute(10L))
           .isInstanceOf(AnswerPostNotFoundException.class);
+      verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
+      verifyNoInteractions(loadAnswerImagesPort);
+    }
+
+    @Test
+    @DisplayName("execute(Long) throws when the post is not a question")
+    void getAnswers_throws_whenPostIsNotQuestion() {
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, false);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+
+      assertThatThrownBy(() -> answerService.execute(10L))
+          .isInstanceOf(AnswerUnsupportedPostTypeException.class);
       verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
       verifyNoInteractions(loadAnswerImagesPort);
     }

@@ -41,10 +41,11 @@ class UpdateAnswerCommandTest {
   }
 
   @Test
-  @DisplayName("validate allows duplicate imageIds on update")
-  void validate_allowsDuplicateImageIdsOnUpdate() {
-    assertThatCode(() -> new UpdateAnswerCommand(10L, 30L, 20L, null, List.of(1L, 1L)))
-        .doesNotThrowAnyException();
+  @DisplayName("validate rejects duplicate imageIds on update")
+  void validate_rejectsDuplicateImageIdsOnUpdate() {
+    assertThatThrownBy(() -> new UpdateAnswerCommand(10L, 30L, 20L, null, List.of(1L, 1L)))
+        .isInstanceOf(AnswerInvalidInputException.class)
+        .hasMessageContaining("Duplicate image IDs are not allowed");
   }
 
   @Test
