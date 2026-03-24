@@ -35,7 +35,8 @@ public class GetImagesByReferenceService implements GetImagesByReferenceUseCase 
     command.validate();
 
     List<Image> images =
-        loadImagePort.findImagesByReference(command.referenceType(), command.referenceId());
+        loadImagePort.findImagesByReference(
+            command.referenceType().expand(), command.referenceId());
 
     List<ImageItem> items = images.stream().map(ImageItem::from).toList();
 
