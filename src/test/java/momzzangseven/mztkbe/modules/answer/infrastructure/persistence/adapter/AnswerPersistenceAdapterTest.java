@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -106,6 +107,33 @@ class AnswerPersistenceAdapterTest {
       answerPersistenceAdapter.deleteAnswersByPostId(10L);
 
       verify(answerJpaRepository).deleteAllByPostId(10L);
+    }
+
+    @Test
+    @DisplayName("loadOrphanAnswerIds() delegates to findOrphanAnswerIds")
+    void loadOrphanAnswerIds_delegatesToRepository() {
+      given(answerJpaRepository.findOrphanAnswerIds(100)).willReturn(List.of(10L, 11L));
+
+      List<Long> result = answerPersistenceAdapter.loadOrphanAnswerIds(100);
+
+      assertThat(result).containsExactly(10L, 11L);
+      verify(answerJpaRepository).findOrphanAnswerIds(100);
+    }
+
+    @Test
+    @DisplayName("deleteAnswersByIds() delegates to deleteAllByIdInBatch")
+    void deleteAnswersByIds_delegatesToDeleteAllByIdInBatch() {
+      answerPersistenceAdapter.deleteAnswersByIds(List.of(10L, 11L));
+
+      verify(answerJpaRepository).deleteAllByIdInBatch(List.of(10L, 11L));
+    }
+
+    @Test
+    @DisplayName("deleteAnswersByIds() skips repository call when ids are empty")
+    void deleteAnswersByIds_skipsWhenEmpty() {
+      answerPersistenceAdapter.deleteAnswersByIds(List.of());
+
+      verify(answerJpaRepository, never()).deleteAllByIdInBatch(any());
     }
   }
 

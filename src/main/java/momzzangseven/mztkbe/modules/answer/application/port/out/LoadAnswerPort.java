@@ -13,4 +13,7 @@ public interface LoadAnswerPort {
 
   // 게시글 삭제 시 답변 삭제 이벤트 발행 대상 ID 조회
   List<Long> loadAnswerIdsByPostId(Long postId);
+
+  // 게시글이 이미 삭제되어 post_id 참조가 깨진 고아 답변 ID 조회
+  List<Long> loadOrphanAnswerIds(int batchSize);
 }

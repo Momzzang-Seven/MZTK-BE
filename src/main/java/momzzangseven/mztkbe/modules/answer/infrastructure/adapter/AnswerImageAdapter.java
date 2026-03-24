@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.answer.infrastructure.adapter;
 
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -10,10 +9,10 @@ import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.Ans
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.infrastructure.config.AnswerImageStorageProperties;
-import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceCommand;
-import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferencesCommand;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferencesResult;
 import momzzangseven.mztkbe.modules.image.application.dto.UpsertImagesByReferenceCommand;
-import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferencesUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import org.springframework.stereotype.Component;
@@ -23,7 +22,7 @@ import org.springframework.stereotype.Component;
 public class AnswerImageAdapter implements UpdateAnswerImagesPort, LoadAnswerImagesPort {
 
   private final UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
-  private final GetImagesByReferenceUseCase getImagesByReferenceUseCase;
+  private final GetImagesByReferencesUseCase getImagesByReferencesUseCase;
   private final AnswerImageStorageProperties answerImageStorageProperties;
 
   @Override
@@ -39,22 +38,23 @@ public class AnswerImageAdapter implements UpdateAnswerImagesPort, LoadAnswerIma
       return Map.of();
     }
 
-    Map<Long, AnswerImageResult> imagesByAnswerId = new LinkedHashMap<>();
-    for (Long answerId : answerIds.stream().distinct().toList()) {
-      GetImagesByReferenceResult result =
-          getImagesByReferenceUseCase.execute(
-              new GetImagesByReferenceCommand(ImageReferenceType.COMMUNITY_ANSWER, answerId));
+    GetImagesByReferencesResult result =
+        getImagesByReferencesUseCase.execute(
+            new GetImagesByReferencesCommand(
+                ImageReferenceType.COMMUNITY_ANSWER, answerIds.stream().distinct().toList()));
 
-      imagesByAnswerId.put(
-          answerId,
-          new AnswerImageResult(
-              result.items().stream()
-                  .map(
-                      item ->
-                          new AnswerImageSlot(item.imageId(), buildImageUrl(item.finalObjectKey())))
-                  .toList()));
-    }
-    return imagesByAnswerId;
+    return result.itemsByReferenceId().entrySet().stream()
+        .collect(
+            java.util.stream.Collectors.toMap(
+                Map.Entry::getKey,
+                entry ->
+                    new AnswerImageResult(
+                        entry.getValue().stream()
+                            .map(
+                                item ->
+                                    new AnswerImageSlot(
+                                        item.imageId(), buildImageUrl(item.finalObjectKey())))
+                            .toList())));
   }
 
   private String buildImageUrl(String finalObjectKey) {

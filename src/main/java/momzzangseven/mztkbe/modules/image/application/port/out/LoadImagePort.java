@@ -19,6 +19,13 @@ public interface LoadImagePort {
    */
   List<Image> findImagesByReference(List<ImageReferenceType> referenceTypes, Long referenceId);
 
+  /**
+   * Finds all images belonging to multiple reference entities of the same reference-type family.
+   * {@code referenceTypes} should already be expanded so virtual types do not reach persistence.
+   */
+  List<Image> findImagesByReferenceIds(
+      List<ImageReferenceType> referenceTypes, List<Long> referenceIds);
+
   /** Finds images by their IDs. Used to validate and load the final image set on post update. */
   List<Image> findImagesByIdIn(List<Long> ids);
 
@@ -38,4 +45,7 @@ public interface LoadImagePort {
    * @return batch of unlinked images ready for permanent removal
    */
   List<Image> findUnlinkedImagesBefore(Instant cutoff, int batchSize);
+
+  /** Finds images still linked to COMMUNITY_ANSWER rows whose answer no longer exists. */
+  List<Image> findOrphanAnswerImages(int batchSize);
 }
