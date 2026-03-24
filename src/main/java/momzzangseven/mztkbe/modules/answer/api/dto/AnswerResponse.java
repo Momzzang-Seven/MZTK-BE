@@ -23,7 +23,7 @@ public record AnswerResponse(
         answer.profileImageUrl(),
         answer.content(),
         answer.accepted(),
-        answer.imageUrls() == null ? List.of() : List.copyOf(answer.imageUrls()),
+        answer.imageUrls() == null ? List.of() : answer.imageUrls(),
         answer.createdAt(),
         answer.updatedAt());
   }

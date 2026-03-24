@@ -41,8 +41,10 @@ public class ImagePersistenceAdapter
   }
 
   @Override
-  public void unlinkImagesByReference(ImageReferenceType referenceType, Long referenceId) {
-    imageJpaRepository.unlinkByReferenceTypeAndReferenceId(referenceType.name(), referenceId);
+  public void unlinkImagesByReference(List<ImageReferenceType> referenceTypes, Long referenceId) {
+    assertNoVirtualTypes(referenceTypes);
+    List<String> typeNames = referenceTypes.stream().map(Enum::name).toList();
+    imageJpaRepository.unlinkByReferenceTypeInAndReferenceId(typeNames, referenceId);
   }
 
   @Override
@@ -74,9 +76,28 @@ public class ImagePersistenceAdapter
   }
 
   @Override
-  public List<Image> findImagesByReference(ImageReferenceType referenceType, Long referenceId) {
+  public List<Image> findImagesByReference(
+      List<ImageReferenceType> referenceTypes, Long referenceId) {
+    assertNoVirtualTypes(referenceTypes);
+    List<String> typeNames = referenceTypes.stream().map(Enum::name).toList();
     return imageJpaRepository
-        .findAllByReferenceTypeAndReferenceIdOrderByImgOrder(referenceType.name(), referenceId)
+        .findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(typeNames, referenceId)
+        .stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<Image> findImagesByReferenceIds(
+      List<ImageReferenceType> referenceTypes, List<Long> referenceIds) {
+    if (referenceIds == null || referenceIds.isEmpty()) {
+      return List.of();
+    }
+    assertNoVirtualTypes(referenceTypes);
+    List<String> typeNames = referenceTypes.stream().map(Enum::name).toList();
+    return imageJpaRepository
+        .findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
+            typeNames, referenceIds)
         .stream()
         .map(this::toDomain)
         .toList();
@@ -117,6 +138,27 @@ public class ImagePersistenceAdapter
   public List<Image> updateAll(List<Image> images) {
     List<ImageEntity> entities = images.stream().map(this::toEntity).toList();
     return imageJpaRepository.saveAll(entities).stream().map(this::toDomain).toList();
+  }
+
+  /**
+   * Guards against virtual reference types (e.g. MARKET_CLASS, MARKET_STORE) reaching the
+   * persistence layer. Virtual types are aggregate placeholders with no direct DB representation;
+   * callers must invoke {@link ImageReferenceType#expand()} before passing types to a port.
+   *
+   * @throws IllegalArgumentException if any type in the list is virtual
+   */
+  private void assertNoVirtualTypes(List<ImageReferenceType> types) {
+    types.stream()
+        .filter(ImageReferenceType::isVirtual)
+        .findFirst()
+        .ifPresent(
+            type -> {
+              throw new IllegalArgumentException(
+                  "Virtual reference type ["
+                      + type
+                      + "] cannot be used in persistence operations directly. "
+                      + "Call referenceType.expand() before passing to a port.");
+            });
   }
 
   /**
