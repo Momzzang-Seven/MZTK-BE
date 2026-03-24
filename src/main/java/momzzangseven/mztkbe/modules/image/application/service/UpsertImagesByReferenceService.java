@@ -136,9 +136,8 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
    * @param images unordered images loaded for the final set
    * @param referenceType the command's reference type (may be virtual)
    * @param orderedIds caller-supplied ordered list of image IDs
-   *
-   * @throws InvalidImageRefTypeException If this excpetion was thrown,
-   * it means issuing pre-signed url phase had a bug.
+   * @throws InvalidImageRefTypeException If this excpetion was thrown, it means issuing pre-signed
+   *     url phase had a bug.
    */
   private void validateMarketOrder(
       List<Image> images, ImageReferenceType referenceType, List<Long> orderedIds) {
