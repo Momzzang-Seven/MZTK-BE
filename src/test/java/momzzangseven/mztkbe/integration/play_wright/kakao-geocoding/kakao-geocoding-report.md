@@ -16,7 +16,7 @@
 
 ## 테스트 목적
 
-이 테스트는 기존 `LocationE2ETest`에서 **`@MockBean GeocodingPort`로 처리했던 Kakao Geocoding/Reverse Geocoding API 호출**을 실제 Kakao API 서버와의 통신으로 검증합니다.
+이 테스트는 기존 `LocationE2ETest`에서 **`@MockitoBean GeocodingPort`로 처리했던 Kakao Geocoding/Reverse Geocoding API 호출**을 실제 Kakao API 서버와의 통신으로 검증합니다.
 
 ### 커버 대상
 
@@ -374,7 +374,7 @@ npx playwright show-report
 
 | 항목 | `LocationE2ETest` (Java) | `kakao-geocoding.spec.ts` (Playwright) |
 |---|---|---|
-| GeocodingPort | `@MockBean` (가짜 응답) | 실제 Kakao API 호출 |
+| GeocodingPort | `@MockitoBean` (가짜 응답) | 실제 Kakao API 호출 |
 | Kakao API 키 불필요 | ✅ (Mock 사용) | ❌ (실제 키 필요) |
 | 네트워크 의존성 | 없음 | 있음 (외부 API) |
 | CI/CD 적합성 | ✅ 매 PR마다 실행 권장 | ⚠️ 주기적 실행 권장 (Kakao API 쿼터 소비) |

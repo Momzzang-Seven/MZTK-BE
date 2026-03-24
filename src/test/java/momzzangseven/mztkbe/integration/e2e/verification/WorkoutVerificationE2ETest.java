@@ -50,7 +50,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
@@ -61,6 +60,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @Tag("e2e")
 @ActiveProfiles("integration")
@@ -80,14 +80,14 @@ class WorkoutVerificationE2ETest {
   @Autowired private XpPolicyJpaRepository xpPolicyJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
 
-  @MockBean private KakaoAuthPort kakaoAuthPort;
-  @MockBean private GoogleAuthPort googleAuthPort;
-  @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
-  @MockBean private ObjectStoragePort objectStoragePort;
-  @MockBean private PrepareOriginalImagePort prepareOriginalImagePort;
-  @MockBean private PrepareAnalysisImagePort prepareAnalysisImagePort;
-  @MockBean private ExifMetadataPort exifMetadataPort;
-  @MockBean private WorkoutImageAiPort workoutImageAiPort;
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private ObjectStoragePort objectStoragePort;
+  @MockitoBean private PrepareOriginalImagePort prepareOriginalImagePort;
+  @MockitoBean private PrepareAnalysisImagePort prepareAnalysisImagePort;
+  @MockitoBean private ExifMetadataPort exifMetadataPort;
+  @MockitoBean private WorkoutImageAiPort workoutImageAiPort;
 
   @Test
   @DisplayName("같은 tmpObjectKey 동시 submit은 단일 verification row와 단일 XP 지급으로 수렴한다")
