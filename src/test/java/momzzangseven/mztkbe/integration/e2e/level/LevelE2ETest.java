@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
@@ -32,6 +31,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Level & Attendance E2E 테스트 (Local Server + Real PostgreSQL).
@@ -68,9 +68,9 @@ class LevelE2ETest {
   @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
-  @MockBean private KakaoAuthPort kakaoAuthPort;
-  @MockBean private GoogleAuthPort googleAuthPort;
-  @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private String baseUrl;
   private String accessToken;

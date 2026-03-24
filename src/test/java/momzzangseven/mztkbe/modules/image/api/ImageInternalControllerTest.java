@@ -20,14 +20,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * ImageInternalController 계약 테스트 (MockMVC + H2).
  *
- * <p>HandleLambdaCallbackUseCase는 @MockBean으로 처리하여 Controller 레이어 계약만 검증한다:
+ * <p>HandleLambdaCallbackUseCase는 @MockitoBean으로 처리하여 Controller 레이어 계약만 검증한다:
  *
  * <ul>
  *   <li>Webhook Secret 인증 (올바른/틀린/누락/빈 값)
@@ -51,13 +51,13 @@ class ImageInternalControllerTest {
 
   @Autowired private MockMvc mockMvc;
 
-  @MockBean private HandleLambdaCallbackUseCase handleLambdaCallbackUseCase;
+  @MockitoBean private HandleLambdaCallbackUseCase handleLambdaCallbackUseCase;
 
   // web3 인프라 Bean 누락 방지 (IssuePresignedUrlControllerTest와 동일한 패턴)
-  @MockBean private MarkTransactionSucceededUseCase txMarkSucceededUseCase;
-  @MockBean private TransactionReceiptWorker txReceiptWorker;
-  @MockBean private TransactionIssuerWorker txIssuerWorker;
-  @MockBean private SignedRecoveryWorker txSignedRecoveryWorker;
+  @MockitoBean private MarkTransactionSucceededUseCase txMarkSucceededUseCase;
+  @MockitoBean private TransactionReceiptWorker txReceiptWorker;
+  @MockitoBean private TransactionIssuerWorker txIssuerWorker;
+  @MockitoBean private SignedRecoveryWorker txSignedRecoveryWorker;
 
   private static String completedBody() {
     return """

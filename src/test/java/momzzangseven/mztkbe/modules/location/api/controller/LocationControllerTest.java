@@ -27,7 +27,7 @@ import momzzangseven.mztkbe.modules.location.application.port.in.RegisterLocatio
 import momzzangseven.mztkbe.modules.location.application.port.in.VerifyLocationUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("LocationController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
@@ -40,30 +40,30 @@ class LocationControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private RegisterLocationUseCase registerLocationUseCase;
-  @MockBean private VerifyLocationUseCase verifyLocationUseCase;
-  @MockBean private DeleteLocationUseCase deleteLocationUseCase;
-  @MockBean private GetMyLocationsUseCase getMyLocationsUseCase;
+  @MockitoBean private RegisterLocationUseCase registerLocationUseCase;
+  @MockitoBean private VerifyLocationUseCase verifyLocationUseCase;
+  @MockitoBean private DeleteLocationUseCase deleteLocationUseCase;
+  @MockitoBean private GetMyLocationsUseCase getMyLocationsUseCase;
 
   @Test
   @DisplayName("GET /users/me/locations 성공")

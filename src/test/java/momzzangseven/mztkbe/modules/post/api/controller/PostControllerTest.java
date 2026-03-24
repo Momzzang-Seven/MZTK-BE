@@ -28,7 +28,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("PostController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
@@ -41,31 +41,31 @@ class PostControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private CreatePostUseCase createPostUseCase;
-  @MockBean private GetPostUseCase getPostUseCase;
-  @MockBean private UpdatePostUseCase updatePostUseCase;
-  @MockBean private DeletePostUseCase deletePostUseCase;
-  @MockBean private SearchPostsUseCase searchPostsUseCase;
+  @MockitoBean private CreatePostUseCase createPostUseCase;
+  @MockitoBean private GetPostUseCase getPostUseCase;
+  @MockitoBean private UpdatePostUseCase updatePostUseCase;
+  @MockitoBean private DeletePostUseCase deletePostUseCase;
+  @MockitoBean private SearchPostsUseCase searchPostsUseCase;
 
   @Test
   @DisplayName("POST /posts/free 성공")

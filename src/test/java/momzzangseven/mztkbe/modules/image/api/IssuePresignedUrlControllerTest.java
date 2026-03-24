@@ -22,16 +22,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * ImageController 계약 테스트 (MockMVC + H2).
  *
- * <p>IssuePresignedUrlUseCase는 @MockBean으로 Mock 처리하여 Controller 레이어 계약만 검증한다:
+ * <p>IssuePresignedUrlUseCase는 @MockitoBean으로 Mock 처리하여 Controller 레이어 계약만 검증한다:
  *
  * <ul>
  *   <li>Bean Validation (@NotNull, @NotEmpty, @NotBlank) 작동 여부
@@ -50,13 +50,13 @@ class IssuePresignedUrlControllerTest {
 
   @Autowired private MockMvc mockMvc;
 
-  @MockBean private IssuePresignedUrlUseCase issuePresignedUrlUseCase;
+  @MockitoBean private IssuePresignedUrlUseCase issuePresignedUrlUseCase;
 
   // web3 인프라 Bean 일부가 조건부 활성화여서 @SpringBootTest 컨텍스트 로딩 시 누락 방지
-  @MockBean private MarkTransactionSucceededUseCase txMarkSucceededUseCase;
-  @MockBean private TransactionReceiptWorker txReceiptWorker;
-  @MockBean private TransactionIssuerWorker txIssuerWorker;
-  @MockBean private SignedRecoveryWorker txSignedRecoveryWorker;
+  @MockitoBean private MarkTransactionSucceededUseCase txMarkSucceededUseCase;
+  @MockitoBean private TransactionReceiptWorker txReceiptWorker;
+  @MockitoBean private TransactionIssuerWorker txIssuerWorker;
+  @MockitoBean private SignedRecoveryWorker txSignedRecoveryWorker;
 
   private static UsernamePasswordAuthenticationToken authAs(Long userId) {
     return new UsernamePasswordAuthenticationToken(

@@ -25,9 +25,9 @@ import momzzangseven.mztkbe.modules.comment.application.port.in.UpdateCommentUse
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("CommentController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
@@ -40,30 +40,30 @@ class CommentControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private CreateCommentUseCase createCommentUseCase;
-  @MockBean private GetCommentUseCase getCommentUseCase;
-  @MockBean private UpdateCommentUseCase updateCommentUseCase;
-  @MockBean private DeleteCommentUseCase deleteCommentUseCase;
+  @MockitoBean private CreateCommentUseCase createCommentUseCase;
+  @MockitoBean private GetCommentUseCase getCommentUseCase;
+  @MockitoBean private UpdateCommentUseCase updateCommentUseCase;
+  @MockitoBean private DeleteCommentUseCase deleteCommentUseCase;
 
   @Nested
   @DisplayName("POST /posts/{postId}/comments")
