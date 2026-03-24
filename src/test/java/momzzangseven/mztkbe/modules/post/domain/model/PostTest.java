@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,12 +18,11 @@ class PostTest {
   @Test
   @DisplayName("free post creation forces reward to zero and initializes defaults")
   void createFreePostInitializesDefaults() {
-    Post post = Post.create(1L, PostType.FREE, null, "content", 99L, null, null);
+    Post post = Post.create(1L, PostType.FREE, null, "content", 99L, null);
 
     assertThat(post.getReward()).isZero();
     assertThat(post.getTitle()).isNull();
     assertThat(post.getIsSolved()).isFalse();
-    assertThat(post.getImageUrls()).isEmpty();
     assertThat(post.getTags()).isEmpty();
     assertThat(post.getCreatedAt()).isNotNull();
     assertThat(post.getUpdatedAt()).isNotNull();
@@ -31,12 +31,11 @@ class PostTest {
   @Test
   @DisplayName("question post requires positive reward")
   void createQuestionRequiresPositiveReward() {
-    assertThatThrownBy(
-            () -> Post.create(1L, PostType.QUESTION, "title", "content", null, null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, "title", "content", null, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Reward must be positive for question posts.");
 
-    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, "title", "content", 0L, null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, "title", "content", 0L, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Reward must be positive for question posts.");
   }
@@ -46,13 +45,7 @@ class PostTest {
   void createQuestionWithPositiveReward() {
     Post post =
         Post.create(
-            1L,
-            PostType.QUESTION,
-            "question title",
-            "question content",
-            25L,
-            List.of("img1"),
-            List.of("tag1"));
+            1L, PostType.QUESTION, "question title", "question content", 25L, List.of("tag1"));
 
     assertThat(post.getReward()).isEqualTo(25L);
     assertThat(post.getType()).isEqualTo(PostType.QUESTION);
@@ -62,19 +55,19 @@ class PostTest {
   @Test
   @DisplayName("create validates mandatory input fields")
   void createValidatesMandatoryFields() {
-    assertThatThrownBy(() -> Post.create(null, PostType.FREE, "title", "content", 0L, null, null))
+    assertThatThrownBy(() -> Post.create(null, PostType.FREE, "title", "content", 0L, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Author ID is required.");
 
-    assertThatThrownBy(() -> Post.create(1L, null, "title", "content", 0L, null, null))
+    assertThatThrownBy(() -> Post.create(1L, null, "title", "content", 0L, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Post type is required.");
 
-    assertThatThrownBy(() -> Post.create(1L, PostType.FREE, "title", " ", 0L, null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.FREE, "title", " ", 0L, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Content must not be blank.");
 
-    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, " ", "content", 10L, null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, " ", "content", 10L, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Title is required for question posts.");
   }
@@ -82,7 +75,7 @@ class PostTest {
   @Test
   @DisplayName("create rejects null content (blank과 구별)")
   void createRejectsNullContent() {
-    assertThatThrownBy(() -> Post.create(1L, PostType.FREE, null, null, 0L, null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.FREE, null, null, 0L, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Content must not be blank.");
   }
@@ -90,7 +83,7 @@ class PostTest {
   @Test
   @DisplayName("create QUESTION 게시글에서 title=null이면 예외")
   void createQuestionWithNullTitleThrows() {
-    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, null, "content", 10L, null, null))
+    assertThatThrownBy(() -> Post.create(1L, PostType.QUESTION, null, "content", 10L, null))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Title is required for question posts.");
   }
@@ -153,6 +146,50 @@ class PostTest {
   }
 
   @Test
+  @DisplayName("solved question post cannot be updated")
+  void updateSolvedQuestionThrows() {
+    Post post =
+        Post.builder()
+            .id(2L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .isSolved(true)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> post.update("edited", null, null))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("cannot be edited");
+  }
+
+  @Test
+  @DisplayName("validateDeletable allows free posts but rejects solved question posts")
+  void validateDeletableBranches() {
+    Post freePost = basePost();
+    Post solvedQuestion =
+        Post.builder()
+            .id(3L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .isSolved(true)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatCode(freePost::validateDeletable).doesNotThrowAnyException();
+    assertThatThrownBy(solvedQuestion::validateDeletable)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("cannot be deleted");
+  }
+
+  @Test
   @DisplayName("withTags handles null as empty without mutating original")
   void withTagsHandlesNull() {
     Post post = basePost();
@@ -164,7 +201,7 @@ class PostTest {
   }
 
   @Test
-  @DisplayName("constructor defensively defaults null imageUrls and tags")
+  @DisplayName("constructor defensively defaults null tags")
   void constructorDefaultsNullCollections() {
     Post post =
         Post.builder()
@@ -175,11 +212,9 @@ class PostTest {
             .content("content")
             .reward(0L)
             .isSolved(false)
-            .imageUrls(null)
             .tags(null)
             .build();
 
-    assertThat(post.getImageUrls()).isEqualTo(new ArrayList<>());
     assertThat(post.getTags()).isEqualTo(new ArrayList<>());
   }
 
@@ -190,7 +225,6 @@ class PostTest {
         .type(PostType.FREE)
         .title("title")
         .content("content")
-        .imageUrls(List.of("img1"))
         .reward(0L)
         .isSolved(false)
         .tags(List.of("tag1"))

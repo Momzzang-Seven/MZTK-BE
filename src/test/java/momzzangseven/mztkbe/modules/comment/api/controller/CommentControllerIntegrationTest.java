@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
@@ -78,7 +77,6 @@ class CommentControllerIntegrationTest {
                 .type(PostType.FREE)
                 .title("댓글 테스트 제목")
                 .content("댓글 테스트 본문")
-                .imageUrls(List.of())
                 .reward(0L)
                 .isSolved(false)
                 .build());

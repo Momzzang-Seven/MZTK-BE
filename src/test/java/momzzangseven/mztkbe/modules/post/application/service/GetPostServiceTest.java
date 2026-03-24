@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
@@ -30,11 +32,12 @@ class GetPostServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
+  @Mock private LoadPostImagesPort loadPostImagesPort;
 
   @InjectMocks private GetPostService getPostService;
 
   @Test
-  @DisplayName("returns mapped post with tags from tag module")
+  @DisplayName("returns mapped post with tags and images from image module")
   void getPostSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     Post post =
@@ -53,12 +56,78 @@ class GetPostServiceTest {
     when(postPersistencePort.loadPost(20L)).thenReturn(Optional.of(post));
     when(loadTagPort.findTagNamesByPostId(20L)).thenReturn(List.of("java", "spring"));
     when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
+    when(loadPostImagesPort.loadImages(PostType.FREE, 20L))
+        .thenReturn(new PostImageResult(List.of()));
 
-    PostResult result = getPostService.getPost(20L);
+    PostDetailResult result = getPostService.getPost(20L);
 
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.tags()).containsExactly("java", "spring");
     assertThat(result.isSolved()).isFalse();
+    assertThat(result.imageUrls()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("returns imageUrls from image module")
+  void getPostReturnsImageUrls() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(20L)
+            .userId(8L)
+            .type(PostType.FREE)
+            .title("hello")
+            .content("world")
+            .reward(0L)
+            .isSolved(null)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(20L)).thenReturn(Optional.of(post));
+    when(loadTagPort.findTagNamesByPostId(20L)).thenReturn(List.of());
+    when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
+    when(loadPostImagesPort.loadImages(PostType.FREE, 20L))
+        .thenReturn(
+            new PostImageResult(
+                List.of(
+                    new PostImageResult.PostImageSlot(
+                        1L, "https://cdn.example.com/images/img1.webp"))));
+
+    PostDetailResult result = getPostService.getPost(20L);
+
+    assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/images/img1.webp");
+  }
+
+  @Test
+  @DisplayName("maps writer nickname and profile image when writer exists")
+  void getPostMapsWriterSummary() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(21L)
+            .userId(9L)
+            .type(PostType.FREE)
+            .title("hello")
+            .content("world")
+            .reward(0L)
+            .isSolved(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(21L)).thenReturn(Optional.of(post));
+    when(loadTagPort.findTagNamesByPostId(21L)).thenReturn(List.of("java"));
+    when(loadPostWriterPort.loadWriterById(9L))
+        .thenReturn(Optional.of(new LoadPostWriterPort.WriterSummary(9L, "writer", "profile.png")));
+    when(loadPostImagesPort.loadImages(PostType.FREE, 21L))
+        .thenReturn(new PostImageResult(List.of()));
+
+    PostDetailResult result = getPostService.getPost(21L);
+
+    assertThat(result.nickname()).isEqualTo("writer");
+    assertThat(result.profileImageUrl()).isEqualTo("profile.png");
+    assertThat(result.tags()).containsExactly("java");
   }
 
   @Test
@@ -81,8 +150,10 @@ class GetPostServiceTest {
     when(postPersistencePort.loadPost(30L)).thenReturn(Optional.of(post));
     when(loadTagPort.findTagNamesByPostId(30L)).thenReturn(List.of());
     when(loadPostWriterPort.loadWriterById(5L)).thenReturn(Optional.empty());
+    when(loadPostImagesPort.loadImages(PostType.QUESTION, 30L))
+        .thenReturn(new PostImageResult(List.of()));
 
-    PostResult result = getPostService.getPost(30L);
+    PostDetailResult result = getPostService.getPost(30L);
 
     assertThat(result.type()).isEqualTo(PostType.QUESTION);
     assertThat(result.title()).isEqualTo("질문 제목");

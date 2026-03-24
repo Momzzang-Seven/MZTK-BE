@@ -59,7 +59,6 @@ class PostProcessServiceTest {
     Post saved = postCaptor.getValue();
     assertThat(saved.getTitle()).isEqualTo("new title");
     assertThat(saved.getContent()).isEqualTo("new content");
-    assertThat(saved.getImageUrls()).containsExactly("old-img");
     assertThat(saved.getTags()).containsExactly("java");
     assertThat(saved.getUpdatedAt()).isAfter(post.getUpdatedAt());
 
@@ -81,6 +80,23 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(linkTagPort, never()).updateTags(postId, null);
+    verify(updatePostImagesPort, never()).updateImages(ownerId, postId, post.getType(), null);
+  }
+
+  @Test
+  @DisplayName("update with empty imageIds delegates explicit image removal sync")
+  void updatePostWithEmptyImageIdsCallsImageSync() {
+    Long ownerId = 7L;
+    Long postId = 53L;
+    Post post = ownedPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "new content", List.of(), null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    postProcessService.updatePost(ownerId, postId, command);
+
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of());
   }
 
   @Test
@@ -210,7 +226,6 @@ class PostProcessServiceTest {
         .type(PostType.FREE)
         .title("old title")
         .content("old content")
-        .imageUrls(List.of("old-img"))
         .reward(0L)
         .isSolved(false)
         .tags(List.of("old-tag"))

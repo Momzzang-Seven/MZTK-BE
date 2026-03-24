@@ -5,4 +5,11 @@ import jakarta.validation.constraints.Positive;
 import java.util.List;
 
 public record UpdatePostRequest(
-    String title, String content, List<@NotNull @Positive Long> imageIds, List<String> tags) {}
+
+    String title,
+    String content,
+    List<
+            @NotNull(message = "Image ID must not be null.")
+            @Positive(message = "Image ID must be positive.") Long>
+        imageIds,
+    List<String> tags) {}

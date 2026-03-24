@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.post.api.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public record PostDetailResponse(
@@ -24,7 +24,7 @@ public record PostDetailResponse(
 
   public record QuestionInfo(Long reward, boolean isSolved) {}
 
-  public static PostDetailResponse from(PostResult result) {
+  public static PostDetailResponse from(PostDetailResult result) {
     QuestionInfo questionInfo = null;
 
     if (PostType.QUESTION.equals(result.type())) {
