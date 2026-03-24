@@ -16,7 +16,6 @@ public class Post {
   private final PostType type;
   private final String title;
   private final String content;
-  private final List<String> imageUrls;
   private final Long reward;
   private final Boolean isSolved;
   private final List<String> tags;
@@ -31,7 +30,6 @@ public class Post {
       PostType type,
       String title,
       String content,
-      List<String> imageUrls,
       Long reward,
       Boolean isSolved,
       List<String> tags,
@@ -42,7 +40,6 @@ public class Post {
     this.type = type;
     this.title = title;
     this.content = content;
-    this.imageUrls = imageUrls != null ? imageUrls : new ArrayList<>();
     this.reward = reward;
     this.isSolved = isSolved;
     this.tags = tags != null ? tags : new ArrayList<>();
@@ -51,13 +48,7 @@ public class Post {
   }
 
   public static Post create(
-      Long userId,
-      PostType type,
-      String title,
-      String content,
-      Long reward,
-      List<String> imageUrls,
-      List<String> tags) {
+      Long userId, PostType type, String title, String content, Long reward, List<String> tags) {
 
     if (userId == null) throw new IllegalArgumentException("Author ID is required.");
     if (type == null) throw new IllegalArgumentException("Post type is required.");
@@ -81,7 +72,6 @@ public class Post {
         .title(title)
         .content(content)
         .reward(reward)
-        .imageUrls(imageUrls != null ? imageUrls : new ArrayList<>())
         .isSolved(false)
         .tags(tags != null ? tags : new ArrayList<>())
         .createdAt(LocalDateTime.now())

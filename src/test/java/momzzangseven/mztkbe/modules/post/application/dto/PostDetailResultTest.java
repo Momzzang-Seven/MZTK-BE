@@ -9,8 +9,8 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("PostResult unit test")
-class PostResultTest {
+@DisplayName("PostDetailResult unit test")
+class PostDetailResultTest {
 
   @Test
   @DisplayName("fromDomain maps all fields and defaults null solved to false")
@@ -25,7 +25,6 @@ class PostResultTest {
             .type(PostType.QUESTION)
             .title("title")
             .content("content")
-            .imageUrls(List.of("img1"))
             .reward(50L)
             .isSolved(null)
             .tags(List.of("java"))
@@ -35,15 +34,19 @@ class PostResultTest {
 
     String nickname = "test nick name";
     String profileImageUrl = "test/image/url";
+    List<String> imageUrls =
+        List.of("https://cdn.example.com/img1.webp", "https://cdn.example.com/img2.webp");
 
-    PostResult result = PostResult.fromDomain(post, nickname, profileImageUrl);
+    PostDetailResult result =
+        PostDetailResult.fromDomain(post, nickname, profileImageUrl, imageUrls);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
     assertThat(result.type()).isEqualTo(PostType.QUESTION);
     assertThat(result.title()).isEqualTo("title");
     assertThat(result.content()).isEqualTo("content");
-    assertThat(result.imageUrls()).containsExactly("img1");
+    assertThat(result.imageUrls())
+        .containsExactly("https://cdn.example.com/img1.webp", "https://cdn.example.com/img2.webp");
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isFalse();
     assertThat(result.tags()).containsExactly("java");
@@ -70,7 +73,7 @@ class PostResultTest {
     String nickname = "test nick name";
     String profileImageUrl = "test/image/url";
 
-    PostResult result = PostResult.fromDomain(post, nickname, profileImageUrl);
+    PostDetailResult result = PostDetailResult.fromDomain(post, nickname, profileImageUrl, null);
 
     assertThat(result.isSolved()).isTrue();
   }

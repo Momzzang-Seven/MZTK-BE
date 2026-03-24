@@ -267,6 +267,7 @@ cloud:
       auto: false
     s3:
       bucket: ${AWS_S3_BUCKET}
+      url-prefix: https://${AWS_S3_BUCKET}.s3.ap-northeast-2.amazonaws.com/
       presigned-url:
         expiry-seconds: 300  # 5m
     credentials:

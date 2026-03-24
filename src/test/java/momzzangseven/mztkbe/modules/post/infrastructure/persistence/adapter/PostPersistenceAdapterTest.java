@@ -42,7 +42,6 @@ class PostPersistenceAdapterTest {
             .type(PostType.FREE)
             .title("title")
             .content("content")
-            .imageUrls(List.of("img1"))
             .reward(0L)
             .isSolved(false)
             .build();
@@ -54,7 +53,6 @@ class PostPersistenceAdapterTest {
             .type(PostType.FREE)
             .title("title")
             .content("content")
-            .imageUrls(List.of("img1"))
             .reward(0L)
             .isSolved(false)
             .build();
@@ -71,7 +69,6 @@ class PostPersistenceAdapterTest {
     assertThat(mapped.getType()).isEqualTo(PostType.FREE);
     assertThat(mapped.getTitle()).isEqualTo("title");
     assertThat(mapped.getContent()).isEqualTo("content");
-    assertThat(mapped.getImageUrls()).containsExactly("img1");
 
     assertThat(result.getId()).isEqualTo(100L);
     assertThat(result.getUserId()).isEqualTo(3L);
@@ -101,7 +98,6 @@ class PostPersistenceAdapterTest {
             .type(PostType.QUESTION)
             .title("question")
             .content("body")
-            .imageUrls(List.of("img"))
             .reward(50L)
             .isSolved(false)
             .build();
@@ -116,6 +112,28 @@ class PostPersistenceAdapterTest {
     assertThat(result.orElseThrow().getId()).isEqualTo(10L);
     assertThat(result.orElseThrow().getType()).isEqualTo(PostType.QUESTION);
     assertThat(result.orElseThrow().getTags()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("loadPostForUpdate delegates to repository lock query")
+  void loadPostForUpdateDelegates() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(15L)
+            .userId(4L)
+            .type(PostType.FREE)
+            .title(null)
+            .content("body")
+            .reward(0L)
+            .isSolved(false)
+            .build();
+
+    when(postJpaRepository.findByIdForUpdate(15L)).thenReturn(Optional.of(entity));
+
+    Optional<Post> result = postPersistenceAdapter.loadPostForUpdate(15L);
+
+    assertThat(result).isPresent();
+    verify(postJpaRepository).findByIdForUpdate(15L);
   }
 
   @Test
@@ -233,6 +251,13 @@ class PostPersistenceAdapterTest {
     @DisplayName("search=text, type=QUESTION → 제목 포함 표현식 반환")
     void searchWithNonFreeType_returnsBooleanExpression() throws Exception {
       Object result = containsSearch.invoke(postPersistenceAdapter, PostType.QUESTION, "spring");
+      assertThat(result).isNotNull();
+    }
+
+    @Test
+    @DisplayName("search=text, type=null → 제목 포함 표현식 반환")
+    void searchWithNullType_returnsBooleanExpression() throws Exception {
+      Object result = containsSearch.invoke(postPersistenceAdapter, null, "spring");
       assertThat(result).isNotNull();
     }
   }
