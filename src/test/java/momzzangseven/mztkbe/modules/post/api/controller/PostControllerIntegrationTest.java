@@ -137,7 +137,8 @@ class PostControllerIntegrationTest {
             new PostImageResult(
                 List.of(
                     new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/images/a.webp"),
-                    new PostImageResult.PostImageSlot(2L, "https://cdn.example.com/images/b.webp"))));
+                    new PostImageResult.PostImageSlot(
+                        2L, "https://cdn.example.com/images/b.webp"))));
 
     mockMvc
         .perform(get("/posts/" + postId).with(userPrincipal(111L)))
