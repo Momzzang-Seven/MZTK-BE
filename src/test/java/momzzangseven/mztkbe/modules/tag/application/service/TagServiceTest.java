@@ -2,11 +2,13 @@ package momzzangseven.mztkbe.modules.tag.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.Arrays;
 import java.util.List;
 import momzzangseven.mztkbe.modules.tag.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.tag.application.port.out.SaveTagPort;
@@ -35,6 +37,31 @@ class TagServiceTest {
     tagService.linkTagsToPost(1L, List.of());
 
     verifyNoInteractions(loadTagPort, saveTagPort);
+  }
+
+  @Test
+  @DisplayName("linkTagsToPost filters blank and null tag names before lookup")
+  void linkTagsToPost_filtersBlankAndNullNames() {
+    Tag existingJava = Tag.builder().id(10L).name("java").build();
+    Tag savedSpring = Tag.builder().id(20L).name("spring").build();
+
+    when(loadTagPort.loadTagsByNames(List.of("java", "spring"))).thenReturn(List.of(existingJava));
+    when(saveTagPort.saveTags(anyList())).thenReturn(List.of(savedSpring));
+
+    tagService.linkTagsToPost(77L, Arrays.asList(" Java ", " ", null, "Spring "));
+
+    verify(loadTagPort).loadTagsByNames(List.of("java", "spring"));
+    verify(saveTagPort).savePostTagMappings(77L, List.of(10L, 20L));
+  }
+
+  @Test
+  @DisplayName("linkTagsToPost returns immediately when all tag names are blank")
+  void linkTagsToPost_blankOnlyInput_returnsImmediately() {
+    tagService.linkTagsToPost(88L, Arrays.asList(" ", "", null, "   "));
+
+    verifyNoInteractions(loadTagPort);
+    verify(saveTagPort, never()).saveTags(anyList());
+    verify(saveTagPort, never()).savePostTagMappings(eq(88L), anyList());
   }
 
   @Test
@@ -93,6 +120,17 @@ class TagServiceTest {
     verify(saveTagPort).deleteTagsByPostId(12L);
     verifyNoInteractions(loadTagPort);
     verify(saveTagPort, never()).saveTags(anyList());
+  }
+
+  @Test
+  @DisplayName("updateTags only deletes when incoming tag names are blank")
+  void updateTagsWithBlankNames() {
+    tagService.updateTags(14L, Arrays.asList(" ", null, ""));
+
+    verify(saveTagPort).deleteTagsByPostId(14L);
+    verifyNoInteractions(loadTagPort);
+    verify(saveTagPort, never()).saveTags(anyList());
+    verify(saveTagPort, never()).savePostTagMappings(eq(14L), anyList());
   }
 
   @Test

@@ -32,9 +32,7 @@ public class CommentService
   @Transactional
   public CommentResult createComment(CreateCommentCommand command) {
     // 1-1. 게시글 존재 여부 검증 (외부 모듈 포트 사용)
-    if (!loadPostPort.existsPost(command.postId())) {
-      throw new BusinessException(ErrorCode.POST_NOT_FOUND);
-    }
+    validatePostExists(command.postId());
 
     // 1-2. 대댓글인 경우 부모 댓글 검증
     if (command.parentId() != null) {
@@ -84,6 +82,7 @@ public class CommentService
   // 4. 루트 댓글 조회 (Read)
   @Override
   public Page<CommentResult> getRootComments(GetRootCommentsQuery query) {
+    validatePostExists(query.postId());
     return loadCommentPort
         .loadRootComments(query.postId(), query.pageable())
         .map(CommentResult::from);
@@ -93,9 +92,9 @@ public class CommentService
   @Override
   public Page<CommentResult> getReplies(GetRepliesQuery query) {
     // 부모 댓글이 존재하는지 먼저 확인
-    if (loadCommentPort.loadComment(query.parentId()).isEmpty()) {
-      throw new CommentNotFoundException();
-    }
+    Comment parent =
+        loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
+    validatePostExists(parent.getPostId());
 
     return loadCommentPort.loadReplies(query.parentId(), query.pageable()).map(CommentResult::from);
   }
@@ -115,6 +114,12 @@ public class CommentService
 
     if (parent.isDeleted()) {
       throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
+    }
+  }
+
+  private void validatePostExists(Long postId) {
+    if (!loadPostPort.existsPost(postId)) {
+      throw new BusinessException(ErrorCode.POST_NOT_FOUND);
     }
   }
 }

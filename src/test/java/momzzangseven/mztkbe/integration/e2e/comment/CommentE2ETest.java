@@ -213,6 +213,20 @@ class CommentE2ETest {
   }
 
   @Test
+  @Order(10)
+  @DisplayName("존재하지 않는 게시글의 댓글 조회는 404를 반환한다")
+  void getRootComments_missingPost_returns404() {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/posts/999999999/comments",
+            HttpMethod.GET,
+            new HttpEntity<>(authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+  }
+
+  @Test
   @Order(3)
   @DisplayName("댓글 수정 — content 변경 후 수정된 값 반환")
   void updateComment_success_returnsUpdatedContent() throws Exception {

@@ -136,6 +136,21 @@ class PostControllerTest {
   }
 
   @Test
+  @DisplayName("POST /posts/free tags에 공백이 있으면 400")
+  void createFreePost_blankTag_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "내용", "tags", List.of("   ")))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
   @DisplayName("POST /posts/free imageIds가 유효하면 201")
   void createFreePost_validImageIds_returns201() throws Exception {
     given(createPostUseCase.execute(any(CreatePostCommand.class)))
@@ -370,6 +385,31 @@ class PostControllerTest {
   }
 
   @Test
+  @DisplayName("POST /posts/question tags에 공백이 있으면 400")
+  void createQuestionPost_blankTag_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "title",
+                            "질문 제목",
+                            "content",
+                            "질문 내용",
+                            "reward",
+                            10,
+                            "tags",
+                            List.of("   ")))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
   @DisplayName("POST /posts/question null principal이면 401 (AUTH_006)")
   void createQuestionPost_nullPrincipal_returns401() throws Exception {
     mockMvc
@@ -465,6 +505,21 @@ class PostControllerTest {
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("imageIds", List.of(-1L)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(updatePostUseCase);
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{postId} tags에 공백이 있으면 400")
+  void updatePost_blankTag_returns400() throws Exception {
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("tags", List.of("   ")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 
