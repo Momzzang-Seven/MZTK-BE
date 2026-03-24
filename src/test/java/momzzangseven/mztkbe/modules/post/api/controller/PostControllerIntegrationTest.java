@@ -119,8 +119,8 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("GET /posts/{id} 상세 조회는 image port의 finalObjectKeys를 응답에 포함")
-  void getPost_detailIncludesFinalObjectKeys() throws Exception {
+  @DisplayName("GET /posts/{id} 상세 조회는 imageUrls를 응답에 포함")
+  void getPost_detailIncludesImageUrls() throws Exception {
     MvcResult createResult =
         mockMvc
             .perform(
@@ -136,14 +136,14 @@ class PostControllerIntegrationTest {
         .willReturn(
             new PostImageResult(
                 List.of(
-                    new PostImageResult.PostImageSlot(1L, "images/a.webp"),
-                    new PostImageResult.PostImageSlot(2L, "images/b.webp"))));
+                    new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/images/a.webp"),
+                    new PostImageResult.PostImageSlot(2L, "https://cdn.example.com/images/b.webp"))));
 
     mockMvc
         .perform(get("/posts/" + postId).with(userPrincipal(111L)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.finalObjectKeys[0]").value("images/a.webp"))
-        .andExpect(jsonPath("$.data.finalObjectKeys[1]").value("images/b.webp"));
+        .andExpect(jsonPath("$.data.imageUrls[0]").value("https://cdn.example.com/images/a.webp"))
+        .andExpect(jsonPath("$.data.imageUrls[1]").value("https://cdn.example.com/images/b.webp"));
   }
 
   @Test

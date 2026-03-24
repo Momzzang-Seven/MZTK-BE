@@ -8,5 +8,5 @@ public record PostImageResult(List<PostImageSlot> slots) {
     return new PostImageResult(List.of());
   }
 
-  public record PostImageSlot(Long imageId, String finalObjectKey) {}
+  public record PostImageSlot(Long imageId, String imageUrl) {}
 }

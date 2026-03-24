@@ -64,12 +64,12 @@ class GetPostServiceTest {
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.tags()).containsExactly("java", "spring");
     assertThat(result.isSolved()).isFalse();
-    assertThat(result.finalObjectKeys()).isEmpty();
+    assertThat(result.imageUrls()).isEmpty();
   }
 
   @Test
-  @DisplayName("returns only completed finalObjectKeys from image module")
-  void getPostReturnsFinalObjectKeys() {
+  @DisplayName("returns imageUrls from image module")
+  void getPostReturnsImageUrls() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     Post post =
         Post.builder()
@@ -89,11 +89,14 @@ class GetPostServiceTest {
     when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
     when(loadPostImagesPort.loadImages(PostType.FREE, 20L))
         .thenReturn(
-            new PostImageResult(List.of(new PostImageResult.PostImageSlot(1L, "img1.webp"))));
+            new PostImageResult(
+                List.of(
+                    new PostImageResult.PostImageSlot(
+                        1L, "https://cdn.example.com/images/img1.webp"))));
 
     PostDetailResult result = getPostService.getPost(20L);
 
-    assertThat(result.finalObjectKeys()).containsExactly("img1.webp");
+    assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/images/img1.webp");
   }
 
   @Test
