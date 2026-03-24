@@ -42,6 +42,11 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
   }
 
   @Override
+  public List<Long> loadOrphanAnswerIds(int batchSize) {
+    return answerJpaRepository.findOrphanAnswerIds(batchSize);
+  }
+
+  @Override
   public void deleteAnswer(Long answerId) {
     answerJpaRepository.deleteById(answerId);
   }
@@ -49,6 +54,14 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
   @Override
   public void deleteAnswersByPostId(Long postId) {
     answerJpaRepository.deleteAllByPostId(postId);
+  }
+
+  @Override
+  public void deleteAnswersByIds(List<Long> answerIds) {
+    if (answerIds.isEmpty()) {
+      return;
+    }
+    answerJpaRepository.deleteAllByIdInBatch(answerIds);
   }
 
   private AnswerEntity toEntity(Answer answer) {

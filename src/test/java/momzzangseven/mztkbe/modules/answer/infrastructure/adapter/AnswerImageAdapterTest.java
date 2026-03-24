@@ -10,10 +10,11 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
 import momzzangseven.mztkbe.modules.answer.infrastructure.config.AnswerImageStorageProperties;
-import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceCommand;
-import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult.ImageItem;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferencesCommand;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferencesResult;
 import momzzangseven.mztkbe.modules.image.application.dto.UpsertImagesByReferenceCommand;
-import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferencesUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
@@ -30,7 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AnswerImageAdapterTest {
 
   @Mock private UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
-  @Mock private GetImagesByReferenceUseCase getImagesByReferenceUseCase;
+  @Mock private GetImagesByReferencesUseCase getImagesByReferencesUseCase;
   @Mock private AnswerImageStorageProperties answerImageStorageProperties;
 
   @InjectMocks private AnswerImageAdapter answerImageAdapter;
@@ -57,16 +58,21 @@ class AnswerImageAdapterTest {
   void loadImagesByAnswerIdsBuildsPublicUrls() {
     when(answerImageStorageProperties.getUrlPrefix())
         .thenReturn("https://test-bucket.s3.ap-northeast-2.amazonaws.com");
-    when(getImagesByReferenceUseCase.execute(
-            new GetImagesByReferenceCommand(ImageReferenceType.COMMUNITY_ANSWER, 31L)))
+    when(getImagesByReferencesUseCase.execute(
+            new GetImagesByReferencesCommand(
+                ImageReferenceType.COMMUNITY_ANSWER, List.of(31L, 32L))))
         .thenReturn(
-            GetImagesByReferenceResult.of(
-                List.of(
-                    new GetImagesByReferenceResult.ImageItem(
-                        100L, ImageStatus.COMPLETED, "/answers/first.webp"),
-                    new GetImagesByReferenceResult.ImageItem(101L, ImageStatus.PENDING, null))));
+            GetImagesByReferencesResult.of(
+                Map.of(
+                    31L,
+                    List.of(
+                        new ImageItem(100L, ImageStatus.COMPLETED, "/answers/first.webp"),
+                        new ImageItem(101L, ImageStatus.PENDING, null)),
+                    32L,
+                    List.of(new ImageItem(200L, ImageStatus.FAILED, null)))));
 
-    Map<Long, AnswerImageResult> result = answerImageAdapter.loadImagesByAnswerIds(List.of(31L));
+    Map<Long, AnswerImageResult> result =
+        answerImageAdapter.loadImagesByAnswerIds(List.of(31L, 32L));
 
     assertThat(result)
         .containsEntry(
@@ -76,13 +82,14 @@ class AnswerImageAdapterTest {
                     new AnswerImageSlot(
                         100L,
                         "https://test-bucket.s3.ap-northeast-2.amazonaws.com/answers/first.webp"),
-                    new AnswerImageSlot(101L, null))));
+                    new AnswerImageSlot(101L, null))))
+        .containsEntry(32L, new AnswerImageResult(List.of(new AnswerImageSlot(200L, null))));
   }
 
   @Test
   @DisplayName("loadImagesByAnswerIds returns empty map for empty ids")
   void loadImagesByAnswerIdsReturnsEmptyMapForEmptyInput() {
     assertThat(answerImageAdapter.loadImagesByAnswerIds(List.of())).isEmpty();
-    verifyNoInteractions(getImagesByReferenceUseCase);
+    verifyNoInteractions(getImagesByReferencesUseCase);
   }
 }

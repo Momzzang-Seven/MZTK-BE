@@ -23,6 +23,12 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
   List<ImageEntity> findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
       List<String> referenceTypes, Long referenceId);
 
+  /**
+   * Returns all images whose referenceType is in the given set and referenceId is one of the IDs.
+   */
+  List<ImageEntity> findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
+      List<String> referenceTypes, List<Long> referenceIds);
+
   /** Returns images matching the given IDs (no lock). */
   List<ImageEntity> findAllByIdIn(List<Long> ids);
 
@@ -48,6 +54,18 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
       nativeQuery = true)
   List<ImageEntity> findUnlinkedBefore(
       @Param("cutoff") Instant cutoff, @Param("batchSize") int batchSize);
+
+  @Query(
+      value =
+          "SELECT i.* FROM images i "
+              + "LEFT JOIN answers a ON a.id = i.reference_id "
+              + "WHERE i.reference_type = 'COMMUNITY_ANSWER' "
+              + "AND i.reference_id IS NOT NULL "
+              + "AND a.id IS NULL "
+              + "ORDER BY i.id "
+              + "LIMIT :batchSize",
+      nativeQuery = true)
+  List<ImageEntity> findOrphanAnswerImages(@Param("batchSize") int batchSize);
 
   // ========== DELETE ========== //
 
