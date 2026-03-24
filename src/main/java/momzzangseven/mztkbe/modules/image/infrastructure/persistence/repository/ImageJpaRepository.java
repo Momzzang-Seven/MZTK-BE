@@ -42,7 +42,7 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
       value =
           "SELECT * FROM images "
               + "WHERE reference_type IS NULL AND reference_id IS NULL "
-              + "AND created_at < :cutoff "
+              + "AND updated_at < :cutoff "
               + "ORDER BY id "
               + "LIMIT :batchSize",
       nativeQuery = true)
