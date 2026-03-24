@@ -1,14 +1,14 @@
-package momzzangseven.mztkbe.modules.image.application.scheduler;
+package momzzangseven.mztkbe.modules.image.infrastructure.scheduler;
 
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.image.application.service.ImagePendingCleanupService;
+import momzzangseven.mztkbe.modules.image.application.port.in.RunPendingImageCleanupBatchUseCase;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Scheduler that triggers the orphaned PENDING image cleanup job.
+ * Driving adapter that triggers the orphaned PENDING image cleanup job via cron.
  *
  * <p>Runs at every hour. Iterates in batches until no more eligible rows remain, preventing large
  * single-transaction locks on the images table.
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ImagePendingCleanupScheduler {
 
-  private final ImagePendingCleanupService cleanupService;
+  private final RunPendingImageCleanupBatchUseCase cleanupUseCase;
 
   @Scheduled(
       cron = "${image.pending-cleanup.cron:0 0 0/1 * * *}",
@@ -28,7 +28,7 @@ public class ImagePendingCleanupScheduler {
     int totalDeleted = 0;
 
     while (true) {
-      int deleted = cleanupService.runBatch(now);
+      int deleted = cleanupUseCase.runBatch(now);
       if (deleted <= 0) {
         break;
       }
