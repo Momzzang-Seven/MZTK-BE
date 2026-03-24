@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.image.application.dto.UpsertImagesByReferenc
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
+import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.external.image.config.PostImageStorageProperties;
@@ -70,8 +71,9 @@ class ImageModuleAdapterTest {
         .thenReturn(
             GetImagesByReferenceResult.of(
                 List.of(
-                    new GetImagesByReferenceResult.ImageItem(1L, "a.webp"),
-                    new GetImagesByReferenceResult.ImageItem(2L, "b.webp"))));
+                    new GetImagesByReferenceResult.ImageItem(1L, ImageStatus.COMPLETED, "a.webp"),
+                    new GetImagesByReferenceResult.ImageItem(
+                        2L, ImageStatus.COMPLETED, "b.webp"))));
 
     PostImageResult result = imageModuleAdapter.loadImages(PostType.FREE, 12L);
 
