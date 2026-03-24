@@ -4,18 +4,21 @@
  * 테스트 시나리오:
  *   모든 request-facing reference_type 에 대해 아래 흐름을 검증합니다.
  *     1. POST /images/presigned-urls → Presigned PUT URL 발급
- *     2. tmpObjectKey prefix·개수 검증 (응답 구조)
+ *     2. 응답 구조 검증 (imageId, tmpObjectKey prefix·개수, presignedUrl)
  *     3. 로컬 테스트 이미지 파일을 Presigned URL 로 실제 S3 에 PUT 업로드
  *     4. public 경로는 GET 으로 업로드된 오브젝트의 실존 확인
  *        (버킷 퍼블릭 읽기 정책 여부에 따라 200 / 403)
  *
  * 커버되는 reference_type:
- *   COMMUNITY_FREE    → public/community/free/tmp/{uuid}.ext
- *   COMMUNITY_QUESTION → public/community/question/tmp/{uuid}.ext
- *   COMMUNITY_ANSWER  → public/community/answer/tmp/{uuid}.ext
- *   MARKET            → THUMB: public/market/thumb/tmp/{uuid}.ext
- *                       DETAIL: public/market/detail/tmp/{uuid}.ext  (n+1 확장)
- *   WORKOUT           → private/workout/{uuid}.ext  (GET 검증 생략)
+ *   COMMUNITY_FREE      → public/community/free/tmp/{uuid}.ext
+ *   COMMUNITY_QUESTION  → public/community/question/tmp/{uuid}.ext
+ *   COMMUNITY_ANSWER    → public/community/answer/tmp/{uuid}.ext
+ *   USER_PROFILE        → public/user/profile/tmp/{uuid}.ext
+ *   MARKET_CLASS        → CLASS_THUMB: public/market/class/thumb/tmp/{uuid}.ext
+ *                         CLASS_DETAIL: public/market/class/detail/tmp/{uuid}.ext  (n+1 확장)
+ *   MARKET_STORE        → STORE_THUMB: public/market/store/thumb/tmp/{uuid}.ext
+ *                         STORE_DETAIL: public/market/store/detail/tmp/{uuid}.ext  (n+1 확장)
+ *   WORKOUT             → private/workout/{uuid}.ext  (GET 검증 생략)
  *
  * 사전 조건:
  *   - MZTK-BE 서버가 실행 중이어야 합니다
@@ -61,6 +64,8 @@ const CONTENT_TYPE_MAP: Record<string, string> = {
 // 타입
 // ────────────────────────────────────────────────────────────────────────────
 interface PresignedUrlItem {
+  /** DB 에 저장된 Image 레코드의 PK. 양수 정수여야 합니다. */
+  imageId: number;
   presignedUrl: string;
   tmpObjectKey: string;
 }
@@ -139,6 +144,7 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
   /**
    * POST /images/presigned-urls 를 호출하여 Presigned URL 목록을 반환합니다.
    * HTTP 200 + status:"SUCCESS" 를 자동으로 검증합니다.
+   * 각 item 의 imageId 가 양수인지도 공통으로 검증합니다.
    */
   async function issuePresignedUrls(
     request: APIRequestContext,
@@ -162,9 +168,22 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
     expect(body.status, `[${referenceType}] 응답 status 필드 오류`).toBe("SUCCESS");
 
     const items = body.data.items as PresignedUrlItem[];
+
+    // 모든 item 의 imageId 가 양수 정수인지 공통 검증
+    items.forEach((item, idx) => {
+      expect(
+        typeof item.imageId,
+        `[${referenceType}] items[${idx}].imageId 타입 오류 — number 여야 합니다`
+      ).toBe("number");
+      expect(
+        item.imageId,
+        `[${referenceType}] items[${idx}].imageId 는 양수여야 합니다`
+      ).toBeGreaterThan(0);
+    });
+
     console.log(
       `[${referenceType}] Presigned URL ${items.length}개 발급 ✅` +
-        items.map((i) => `\n  · ${i.tmpObjectKey}`).join("")
+        items.map((i) => `\n  · id=${i.imageId}  key=${i.tmpObjectKey}`).join("")
     );
     return items;
   }
@@ -257,7 +276,7 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
   test(
     "TC-1: COMMUNITY_FREE 단일 이미지 → public/community/free/tmp/ 업로드 및 GET 검증",
     async ({ request }) => {
-      // ── Presigned URL 발급
+      // ── Presigned URL 발급 (imageId 포함 공통 검증은 issuePresignedUrls 내부)
       const items = await issuePresignedUrls(request, "COMMUNITY_FREE", ["test1.png"]);
 
       // ── 응답 구조 검증
@@ -266,10 +285,7 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
         items[0].tmpObjectKey,
         "COMMUNITY_FREE tmpObjectKey prefix 불일치"
       ).toMatch(/^public\/community\/free\/tmp\/.+\.png$/);
-      expect(
-        items[0].presignedUrl,
-        "presignedUrl 이 비어 있음"
-      ).toBeTruthy();
+      expect(items[0].presignedUrl, "presignedUrl 이 비어 있음").toBeTruthy();
 
       // ── S3 PUT 업로드
       await putImageToS3(request, items[0].presignedUrl, "test1.png", "COMMUNITY_FREE");
@@ -312,63 +328,143 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // TC-4: MARKET — 3장 입력 → 4개 Presigned URL (n+1 확장)
+  // TC-4: USER_PROFILE — 단일 이미지
+  //
+  // USER_PROFILE 은 public/user/profile/tmp/{uuid}.ext 형식입니다.
+  // ════════════════════════════════════════════════════════════════════════════
+  test(
+    "TC-4: USER_PROFILE 단일 이미지, public/user/profile/tmp/ 업로드 및 GET 검증",
+    async ({ request }) => {
+      const items = await issuePresignedUrls(request, "USER_PROFILE", ["test1.png"]);
+
+      expect(items).toHaveLength(1);
+      expect(
+        items[0].tmpObjectKey,
+        "USER_PROFILE tmpObjectKey prefix 불일치"
+      ).toMatch(/^public\/user\/profile\/tmp\/.+\.png$/);
+      expect(items[0].presignedUrl, "presignedUrl 이 비어 있음").toBeTruthy();
+
+      await putImageToS3(request, items[0].presignedUrl, "test1.png", "USER_PROFILE");
+      await verifyS3ObjectExists(request, items[0].presignedUrl, "USER_PROFILE");
+    }
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // TC-5: MARKET_CLASS — 3장 입력 → 4개 Presigned URL (n+1 확장)
   //
   // 흐름:
   //   입력: ["test1.png", "test2.png", "test3.png"]
   //   출력:
-  //     [0] MARKET_THUMB  ← test1.png  (public/market/thumb/tmp/{uuid}.png)
-  //     [1] MARKET_DETAIL ← test1.png  (public/market/detail/tmp/{uuid}.png)
-  //     [2] MARKET_DETAIL ← test2.png  (public/market/detail/tmp/{uuid}.png)
-  //     [3] MARKET_DETAIL ← test3.png  (public/market/detail/tmp/{uuid}.png)
+  //     [0] MARKET_CLASS_THUMB  ← test1.png  (public/market/class/thumb/tmp/{uuid}.png)
+  //     [1] MARKET_CLASS_DETAIL ← test1.png  (public/market/class/detail/tmp/{uuid}.png)
+  //     [2] MARKET_CLASS_DETAIL ← test2.png  (public/market/class/detail/tmp/{uuid}.png)
+  //     [3] MARKET_CLASS_DETAIL ← test3.png  (public/market/class/detail/tmp/{uuid}.png)
   // ════════════════════════════════════════════════════════════════════════════
   test(
-    "TC-4: MARKET 3장 → THUMB×1 + DETAIL×3 = 4개 Presigned URL 발급 및 각각 S3 업로드",
+    "TC-5: MARKET_CLASS 3장 → CLASS_THUMB×1 + CLASS_DETAIL×3 = 4개 Presigned URL 발급 및 각각 S3 업로드",
     async ({ request }) => {
       const inputImages = ["test1.png", "test2.png", "test3.png"];
-      const items = await issuePresignedUrls(request, "MARKET", inputImages);
+      const items = await issuePresignedUrls(request, "MARKET_CLASS", inputImages);
 
-      // MARKET n장 → n+1개 URL
-      expect(items, "MARKET: n+1 items 아님").toHaveLength(4);
+      // MARKET_CLASS n장 → n+1개 URL
+      expect(items, "MARKET_CLASS: n+1 items 아님").toHaveLength(4);
 
       // prefix 분기 검증
-      expect(items[0].tmpObjectKey, "MARKET_THUMB prefix 오류").toMatch(
-        /^public\/market\/thumb\/tmp\/.+\.png$/
+      expect(items[0].tmpObjectKey, "MARKET_CLASS_THUMB prefix 오류").toMatch(
+        /^public\/market\/class\/thumb\/tmp\/.+\.png$/
       );
-      expect(items[1].tmpObjectKey, "MARKET_DETAIL[0] prefix 오류").toMatch(
-        /^public\/market\/detail\/tmp\/.+\.png$/
+      expect(items[1].tmpObjectKey, "MARKET_CLASS_DETAIL[0] prefix 오류").toMatch(
+        /^public\/market\/class\/detail\/tmp\/.+\.png$/
       );
-      expect(items[2].tmpObjectKey, "MARKET_DETAIL[1] prefix 오류").toMatch(
-        /^public\/market\/detail\/tmp\/.+\.png$/
+      expect(items[2].tmpObjectKey, "MARKET_CLASS_DETAIL[1] prefix 오류").toMatch(
+        /^public\/market\/class\/detail\/tmp\/.+\.png$/
       );
-      expect(items[3].tmpObjectKey, "MARKET_DETAIL[2] prefix 오류").toMatch(
-        /^public\/market\/detail\/tmp\/.+\.png$/
+      expect(items[3].tmpObjectKey, "MARKET_CLASS_DETAIL[2] prefix 오류").toMatch(
+        /^public\/market\/class\/detail\/tmp\/.+\.png$/
       );
 
       // 모든 tmpObjectKey 가 서로 달라야 함 (UUID 고유성)
       const allKeys = items.map((i) => i.tmpObjectKey);
       expect(new Set(allKeys).size, "tmpObjectKey 중복 존재 — UUID 충돌").toBe(4);
 
+      // 모든 imageId 가 서로 달라야 함 (각각 별도 DB row)
+      const allIds = items.map((i) => i.imageId);
+      expect(new Set(allIds).size, "imageId 중복 존재 — 서로 다른 DB row 여야 합니다").toBe(4);
+
       // S3 PUT: 각 URL 에 대응하는 파일 업로드
-      await putImageToS3(request, items[0].presignedUrl, "test1.png", "MARKET_THUMB[test1]");
-      await putImageToS3(request, items[1].presignedUrl, "test1.png", "MARKET_DETAIL[test1]");
-      await putImageToS3(request, items[2].presignedUrl, "test2.png", "MARKET_DETAIL[test2]");
-      await putImageToS3(request, items[3].presignedUrl, "test3.png", "MARKET_DETAIL[test3]");
+      await putImageToS3(request, items[0].presignedUrl, "test1.png", "MARKET_CLASS_THUMB[test1]");
+      await putImageToS3(request, items[1].presignedUrl, "test1.png", "MARKET_CLASS_DETAIL[test1]");
+      await putImageToS3(request, items[2].presignedUrl, "test2.png", "MARKET_CLASS_DETAIL[test2]");
+      await putImageToS3(request, items[3].presignedUrl, "test3.png", "MARKET_CLASS_DETAIL[test3]");
 
       // GET 검증 (THUMB + DETAIL 대표 1개)
-      await verifyS3ObjectExists(request, items[0].presignedUrl, "MARKET_THUMB");
-      await verifyS3ObjectExists(request, items[1].presignedUrl, "MARKET_DETAIL");
+      await verifyS3ObjectExists(request, items[0].presignedUrl, "MARKET_CLASS_THUMB");
+      await verifyS3ObjectExists(request, items[1].presignedUrl, "MARKET_CLASS_DETAIL");
     }
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // TC-5: WORKOUT — private 경로 (GET 검증 생략)
+  // TC-6: MARKET_STORE — 3장 입력 → 4개 Presigned URL (n+1 확장)
+  //
+  // 흐름:
+  //   입력: ["test1.png", "test2.png", "test3.png"]
+  //   출력:
+  //     [0] MARKET_STORE_THUMB  ← test1.png  (public/market/store/thumb/tmp/{uuid}.png)
+  //     [1] MARKET_STORE_DETAIL ← test1.png  (public/market/store/detail/tmp/{uuid}.png)
+  //     [2] MARKET_STORE_DETAIL ← test2.png  (public/market/store/detail/tmp/{uuid}.png)
+  //     [3] MARKET_STORE_DETAIL ← test3.png  (public/market/store/detail/tmp/{uuid}.png)
+  // ════════════════════════════════════════════════════════════════════════════
+  test(
+    "TC-6: MARKET_STORE 3장 → STORE_THUMB×1 + STORE_DETAIL×3 = 4개 Presigned URL 발급 및 각각 S3 업로드",
+    async ({ request }) => {
+      const inputImages = ["test1.png", "test2.png", "test3.png"];
+      const items = await issuePresignedUrls(request, "MARKET_STORE", inputImages);
+
+      // MARKET_STORE n장 → n+1개 URL
+      expect(items, "MARKET_STORE: n+1 items 아님").toHaveLength(4);
+
+      // prefix 분기 검증
+      expect(items[0].tmpObjectKey, "MARKET_STORE_THUMB prefix 오류").toMatch(
+        /^public\/market\/store\/thumb\/tmp\/.+\.png$/
+      );
+      expect(items[1].tmpObjectKey, "MARKET_STORE_DETAIL[0] prefix 오류").toMatch(
+        /^public\/market\/store\/detail\/tmp\/.+\.png$/
+      );
+      expect(items[2].tmpObjectKey, "MARKET_STORE_DETAIL[1] prefix 오류").toMatch(
+        /^public\/market\/store\/detail\/tmp\/.+\.png$/
+      );
+      expect(items[3].tmpObjectKey, "MARKET_STORE_DETAIL[2] prefix 오류").toMatch(
+        /^public\/market\/store\/detail\/tmp\/.+\.png$/
+      );
+
+      // 모든 tmpObjectKey 가 서로 달라야 함 (UUID 고유성)
+      const allKeys = items.map((i) => i.tmpObjectKey);
+      expect(new Set(allKeys).size, "tmpObjectKey 중복 존재 — UUID 충돌").toBe(4);
+
+      // 모든 imageId 가 서로 달라야 함 (각각 별도 DB row)
+      const allIds = items.map((i) => i.imageId);
+      expect(new Set(allIds).size, "imageId 중복 존재 — 서로 다른 DB row 여야 합니다").toBe(4);
+
+      // S3 PUT: 각 URL 에 대응하는 파일 업로드
+      await putImageToS3(request, items[0].presignedUrl, "test1.png", "MARKET_STORE_THUMB[test1]");
+      await putImageToS3(request, items[1].presignedUrl, "test1.png", "MARKET_STORE_DETAIL[test1]");
+      await putImageToS3(request, items[2].presignedUrl, "test2.png", "MARKET_STORE_DETAIL[test2]");
+      await putImageToS3(request, items[3].presignedUrl, "test3.png", "MARKET_STORE_DETAIL[test3]");
+
+      // GET 검증 (THUMB + DETAIL 대표 1개)
+      await verifyS3ObjectExists(request, items[0].presignedUrl, "MARKET_STORE_THUMB");
+      await verifyS3ObjectExists(request, items[1].presignedUrl, "MARKET_STORE_DETAIL");
+    }
+  );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // TC-7: WORKOUT — private 경로 (GET 검증 생략)
   //
   // WORKOUT 은 private/workout/{uuid}.ext 형식으로 tmp/ 서브폴더가 없습니다.
   // 버킷 정책상 퍼블릭 GET 이 불가능하므로 PUT 성공만 검증합니다.
   // ════════════════════════════════════════════════════════════════════════════
   test(
-    "TC-5: WORKOUT 단일 이미지 → private/workout/ (tmp/ 없음) + S3 PUT 성공 검증",
+    "TC-7: WORKOUT 단일 이미지 → private/workout/ (tmp/ 없음) + S3 PUT 성공 검증",
     async ({ request }) => {
       const items = await issuePresignedUrls(request, "WORKOUT", ["test4.png"]);
 
@@ -395,10 +491,10 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // TC-6: COMMUNITY_FREE 5장 복수 업로드
+  // TC-8: COMMUNITY_FREE 5장 복수 업로드
   // ════════════════════════════════════════════════════════════════════════════
   test(
-    "TC-6: COMMUNITY_FREE 5장 복수 업로드 → 5개 Presigned URL 발급 및 S3 PUT 전체 성공",
+    "TC-8: COMMUNITY_FREE 5장 복수 업로드 → 5개 Presigned URL 발급 및 S3 PUT 전체 성공",
     async ({ request }) => {
       const inputImages = [
         "test1.png",
@@ -411,6 +507,10 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
       const items = await issuePresignedUrls(request, "COMMUNITY_FREE", inputImages);
 
       expect(items, "COMMUNITY_FREE 5장: items 개수 불일치").toHaveLength(5);
+
+      // 모든 imageId 가 서로 달라야 함
+      const allIds = items.map((i) => i.imageId);
+      expect(new Set(allIds).size, "imageId 중복 존재 — 각 파일은 별도 DB row 여야 합니다").toBe(5);
 
       // imgOrder 대응: items[i] → inputImages[i]
       for (let i = 0; i < items.length; i++) {
@@ -427,28 +527,28 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
         );
       }
 
-      console.log("[TC-6] 5장 복수 업로드 완료 ✅");
+      console.log("[TC-8] 5장 복수 업로드 완료 ✅");
     }
   );
 
   // ════════════════════════════════════════════════════════════════════════════
-  // TC-7: 인증 없이 요청 → 401 Unauthorized
+  // TC-9: 인증 없이 요청 → 401 Unauthorized
   // ════════════════════════════════════════════════════════════════════════════
-  test("TC-7: Authorization 헤더 없이 POST /images/presigned-urls → 401", async ({ request }) => {
+  test("TC-9: Authorization 헤더 없이 POST /images/presigned-urls → 401", async ({ request }) => {
     const res = await request.post(`${ENV.BACKEND_URL}/images/presigned-urls`, {
       headers: { "Content-Type": "application/json" },
       data: { referenceType: "COMMUNITY_FREE", images: ["photo.png"] },
     });
 
     expect(res.status(), "인증 없는 요청이 401 이 아님").toBe(401);
-    console.log("[TC-7] 미인증 요청 → 401 정상 처리 ✅");
+    console.log("[TC-9] 미인증 요청 → 401 정상 처리 ✅");
   });
 
   // ════════════════════════════════════════════════════════════════════════════
-  // TC-8: 허용되지 않는 확장자 → 400 IMAGE_005
+  // TC-10: 허용되지 않는 확장자 → 400 IMAGE_005
   // ════════════════════════════════════════════════════════════════════════════
   test(
-    "TC-8: 허용되지 않는 확장자(webp) 포함 시 → 400 + IMAGE_005 에러코드",
+    "TC-10: 허용되지 않는 확장자(webp) 포함 시 → 400 + IMAGE_005 에러코드",
     async ({ request }) => {
       const res = await request.post(`${ENV.BACKEND_URL}/images/presigned-urls`, {
         headers: {
@@ -463,7 +563,7 @@ test.describe("이미지 Presigned URL 발급 + 실제 S3 PUT/GET E2E", () => {
       const body = await res.json();
       expect(body.code, "IMAGE_005 에러코드 불일치").toBe("IMAGE_005");
 
-      console.log("[TC-8] 허용 안 되는 확장자 → 400 IMAGE_005 정상 처리 ✅");
+      console.log("[TC-10] 허용 안 되는 확장자 → 400 IMAGE_005 정상 처리 ✅");
     }
   );
 });

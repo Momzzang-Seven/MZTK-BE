@@ -50,47 +50,53 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
   public void execute(UpsertImagesByReferenceCommand command) {
     command.validate();
 
-    // ---- Phase 1: Unlink images no longer in the reference ----
+    // ---- Phase 1: Find toDelete images no longer in the reference ----
     List<Image> existingImages =
-        loadImagePort.findImagesByReference(command.referenceType(), command.referenceId());
+        loadImagePort.findImagesByReference(
+            command.referenceType().expand(), command.referenceId());
 
     Set<Long> retainIds = Set.copyOf(command.imageIds());
     List<Image> toDelete =
         existingImages.stream().filter(img -> !retainIds.contains(img.getId())).toList();
 
-    // Best-effort S3 deletion for COMPLETED images only.
-    // PENDING images are intentionally skipped: Lambda may still be processing them,
-    // and their tmp S3 objects will be reclaimed by the S3 lifecycle rule.
-    for (Image img : toDelete) {
-      if (img.getStatus() == ImageStatus.COMPLETED && img.getFinalObjectKey() != null) {
-        log.debug(
-            "Best-effort S3 delete before unlink: imageId={}, key={}",
-            img.getId(),
-            img.getFinalObjectKey());
-        deleteS3ObjectPort.deleteObject(img.getFinalObjectKey());
-      }
+    // ---- Phase 2: Validate the final image set ----
+    // Acquire a pessimistic write lock to prevent concurrent modification of the same rows.
+    List<Image> finalImages;
+    if (command.imageIds().isEmpty()) {
+      finalImages = List.of();
+    } else {
+      finalImages = loadImagePort.findImagesByIdInForUpdate(command.imageIds());
+      validateOwnership(
+          finalImages, command.userId(), command.referenceType(), command.referenceId());
+      validateCount(command.imageIds().size(), command.referenceType());
+      validateMarketOrder(finalImages, command.referenceType(), command.imageIds());
     }
 
-    // Unlink images with the reference in the DB
+    // ---- Phase 3: DB mutations ----
+    // Placing DB operations first ensures a DB failure triggers a transaction rollback
+    // before any S3 objects are deleted.
     if (!toDelete.isEmpty()) {
       List<Long> toDeleteIds = toDelete.stream().map(Image::getId).toList();
       deleteImagePort.unlinkImagesByIdIn(toDeleteIds);
     }
 
-    // No images requested: nothing left to link or reorder.
-    if (command.imageIds().isEmpty()) {
-      return;
+    if (!finalImages.isEmpty()) {
+      List<Image> updated = buildOrderedImages(finalImages, command);
+      updateImagePort.updateAll(updated);
     }
 
-    // ---- Phase 2: Validate the final image set ----
-    // Acquire a pessimistic write lock to prevent concurrent modification of the same rows.
-    List<Image> finalImages = loadImagePort.findImagesByIdInForUpdate(command.imageIds());
-    validateOwnership(finalImages, command.userId(), command.referenceId());
-    validateCount(command.imageIds().size(), command.referenceType());
-
-    // ---- Phase 3: Reassign order and reference ----
-    List<Image> updated = buildOrderedImages(finalImages, command);
-    updateImagePort.updateAll(updated);
+    // ---- Phase 4: S3 deletion (best-effort, after all DB mutations) ----
+    // PENDING images are skipped — Lambda may still be processing them, and their tmp objects
+    // are reclaimed by the S3 lifecycle rule.
+    for (Image img : toDelete) {
+      if (img.getStatus() == ImageStatus.COMPLETED && img.getFinalObjectKey() != null) {
+        log.debug(
+            "Best-effort S3 delete after DB unlink: imageId={}, key={}",
+            img.getId(),
+            img.getFinalObjectKey());
+        deleteS3ObjectPort.deleteObject(img.getFinalObjectKey());
+      }
+    }
   }
 
   /**
@@ -101,17 +107,69 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
    * @param userId ID of the user performing the update
    * @param referenceId ID of the reference being updated
    */
-  private void validateOwnership(List<Image> images, Long userId, Long referenceId) {
+  private void validateOwnership(
+      List<Image> images, Long userId, ImageReferenceType referenceType, Long referenceId) {
     for (Image img : images) {
       // Verify every images that it belongs to the user requested reference update
       if (!userId.equals(img.getUserId())) {
         throw new ImageNotBelongsToUserException(
             "Image " + img.getId() + " does not belong to user " + userId);
       }
-      // Verify only retained images that it belongs to the original reference
-      if (img.getReferenceId() != null && !referenceId.equals(img.getReferenceId())) {
+      // Verify only retained images that they belong to the original reference (type+id pair).
+      // referenceType.expand() resolves virtual types (e.g. MARKET_CLASS → [THUMB, DETAIL]) so
+      // that concrete DB-stored subtypes are accepted without false positives.
+      if (img.getReferenceId() != null
+          && !(referenceType.expand().contains(img.getReferenceType())
+              && referenceId.equals(img.getReferenceId()))) {
         throw new InvalidImageRefTypeException(
             "Image " + img.getId() + " is already linked to a different entity");
+      }
+    }
+  }
+
+  /**
+   * For virtual MARKET types, verifies that the ordered image set satisfies the layout rule: the
+   * first image must be the THUMB subtype and every subsequent image must be the DETAIL subtype.
+   *
+   * <p>Non-virtual types (e.g. {@code COMMUNITY_*}) are skipped entirely.
+   *
+   * @param images unordered images loaded for the final set
+   * @param referenceType the command's reference type (may be virtual)
+   * @param orderedIds caller-supplied ordered list of image IDs
+   * @throws InvalidImageRefTypeException If this excpetion was thrown, it means issuing pre-signed
+   *     url phase had a bug.
+   */
+  private void validateMarketOrder(
+      List<Image> images, ImageReferenceType referenceType, List<Long> orderedIds) {
+    if (!referenceType.isVirtual()) {
+      return;
+    }
+
+    List<ImageReferenceType> expanded = referenceType.expand();
+    ImageReferenceType thumbType = expanded.get(0);
+    ImageReferenceType detailType = expanded.get(1);
+
+    Map<Long, Image> imageById =
+        images.stream().collect(Collectors.toMap(Image::getId, img -> img));
+
+    for (int i = 0; i < orderedIds.size(); i++) {
+      Image img = imageById.get(orderedIds.get(i));
+      if (img == null) {
+        continue; // null case is caught later in buildOrderedImages
+      }
+      ImageReferenceType expectedType = (i == 0) ? thumbType : detailType;
+      if (!expectedType.equals(img.getReferenceType())) {
+        throw new InvalidImageRefTypeException(
+            "Image "
+                + img.getId()
+                + " at position "
+                + (i + 1)
+                + " has type "
+                + img.getReferenceType()
+                + " but expected "
+                + expectedType
+                + " for reference type "
+                + referenceType);
       }
     }
   }
@@ -157,9 +215,14 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
       if (img == null) {
         throw new ImageNotFoundException("Requested image not found: id=" + id);
       }
-      result.add(
-          img.updateReference(command.referenceType(), command.referenceId())
-              .updateImageOrder(i + 1));
+      // For virtual types (MARKET_CLASS, MARKET_STORE), the concrete subtype (THUMB/DETAIL)
+      // is already stored on the image from IssuePresignedUrlService. Preserve it so we do
+      // not overwrite a concrete type with its virtual parent in the DB.
+      ImageReferenceType concreteType =
+          command.referenceType().isVirtual() // MARKET_STORE -> concreteType =
+              ? img.getReferenceType()
+              : command.referenceType();
+      result.add(img.updateReference(concreteType, command.referenceId()).updateImageOrder(i + 1));
     }
 
     return result;

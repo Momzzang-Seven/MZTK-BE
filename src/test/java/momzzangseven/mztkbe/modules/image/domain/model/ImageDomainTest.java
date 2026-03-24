@@ -147,6 +147,87 @@ class ImageDomainTest {
     }
   }
 
+  // ========== updateReference / updateImageOrder ==========
+
+  @Nested
+  @DisplayName("updateReference() — 레퍼런스 변경 및 unlink")
+  class UpdateReferenceTests {
+
+    @Test
+    @DisplayName(
+        "[TC-IMAGE-DOMAIN-005] updateReference(null, null) → referenceType=null, referenceId=null (unlink)")
+    void updateReference_toNull_unlinksImage() {
+      Image linked =
+          Image.builder()
+              .id(1L)
+              .userId(1L)
+              .referenceType(ImageReferenceType.COMMUNITY_FREE)
+              .referenceId(1L)
+              .status(ImageStatus.PENDING)
+              .tmpObjectKey("tmp.jpg")
+              .imgOrder(1)
+              .build();
+
+      Image unlinked = linked.updateReference(null, null);
+
+      assertThat(unlinked.getReferenceType()).isNull();
+      assertThat(unlinked.getReferenceId()).isNull();
+    }
+
+    @Test
+    @DisplayName("[Immut-updateRef] updateReference() 호출 후 원본 객체는 변하지 않는다")
+    void updateReference_doesNotMutateOriginal() {
+      Image original =
+          Image.builder()
+              .id(1L)
+              .userId(1L)
+              .referenceType(ImageReferenceType.COMMUNITY_FREE)
+              .referenceId(1L)
+              .status(ImageStatus.PENDING)
+              .tmpObjectKey("tmp.jpg")
+              .imgOrder(1)
+              .build();
+
+      original.updateReference(null, null);
+
+      assertThat(original.getReferenceType()).isEqualTo(ImageReferenceType.COMMUNITY_FREE);
+      assertThat(original.getReferenceId()).isEqualTo(1L);
+    }
+  }
+
+  @Nested
+  @DisplayName("updateImageOrder() — 순서 갱신 및 불변성 보장")
+  class UpdateImageOrderTests {
+
+    @Test
+    @DisplayName("[TC-IMAGE-DOMAIN-006] updateImageOrder(3) → 새 인스턴스의 imgOrder=3")
+    void updateImageOrder_returnsNewInstanceWithUpdatedOrder() {
+      Image original = pendingImage();
+      Image updated = original.updateImageOrder(3);
+
+      assertThat(updated.getImgOrder()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("[TC-IMAGE-DOMAIN-006] updateImageOrder() 호출 후 원본의 imgOrder는 변하지 않는다")
+    void updateImageOrder_doesNotMutateOriginal() {
+      Image original = pendingImage();
+
+      original.updateImageOrder(3);
+
+      assertThat(original.getImgOrder()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("[Immut-order] updateImageOrder()가 반환한 새 인스턴스는 원본과 다른 객체이다")
+    void updateImageOrder_returnsNewInstance() {
+      Image original = pendingImage();
+      Image updated = original.updateImageOrder(3);
+
+      assertThat(updated).isNotSameAs(original);
+    }
+  }
+
   // ========== createPending 팩토리 검증 ==========
 
   @Nested

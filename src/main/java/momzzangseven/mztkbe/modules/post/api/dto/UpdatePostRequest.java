@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Positive;
 import java.util.List;
 
 public record UpdatePostRequest(
+
     String title,
     String content,
     List<

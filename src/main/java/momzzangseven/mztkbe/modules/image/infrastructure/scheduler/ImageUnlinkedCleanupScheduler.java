@@ -1,16 +1,14 @@
-package momzzangseven.mztkbe.modules.image.application.scheduler;
+package momzzangseven.mztkbe.modules.image.infrastructure.scheduler;
 
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.image.application.config.ImageUnlinkedCleanupProperties;
-import momzzangseven.mztkbe.modules.image.application.service.ImageUnlinkedCleanupService;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import momzzangseven.mztkbe.modules.image.application.port.in.RunUnlinkedImageCleanupBatchUseCase;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Scheduler that triggers the unlinked image cleanup job.
+ * Driving adapter that triggers the unlinked image cleanup job via cron.
  *
  * <p>Runs daily at 03:00 (Asia/Seoul). Iterates in batches until no more eligible rows remain,
  * preventing large single-transaction locks on the images table.
@@ -26,9 +24,9 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@EnableConfigurationProperties(ImageUnlinkedCleanupProperties.class)
 public class ImageUnlinkedCleanupScheduler {
-  private final ImageUnlinkedCleanupService cleanupService;
+
+  private final RunUnlinkedImageCleanupBatchUseCase cleanupUseCase;
 
   @Scheduled(
       cron = "${image.unlinked-cleanup.cron:0 0 3 * * *}",
@@ -38,7 +36,7 @@ public class ImageUnlinkedCleanupScheduler {
     int totalDeleted = 0;
 
     while (true) {
-      int deleted = cleanupService.runBatch(now);
+      int deleted = cleanupUseCase.runBatch(now);
       if (deleted <= 0) {
         break;
       }

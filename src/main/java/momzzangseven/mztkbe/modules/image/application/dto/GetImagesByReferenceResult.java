@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.image.application.dto;
 
 import java.util.List;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
+import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
 
 /**
  * Output result of {@link
@@ -13,11 +14,14 @@ public record GetImagesByReferenceResult(List<ImageItem> items) {
     return new GetImagesByReferenceResult(items);
   }
 
-  /** A single image entry: database ID and its final S3 object key. */
-  public record ImageItem(Long imageId, String finalObjectKey) {
+  /**
+   * A single image entry. {@code finalObjectKey} is {@code null} when {@code status} is PENDING or
+   * FAILED.
+   */
+  public record ImageItem(Long imageId, ImageStatus status, String finalObjectKey) {
 
     public static ImageItem from(Image image) {
-      return new ImageItem(image.getId(), image.getFinalObjectKey());
+      return new ImageItem(image.getId(), image.getStatus(), image.getFinalObjectKey());
     }
   }
 }

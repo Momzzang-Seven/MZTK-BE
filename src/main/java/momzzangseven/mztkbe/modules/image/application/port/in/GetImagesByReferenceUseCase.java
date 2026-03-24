@@ -9,8 +9,8 @@ public interface GetImagesByReferenceUseCase {
    * Get images by reference.
    *
    * @param command GetImagesByReferenceCommand
-   * @return result wrapping a list of (imageId, finalObjectKey) for COMPLETED images, ordered by
-   *     img_order
+   * @return result wrapping a list of (imageId, finalObjectKey) for all linked images, ordered by
+   *     img_order; {@code finalObjectKey} is {@code null} for PENDING/FAILED images
    */
   GetImagesByReferenceResult execute(GetImagesByReferenceCommand command);
 }
