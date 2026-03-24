@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.image.infrastructure.config;
 
 import lombok.Getter;
 import lombok.Setter;
+import momzzangseven.mztkbe.modules.image.application.port.out.LoadUnlinkedImageCleanupPolicyPort;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -12,7 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "image.unlinked-cleanup")
-public class ImageUnlinkedCleanupProperties {
+public class ImageUnlinkedCleanupProperties implements LoadUnlinkedImageCleanupPolicyPort {
   /**
    * Number of hours after which an unlinked image is eligible for permanent deletion. Must be large
    * enough to allow Lambda to complete processing (Lambda max timeout: 15 min). Defaults to 5
