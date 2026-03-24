@@ -83,8 +83,8 @@ class UpsertImagesConcurrencyE2ETest {
     txTemplate.execute(
         status -> {
           List<ImageEntity> remaining =
-              imageJpaRepository.findAllByReferenceTypeAndReferenceIdOrderByImgOrder(
-                  FREE.name(), REF_ID);
+              imageJpaRepository.findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
+                  List.of(FREE.name()), REF_ID);
           remaining.forEach(imageJpaRepository::delete);
           return null;
         });
@@ -186,7 +186,8 @@ class UpsertImagesConcurrencyE2ETest {
 
     // 검증: 최종 상태 — 3개 이미지 모두 REF_ID에 연결됨 (last-write-wins)
     List<ImageEntity> linked =
-        imageJpaRepository.findAllByReferenceTypeAndReferenceIdOrderByImgOrder(FREE.name(), REF_ID);
+        imageJpaRepository.findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
+            List.of(FREE.name()), REF_ID);
     assertThat(linked).hasSize(3);
     assertThat(linked).extracting(ImageEntity::getReferenceId).allMatch(REF_ID::equals);
   }
@@ -284,7 +285,8 @@ class UpsertImagesConcurrencyE2ETest {
 
     // 검증: 두 이미지 모두 unlink (referenceId=null)
     List<ImageEntity> remaining =
-        imageJpaRepository.findAllByReferenceTypeAndReferenceIdOrderByImgOrder(FREE.name(), postId);
+        imageJpaRepository.findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
+            List.of(FREE.name()), postId);
     assertThat(remaining).isEmpty(); // 두 번 실행 후 남은 연결된 이미지 없음
   }
 
@@ -326,7 +328,8 @@ class UpsertImagesConcurrencyE2ETest {
 
     // 검증: 이미지가 unlink 상태
     List<ImageEntity> remaining =
-        imageJpaRepository.findAllByReferenceTypeAndReferenceIdOrderByImgOrder(FREE.name(), postId);
+        imageJpaRepository.findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
+            List.of(FREE.name()), postId);
     assertThat(remaining).isEmpty();
   }
 }

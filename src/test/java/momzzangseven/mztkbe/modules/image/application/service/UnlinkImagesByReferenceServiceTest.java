@@ -36,7 +36,8 @@ class UnlinkImagesByReferenceServiceTest {
     void execute_communityFree_callsUnlinkPort() {
       service.execute(new UnlinkImagesByReferenceCommand(ImageReferenceType.COMMUNITY_FREE, 1L));
 
-      verify(deleteImagePort).unlinkImagesByReference(ImageReferenceType.COMMUNITY_FREE, 1L);
+      verify(deleteImagePort)
+          .unlinkImagesByReference(ImageReferenceType.COMMUNITY_FREE.expand(), 1L);
     }
 
     @Test
@@ -45,7 +46,8 @@ class UnlinkImagesByReferenceServiceTest {
       service.execute(
           new UnlinkImagesByReferenceCommand(ImageReferenceType.COMMUNITY_QUESTION, 42L));
 
-      verify(deleteImagePort).unlinkImagesByReference(ImageReferenceType.COMMUNITY_QUESTION, 42L);
+      verify(deleteImagePort)
+          .unlinkImagesByReference(ImageReferenceType.COMMUNITY_QUESTION.expand(), 42L);
     }
 
     @Test
@@ -57,7 +59,8 @@ class UnlinkImagesByReferenceServiceTest {
                   service.execute(
                       new UnlinkImagesByReferenceCommand(ImageReferenceType.COMMUNITY_FREE, 99L)));
 
-      verify(deleteImagePort).unlinkImagesByReference(ImageReferenceType.COMMUNITY_FREE, 99L);
+      verify(deleteImagePort)
+          .unlinkImagesByReference(ImageReferenceType.COMMUNITY_FREE.expand(), 99L);
     }
   }
 

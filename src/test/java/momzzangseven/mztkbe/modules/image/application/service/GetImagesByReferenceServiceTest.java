@@ -80,7 +80,7 @@ class GetImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-GET-001] COMPLETED 이미지만 있는 경우 status=COMPLETED, finalObjectKey 포함하여 반환")
     void execute_onlyCompleted_returnsItemsWithFinalKey() {
-      given(loadImagePort.findImagesByReference(FREE, 1L))
+      given(loadImagePort.findImagesByReference(FREE.expand(), 1L))
           .willReturn(
               List.of(
                   completedImage(10, 1, "imgs/10.webp"), completedImage(11, 2, "imgs/11.webp")));
@@ -103,7 +103,7 @@ class GetImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-GET-002] PENDING/FAILED 이미지도 items에 포함되며 finalObjectKey는 null")
     void execute_mixedStatus_allIncludedWithNullKeyForNonCompleted() {
-      given(loadImagePort.findImagesByReference(FREE, 1L))
+      given(loadImagePort.findImagesByReference(FREE.expand(), 1L))
           .willReturn(
               List.of(
                   pendingImage(10, 1), failedImage(11, 2), completedImage(12, 3, "imgs/12.webp")));
@@ -128,7 +128,7 @@ class GetImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-GET-003] 모든 이미지가 PENDING/FAILED인 경우에도 items에 포함 (finalObjectKey=null)")
     void execute_allPendingOrFailed_allIncludedWithNullKey() {
-      given(loadImagePort.findImagesByReference(FREE, 1L))
+      given(loadImagePort.findImagesByReference(FREE.expand(), 1L))
           .willReturn(List.of(pendingImage(10, 1), failedImage(11, 2)));
 
       GetImagesByReferenceResult result =
@@ -147,7 +147,7 @@ class GetImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-GET-004] referenceId에 연결된 이미지가 없으면 빈 items 반환")
     void execute_noImages_returnsEmptyItems() {
-      given(loadImagePort.findImagesByReference(FREE, 1L)).willReturn(List.of());
+      given(loadImagePort.findImagesByReference(FREE.expand(), 1L)).willReturn(List.of());
 
       GetImagesByReferenceResult result =
           service.execute(new GetImagesByReferenceCommand(FREE, 1L));
@@ -158,7 +158,7 @@ class GetImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-GET-005] MARKET_STORE referenceType으로 조회 가능 (신규 타입 지원 확인)")
     void execute_marketStoreType_returnsItems() {
-      given(loadImagePort.findImagesByReference(ImageReferenceType.MARKET_STORE, 5L))
+      given(loadImagePort.findImagesByReference(ImageReferenceType.MARKET_STORE.expand(), 5L))
           .willReturn(
               List.of(
                   Image.builder()
@@ -184,7 +184,7 @@ class GetImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-GET-006] img_order 순서대로 정렬되어 반환 (로드 순서 그대로 유지)")
     void execute_returnsItemsInPortOrder() {
-      given(loadImagePort.findImagesByReference(FREE, 1L))
+      given(loadImagePort.findImagesByReference(FREE.expand(), 1L))
           .willReturn(
               List.of(
                   completedImage(3, 1, "k3.webp"),
