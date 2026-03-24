@@ -13,7 +13,7 @@ public record PostDetailResult(
     Long userId,
     String nickname,
     String profileImageUrl,
-    List<String> finalObjectKeys,
+    List<String> imageUrls,
     Long reward,
     boolean isSolved,
     List<String> tags,
@@ -21,7 +21,7 @@ public record PostDetailResult(
     LocalDateTime updatedAt) {
 
   public static PostDetailResult fromDomain(
-      Post post, String nickname, String profileImageUrl, List<String> finalObjectKeys) {
+      Post post, String nickname, String profileImageUrl, List<String> imageUrls) {
     return new PostDetailResult(
         post.getId(),
         post.getType(),
@@ -30,7 +30,7 @@ public record PostDetailResult(
         post.getUserId(),
         nickname,
         profileImageUrl,
-        finalObjectKeys,
+        imageUrls,
         post.getReward(),
         post.getIsSolved() != null ? post.getIsSolved() : false,
         post.getTags(),

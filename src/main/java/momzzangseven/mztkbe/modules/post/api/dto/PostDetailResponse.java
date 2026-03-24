@@ -17,7 +17,7 @@ public record PostDetailResponse(
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     WriterInfo writer,
-    List<String> finalObjectKeys,
+    List<String> imageUrls,
     QuestionInfo question) {
 
   public record WriterInfo(Long userId, String nickname, String profileImage) {}
@@ -43,7 +43,7 @@ public record PostDetailResponse(
         result.createdAt(),
         result.updatedAt(),
         new WriterInfo(result.userId(), result.nickname(), result.profileImageUrl()),
-        result.finalObjectKeys(),
+        result.imageUrls(),
         questionInfo);
   }
 }

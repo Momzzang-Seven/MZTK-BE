@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByRefe
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.post.infrastructure.external.image.config.PostImageStorageProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,6 +27,7 @@ class ImageModuleAdapterTest {
 
   @Mock private UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
   @Mock private GetImagesByReferenceUseCase getImagesByReferenceUseCase;
+  @Mock private PostImageStorageProperties postImageStorageProperties;
 
   @InjectMocks private ImageModuleAdapter imageModuleAdapter;
 
@@ -58,8 +60,10 @@ class ImageModuleAdapterTest {
   }
 
   @Test
-  @DisplayName("loadImages maps image module result items to post image slots")
+  @DisplayName("loadImages maps final object keys to public image urls")
   void loadImagesMapsResultItems() {
+    when(postImageStorageProperties.getUrlPrefix())
+        .thenReturn("https://test-bucket.s3.ap-northeast-2.amazonaws.com/");
     when(getImagesByReferenceUseCase.execute(
             new momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceCommand(
                 ImageReferenceType.COMMUNITY_FREE, 12L)))
@@ -73,7 +77,9 @@ class ImageModuleAdapterTest {
 
     assertThat(result.slots())
         .containsExactly(
-            new PostImageResult.PostImageSlot(1L, "a.webp"),
-            new PostImageResult.PostImageSlot(2L, "b.webp"));
+            new PostImageResult.PostImageSlot(
+                1L, "https://test-bucket.s3.ap-northeast-2.amazonaws.com/a.webp"),
+            new PostImageResult.PostImageSlot(
+                2L, "https://test-bucket.s3.ap-northeast-2.amazonaws.com/b.webp"));
   }
 }

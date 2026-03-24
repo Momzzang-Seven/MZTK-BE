@@ -247,6 +247,7 @@ cloud:
       auto: false
     s3:
       bucket: test-bucket
+      url-prefix: https://test-bucket.s3.ap-northeast-2.amazonaws.com/
       presigned-url:
         expiry-seconds: 300
     credentials:

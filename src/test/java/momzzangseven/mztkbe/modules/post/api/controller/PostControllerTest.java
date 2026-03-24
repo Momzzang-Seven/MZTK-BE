@@ -218,7 +218,8 @@ class PostControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(1))
-        .andExpect(jsonPath("$.data.type").value("FREE"));
+        .andExpect(jsonPath("$.data.type").value("FREE"))
+        .andExpect(jsonPath("$.data.imageUrls").isArray());
   }
 
   @Test

@@ -39,9 +39,8 @@ public class GetPostService implements GetPostUseCase {
 
     PostImageResult imageResult = loadPostImagesPort.loadImages(post.getType(), post.getId());
 
-    List<String> finalObjectKeys =
-        imageResult.slots().stream().map(slot -> slot.finalObjectKey()).toList();
+    List<String> imageUrls = imageResult.slots().stream().map(slot -> slot.imageUrl()).toList();
 
-    return PostDetailResult.fromDomain(post, nickname, profileImageUrl, finalObjectKeys);
+    return PostDetailResult.fromDomain(post, nickname, profileImageUrl, imageUrls);
   }
 }
