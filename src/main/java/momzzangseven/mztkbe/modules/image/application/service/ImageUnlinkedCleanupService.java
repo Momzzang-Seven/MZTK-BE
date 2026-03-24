@@ -9,8 +9,8 @@ import momzzangseven.mztkbe.modules.image.application.port.in.RunUnlinkedImageCl
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteS3ObjectPort;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
+import momzzangseven.mztkbe.modules.image.application.port.out.LoadUnlinkedImageCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
-import momzzangseven.mztkbe.modules.image.infrastructure.config.ImageUnlinkedCleanupProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +36,7 @@ public class ImageUnlinkedCleanupService implements RunUnlinkedImageCleanupBatch
   private final LoadImagePort loadImagePort;
   private final DeleteImagePort deleteImagePort;
   private final DeleteS3ObjectPort deleteS3ObjectPort;
-  private final ImageUnlinkedCleanupProperties props;
+  private final LoadUnlinkedImageCleanupPolicyPort cleanupPolicyPort;
 
   /**
    * Processes one batch of non-PENDING images with {@code referenceId = null} that are older than
@@ -49,8 +49,9 @@ public class ImageUnlinkedCleanupService implements RunUnlinkedImageCleanupBatch
   @Override
   @Transactional
   public int runBatch(Instant now) {
-    Instant cutoff = now.minus(props.getRetentionHours(), ChronoUnit.HOURS);
-    List<Image> candidates = loadImagePort.findUnlinkedImagesBefore(cutoff, props.getBatchSize());
+    Instant cutoff = now.minus(cleanupPolicyPort.getRetentionHours(), ChronoUnit.HOURS);
+    List<Image> candidates =
+        loadImagePort.findUnlinkedImagesBefore(cutoff, cleanupPolicyPort.getBatchSize());
 
     if (candidates.isEmpty()) {
       return 0;
