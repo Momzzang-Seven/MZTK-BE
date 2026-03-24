@@ -39,7 +39,8 @@ class CommentJpaRepositoryTest {
     assertThat(page.getTotalElements()).isEqualTo(3);
     assertThat(page.getContent().stream().map(this::idOf).toList())
         .containsExactly(idOf(rootEarlier), idOf(parent), idOf(rootLater));
-    assertThat(page.getContent().stream().map(this::idOf).toList()).doesNotContain(idOf(otherPostRoot));
+    assertThat(page.getContent().stream().map(this::idOf).toList())
+        .doesNotContain(idOf(otherPostRoot));
   }
 
   @Test
@@ -61,7 +62,8 @@ class CommentJpaRepositoryTest {
     assertThat(page.getTotalElements()).isEqualTo(2);
     assertThat(page.getContent().stream().map(this::idOf).toList())
         .containsExactly(idOf(replyEarlier), idOf(replyLater));
-    assertThat(page.getContent().stream().map(this::idOf).toList()).doesNotContain(idOf(otherReply));
+    assertThat(page.getContent().stream().map(this::idOf).toList())
+        .doesNotContain(idOf(otherReply));
   }
 
   @Test

@@ -201,12 +201,29 @@ withdrawal:
     batch-size: 200
     cron: "0 0 3 * * *"
     zone: Asia/Seoul
-  comment:
-    hard-delete:
-      retention-days: 30
-      batch-size: 100
-      cron: "0 0 4 * * *"
-      zone: Asia/Seoul
+
+comment:
+  hard-delete:
+    retention-days: 30
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
+
+answer:
+  orphan-cleanup:
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
+
+image:
+  post-orphan-cleanup:
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
+  answer-orphan-cleanup:
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
 
 # 레벨 정책
 level:
