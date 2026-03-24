@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.image.application.config;
+package momzzangseven.mztkbe.modules.image.infrastructure.config;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -7,9 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Configuration properties for the unlinked image cleanup job.
  *
- * <p>Bound from the {@code image.unlinked-cleanup} prefix in application.yml. Activate by adding
- * {@code @EnableConfigurationProperties(ImageUnlinkedCleanupProperties.class)} to the scheduler or
- * a dedicated configuration class.
+ * <p>Bound from the {@code image.unlinked-cleanup} prefix in application.yml.
  */
 @Getter
 @Setter
