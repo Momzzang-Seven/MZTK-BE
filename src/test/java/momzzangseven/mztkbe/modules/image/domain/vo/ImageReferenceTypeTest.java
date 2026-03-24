@@ -60,7 +60,7 @@ class ImageReferenceTypeTest {
     @ParameterizedTest
     @EnumSource(
         value = ImageReferenceType.class,
-        names = {"MARKET", "MARKET_STORE"})
+        names = {"MARKET_CLASS", "MARKET_STORE"})
     @DisplayName("virtual request-facing types return true from isVirtual()")
     void isVirtual_returnsTrue(ImageReferenceType type) {
       assertThat(type.isVirtual()).isTrue();
@@ -70,7 +70,7 @@ class ImageReferenceTypeTest {
     @EnumSource(
         value = ImageReferenceType.class,
         mode = EnumSource.Mode.EXCLUDE,
-        names = {"MARKET", "MARKET_STORE"})
+        names = {"MARKET_CLASS", "MARKET_STORE"})
     @DisplayName("non-virtual types return false from isVirtual()")
     void isVirtual_returnsFalse(ImageReferenceType type) {
       assertThat(type.isVirtual()).isFalse();
@@ -79,14 +79,14 @@ class ImageReferenceTypeTest {
     @ParameterizedTest
     @EnumSource(
         value = ImageReferenceType.class,
-        names = {"MARKET", "MARKET_STORE"})
+        names = {"MARKET_CLASS", "MARKET_STORE"})
     @DisplayName("expand returns concrete stored subtypes for virtual types")
     void expand_returnsConcreteTypes(ImageReferenceType type) {
       assertThat(type.expand())
           .isEqualTo(
-              type == ImageReferenceType.MARKET
+              type == ImageReferenceType.MARKET_CLASS
                   ? java.util.List.of(
-                      ImageReferenceType.MARKET_THUMB, ImageReferenceType.MARKET_DETAIL)
+                      ImageReferenceType.MARKET_CLASS_THUMB, ImageReferenceType.MARKET_CLASS_DETAIL)
                   : java.util.List.of(
                       ImageReferenceType.MARKET_STORE_THUMB,
                       ImageReferenceType.MARKET_STORE_DETAIL));
