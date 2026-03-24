@@ -75,7 +75,7 @@ class CommentE2ETest {
   private Long postId;
   private Long commentId;
 
-  private List<String> imageUrls = new ArrayList<>();
+  private List<Long> imageIds = new ArrayList<>();
 
   // ============================================================
   // Helper Methods
@@ -115,8 +115,8 @@ class CommentE2ETest {
     return root.at("/data/accessToken").asText();
   }
 
-  private Long createFreePost(String content, List<String> imageUrls) throws Exception {
-    Map<String, Object> body = Map.of("content", content, "imageUrls", imageUrls);
+  private Long createFreePost(String content) throws Exception {
+    Map<String, Object> body = Map.of("content", content, "imageIds", imageIds);
     ResponseEntity<String> response =
         restTemplate.exchange(
             baseUrl + "/posts/free",
@@ -157,7 +157,7 @@ class CommentE2ETest {
     String email = uniqueEmail();
     signup(email, "Test@1234!", "댓글E2E유저");
     accessToken = loginAndGetAccessToken(email, "Test@1234!");
-    postId = createFreePost("E2E 테스트용 자유게시글 내용입니다.", imageUrls);
+    postId = createFreePost("E2E 테스트용 자유게시글 내용입니다.");
   }
 
   // ============================================================

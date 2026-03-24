@@ -76,7 +76,7 @@ class PostE2ETest {
   private String baseUrl;
   private String accessToken;
   private final List<Long> createdPostIds = new ArrayList<>();
-  private List<String> imageUrls = new ArrayList<>();
+  private List<Long> imageIds = new ArrayList<>();
 
   // ============================================================
   // Setup / Teardown
@@ -167,7 +167,7 @@ class PostE2ETest {
   }
 
   private Long createFreePost(String content) throws Exception {
-    Map<String, Object> body = Map.of("content", content, "imageUrls", imageUrls);
+    Map<String, Object> body = Map.of("content", content, "imageIds", imageIds);
     ResponseEntity<String> res =
         restTemplate.exchange(
             baseUrl + "/posts/free",
@@ -228,7 +228,7 @@ class PostE2ETest {
   @DisplayName("자유 게시글 작성 → 201 응답 및 postId 반환")
   void createFreePost_success_returns201WithPostId() throws Exception {
     // given
-    Map<String, Object> body = Map.of("content", "E2E 자유 게시글 내용", "imageUrls", imageUrls);
+    Map<String, Object> body = Map.of("content", "E2E 자유 게시글 내용", "imageIds", imageIds);
 
     // when
     ResponseEntity<String> res =
@@ -254,7 +254,7 @@ class PostE2ETest {
     Long postId = createFreePost("수정 전 내용");
 
     // when
-    Map<String, Object> updateBody = Map.of("content", "수정 후 내용 E2E", "imageUrls", imageUrls);
+    Map<String, Object> updateBody = Map.of("content", "수정 후 내용 E2E", "imageIds", imageIds);
     ResponseEntity<String> res =
         restTemplate.exchange(
             baseUrl + "/posts/" + postId,
@@ -271,6 +271,21 @@ class PostE2ETest {
     // then - DB 직접 검증
     String savedContent = getPostContentFromDb(postId);
     assertThat(savedContent).isEqualTo("수정 후 내용 E2E");
+  }
+
+  @Test
+  @DisplayName("자유 게시글 작성 시 duplicate imageIds → 400 BAD_REQUEST")
+  void createFreePost_duplicateImageIds_returns400() throws Exception {
+    Map<String, Object> body = Map.of("content", "중복 이미지", "imageIds", List.of(1, 1));
+
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            baseUrl + "/posts/free",
+            HttpMethod.POST,
+            new HttpEntity<>(body, authHeaders()),
+            String.class);
+
+    assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
   }
 
   @Test
@@ -475,9 +490,9 @@ class PostE2ETest {
     }
 
     @Test
-    @DisplayName("reward = 0 → 도메인 불변식에 의해 400 (POST_003)")
-    void createQuestion_rewardIsZero_returns400_domainInvariant() throws Exception {
-      // given: reward=0 은 도메인 레이어(Post.create)에서 거부됨
+    @DisplayName("reward = 0 → 400 BAD_REQUEST")
+    void createQuestion_rewardIsZero_returns400_badRequest() throws Exception {
+      // given: reward=0 은 request validation/API command/domain 어느 경로에서도 허용되지 않음
       Map<String, Object> body = Map.of("title", "질문 제목", "content", "질문 내용", "reward", 0);
 
       // when
@@ -488,7 +503,7 @@ class PostE2ETest {
               new HttpEntity<>(body, authHeaders()),
               String.class);
 
-      // then: CreatePostCommand.validate()는 reward < 0만 거부, reward=0은 Post.create()에서 거부
+      // then
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 

@@ -21,6 +21,8 @@ public enum ImageCountPolicy {
   /** Marketplace images: client may submit up to 5 filenames (resulting in up to 6 DB rows). */
   MARKET_POLICY(5),
 
+  USER_PROFILE_POLICY(1),
+
   // So far, we don't have any business rule demonstrating the max count for community, class, or
   // review. If any business rule is added, a new entry should be deployed here.
   DEFAULT_POLICY(10);
@@ -36,7 +38,8 @@ public enum ImageCountPolicy {
   public static ImageCountPolicy of(ImageReferenceType referenceType) {
     return switch (referenceType) {
       case WORKOUT -> WORKOUT_POLICY;
-      case MARKET -> MARKET_POLICY;
+      case MARKET_CLASS, MARKET_STORE -> MARKET_POLICY;
+      case USER_PROFILE -> USER_PROFILE_POLICY;
       default -> DEFAULT_POLICY;
     };
   }

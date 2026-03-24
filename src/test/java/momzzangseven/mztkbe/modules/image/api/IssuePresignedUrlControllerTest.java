@@ -69,6 +69,7 @@ class IssuePresignedUrlControllerTest {
             .mapToObj(
                 i ->
                     new PresignedUrlItem(
+                        (long) (i + 1),
                         "https://s3.presigned.url/fake-" + i,
                         "public/community/free/tmp/uuid-" + i + ".jpg"))
             .toList();
@@ -202,13 +203,14 @@ class IssuePresignedUrlControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.items").isArray())
         .andExpect(jsonPath("$.data.items.length()").value(1))
+        .andExpect(jsonPath("$.data.items[0].imageId").isNumber())
         .andExpect(jsonPath("$.data.items[0].presignedUrl").isString())
         .andExpect(jsonPath("$.data.items[0].tmpObjectKey").isString());
   }
 
   @Test
-  @DisplayName("[H-6] MARKET 단일 이미지 — use case가 2개 items 반환 시 응답에도 2개")
-  void issuePresignedUrls_returns200_with2Items_forMarket() throws Exception {
+  @DisplayName("[H-6] MARKET_CLASS 단일 이미지 — use case가 2개 items 반환 시 응답에도 2개")
+  void issuePresignedUrls_returns200_with2Items_forMarketClass() throws Exception {
     given(issuePresignedUrlUseCase.execute(any())).willReturn(fakeResult(2));
 
     mockMvc
@@ -218,7 +220,7 @@ class IssuePresignedUrlControllerTest {
                 .contentType(APPLICATION_JSON)
                 .content(
                     """
-                    {"referenceType":"MARKET","images":["product.jpg"]}
+                    {"referenceType":"MARKET_CLASS","images":["product.jpg"]}
                     """))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.items.length()").value(2));

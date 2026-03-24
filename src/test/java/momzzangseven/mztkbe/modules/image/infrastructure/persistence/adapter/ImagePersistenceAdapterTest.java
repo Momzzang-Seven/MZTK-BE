@@ -139,14 +139,14 @@ class ImagePersistenceAdapterTest {
     @SuppressWarnings("unchecked")
     void saveAll_reverseConvertReferenceTypeToEnum() {
       Image domain =
-          buildDomainImage(null, 1L, ImageReferenceType.MARKET_THUMB, ImageStatus.PENDING);
+          buildDomainImage(null, 1L, ImageReferenceType.MARKET_CLASS_THUMB, ImageStatus.PENDING);
       ImageEntity savedEntity =
-          buildEntity(10L, 1L, ImageReferenceType.MARKET_THUMB, ImageStatus.PENDING);
+          buildEntity(10L, 1L, ImageReferenceType.MARKET_CLASS_THUMB, ImageStatus.PENDING);
       given(imageJpaRepository.saveAll(anyList())).willReturn(List.of(savedEntity));
 
       List<Image> result = adapter.saveAll(List.of(domain));
 
-      assertThat(result.get(0).getReferenceType()).isEqualTo(ImageReferenceType.MARKET_THUMB);
+      assertThat(result.get(0).getReferenceType()).isEqualTo(ImageReferenceType.MARKET_CLASS_THUMB);
     }
 
     @Test

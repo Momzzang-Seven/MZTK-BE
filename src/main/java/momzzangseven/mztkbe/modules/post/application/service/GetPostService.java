@@ -3,8 +3,10 @@ package momzzangseven.mztkbe.modules.post.application.service;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
-import momzzangseven.mztkbe.modules.post.application.dto.PostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
@@ -20,9 +22,10 @@ public class GetPostService implements GetPostUseCase {
   private final PostPersistencePort postPersistencePort;
   private final LoadTagPort loadTagPort;
   private final LoadPostWriterPort loadPostWriterPort;
+  private final LoadPostImagesPort loadPostImagesPort;
 
   @Override
-  public PostResult getPost(Long postId) {
+  public PostDetailResult getPost(Long postId) {
     Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
 
     List<String> tags = loadTagPort.findTagNamesByPostId(postId);
@@ -34,6 +37,10 @@ public class GetPostService implements GetPostUseCase {
     String nickname = writer != null ? writer.nickname() : null;
     String profileImageUrl = writer != null ? writer.profileImageUrl() : null;
 
-    return PostResult.fromDomain(post, nickname, profileImageUrl);
+    PostImageResult imageResult = loadPostImagesPort.loadImages(post.getType(), post.getId());
+
+    List<String> imageUrls = imageResult.slots().stream().map(slot -> slot.imageUrl()).toList();
+
+    return PostDetailResult.fromDomain(post, nickname, profileImageUrl, imageUrls);
   }
 }

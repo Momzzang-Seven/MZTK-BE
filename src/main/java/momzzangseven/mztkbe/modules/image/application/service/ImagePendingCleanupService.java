@@ -4,8 +4,9 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.image.application.config.ImagePendingCleanupProperties;
+import momzzangseven.mztkbe.modules.image.application.port.in.RunPendingImageCleanupBatchUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
+import momzzangseven.mztkbe.modules.image.application.port.out.LoadPendingImageCleanupPolicyPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,9 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ImagePendingCleanupService {
+public class ImagePendingCleanupService implements RunPendingImageCleanupBatchUseCase {
   private final DeleteImagePort deleteImagePort;
-  private final ImagePendingCleanupProperties props;
+  private final LoadPendingImageCleanupPolicyPort cleanupPolicyPort;
 
   /**
    * Deletes one batch of orphaned PENDING image records.
@@ -28,10 +29,12 @@ public class ImagePendingCleanupService {
    * @param now the reference time for computing the cutoff (passed in for testability)
    * @return the number of rows deleted; {@code 0} signals that no more work remains
    */
+  @Override
   @Transactional
   public int runBatch(Instant now) {
-    Instant cutoff = now.minus(props.getRetentionHours(), ChronoUnit.HOURS);
-    int deleted = deleteImagePort.deletePendingImagesBefore(cutoff, props.getBatchSize());
+    Instant cutoff = now.minus(cleanupPolicyPort.getRetentionHours(), ChronoUnit.HOURS);
+    int deleted =
+        deleteImagePort.deletePendingImagesBefore(cutoff, cleanupPolicyPort.getBatchSize());
 
     if (deleted > 0) {
       log.info("Orphaned PENDING image cleanup batch: deleted={}, cutoff={}", deleted, cutoff);

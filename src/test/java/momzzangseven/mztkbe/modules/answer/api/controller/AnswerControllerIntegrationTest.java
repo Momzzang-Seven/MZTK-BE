@@ -337,7 +337,6 @@ class AnswerControllerIntegrationTest {
             .type(type)
             .title(type == PostType.QUESTION ? "question title" : null)
             .content("post content")
-            .imageUrls(List.of())
             .reward(type == PostType.QUESTION ? 100L : 0L)
             .isSolved(isSolved)
             .build());
