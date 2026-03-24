@@ -50,17 +50,21 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
   public void execute(UpsertImagesByReferenceCommand command) {
     command.validate();
 
-    // ---- Phase 1: Find toDelete images no longer in the reference ----
+    // ---- Phase 0: Lock the entire reference upfront ----
+    // Acquiring SELECT FOR UPDATE on ALL existing images for prevent the cross=transaction
+    // deadlock.
     List<Image> existingImages =
-        loadImagePort.findImagesByReference(
+        loadImagePort.findImagesByReferenceForUpdate(
             command.referenceType().expand(), command.referenceId());
 
     Set<Long> retainIds = Set.copyOf(command.imageIds());
     List<Image> toDelete =
         existingImages.stream().filter(img -> !retainIds.contains(img.getId())).toList();
 
-    // ---- Phase 2: Validate the final image set ----
-    // Acquire a pessimistic write lock to prevent concurrent modification of the same rows.
+    // ---- Phase 1: Validate the final image set ----
+    // findImagesByIdInForUpdate locks any NEW images being added (not yet in the reference).
+    // Re-acquiring locks on already-locked rows (the retained subset of existingImages)
+    // is a no-op in PostgreSQL — the session already holds the row lock.
     List<Image> finalImages;
     if (command.imageIds().isEmpty()) {
       finalImages = List.of();
@@ -72,7 +76,7 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
       validateMarketOrder(finalImages, command.referenceType(), command.imageIds());
     }
 
-    // ---- Phase 3: DB mutations ----
+    // ---- Phase 2: DB mutations ----
     // Placing DB operations first ensures a DB failure triggers a transaction rollback
     // before any S3 objects are deleted.
     if (!toDelete.isEmpty()) {
@@ -85,7 +89,7 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
       updateImagePort.updateAll(updated);
     }
 
-    // ---- Phase 4: S3 deletion (best-effort, after all DB mutations) ----
+    // ---- Phase 3: S3 deletion (best-effort, after all DB mutations) ----
     // PENDING images are skipped — Lambda may still be processing them, and their tmp objects
     // are reclaimed by the S3 lifecycle rule.
     for (Image img : toDelete) {
@@ -100,29 +104,47 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
   }
 
   /**
-   * Verifies that every image in the final set belongs to the requesting user and is not already
-   * linked to a different entity.
+   * Verifies that every image in the final set satisfies three invariants:
+   *
+   * <ol>
+   *   <li><b>Ownership</b> — the image must belong to the requesting user.
+   *   <li><b>Reference-type compatibility</b> — the image's {@code referenceType} must fall within
+   *       the expanded type family of the command. This applies to fresh PENDING images (type set
+   *       at issuance) and UNLINKED images (type preserved from the original issuance) alike. An
+   *       image with a {@code null} referenceType does not pass validation and throws an exception.
+   *   <li><b>Reference-id exclusivity</b> — if the image is already linked to an entity ({@code
+   *       referenceId != null}), it must be linked to exactly this reference; linking a
+   *       fully-linked image to a different entity is rejected.
+   * </ol>
    *
    * @param images images loaded for the final set
    * @param userId ID of the user performing the update
+   * @param referenceType the command's reference type (could be virtual)
    * @param referenceId ID of the reference being updated
    */
   private void validateOwnership(
       List<Image> images, Long userId, ImageReferenceType referenceType, Long referenceId) {
+    List<ImageReferenceType> expandedTypes = referenceType.expand();
     for (Image img : images) {
-      // Verify every images that it belongs to the user requested reference update
+      // (1) Ownership
       if (!userId.equals(img.getUserId())) {
-        throw new ImageNotBelongsToUserException(
-            "Image " + img.getId() + " does not belong to user " + userId);
+        throw new ImageNotBelongsToUserException("Image does not belong to user");
       }
-      // Verify only retained images that they belong to the original reference (type+id pair).
-      // referenceType.expand() resolves virtual types (e.g. MARKET_CLASS → [THUMB, DETAIL]) so
-      // that concrete DB-stored subtypes are accepted without false positives.
-      if (img.getReferenceId() != null
-          && !(referenceType.expand().contains(img.getReferenceType())
-              && referenceId.equals(img.getReferenceId()))) {
+
+      // (2) Reference-type should not be null.
+      if (img.getReferenceType() == null) {
+        throw new InvalidImageRefTypeException("Image reference Type should not be null");
+      }
+      // (2) Reference-type compatibility (covers both PENDING and unlinked images)
+      // expand() resolves virtual types (e.g. MARKET_CLASS → [THUMB, DETAIL]).
+      if (img.getReferenceType() != null && !expandedTypes.contains(img.getReferenceType())) {
         throw new InvalidImageRefTypeException(
-            "Image " + img.getId() + " is already linked to a different entity");
+            "New image has different reference type with command");
+      }
+      // (3) Reference-id exclusivity: reject if the image is already owned by a different entity
+      // If referenceId == null, it is treated as PENDING or UNLINKED
+      if (img.getReferenceId() != null && !referenceId.equals(img.getReferenceId())) {
+        throw new InvalidImageRefTypeException("Image is already linked to a different entity");
       }
     }
   }
@@ -219,9 +241,7 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
       // is already stored on the image from IssuePresignedUrlService. Preserve it so we do
       // not overwrite a concrete type with its virtual parent in the DB.
       ImageReferenceType concreteType =
-          command.referenceType().isVirtual() // MARKET_STORE -> concreteType =
-              ? img.getReferenceType()
-              : command.referenceType();
+          command.referenceType().isVirtual() ? img.getReferenceType() : command.referenceType();
       result.add(img.updateReference(concreteType, command.referenceId()).updateImageOrder(i + 1));
     }
 
