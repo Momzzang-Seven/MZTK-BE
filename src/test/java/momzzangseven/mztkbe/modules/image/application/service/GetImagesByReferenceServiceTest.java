@@ -48,8 +48,7 @@ class GetImagesByReferenceServiceTest {
     verify(loadImagePort).findImagesByReference(ImageReferenceType.MARKET.expand(), 10L);
   }
 
-  private Image image(
-      Long id, ImageReferenceType type, ImageStatus status, String finalObjectKey) {
+  private Image image(Long id, ImageReferenceType type, ImageStatus status, String finalObjectKey) {
     return Image.builder()
         .id(id)
         .userId(1L)

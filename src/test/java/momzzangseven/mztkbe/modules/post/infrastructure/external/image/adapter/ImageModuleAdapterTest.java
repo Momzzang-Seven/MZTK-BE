@@ -71,8 +71,7 @@ class ImageModuleAdapterTest {
         .thenReturn(
             GetImagesByReferenceResult.of(
                 List.of(
-                    new GetImagesByReferenceResult.ImageItem(
-                        1L, ImageStatus.COMPLETED, "a.webp"),
+                    new GetImagesByReferenceResult.ImageItem(1L, ImageStatus.COMPLETED, "a.webp"),
                     new GetImagesByReferenceResult.ImageItem(
                         2L, ImageStatus.COMPLETED, "b.webp"))));
 
