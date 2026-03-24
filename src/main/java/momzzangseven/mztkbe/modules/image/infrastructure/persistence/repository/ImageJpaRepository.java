@@ -119,8 +119,7 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
               + "WHERE reference_type IN (:referenceTypes) AND reference_id = :referenceId",
       nativeQuery = true)
   void unlinkByReferenceTypeInAndReferenceId(
-      @Param("referenceTypes") List<String> referenceTypes,
-      @Param("referenceId") Long referenceId);
+      @Param("referenceTypes") List<String> referenceTypes, @Param("referenceId") Long referenceId);
 
   /**
    * Sets reference_type and reference_id to NULL for the specified image IDs. Does not physically
