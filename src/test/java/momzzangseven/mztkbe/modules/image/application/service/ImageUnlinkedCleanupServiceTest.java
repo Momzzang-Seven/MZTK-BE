@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.modules.image.application.port.out.DeleteImagePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteS3ObjectPort;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
+import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
 import momzzangseven.mztkbe.modules.image.infrastructure.config.ImageUnlinkedCleanupProperties;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,11 +48,15 @@ class ImageUnlinkedCleanupServiceTest {
     given(props.getBatchSize()).willReturn(100);
   }
 
+  /**
+   * COMPLETED 이미지 — unlink 후 referenceId=null 상태. referenceType·status는 보존된다. Lambda가 성공한 후 게시글이
+   * 삭제된 케이스.
+   */
   private Image completedUnlinkedImage(long id, String finalKey) {
     return Image.builder()
         .id(id)
         .userId(1L)
-        .referenceType(null)
+        .referenceType(ImageReferenceType.COMMUNITY_FREE)
         .referenceId(null)
         .status(ImageStatus.COMPLETED)
         .tmpObjectKey("tmp/" + id + ".jpg")
@@ -60,24 +65,15 @@ class ImageUnlinkedCleanupServiceTest {
         .build();
   }
 
-  private Image pendingUnlinkedImage(long id) {
-    return Image.builder()
-        .id(id)
-        .userId(1L)
-        .referenceType(null)
-        .referenceId(null)
-        .status(ImageStatus.PENDING)
-        .tmpObjectKey("tmp/" + id + ".jpg")
-        .finalObjectKey(null)
-        .imgOrder(1)
-        .build();
-  }
-
+  /**
+   * FAILED 이미지 — unlink 후 referenceId=null 상태. referenceType·status는 보존된다. Lambda가 실패한 후 게시글이 삭제된
+   * 케이스.
+   */
   private Image failedUnlinkedImage(long id) {
     return Image.builder()
         .id(id)
         .userId(1L)
-        .referenceType(null)
+        .referenceType(ImageReferenceType.COMMUNITY_FREE)
         .referenceId(null)
         .status(ImageStatus.FAILED)
         .tmpObjectKey("tmp/" + id + ".jpg")
@@ -91,8 +87,9 @@ class ImageUnlinkedCleanupServiceTest {
   class SuccessCases {
 
     @Test
-    @DisplayName("[TC-CLEANUP-001] COMPLETED 이미지: S3 삭제 후 DB row 삭제, 반환값=1")
-    void runBatch_completedImage_deletesS3ThenDb() {
+    @DisplayName(
+        "[TC-CLEANUP-001] finalObjectKey가 있는 COMPLETED unlinked 이미지: S3 삭제 후 DB row 삭제, 반환값=1")
+    void runBatch_completedUnlinkedImageWithKey_deletesS3ThenDb() {
       given(loadImagePort.findUnlinkedImagesBefore(any(), anyInt()))
           .willReturn(List.of(completedUnlinkedImage(1L, "c/1.webp")));
 
@@ -104,10 +101,10 @@ class ImageUnlinkedCleanupServiceTest {
     }
 
     @Test
-    @DisplayName("[TC-CLEANUP-002] PENDING 이미지: S3 삭제 없이 DB row만 삭제")
-    void runBatch_pendingImage_skipsS3DeletesDb() {
+    @DisplayName("[TC-CLEANUP-002] FAILED unlinked 이미지(finalObjectKey 없음): S3 삭제 없이 DB row만 삭제")
+    void runBatch_failedUnlinkedImage_skipsS3DeletesDb() {
       given(loadImagePort.findUnlinkedImagesBefore(any(), anyInt()))
-          .willReturn(List.of(pendingUnlinkedImage(2L)));
+          .willReturn(List.of(failedUnlinkedImage(2L)));
 
       cleanupService.runBatch(Instant.now());
 
@@ -116,10 +113,11 @@ class ImageUnlinkedCleanupServiceTest {
     }
 
     @Test
-    @DisplayName("[TC-CLEANUP-003] FAILED 이미지: S3 삭제 없이 DB row만 삭제")
-    void runBatch_failedImage_skipsS3DeletesDb() {
+    @DisplayName(
+        "[TC-CLEANUP-003] COMPLETED unlinked 이미지(finalObjectKey=null 엣지케이스): S3 삭제 없이 DB row만 삭제")
+    void runBatch_completedUnlinkedImageWithNullKey_skipsS3DeletesDb() {
       given(loadImagePort.findUnlinkedImagesBefore(any(), anyInt()))
-          .willReturn(List.of(failedUnlinkedImage(3L)));
+          .willReturn(List.of(completedUnlinkedImage(3L, null)));
 
       cleanupService.runBatch(Instant.now());
 
@@ -176,18 +174,6 @@ class ImageUnlinkedCleanupServiceTest {
     }
 
     @Test
-    @DisplayName("[TC-CLEANUP-007] COMPLETED 이미지의 finalObjectKey=null이면 S3 삭제 스킵 후 DB 삭제")
-    void runBatch_completedWithNullFinalKey_skipsS3DeletesDb() {
-      given(loadImagePort.findUnlinkedImagesBefore(any(), anyInt()))
-          .willReturn(List.of(completedUnlinkedImage(1L, null)));
-
-      cleanupService.runBatch(Instant.now());
-
-      verify(deleteS3ObjectPort, never()).deleteObject(any());
-      verify(deleteImagePort).deleteImagesByIdIn(List.of(1L));
-    }
-
-    @Test
     @DisplayName("[TC-CLEANUP-008] S3 삭제 실패 시 예외가 전파되어 DB 삭제가 실행되지 않는다 (try-catch 없음 확인)")
     void runBatch_s3DeleteThrows_exceptionPropagates() {
       // DeleteS3ObjectPort 계약("must not throw")이 지켜지지 않을 경우 현재 구현 동작을 문서화.
@@ -205,14 +191,14 @@ class ImageUnlinkedCleanupServiceTest {
     }
 
     @Test
-    @DisplayName("[C-2] 혼합 상태 이미지 배치: COMPLETED만 S3 삭제, 모두 DB 삭제")
-    void runBatch_mixedStatusBatch_deletesS3OnlyForCompleted() {
+    @DisplayName("[C-2] 혼합 배치: finalObjectKey가 있는 것만 S3 삭제, 모두 DB 삭제")
+    void runBatch_mixedBatch_deletesS3OnlyForImageWithKey() {
       given(loadImagePort.findUnlinkedImagesBefore(any(), anyInt()))
           .willReturn(
               List.of(
                   completedUnlinkedImage(1L, "c/1.webp"),
-                  pendingUnlinkedImage(2L),
-                  failedUnlinkedImage(3L)));
+                  failedUnlinkedImage(2L),
+                  completedUnlinkedImage(3L, null)));
 
       int result = cleanupService.runBatch(Instant.now());
 

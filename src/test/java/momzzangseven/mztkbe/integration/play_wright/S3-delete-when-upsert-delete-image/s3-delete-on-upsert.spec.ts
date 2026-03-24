@@ -31,6 +31,7 @@
  *   - 서버 .env 에 실제 AWS IAM 자격증명이 설정되어 있어야 합니다
  *   - Lambda 가 S3 ObjectCreated 이벤트에 연결되어 있어야 합니다 (S3-DEL-001/002)
  *   - test-images/ 디렉터리에 test1.png, test2.png 파일이 존재해야 합니다
+ *   - ngrok 포트포워딩이 설정되어 있어야 합니다. (8080 포트) > ngrok http 8080
  *
  * 실행 방법:
  *   cd src/test/java/momzzangseven/mztkbe/integration/play_wright

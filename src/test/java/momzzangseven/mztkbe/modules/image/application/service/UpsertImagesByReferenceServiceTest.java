@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.image.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -49,7 +50,7 @@ class UpsertImagesByReferenceServiceTest {
     return Image.builder()
         .id(id)
         .userId(userId)
-        .referenceType(refId != null ? FREE : null)
+        .referenceType(FREE)
         .referenceId(refId)
         .status(ImageStatus.COMPLETED)
         .tmpObjectKey("tmp/" + id + ".jpg")
@@ -62,7 +63,7 @@ class UpsertImagesByReferenceServiceTest {
     return Image.builder()
         .id(id)
         .userId(userId)
-        .referenceType(refId != null ? FREE : null)
+        .referenceType(FREE)
         .referenceId(refId)
         .status(ImageStatus.PENDING)
         .tmpObjectKey("tmp/" + id + ".jpg")
@@ -75,7 +76,7 @@ class UpsertImagesByReferenceServiceTest {
     return Image.builder()
         .id(id)
         .userId(userId)
-        .referenceType(refId != null ? FREE : null)
+        .referenceType(FREE)
         .referenceId(refId)
         .status(ImageStatus.FAILED)
         .tmpObjectKey("tmp/" + id + ".jpg")
@@ -103,7 +104,8 @@ class UpsertImagesByReferenceServiceTest {
               completedImage(1L, USER_ID, REF_ID, "a/1.webp"),
               completedImage(3L, USER_ID, REF_ID, "a/3.webp"));
 
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(existing);
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(existing);
       given(loadImagePort.findImagesByIdInForUpdate(List.of(1L, 3L))).willReturn(retained);
       given(updateImagePort.updateAll(any())).willReturn(retained);
 
@@ -123,7 +125,8 @@ class UpsertImagesByReferenceServiceTest {
               pendingImage(1L, USER_ID, REF_ID), completedImage(2L, USER_ID, REF_ID, "a/2.webp"));
       List<Image> retained = List.of(completedImage(2L, USER_ID, REF_ID, "a/2.webp"));
 
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(existing);
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(existing);
       given(loadImagePort.findImagesByIdInForUpdate(List.of(2L))).willReturn(retained);
       given(updateImagePort.updateAll(any())).willReturn(retained);
 
@@ -141,7 +144,8 @@ class UpsertImagesByReferenceServiceTest {
               failedImage(1L, USER_ID, REF_ID), completedImage(2L, USER_ID, REF_ID, "a/2.webp"));
       List<Image> retained = List.of(completedImage(2L, USER_ID, REF_ID, "a/2.webp"));
 
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(existing);
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(existing);
       given(loadImagePort.findImagesByIdInForUpdate(List.of(2L))).willReturn(retained);
       given(updateImagePort.updateAll(any())).willReturn(retained);
 
@@ -156,7 +160,8 @@ class UpsertImagesByReferenceServiceTest {
     void execute_completedWithNullFinalKey_skipsS3DeleteUnlinks() {
       List<Image> existing = List.of(completedImage(1L, USER_ID, REF_ID, null));
 
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(existing);
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(existing);
 
       service.execute(new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of()));
 
@@ -167,7 +172,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-DEL-005] 기존 이미지가 없는 경우 unlink 및 Phase 2,3 호출 없음")
     void execute_noExistingImages_skipsAllPorts() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
 
       service.execute(new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of()));
 
@@ -183,7 +189,8 @@ class UpsertImagesByReferenceServiceTest {
               completedImage(1L, USER_ID, REF_ID, "a.webp"),
               completedImage(2L, USER_ID, REF_ID, "b.webp"));
 
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(existing);
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(existing);
 
       service.execute(new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of()));
 
@@ -208,7 +215,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-VALID-001] 요청자 소유 이미지, referenceId=null(신규) 통과")
     void execute_ownedImagesWithNullRef_passes() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Image> finalImages =
           List.of(pendingImage(1L, USER_ID, null), pendingImage(2L, USER_ID, null));
       given(loadImagePort.findImagesByIdInForUpdate(List.of(1L, 2L))).willReturn(finalImages);
@@ -222,7 +230,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-VALID-002] 이미 이 엔티티에 연결된 이미지(referenceId=command.referenceId)는 통과")
     void execute_imageAlreadyLinkedToSameRef_passes() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Image> finalImages = List.of(completedImage(1L, USER_ID, REF_ID, "k.webp"));
       given(loadImagePort.findImagesByIdInForUpdate(List.of(1L))).willReturn(finalImages);
       given(updateImagePort.updateAll(any())).willReturn(finalImages);
@@ -235,7 +244,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-VALID-003] 다른 사용자 소유 이미지 포함 시 ImageNotBelongsToUserException")
     void execute_imageOwnedByOtherUser_throws() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Image> finalImages =
           List.of(
               completedImage(1L, USER_ID, null, "k1.webp"),
@@ -252,7 +262,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-VALID-004] 다른 엔티티에 이미 연결된 이미지 포함 시 InvalidImageRefTypeException")
     void execute_imageLinkedToDifferentRef_throws() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Image> finalImages =
           List.of(completedImage(1L, USER_ID, 999L, "k.webp")); // referenceId=999
       given(loadImagePort.findImagesByIdInForUpdate(List.of(1L))).willReturn(finalImages);
@@ -267,7 +278,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-VALID-005] ImageCountPolicy(10장) 초과 시 ImageMaxCountExceedException")
     void execute_exceedsMaxCount_throws() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Long> elevenIds = List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
       List<Image> elevenImages =
           elevenIds.stream().map(id -> pendingImage(id, USER_ID, null)).toList();
@@ -283,7 +295,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-VALID-006] ImageCountPolicy 정확히 10장은 통과")
     void execute_exactlyMaxCount_passes() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Long> tenIds = List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L);
       List<Image> tenImages = tenIds.stream().map(id -> pendingImage(id, USER_ID, null)).toList();
       given(loadImagePort.findImagesByIdInForUpdate(tenIds)).willReturn(tenImages);
@@ -295,9 +308,69 @@ class UpsertImagesByReferenceServiceTest {
     }
 
     @Test
+    @DisplayName(
+        "[TC-UPD-VALID-008] 다른 referenceType으로 발급된 미연결 이미지 포함 시 InvalidImageRefTypeException")
+    void execute_pendingImageIssuedForDifferentType_throws() {
+      // USER_PROFILE 용도로 발급된 미연결 이미지를 COMMUNITY_FREE 게시글에 연결 시도
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
+      Image wrongTypeImage =
+          Image.builder()
+              .id(1L)
+              .userId(USER_ID)
+              .referenceType(ImageReferenceType.USER_PROFILE) // 다른 용도로 발급된 이미지
+              .referenceId(null)
+              .status(ImageStatus.PENDING)
+              .tmpObjectKey("tmp/1.jpg")
+              .finalObjectKey(null)
+              .imgOrder(1)
+              .build();
+      given(loadImagePort.findImagesByIdInForUpdate(List.of(1L)))
+          .willReturn(List.of(wrongTypeImage));
+
+      assertThatThrownBy(
+              () ->
+                  service.execute(
+                      new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(1L))))
+          .isInstanceOf(InvalidImageRefTypeException.class);
+    }
+
+    @Test
+    @DisplayName(
+        "[TC-UPD-VALID-009] unlink된 이미지(COMPLETED, referenceId=null)는 동일 userId·referenceType이면 재사용 허용")
+    void execute_unlinkedCompletedImage_sameUserAndType_canBeRelinked() {
+      // unlink 시 referenceType·status는 보존되고 referenceId만 null로 변환된다.
+      // 동일 userId + 동일 referenceType 계열이면 재연결 가능해야 한다.
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
+      Image unlinkedImage =
+          Image.builder()
+              .id(1L)
+              .userId(USER_ID)
+              .referenceType(ImageReferenceType.COMMUNITY_FREE)
+              .referenceId(null) // unlink 시 null로 변환, status는 COMPLETED 유지
+              .status(ImageStatus.COMPLETED)
+              .tmpObjectKey("tmp/1.jpg")
+              .finalObjectKey("imgs/1.webp")
+              .imgOrder(1)
+              .build();
+      given(loadImagePort.findImagesByIdInForUpdate(List.of(1L)))
+          .willReturn(List.of(unlinkedImage));
+      given(updateImagePort.updateAll(any())).willAnswer(inv -> inv.getArgument(0));
+
+      // 예외 없이 정상 실행되어야 한다
+      assertThatCode(
+              () ->
+                  service.execute(
+                      new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(1L))))
+          .doesNotThrowAnyException();
+    }
+
+    @Test
     @DisplayName("[TC-UPD-VALID-007] imageIds에 존재하지 않는 id 포함 시 ImageNotFoundException")
     void execute_unknownImageId_throws() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       // DB에서 id=1만 반환, id=9999 없음
       given(loadImagePort.findImagesByIdInForUpdate(List.of(1L, 9999L)))
           .willReturn(List.of(pendingImage(1L, USER_ID, null)));
@@ -320,7 +393,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-ORDER-001] 3장 이미지 순서 재배치: imageIds=[3,1,2] → imgOrder=1,2,3")
     void execute_reordersImages_correctImgOrder() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Long> imageIds = List.of(3L, 1L, 2L);
       List<Image> dbImages =
           List.of(
@@ -348,7 +422,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-ORDER-002] 신규 이미지(referenceId=null) 추가 + 기존 이미지 순서 유지")
     void execute_addsNewImageWithCorrectOrder() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Long> imageIds = List.of(1L, 10L);
       List<Image> dbImages =
           List.of(completedImage(1L, USER_ID, REF_ID, "k1.webp"), pendingImage(10L, USER_ID, null));
@@ -370,7 +445,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-ORDER-003] 1장만 남기는 경우 imgOrder=1")
     void execute_singleImage_imgOrderIsOne() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Image> dbImages = List.of(completedImage(1L, USER_ID, REF_ID, "k.webp"));
       given(loadImagePort.findImagesByIdInForUpdate(List.of(1L))).willReturn(dbImages);
       given(updateImagePort.updateAll(any())).willReturn(List.of());
@@ -385,7 +461,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-ORDER-004] DB 반환 순서와 무관하게 요청(imageIds) 순서 기준으로 imgOrder 배정")
     void execute_usesRequestOrderNotDbOrder() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Long> imageIds = List.of(1L, 2L, 3L);
       // DB는 [3, 1, 2] 순서로 반환
       List<Image> dbImages =
@@ -414,7 +491,8 @@ class UpsertImagesByReferenceServiceTest {
     @DisplayName("[TC-UPD-ORDER-005] updateAll() 호출 시 imageIds 크기와 동일한 이미지 리스트 전달")
     void execute_updateAllReceivesCorrectCount() {
       List<Long> imageIds = List.of(1L, 2L, 3L);
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Image> dbImages =
           List.of(
               pendingImage(1L, USER_ID, null),
@@ -433,7 +511,8 @@ class UpsertImagesByReferenceServiceTest {
     @Test
     @DisplayName("[TC-UPD-ORDER-*] 업데이트된 이미지에 referenceType/referenceId가 올바르게 설정됨")
     void execute_setsReferenceOnUpdatedImages() {
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       List<Image> dbImages = List.of(pendingImage(1L, USER_ID, null));
       given(loadImagePort.findImagesByIdInForUpdate(List.of(1L))).willReturn(dbImages);
       given(updateImagePort.updateAll(any())).willReturn(List.of());
@@ -472,7 +551,8 @@ class UpsertImagesByReferenceServiceTest {
               completedImage(4L, USER_ID, REF_ID, "a/4.webp"),
               pendingImage(6L, USER_ID, null));
 
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(existing);
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(existing);
       given(loadImagePort.findImagesByIdInForUpdate(imageIds)).willReturn(finalImages);
       given(updateImagePort.updateAll(any())).willReturn(List.of());
 
@@ -494,7 +574,8 @@ class UpsertImagesByReferenceServiceTest {
       List<Long> imageIds = List.of(1L, 2L, 5L, 4L, 6L);
       List<Image> newImages = imageIds.stream().map(id -> pendingImage(id, USER_ID, null)).toList();
 
-      given(loadImagePort.findImagesByReference(FREE.expand(), REF_ID)).willReturn(List.of());
+      given(loadImagePort.findImagesByReferenceForUpdate(FREE.expand(), REF_ID))
+          .willReturn(List.of());
       given(loadImagePort.findImagesByIdInForUpdate(imageIds)).willReturn(newImages);
       given(updateImagePort.updateAll(any())).willReturn(List.of());
 

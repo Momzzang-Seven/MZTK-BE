@@ -88,6 +88,18 @@ public class ImagePersistenceAdapter
   }
 
   @Override
+  public List<Image> findImagesByReferenceForUpdate(
+      List<ImageReferenceType> referenceTypes, Long referenceId) {
+    assertNoVirtualTypes(referenceTypes);
+    List<String> typeNames = referenceTypes.stream().map(Enum::name).toList();
+    return imageJpaRepository
+        .findAllByReferenceTypeInAndReferenceIdForUpdate(typeNames, referenceId)
+        .stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<Image> findImagesByIdIn(List<Long> ids) {
     return imageJpaRepository.findAllByIdIn(ids).stream().map(this::toDomain).toList();
   }
