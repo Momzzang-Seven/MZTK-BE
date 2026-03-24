@@ -33,7 +33,8 @@ public class ImagePendingCleanupService implements RunPendingImageCleanupBatchUs
   @Transactional
   public int runBatch(Instant now) {
     Instant cutoff = now.minus(cleanupPolicyPort.getRetentionHours(), ChronoUnit.HOURS);
-    int deleted = deleteImagePort.deletePendingImagesBefore(cutoff, cleanupPolicyPort.getBatchSize());
+    int deleted =
+        deleteImagePort.deletePendingImagesBefore(cutoff, cleanupPolicyPort.getBatchSize());
 
     if (deleted > 0) {
       log.info("Orphaned PENDING image cleanup batch: deleted={}, cutoff={}", deleted, cutoff);
