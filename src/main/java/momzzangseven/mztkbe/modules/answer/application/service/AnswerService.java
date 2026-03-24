@@ -81,9 +81,8 @@ public class AnswerService
     if (postId == null) {
       throw new AnswerInvalidInputException("postId is required.");
     }
-    if (!loadPostPort.existsPost(postId)) {
-      throw new AnswerPostNotFoundException();
-    }
+    LoadPostPort.PostContext post = loadPost(postId);
+    validateAnswerablePost(post);
 
     List<Answer> answers = loadAnswerPort.loadAnswersByPostId(postId);
     Map<Long, LoadAnswerWriterPort.WriterSummary> writers =

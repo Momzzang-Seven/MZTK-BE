@@ -312,6 +312,17 @@ class AnswerControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("GET answers returns 400 when the target post is not a question")
+    void getAnswers_returns400_whenPostIsNotQuestion() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.FREE, false);
+
+      mockMvc
+          .perform(get("/questions/" + savedPost.getId() + "/answers").with(userPrincipal(501L)))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
     @DisplayName("PUT answer returns 403 when the requester is not the owner")
     void updateAnswer_returns403_whenNotOwner() throws Exception {
       PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
@@ -324,6 +335,22 @@ class AnswerControllerIntegrationTest {
                   .contentType(APPLICATION_JSON)
                   .content(json(Map.of("content", "updated"))))
           .andExpect(status().isForbidden())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("PUT answer returns 400 when duplicate imageIds are provided")
+    void updateAnswer_returns400_whenDuplicateImageIds() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      Long answerId = createAnswer(savedPost.getId(), 502L, "answer content", List.of());
+
+      mockMvc
+          .perform(
+              put("/questions/" + savedPost.getId() + "/answers/" + answerId)
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("imageIds", List.of(1L, 1L)))))
+          .andExpect(status().isBadRequest())
           .andExpect(jsonPath("$.status").value("FAIL"));
     }
 
