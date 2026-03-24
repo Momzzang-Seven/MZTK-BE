@@ -27,9 +27,10 @@ class ImageReferenceTypeTest {
           "COMMUNITY_FREE",
           "COMMUNITY_QUESTION",
           "COMMUNITY_ANSWER",
-          "MARKET",
+          "MARKET_CLASS",
           "MARKET_STORE",
-          "WORKOUT"
+          "WORKOUT",
+          "USER_PROFILE"
         })
     @DisplayName("클라이언트 요청 가능 타입은 true를 반환한다")
     void isRequestFacing_returnsTrue(ImageReferenceType type) {
@@ -39,9 +40,14 @@ class ImageReferenceTypeTest {
     @ParameterizedTest
     @EnumSource(
         value = ImageReferenceType.class,
-        names = {"MARKET_THUMB", "MARKET_DETAIL", "MARKET_STORE_THUMB", "MARKET_STORE_DETAIL"})
+        names = {
+          "MARKET_CLASS_THUMB",
+          "MARKET_CLASS_DETAIL",
+          "MARKET_STORE_THUMB",
+          "MARKET_STORE_DETAIL"
+        })
     @DisplayName(
-        "내부 전용 타입(MARKET_THUMB, MARKET_DETAIL, MARKET_STORE_THUMB, MARKET_STORE_DETAIL)은 false를 반환한다")
+        "내부 전용 타입(MARKET_CLASS_THUMB, MARKET_CLASS_DETAIL, MARKET_STORE_THUMB, MARKET_STORE_DETAIL)은 false를 반환한다")
     void isRequestFacing_returnsFalse_forInternalTypes(ImageReferenceType type) {
       assertThat(type.isRequestFacing()).isFalse();
     }

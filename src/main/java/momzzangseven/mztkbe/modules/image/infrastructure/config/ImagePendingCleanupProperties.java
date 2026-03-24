@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.image.application.config;
+package momzzangseven.mztkbe.modules.image.infrastructure.config;
 
 import lombok.Getter;
 import lombok.Setter;
