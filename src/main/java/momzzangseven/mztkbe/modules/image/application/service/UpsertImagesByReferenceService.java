@@ -131,7 +131,7 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
         throw new ImageNotBelongsToUserException("Image does not belong to user");
       }
 
-      // (2) Reference-type should not be null. 
+      // (2) Reference-type should not be null.
       if (img.getReferenceType() == null) {
         throw new InvalidImageRefTypeException("Image reference Type should not be null");
       }
