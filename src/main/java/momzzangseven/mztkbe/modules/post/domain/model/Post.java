@@ -17,6 +17,8 @@ public class Post {
   private final String title;
   private final String content;
   private final Long reward;
+  private final Long acceptedAnswerId;
+  private final PostStatus status;
   private final Boolean isSolved;
   private final List<String> tags;
 
@@ -31,6 +33,8 @@ public class Post {
       String title,
       String content,
       Long reward,
+      Long acceptedAnswerId,
+      PostStatus status,
       Boolean isSolved,
       List<String> tags,
       LocalDateTime createdAt,
@@ -41,7 +45,9 @@ public class Post {
     this.title = title;
     this.content = content;
     this.reward = reward;
-    this.isSolved = isSolved;
+    this.acceptedAnswerId = acceptedAnswerId;
+    this.status = resolveStatus(status, isSolved);
+    this.isSolved = this.status == PostStatus.RESOLVED;
     this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
@@ -72,6 +78,8 @@ public class Post {
         .title(title)
         .content(content)
         .reward(reward)
+        .acceptedAnswerId(null)
+        .status(PostStatus.OPEN)
         .isSolved(false)
         .tags(tags != null ? tags : new ArrayList<>())
         .createdAt(LocalDateTime.now())
@@ -86,13 +94,13 @@ public class Post {
   }
 
   public void validateDeletable() {
-    if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
+    if (PostType.QUESTION.equals(this.type) && isResolved()) {
       throw new PostInvalidInputException("A solved question post cannot be deleted.");
     }
   }
 
   public Post update(String title, String content, List<String> tags) {
-    if (PostType.QUESTION.equals(this.type) && Boolean.TRUE.equals(this.isSolved)) {
+    if (PostType.QUESTION.equals(this.type) && isResolved()) {
       throw new PostInvalidInputException("A solved question post cannot be edited.");
     }
 
@@ -126,5 +134,35 @@ public class Post {
 
   public Post withTags(List<String> tags) {
     return this.toBuilder().tags(tags != null ? tags : new ArrayList<>()).build();
+  }
+
+  public boolean isResolved() {
+    return this.status == PostStatus.RESOLVED;
+  }
+
+  public Post accept(Long answerId) {
+    if (type != PostType.QUESTION) {
+      throw new PostInvalidInputException("Only question posts can accept an answer.");
+    }
+    if (answerId == null || answerId <= 0) {
+      throw new PostInvalidInputException("answerId must be positive.");
+    }
+    if (isResolved()) {
+      throw new PostInvalidInputException("This post is already resolved.");
+    }
+
+    return this.toBuilder()
+        .acceptedAnswerId(answerId)
+        .status(PostStatus.RESOLVED)
+        .isSolved(true)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  private static PostStatus resolveStatus(PostStatus status, Boolean isSolved) {
+    if (status != null) {
+      return status;
+    }
+    return Boolean.TRUE.equals(isSolved) ? PostStatus.RESOLVED : PostStatus.OPEN;
   }
 }

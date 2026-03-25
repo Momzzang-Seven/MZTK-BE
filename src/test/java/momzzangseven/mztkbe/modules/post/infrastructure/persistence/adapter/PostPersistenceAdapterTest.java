@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -172,12 +173,15 @@ class PostPersistenceAdapterTest {
   @Test
   @DisplayName("markQuestionPostSolved enforces QUESTION type in repository call")
   void markQuestionPostSolvedDelegates() {
-    when(postJpaRepository.markSolvedByIdIfType(9L, PostType.QUESTION)).thenReturn(1);
+    when(postJpaRepository.markSolvedByIdIfType(
+            9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED))
+        .thenReturn(1);
 
     int updated = postPersistenceAdapter.markQuestionPostSolved(9L);
 
     assertThat(updated).isEqualTo(1);
-    verify(postJpaRepository).markSolvedByIdIfType(9L, PostType.QUESTION);
+    verify(postJpaRepository)
+        .markSolvedByIdIfType(9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
