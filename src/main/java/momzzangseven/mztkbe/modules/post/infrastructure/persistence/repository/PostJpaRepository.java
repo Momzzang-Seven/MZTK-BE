@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository;
 
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,7 +21,11 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
-      "update PostEntity p set p.isSolved = true"
-          + " where p.id = :postId and p.type = :postType and p.isSolved = false")
-  int markSolvedByIdIfType(@Param("postId") Long postId, @Param("postType") PostType postType);
+      "update PostEntity p set p.isSolved = true, p.status = :resolvedStatus"
+          + " where p.id = :postId and p.type = :postType and p.status = :openStatus")
+  int markSolvedByIdIfType(
+      @Param("postId") Long postId,
+      @Param("postType") PostType postType,
+      @Param("openStatus") PostStatus openStatus,
+      @Param("resolvedStatus") PostStatus resolvedStatus);
 }

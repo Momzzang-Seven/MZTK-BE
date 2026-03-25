@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -90,7 +91,8 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
 
   @Override
   public int markQuestionPostSolved(Long postId) {
-    return postJpaRepository.markSolvedByIdIfType(postId, PostType.QUESTION);
+    return postJpaRepository.markSolvedByIdIfType(
+        postId, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
   }
 
   // --- 동적 쿼리용 헬퍼 메서드 ---

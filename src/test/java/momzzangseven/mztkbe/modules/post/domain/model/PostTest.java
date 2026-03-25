@@ -218,6 +218,29 @@ class PostTest {
     assertThat(post.getTags()).isEqualTo(new ArrayList<>());
   }
 
+  @Test
+  @DisplayName("accept marks question post as resolved with accepted answer id")
+  void accept_marksResolved() {
+    Post post =
+        Post.builder()
+            .id(20L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    Post accepted = post.accept(99L);
+
+    assertThat(accepted.getAcceptedAnswerId()).isEqualTo(99L);
+    assertThat(accepted.getStatus()).isEqualTo(PostStatus.RESOLVED);
+    assertThat(accepted.getIsSolved()).isTrue();
+  }
+
   private Post basePost() {
     return Post.builder()
         .id(1L)
