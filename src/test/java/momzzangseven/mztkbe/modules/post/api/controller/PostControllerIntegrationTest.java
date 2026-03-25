@@ -25,11 +25,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -49,33 +49,33 @@ class PostControllerIntegrationTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected PostJpaRepository postJpaRepository;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private GrantXpUseCase grantXpUseCase;
+  @MockitoBean private GrantXpUseCase grantXpUseCase;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort
       updatePostImagesPort;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort
       loadPostImagesPort;
 
@@ -241,6 +241,31 @@ class PostControllerIntegrationTest {
 
     org.mockito.Mockito.verify(updatePostImagesPort)
         .updateImages(206L, postId, PostType.FREE, List.of());
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{id} duplicate imageIds는 400")
+  void updatePost_duplicateImageIds_returns400() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(207L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "초기 본문"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+    Long postId = extractPostId(createResult);
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(207L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("imageIds", List.of(1L, 1L)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
   }
 
   private Long extractPostId(MvcResult result) throws Exception {

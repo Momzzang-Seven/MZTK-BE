@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
@@ -36,6 +35,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Location E2E 테스트 (Local Server + Real PostgreSQL).
@@ -57,7 +57,7 @@ import org.springframework.test.context.ActiveProfiles;
  *   <li>인증 없이 접근 시 401 반환
  * </ul>
  *
- * <p>외부 Kakao Geocoding API는 {@code @MockBean GeocodingPort}로 대체합니다.
+ * <p>외부 Kakao Geocoding API는 {@code @MockitoBean GeocodingPort}로 대체합니다.
  */
 @Tag("e2e")
 @ActiveProfiles("integration")
@@ -79,10 +79,10 @@ class LocationE2ETest {
   @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
-  @MockBean private KakaoAuthPort kakaoAuthPort;
-  @MockBean private GoogleAuthPort googleAuthPort;
-  @MockBean private GeocodingPort geocodingPort;
-  @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private GeocodingPort geocodingPort;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private String baseUrl;
   private String accessToken;

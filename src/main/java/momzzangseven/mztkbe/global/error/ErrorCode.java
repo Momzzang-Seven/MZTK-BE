@@ -345,7 +345,7 @@ public enum ErrorCode {
   IMAGE_FILE_NAME_INVALID("IMAGE_007", "Image file name invalid", HttpStatus.BAD_REQUEST),
   IMAGE_VIRTUAL_REF_TYPE_CANNOT_BUILD_OBJECT_KEY(
       "IMAGE_008", "Virtual ref type cannot build object key", HttpStatus.INTERNAL_SERVER_ERROR),
-  IMAGE_ILLEGAL_OWNERSHIP("IMAGE_009", "Image is not belongs to the user", HttpStatus.FORBIDDEN),
+  IMAGE_ILLEGAL_OWNERSHIP("IMAGE_009", "Image does not belong to the user", HttpStatus.FORBIDDEN),
   // ========================================
   // Verification Errors (VERIFICATION_xxx)
   // ========================================

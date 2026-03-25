@@ -16,7 +16,7 @@ import momzzangseven.mztkbe.modules.level.application.port.in.GetAttendanceStatu
 import momzzangseven.mztkbe.modules.level.application.port.in.GetWeeklyAttendanceUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("AttendanceController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
@@ -29,29 +29,29 @@ class AttendanceControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private CheckInUseCase checkInUseCase;
-  @MockBean private GetAttendanceStatusUseCase getAttendanceStatusUseCase;
-  @MockBean private GetWeeklyAttendanceUseCase getWeeklyAttendanceUseCase;
+  @MockitoBean private CheckInUseCase checkInUseCase;
+  @MockitoBean private GetAttendanceStatusUseCase getAttendanceStatusUseCase;
+  @MockitoBean private GetWeeklyAttendanceUseCase getWeeklyAttendanceUseCase;
 
   @Test
   @DisplayName("POST /users/me/attendance 성공")

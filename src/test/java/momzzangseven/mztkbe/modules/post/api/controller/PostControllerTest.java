@@ -28,7 +28,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("PostController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
@@ -41,31 +41,31 @@ class PostControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private CreatePostUseCase createPostUseCase;
-  @MockBean private GetPostUseCase getPostUseCase;
-  @MockBean private UpdatePostUseCase updatePostUseCase;
-  @MockBean private DeletePostUseCase deletePostUseCase;
-  @MockBean private SearchPostsUseCase searchPostsUseCase;
+  @MockitoBean private CreatePostUseCase createPostUseCase;
+  @MockitoBean private GetPostUseCase getPostUseCase;
+  @MockitoBean private UpdatePostUseCase updatePostUseCase;
+  @MockitoBean private DeletePostUseCase deletePostUseCase;
+  @MockitoBean private SearchPostsUseCase searchPostsUseCase;
 
   @Test
   @DisplayName("POST /posts/free 성공")
@@ -129,6 +129,21 @@ class PostControllerTest {
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("content", " "))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/free tags에 공백이 있으면 400")
+  void createFreePost_blankTag_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "내용", "tags", List.of("   ")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 
@@ -370,6 +385,31 @@ class PostControllerTest {
   }
 
   @Test
+  @DisplayName("POST /posts/question tags에 공백이 있으면 400")
+  void createQuestionPost_blankTag_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "title",
+                            "질문 제목",
+                            "content",
+                            "질문 내용",
+                            "reward",
+                            10,
+                            "tags",
+                            List.of("   ")))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(createPostUseCase);
+  }
+
+  @Test
   @DisplayName("POST /posts/question null principal이면 401 (AUTH_006)")
   void createQuestionPost_nullPrincipal_returns401() throws Exception {
     mockMvc
@@ -465,6 +505,21 @@ class PostControllerTest {
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("imageIds", List.of(-1L)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"));
+
+    verifyNoInteractions(updatePostUseCase);
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{postId} tags에 공백이 있으면 400")
+  void updatePost_blankTag_returns400() throws Exception {
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("tags", List.of("   ")))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
 

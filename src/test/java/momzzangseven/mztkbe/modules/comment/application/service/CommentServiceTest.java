@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
@@ -101,6 +102,20 @@ class CommentServiceTest {
 
     verify(loadCommentPort, never())
         .loadReplies(any(Long.class), any(org.springframework.data.domain.Pageable.class));
+  }
+
+  @Test
+  @DisplayName("getRootComments() throws when post does not exist")
+  void getRootComments_postMissing_throwsBusinessException() {
+    Pageable pageable = PageRequest.of(0, 20);
+    GetRootCommentsQuery query = new GetRootCommentsQuery(100L, pageable);
+    given(loadPostPort.existsPost(100L)).willReturn(false);
+
+    assertThatThrownBy(() -> commentService.getRootComments(query))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.POST_NOT_FOUND.getMessage());
+
+    verify(loadCommentPort, never()).loadRootComments(any(Long.class), any(Pageable.class));
   }
 
   @Test
@@ -209,12 +224,38 @@ class CommentServiceTest {
             .build();
     Pageable pageable = PageRequest.of(0, 10);
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
+    given(loadPostPort.existsPost(100L)).willReturn(true);
     given(loadCommentPort.loadReplies(10L, pageable)).willReturn(Page.empty(pageable));
 
     Page<CommentResult> result = commentService.getReplies(new GetRepliesQuery(10L, pageable));
 
     assertThat(result).isNotNull();
     verify(loadCommentPort).loadReplies(10L, pageable);
+  }
+
+  @Test
+  @DisplayName("getReplies() throws when parent comment's post does not exist")
+  void getReplies_parentPostMissing_throwsBusinessException() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment parent =
+        Comment.builder()
+            .id(10L)
+            .postId(100L)
+            .writerId(99L)
+            .content("parent")
+            .isDeleted(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    Pageable pageable = PageRequest.of(0, 10);
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
+    given(loadPostPort.existsPost(100L)).willReturn(false);
+
+    assertThatThrownBy(() -> commentService.getReplies(new GetRepliesQuery(10L, pageable)))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.POST_NOT_FOUND.getMessage());
+
+    verify(loadCommentPort, never()).loadReplies(any(Long.class), any(Pageable.class));
   }
 
   @Test

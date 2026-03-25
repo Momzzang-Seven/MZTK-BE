@@ -1,8 +1,6 @@
 package momzzangseven.mztkbe.modules.answer.domain.model;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 import lombok.Builder;
 import lombok.Getter;
@@ -21,7 +19,6 @@ public class Answer {
   private final Long userId;
   private final String content;
   private final Boolean isAccepted;
-  private final List<String> imageUrls;
   private final LocalDateTime createdAt;
   private final LocalDateTime updatedAt;
 
@@ -32,7 +29,6 @@ public class Answer {
       Long userId,
       String content,
       Boolean isAccepted,
-      List<String> imageUrls,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
     this.id = id;
@@ -40,18 +36,12 @@ public class Answer {
     this.userId = userId;
     this.content = content;
     this.isAccepted = isAccepted != null ? isAccepted : false;
-    this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
   }
 
   public static Answer create(
-      Long postId,
-      Long postWriterId,
-      boolean isPostSolved,
-      Long answererId,
-      String content,
-      List<String> imageUrls) {
+      Long postId, Long postWriterId, boolean isPostSolved, Long answererId, String content) {
 
     Objects.requireNonNull(postWriterId, "postWriterId must not be null");
     Objects.requireNonNull(answererId, "answererId must not be null");
@@ -71,7 +61,6 @@ public class Answer {
         .userId(answererId)
         .content(content)
         .isAccepted(false)
-        .imageUrls(imageUrls == null ? List.of() : List.copyOf(imageUrls))
         .build();
   }
 
@@ -89,7 +78,7 @@ public class Answer {
     }
   }
 
-  public Answer update(String content, List<String> imageUrls, Long requesterId) {
+  public Answer update(String content, Long requesterId) {
     validateOwnership(requesterId);
 
     if (this.isAccepted) {
@@ -104,11 +93,6 @@ public class Answer {
         throw new AnswerInvalidInputException("Updated content must not be blank.");
       }
       builder.content(content);
-      isUpdated = true;
-    }
-
-    if (imageUrls != null) {
-      builder.imageUrls(List.copyOf(imageUrls));
       isUpdated = true;
     }
 

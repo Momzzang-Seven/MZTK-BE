@@ -19,8 +19,8 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PrepareTok
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.SubmitTokenTransferUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @TestPropertySource(properties = {"web3.reward-token.enabled=true", "web3.eip7702.enabled=true"})
 @DisplayName("TokenTransferController 컨트롤러 계약 테스트 (MockMvc + H2)")
@@ -34,28 +34,28 @@ class TokenTransferControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private PrepareTokenTransferUseCase prepareTokenTransferUseCase;
-  @MockBean private SubmitTokenTransferUseCase submitTokenTransferUseCase;
+  @MockitoBean private PrepareTokenTransferUseCase prepareTokenTransferUseCase;
+  @MockitoBean private SubmitTokenTransferUseCase submitTokenTransferUseCase;
 
   @Test
   @DisplayName("POST /users/me/token-transfers/prepare 성공")

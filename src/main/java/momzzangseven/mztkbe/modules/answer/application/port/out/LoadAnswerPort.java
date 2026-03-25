@@ -10,4 +10,10 @@ public interface LoadAnswerPort {
 
   // 답변 수정을 위한 특정 답변 단건 조회
   Optional<Answer> loadAnswer(Long answerId);
+
+  // 게시글 삭제 시 답변 삭제 이벤트 발행 대상 ID 조회
+  List<Long> loadAnswerIdsByPostId(Long postId);
+
+  // 게시글이 이미 삭제되어 post_id 참조가 깨진 고아 답변 ID 조회
+  List<Long> loadOrphanAnswerIds(int batchSize);
 }

@@ -37,6 +37,16 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
   }
 
   @Override
+  public List<Long> loadAnswerIdsByPostId(Long postId) {
+    return answerJpaRepository.findIdsByPostId(postId);
+  }
+
+  @Override
+  public List<Long> loadOrphanAnswerIds(int batchSize) {
+    return answerJpaRepository.findOrphanAnswerIds(batchSize);
+  }
+
+  @Override
   public void deleteAnswer(Long answerId) {
     answerJpaRepository.deleteById(answerId);
   }
@@ -46,6 +56,14 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
     answerJpaRepository.deleteAllByPostId(postId);
   }
 
+  @Override
+  public void deleteAnswersByIds(List<Long> answerIds) {
+    if (answerIds.isEmpty()) {
+      return;
+    }
+    answerJpaRepository.deleteAllByIdInBatch(answerIds);
+  }
+
   private AnswerEntity toEntity(Answer answer) {
     return AnswerEntity.builder()
         .id(answer.getId())
@@ -53,7 +71,6 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
         .userId(answer.getUserId())
         .content(answer.getContent())
         .isAccepted(answer.getIsAccepted())
-        .imageUrls(answer.getImageUrls())
         .build();
   }
 
@@ -64,7 +81,6 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
         .userId(entity.getUserId())
         .content(entity.getContent())
         .isAccepted(entity.getIsAccepted())
-        .imageUrls(entity.getImageUrls())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();

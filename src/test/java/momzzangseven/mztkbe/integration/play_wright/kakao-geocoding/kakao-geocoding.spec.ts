@@ -16,7 +16,7 @@
  *   - PostgreSQL 이 로컬에서 실행 중이어야 합니다.
  *
  * 주의:
- *   이 테스트는 KakaoGeocodingAdapter 에 @MockBean 을 적용한 LocationE2ETest 와 달리,
+ *   이 테스트는 KakaoGeocodingAdapter 에 @MockitoBean 을 적용한 LocationE2ETest 와 달리,
  *   실제 Kakao API 서버에 HTTP 요청을 보냅니다.
  *   따라서 네트워크 상태 및 Kakao API 키 유효성에 따라 결과가 달라질 수 있습니다.
  */

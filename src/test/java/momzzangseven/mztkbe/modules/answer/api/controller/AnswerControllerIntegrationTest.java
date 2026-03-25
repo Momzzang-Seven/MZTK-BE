@@ -14,21 +14,26 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -51,25 +56,37 @@ class AnswerControllerIntegrationTest {
   @org.springframework.beans.factory.annotation.Autowired
   private PostJpaRepository postJpaRepository;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
+
+  @MockitoBean private UpdateAnswerImagesPort updateAnswerImagesPort;
+
+  @MockitoBean private LoadAnswerImagesPort loadAnswerImagesPort;
+
+  @BeforeEach
+  void setUp() {
+    org.mockito.BDDMockito.given(
+            loadAnswerImagesPort.loadImagesByAnswerIds(
+                org.mockito.ArgumentMatchers.anyCollection()))
+        .willReturn(Map.of());
+  }
 
   @Nested
   @DisplayName("Success cases")
@@ -88,12 +105,7 @@ class AnswerControllerIntegrationTest {
                       .with(userPrincipal(502L))
                       .contentType(APPLICATION_JSON)
                       .content(
-                          json(
-                              Map.of(
-                                  "content",
-                                  "integration answer",
-                                  "imageUrls",
-                                  List.of("https://example.com/answer-1.png")))))
+                          json(Map.of("content", "integration answer", "imageIds", List.of(1L)))))
               .andExpect(status().isCreated())
               .andExpect(jsonPath("$.status").value("SUCCESS"))
               .andReturn();
@@ -103,6 +115,14 @@ class AnswerControllerIntegrationTest {
       assertThat(savedAnswer.getPostId()).isEqualTo(postId);
       assertThat(savedAnswer.getUserId()).isEqualTo(502L);
       assertThat(savedAnswer.getContent()).isEqualTo("integration answer");
+      org.mockito.Mockito.verify(updateAnswerImagesPort).updateImages(502L, answerId, List.of(1L));
+
+      org.mockito.BDDMockito.given(loadAnswerImagesPort.loadImagesByAnswerIds(List.of(answerId)))
+          .willReturn(
+              Map.of(
+                  answerId,
+                  new AnswerImageResult(
+                      List.of(new AnswerImageSlot(1L, "https://example.com/answer-1.png")))));
 
       mockMvc
           .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
@@ -126,12 +146,12 @@ class AnswerControllerIntegrationTest {
               put("/questions/" + postId + "/answers/" + answerId)
                   .with(userPrincipal(502L))
                   .contentType(APPLICATION_JSON)
-                  .content(json(Map.of("imageUrls", List.of("https://example.com/answer-2.png")))))
+                  .content(json(Map.of("imageIds", List.of(2L)))))
           .andExpect(status().isOk());
 
       AnswerEntity updatedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
       assertThat(updatedAnswer.getContent()).isEqualTo("updated answer");
-      assertThat(updatedAnswer.getImageUrls()).containsExactly("https://example.com/answer-2.png");
+      org.mockito.Mockito.verify(updateAnswerImagesPort).updateImages(502L, answerId, List.of(2L));
 
       mockMvc
           .perform(
@@ -148,8 +168,8 @@ class AnswerControllerIntegrationTest {
       PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
       Long postId = savedPost.getId();
 
-      answerJpaRepository.save(buildAnswerEntity(postId, 502L, "regular", false, List.of()));
-      answerJpaRepository.save(buildAnswerEntity(postId, 503L, "accepted", true, List.of()));
+      answerJpaRepository.save(buildAnswerEntity(postId, 502L, "regular", false));
+      answerJpaRepository.save(buildAnswerEntity(postId, 503L, "accepted", true));
 
       mockMvc
           .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
@@ -159,22 +179,28 @@ class AnswerControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("Deleting a question post removes orphan answers through the event handler")
-    void deletingQuestionPost_removesAnswersThroughEventHandler() throws Exception {
+    @DisplayName("GET answers preserves null image url slots")
+    void getAnswers_preservesNullImageUrlSlots() throws Exception {
       PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
       Long postId = savedPost.getId();
-      Long firstAnswerId = createAnswer(postId, 502L, "first", List.of());
-      Long secondAnswerId =
-          createAnswer(postId, 503L, "second", List.of("https://example.com/2.png"));
+      AnswerEntity answer =
+          answerJpaRepository.save(buildAnswerEntity(postId, 502L, "regular", false));
+
+      org.mockito.BDDMockito.given(
+              loadAnswerImagesPort.loadImagesByAnswerIds(List.of(answer.getId())))
+          .willReturn(
+              Map.of(
+                  answer.getId(),
+                  new AnswerImageResult(
+                      List.of(
+                          new AnswerImageSlot(1L, "https://cdn.example.com/a.webp"),
+                          new AnswerImageSlot(2L, null)))));
 
       mockMvc
-          .perform(delete("/posts/" + postId).with(userPrincipal(501L)))
+          .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
           .andExpect(status().isOk())
-          .andExpect(jsonPath("$.status").value("SUCCESS"));
-
-      assertThat(postJpaRepository.findById(postId)).isEmpty();
-      assertThat(answerJpaRepository.findById(firstAnswerId)).isEmpty();
-      assertThat(answerJpaRepository.findById(secondAnswerId)).isEmpty();
+          .andExpect(jsonPath("$.data[0].imageUrls[0]").value("https://cdn.example.com/a.webp"))
+          .andExpect(jsonPath("$.data[0].imageUrls[1]").value(org.hamcrest.Matchers.nullValue()));
     }
   }
 
@@ -256,6 +282,26 @@ class AnswerControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("POST answer returns 500 when image sync fails")
+    void createAnswer_rollsBack_whenImageSyncFails() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      org.mockito.BDDMockito.willThrow(new RuntimeException("sync failed"))
+          .given(updateAnswerImagesPort)
+          .updateImages(
+              org.mockito.ArgumentMatchers.anyLong(),
+              org.mockito.ArgumentMatchers.anyLong(),
+              org.mockito.ArgumentMatchers.anyList());
+
+      mockMvc
+          .perform(
+              post("/questions/" + savedPost.getId() + "/answers")
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "answer content", "imageIds", List.of(1L)))))
+          .andExpect(status().isInternalServerError());
+    }
+
+    @Test
     @DisplayName("GET answers returns 404 when the post does not exist")
     void getAnswers_returns404_whenPostNotFound() throws Exception {
       mockMvc
@@ -263,6 +309,17 @@ class AnswerControllerIntegrationTest {
           .andExpect(status().isNotFound())
           .andExpect(jsonPath("$.status").value("FAIL"))
           .andExpect(jsonPath("$.code").value("POST_001"));
+    }
+
+    @Test
+    @DisplayName("GET answers returns 400 when the target post is not a question")
+    void getAnswers_returns400_whenPostIsNotQuestion() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.FREE, false);
+
+      mockMvc
+          .perform(get("/questions/" + savedPost.getId() + "/answers").with(userPrincipal(501L)))
+          .andExpect(status().isBadRequest())
+          .andExpect(jsonPath("$.status").value("FAIL"));
     }
 
     @Test
@@ -278,6 +335,22 @@ class AnswerControllerIntegrationTest {
                   .contentType(APPLICATION_JSON)
                   .content(json(Map.of("content", "updated"))))
           .andExpect(status().isForbidden())
+          .andExpect(jsonPath("$.status").value("FAIL"));
+    }
+
+    @Test
+    @DisplayName("PUT answer returns 400 when duplicate imageIds are provided")
+    void updateAnswer_returns400_whenDuplicateImageIds() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      Long answerId = createAnswer(savedPost.getId(), 502L, "answer content", List.of());
+
+      mockMvc
+          .perform(
+              put("/questions/" + savedPost.getId() + "/answers/" + answerId)
+                  .with(userPrincipal(502L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("imageIds", List.of(1L, 1L)))))
+          .andExpect(status().isBadRequest())
           .andExpect(jsonPath("$.status").value("FAIL"));
     }
 
@@ -301,7 +374,7 @@ class AnswerControllerIntegrationTest {
       PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
       AnswerEntity answer =
           answerJpaRepository.save(
-              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true, List.of()));
+              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true));
 
       mockMvc
           .perform(
@@ -319,7 +392,7 @@ class AnswerControllerIntegrationTest {
       PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
       AnswerEntity answer =
           answerJpaRepository.save(
-              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true, List.of()));
+              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true));
 
       mockMvc
           .perform(
@@ -343,21 +416,20 @@ class AnswerControllerIntegrationTest {
   }
 
   private AnswerEntity buildAnswerEntity(
-      Long postId, Long userId, String content, boolean isAccepted, List<String> imageUrls) {
+      Long postId, Long userId, String content, boolean isAccepted) {
     return AnswerEntity.builder()
         .postId(postId)
         .userId(userId)
         .content(content)
         .isAccepted(isAccepted)
-        .imageUrls(imageUrls)
         .build();
   }
 
-  private Long createAnswer(Long postId, Long userId, String content, List<String> imageUrls)
+  private Long createAnswer(Long postId, Long userId, String content, List<Long> imageIds)
       throws Exception {
     LinkedHashMap<String, Object> request = new LinkedHashMap<>();
     request.put("content", content);
-    request.put("imageUrls", imageUrls);
+    request.put("imageIds", imageIds);
 
     MvcResult createResult =
         mockMvc
