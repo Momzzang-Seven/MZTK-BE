@@ -1,10 +1,12 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.external.answer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
@@ -20,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AcceptedAnswerAdapterTest {
 
   @Mock private LoadAnswerPort loadAnswerPort;
+  @Mock private MarkAnswerAcceptedUseCase markAnswerAcceptedUseCase;
 
   @InjectMocks private AcceptedAnswerAdapter acceptedAnswerAdapter;
 
@@ -45,5 +48,13 @@ class AcceptedAnswerAdapterTest {
     assertThat(result.get().answerId()).isEqualTo(20L);
     assertThat(result.get().postId()).isEqualTo(10L);
     assertThat(result.get().userId()).isEqualTo(2L);
+  }
+
+  @Test
+  @DisplayName("delegates accepted answer state sync to answer module use case")
+  void markAccepted_delegatesToUseCase() {
+    acceptedAnswerAdapter.markAccepted(20L);
+
+    verify(markAnswerAcceptedUseCase).markAccepted(20L);
   }
 }
