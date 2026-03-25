@@ -525,7 +525,9 @@ class AnswerE2ETest {
   }
 
   private void markPostSolved(Long postId) {
-    int updated = jdbcTemplate.update("UPDATE posts SET is_solved = true WHERE id = ?", postId);
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE posts SET is_solved = true, status = 'RESOLVED' WHERE id = ?", postId);
     assertThat(updated).isEqualTo(1);
   }
 
@@ -576,7 +578,7 @@ class AnswerE2ETest {
     String sql =
         "INSERT INTO images "
             + "(user_id, reference_type, reference_id, status, tmp_object_key, final_object_key, img_order, created_at, updated_at) "
-            + "VALUES (?, NULL, NULL, ?, ?, ?, 1, ?, ?)";
+            + "VALUES (?, 'COMMUNITY_ANSWER', NULL, ?, ?, ?, 1, ?, ?)";
 
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcTemplate.update(
@@ -617,7 +619,7 @@ class AnswerE2ETest {
         jdbcTemplate.queryForMap(
             "SELECT reference_type, reference_id FROM images WHERE id = ?", imageId);
 
-    assertThat(row.get("reference_type")).isNull();
+    assertThat(row.get("reference_type")).isEqualTo("COMMUNITY_ANSWER");
     assertThat(row.get("reference_id")).isNull();
   }
 
