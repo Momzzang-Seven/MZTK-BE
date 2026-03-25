@@ -44,9 +44,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -79,31 +79,31 @@ class WorkoutVerificationControllerIntegrationTest {
   @org.springframework.beans.factory.annotation.Autowired protected JdbcTemplate jdbcTemplate;
   @org.springframework.beans.factory.annotation.Autowired protected EntityManager entityManager;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private ObjectStoragePort objectStoragePort;
-  @MockBean private PrepareOriginalImagePort prepareOriginalImagePort;
-  @MockBean private PrepareAnalysisImagePort prepareAnalysisImagePort;
-  @MockBean private ExifMetadataPort exifMetadataPort;
-  @MockBean private WorkoutImageAiPort workoutImageAiPort;
+  @MockitoBean private ObjectStoragePort objectStoragePort;
+  @MockitoBean private PrepareOriginalImagePort prepareOriginalImagePort;
+  @MockitoBean private PrepareAnalysisImagePort prepareAnalysisImagePort;
+  @MockitoBean private ExifMetadataPort exifMetadataPort;
+  @MockitoBean private WorkoutImageAiPort workoutImageAiPort;
 
   @Test
   @DisplayName("운동 사진 failed-today 재시도는 같은 verificationId로 XP ledger를 1회만 적재한다")

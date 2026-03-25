@@ -28,7 +28,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("WorkoutVerificationController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @SpringBootTest
@@ -41,27 +41,30 @@ class WorkoutVerificationControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @MockBean private SubmitWorkoutPhotoVerificationUseCase submitWorkoutPhotoVerificationUseCase;
-  @MockBean private SubmitWorkoutRecordVerificationUseCase submitWorkoutRecordVerificationUseCase;
-  @MockBean private GetVerificationDetailUseCase getVerificationDetailUseCase;
-  @MockBean private GetTodayWorkoutCompletionUseCase getTodayWorkoutCompletionUseCase;
+  @MockitoBean private SubmitWorkoutPhotoVerificationUseCase submitWorkoutPhotoVerificationUseCase;
 
-  @MockBean
+  @MockitoBean
+  private SubmitWorkoutRecordVerificationUseCase submitWorkoutRecordVerificationUseCase;
+
+  @MockitoBean private GetVerificationDetailUseCase getVerificationDetailUseCase;
+  @MockitoBean private GetTodayWorkoutCompletionUseCase getTodayWorkoutCompletionUseCase;
+
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @MockBean
+  @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;

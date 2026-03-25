@@ -34,11 +34,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -71,14 +71,14 @@ class AuthControllerTest {
   @Autowired private UserJpaRepository userJpaRepository;
 
   // Kakao / Google 외부 API는 MockBean으로 대체 (실제 HTTP 호출 차단)
-  @MockBean private KakaoAuthPort kakaoAuthPort;
-  @MockBean private GoogleAuthPort googleAuthPort;
-  @MockBean private ReactivateUseCase reactivateUseCase;
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private ReactivateUseCase reactivateUseCase;
 
   // MarkTransactionSucceededService는 @ConditionalOnProperty(web3.reward-token.enabled=true)로
   // 테스트 환경(enabled=false)에서 생성되지 않지만, MarkTransactionSucceededAdapter가 이를 주입하려
   // 시도하므로 MockBean으로 컨텍스트 로딩 오류를 방지한다.
-  @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private static final String EMAIL = "auth-ctrl-test@example.com";
   private static final String PASSWORD = "Test@1234!";

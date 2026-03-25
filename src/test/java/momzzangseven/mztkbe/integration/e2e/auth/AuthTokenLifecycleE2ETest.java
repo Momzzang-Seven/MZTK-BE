@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
@@ -28,6 +27,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Auth 토큰 라이프사이클 E2E 테스트 (Local Server + Real PostgreSQL).
@@ -63,13 +63,13 @@ class AuthTokenLifecycleE2ETest {
   @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
-  @MockBean private KakaoAuthPort kakaoAuthPort;
-  @MockBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
 
   // MarkTransactionSucceededService는 @ConditionalOnProperty(web3.reward-token.enabled=true)로
   // 테스트 환경에서 생성되지 않지만, MarkTransactionSucceededAdapter가 이를 주입하려 시도하므로
   // MockBean으로 컨텍스트 로딩 오류를 방지한다.
-  @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private String baseUrl;
   private final List<String> createdUserEmails = new ArrayList<>();

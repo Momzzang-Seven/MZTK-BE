@@ -77,4 +77,14 @@ class UpdatePostCommandTest {
 
     assertThatCode(command::validate).doesNotThrowAnyException();
   }
+
+  @Test
+  @DisplayName("validate rejects duplicate imageIds")
+  void validate_duplicateImageIds_throwsException() {
+    UpdatePostCommand command = new UpdatePostCommand(null, null, List.of(1L, 1L), null);
+
+    assertThatThrownBy(command::validate)
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Duplicate image IDs are not allowed");
+  }
 }

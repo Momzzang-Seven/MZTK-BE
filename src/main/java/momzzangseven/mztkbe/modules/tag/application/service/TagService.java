@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.tag.application.service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.tag.application.port.in.ManageTagsUseCase;
 import momzzangseven.mztkbe.modules.tag.application.port.out.LoadTagPort;
@@ -28,7 +29,16 @@ public class TagService implements ManageTagsUseCase {
 
     // 1. 중복 제거 및 공백 제거
     List<String> distinctNames =
-        tagNames.stream().map(String::trim).map(String::toLowerCase).distinct().toList();
+        tagNames.stream()
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .map(String::toLowerCase)
+            .filter(name -> !name.isBlank())
+            .distinct()
+            .toList();
+    if (distinctNames.isEmpty()) {
+      return;
+    }
 
     // 2. 이미 DB에 존재하는 태그 조회
     List<Tag> existingTags = loadTagPort.loadTagsByNames(distinctNames);

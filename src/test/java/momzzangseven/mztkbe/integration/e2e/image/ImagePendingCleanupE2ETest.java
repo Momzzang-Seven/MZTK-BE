@@ -20,12 +20,12 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * PENDING 이미지 배치 삭제 E2E 테스트 (Real PostgreSQL + 서비스 직접 호출).
@@ -59,9 +59,9 @@ class ImagePendingCleanupE2ETest {
   @Autowired private ImageJpaRepository imageJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
 
-  @MockBean private KakaoAuthPort kakaoAuthPort;
-  @MockBean private GoogleAuthPort googleAuthPort;
-  @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   /**
    * 테스트 전용 userId. 실제 users 테이블에 없어도 images 테이블에 FK 제약이 없으면 삽입 가능. 테스트가 시작될 때마다 해당 userId로 삽입한

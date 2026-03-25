@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
@@ -205,6 +206,103 @@ class ImagePersistenceAdapterTest {
       int result = adapter.deletePendingImagesBefore(cutoff, 100);
 
       assertThat(result).isZero();
+    }
+  }
+
+  @Nested
+  @DisplayName("LoadImagePort 구현")
+  class LoadTests {
+
+    @Test
+    @DisplayName("findImagesByReferenceIds() delegates to batch repository query")
+    void findImagesByReferenceIds_delegatesToRepository() {
+      given(
+              imageJpaRepository
+                  .findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
+                      List.of("COMMUNITY_ANSWER"), List.of(31L, 32L)))
+          .willReturn(
+              List.of(
+                  ImageEntity.builder()
+                      .id(10L)
+                      .userId(1L)
+                      .referenceType("COMMUNITY_ANSWER")
+                      .referenceId(31L)
+                      .status("COMPLETED")
+                      .tmpObjectKey("tmp/10.jpg")
+                      .finalObjectKey("final/10.webp")
+                      .imgOrder(1)
+                      .build()));
+
+      List<Image> result =
+          adapter.findImagesByReferenceIds(
+              List.of(ImageReferenceType.COMMUNITY_ANSWER), List.of(31L, 32L));
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).getReferenceId()).isEqualTo(31L);
+      verify(imageJpaRepository)
+          .findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
+              List.of("COMMUNITY_ANSWER"), List.of(31L, 32L));
+    }
+
+    @Test
+    @DisplayName(
+        "findImagesByReferenceIds() returns empty without repository call when ids are empty")
+    void findImagesByReferenceIds_skipsRepositoryWhenIdsEmpty() {
+      List<Image> result =
+          adapter.findImagesByReferenceIds(List.of(ImageReferenceType.COMMUNITY_ANSWER), List.of());
+
+      assertThat(result).isEmpty();
+      verify(imageJpaRepository, never())
+          .findAllByReferenceTypeInAndReferenceIdInOrderByReferenceIdAscImgOrderAsc(
+              anyList(), anyList());
+    }
+
+    @Test
+    @DisplayName("findOrphanAnswerImages() delegates to orphan image repository query")
+    void findOrphanAnswerImages_delegatesToRepository() {
+      given(imageJpaRepository.findOrphanAnswerImages(100))
+          .willReturn(
+              List.of(
+                  ImageEntity.builder()
+                      .id(20L)
+                      .userId(1L)
+                      .referenceType("COMMUNITY_ANSWER")
+                      .referenceId(31L)
+                      .status("COMPLETED")
+                      .tmpObjectKey("tmp/20.jpg")
+                      .finalObjectKey("final/20.webp")
+                      .imgOrder(1)
+                      .build()));
+
+      List<Image> result = adapter.findOrphanAnswerImages(100);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).getId()).isEqualTo(20L);
+      verify(imageJpaRepository).findOrphanAnswerImages(100);
+    }
+
+    @Test
+    @DisplayName("findOrphanPostImages() delegates to orphan post image repository query")
+    void findOrphanPostImages_delegatesToRepository() {
+      given(imageJpaRepository.findOrphanPostImages(100))
+          .willReturn(
+              List.of(
+                  ImageEntity.builder()
+                      .id(30L)
+                      .userId(1L)
+                      .referenceType("COMMUNITY_FREE")
+                      .referenceId(41L)
+                      .status("COMPLETED")
+                      .tmpObjectKey("tmp/30.jpg")
+                      .finalObjectKey("final/30.webp")
+                      .imgOrder(1)
+                      .build()));
+
+      List<Image> result = adapter.findOrphanPostImages(100);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).getId()).isEqualTo(30L);
+      verify(imageJpaRepository).findOrphanPostImages(100);
     }
   }
 }

@@ -15,7 +15,8 @@ public record AnswerResult(
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
-  public static AnswerResult from(Answer answer, String nickname, String profileImageUrl) {
+  public static AnswerResult from(
+      Answer answer, String nickname, String profileImageUrl, List<String> imageUrls) {
     return new AnswerResult(
         answer.getId(),
         answer.getUserId(),
@@ -23,7 +24,7 @@ public record AnswerResult(
         profileImageUrl,
         answer.getContent(),
         answer.getIsAccepted(),
-        List.copyOf(answer.getImageUrls()),
+        imageUrls == null ? List.of() : imageUrls,
         answer.getCreatedAt(),
         answer.getUpdatedAt());
   }

@@ -125,7 +125,7 @@ momzzangseven.mztkbe (test root)
 
 - 실제 DB 스키마와 Flyway 마이그레이션이 올바르게 적용되는지 확인
 - HTTP 엔드포인트부터 DB 반영까지의 실제 연동 검증
-- **외부 API(카카오, 구글 등)는 `@MockBean` 처리**하여 외부 의존성 제거
+- **외부 API(카카오, 구글 등)는 `@MockitoBean` 처리**하여 외부 의존성 제거
 - `@Tag("e2e")` 로 CI 파이프라인에서 선택적 실행 가능
 
 ## `integration/play_wright/`
@@ -196,7 +196,7 @@ momzzangseven.mztkbe (test root)
 | `@Sql(scripts = "...")`                         | 테스트 전 SQL 스크립트로 픽스처 데이터 삽입             |
 | `@Tag("e2e")`                                   | `./gradlew e2eTest` 로 선택 실행            |
 | `@TestPropertySource`                           | 테스트 전용 프로퍼티 오버라이드                      |
-| `@MockBean`                                     | 외부 API 어댑터 등 특정 Bean만 Mock 처리          |
+| `@MockitoBean`                                     | 외부 API 어댑터 등 특정 Bean만 Mock 처리          |
 | `TestRestTemplate`                              | 실제 HTTP 요청/응답 기반 통합 검증                 |
 
 
@@ -212,7 +212,7 @@ class RegisterLocationE2ETest {
     @Autowired
     private TestRestTemplate restTemplate;
 
-    @MockBean
+    @MockitoBean
     private GeocodingPort geocodingPort; // 외부 API만 Mock 처리
 
     @BeforeEach
@@ -251,7 +251,7 @@ class RegisterLocationE2ETest {
 
 ## 주의사항
 
-- **외부 API**(카카오, Google OAuth 등)는 반드시 `@MockBean`으로 대체합니다.
+- **외부 API**(카카오, Google OAuth 등)는 반드시 `@MockitoBean`으로 대체합니다.
 - 테스트 DB는 로컬 PostgreSQL를 사용하며, `application-integration.yml`에 DataSource를 별도 설정합니다.
 - `RANDOM_PORT + TestRestTemplate` 기반 통합 테스트에서는 테스트 메서드 트랜잭션 롤백에 의존하지 말고, 테스트 데이터 격리(고유 키/픽스처 정리) 전략을 사용합니다.
 - 픽스처 데이터가 필요한 경우 `@Sql`을 사용하고, `src/test/resources/sql/fixtures/`에 SQL 파일을 위치시킵니다.
@@ -280,7 +280,7 @@ class RegisterLocationE2ETest {
 | 어노테이션                           | 설명                                |
 | ------------------------------- | --------------------------------- |
 | `@SpringBootTest`               | Spring 전체 컨텍스트를 로드하여 애플리케이션 통합 검증 |
-| `@MockBean`                     | Spring 컨텍스트의 Bean을 Mock으로 대체      |
+| `@MockitoBean`                     | Spring 컨텍스트의 Bean을 Mock으로 대체      |
 | `@WithMockUser(roles = "USER")` | 인증된 사용자 컨텍스트 주입                   |
 | `@AutoConfigureMockMvc`         | MockMVC 자동 설정                     |
 | `@Transactional`                | 테스트 종료 후 롤백으로 DB 오염 방지            |
@@ -408,7 +408,7 @@ class LocationControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private GetMyLocationsUseCase getMyLocationsUseCase;
 
     @Test

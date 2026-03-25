@@ -34,7 +34,7 @@ import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("LevelController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
@@ -47,31 +47,31 @@ class LevelControllerTest {
   @org.springframework.beans.factory.annotation.Autowired
   protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
           .MarkTransactionSucceededUseCase
       txMarkTransactionSucceededUseCase;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionReceiptWorker
       txTransactionReceiptWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .TransactionIssuerWorker
       txTransactionIssuerWorker;
 
-  @org.springframework.boot.test.mock.mockito.MockBean
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockBean private GetMyLevelUseCase getMyLevelUseCase;
-  @MockBean private GetLevelPoliciesUseCase getLevelPoliciesUseCase;
-  @MockBean private LevelUpUseCase levelUpUseCase;
-  @MockBean private GetMyLevelUpHistoriesUseCase getMyLevelUpHistoriesUseCase;
-  @MockBean private GetMyXpLedgerUseCase getMyXpLedgerUseCase;
+  @MockitoBean private GetMyLevelUseCase getMyLevelUseCase;
+  @MockitoBean private GetLevelPoliciesUseCase getLevelPoliciesUseCase;
+  @MockitoBean private LevelUpUseCase levelUpUseCase;
+  @MockitoBean private GetMyLevelUpHistoriesUseCase getMyLevelUpHistoriesUseCase;
+  @MockitoBean private GetMyXpLedgerUseCase getMyXpLedgerUseCase;
 
   @Test
   @DisplayName("GET /users/me/level 성공")

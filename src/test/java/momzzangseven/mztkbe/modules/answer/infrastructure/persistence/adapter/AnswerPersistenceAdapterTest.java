@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
@@ -35,10 +36,8 @@ class AnswerPersistenceAdapterTest {
     @Test
     @DisplayName("saveAnswer() converts a domain object to an entity and back")
     void saveAnswer_convertsDomainAndReturnsSavedDomain() {
-      Answer answer =
-          buildAnswer(null, 10L, 20L, "answer content", false, List.of("https://image"));
-      AnswerEntity savedEntity =
-          buildEntity(99L, 10L, 20L, "answer content", false, List.of("https://image"));
+      Answer answer = buildAnswer(null, 10L, 20L, "answer content", false);
+      AnswerEntity savedEntity = buildEntity(99L, 10L, 20L, "answer content", false);
       given(answerJpaRepository.save(any(AnswerEntity.class))).willReturn(savedEntity);
 
       Answer result = answerPersistenceAdapter.saveAnswer(answer);
@@ -50,7 +49,6 @@ class AnswerPersistenceAdapterTest {
       verify(answerJpaRepository).save(entityCaptor.capture());
       assertThat(entityCaptor.getValue().getPostId()).isEqualTo(10L);
       assertThat(entityCaptor.getValue().getContent()).isEqualTo("answer content");
-      assertThat(entityCaptor.getValue().getImageUrls()).containsExactly("https://image");
     }
 
     @Test
@@ -59,8 +57,8 @@ class AnswerPersistenceAdapterTest {
       Long postId = 10L;
       List<AnswerEntity> entities =
           List.of(
-              buildEntity(1L, 10L, 20L, "accepted", true, List.of()),
-              buildEntity(2L, 10L, 21L, "regular", false, List.of("https://image")));
+              buildEntity(1L, 10L, 20L, "accepted", true),
+              buildEntity(2L, 10L, 21L, "regular", false));
       given(answerJpaRepository.findByPostIdOrderByIsAcceptedDescCreatedAtAsc(postId))
           .willReturn(entities);
 
@@ -69,7 +67,7 @@ class AnswerPersistenceAdapterTest {
       assertThat(result).hasSize(2);
       assertThat(result.get(0).getIsAccepted()).isTrue();
       assertThat(result.get(0).getId()).isEqualTo(1L);
-      assertThat(result.get(1).getImageUrls()).containsExactly("https://image");
+      assertThat(result.get(1).getContent()).isEqualTo("regular");
     }
 
     @Test
@@ -86,7 +84,7 @@ class AnswerPersistenceAdapterTest {
     @Test
     @DisplayName("loadAnswer() maps an entity to a domain object")
     void loadAnswer_mapsEntityToDomain() {
-      AnswerEntity entity = buildEntity(1L, 10L, 20L, "answer content", false, List.of());
+      AnswerEntity entity = buildEntity(1L, 10L, 20L, "answer content", false);
       given(answerJpaRepository.findById(1L)).willReturn(Optional.of(entity));
 
       Optional<Answer> result = answerPersistenceAdapter.loadAnswer(1L);
@@ -110,6 +108,33 @@ class AnswerPersistenceAdapterTest {
 
       verify(answerJpaRepository).deleteAllByPostId(10L);
     }
+
+    @Test
+    @DisplayName("loadOrphanAnswerIds() delegates to findOrphanAnswerIds")
+    void loadOrphanAnswerIds_delegatesToRepository() {
+      given(answerJpaRepository.findOrphanAnswerIds(100)).willReturn(List.of(10L, 11L));
+
+      List<Long> result = answerPersistenceAdapter.loadOrphanAnswerIds(100);
+
+      assertThat(result).containsExactly(10L, 11L);
+      verify(answerJpaRepository).findOrphanAnswerIds(100);
+    }
+
+    @Test
+    @DisplayName("deleteAnswersByIds() delegates to deleteAllByIdInBatch")
+    void deleteAnswersByIds_delegatesToDeleteAllByIdInBatch() {
+      answerPersistenceAdapter.deleteAnswersByIds(List.of(10L, 11L));
+
+      verify(answerJpaRepository).deleteAllByIdInBatch(List.of(10L, 11L));
+    }
+
+    @Test
+    @DisplayName("deleteAnswersByIds() skips repository call when ids are empty")
+    void deleteAnswersByIds_skipsWhenEmpty() {
+      answerPersistenceAdapter.deleteAnswersByIds(List.of());
+
+      verify(answerJpaRepository, never()).deleteAllByIdInBatch(any());
+    }
   }
 
   @Nested
@@ -128,38 +153,26 @@ class AnswerPersistenceAdapterTest {
   }
 
   private Answer buildAnswer(
-      Long id,
-      Long postId,
-      Long userId,
-      String content,
-      boolean isAccepted,
-      List<String> imageUrls) {
+      Long id, Long postId, Long userId, String content, boolean isAccepted) {
     return Answer.builder()
         .id(id)
         .postId(postId)
         .userId(userId)
         .content(content)
         .isAccepted(isAccepted)
-        .imageUrls(imageUrls)
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();
   }
 
   private AnswerEntity buildEntity(
-      Long id,
-      Long postId,
-      Long userId,
-      String content,
-      boolean isAccepted,
-      List<String> imageUrls) {
+      Long id, Long postId, Long userId, String content, boolean isAccepted) {
     return AnswerEntity.builder()
         .id(id)
         .postId(postId)
         .userId(userId)
         .content(content)
         .isAccepted(isAccepted)
-        .imageUrls(imageUrls)
         .build();
   }
 }

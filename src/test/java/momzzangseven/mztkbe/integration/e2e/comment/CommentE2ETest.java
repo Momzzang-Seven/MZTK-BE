@@ -20,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
@@ -30,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Comment CRUD E2E 테스트 (Local Server + Real PostgreSQL).
@@ -63,9 +63,9 @@ class CommentE2ETest {
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private ObjectMapper objectMapper;
 
-  @MockBean private KakaoAuthPort kakaoAuthPort;
-  @MockBean private GoogleAuthPort googleAuthPort;
-  @MockBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private String baseUrl;
 
@@ -210,6 +210,20 @@ class CommentE2ETest {
       }
     }
     assertThat(found).as("생성한 댓글이 목록에 포함되어야 함").isTrue();
+  }
+
+  @Test
+  @Order(10)
+  @DisplayName("존재하지 않는 게시글의 댓글 조회는 404를 반환한다")
+  void getRootComments_missingPost_returns404() {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/posts/999999999/comments",
+            HttpMethod.GET,
+            new HttpEntity<>(authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
   }
 
   @Test
