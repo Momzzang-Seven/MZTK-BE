@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCa
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
@@ -39,7 +40,8 @@ public class AnswerService
         GetAnswerUseCase,
         UpdateAnswerUseCase,
         DeleteAnswerUseCase,
-        DeleteAnswersByPostUseCase {
+        DeleteAnswersByPostUseCase,
+        MarkAnswerAcceptedUseCase {
 
   private final SaveAnswerPort saveAnswerPort;
   private final LoadPostPort loadPostPort;
@@ -142,6 +144,20 @@ public class AnswerService
     List<Long> answerIds = loadAnswerPort.loadAnswerIdsByPostId(postId);
     deleteAnswerPort.deleteAnswersByPostId(postId);
     answerIds.forEach(answerId -> eventPublisher.publishEvent(new AnswerDeletedEvent(answerId)));
+  }
+
+  @Override
+  @Transactional
+  public void markAccepted(Long answerId) {
+    if (answerId == null) {
+      throw new AnswerInvalidInputException("answerId is required.");
+    }
+
+    Answer answer = loadAnswer(answerId);
+    Answer acceptedAnswer = answer.accept();
+    if (acceptedAnswer != answer) {
+      saveAnswerPort.saveAnswer(acceptedAnswer);
+    }
   }
 
   private LoadPostPort.PostContext loadPost(Long postId) {

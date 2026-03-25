@@ -225,6 +225,22 @@ class AnswerServiceTest {
       verify(eventPublisher).publishEvent(new AnswerDeletedEvent(100L));
       verify(eventPublisher).publishEvent(new AnswerDeletedEvent(101L));
     }
+
+    @Test
+    @DisplayName("markAccepted updates the accepted answer state")
+    void markAccepted_updatesAcceptedState() {
+      Answer answer = buildAnswer(100L, 10L, 20L, "accepted", false);
+
+      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(saveAnswerPort.saveAnswer(any(Answer.class)))
+          .willAnswer(invocation -> invocation.getArgument(0));
+
+      answerService.markAccepted(100L);
+
+      ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
+      verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
+      assertThat(answerCaptor.getValue().getIsAccepted()).isTrue();
+    }
   }
 
   @Nested
@@ -448,6 +464,13 @@ class AnswerServiceTest {
           .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
       verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("markAccepted throws when answerId is null")
+    void markAccepted_throws_whenAnswerIdIsNull() {
+      assertThatThrownBy(() -> answerService.markAccepted(null))
+          .isInstanceOf(AnswerInvalidInputException.class);
     }
   }
 

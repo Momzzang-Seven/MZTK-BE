@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -302,6 +303,8 @@ class PostControllerIntegrationTest {
     assertThat(savedPost.getAcceptedAnswerId()).isEqualTo(answerId);
     assertThat(savedPost.getStatus()).isEqualTo(PostStatus.RESOLVED);
     assertThat(savedPost.getIsSolved()).isTrue();
+    AnswerEntity savedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
+    assertThat(savedAnswer.getIsAccepted()).isTrue();
   }
 
   @Test
@@ -325,6 +328,37 @@ class PostControllerIntegrationTest {
         .andExpect(status().isForbidden())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("POST_004"));
+  }
+
+  @Test
+  @DisplayName("accepted answer cannot be updated after acceptance")
+  void acceptAnswer_success_blocksAnswerUpdate() throws Exception {
+    Long postId = createQuestionPost(421L, "accept title", "accept content", 100L, List.of());
+    Long answerId =
+        answerJpaRepository
+            .save(
+                AnswerEntity.builder()
+                    .postId(postId)
+                    .userId(422L)
+                    .content("candidate")
+                    .isAccepted(false)
+                    .build())
+            .getId();
+
+    mockMvc
+        .perform(
+            post("/posts/" + postId + "/answers/" + answerId + "/accept").with(userPrincipal(421L)))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
+            put("/questions/" + postId + "/answers/" + answerId)
+                .with(userPrincipal(422L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "updated after accept"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("ANSWER_005"));
   }
 
   private Long extractPostId(MvcResult result) throws Exception {

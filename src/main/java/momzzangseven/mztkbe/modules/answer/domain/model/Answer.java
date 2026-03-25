@@ -98,4 +98,11 @@ public class Answer {
 
     return isUpdated ? builder.build() : this;
   }
+
+  public Answer accept() {
+    if (this.isAccepted) {
+      return this;
+    }
+    return this.toBuilder().isAccepted(true).updatedAt(LocalDateTime.now()).build();
+  }
 }

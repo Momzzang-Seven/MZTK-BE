@@ -231,6 +231,10 @@ class PostE2ETest {
         "SELECT accepted_answer_id, status, is_solved FROM posts WHERE id = ?", postId);
   }
 
+  private Map<String, Object> getAnswerState(Long answerId) {
+    return jdbcTemplate.queryForMap("SELECT is_accepted FROM answers WHERE id = ?", answerId);
+  }
+
   private boolean postExistsInDb(Long postId) {
     Integer count =
         jdbcTemplate.queryForObject(
@@ -826,7 +830,7 @@ class PostE2ETest {
   class AcceptQuestionAnswer {
 
     @Test
-    @DisplayName("accepting an answer updates accepted_answer_id and status")
+    @DisplayName("accepting an answer updates post state and answer accepted state")
     void acceptAnswer_byWriter_updatesPostState() throws Exception {
       String answererEmail = uniqueEmail();
       signupUser(answererEmail, "Test@1234!", "answerer");
@@ -853,6 +857,38 @@ class PostE2ETest {
       assertThat(((Number) row.get("accepted_answer_id")).longValue()).isEqualTo(answerId);
       assertThat(row.get("status")).isEqualTo("RESOLVED");
       assertThat(row.get("is_solved")).isEqualTo(true);
+
+      Map<String, Object> answerRow = getAnswerState(answerId);
+      assertThat(answerRow.get("is_accepted")).isEqualTo(true);
+    }
+
+    @Test
+    @DisplayName("accepted answer cannot be deleted through answer API")
+    void acceptAnswer_blocksAcceptedAnswerDeletion() throws Exception {
+      String answererEmail = uniqueEmail();
+      signupUser(answererEmail, "Test@1234!", "answerer");
+      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+
+      Long postId = createQuestionPost("delete lock title", "delete lock content", 30L);
+      Long answerId = createAnswer(postId, answererToken, "accepted candidate");
+
+      ResponseEntity<String> acceptRes =
+          restTemplate.exchange(
+              baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+              HttpMethod.POST,
+              new HttpEntity<>(authHeaders()),
+              String.class);
+      assertThat(acceptRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      ResponseEntity<String> deleteRes =
+          restTemplate.exchange(
+              baseUrl + "/questions/" + postId + "/answers/" + answerId,
+              HttpMethod.DELETE,
+              new HttpEntity<>(headersWithToken(answererToken)),
+              String.class);
+
+      assertThat(deleteRes.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      assertThat(parse(deleteRes).at("/code").asText()).isEqualTo("ANSWER_006");
     }
 
     @Test
