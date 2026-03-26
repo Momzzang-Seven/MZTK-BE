@@ -1,4 +1,4 @@
-name: Create Sprint Release PR (dev → main)
+name: Create Sprint Release PR (develop → main)
 
 on:
   # Jira Automation에서 호출
@@ -28,7 +28,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create dev → main Sprint Release PR
+      - name: Create develop → main Sprint Release PR
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -36,7 +36,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            const head = "dev";   // 병합할 소스 브랜치
+            const head = "develop";   // 병합할 소스 브랜치
             const base = "main";  // 병합 대상 브랜치
 
             // 1) Jira / workflow_dispatch 에서 넘어온 값 정리
@@ -58,7 +58,7 @@ jobs:
               inputs?.summary ||
               "";
 
-            // 2) main..dev 변경 내용 조회
+            // 2) main..develop 변경 내용 조회
             const compare = await github.rest.repos.compareCommits({
               owner,
               repo,
@@ -70,7 +70,7 @@ jobs:
             const files = compare.data.files || [];
 
             if (commits.length === 0) {
-              console.log("main과 dev 사이에 커밋이 없습니다. PR을 생성하지 않습니다.");
+              console.log("main과 develop 사이에 커밋이 없습니다. PR을 생성하지 않습니다.");
               return;
             }
 
@@ -130,7 +130,7 @@ jobs:
             if (sprintName) titleParts.push(sprintName);
             if (summary) titleParts.push("-", summary);
             if (!sprintName && !summary) {
-              titleParts.push("dev → main");
+              titleParts.push("develop → main");
             }
 
             const prTitle = titleParts.join(" ");
@@ -138,7 +138,7 @@ jobs:
             // 6) PR 본문 자동 생성 (사람이 채워야 할 TODO 없이)
             const bodyLines = [];
 
-            bodyLines.push("<!-- Sprint Release : dev → main (자동 생성) -->");
+            bodyLines.push("<!-- Sprint Release : develop → main (자동 생성) -->");
             bodyLines.push("");
             bodyLines.push("## 🚀 Sprint Summary");
             bodyLines.push(`- Sprint: ${sprintName || "-"} `);

@@ -2,7 +2,7 @@ name: Semgrep Security Scan
 
 on:
   pull_request:
-    branches: [ "main", "dev" ]
+    branches: [ "main", "develop" ]
 
 jobs:
   semgrep:
