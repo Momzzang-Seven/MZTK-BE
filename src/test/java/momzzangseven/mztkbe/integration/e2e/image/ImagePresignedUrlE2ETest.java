@@ -471,14 +471,14 @@ class ImagePresignedUrlE2ETest {
   }
 
   @Test
-  @DisplayName("[E-13] 혼합 리스트(valid.jpg + invalid.webp) → 400 + DB 부분 저장 없음 (트랜잭션 롤백)")
+  @DisplayName("[E-13] 혼합 리스트(valid.jpg + invalid.bmp) → 400 + DB 부분 저장 없음 (트랜잭션 롤백)")
   void e13_mixedList_returns400_noPartialDbSave() throws Exception {
     // given: 테스트 전 이미지 전체 행 수 기록
     long countBefore = imageJpaRepository.count();
 
     // when: 유효 + 무효 확장자 혼합 요청
     ResponseEntity<String> response =
-        issuePresignedUrls("COMMUNITY_FREE", List.of("valid.jpg", "invalid.webp"));
+        issuePresignedUrls("COMMUNITY_FREE", List.of("valid.jpg", "invalid.bmp"));
 
     // then — 400 반환
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);

@@ -234,7 +234,8 @@ class S3PresignedUrlAdapterTest {
       "png, image/png",
       "gif, image/gif",
       "heic, image/heic",
-      "heif, image/heif"
+      "heif, image/heif",
+      "webp, image/webp"
     })
     @DisplayName("허용된 확장자별로 올바른 Content-Type이 SDK에 전달된다")
     void generatePutPresignedUrl_extensionMapsToCorrectContentType(
@@ -249,7 +250,7 @@ class S3PresignedUrlAdapterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"webp", "bmp", "tiff", "svg"})
+    @ValueSource(strings = {"bmp", "tiff", "svg"})
     @DisplayName("허용되지 않는 확장자 호출 시 InvalidImageExtensionException 발생")
     void generatePutPresignedUrl_unsupportedExtension_throwsInvalidImageExtensionException(
         String ext) {
