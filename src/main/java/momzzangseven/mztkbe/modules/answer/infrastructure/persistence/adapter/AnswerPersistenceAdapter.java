@@ -37,6 +37,11 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
   }
 
   @Override
+  public Optional<Answer> loadAnswerForUpdate(Long answerId) {
+    return answerJpaRepository.findByIdForUpdate(answerId).map(this::toDomain);
+  }
+
+  @Override
   public List<Long> loadAnswerIdsByPostId(Long postId) {
     return answerJpaRepository.findIdsByPostId(postId);
   }

@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,9 +15,12 @@ import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
+import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -48,6 +52,9 @@ class PostControllerIntegrationTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected PostJpaRepository postJpaRepository;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  protected AnswerJpaRepository answerJpaRepository;
 
   @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -266,6 +273,92 @@ class PostControllerIntegrationTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("POST_003"));
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/answers/{answerId}/accept updates accepted answer state in DB")
+  void acceptAnswer_success_updatesPostState() throws Exception {
+    Long postId = createQuestionPost(401L, "accept title", "accept content", 100L, List.of());
+    Long answerId =
+        answerJpaRepository
+            .save(
+                AnswerEntity.builder()
+                    .postId(postId)
+                    .userId(402L)
+                    .content("candidate")
+                    .isAccepted(false)
+                    .build())
+            .getId();
+
+    mockMvc
+        .perform(
+            post("/posts/" + postId + "/answers/" + answerId + "/accept").with(userPrincipal(401L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(postId))
+        .andExpect(jsonPath("$.data.acceptedAnswerId").value(answerId))
+        .andExpect(jsonPath("$.data.status").value("RESOLVED"));
+
+    PostEntity savedPost = postJpaRepository.findById(postId).orElseThrow();
+    assertThat(savedPost.getAcceptedAnswerId()).isEqualTo(answerId);
+    assertThat(savedPost.getStatus()).isEqualTo(PostStatus.RESOLVED);
+    assertThat(savedPost.getIsSolved()).isTrue();
+    AnswerEntity savedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
+    assertThat(savedAnswer.getIsAccepted()).isTrue();
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/answers/{answerId}/accept by non-writer returns 403")
+  void acceptAnswer_byNonWriter_returns403() throws Exception {
+    Long postId = createQuestionPost(411L, "accept title", "accept content", 100L, List.of());
+    Long answerId =
+        answerJpaRepository
+            .save(
+                AnswerEntity.builder()
+                    .postId(postId)
+                    .userId(412L)
+                    .content("candidate")
+                    .isAccepted(false)
+                    .build())
+            .getId();
+
+    mockMvc
+        .perform(
+            post("/posts/" + postId + "/answers/" + answerId + "/accept").with(userPrincipal(999L)))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_004"));
+  }
+
+  @Test
+  @DisplayName("accepted answer cannot be updated after acceptance")
+  void acceptAnswer_success_blocksAnswerUpdate() throws Exception {
+    Long postId = createQuestionPost(421L, "accept title", "accept content", 100L, List.of());
+    Long answerId =
+        answerJpaRepository
+            .save(
+                AnswerEntity.builder()
+                    .postId(postId)
+                    .userId(422L)
+                    .content("candidate")
+                    .isAccepted(false)
+                    .build())
+            .getId();
+
+    mockMvc
+        .perform(
+            post("/posts/" + postId + "/answers/" + answerId + "/accept").with(userPrincipal(421L)))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(
+            put("/questions/" + postId + "/answers/" + answerId)
+                .with(userPrincipal(422L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "updated after accept"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("ANSWER_005"));
   }
 
   private Long extractPostId(MvcResult result) throws Exception {

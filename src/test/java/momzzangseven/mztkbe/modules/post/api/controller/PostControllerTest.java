@@ -15,16 +15,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerResult;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
+import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -66,6 +69,7 @@ class PostControllerTest {
   @MockitoBean private UpdatePostUseCase updatePostUseCase;
   @MockitoBean private DeletePostUseCase deletePostUseCase;
   @MockitoBean private SearchPostsUseCase searchPostsUseCase;
+  @MockitoBean private AcceptAnswerUseCase acceptAnswerUseCase;
 
   @Test
   @DisplayName("POST /posts/free 성공")
@@ -567,6 +571,23 @@ class PostControllerTest {
   @DisplayName("PATCH /posts/{postId} 인증 없으면 401")
   void updatePost_unauthenticated_returns401() throws Exception {
     mockMvc.perform(patch("/posts/1")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/answers/{answerId}/accept succeeds")
+  void acceptAnswer_success() throws Exception {
+    given(acceptAnswerUseCase.execute(any()))
+        .willReturn(new AcceptAnswerResult(1L, 2L, PostStatus.RESOLVED));
+
+    mockMvc
+        .perform(post("/posts/1/answers/2/accept").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(1))
+        .andExpect(jsonPath("$.data.acceptedAnswerId").value(2))
+        .andExpect(jsonPath("$.data.status").value("RESOLVED"));
+
+    verify(acceptAnswerUseCase).execute(any());
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(
