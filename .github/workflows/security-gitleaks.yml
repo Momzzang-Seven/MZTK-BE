@@ -2,9 +2,9 @@ name: Gitleaks Scan (CLI)
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main, develop ]
   workflow_dispatch:
 
 jobs:
