@@ -107,7 +107,7 @@ public class AnswerService
   public void execute(UpdateAnswerCommand command) {
     command.validate();
 
-    Answer answer = loadAnswer(command.answerId());
+    Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
 
     Answer updatedAnswer = answer.update(command.content(), command.userId());
@@ -126,7 +126,7 @@ public class AnswerService
   public void execute(DeleteAnswerCommand command) {
     command.validate();
 
-    Answer answer = loadAnswer(command.answerId());
+    Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
 
     answer.validateDeletable(command.userId());
@@ -153,7 +153,7 @@ public class AnswerService
       throw new AnswerInvalidInputException("answerId is required.");
     }
 
-    Answer answer = loadAnswer(answerId);
+    Answer answer = loadAnswerForUpdate(answerId);
     Answer acceptedAnswer = answer.accept();
     if (acceptedAnswer != answer) {
       saveAnswerPort.saveAnswer(acceptedAnswer);
@@ -166,6 +166,10 @@ public class AnswerService
 
   private Answer loadAnswer(Long answerId) {
     return loadAnswerPort.loadAnswer(answerId).orElseThrow(AnswerNotFoundException::new);
+  }
+
+  private Answer loadAnswerForUpdate(Long answerId) {
+    return loadAnswerPort.loadAnswerForUpdate(answerId).orElseThrow(AnswerNotFoundException::new);
   }
 
   private AnswerResult toResult(

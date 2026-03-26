@@ -72,6 +72,13 @@ class AnswerE2ETest {
     }
     createdImageIds.clear();
 
+    for (Long postId : createdPostIds) {
+      try {
+        jdbcTemplate.update("UPDATE posts SET accepted_answer_id = NULL WHERE id = ?", postId);
+      } catch (Exception ignored) {
+      }
+    }
+
     for (Long answerId : createdAnswerIds) {
       try {
         jdbcTemplate.update("DELETE FROM answers WHERE id = ?", answerId);
@@ -178,7 +185,7 @@ class AnswerE2ETest {
               List.of(regularImageId, pendingImageId));
       Long acceptedAnswerId =
           createAnswer(postId, acceptedAnswerer.accessToken(), "accepted answer", List.of());
-      markAnswerAccepted(acceptedAnswerId);
+      acceptAnswer(postId, acceptedAnswerId, author.accessToken());
 
       ResponseEntity<String> response =
           restTemplate.exchange(
@@ -430,8 +437,8 @@ class AnswerE2ETest {
     }
 
     @Test
-    @DisplayName("accepted answer cannot be deleted and DB rows remain")
-    void deleteAcceptedAnswer_returns400AndKeepsRows() throws Exception {
+    @DisplayName("accepted answer cannot be updated or deleted and DB rows remain")
+    void acceptedAnswer_blocksUpdateAndDelete() throws Exception {
       TestUser author = signupAndLogin("accepted-delete-author");
       TestUser answerer = signupAndLogin("accepted-delete-answerer");
       Long postId = createQuestionPost(author.accessToken(), "Accepted delete", "Question", 90L);
@@ -441,7 +448,26 @@ class AnswerE2ETest {
               answerer.accessToken(),
               "cannot delete me",
               List.of(insertImage(answerer.userId(), "COMPLETED", "answers/keep.webp")));
-      markAnswerAccepted(answerId);
+      acceptAnswer(postId, answerId, author.accessToken());
+
+      Long replacementImageId =
+          insertImage(answerer.userId(), "COMPLETED", "answers/rejected-update.webp");
+
+      ResponseEntity<String> updateResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers/" + answerId,
+              HttpMethod.PUT,
+              new HttpEntity<>(
+                  Map.of("content", "should not update", "imageIds", List.of(replacementImageId)),
+                  authHeaders(answerer.accessToken())),
+              String.class);
+
+      assertThat(updateResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      JsonNode updateRoot = parse(updateResponse);
+      assertThat(updateRoot.at("/status").asText()).isEqualTo("FAIL");
+      assertThat(updateRoot.at("/code").asText()).isEqualTo("ANSWER_005");
+      assertThat(answerContent(answerId)).isEqualTo("cannot delete me");
+      assertImageUnlinked(replacementImageId);
 
       ResponseEntity<String> response =
           restTemplate.exchange(
@@ -531,10 +557,17 @@ class AnswerE2ETest {
     assertThat(updated).isEqualTo(1);
   }
 
-  private void markAnswerAccepted(Long answerId) {
-    int updated =
-        jdbcTemplate.update("UPDATE answers SET is_accepted = true WHERE id = ?", answerId);
-    assertThat(updated).isEqualTo(1);
+  private void acceptAnswer(Long postId, Long answerId, String accessToken) throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId + "/answers/" + answerId + "/accept",
+            HttpMethod.POST,
+            new HttpEntity<>(authHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = parse(response);
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
   }
 
   private int countAnswersByPostId(Long postId) {
