@@ -24,7 +24,7 @@ class AllowedImageExtensionTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", ".", ".jpg", "filename", "file.webp", "archive.tar.gz"})
+    @ValueSource(strings = {"", ".", ".jpg", "filename", "archive.tar.gz"})
     @DisplayName("확장자 없음/숨김파일/미허용 확장자는 false를 반환한다")
     void isAllowed_returnsFalse_forInvalidInputs(String filename) {
       assertThat(AllowedImageExtension.isAllowedWithFileName(filename)).isFalse();
@@ -43,12 +43,6 @@ class AllowedImageExtensionTest {
     }
 
     @Test
-    @DisplayName("허용되지 않는 확장자 webp는 false를 반환한다")
-    void isAllowed_returnsFalse_forWebp() {
-      assertThat(AllowedImageExtension.isAllowedWithFileName("file.webp")).isFalse();
-    }
-
-    @Test
     @DisplayName("허용되지 않는 복합 확장자 tar.gz는 false를 반환한다")
     void isAllowed_returnsFalse_forTarGz() {
       assertThat(AllowedImageExtension.isAllowedWithFileName("archive.tar.gz")).isFalse();
@@ -61,7 +55,15 @@ class AllowedImageExtensionTest {
 
     @ParameterizedTest
     @ValueSource(
-        strings = {"file.jpg", "file.jpeg", "file.png", "file.gif", "file.heic", "file.heif"})
+        strings = {
+          "file.jpg",
+          "file.jpeg",
+          "file.png",
+          "file.gif",
+          "file.heic",
+          "file.heif",
+          "file.webp"
+        })
     @DisplayName("허용된 소문자 확장자는 true를 반환한다")
     void isAllowed_returnsTrue_forAllowedLowercaseExtensions(String filename) {
       assertThat(AllowedImageExtension.isAllowedWithFileName(filename)).isTrue();
@@ -86,7 +88,7 @@ class AllowedImageExtensionTest {
   class AllowedWithExtensionCases {
 
     @ParameterizedTest
-    @ValueSource(strings = {"jpg", "jpeg", "png", "gif", "heic", "heif"})
+    @ValueSource(strings = {"jpg", "jpeg", "png", "gif", "heic", "heif", "webp"})
     @DisplayName("허용된 소문자 확장자 문자열은 true를 반환한다")
     void isAllowedWithExtension_returnsTrue_forAllowedExtensions(String ext) {
       assertThat(AllowedImageExtension.isAllowedWithExtension(ext)).isTrue();
@@ -100,7 +102,7 @@ class AllowedImageExtensionTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"webp", "bmp", "tiff", "svg"})
+    @ValueSource(strings = {"bmp", "tiff", "svg"})
     @DisplayName("허용되지 않는 확장자 문자열은 false를 반환한다")
     void isAllowedWithExtension_returnsFalse_forUnsupportedExtensions(String ext) {
       assertThat(AllowedImageExtension.isAllowedWithExtension(ext)).isFalse();
