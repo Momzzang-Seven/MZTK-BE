@@ -52,6 +52,7 @@ public class VerificationImagePolicy {
           case "png" -> Set.of("image/png");
           case "heic" -> Set.of("image/heic", "image/heic-sequence");
           case "heif" -> Set.of("image/heif", "image/heif-sequence");
+          case "webp" -> Set.of("image/webp");
           default -> Set.of();
         };
     if (!allowedContentTypes.isEmpty() && !allowedContentTypes.contains(normalizedContentType)) {

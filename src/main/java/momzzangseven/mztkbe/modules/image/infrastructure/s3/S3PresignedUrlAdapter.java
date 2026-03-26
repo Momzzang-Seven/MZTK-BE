@@ -98,6 +98,7 @@ public class S3PresignedUrlAdapter implements GeneratePresignedUrlPort {
       case "gif" -> "image/gif";
       case "heif" -> "image/heif";
       case "heic" -> "image/heic";
+      case "webp" -> "image/webp";
       default -> "image/jpeg";
     };
   }
