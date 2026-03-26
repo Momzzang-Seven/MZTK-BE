@@ -5,7 +5,6 @@ import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.global.error.post.AnswerNotBelongToPostException;
 import momzzangseven.mztkbe.global.error.post.InvalidPostTypeException;
 import momzzangseven.mztkbe.global.error.post.OnlyPostWriterCanAcceptException;
-import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerResult;
@@ -43,8 +42,6 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
     validateQuestionPost(post);
     validatePostWriter(post, command.requesterId());
     validateAnswerBelongsToPost(post, answer);
-    validateNotSolved(post);
-
     Post acceptedPost = post.accept(command.answerId());
     Post savedPost = postPersistencePort.savePost(acceptedPost);
     markAcceptedAnswerPort.markAccepted(answer.answerId());
@@ -67,12 +64,6 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
       Post post, LoadAcceptedAnswerPort.AcceptedAnswerInfo answer) {
     if (!post.getId().equals(answer.postId())) {
       throw new AnswerNotBelongToPostException();
-    }
-  }
-
-  private void validateNotSolved(Post post) {
-    if (post.isResolved()) {
-      throw new PostAlreadySolvedException();
     }
   }
 }
