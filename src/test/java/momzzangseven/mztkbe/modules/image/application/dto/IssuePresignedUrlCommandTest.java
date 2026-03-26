@@ -84,10 +84,10 @@ class IssuePresignedUrlCommandTest {
     }
 
     @Test
-    @DisplayName("[E-11] 허용되지 않는 확장자(webp)는 InvalidImageExtensionException 발생")
-    void validate_throwsException_whenWebpExtension() {
+    @DisplayName("[E-11] 허용되지 않는 확장자(bmp)는 InvalidImageExtensionException 발생")
+    void validate_throwsException_whenUnsupportedExtension() {
       IssuePresignedUrlCommand command =
-          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.webp"));
+          new IssuePresignedUrlCommand(1L, ImageReferenceType.COMMUNITY_FREE, List.of("file.bmp"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageExtensionException.class);
     }
 
@@ -96,7 +96,7 @@ class IssuePresignedUrlCommandTest {
     void validate_throwsException_whenMixedExtensions() {
       IssuePresignedUrlCommand command =
           new IssuePresignedUrlCommand(
-              1L, ImageReferenceType.COMMUNITY_FREE, List.of("valid.jpg", "invalid.webp"));
+              1L, ImageReferenceType.COMMUNITY_FREE, List.of("valid.jpg", "invalid.bmp"));
       assertThatThrownBy(command::validate).isInstanceOf(InvalidImageExtensionException.class);
     }
 
@@ -173,7 +173,15 @@ class IssuePresignedUrlCommandTest {
 
     @ParameterizedTest
     @ValueSource(
-        strings = {"file.jpg", "file.jpeg", "file.png", "file.gif", "file.heic", "file.heif"})
+        strings = {
+          "file.jpg",
+          "file.jpeg",
+          "file.png",
+          "file.gif",
+          "file.heic",
+          "file.heif",
+          "file.webp"
+        })
     @DisplayName("[H-9] 허용된 모든 확장자는 validate() 통과")
     void validate_passes_forAllAllowedExtensions(String filename) {
       IssuePresignedUrlCommand command =
