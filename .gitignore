@@ -9,6 +9,7 @@ docs/
 .gradle/
 build/
 .gradle-local/
+.gradle-home/
 # Keep Gradle Wrapper
 !gradle/wrapper/gradle-wrapper.jar
 

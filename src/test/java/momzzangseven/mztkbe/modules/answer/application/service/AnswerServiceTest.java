@@ -159,7 +159,7 @@ class AnswerServiceTest {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -177,7 +177,7 @@ class AnswerServiceTest {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(9L));
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       answerService.execute(command);
 
@@ -191,7 +191,7 @@ class AnswerServiceTest {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of());
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -206,7 +206,7 @@ class AnswerServiceTest {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       answerService.execute(command);
 
@@ -224,6 +224,22 @@ class AnswerServiceTest {
       verify(deleteAnswerPort).deleteAnswersByPostId(10L);
       verify(eventPublisher).publishEvent(new AnswerDeletedEvent(100L));
       verify(eventPublisher).publishEvent(new AnswerDeletedEvent(101L));
+    }
+
+    @Test
+    @DisplayName("markAccepted updates the accepted answer state")
+    void markAccepted_updatesAcceptedState() {
+      Answer answer = buildAnswer(100L, 10L, 20L, "accepted", false);
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(saveAnswerPort.saveAnswer(any(Answer.class)))
+          .willAnswer(invocation -> invocation.getArgument(0));
+
+      answerService.markAccepted(100L);
+
+      ArgumentCaptor<Answer> answerCaptor = ArgumentCaptor.forClass(Answer.class);
+      verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
+      assertThat(answerCaptor.getValue().getIsAccepted()).isTrue();
     }
   }
 
@@ -335,7 +351,7 @@ class AnswerServiceTest {
     void updateAnswer_throws_whenAnswerNotFound() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.empty());
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.empty());
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerNotFoundException.class);
@@ -347,7 +363,7 @@ class AnswerServiceTest {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
       Answer answer = buildAnswer(100L, 999L, 20L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerPostMismatchException.class);
@@ -359,7 +375,7 @@ class AnswerServiceTest {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
       Answer answer = buildAnswer(100L, 10L, 99L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnauthorizedException.class);
@@ -371,7 +387,7 @@ class AnswerServiceTest {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
       Answer answer = buildAnswer(100L, 10L, 20L, "before", true);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotUpdateAcceptedAnswerException.class);
@@ -384,7 +400,7 @@ class AnswerServiceTest {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(1L));
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       willThrow(new RuntimeException("sync failed"))
           .given(updateAnswerImagesPort)
           .updateImages(20L, 100L, List.of(1L));
@@ -406,7 +422,7 @@ class AnswerServiceTest {
     void deleteAnswer_throws_whenAnswerNotFound() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.empty());
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.empty());
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerNotFoundException.class);
@@ -418,7 +434,7 @@ class AnswerServiceTest {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 999L, 20L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerPostMismatchException.class);
@@ -430,7 +446,7 @@ class AnswerServiceTest {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 99L, "before", false);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnauthorizedException.class);
@@ -442,12 +458,19 @@ class AnswerServiceTest {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "accepted", true);
 
-      given(loadAnswerPort.loadAnswer(100L)).willReturn(Optional.of(answer));
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
       verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("markAccepted throws when answerId is null")
+    void markAccepted_throws_whenAnswerIdIsNull() {
+      assertThatThrownBy(() -> answerService.markAccepted(null))
+          .isInstanceOf(AnswerInvalidInputException.class);
     }
   }
 

@@ -6,6 +6,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.post.api.dto.AcceptAnswerResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateQuestionPostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.PostDetailResponse;
@@ -32,6 +33,7 @@ public class PostController {
   private final UpdatePostUseCase updatePostUseCase;
   private final DeletePostUseCase deletePostUseCase;
   private final SearchPostsUseCase searchPostsUseCase;
+  private final AcceptAnswerUseCase acceptAnswerUseCase;
 
   // [Create] 질문게시글 작성
   @PostMapping("/question")
@@ -107,6 +109,19 @@ public class PostController {
 
     deletePostUseCase.deletePost(validatedUserId, postId);
     return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
+  }
+
+  @PostMapping("/{postId}/answers/{answerId}/accept")
+  public ResponseEntity<ApiResponse<AcceptAnswerResponse>> acceptAnswer(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long postId,
+      @PathVariable Long answerId) {
+
+    Long validatedUserId = requireUserId(userId);
+
+    AcceptAnswerResult result =
+        acceptAnswerUseCase.execute(new AcceptAnswerCommand(postId, answerId, validatedUserId));
+    return ResponseEntity.ok(ApiResponse.success(AcceptAnswerResponse.from(result)));
   }
 
   private Long requireUserId(Long userId) {

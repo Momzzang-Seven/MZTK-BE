@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.*;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -36,7 +37,14 @@ public class PostEntity {
 
   private Long reward;
 
+  @Column(name = "accepted_answer_id")
+  private Long acceptedAnswerId;
+
+  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
+  private PostStatus status;
+
+  @Column(name = "is_solved", nullable = false)
   private Boolean isSolved = false;
 
   @CreatedDate
@@ -55,6 +63,8 @@ public class PostEntity {
       String title,
       String content,
       Long reward,
+      Long acceptedAnswerId,
+      PostStatus status,
       Boolean isSolved) {
     this.id = id;
     this.userId = userId;
@@ -62,7 +72,9 @@ public class PostEntity {
     this.title = title;
     this.content = content;
     this.reward = reward;
-    this.isSolved = isSolved != null ? isSolved : false;
+    this.acceptedAnswerId = acceptedAnswerId;
+    this.status = resolveStatus(status, isSolved);
+    this.isSolved = this.status == PostStatus.RESOLVED;
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -73,6 +85,8 @@ public class PostEntity {
         .title(post.getTitle())
         .content(post.getContent())
         .reward(post.getReward())
+        .acceptedAnswerId(post.getAcceptedAnswerId())
+        .status(post.getStatus())
         .isSolved(post.getIsSolved())
         .build();
   }
@@ -85,6 +99,8 @@ public class PostEntity {
         .title(this.title)
         .content(this.content)
         .reward(this.reward)
+        .acceptedAnswerId(this.acceptedAnswerId)
+        .status(this.status)
         .isSolved(this.isSolved)
         .tags(tags)
         .createdAt(this.createdAt)
@@ -94,5 +110,12 @@ public class PostEntity {
 
   public Post toDomain() {
     return toDomain(new ArrayList<>());
+  }
+
+  private static PostStatus resolveStatus(PostStatus status, Boolean isSolved) {
+    if (status != null) {
+      return status;
+    }
+    return Boolean.TRUE.equals(isSolved) ? PostStatus.RESOLVED : PostStatus.OPEN;
   }
 }

@@ -102,6 +102,14 @@ class PostE2ETest {
   void tearDown() {
     for (Long postId : createdPostIds) {
       try {
+        jdbcTemplate.update("UPDATE posts SET accepted_answer_id = NULL WHERE id = ?", postId);
+      } catch (Exception ignored) {
+      }
+      try {
+        jdbcTemplate.update("DELETE FROM answers WHERE post_id = ?", postId);
+      } catch (Exception ignored) {
+      }
+      try {
         jdbcTemplate.update("DELETE FROM post_tags WHERE post_id = ?", postId);
       } catch (Exception ignored) {
         // post_tags 가 없거나 cascade 로 이미 삭제된 경우 무시
@@ -198,10 +206,33 @@ class PostE2ETest {
     return postId;
   }
 
+  private Long createAnswer(Long postId, String token, String content) throws Exception {
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            baseUrl + "/questions/" + postId + "/answers",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("content", content, "imageIds", List.of()), headersWithToken(token)),
+            String.class);
+    assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    return objectMapper.readTree(res.getBody()).at("/data/answerId").asLong();
+  }
+
   /** isSolved=true 는 web3 transfer 완료 이벤트로만 변경되므로 테스트 전제 조건 설정에 JdbcTemplate 사용. */
   private void markPostAsSolved(Long postId) {
-    int updated = jdbcTemplate.update("UPDATE posts SET is_solved = true WHERE id = ?", postId);
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE posts SET is_solved = true, status = 'RESOLVED' WHERE id = ?", postId);
     assertThat(updated).as("Post %d should exist to be marked as solved", postId).isEqualTo(1);
+  }
+
+  private Map<String, Object> getPostState(Long postId) {
+    return jdbcTemplate.queryForMap(
+        "SELECT accepted_answer_id, status, is_solved FROM posts WHERE id = ?", postId);
+  }
+
+  private Map<String, Object> getAnswerState(Long answerId) {
+    return jdbcTemplate.queryForMap("SELECT is_accepted FROM answers WHERE id = ?", answerId);
   }
 
   private boolean postExistsInDb(Long postId) {
@@ -791,6 +822,120 @@ class PostE2ETest {
       JsonNode root = parse(res);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
       assertThat(root.at("/code").asText()).isEqualTo("POST_003");
+    }
+  }
+
+  @Nested
+  @DisplayName("QUESTION answer acceptance")
+  class AcceptQuestionAnswer {
+
+    @Test
+    @DisplayName("accepting an answer updates post state and answer accepted state")
+    void acceptAnswer_byWriter_updatesPostState() throws Exception {
+      String answererEmail = uniqueEmail();
+      signupUser(answererEmail, "Test@1234!", "answerer");
+      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+
+      Long postId = createQuestionPost("accept title", "accept content", 30L);
+      Long answerId = createAnswer(postId, answererToken, "accepted candidate");
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+              HttpMethod.POST,
+              new HttpEntity<>(authHeaders()),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode root = parse(res);
+      assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+      assertThat(root.at("/data/postId").asLong()).isEqualTo(postId);
+      assertThat(root.at("/data/acceptedAnswerId").asLong()).isEqualTo(answerId);
+      assertThat(root.at("/data/status").asText()).isEqualTo("RESOLVED");
+
+      Map<String, Object> row = getPostState(postId);
+      assertThat(((Number) row.get("accepted_answer_id")).longValue()).isEqualTo(answerId);
+      assertThat(row.get("status")).isEqualTo("RESOLVED");
+      assertThat(row.get("is_solved")).isEqualTo(true);
+
+      Map<String, Object> answerRow = getAnswerState(answerId);
+      assertThat(answerRow.get("is_accepted")).isEqualTo(true);
+    }
+
+    @Test
+    @DisplayName("accepted answer cannot be deleted through answer API")
+    void acceptAnswer_blocksAcceptedAnswerDeletion() throws Exception {
+      String answererEmail = uniqueEmail();
+      signupUser(answererEmail, "Test@1234!", "answerer");
+      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+
+      Long postId = createQuestionPost("delete lock title", "delete lock content", 30L);
+      Long answerId = createAnswer(postId, answererToken, "accepted candidate");
+
+      ResponseEntity<String> acceptRes =
+          restTemplate.exchange(
+              baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+              HttpMethod.POST,
+              new HttpEntity<>(authHeaders()),
+              String.class);
+      assertThat(acceptRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+      ResponseEntity<String> deleteRes =
+          restTemplate.exchange(
+              baseUrl + "/questions/" + postId + "/answers/" + answerId,
+              HttpMethod.DELETE,
+              new HttpEntity<>(headersWithToken(answererToken)),
+              String.class);
+
+      assertThat(deleteRes.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      assertThat(parse(deleteRes).at("/code").asText()).isEqualTo("ANSWER_006");
+    }
+
+    @Test
+    @DisplayName("accepting by non writer returns 403")
+    void acceptAnswer_byOtherUser_returns403() throws Exception {
+      String answererEmail = uniqueEmail();
+      signupUser(answererEmail, "Test@1234!", "answerer");
+      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+
+      String intruderEmail = uniqueEmail();
+      signupUser(intruderEmail, "Test@1234!", "intruder");
+      String intruderToken = loginAndGetToken(intruderEmail, "Test@1234!");
+
+      Long postId = createQuestionPost("auth title", "auth content", 30L);
+      Long answerId = createAnswer(postId, answererToken, "candidate");
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+              HttpMethod.POST,
+              new HttpEntity<>(headersWithToken(intruderToken)),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+      assertThat(parse(res).at("/code").asText()).isEqualTo("POST_004");
+    }
+
+    @Test
+    @DisplayName("accepting an answer from another post returns 400")
+    void acceptAnswer_withForeignAnswer_returns400() throws Exception {
+      String answererEmail = uniqueEmail();
+      signupUser(answererEmail, "Test@1234!", "answerer");
+      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+
+      Long targetPostId = createQuestionPost("target title", "target content", 30L);
+      Long otherPostId = createQuestionPost("other title", "other content", 30L);
+      Long foreignAnswerId = createAnswer(otherPostId, answererToken, "foreign answer");
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl + "/posts/" + targetPostId + "/answers/" + foreignAnswerId + "/accept",
+              HttpMethod.POST,
+              new HttpEntity<>(authHeaders()),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      assertThat(parse(res).at("/code").asText()).isEqualTo("POST_005");
     }
   }
 }

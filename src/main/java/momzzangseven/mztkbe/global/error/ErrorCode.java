@@ -268,6 +268,12 @@ public enum ErrorCode {
   INVALID_POST_INPUT(
       "POST_003", "Invalid post input", HttpStatus.BAD_REQUEST // 400
       ),
+  ONLY_POST_WRITER_CAN_ACCEPT(
+      "POST_004", "Only the post writer can accept an answer", HttpStatus.FORBIDDEN),
+  ANSWER_NOT_BELONG_TO_POST(
+      "POST_005", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST),
+  POST_ALREADY_SOLVED("POST_006", "Post is already solved", HttpStatus.CONFLICT),
+  INVALID_POST_TYPE("POST_007", "Invalid post type for this operation", HttpStatus.BAD_REQUEST),
   // ========================================
   // Comment Errors (COMMENT_xxx)
   // ========================================
