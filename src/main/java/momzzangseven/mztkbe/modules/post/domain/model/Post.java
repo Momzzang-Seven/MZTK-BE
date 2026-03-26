@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 
@@ -148,7 +149,7 @@ public class Post {
       throw new PostInvalidInputException("answerId must be positive.");
     }
     if (isResolved()) {
-      throw new PostInvalidInputException("This post is already resolved.");
+      throw new PostAlreadySolvedException();
     }
 
     return this.toBuilder()

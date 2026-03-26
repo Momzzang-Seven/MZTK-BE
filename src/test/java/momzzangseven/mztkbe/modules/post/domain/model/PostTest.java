@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import org.junit.jupiter.api.DisplayName;
@@ -239,6 +240,26 @@ class PostTest {
     assertThat(accepted.getAcceptedAnswerId()).isEqualTo(99L);
     assertThat(accepted.getStatus()).isEqualTo(PostStatus.RESOLVED);
     assertThat(accepted.getIsSolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("accept rejects already resolved question with PostAlreadySolvedException")
+  void accept_rejectsResolvedQuestion() {
+    Post post =
+        Post.builder()
+            .id(21L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(55L)
+            .status(PostStatus.RESOLVED)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> post.accept(99L)).isInstanceOf(PostAlreadySolvedException.class);
   }
 
   private Post basePost() {
