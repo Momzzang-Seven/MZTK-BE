@@ -34,12 +34,13 @@ public record GetMyProfileResult(
       User user,
       UserLevelInfo levelInfo,
       AttendanceSummary attendance,
-      WorkoutCompletionInfo workout) {
+      WorkoutCompletionInfo workout,
+      String walletAddress) {
     return new GetMyProfileResult(
         user.getNickname(),
         user.getEmail(),
         user.getAuthProvider().name(),
-        user.getWalletAddress(),
+        walletAddress,
         levelInfo.level(),
         levelInfo.currentXp(),
         levelInfo.requiredXpForNextLevel(),

@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.user.application.port.out.LoadAttendanceSumm
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadTodayWorkoutCompletionPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserLevelPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserWalletPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class GetMyProfileService implements GetMyProfileUseCase {
   private final LoadUserLevelPort loadUserLevelPort;
   private final LoadAttendanceSummaryPort loadAttendanceSummaryPort;
   private final LoadTodayWorkoutCompletionPort loadTodayWorkoutCompletionPort;
+  private final LoadUserWalletPort loadUserWalletPort;
 
   /**
    * Loads and assembles the full profile for the given user.
@@ -45,7 +47,8 @@ public class GetMyProfileService implements GetMyProfileUseCase {
     UserLevelInfo levelInfo = loadUserLevelPort.loadLevelInfo(userId);
     AttendanceSummary attendance = loadAttendanceSummaryPort.loadSummary(userId);
     WorkoutCompletionInfo workout = loadTodayWorkoutCompletionPort.loadCompletion(userId);
+    String walletAddress = loadUserWalletPort.loadActiveWalletAddress(userId).orElse(null);
 
-    return GetMyProfileResult.from(user, levelInfo, attendance, workout);
+    return GetMyProfileResult.from(user, levelInfo, attendance, workout, walletAddress);
   }
 }
