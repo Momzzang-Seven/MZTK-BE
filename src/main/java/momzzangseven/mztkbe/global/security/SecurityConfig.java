@@ -183,6 +183,8 @@ public class SecurityConfig {
                     // --- Image Endpoints ---
                     .requestMatchers(HttpMethod.POST, "/images/presigned-urls")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/images")
+                    .authenticated()
 
                     // --- Actuator Endpoints ---
                     .requestMatchers("/actuator/info")

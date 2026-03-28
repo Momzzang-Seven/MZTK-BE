@@ -13,6 +13,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -121,6 +122,15 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(MissingRequestHeaderException.class)
   public ResponseEntity<ApiResponse<Void>> handleMissingRequestHeaderException(
       MissingRequestHeaderException ex) {
+    ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /** Handle missing required query parameters. */
+  @ExceptionHandler(MissingServletRequestParameterException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestParameterException(
+      MissingServletRequestParameterException ex) {
     ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
