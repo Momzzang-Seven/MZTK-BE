@@ -25,7 +25,7 @@ public class CommentEntity {
   @Column(nullable = false)
   private Long writerId;
 
-  @Column(nullable = false, length = 1000)
+  @Column(nullable = false, columnDefinition = "TEXT")
   private String content;
 
   @Column(nullable = false)
