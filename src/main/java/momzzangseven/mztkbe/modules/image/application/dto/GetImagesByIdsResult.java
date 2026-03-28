@@ -32,7 +32,7 @@ public record GetImagesByIdsResult(List<ImageItem> images) {
       return new ImageItem(
           image.getId(),
           image.getUserId(),
-          image.getReferenceType(),
+          image.getReferenceType().toRequestFacing(),
           image.getReferenceId(),
           image.getStatus(),
           image.getFinalObjectKey(),

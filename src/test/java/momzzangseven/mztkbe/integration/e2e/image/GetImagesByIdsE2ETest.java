@@ -60,6 +60,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>[E-12] ids 개수 초과(11개) → 400 IMAGE_004
  *   <li>[E-13] MARKET_STORE virtual type, concrete subtype 이미지 정상 조회 → 200
  *   <li>[E-14] 읽기 전용 트랜잭션 — updated_at 변경 없음 검증
+ *   <li>[E-15] imgOrder 역순 저장 — 응답은 imgOrder 오름차순 정렬 보장
+ *   <li>[E-16] MARKET_STORE: 응답 referenceType은 MARKET_STORE (내부 THUMB/DETAIL 노출 없음)
+ *   <li>[E-17] MARKET_CLASS: 응답 referenceType은 MARKET_CLASS (내부 THUMB/DETAIL 노출 없음)
  * </ul>
  */
 @Tag("e2e")
@@ -449,6 +452,73 @@ class GetImagesByIdsE2ETest {
     JsonNode body = objectMapper.readTree(response.getBody());
     assertThat(body.at("/status").asText()).isEqualTo("SUCCESS");
     assertThat(body.at("/data/images").size()).isEqualTo(2);
+  }
+
+  @Test
+  @DisplayName("[E-15] imgOrder 역순 저장 — 응답은 imgOrder 오름차순 정렬 보장")
+  void getImages_returns200_sortedByImgOrderAscending() throws Exception {
+    // given: save with imgOrder 3, 1, 2 intentionally out of order
+    Long id3 = saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "public/3.webp", 3);
+    Long id1 = saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "public/1.webp", 1);
+    Long id2 = saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "public/2.webp", 2);
+
+    // when
+    ResponseEntity<String> response =
+        getImages(accessToken, List.of(id3, id1, id2), "COMMUNITY_FREE", 100L);
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode images = objectMapper.readTree(response.getBody()).at("/data/images");
+    assertThat(images.size()).isEqualTo(3);
+    assertThat(images.get(0).at("/imgOrder").asInt()).isEqualTo(1);
+    assertThat(images.get(1).at("/imgOrder").asInt()).isEqualTo(2);
+    assertThat(images.get(2).at("/imgOrder").asInt()).isEqualTo(3);
+  }
+
+  @Test
+  @DisplayName(
+      "[E-16] MARKET_STORE virtual type — 응답의 referenceType은 MARKET_STORE 반환 (내부 THUMB/DETAIL 노출 없음)")
+  void getImages_returns200_withMarketStoreConvertedToRequestFacing() throws Exception {
+    // given
+    Long thumbId =
+        saveImage(currentUserId, "MARKET_STORE_THUMB", 200L, "COMPLETED", "store/thumb.webp", 1);
+    Long detailId =
+        saveImage(currentUserId, "MARKET_STORE_DETAIL", 200L, "COMPLETED", "store/detail.webp", 2);
+
+    // when
+    ResponseEntity<String> response =
+        getImages(accessToken, List.of(thumbId, detailId), "MARKET_STORE", 200L);
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode images = objectMapper.readTree(response.getBody()).at("/data/images");
+    assertThat(images.size()).isEqualTo(2);
+    for (int i = 0; i < images.size(); i++) {
+      assertThat(images.get(i).at("/referenceType").asText()).isEqualTo("MARKET_STORE");
+    }
+  }
+
+  @Test
+  @DisplayName(
+      "[E-17] MARKET_CLASS virtual type — 응답의 referenceType은 MARKET_CLASS 반환 (내부 THUMB/DETAIL 노출 없음)")
+  void getImages_returns200_withMarketClassConvertedToRequestFacing() throws Exception {
+    // given
+    Long thumbId =
+        saveImage(currentUserId, "MARKET_CLASS_THUMB", 300L, "COMPLETED", "class/thumb.webp", 1);
+    Long detailId =
+        saveImage(currentUserId, "MARKET_CLASS_DETAIL", 300L, "COMPLETED", "class/detail.webp", 2);
+
+    // when
+    ResponseEntity<String> response =
+        getImages(accessToken, List.of(thumbId, detailId), "MARKET_CLASS", 300L);
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode images = objectMapper.readTree(response.getBody()).at("/data/images");
+    assertThat(images.size()).isEqualTo(2);
+    for (int i = 0; i < images.size(); i++) {
+      assertThat(images.get(i).at("/referenceType").asText()).isEqualTo("MARKET_CLASS");
+    }
   }
 
   @Test
