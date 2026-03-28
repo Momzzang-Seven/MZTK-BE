@@ -126,16 +126,23 @@ class CommentControllerTest {
     }
 
     @Test
-    @DisplayName("내용이 1000자 초과면 400을 반환한다")
-    void createComment_tooLongContent_returns400() throws Exception {
-      String longContent = "a".repeat(1001);
+    @DisplayName("긴 댓글도 생성 요청을 통과한다")
+    void createComment_longContent_returns200() throws Exception {
+      String longContent = "a".repeat(5000);
+      given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
+          .willReturn(comment(2L, longContent, false));
       mockMvc
           .perform(
               post("/posts/10/comments")
                   .with(userPrincipal(1L))
                   .contentType(APPLICATION_JSON)
                   .content(json(Map.of("content", longContent))))
-          .andExpect(status().isBadRequest());
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.commentId").value(2))
+          .andExpect(jsonPath("$.data.content").value(longContent));
+
+      verify(createCommentUseCase).createComment(any(CreateCommentCommand.class));
     }
   }
 
@@ -171,6 +178,27 @@ class CommentControllerTest {
                   .contentType(APPLICATION_JSON)
                   .content(json(Map.of("content", ""))))
           .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("긴 댓글도 수정 요청을 통과한다")
+    void updateComment_longContent_returns200() throws Exception {
+      String longContent = "a".repeat(5000);
+      given(updateCommentUseCase.updateComment(any(UpdateCommentCommand.class)))
+          .willReturn(comment(7L, longContent, false));
+
+      mockMvc
+          .perform(
+              put("/comments/7")
+                  .with(userPrincipal(1L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", longContent))))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.commentId").value(7))
+          .andExpect(jsonPath("$.data.content").value(longContent));
+
+      verify(updateCommentUseCase).updateComment(any(UpdateCommentCommand.class));
     }
 
     @Test
