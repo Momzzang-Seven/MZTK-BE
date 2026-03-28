@@ -87,4 +87,24 @@ public enum ImageReferenceType {
       default -> List.of(this);
     };
   }
+
+  /**
+   * Collapses an internal-only concrete type to its request-facing parent type.
+   *
+   * <ul>
+   *   <li>{@code MARKET_CLASS_THUMB}, {@code MARKET_CLASS_DETAIL} → {@code MARKET_CLASS}
+   *   <li>{@code MARKET_STORE_THUMB}, {@code MARKET_STORE_DETAIL} → {@code MARKET_STORE}
+   *   <li>All other types → {@code this} (identity)
+   * </ul>
+   *
+   * <p>Use this when building API responses so that internal storage subtypes are never exposed to
+   * clients.
+   */
+  public ImageReferenceType toRequestFacing() {
+    return switch (this) {
+      case MARKET_CLASS_THUMB, MARKET_CLASS_DETAIL -> MARKET_CLASS;
+      case MARKET_STORE_THUMB, MARKET_STORE_DETAIL -> MARKET_STORE;
+      default -> this;
+    };
+  }
 }

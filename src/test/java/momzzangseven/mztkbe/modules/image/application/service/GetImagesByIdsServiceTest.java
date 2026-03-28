@@ -61,6 +61,19 @@ class GetImagesByIdsServiceTest {
         .build();
   }
 
+  private Image imageWithType(long id, ImageReferenceType type, int order) {
+    return Image.builder()
+        .id(id)
+        .userId(USER_ID)
+        .referenceType(type)
+        .referenceId(REF_ID)
+        .status(ImageStatus.COMPLETED)
+        .tmpObjectKey("tmp/" + id + ".jpg")
+        .finalObjectKey("public/img/" + id + ".webp")
+        .imgOrder(order)
+        .build();
+  }
+
   private Image failedImage(long id, int order) {
     return Image.builder()
         .id(id)
@@ -131,6 +144,76 @@ class GetImagesByIdsServiceTest {
           service.execute(new GetImagesByIdsCommand(USER_ID, FREE, REF_ID, List.of(99L)));
 
       assertThat(result.images()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("[TC-SVC-011] 여러 이미지 — DB 반환 순서와 무관하게 imgOrder 오름차순 정렬 보장")
+    void execute_multipleImages_sortedByImgOrderAscending() {
+      // DB returns out-of-order: imgOrder 3, 1, 2
+      given(loadImagePort.findImagesByIdIn(List.of(3L, 1L, 2L)))
+          .willReturn(List.of(completedImage(3, 3), completedImage(1, 1), completedImage(2, 2)));
+
+      GetImagesByIdsResult result =
+          service.execute(new GetImagesByIdsCommand(USER_ID, FREE, REF_ID, List.of(3L, 1L, 2L)));
+
+      assertThat(result.images()).extracting(ImageItem::imgOrder).containsExactly(1, 2, 3);
+      assertThat(result.images()).extracting(ImageItem::imageId).containsExactly(1L, 2L, 3L);
+    }
+
+    @Test
+    @DisplayName("[TC-SVC-012] MARKET_STORE_THUMB → referenceType=MARKET_STORE 변환 반환")
+    void execute_marketStoreThumb_convertsToRequestFacingMarketStore() {
+      given(loadImagePort.findImagesByIdIn(List.of(10L)))
+          .willReturn(List.of(imageWithType(10L, ImageReferenceType.MARKET_STORE_THUMB, 1)));
+
+      GetImagesByIdsResult result =
+          service.execute(
+              new GetImagesByIdsCommand(
+                  USER_ID, ImageReferenceType.MARKET_STORE, REF_ID, List.of(10L)));
+
+      assertThat(result.images().get(0).referenceType()).isEqualTo(ImageReferenceType.MARKET_STORE);
+    }
+
+    @Test
+    @DisplayName("[TC-SVC-013] MARKET_STORE_DETAIL → referenceType=MARKET_STORE 변환 반환")
+    void execute_marketStoreDetail_convertsToRequestFacingMarketStore() {
+      given(loadImagePort.findImagesByIdIn(List.of(11L)))
+          .willReturn(List.of(imageWithType(11L, ImageReferenceType.MARKET_STORE_DETAIL, 1)));
+
+      GetImagesByIdsResult result =
+          service.execute(
+              new GetImagesByIdsCommand(
+                  USER_ID, ImageReferenceType.MARKET_STORE, REF_ID, List.of(11L)));
+
+      assertThat(result.images().get(0).referenceType()).isEqualTo(ImageReferenceType.MARKET_STORE);
+    }
+
+    @Test
+    @DisplayName("[TC-SVC-014] MARKET_CLASS_THUMB → referenceType=MARKET_CLASS 변환 반환")
+    void execute_marketClassThumb_convertsToRequestFacingMarketClass() {
+      given(loadImagePort.findImagesByIdIn(List.of(20L)))
+          .willReturn(List.of(imageWithType(20L, ImageReferenceType.MARKET_CLASS_THUMB, 1)));
+
+      GetImagesByIdsResult result =
+          service.execute(
+              new GetImagesByIdsCommand(
+                  USER_ID, ImageReferenceType.MARKET_CLASS, REF_ID, List.of(20L)));
+
+      assertThat(result.images().get(0).referenceType()).isEqualTo(ImageReferenceType.MARKET_CLASS);
+    }
+
+    @Test
+    @DisplayName("[TC-SVC-015] MARKET_CLASS_DETAIL → referenceType=MARKET_CLASS 변환 반환")
+    void execute_marketClassDetail_convertsToRequestFacingMarketClass() {
+      given(loadImagePort.findImagesByIdIn(List.of(21L)))
+          .willReturn(List.of(imageWithType(21L, ImageReferenceType.MARKET_CLASS_DETAIL, 1)));
+
+      GetImagesByIdsResult result =
+          service.execute(
+              new GetImagesByIdsCommand(
+                  USER_ID, ImageReferenceType.MARKET_CLASS, REF_ID, List.of(21L)));
+
+      assertThat(result.images().get(0).referenceType()).isEqualTo(ImageReferenceType.MARKET_CLASS);
     }
 
     @Test

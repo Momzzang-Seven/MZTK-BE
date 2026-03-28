@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.image.application.service;
 
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.image.ImageNotBelongsToUserException;
@@ -42,7 +43,11 @@ public class GetImagesByIdsService implements GetImagesByIdsUseCase {
       verifyOwnership(command, image);
     }
 
-    List<ImageItem> items = images.stream().map(ImageItem::from).toList();
+    List<ImageItem> items =
+        images.stream()
+            .sorted(Comparator.comparingInt(Image::getImgOrder))
+            .map(ImageItem::from)
+            .toList();
     return new GetImagesByIdsResult(items);
   }
 
@@ -52,7 +57,7 @@ public class GetImagesByIdsService implements GetImagesByIdsUseCase {
     boolean refMatch = command.referenceId().equals(image.getReferenceId());
 
     if (!ownerMatch || !typeMatch || !refMatch) {
-      throw new ImageNotBelongsToUserException("Image not belongs to user or given reference");
+      throw new ImageNotBelongsToUserException("Image does not belong to user or given reference");
     }
   }
 }
