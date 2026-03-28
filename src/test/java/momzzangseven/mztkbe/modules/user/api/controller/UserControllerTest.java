@@ -2,7 +2,9 @@ package momzzangseven.mztkbe.modules.user.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,11 +12,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.modules.user.application.dto.GetMyProfileResult;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
+import momzzangseven.mztkbe.modules.user.application.port.in.GetMyProfileUseCase;
 import momzzangseven.mztkbe.modules.user.application.port.in.UpdateUserRoleUseCase;
 import momzzangseven.mztkbe.modules.user.application.port.in.WithdrawUserUseCase;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.user.domain.vo.WorkoutCompletedMethod;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -50,6 +56,7 @@ class UserControllerTest {
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
+  @MockitoBean private GetMyProfileUseCase getMyProfileUseCase;
   @MockitoBean private UpdateUserRoleUseCase updateUserRoleUseCase;
   @MockitoBean private WithdrawUserUseCase withdrawUserUseCase;
 
@@ -153,6 +160,68 @@ class UserControllerTest {
     mockMvc
         .perform(post("/users/me/withdrawal").with(nullStepUpPrincipal()))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("[M-6] GET /users/me 인증된 유저 조회 성공 시 200과 올바른 JSON 구조를 반환한다")
+  void getMyProfile_authenticatedUser_returns200WithCorrectJsonStructure() throws Exception {
+    GetMyProfileResult mockResult =
+        new GetMyProfileResult(
+            "테스터",
+            "test@example.com",
+            "LOCAL",
+            null,
+            1,
+            0,
+            300,
+            false,
+            true,
+            WorkoutCompletedMethod.WORKOUT_PHOTO,
+            0);
+    given(getMyProfileUseCase.execute(1L)).willReturn(mockResult);
+
+    mockMvc
+        .perform(get("/users/me").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.nickname").value("테스터"))
+        .andExpect(jsonPath("$.data.email").value("test@example.com"))
+        .andExpect(jsonPath("$.data.provider").value("LOCAL"))
+        .andExpect(jsonPath("$.data.level").isNumber())
+        .andExpect(jsonPath("$.data.currentXp").isNumber())
+        .andExpect(jsonPath("$.data.requiredXpForNextLevel").isNumber())
+        .andExpect(jsonPath("$.data.hasAttendedToday").isBoolean())
+        .andExpect(jsonPath("$.data.hasCompletedWorkoutToday").isBoolean())
+        .andExpect(jsonPath("$.data.completedWorkoutMethod").value("WORKOUT_PHOTO"))
+        .andExpect(jsonPath("$.data.weeklyAttendanceCount").isNumber());
+  }
+
+  @Test
+  @DisplayName("[M-7] GET /users/me 인증 없이 요청 시 401을 반환한다")
+  void getMyProfile_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(get("/users/me")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(getMyProfileUseCase);
+  }
+
+  @Test
+  @DisplayName("[M-8] GET /users/me principal이 null이면 401을 반환한다")
+  void getMyProfile_nullPrincipal_returns401() throws Exception {
+    mockMvc
+        .perform(get("/users/me").with(nullUserPrincipal()))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
+
+    verifyNoInteractions(getMyProfileUseCase);
+  }
+
+  @Test
+  @DisplayName("[M-9] GET /users/me 유저가 존재하지 않으면 401을 반환한다 (USER_NOT_FOUND → HTTP 401)")
+  void getMyProfile_userNotFound_returns401() throws Exception {
+    given(getMyProfileUseCase.execute(1L)).willThrow(new UserNotFoundException(1L));
+
+    mockMvc.perform(get("/users/me").with(userPrincipal(1L))).andExpect(status().isUnauthorized());
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(
