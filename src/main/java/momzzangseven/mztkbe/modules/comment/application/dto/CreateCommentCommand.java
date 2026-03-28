@@ -12,8 +12,5 @@ public record CreateCommentCommand(Long postId, Long userId, Long parentId, Stri
     if (postId == null || userId == null || content == null || content.isBlank()) {
       throw new BusinessException(ErrorCode.MISSING_REQUIRED_FIELD);
     }
-    if (content.length() > 1000) {
-      throw new BusinessException(ErrorCode.COMMENT_TOO_LONG);
-    }
   }
 }
