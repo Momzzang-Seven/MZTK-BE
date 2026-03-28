@@ -159,6 +159,7 @@ class GetMyProfileServiceTest {
       verify(loadUserLevelPort, never()).loadLevelInfo(999L);
       verify(loadAttendanceSummaryPort, never()).loadSummary(999L);
       verify(loadTodayWorkoutCompletionPort, never()).loadCompletion(999L);
+      verify(loadUserWalletPort, never()).loadActiveWalletAddress(999L);
     }
   }
 }
