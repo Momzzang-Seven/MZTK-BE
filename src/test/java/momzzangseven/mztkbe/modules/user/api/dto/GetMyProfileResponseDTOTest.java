@@ -40,4 +40,29 @@ class GetMyProfileResponseDTOTest {
     assertThat(dto.completedWorkoutMethod()).isEqualTo(WorkoutCompletedMethod.WORKOUT_RECORD);
     assertThat(dto.weeklyAttendanceCount()).isEqualTo(3);
   }
+
+  @Test
+  @DisplayName("[M-5b] walletAddress가 null인 경우에도 NPE 없이 null을 반환한다")
+  void from_nullWalletAddress_mapsNullSafely() {
+    // given
+    GetMyProfileResult result =
+        new GetMyProfileResult(
+            "홍길동",
+            "hong@example.com",
+            "LOCAL",
+            null,
+            1,
+            0,
+            300,
+            false,
+            false,
+            WorkoutCompletedMethod.UNKNOWN,
+            0);
+
+    // when
+    GetMyProfileResponseDTO dto = GetMyProfileResponseDTO.from(result);
+
+    // then
+    assertThat(dto.walletAddress()).isNull();
+  }
 }
