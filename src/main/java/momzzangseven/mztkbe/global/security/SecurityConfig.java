@@ -98,6 +98,8 @@ public class SecurityConfig {
                     .authenticated()
 
                     // --- User & Me Endpoints ---
+                    .requestMatchers(HttpMethod.GET, "/users/me")
+                    .authenticated()
                     .requestMatchers(HttpMethod.POST, "/users/me/withdrawal")
                     .hasAuthority("ROLE_STEP_UP")
                     .requestMatchers(HttpMethod.PATCH, "/users/me/role")
