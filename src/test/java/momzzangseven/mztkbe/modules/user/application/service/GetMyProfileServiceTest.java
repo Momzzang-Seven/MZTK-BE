@@ -72,6 +72,7 @@ class GetMyProfileServiceTest {
 
       // then
       assertThat(result.nickname()).isEqualTo("테스터");
+      assertThat(result.role()).isEqualTo(UserRole.USER);
       assertThat(result.level()).isEqualTo(3);
       assertThat(result.currentXp()).isEqualTo(120);
       assertThat(result.requiredXpForNextLevel()).isEqualTo(200);

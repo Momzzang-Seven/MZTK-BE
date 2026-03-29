@@ -170,6 +170,7 @@ class UserControllerTest {
             "테스터",
             "test@example.com",
             "LOCAL",
+            UserRole.USER,
             null,
             1,
             0,
@@ -187,6 +188,7 @@ class UserControllerTest {
         .andExpect(jsonPath("$.data.nickname").value("테스터"))
         .andExpect(jsonPath("$.data.email").value("test@example.com"))
         .andExpect(jsonPath("$.data.provider").value("LOCAL"))
+        .andExpect(jsonPath("$.data.role").value("USER"))
         .andExpect(jsonPath("$.data.level").isNumber())
         .andExpect(jsonPath("$.data.currentXp").isNumber())
         .andExpect(jsonPath("$.data.requiredXpForNextLevel").isNumber())

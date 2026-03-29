@@ -154,6 +154,7 @@ class GetMyProfileE2ETest {
     JsonNode body = objectMapper.readTree(res.getBody());
     assertThat(body.at("/status").asText()).isEqualTo("SUCCESS");
     assertThat(data.at("/provider").asText()).isEqualTo("LOCAL");
+    assertThat(data.at("/role").asText()).isEqualTo("USER");
     assertThat(data.at("/walletAddress").isNull()).isTrue();
     assertThat(data.at("/level").asInt()).isEqualTo(1);
     assertThat(data.at("/currentXp").asInt()).isEqualTo(0);
