@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.user.api.dto;
 
 import momzzangseven.mztkbe.modules.user.application.dto.GetMyProfileResult;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import momzzangseven.mztkbe.modules.user.domain.vo.WorkoutCompletedMethod;
 
 /**
@@ -11,6 +12,7 @@ public record GetMyProfileResponseDTO(
     String nickname,
     String email,
     String provider,
+    UserRole role,
     String walletAddress,
     int level,
     int currentXp,
@@ -31,6 +33,7 @@ public record GetMyProfileResponseDTO(
         result.nickname(),
         result.email(),
         result.provider(),
+        result.role(),
         result.walletAddress(),
         result.level(),
         result.currentXp(),
