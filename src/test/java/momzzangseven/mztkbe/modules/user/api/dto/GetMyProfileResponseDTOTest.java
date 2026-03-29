@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.user.api.dto;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import momzzangseven.mztkbe.modules.user.application.dto.GetMyProfileResult;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import momzzangseven.mztkbe.modules.user.domain.vo.WorkoutCompletedMethod;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ class GetMyProfileResponseDTOTest {
             "홍길동",
             "hong@example.com",
             "KAKAO",
+            UserRole.USER,
             "0xABC",
             5,
             300,
@@ -34,6 +36,7 @@ class GetMyProfileResponseDTOTest {
     // then
     assertThat(dto.nickname()).isEqualTo("홍길동");
     assertThat(dto.provider()).isEqualTo("KAKAO");
+    assertThat(dto.role()).isEqualTo(UserRole.USER);
     assertThat(dto.walletAddress()).isEqualTo("0xABC");
     assertThat(dto.level()).isEqualTo(5);
     assertThat(dto.hasCompletedWorkoutToday()).isTrue();
@@ -50,6 +53,7 @@ class GetMyProfileResponseDTOTest {
             "홍길동",
             "hong@example.com",
             "LOCAL",
+            UserRole.USER,
             null,
             1,
             0,
