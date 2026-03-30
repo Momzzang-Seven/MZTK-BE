@@ -64,7 +64,7 @@ public class ReactivateService implements ReactivateUseCase {
 
     String walletAddress = null;
     try {
-      walletAddress = loadUserWalletPort.findActiveWalletAddress(user.getId()).orElse(null);
+      walletAddress = loadUserWalletPort.loadActiveWalletAddress(user.getId()).orElse(null);
     } catch (Exception e) {
       log.warn(
           "Failed to load wallet address for user {}, skipping: {}", user.getId(), e.getMessage());
