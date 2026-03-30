@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.comment.application.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
@@ -8,6 +9,7 @@ import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -16,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -26,6 +29,7 @@ public class CommentService
   private final SaveCommentPort saveCommentPort;
   private final LoadPostPort loadPostPort;
   private final DeleteCommentPort deleteCommentPort;
+  private final GrantCommentXpPort grantCommentXpPort;
 
   // 1. 생성 (Create)
   @Override
@@ -43,7 +47,19 @@ public class CommentService
     Comment newComment =
         Comment.create(command.postId(), command.userId(), command.parentId(), command.content());
 
-    return CommentResult.from(saveCommentPort.saveComment(newComment));
+    Comment savedComment = saveCommentPort.saveComment(newComment);
+
+    try {
+      grantCommentXpPort.grantCreateCommentXp(savedComment.getWriterId(), savedComment.getId());
+    } catch (Exception e) {
+      log.warn(
+          "Comment created but XP grant failed for userId={}, commentId={}",
+          savedComment.getWriterId(),
+          savedComment.getId(),
+          e);
+    }
+
+    return CommentResult.from(savedComment);
   }
 
   // 2. 수정 (Update)
