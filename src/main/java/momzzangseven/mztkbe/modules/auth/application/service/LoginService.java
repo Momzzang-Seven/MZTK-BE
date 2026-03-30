@@ -43,7 +43,7 @@ public class LoginService implements LoginUseCase {
     String walletAddress = null;
     try {
       walletAddress =
-          loadUserWalletPort.findActiveWalletAddress(authenticatedUser.user().getId()).orElse(null);
+          loadUserWalletPort.loadActiveWalletAddress(authenticatedUser.user().getId()).orElse(null);
     } catch (Exception e) {
       log.warn(
           "Failed to load wallet address for user {}, skipping: {}",

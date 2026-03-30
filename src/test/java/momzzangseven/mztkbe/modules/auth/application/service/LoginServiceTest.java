@@ -65,7 +65,7 @@ class LoginServiceTest {
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(user));
       given(tokenIssuer.issueTokens(1L, "user@example.com", null)).willReturn(STUB_TOKENS);
-      given(loadUserWalletPort.findActiveWalletAddress(1L)).willReturn(Optional.of("0xabc"));
+      given(loadUserWalletPort.loadActiveWalletAddress(1L)).willReturn(Optional.of("0xabc"));
 
       LoginResult result = loginService.execute(command);
 
@@ -76,7 +76,7 @@ class LoginServiceTest {
       verify(strategyFactory, times(1)).getStrategy(AuthProvider.LOCAL);
       verify(mockStrategy, times(1)).authenticate(any());
       verify(tokenIssuer, times(1)).issueTokens(1L, "user@example.com", null);
-      verify(loadUserWalletPort, times(1)).findActiveWalletAddress(1L);
+      verify(loadUserWalletPort, times(1)).loadActiveWalletAddress(1L);
     }
 
     @Test
@@ -89,7 +89,7 @@ class LoginServiceTest {
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(user));
       given(tokenIssuer.issueTokens(1L, "user@example.com", null)).willReturn(STUB_TOKENS);
-      given(loadUserWalletPort.findActiveWalletAddress(1L)).willReturn(Optional.empty());
+      given(loadUserWalletPort.loadActiveWalletAddress(1L)).willReturn(Optional.empty());
 
       LoginResult result = loginService.execute(command);
 
@@ -106,7 +106,7 @@ class LoginServiceTest {
       given(strategyFactory.getStrategy(AuthProvider.KAKAO)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.newUser(newUser));
       given(tokenIssuer.issueTokens(eq(1L), any(), any())).willReturn(STUB_TOKENS);
-      given(loadUserWalletPort.findActiveWalletAddress(1L)).willReturn(Optional.empty());
+      given(loadUserWalletPort.loadActiveWalletAddress(1L)).willReturn(Optional.empty());
 
       LoginResult result = loginService.execute(command);
 
@@ -158,7 +158,7 @@ class LoginServiceTest {
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(user));
       given(tokenIssuer.issueTokens(1L, "user@example.com", null)).willReturn(STUB_TOKENS);
-      given(loadUserWalletPort.findActiveWalletAddress(1L))
+      given(loadUserWalletPort.loadActiveWalletAddress(1L))
           .willThrow(new RuntimeException("DB connection error"));
 
       LoginResult result = loginService.execute(command);

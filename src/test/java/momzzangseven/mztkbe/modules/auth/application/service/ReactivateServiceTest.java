@@ -71,7 +71,7 @@ class ReactivateServiceTest {
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
     given(tokenIssuer.issueTokens(any(), any(), any())).willReturn(STUB_TOKENS);
-    given(loadUserWalletPort.findActiveWalletAddress(1L)).willReturn(Optional.empty());
+    given(loadUserWalletPort.loadActiveWalletAddress(1L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -121,7 +121,7 @@ class ReactivateServiceTest {
         .willAnswer(invocation -> invocation.getArgument(0));
     given(tokenIssuer.issueTokens(any(), any(), any()))
         .willReturn(new IssuedTokens("access2", "refresh2", "Bearer", 10L, 20L));
-    given(loadUserWalletPort.findActiveWalletAddress(2L)).willReturn(Optional.empty());
+    given(loadUserWalletPort.loadActiveWalletAddress(2L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -205,7 +205,7 @@ class ReactivateServiceTest {
         .willAnswer(invocation -> invocation.getArgument(0));
     given(tokenIssuer.issueTokens(any(), any(), any()))
         .willReturn(new IssuedTokens("g-access", "g-refresh", "Bearer", 10L, 20L));
-    given(loadUserWalletPort.findActiveWalletAddress(4L)).willReturn(Optional.empty());
+    given(loadUserWalletPort.loadActiveWalletAddress(4L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -244,7 +244,7 @@ class ReactivateServiceTest {
         .willAnswer(invocation -> invocation.getArgument(0));
     given(tokenIssuer.issueTokens(any(), any(), any()))
         .willReturn(new IssuedTokens("k-access", "k-refresh", "Bearer", 10L, 20L));
-    given(loadUserWalletPort.findActiveWalletAddress(5L)).willReturn(Optional.empty());
+    given(loadUserWalletPort.loadActiveWalletAddress(5L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -296,7 +296,7 @@ class ReactivateServiceTest {
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
     given(tokenIssuer.issueTokens(any(), any(), any())).willReturn(STUB_TOKENS);
-    given(loadUserWalletPort.findActiveWalletAddress(1L))
+    given(loadUserWalletPort.loadActiveWalletAddress(1L))
         .willThrow(new RuntimeException("DB connection error"));
 
     LoginResult result = reactivateService.execute(command);

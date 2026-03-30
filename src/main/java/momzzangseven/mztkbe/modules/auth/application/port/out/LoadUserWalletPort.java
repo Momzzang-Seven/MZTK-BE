@@ -6,5 +6,5 @@ import java.util.Optional;
 public interface LoadUserWalletPort {
 
   /** Returns the active wallet address for the given user, or empty if none is registered. */
-  Optional<String> findActiveWalletAddress(Long userId);
+  Optional<String> loadActiveWalletAddress(Long userId);
 }
