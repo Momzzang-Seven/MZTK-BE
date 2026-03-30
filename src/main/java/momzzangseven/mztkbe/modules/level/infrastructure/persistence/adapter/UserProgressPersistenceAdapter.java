@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.level.infrastructure.persistence.adapter;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.level.application.port.out.EnsureUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.infrastructure.persistence.entity.UserProgressEntity;
@@ -17,7 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class UserProgressPersistenceAdapter implements UserProgressPort {
+public class UserProgressPersistenceAdapter implements UserProgressPort, EnsureUserProgressPort {
 
   private final UserProgressJpaRepository userProgressJpaRepository;
   private final PlatformTransactionManager transactionManager;

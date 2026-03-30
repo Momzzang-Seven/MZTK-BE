@@ -26,7 +26,8 @@ public class GetMyLevelService implements GetMyLevelUseCase {
       throw new UserNotAuthenticatedException();
     }
 
-    UserProgress progress = userProgressPort.loadOrCreateUserProgress(userId);
+    UserProgress progress =
+        userProgressPort.loadUserProgress(userId).orElseGet(() -> UserProgress.createInitial(userId));
     LocalDateTime now = LocalDateTime.now();
 
     LevelPolicyResolver.NextLevelPolicyInfo nextPolicy =

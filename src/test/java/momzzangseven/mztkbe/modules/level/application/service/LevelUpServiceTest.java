@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.global.error.level.RewardIntentCreationException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
+import momzzangseven.mztkbe.modules.level.application.port.out.EnsureUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadActiveWalletPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
@@ -38,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class LevelUpServiceTest {
 
+  @Mock private EnsureUserProgressPort ensureUserProgressPort;
   @Mock private UserProgressPort userProgressPort;
   @Mock private LevelPolicyResolver levelPolicyResolver;
   @Mock private LevelUpHistoryPort levelUpHistoryPort;
@@ -50,6 +52,7 @@ class LevelUpServiceTest {
   void setUp() {
     service =
         new LevelUpService(
+            ensureUserProgressPort,
             userProgressPort,
             levelPolicyResolver,
             levelUpHistoryPort,
@@ -89,7 +92,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
@@ -126,7 +129,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
@@ -160,7 +163,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
@@ -192,7 +195,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
@@ -225,7 +228,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
@@ -256,7 +259,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
@@ -290,7 +293,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
@@ -327,7 +330,7 @@ class LevelUpServiceTest {
 
     when(loadActiveWalletPort.loadActiveWalletAddress(userId))
         .thenReturn(Optional.of(EvmAddress.of("0x1111111111111111111111111111111111111111")));
-    when(userProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
+    when(ensureUserProgressPort.loadOrCreateUserProgress(userId)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(userId)).thenReturn(progress);
     when(levelPolicyResolver.resolveLevelUpPolicy(eqInt(1), any(LocalDateTime.class)))
         .thenReturn(policy);
