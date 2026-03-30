@@ -2,12 +2,16 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.*;
 
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UnsupportedProviderException;
 import momzzangseven.mztkbe.modules.auth.application.dto.AuthenticatedUser;
+import momzzangseven.mztkbe.modules.auth.application.dto.IssuedTokens;
 import momzzangseven.mztkbe.modules.auth.application.dto.LoginCommand;
 import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
+import momzzangseven.mztkbe.modules.auth.application.port.out.LoadUserWalletPort;
 import momzzangseven.mztkbe.modules.auth.application.strategy.AuthenticationStrategy;
 import momzzangseven.mztkbe.modules.auth.application.strategy.AuthenticationStrategyFactory;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
@@ -27,8 +31,12 @@ class LoginServiceTest {
   @Mock private AuthenticationStrategyFactory strategyFactory;
   @Mock private AuthTokenIssuer tokenIssuer;
   @Mock private AuthenticationStrategy mockStrategy;
+  @Mock private LoadUserWalletPort loadUserWalletPort;
 
   @InjectMocks private LoginService loginService;
+
+  private static final IssuedTokens STUB_TOKENS =
+      new IssuedTokens("access-token", "refresh-token", "Bearer", 900L, 604800L);
 
   private User createFakeUser() {
     return User.builder()
@@ -48,35 +56,44 @@ class LoginServiceTest {
   class LoginSuccessTest {
 
     @Test
-    @DisplayName("LOCAL 로그인 성공 - 기존 유저")
-    void execute_LocalLogin_ExistingUser_Success() {
+    @DisplayName("LOCAL 로그인 성공 - 등록된 지갑 있음")
+    void execute_LocalLogin_WithWallet_Success() {
       User user = createFakeUser();
       LoginCommand command =
           new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null);
 
-      LoginResult expectedResult =
-          LoginResult.builder()
-              .accessToken("access-token")
-              .refreshToken("refresh-token")
-              .grantType("Bearer")
-              .accessTokenExpiresIn(900L)
-              .refreshTokenExpiresIn(604800L)
-              .isNewUser(false)
-              .user(user)
-              .build();
-
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(user));
-      given(tokenIssuer.issue(user, false)).willReturn(expectedResult);
+      given(tokenIssuer.issueTokens(1L, "user@example.com", null)).willReturn(STUB_TOKENS);
+      given(loadUserWalletPort.findActiveWalletAddress(1L)).willReturn(Optional.of("0xabc"));
 
       LoginResult result = loginService.execute(command);
 
       assertThat(result).isNotNull();
       assertThat(result.accessToken()).isEqualTo("access-token");
       assertThat(result.isNewUser()).isFalse();
+      assertThat(result.walletAddress()).isEqualTo("0xabc");
       verify(strategyFactory, times(1)).getStrategy(AuthProvider.LOCAL);
       verify(mockStrategy, times(1)).authenticate(any());
-      verify(tokenIssuer, times(1)).issue(user, false);
+      verify(tokenIssuer, times(1)).issueTokens(1L, "user@example.com", null);
+      verify(loadUserWalletPort, times(1)).findActiveWalletAddress(1L);
+    }
+
+    @Test
+    @DisplayName("LOCAL 로그인 성공 - 지갑 없으면 walletAddress null")
+    void execute_LocalLogin_NoWallet_WalletAddressNull() {
+      User user = createFakeUser();
+      LoginCommand command =
+          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null);
+
+      given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
+      given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(user));
+      given(tokenIssuer.issueTokens(1L, "user@example.com", null)).willReturn(STUB_TOKENS);
+      given(loadUserWalletPort.findActiveWalletAddress(1L)).willReturn(Optional.empty());
+
+      LoginResult result = loginService.execute(command);
+
+      assertThat(result.walletAddress()).isNull();
     }
 
     @Test
@@ -86,25 +103,14 @@ class LoginServiceTest {
       LoginCommand command =
           new LoginCommand(AuthProvider.KAKAO, null, null, "kakao-auth-code", null);
 
-      LoginResult expectedResult =
-          LoginResult.builder()
-              .accessToken("access-token")
-              .refreshToken("refresh-token")
-              .grantType("Bearer")
-              .accessTokenExpiresIn(900L)
-              .refreshTokenExpiresIn(604800L)
-              .isNewUser(true)
-              .user(newUser)
-              .build();
-
       given(strategyFactory.getStrategy(AuthProvider.KAKAO)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.newUser(newUser));
-      given(tokenIssuer.issue(newUser, true)).willReturn(expectedResult);
+      given(tokenIssuer.issueTokens(eq(1L), any(), any())).willReturn(STUB_TOKENS);
+      given(loadUserWalletPort.findActiveWalletAddress(1L)).willReturn(Optional.empty());
 
       LoginResult result = loginService.execute(command);
 
       assertThat(result.isNewUser()).isTrue();
-      verify(tokenIssuer, times(1)).issue(newUser, true);
     }
   }
 
@@ -125,7 +131,7 @@ class LoginServiceTest {
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Provider is required");
 
-      verifyNoInteractions(strategyFactory, tokenIssuer);
+      verifyNoInteractions(strategyFactory, tokenIssuer, loadUserWalletPort);
     }
 
     @Test
@@ -139,7 +145,7 @@ class LoginServiceTest {
       assertThatThrownBy(() -> loginService.execute(command))
           .isInstanceOf(UnsupportedProviderException.class);
 
-      verifyNoInteractions(tokenIssuer);
+      verifyNoInteractions(tokenIssuer, loadUserWalletPort);
     }
 
     @Test
@@ -156,7 +162,7 @@ class LoginServiceTest {
           .isInstanceOf(RuntimeException.class)
           .hasMessageContaining("Authentication failed");
 
-      verifyNoInteractions(tokenIssuer);
+      verifyNoInteractions(tokenIssuer, loadUserWalletPort);
     }
   }
 }
