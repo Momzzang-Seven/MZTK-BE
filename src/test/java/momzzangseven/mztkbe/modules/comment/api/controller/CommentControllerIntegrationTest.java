@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.comment.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,14 +10,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
+import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
+import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -67,6 +72,14 @@ class CommentControllerIntegrationTest {
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
+
+  @MockitoBean private GrantXpUseCase grantXpUseCase;
+
+  @BeforeEach
+  void setUp() {
+    org.mockito.BDDMockito.given(grantXpUseCase.execute(any()))
+        .willReturn(GrantXpResult.granted(1, -1, 1, LocalDate.of(2026, 3, 29)));
+  }
 
   @Test
   @DisplayName("create, query, and delete comment are reflected in H2")
