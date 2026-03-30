@@ -7,8 +7,6 @@ import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 public interface UserProgressPort {
   Optional<UserProgress> loadUserProgress(Long userId);
 
-  UserProgress loadOrCreateUserProgress(Long userId);
-
   /** Loads the user progress with a pessimistic lock to ensure data consistency during updates. */
   UserProgress loadUserProgressWithLock(Long userId);
 

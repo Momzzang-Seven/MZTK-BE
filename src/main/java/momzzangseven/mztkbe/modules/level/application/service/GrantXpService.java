@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.global.error.level.LevelValidationMessage;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.out.EnsureUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GrantXpService implements GrantXpUseCase {
 
+  private final EnsureUserProgressPort ensureUserProgressPort;
   private final UserProgressPort userProgressPort;
   private final PolicyPort policyPort;
   private final XpLedgerPort xpLedgerPort;
@@ -40,7 +42,7 @@ public class GrantXpService implements GrantXpUseCase {
     LocalDateTime occurredAt = command.occurredAt();
     XpType xpType = command.xpType();
 
-    userProgressPort.loadOrCreateUserProgress(userId);
+    ensureUserProgressPort.loadOrCreateUserProgress(userId);
     UserProgress progress = userProgressPort.loadUserProgressWithLock(userId);
 
     XpPolicy policy =

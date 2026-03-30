@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.modules.level.application.dto.GetMyLevelResult;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
@@ -43,7 +45,7 @@ class GetMyLevelServiceTest {
             .updatedAt(LocalDateTime.of(2026, 2, 28, 0, 0))
             .build();
 
-    when(userProgressPort.loadOrCreateUserProgress(1L)).thenReturn(progress);
+    when(userProgressPort.loadUserProgress(1L)).thenReturn(Optional.of(progress));
     when(levelPolicyResolver.resolveNextLevelInfo(eq(3), any(LocalDateTime.class)))
         .thenReturn(new LevelPolicyResolver.NextLevelPolicyInfo(300, 15));
 
@@ -53,5 +55,21 @@ class GetMyLevelServiceTest {
     assertThat(result.availableXp()).isEqualTo(250);
     assertThat(result.requiredXpForNext()).isEqualTo(300);
     assertThat(result.rewardMztkForNext()).isEqualTo(15);
+    verify(userProgressPort).loadUserProgress(1L);
+  }
+
+  @Test
+  void execute_shouldReturnInitialSnapshotWithoutPersistingWhenProgressMissing() {
+    when(userProgressPort.loadUserProgress(1L)).thenReturn(Optional.empty());
+    when(levelPolicyResolver.resolveNextLevelInfo(eq(1), any(LocalDateTime.class)))
+        .thenReturn(new LevelPolicyResolver.NextLevelPolicyInfo(100, 10));
+
+    GetMyLevelResult result = service.execute(1L);
+
+    assertThat(result.level()).isEqualTo(1);
+    assertThat(result.availableXp()).isEqualTo(0);
+    assertThat(result.requiredXpForNext()).isEqualTo(100);
+    assertThat(result.rewardMztkForNext()).isEqualTo(10);
+    verify(userProgressPort).loadUserProgress(1L);
   }
 }
