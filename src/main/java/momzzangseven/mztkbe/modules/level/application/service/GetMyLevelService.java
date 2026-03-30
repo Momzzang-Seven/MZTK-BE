@@ -27,7 +27,9 @@ public class GetMyLevelService implements GetMyLevelUseCase {
     }
 
     UserProgress progress =
-        userProgressPort.loadUserProgress(userId).orElseGet(() -> UserProgress.createInitial(userId));
+        userProgressPort
+            .loadUserProgress(userId)
+            .orElseGet(() -> UserProgress.createInitial(userId));
     LocalDateTime now = LocalDateTime.now();
 
     LevelPolicyResolver.NextLevelPolicyInfo nextPolicy =

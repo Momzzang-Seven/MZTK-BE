@@ -42,7 +42,11 @@ class GrantXpServiceTest {
   void setUp() {
     service =
         new GrantXpService(
-            ensureUserProgressPort, userProgressPort, policyPort, xpLedgerPort, ZoneId.of("Asia/Seoul"));
+            ensureUserProgressPort,
+            userProgressPort,
+            policyPort,
+            xpLedgerPort,
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Test
