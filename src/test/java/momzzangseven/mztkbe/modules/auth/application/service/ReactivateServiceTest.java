@@ -275,6 +275,36 @@ class ReactivateServiceTest {
     verify(saveUserPort, never()).saveUser(any());
   }
 
+  @Test
+  @DisplayName("wallet lookup throws exception - login succeeds with null walletAddress")
+  void execute_walletLookupThrows_loginSucceedsWithNullWallet() {
+    ReactivateCommand command =
+        new ReactivateCommand(AuthProvider.LOCAL, "user@example.com", "raw-password", null, null);
+    User deletedUser =
+        User.builder()
+            .id(1L)
+            .email("user@example.com")
+            .password("encoded-password")
+            .authProvider(AuthProvider.LOCAL)
+            .status(UserStatus.DELETED)
+            .role(UserRole.USER)
+            .build();
+
+    given(loadUserPort.loadDeletedUserByEmail("user@example.com"))
+        .willReturn(Optional.of(deletedUser));
+    given(passwordEncoder.matches("raw-password", "encoded-password")).willReturn(true);
+    given(saveUserPort.saveUser(any(User.class)))
+        .willAnswer(invocation -> invocation.getArgument(0));
+    given(tokenIssuer.issueTokens(any(), any(), any())).willReturn(STUB_TOKENS);
+    given(loadUserWalletPort.findActiveWalletAddress(1L))
+        .willThrow(new RuntimeException("DB connection error"));
+
+    LoginResult result = reactivateService.execute(command);
+
+    assertThat(result.accessToken()).isEqualTo("access");
+    assertThat(result.walletAddress()).isNull();
+  }
+
   /** Helper to access the googleAuthPort mock without exposing the field directly. */
   private GoogleAuthPort reactivateService_googleAuthPort() {
     return googleAuthPort;
