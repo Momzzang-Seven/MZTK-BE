@@ -291,8 +291,14 @@ class GetMyProfileE2ETest {
   @Test
   @DisplayName("[E-7] 레벨업 후 GET /users/me → level >= 2, currentXp < requiredXpForNextLevel")
   void getMyProfile_afterLevelUp_showsIncreasedLevelAndResetXp() throws Exception {
-    // given: user_progress 행은 lazy 초기화 — 먼저 프로필 조회로 행 생성을 보장
-    getMyProfile(accessToken);
+    // given: command 경로로 user_progress 행을 생성
+    ResponseEntity<String> attendanceRes =
+        restTemplate.exchange(
+            baseUrl + "/users/me/attendance",
+            HttpMethod.POST,
+            new HttpEntity<>(authHeaders()),
+            String.class);
+    assertThat(attendanceRes.getStatusCode().is2xxSuccessful()).isTrue();
 
     // 레벨업에 충분한 XP를 JDBC로 직접 주입
     int updated =
@@ -355,16 +361,14 @@ class GetMyProfileE2ETest {
   @Test
   @DisplayName("[E-9] GET /users/me는 readOnly — DB에 write가 발생하지 않는다")
   void getMyProfile_isReadOnly_causesNoDbWrites() {
-    // given: 첫 번째 호출로 user_progress lazy 초기화를 완료한 뒤 행 수 기록
-    getMyProfile(accessToken);
-
+    // given: 첫 호출 전 행 수 기록
     long userCountBefore =
         jdbcTemplate.queryForObject("SELECT COUNT(*) FROM users WHERE id = ?", Long.class, userId);
     long progressCountBefore =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM user_progress WHERE user_id = ?", Long.class, userId);
 
-    // when: 두 번째 호출 — 추가 write가 없어야 한다
+    // when: 첫 번째 호출 자체가 write를 만들면 안 된다
     ResponseEntity<String> res = getMyProfile(accessToken);
 
     // then
