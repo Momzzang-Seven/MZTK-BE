@@ -223,11 +223,11 @@ npx playwright show-report
 
 ---
 
-### `GET /users/me/level` — 레벨 초기화 및 조회
+### `GET /users/me/level` — 레벨 조회
 
 **Request Header:** `Authorization: Bearer {accessToken}`
 
-최초 호출 시 서버에서 `user_progress` 레코드를 생성합니다.
+`user_progress` row가 없어도 서버는 초기 레벨 스냅샷을 read-only로 반환합니다.
 
 **Response:** `200 OK`
 ```json

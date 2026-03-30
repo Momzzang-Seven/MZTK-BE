@@ -130,8 +130,8 @@ async function signUpAndLogin(
 }
 
 /**
- * GET /users/me/level 호출 → UserProgress 초기화 (레벨 1 시작)
- * 최초 호출 시 서버에서 UserProgress 레코드를 생성합니다.
+ * GET /users/me/level 호출 → 초기 레벨 스냅샷 조회 (레벨 1 시작)
+ * progress row가 없어도 read-only 응답으로 현재 상태를 조회할 수 있습니다.
  */
 async function initLevel(
   request: import("@playwright/test").APIRequestContext,
@@ -141,7 +141,7 @@ async function initLevel(
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (res.status() !== 200) {
-    throw new Error(`레벨 초기화 실패 (${res.status()}): ${await res.text()}`);
+    throw new Error(`레벨 조회 실패 (${res.status()}): ${await res.text()}`);
   }
 }
 
