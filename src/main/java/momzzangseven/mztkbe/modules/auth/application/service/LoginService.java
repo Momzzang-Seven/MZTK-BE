@@ -40,8 +40,16 @@ public class LoginService implements LoginUseCase {
             authenticatedUser.user().getEmail(),
             authenticatedUser.user().getRole());
 
-    String walletAddress =
-        loadUserWalletPort.findActiveWalletAddress(authenticatedUser.user().getId()).orElse(null);
+    String walletAddress = null;
+    try {
+      walletAddress =
+          loadUserWalletPort.findActiveWalletAddress(authenticatedUser.user().getId()).orElse(null);
+    } catch (Exception e) {
+      log.warn(
+          "Failed to load wallet address for user {}, skipping: {}",
+          authenticatedUser.user().getId(),
+          e.getMessage());
+    }
 
     log.info(
         "Login successful for user: {}, isNewUser: {}",

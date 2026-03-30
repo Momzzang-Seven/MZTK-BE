@@ -149,6 +149,26 @@ class LoginServiceTest {
     }
 
     @Test
+    @DisplayName("지갑 조회 중 예외 발생 시 로그인은 성공하고 walletAddress는 null")
+    void execute_WalletLookupThrows_LoginSucceedsWithNullWallet() {
+      User user = createFakeUser();
+      LoginCommand command =
+          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null);
+
+      given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
+      given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(user));
+      given(tokenIssuer.issueTokens(1L, "user@example.com", null)).willReturn(STUB_TOKENS);
+      given(loadUserWalletPort.findActiveWalletAddress(1L))
+          .willThrow(new RuntimeException("DB connection error"));
+
+      LoginResult result = loginService.execute(command);
+
+      assertThat(result).isNotNull();
+      assertThat(result.accessToken()).isEqualTo("access-token");
+      assertThat(result.walletAddress()).isNull();
+    }
+
+    @Test
     @DisplayName("인증 전략이 예외를 던지면 그대로 전파됨")
     void execute_StrategyThrowsException_PropagatesException() {
       LoginCommand command =
