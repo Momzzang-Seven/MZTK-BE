@@ -63,10 +63,6 @@ public class UserEntity {
   @Column(name = "profile_image_url")
   private String profileImageUrl;
 
-  // 지갑 주소
-  @Column(name = "wallet_address", unique = true, length = 42)
-  private String walletAddress;
-
   @Enumerated(EnumType.STRING)
   @Column(nullable = false)
   @ColumnDefault("'ACTIVE'")
