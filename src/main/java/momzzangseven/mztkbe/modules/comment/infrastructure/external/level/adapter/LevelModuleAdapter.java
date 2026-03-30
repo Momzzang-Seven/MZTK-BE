@@ -10,6 +10,8 @@ import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.level.domain.vo.XpType;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component("commentLevelModuleAdapter")
@@ -20,6 +22,7 @@ public class LevelModuleAdapter implements GrantCommentXpPort {
   private final ZoneId appZoneId;
 
   @Override
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Long grantCreateCommentXp(Long userId, Long commentId) {
     LocalDateTime occurredAt = LocalDateTime.now(appZoneId);
     String idempotencyKey = "comment:create:" + commentId;

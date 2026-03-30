@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -28,7 +29,7 @@ public class CommentService
   private final SaveCommentPort saveCommentPort;
   private final LoadPostPort loadPostPort;
   private final DeleteCommentPort deleteCommentPort;
-  private final CommentXpService commentXpService;
+  private final GrantCommentXpPort grantCommentXpPort;
 
   // 1. 생성 (Create)
   @Override
@@ -49,7 +50,7 @@ public class CommentService
     Comment savedComment = saveCommentPort.saveComment(newComment);
 
     try {
-      commentXpService.grantCreateCommentXp(savedComment.getWriterId(), savedComment.getId());
+      grantCommentXpPort.grantCreateCommentXp(savedComment.getWriterId(), savedComment.getId());
     } catch (Exception e) {
       log.warn(
           "Comment created but XP grant failed for userId={}, commentId={}",
