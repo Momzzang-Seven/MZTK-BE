@@ -40,9 +40,6 @@ public class User {
    */
   private String googleRefreshToken;
 
-  /** Connected Web3 wallet address. */
-  private String walletAddress;
-
   private AuthProvider authProvider;
   private UserRole role;
   private UserStatus status;

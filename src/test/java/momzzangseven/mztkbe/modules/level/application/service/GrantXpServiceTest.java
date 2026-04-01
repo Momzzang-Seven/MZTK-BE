@@ -14,6 +14,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
+import momzzangseven.mztkbe.modules.level.application.port.out.EnsureUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.PolicyPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.UserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.XpLedgerPort;
@@ -30,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GrantXpServiceTest {
 
+  @Mock private EnsureUserProgressPort ensureUserProgressPort;
   @Mock private UserProgressPort userProgressPort;
   @Mock private PolicyPort policyPort;
   @Mock private XpLedgerPort xpLedgerPort;
@@ -39,7 +41,12 @@ class GrantXpServiceTest {
   @BeforeEach
   void setUp() {
     service =
-        new GrantXpService(userProgressPort, policyPort, xpLedgerPort, ZoneId.of("Asia/Seoul"));
+        new GrantXpService(
+            ensureUserProgressPort,
+            userProgressPort,
+            policyPort,
+            xpLedgerPort,
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Test
@@ -57,6 +64,7 @@ class GrantXpServiceTest {
     XpPolicy policy = xpPolicy(XpType.CHECK_IN, 10, 5);
     LocalDate earnedOn = LocalDate.of(2026, 2, 26);
 
+    when(ensureUserProgressPort.loadOrCreateUserProgress(1L)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(1L)).thenReturn(progress);
     when(policyPort.loadXpPolicy(XpType.CHECK_IN, occurredAt)).thenReturn(Optional.of(policy));
     when(xpLedgerPort.countByUserIdAndTypeAndEarnedOn(1L, XpType.CHECK_IN, earnedOn)).thenReturn(2);
@@ -79,6 +87,7 @@ class GrantXpServiceTest {
     XpPolicy policy = xpPolicy(XpType.CHECK_IN, 10, 0);
     LocalDate earnedOn = LocalDate.of(2026, 2, 26);
 
+    when(ensureUserProgressPort.loadOrCreateUserProgress(1L)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(1L)).thenReturn(progress);
     when(policyPort.loadXpPolicy(XpType.CHECK_IN, occurredAt)).thenReturn(Optional.of(policy));
     when(xpLedgerPort.countByUserIdAndTypeAndEarnedOn(1L, XpType.CHECK_IN, earnedOn)).thenReturn(0);
@@ -99,6 +108,7 @@ class GrantXpServiceTest {
     XpPolicy policy = xpPolicy(XpType.CHECK_IN, 10, 5);
     LocalDate earnedOn = LocalDate.of(2026, 2, 26);
 
+    when(ensureUserProgressPort.loadOrCreateUserProgress(1L)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(1L)).thenReturn(progress);
     when(policyPort.loadXpPolicy(XpType.CHECK_IN, occurredAt)).thenReturn(Optional.of(policy));
     when(xpLedgerPort.countByUserIdAndTypeAndEarnedOn(1L, XpType.CHECK_IN, earnedOn)).thenReturn(1);
@@ -120,6 +130,7 @@ class GrantXpServiceTest {
     XpPolicy policy = xpPolicy(XpType.CHECK_IN, 10, 3);
     LocalDate earnedOn = LocalDate.of(2026, 2, 26);
 
+    when(ensureUserProgressPort.loadOrCreateUserProgress(1L)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(1L)).thenReturn(progress);
     when(policyPort.loadXpPolicy(XpType.CHECK_IN, occurredAt)).thenReturn(Optional.of(policy));
     when(xpLedgerPort.countByUserIdAndTypeAndEarnedOn(1L, XpType.CHECK_IN, earnedOn)).thenReturn(3);
@@ -140,6 +151,7 @@ class GrantXpServiceTest {
     XpPolicy policy = xpPolicy(XpType.CHECK_IN, 20, 5);
     LocalDate earnedOn = LocalDate.of(2026, 2, 26);
 
+    when(ensureUserProgressPort.loadOrCreateUserProgress(1L)).thenReturn(progress);
     when(userProgressPort.loadUserProgressWithLock(1L)).thenReturn(progress);
     when(policyPort.loadXpPolicy(XpType.CHECK_IN, occurredAt)).thenReturn(Optional.of(policy));
     when(xpLedgerPort.countByUserIdAndTypeAndEarnedOn(1L, XpType.CHECK_IN, earnedOn)).thenReturn(1);

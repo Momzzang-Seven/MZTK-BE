@@ -12,11 +12,13 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.modules.auth.application.dto.GoogleUserInfo;
+import momzzangseven.mztkbe.modules.auth.application.dto.IssuedTokens;
 import momzzangseven.mztkbe.modules.auth.application.dto.KakaoUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
 import momzzangseven.mztkbe.modules.auth.application.dto.ReactivateCommand;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.auth.application.port.out.LoadUserWalletPort;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
@@ -41,8 +43,12 @@ class ReactivateServiceTest {
   @Mock private KakaoAuthPort kakaoAuthPort;
   @Mock private GoogleAuthPort googleAuthPort;
   @Mock private AuthTokenIssuer tokenIssuer;
+  @Mock private LoadUserWalletPort loadUserWalletPort;
 
   @InjectMocks private ReactivateService reactivateService;
+
+  private static final IssuedTokens STUB_TOKENS =
+      new IssuedTokens("access", "refresh", "Bearer", 10L, 20L);
 
   @Test
   @DisplayName("LOCAL deleted user is reactivated and token is issued")
@@ -64,8 +70,8 @@ class ReactivateServiceTest {
     given(passwordEncoder.matches("raw-password", "encoded-password")).willReturn(true);
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
-    given(tokenIssuer.issue(any(User.class), org.mockito.ArgumentMatchers.eq(false)))
-        .willReturn(LoginResult.of("access", "refresh", 10L, 20L, false, deletedUser.reactivate()));
+    given(tokenIssuer.issueTokens(any(), any(), any())).willReturn(STUB_TOKENS);
+    given(loadUserWalletPort.loadActiveWalletAddress(1L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -76,7 +82,7 @@ class ReactivateServiceTest {
 
     verify(loadUserPort).loadDeletedUserByEmail("user@example.com");
     verify(saveUserPort).saveUser(any(User.class));
-    verify(tokenIssuer).issue(any(User.class), org.mockito.ArgumentMatchers.eq(false));
+    verify(tokenIssuer).issueTokens(any(), any(), any());
     verify(loadUserPort, never()).loadUserByEmail("user@example.com");
   }
 
@@ -113,8 +119,9 @@ class ReactivateServiceTest {
     given(passwordEncoder.matches("raw-password", "encoded-password")).willReturn(true);
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
-    given(tokenIssuer.issue(any(User.class), org.mockito.ArgumentMatchers.eq(false)))
-        .willReturn(LoginResult.of("access2", "refresh2", 10L, 20L, false, activeUser));
+    given(tokenIssuer.issueTokens(any(), any(), any()))
+        .willReturn(new IssuedTokens("access2", "refresh2", "Bearer", 10L, 20L));
+    given(loadUserWalletPort.loadActiveWalletAddress(2L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -196,9 +203,9 @@ class ReactivateServiceTest {
         .willReturn(Optional.of(deletedUser));
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
-    given(tokenIssuer.issue(any(User.class), org.mockito.ArgumentMatchers.eq(false)))
-        .willReturn(
-            LoginResult.of("g-access", "g-refresh", 10L, 20L, false, deletedUser.reactivate()));
+    given(tokenIssuer.issueTokens(any(), any(), any()))
+        .willReturn(new IssuedTokens("g-access", "g-refresh", "Bearer", 10L, 20L));
+    given(loadUserWalletPort.loadActiveWalletAddress(4L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -235,8 +242,9 @@ class ReactivateServiceTest {
         .willReturn(Optional.of(activeUser));
     given(saveUserPort.saveUser(any(User.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
-    given(tokenIssuer.issue(any(User.class), org.mockito.ArgumentMatchers.eq(false)))
-        .willReturn(LoginResult.of("k-access", "k-refresh", 10L, 20L, false, activeUser));
+    given(tokenIssuer.issueTokens(any(), any(), any()))
+        .willReturn(new IssuedTokens("k-access", "k-refresh", "Bearer", 10L, 20L));
+    given(loadUserWalletPort.loadActiveWalletAddress(5L)).willReturn(Optional.empty());
 
     LoginResult result = reactivateService.execute(command);
 
@@ -265,6 +273,36 @@ class ReactivateServiceTest {
     assertThatThrownBy(() -> reactivateService.execute(command))
         .isInstanceOf(UserNotFoundException.class);
     verify(saveUserPort, never()).saveUser(any());
+  }
+
+  @Test
+  @DisplayName("wallet lookup throws exception - login succeeds with null walletAddress")
+  void execute_walletLookupThrows_loginSucceedsWithNullWallet() {
+    ReactivateCommand command =
+        new ReactivateCommand(AuthProvider.LOCAL, "user@example.com", "raw-password", null, null);
+    User deletedUser =
+        User.builder()
+            .id(1L)
+            .email("user@example.com")
+            .password("encoded-password")
+            .authProvider(AuthProvider.LOCAL)
+            .status(UserStatus.DELETED)
+            .role(UserRole.USER)
+            .build();
+
+    given(loadUserPort.loadDeletedUserByEmail("user@example.com"))
+        .willReturn(Optional.of(deletedUser));
+    given(passwordEncoder.matches("raw-password", "encoded-password")).willReturn(true);
+    given(saveUserPort.saveUser(any(User.class)))
+        .willAnswer(invocation -> invocation.getArgument(0));
+    given(tokenIssuer.issueTokens(any(), any(), any())).willReturn(STUB_TOKENS);
+    given(loadUserWalletPort.loadActiveWalletAddress(1L))
+        .willThrow(new RuntimeException("DB connection error"));
+
+    LoginResult result = reactivateService.execute(command);
+
+    assertThat(result.accessToken()).isEqualTo("access");
+    assertThat(result.walletAddress()).isNull();
   }
 
   /** Helper to access the googleAuthPort mock without exposing the field directly. */

@@ -16,7 +16,7 @@ class LoginResultTest {
   void of_setsBearerAndMapsValues() {
     User user = sampleUser();
 
-    LoginResult result = LoginResult.of("access", "refresh", 900L, 3600L, false, user);
+    LoginResult result = LoginResult.of("access", "refresh", 900L, 3600L, false, user, "0xabc");
 
     assertThat(result.accessToken()).isEqualTo("access");
     assertThat(result.refreshToken()).isEqualTo("refresh");
@@ -25,12 +25,13 @@ class LoginResultTest {
     assertThat(result.refreshTokenExpiresIn()).isEqualTo(3600L);
     assertThat(result.isNewUser()).isFalse();
     assertThat(result.user()).isSameAs(user);
+    assertThat(result.walletAddress()).isEqualTo("0xabc");
   }
 
   @Test
   @DisplayName("of() keeps null token values as-is")
   void of_keepsNullTokenValues() {
-    LoginResult result = LoginResult.of(null, null, 1L, 2L, true, null);
+    LoginResult result = LoginResult.of(null, null, 1L, 2L, true, null, null);
 
     assertThat(result.accessToken()).isNull();
     assertThat(result.refreshToken()).isNull();

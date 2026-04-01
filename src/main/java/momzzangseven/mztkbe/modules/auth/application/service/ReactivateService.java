@@ -6,12 +6,14 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.modules.auth.application.dto.GoogleUserInfo;
+import momzzangseven.mztkbe.modules.auth.application.dto.IssuedTokens;
 import momzzangseven.mztkbe.modules.auth.application.dto.KakaoUserInfo;
 import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
 import momzzangseven.mztkbe.modules.auth.application.dto.ReactivateCommand;
 import momzzangseven.mztkbe.modules.auth.application.port.in.ReactivateUseCase;
 import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.auth.application.port.out.LoadUserWalletPort;
 import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
@@ -32,6 +34,7 @@ public class ReactivateService implements ReactivateUseCase {
   private final KakaoAuthPort kakaoAuthPort;
   private final GoogleAuthPort googleAuthPort;
   private final AuthTokenIssuer tokenIssuer;
+  private final LoadUserWalletPort loadUserWalletPort;
 
   @Override
   public LoginResult execute(ReactivateCommand command) {
@@ -57,7 +60,24 @@ public class ReactivateService implements ReactivateUseCase {
         throw new IllegalArgumentException("Unsupported provider: " + command.provider());
     }
 
-    return tokenIssuer.issue(user, false);
+    IssuedTokens tokens = tokenIssuer.issueTokens(user.getId(), user.getEmail(), user.getRole());
+
+    String walletAddress = null;
+    try {
+      walletAddress = loadUserWalletPort.loadActiveWalletAddress(user.getId()).orElse(null);
+    } catch (Exception e) {
+      log.warn(
+          "Failed to load wallet address for user {}, skipping: {}", user.getId(), e.getMessage());
+    }
+
+    return LoginResult.of(
+        tokens.accessToken(),
+        tokens.refreshToken(),
+        tokens.accessTokenExpiresIn(),
+        tokens.refreshTokenExpiresIn(),
+        false,
+        user,
+        walletAddress);
   }
 
   private User reactivateLocal(String email, String password) {

@@ -33,7 +33,7 @@ public interface LoadImagePort {
   List<Image> findImagesByReferenceIds(
       List<ImageReferenceType> referenceTypes, List<Long> referenceIds);
 
-  /** Finds images by their IDs. Used to validate and load the final image set on post update. */
+  /** Finds images by their IDs. */
   List<Image> findImagesByIdIn(List<Long> ids);
 
   /**

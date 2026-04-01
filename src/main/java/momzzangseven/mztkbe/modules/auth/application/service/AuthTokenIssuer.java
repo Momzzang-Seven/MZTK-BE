@@ -3,15 +3,15 @@ package momzzangseven.mztkbe.modules.auth.application.service;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.auth.application.delegation.RefreshTokenManager;
-import momzzangseven.mztkbe.modules.auth.application.dto.LoginResult;
-import momzzangseven.mztkbe.modules.user.domain.model.User;
+import momzzangseven.mztkbe.modules.auth.application.dto.IssuedTokens;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.stereotype.Component;
 
 /**
- * Issues access/refresh tokens for an authenticated user and returns a {@link LoginResult}.
+ * Issues JWT access/refresh tokens for an authenticated user.
  *
- * <p>This is shared by multiple auth flows (login, reactivation) to avoid duplicating token
- * issuance logic.
+ * <p>Shared by multiple auth flows (login, reactivation) to avoid duplicating token issuance logic.
+ * Callers are responsible for assembling the final {@code LoginResult}.
  */
 @Component
 @RequiredArgsConstructor
@@ -21,23 +21,21 @@ public class AuthTokenIssuer {
   private final RefreshTokenManager refreshTokenManager;
 
   /**
-   * Issue access/refresh tokens for the given user.
+   * Generate and persist an access/refresh token pair for the given user identity.
    *
-   * @param user authenticated user
-   * @param isNewUser whether this login created a new user
-   * @return login result containing tokens and user payload
+   * @param userId user's numeric ID
+   * @param email user's email address
+   * @param role user's role
+   * @return issued token data
    */
-  public LoginResult issue(User user, boolean isNewUser) {
-    String accessToken =
-        jwtTokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
-    String refreshToken = refreshTokenManager.createAndSaveRefreshToken(user.getId());
-
-    return LoginResult.of(
+  public IssuedTokens issueTokens(Long userId, String email, UserRole role) {
+    String accessToken = jwtTokenProvider.generateAccessToken(userId, email, role);
+    String refreshToken = refreshTokenManager.createAndSaveRefreshToken(userId);
+    return new IssuedTokens(
         accessToken,
         refreshToken,
+        "Bearer",
         jwtTokenProvider.getAccessTokenExpiresIn(),
-        jwtTokenProvider.getRefreshTokenExpiresIn(),
-        isNewUser,
-        user);
+        jwtTokenProvider.getRefreshTokenExpiresIn());
   }
 }

@@ -12,15 +12,15 @@ import org.junit.jupiter.api.Test;
 class UpdateCommentCommandTest {
 
   @Test
-  @DisplayName("constructor accepts content at max length 1000")
-  void constructor_acceptsMaxLengthContent() {
-    String content = "a".repeat(1000);
+  @DisplayName("constructor accepts content longer than 1000 chars")
+  void constructor_acceptsLongContent() {
+    String content = "a".repeat(5000);
 
     UpdateCommentCommand command = new UpdateCommentCommand(1L, 2L, content);
 
     assertThat(command.commentId()).isEqualTo(1L);
     assertThat(command.userId()).isEqualTo(2L);
-    assertThat(command.content()).hasSize(1000);
+    assertThat(command.content()).hasSize(5000);
   }
 
   @Test
@@ -41,15 +41,5 @@ class UpdateCommentCommandTest {
     assertThatThrownBy(() -> new UpdateCommentCommand(1L, 2L, " "))
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.MISSING_REQUIRED_FIELD.getMessage());
-  }
-
-  @Test
-  @DisplayName("constructor rejects content over 1000 chars")
-  void constructor_rejectsTooLongContent() {
-    String tooLong = "a".repeat(1001);
-
-    assertThatThrownBy(() -> new UpdateCommentCommand(1L, 2L, tooLong))
-        .isInstanceOf(BusinessException.class)
-        .hasMessage(ErrorCode.COMMENT_TOO_LONG.getMessage());
   }
 }
