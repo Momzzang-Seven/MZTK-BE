@@ -198,7 +198,9 @@ public class SecurityConfig {
 
                     // --- Internal Endpoints ---
 
-                    .requestMatchers("/internal/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                    .requestMatchers(
+                        "/internal/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                    .permitAll()
 
                     // Fallback
                     .anyRequest()

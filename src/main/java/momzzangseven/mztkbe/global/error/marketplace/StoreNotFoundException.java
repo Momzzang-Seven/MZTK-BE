@@ -7,8 +7,6 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 public class StoreNotFoundException extends BusinessException {
 
   public StoreNotFoundException(Long trainerId) {
-    super(
-        ErrorCode.MARKETPLACE_STORE_NOT_FOUND,
-        "Store not found for trainer ID: " + trainerId);
+    super(ErrorCode.MARKETPLACE_STORE_NOT_FOUND, "Store not found for trainer ID: " + trainerId);
   }
 }
