@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.enti
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EntityListeners;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -17,17 +16,21 @@ import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+/**
+ * JPA Entity for trainer_stores table.
+ *
+ * <p><b>Timestamp management:</b> {@code createdAt} and {@code updatedAt} are managed exclusively
+ * by the native upsert query using {@code CURRENT_TIMESTAMP}. JPA Auditing annotations are
+ * intentionally omitted because the entity is never persisted through JPA's standard
+ * persist/merge lifecycle.
+ */
 @Entity
 @Table(name = "trainer_stores")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
-@EntityListeners(AuditingEntityListener.class)
 public class TrainerStoreEntity {
 
   private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
@@ -63,11 +66,9 @@ public class TrainerStoreEntity {
   @Column(name = "x_url")
   private String xUrl;
 
-  @CreatedDate
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
 
-  @LastModifiedDate
   @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
 
@@ -87,6 +88,18 @@ public class TrainerStoreEntity {
   // Domain Mapping
   // ============================================
 
+  /**
+   * Convert a domain model to an entity for persistence.
+   *
+   * <p><b>Note on id field:</b> When called from the save path (via {@code TrainerStore.create()}),
+   * {@code store.getId()} is always null because the domain factory does not assign IDs. The native
+   * upsert query ignores the id column entirely (uses IDENTITY generation). The id is included here
+   * only for completeness, supporting potential future use cases where an entity is reconstructed
+   * from a database-loaded domain model.
+   *
+   * @param store the domain model to convert
+   * @return the JPA entity
+   */
   public static TrainerStoreEntity fromDomain(TrainerStore store) {
     Point point = null;
     if (store.getLongitude() != null && store.getLatitude() != null) {
@@ -105,14 +118,16 @@ public class TrainerStoreEntity {
         .homepageUrl(store.getHomepageUrl())
         .instagramUrl(store.getInstagramUrl())
         .xUrl(store.getXUrl())
-        // createdAt/updatedAt: null for new entities (create() does not set them).
-        // The native upsert query uses CURRENT_TIMESTAMP directly.
-        // These are only non-null when reconstructing from a DB read (toDomain).
         .createdAt(store.getCreatedAt())
         .updatedAt(store.getUpdatedAt())
         .build();
   }
 
+  /**
+   * Convert this entity to a domain model.
+   *
+   * @return the domain model
+   */
   public TrainerStore toDomain() {
     return TrainerStore.builder()
         .id(this.id)
