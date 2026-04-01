@@ -69,8 +69,7 @@ class StorePersistenceAdapterTest {
       // given
       Long trainerId = 1L;
       TrainerStoreEntity entity = createStoreEntity();
-      given(trainerStoreJpaRepository.findByTrainerId(trainerId))
-          .willReturn(Optional.of(entity));
+      given(trainerStoreJpaRepository.findByTrainerId(trainerId)).willReturn(Optional.of(entity));
 
       // when
       Optional<TrainerStore> result = storagePersistenceAdapter.findByTrainerId(trainerId);
@@ -91,8 +90,7 @@ class StorePersistenceAdapterTest {
     void findByTrainerId_returnsEmpty_whenNotExists() {
       // given
       Long trainerId = 999L;
-      given(trainerStoreJpaRepository.findByTrainerId(trainerId))
-          .willReturn(Optional.empty());
+      given(trainerStoreJpaRepository.findByTrainerId(trainerId)).willReturn(Optional.empty());
 
       // when
       Optional<TrainerStore> result = storagePersistenceAdapter.findByTrainerId(trainerId);
@@ -106,8 +104,7 @@ class StorePersistenceAdapterTest {
     void findByTrainerId_callsRepositoryOnce() {
       // given
       Long trainerId = 1L;
-      given(trainerStoreJpaRepository.findByTrainerId(trainerId))
-          .willReturn(Optional.empty());
+      given(trainerStoreJpaRepository.findByTrainerId(trainerId)).willReturn(Optional.empty());
 
       // when
       storagePersistenceAdapter.findByTrainerId(trainerId);

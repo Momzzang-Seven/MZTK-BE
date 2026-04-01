@@ -112,12 +112,28 @@ class TrainerStoreTest {
       // when & then — no exception
       TrainerStore storeMin =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, -90.0, VALID_LONGITUDE, null,
-              null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              null,
+              -90.0,
+              VALID_LONGITUDE,
+              null,
+              null,
+              null,
+              null);
       TrainerStore storeMax =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, 90.0, VALID_LONGITUDE, null,
-              null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              null,
+              90.0,
+              VALID_LONGITUDE,
+              null,
+              null,
+              null,
+              null);
 
       assertThat(storeMin.getLatitude()).isEqualTo(-90.0);
       assertThat(storeMax.getLatitude()).isEqualTo(90.0);
@@ -129,12 +145,28 @@ class TrainerStoreTest {
       // when & then — no exception
       TrainerStore storeMin =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE, -180.0, null,
-              null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              null,
+              VALID_LATITUDE,
+              -180.0,
+              null,
+              null,
+              null,
+              null);
       TrainerStore storeMax =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE, 180.0, null,
-              null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              null,
+              VALID_LATITUDE,
+              180.0,
+              null,
+              null,
+              null,
+              null);
 
       assertThat(storeMin.getLongitude()).isEqualTo(-180.0);
       assertThat(storeMax.getLongitude()).isEqualTo(180.0);
@@ -155,8 +187,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      null, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE, VALID_LONGITUDE,
-                      null, null, null, null))
+                      null,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Trainer ID must be a positive number");
     }
@@ -167,8 +207,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      0L, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE, VALID_LONGITUDE,
-                      null, null, null, null))
+                      0L,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Trainer ID must be a positive number");
     }
@@ -179,8 +227,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      -1L, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE, VALID_LONGITUDE,
-                      null, null, null, null))
+                      -1L,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Trainer ID must be a positive number");
     }
@@ -202,8 +258,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, storeName, VALID_ADDRESS, null, VALID_LATITUDE,
-                      VALID_LONGITUDE, null, null, null, null))
+                      VALID_TRAINER_ID,
+                      storeName,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Store name must not be null or blank");
     }
@@ -225,8 +289,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, address, null, VALID_LATITUDE,
-                      VALID_LONGITUDE, null, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      address,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Address must not be null or blank");
     }
@@ -246,8 +318,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, null,
-                      VALID_LONGITUDE, null, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      null,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Latitude");
     }
@@ -258,8 +338,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE, null,
-                      null, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      null,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Longitude");
     }
@@ -270,8 +358,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, 90.1,
-                      VALID_LONGITUDE, null, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      90.1,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Latitude must be between");
     }
@@ -282,8 +378,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, -90.1,
-                      VALID_LONGITUDE, null, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      -90.1,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Latitude must be between");
     }
@@ -294,8 +398,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-                      180.1, null, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      180.1,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Longitude must be between");
     }
@@ -306,8 +418,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-                      -180.1, null, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      -180.1,
+                      null,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Longitude must be between");
     }
@@ -326,8 +446,16 @@ class TrainerStoreTest {
     void create_withValidHttpsUrl_succeeds() {
       TrainerStore store =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-              VALID_LONGITUDE, null, "https://example.com", null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              null,
+              VALID_LATITUDE,
+              VALID_LONGITUDE,
+              null,
+              "https://example.com",
+              null,
+              null);
 
       assertThat(store.getHomepageUrl()).isEqualTo("https://example.com");
     }
@@ -337,8 +465,16 @@ class TrainerStoreTest {
     void create_withValidHttpUrl_succeeds() {
       TrainerStore store =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-              VALID_LONGITUDE, null, "http://example.com", null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              null,
+              VALID_LATITUDE,
+              VALID_LONGITUDE,
+              null,
+              "http://example.com",
+              null,
+              null);
 
       assertThat(store.getHomepageUrl()).isEqualTo("http://example.com");
     }
@@ -349,8 +485,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-                      VALID_LONGITUDE, null, "ftp://example.com/files", null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      "ftp://example.com/files",
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("must use http or https scheme");
     }
@@ -361,8 +505,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-                      VALID_LONGITUDE, null, "file:///etc/passwd", null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      "file:///etc/passwd",
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("must use http or https scheme");
     }
@@ -373,8 +525,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-                      VALID_LONGITUDE, null, "not a url at all", null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      "not a url at all",
+                      null,
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("must be a valid URL");
     }
@@ -384,8 +544,16 @@ class TrainerStoreTest {
     void create_withEmptyUrl_succeeds() {
       TrainerStore store =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-              VALID_LONGITUDE, null, "", null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              null,
+              VALID_LATITUDE,
+              VALID_LONGITUDE,
+              null,
+              "",
+              null,
+              null);
 
       assertThat(store.getHomepageUrl()).isEmpty();
     }
@@ -396,8 +564,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-                      VALID_LONGITUDE, null, null, "ftp://invalid", null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      "ftp://invalid",
+                      null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Instagram URL");
     }
@@ -408,8 +584,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, null, VALID_LATITUDE,
-                      VALID_LONGITUDE, null, null, null, "ftp://invalid"))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      null,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      null,
+                      null,
+                      null,
+                      "ftp://invalid"))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("X URL");
     }
