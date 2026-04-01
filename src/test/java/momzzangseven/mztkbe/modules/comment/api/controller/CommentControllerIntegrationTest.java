@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.comment.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,14 +10,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
+import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
+import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -31,7 +36,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
-@DisplayName("CommentController 실경로 통합 테스트 (MockMvc + H2)")
+@DisplayName("CommentController integration test")
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
@@ -68,16 +73,24 @@ class CommentControllerIntegrationTest {
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
+  @MockitoBean private GrantXpUseCase grantXpUseCase;
+
+  @BeforeEach
+  void setUp() {
+    org.mockito.BDDMockito.given(grantXpUseCase.execute(any()))
+        .willReturn(GrantXpResult.granted(1, -1, 1, LocalDate.of(2026, 3, 29)));
+  }
+
   @Test
-  @DisplayName("댓글 생성/조회/삭제가 실제 DB에 반영된다")
+  @DisplayName("create, query, and delete comment are reflected in H2")
   void createGetDeleteComment_realFlow_reflectsInH2() throws Exception {
     PostEntity savedPost =
         postJpaRepository.save(
             PostEntity.builder()
                 .userId(401L)
                 .type(PostType.FREE)
-                .title("댓글 테스트 제목")
-                .content("댓글 테스트 본문")
+                .title("comment test title")
+                .content("comment test body")
                 .reward(0L)
                 .isSolved(false)
                 .build());
@@ -89,17 +102,17 @@ class CommentControllerIntegrationTest {
                 post("/posts/" + postId + "/comments")
                     .with(userPrincipal(401L))
                     .contentType(APPLICATION_JSON)
-                    .content(json(Map.of("content", "첫 댓글"))))
+                    .content(json(Map.of("content", "first comment"))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("SUCCESS"))
-            .andExpect(jsonPath("$.data.content").value("첫 댓글"))
+            .andExpect(jsonPath("$.data.content").value("first comment"))
             .andReturn();
     Long commentId = extractLong(createCommentResult, "/data/commentId");
 
     CommentEntity saved = commentJpaRepository.findById(commentId).orElseThrow();
     assertThat(saved.getPostId()).isEqualTo(postId);
     assertThat(saved.getWriterId()).isEqualTo(401L);
-    assertThat(saved.getContent()).isEqualTo("첫 댓글");
+    assertThat(saved.getContent()).isEqualTo("first comment");
     assertThat(saved.isDeleted()).isFalse();
 
     mockMvc
@@ -107,7 +120,7 @@ class CommentControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.content[0].commentId").value(commentId))
-        .andExpect(jsonPath("$.data.content[0].content").value("첫 댓글"));
+        .andExpect(jsonPath("$.data.content[0].content").value("first comment"));
 
     mockMvc
         .perform(delete("/comments/" + commentId).with(userPrincipal(401L)))
@@ -127,7 +140,42 @@ class CommentControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("존재하지 않는 게시글의 루트 댓글 조회는 404를 반환한다")
+  @DisplayName("comment content longer than 1000 chars is persisted")
+  void createComment_longContent_persistsInH2() throws Exception {
+    String longContent = "a".repeat(5000);
+
+    PostEntity savedPost =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(401L)
+                .type(PostType.FREE)
+                .title("long content post")
+                .content("body")
+                .reward(0L)
+                .isSolved(false)
+                .build());
+
+    MvcResult createCommentResult =
+        mockMvc
+            .perform(
+                post("/posts/" + savedPost.getId() + "/comments")
+                    .with(userPrincipal(401L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", longContent))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.data.content").value(longContent))
+            .andReturn();
+
+    Long commentId = extractLong(createCommentResult, "/data/commentId");
+    CommentEntity saved = commentJpaRepository.findById(commentId).orElseThrow();
+
+    assertThat(saved.getContent()).hasSize(5000);
+    assertThat(saved.getContent()).isEqualTo(longContent);
+  }
+
+  @Test
+  @DisplayName("missing post returns 404 when fetching root comments")
   void getRootComments_missingPost_returns404() throws Exception {
     mockMvc
         .perform(get("/posts/999999/comments").with(userPrincipal(401L)))
@@ -137,7 +185,7 @@ class CommentControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("부모 댓글의 게시글이 존재하지 않으면 대댓글 조회는 404를 반환한다")
+  @DisplayName("missing post returns 404 when fetching replies")
   void getReplies_missingParentPost_returns404() throws Exception {
     CommentEntity orphanParent =
         commentJpaRepository.save(

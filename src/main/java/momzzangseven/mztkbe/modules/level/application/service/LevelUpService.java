@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.LevelUpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.out.EnsureUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadActiveWalletPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class LevelUpService implements LevelUpUseCase {
 
+  private final EnsureUserProgressPort ensureUserProgressPort;
   private final UserProgressPort userProgressPort;
   private final LevelPolicyResolver levelPolicyResolver;
   private final LevelUpHistoryPort levelUpHistoryPort;
@@ -54,7 +56,7 @@ public class LevelUpService implements LevelUpUseCase {
         loadActiveWalletPort
             .loadActiveWalletAddress(userId)
             .orElseThrow(() -> new WalletNotConnectedException(userId));
-    userProgressPort.loadOrCreateUserProgress(userId);
+    ensureUserProgressPort.loadOrCreateUserProgress(userId);
 
     UserProgress progress = userProgressPort.loadUserProgressWithLock(userId);
     LocalDateTime now = LocalDateTime.now();

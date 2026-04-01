@@ -120,7 +120,6 @@ class UserPersistenceAdapterTest {
             .profileImageUrl("https://image")
             .providerUserId("updated-provider-id")
             .googleRefreshToken("token")
-            .walletAddress("0x0000000000000000000000000000000000000001")
             .authProvider(AuthProvider.GOOGLE)
             .role(UserRole.TRAINER)
             .status(UserStatus.DELETED)

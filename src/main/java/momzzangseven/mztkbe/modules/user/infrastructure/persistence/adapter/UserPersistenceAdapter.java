@@ -165,7 +165,6 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, Delet
         .profileImageUrl(entity.getProfileImageUrl())
         .providerUserId(entity.getProviderUserId())
         .googleRefreshToken(entity.getGoogleRefreshToken())
-        .walletAddress(entity.getWalletAddress())
         .authProvider(entity.getProvider())
         .role(entity.getRole())
         .status(status)
@@ -196,7 +195,6 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, Delet
         .profileImageUrl(user.getProfileImageUrl())
         .providerUserId(providerUserId)
         .googleRefreshToken(user.getGoogleRefreshToken())
-        .walletAddress(user.getWalletAddress())
         .provider(user.getAuthProvider())
         .role(user.getRole())
         .status(status)
@@ -216,7 +214,6 @@ public class UserPersistenceAdapter implements LoadUserPort, SaveUserPort, Delet
     entity.setProfileImageUrl(user.getProfileImageUrl());
     entity.setProviderUserId(user.getProviderUserId());
     entity.setGoogleRefreshToken(user.getGoogleRefreshToken());
-    entity.setWalletAddress(user.getWalletAddress());
     entity.setProvider(user.getAuthProvider());
     entity.setRole(user.getRole());
     entity.setStatus(status);

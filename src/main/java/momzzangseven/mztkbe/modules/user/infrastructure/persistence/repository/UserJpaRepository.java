@@ -31,9 +31,6 @@ public interface UserJpaRepository extends JpaRepository<UserEntity, Long> {
   Optional<UserEntity> findByProviderAndProviderUserId(
       AuthProvider provider, String providerUserId);
 
-  /** Find user by wallet address. */
-  Optional<UserEntity> findByWalletAddress(String walletAddress);
-
   /** Check if email exists. */
   boolean existsByEmail(String email);
 

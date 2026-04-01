@@ -38,7 +38,7 @@ public class LoginResponseDTO {
         .grantType(result.grantType())
         .expiresIn(result.accessTokenExpiresIn())
         .isNewUser(result.isNewUser())
-        .userInfo(UserInfo.from(result.user()))
+        .userInfo(UserInfo.from(result.user(), result.walletAddress()))
         .build();
   }
 
@@ -63,16 +63,17 @@ public class LoginResponseDTO {
      * Map the User domain entity to API payload.
      *
      * @param user domain user
+     * @param walletAddress active wallet address from user_wallets, or null
      * @return nested user info DTO
      */
-    public static UserInfo from(User user) {
+    public static UserInfo from(User user, String walletAddress) {
       return UserInfo.builder()
           .userId(user.getId())
           .email(user.getEmail())
           .nickname(user.getNickname())
           .profileImage(user.getProfileImageUrl())
           .role(user.getRole().name())
-          .walletAddress(user.getWalletAddress())
+          .walletAddress(walletAddress)
           .build();
     }
   }

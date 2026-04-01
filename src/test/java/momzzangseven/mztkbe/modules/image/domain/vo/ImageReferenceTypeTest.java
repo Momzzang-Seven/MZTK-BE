@@ -54,6 +54,44 @@ class ImageReferenceTypeTest {
   }
 
   @Nested
+  @DisplayName("[D-4] toRequestFacing() — 내부 전용 타입을 요청 가능 부모 타입으로 변환")
+  class ToRequestFacingTests {
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ImageReferenceType.class,
+        names = {"MARKET_CLASS_THUMB", "MARKET_CLASS_DETAIL"})
+    @DisplayName("MARKET_CLASS 내부 전용 타입은 MARKET_CLASS를 반환한다")
+    void toRequestFacing_returnsMarketClass_forMarketClassInternalTypes(ImageReferenceType type) {
+      assertThat(type.toRequestFacing()).isEqualTo(ImageReferenceType.MARKET_CLASS);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ImageReferenceType.class,
+        names = {"MARKET_STORE_THUMB", "MARKET_STORE_DETAIL"})
+    @DisplayName("MARKET_STORE 내부 전용 타입은 MARKET_STORE를 반환한다")
+    void toRequestFacing_returnsMarketStore_forMarketStoreInternalTypes(ImageReferenceType type) {
+      assertThat(type.toRequestFacing()).isEqualTo(ImageReferenceType.MARKET_STORE);
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+        value = ImageReferenceType.class,
+        mode = EnumSource.Mode.EXCLUDE,
+        names = {
+          "MARKET_CLASS_THUMB",
+          "MARKET_CLASS_DETAIL",
+          "MARKET_STORE_THUMB",
+          "MARKET_STORE_DETAIL"
+        })
+    @DisplayName("이미 요청 가능 타입은 자기 자신을 반환한다(identity)")
+    void toRequestFacing_returnsSelf_forRequestFacingTypes(ImageReferenceType type) {
+      assertThat(type.toRequestFacing()).isEqualTo(type);
+    }
+  }
+
+  @Nested
   @DisplayName("virtual type helpers")
   class VirtualTypeTests {
 

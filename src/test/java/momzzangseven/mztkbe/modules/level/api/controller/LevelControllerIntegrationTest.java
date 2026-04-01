@@ -109,8 +109,8 @@ class LevelControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("GET /users/me/level 호출 시 user_progress가 없으면 생성된다")
-  void getMyLevel_realFlow_createsUserProgressWhenMissing() throws Exception {
+  @DisplayName("GET /users/me/level 호출 시 user_progress가 없어도 read-only로 초기 스냅샷을 반환한다")
+  void getMyLevel_realFlow_returnsInitialSnapshotWithoutPersistingWhenMissing() throws Exception {
     Long userId = 701L;
     assertThat(userProgressJpaRepository.findById(userId)).isEmpty();
 
@@ -121,10 +121,7 @@ class LevelControllerIntegrationTest {
         .andExpect(jsonPath("$.data.level").value(1))
         .andExpect(jsonPath("$.data.availableXp").value(0));
 
-    var saved = userProgressJpaRepository.findById(userId).orElseThrow();
-    assertThat(saved.getLevel()).isEqualTo(1);
-    assertThat(saved.getAvailableXp()).isEqualTo(0);
-    assertThat(saved.getLifetimeXp()).isEqualTo(0);
+    assertThat(userProgressJpaRepository.findById(userId)).isEmpty();
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {

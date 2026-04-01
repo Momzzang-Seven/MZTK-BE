@@ -158,7 +158,13 @@ class AuthControllerTest {
             .updatedAt(LocalDateTime.now())
             .build();
     return LoginResult.of(
-        "access-token-reactivate", "refresh-token-reactivate", 900000L, 604800000L, false, user);
+        "access-token-reactivate",
+        "refresh-token-reactivate",
+        900000L,
+        604800000L,
+        false,
+        user,
+        null);
   }
 
   // ============================================================
