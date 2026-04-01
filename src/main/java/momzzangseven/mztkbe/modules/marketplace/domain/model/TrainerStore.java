@@ -137,11 +137,9 @@ public class TrainerStore {
     } catch (IllegalArgumentException e) {
       throw e; // re-throw our own validation exception
     } catch (URISyntaxException e) {
-      throw new IllegalArgumentException(
-          fieldName + " must be a valid URL: " + e.getMessage(), e);
+      throw new IllegalArgumentException(fieldName + " must be a valid URL: " + e.getMessage(), e);
     } catch (Exception e) {
-      throw new IllegalArgumentException(
-          fieldName + " must be a valid URL: " + e.getMessage(), e);
+      throw new IllegalArgumentException(fieldName + " must be a valid URL: " + e.getMessage(), e);
     }
   }
 }

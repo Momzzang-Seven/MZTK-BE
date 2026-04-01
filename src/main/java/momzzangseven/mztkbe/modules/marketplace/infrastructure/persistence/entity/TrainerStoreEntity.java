@@ -22,8 +22,8 @@ import org.locationtech.jts.geom.Point;
  *
  * <p><b>Timestamp management:</b> {@code createdAt} and {@code updatedAt} are managed exclusively
  * by the native upsert query using {@code CURRENT_TIMESTAMP}. JPA Auditing annotations are
- * intentionally omitted because the entity is never persisted through JPA's standard
- * persist/merge lifecycle.
+ * intentionally omitted because the entity is never persisted through JPA's standard persist/merge
+ * lifecycle.
  */
 @Entity
 @Table(name = "trainer_stores")
@@ -103,7 +103,8 @@ public class TrainerStoreEntity {
   public static TrainerStoreEntity fromDomain(TrainerStore store) {
     Point point = null;
     if (store.getLongitude() != null && store.getLatitude() != null) {
-      point = GEOMETRY_FACTORY.createPoint(new Coordinate(store.getLongitude(), store.getLatitude()));
+      point =
+          GEOMETRY_FACTORY.createPoint(new Coordinate(store.getLongitude(), store.getLatitude()));
       point.setSRID(4326);
     }
 

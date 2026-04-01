@@ -6,8 +6,8 @@ import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
  * Outbound port for persisting store data.
  *
  * <p>Hexagonal Architecture: This is an OUTPUT PORT that defines operations needed by the
- * application layer. Implemented by an adapter in the infrastructure layer, allowing the application
- * layer to remain independent of infrastructure details.
+ * application layer. Implemented by an adapter in the infrastructure layer, allowing the
+ * application layer to remain independent of infrastructure details.
  */
 public interface SaveStorePort {
 

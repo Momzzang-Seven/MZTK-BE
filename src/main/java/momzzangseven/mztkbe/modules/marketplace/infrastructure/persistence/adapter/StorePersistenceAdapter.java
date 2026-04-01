@@ -15,9 +15,9 @@ import org.springframework.stereotype.Component;
 /**
  * Persistence adapter implementing store port interfaces.
  *
- * <p>Uses {@code EntityManager} for the native upsert query to leverage PostgreSQL's
- * {@code RETURNING id}, eliminating the re-query race condition that existed when using
- * {@code @Modifying} + separate {@code findByTrainerId()}.
+ * <p>Uses {@code EntityManager} for the native upsert query to leverage PostgreSQL's {@code
+ * RETURNING id}, eliminating the re-query race condition that existed when using {@code @Modifying}
+ * + separate {@code findByTrainerId()}.
  */
 @Slf4j
 @Component
@@ -72,14 +72,15 @@ public class StorePersistenceAdapter implements LoadStorePort, SaveStorePort {
    *
    * <p>Implementation uses PostgreSQL native {@code INSERT ... ON CONFLICT ... DO UPDATE ...
    * RETURNING id} via {@code EntityManager} to:
+   *
    * <ol>
-   *   <li>Atomically handle concurrent upserts (database-level locking)</li>
-   *   <li>Retrieve the generated/existing ID in the same SQL statement</li>
-   *   <li>Avoid the re-query race condition of separate upsert + findByTrainerId calls</li>
+   *   <li>Atomically handle concurrent upserts (database-level locking)
+   *   <li>Retrieve the generated/existing ID in the same SQL statement
+   *   <li>Avoid the re-query race condition of separate upsert + findByTrainerId calls
    * </ol>
    *
-   * <p>After obtaining the ID, a standard JPA {@code findById()} retrieves the full entity
-   * with proper Hibernate Spatial type mapping.
+   * <p>After obtaining the ID, a standard JPA {@code findById()} retrieves the full entity with
+   * proper Hibernate Spatial type mapping.
    */
   @Override
   public TrainerStore save(TrainerStore store) {
