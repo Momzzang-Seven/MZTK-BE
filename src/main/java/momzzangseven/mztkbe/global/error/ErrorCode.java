@@ -353,6 +353,12 @@ public enum ErrorCode {
       "IMAGE_008", "Virtual ref type cannot build object key", HttpStatus.INTERNAL_SERVER_ERROR),
   IMAGE_ILLEGAL_OWNERSHIP("IMAGE_009", "Image does not belong to the user", HttpStatus.FORBIDDEN),
   // ========================================
+  // Marketplace Errors (MARKETPLACE_xxx)
+  // ========================================
+  MARKETPLACE_STORE_NOT_FOUND(
+      "MARKETPLACE_001", "Marketplace store not found", HttpStatus.NOT_FOUND),
+
+  // ========================================
   // Verification Errors (VERIFICATION_xxx)
   // ========================================
   VERIFICATION_INVALID_TMP_OBJECT_KEY(
