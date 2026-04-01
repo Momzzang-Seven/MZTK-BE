@@ -33,17 +33,18 @@ public class StoreController {
   /**
    * Create or update a trainer store.
    *
-   * <p>Always returns 200 OK regardless of whether the store was created or updated, because
-   * the native upsert operation is atomic and does not distinguish between the two cases.
+   * <p>Always returns 200 OK regardless of whether the store was created or updated, because the
+   * native upsert operation is atomic and does not distinguish between the two cases.
    */
   @PutMapping
   public ResponseEntity<ApiResponse<UpsertStoreResponseDTO>> upsertStore(
-      @Valid @RequestBody UpsertStoreRequestDTO request,
-      @AuthenticationPrincipal Long trainerId) {
+      @Valid @RequestBody UpsertStoreRequestDTO request, @AuthenticationPrincipal Long trainerId) {
 
     requireTrainerId(trainerId);
 
-    log.debug("Store upsert request received: trainerId={}, storeName={}", trainerId,
+    log.debug(
+        "Store upsert request received: trainerId={}, storeName={}",
+        trainerId,
         request.storeName());
 
     UpsertStoreResult result = upsertStoreCommandHandler.execute(request.toCommand(trainerId));
@@ -78,7 +79,8 @@ public class StoreController {
    *
    * <p>This guard exists as a defense-in-depth measure. When Spring Security is properly
    * configured, the JWT filter should guarantee a non-null principal. This method prevents
-   * NullPointerException in case of security misconfiguration rather than silently propagating null.
+   * NullPointerException in case of security misconfiguration rather than silently propagating
+   * null.
    */
   private void requireTrainerId(Long trainerId) {
     if (trainerId == null) {

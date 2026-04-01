@@ -13,9 +13,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * side effects. This consumer provides a decoupling point for downstream modules (e.g., search
  * index update, push notification) that need to react to store changes.
  *
- * <p><b>Outbox pattern migration:</b> When implementing the Outbox pattern, change
- * {@code phase} to {@code BEFORE_COMMIT} so that outbox record persistence is atomic
- * with the main transaction.
+ * <p><b>Outbox pattern migration:</b> When implementing the Outbox pattern, change {@code phase} to
+ * {@code BEFORE_COMMIT} so that outbox record persistence is atomic with the main transaction.
  */
 @Slf4j
 @Component
@@ -24,8 +23,8 @@ public class StoreEventConsumer {
   /**
    * Handle TrainerStoreUpsertedEvent after the transaction has successfully committed.
    *
-   * <p>Currently logs the event for observability. Replace with actual side-effect logic
-   * (outbox persistence, secondary DB update, push notification) when requirements emerge.
+   * <p>Currently logs the event for observability. Replace with actual side-effect logic (outbox
+   * persistence, secondary DB update, push notification) when requirements emerge.
    *
    * @param event the store upserted event
    */
