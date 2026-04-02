@@ -4,11 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
-import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("AcceptedAnswerAdapter unit test")
 class AcceptedAnswerAdapterTest {
 
-  @Mock private LoadAnswerPort loadAnswerPort;
+  @Mock private GetAnswerSummaryUseCase getAnswerSummaryUseCase;
   @Mock private MarkAnswerAcceptedUseCase markAnswerAcceptedUseCase;
 
   @InjectMocks private AcceptedAnswerAdapter acceptedAnswerAdapter;
@@ -29,17 +27,8 @@ class AcceptedAnswerAdapterTest {
   @Test
   @DisplayName("maps answer module domain object to accepted answer info")
   void loadAcceptedAnswer_mapsAnswer() {
-    Answer answer =
-        Answer.builder()
-            .id(20L)
-            .postId(10L)
-            .userId(2L)
-            .content("content")
-            .isAccepted(false)
-            .createdAt(LocalDateTime.of(2026, 1, 1, 10, 0))
-            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
-            .build();
-    when(loadAnswerPort.loadAnswer(20L)).thenReturn(Optional.of(answer));
+    when(getAnswerSummaryUseCase.getAnswerSummary(20L))
+        .thenReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(20L, 10L, 2L)));
 
     Optional<LoadAcceptedAnswerPort.AcceptedAnswerInfo> result =
         acceptedAnswerAdapter.loadAcceptedAnswer(20L);
