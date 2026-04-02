@@ -38,7 +38,7 @@ class PostDetailResultTest {
         List.of("https://cdn.example.com/img1.webp", "https://cdn.example.com/img2.webp");
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, nickname, profileImageUrl, imageUrls);
+        PostDetailResult.fromDomain(post, 3L, true, nickname, profileImageUrl, imageUrls);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
@@ -47,6 +47,8 @@ class PostDetailResultTest {
     assertThat(result.content()).isEqualTo("content");
     assertThat(result.imageUrls())
         .containsExactly("https://cdn.example.com/img1.webp", "https://cdn.example.com/img2.webp");
+    assertThat(result.likeCount()).isEqualTo(3L);
+    assertThat(result.liked()).isTrue();
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isFalse();
     assertThat(result.tags()).containsExactly("java");
@@ -73,7 +75,8 @@ class PostDetailResultTest {
     String nickname = "test nick name";
     String profileImageUrl = "test/image/url";
 
-    PostDetailResult result = PostDetailResult.fromDomain(post, nickname, profileImageUrl, null);
+    PostDetailResult result =
+        PostDetailResult.fromDomain(post, 0L, false, nickname, profileImageUrl, null);
 
     assertThat(result.isSolved()).isTrue();
   }

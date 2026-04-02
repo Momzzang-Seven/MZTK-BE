@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,6 +16,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -33,6 +35,7 @@ class GetPostServiceTest {
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
   @Mock private LoadPostImagesPort loadPostImagesPort;
+  @Mock private PostLikePersistencePort postLikePersistencePort;
 
   @InjectMocks private GetPostService getPostService;
 
@@ -58,13 +61,17 @@ class GetPostServiceTest {
     when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
     when(loadPostImagesPort.loadImages(PostType.FREE, 20L))
         .thenReturn(new PostImageResult(List.of()));
+    when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(3L);
+    when(postLikePersistencePort.exists(any(), any(), any())).thenReturn(true);
 
-    PostDetailResult result = getPostService.getPost(20L);
+    PostDetailResult result = getPostService.getPost(20L, 99L);
 
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.tags()).containsExactly("java", "spring");
     assertThat(result.isSolved()).isFalse();
     assertThat(result.imageUrls()).isEmpty();
+    assertThat(result.likeCount()).isEqualTo(3L);
+    assertThat(result.liked()).isTrue();
   }
 
   @Test
@@ -93,8 +100,9 @@ class GetPostServiceTest {
                 List.of(
                     new PostImageResult.PostImageSlot(
                         1L, "https://cdn.example.com/images/img1.webp"))));
+    when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(0L);
 
-    PostDetailResult result = getPostService.getPost(20L);
+    PostDetailResult result = getPostService.getPost(20L, 99L);
 
     assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/images/img1.webp");
   }
@@ -122,8 +130,9 @@ class GetPostServiceTest {
         .thenReturn(Optional.of(new LoadPostWriterPort.WriterSummary(9L, "writer", "profile.png")));
     when(loadPostImagesPort.loadImages(PostType.FREE, 21L))
         .thenReturn(new PostImageResult(List.of()));
+    when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(0L);
 
-    PostDetailResult result = getPostService.getPost(21L);
+    PostDetailResult result = getPostService.getPost(21L, 99L);
 
     assertThat(result.nickname()).isEqualTo("writer");
     assertThat(result.profileImageUrl()).isEqualTo("profile.png");
@@ -152,8 +161,9 @@ class GetPostServiceTest {
     when(loadPostWriterPort.loadWriterById(5L)).thenReturn(Optional.empty());
     when(loadPostImagesPort.loadImages(PostType.QUESTION, 30L))
         .thenReturn(new PostImageResult(List.of()));
+    when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(1L);
 
-    PostDetailResult result = getPostService.getPost(30L);
+    PostDetailResult result = getPostService.getPost(30L, 99L);
 
     assertThat(result.type()).isEqualTo(PostType.QUESTION);
     assertThat(result.title()).isEqualTo("질문 제목");
@@ -166,7 +176,7 @@ class GetPostServiceTest {
   void getPostThrowsWhenNotFound() {
     when(postPersistencePort.loadPost(999L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> getPostService.getPost(999L))
+    assertThatThrownBy(() -> getPostService.getPost(999L, 99L))
         .isInstanceOf(PostNotFoundException.class);
 
     verify(loadTagPort, never()).findTagNamesByPostId(999L);

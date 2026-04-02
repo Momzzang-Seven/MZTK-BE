@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
@@ -38,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AnswerService
     implements CreateAnswerUseCase,
         GetAnswerUseCase,
+        GetAnswerSummaryUseCase,
         UpdateAnswerUseCase,
         DeleteAnswerUseCase,
         DeleteAnswersByPostUseCase,
@@ -99,6 +101,20 @@ public class AnswerService
                 answers.stream().map(Answer::getId).toList());
 
     return answers.stream().map(answer -> toResult(answer, writers, imagesByAnswerId)).toList();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public java.util.Optional<GetAnswerSummaryUseCase.AnswerSummary> getAnswerSummary(Long answerId) {
+    if (answerId == null) {
+      throw new AnswerInvalidInputException("answerId is required.");
+    }
+    return loadAnswerPort
+        .loadAnswer(answerId)
+        .map(
+            answer ->
+                new GetAnswerSummaryUseCase.AnswerSummary(
+                    answer.getId(), answer.getPostId(), answer.getUserId()));
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */

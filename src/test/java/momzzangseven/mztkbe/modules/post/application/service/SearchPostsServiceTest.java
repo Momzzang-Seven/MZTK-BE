@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -29,6 +31,7 @@ class SearchPostsServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
+  @Mock private PostLikePersistencePort postLikePersistencePort;
 
   @InjectMocks private SearchPostsService searchPostsService;
 
@@ -39,7 +42,7 @@ class SearchPostsServiceTest {
 
     when(loadTagPort.findPostIdsByTagName("java")).thenReturn(List.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition);
+    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
 
     assertThat(results).isEmpty();
     verify(postPersistencePort, never()).findPostsByCondition(condition, List.of());
@@ -54,8 +57,10 @@ class SearchPostsServiceTest {
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of(post));
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L))).thenReturn(Map.of());
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
+    when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
+    when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition);
+    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
 
     assertThat(results).hasSize(1);
     assertThat(results.getFirst().tags()).isEmpty();
@@ -75,12 +80,16 @@ class SearchPostsServiceTest {
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L, 2L)))
         .thenReturn(Map.of(1L, List.of("java"), 2L, List.of("spring", "kotlin")));
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
+    when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of(1L, 2L, 2L, 1L));
+    when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of(2L));
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition);
+    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
 
     assertThat(results).hasSize(2);
     assertThat(results.get(0).tags()).containsExactly("java");
     assertThat(results.get(1).tags()).containsExactly("spring", "kotlin");
+    assertThat(results.get(0).likeCount()).isEqualTo(2L);
+    assertThat(results.get(1).liked()).isTrue();
   }
 
   @Test
@@ -93,8 +102,10 @@ class SearchPostsServiceTest {
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L))).thenReturn(Map.of(1L, List.of("java")));
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L)))
         .thenReturn(Map.of(1L, new LoadPostWriterPort.WriterSummary(1L, "writer", "profile.png")));
+    when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
+    when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition);
+    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
 
     assertThat(results).hasSize(1);
     assertThat(results.getFirst().nickname()).isEqualTo("writer");
@@ -109,7 +120,7 @@ class SearchPostsServiceTest {
 
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition);
+    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
 
     assertThat(results).isEmpty();
     verify(loadTagPort, never()).findTagsByPostIdsIn(List.of());
