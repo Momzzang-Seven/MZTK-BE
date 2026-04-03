@@ -370,6 +370,56 @@ class UserTest {
     assertThat(updated.getGoogleRefreshToken()).isEqualTo("encrypted-token");
   }
 
+  // ── Phase 2: User.create() factory method tests ──
+
+  @Test
+  @DisplayName("[M-32] create: provider 없이 순수 프로필 User 생성")
+  void create_withValidInput_createsProfileOnlyUser() {
+    User user = User.create("new@example.com", "newbie", "https://img.com/1.png", UserRole.USER);
+
+    assertThat(user.getEmail()).isEqualTo("new@example.com");
+    assertThat(user.getNickname()).isEqualTo("newbie");
+    assertThat(user.getProfileImageUrl()).isEqualTo("https://img.com/1.png");
+    assertThat(user.getRole()).isEqualTo(UserRole.USER);
+    assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+    assertThat(user.getCreatedAt()).isNotNull();
+    assertThat(user.getUpdatedAt()).isNotNull();
+    assertThat(user.getPassword()).isNull();
+    assertThat(user.getAuthProvider()).isNull();
+    assertThat(user.getProviderUserId()).isNull();
+  }
+
+  @Test
+  @DisplayName("[M-33] create: TRAINER 역할로 생성 가능")
+  void create_withTrainerRole_setsTrainerRole() {
+    User user = User.create("trainer@example.com", "trainer", null, UserRole.TRAINER);
+
+    assertThat(user.getRole()).isEqualTo(UserRole.TRAINER);
+    assertThat(user.getProfileImageUrl()).isNull();
+  }
+
+  @Test
+  @DisplayName("[M-34] create: 이메일 형식 잘못된 경우 IllegalArgumentException")
+  void create_withInvalidEmail_throws() {
+    assertThatThrownBy(() -> User.create("invalid-email", "test", null, UserRole.USER))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("[M-35] create: 닉네임 누락 시 IllegalArgumentException")
+  void create_withNullNickname_throws() {
+    assertThatThrownBy(() -> User.create("test@example.com", null, null, UserRole.USER))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("[M-36] create: 닉네임 길이 1자(최소 미만) 시 IllegalArgumentException")
+  void create_withTooShortNickname_throws() {
+    assertThatThrownBy(() -> User.create("test@example.com", "a", null, UserRole.USER))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("Nickname must be between 2 and 50 characters");
+  }
+
   @Test
   @DisplayName("canBecomeTrainer returns true when email exists")
   void canBecomeTrainer_whenEmailExists_returnsTrue() {
