@@ -53,6 +53,33 @@ public class User {
   // ============================================
 
   /**
+   * Create a user with only profile data (no provider/password). Used by the account module during
+   * signup — authentication fields are managed separately in {@code users_account}.
+   *
+   * @param email User's email address
+   * @param nickname User's display name
+   * @param profileImageUrl Profile image URL (nullable)
+   * @param role User's role
+   * @return New User instance
+   * @throws IllegalArgumentException if validation fails
+   */
+  public static User create(String email, String nickname, String profileImageUrl, UserRole role) {
+    validateEmail(email);
+    validateNickname(nickname);
+
+    LocalDateTime now = LocalDateTime.now();
+    return User.builder()
+        .email(email)
+        .nickname(nickname)
+        .profileImageUrl(profileImageUrl)
+        .role(role)
+        .status(UserStatus.ACTIVE)
+        .createdAt(now)
+        .updatedAt(now)
+        .build();
+  }
+
+  /**
    * Create a LOCAL user (email/password authentication).
    *
    * @param email User's email address
