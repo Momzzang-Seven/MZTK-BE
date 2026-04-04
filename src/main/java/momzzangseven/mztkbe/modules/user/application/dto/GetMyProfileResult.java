@@ -23,17 +23,20 @@ public record GetMyProfileResult(
     int weeklyAttendanceCount) {
 
   /**
-   * Assembles a {@code GetMyProfileResult} from the four data sources used by {@code
+   * Assembles a {@code GetMyProfileResult} from the data sources used by {@code
    * GetMyProfileService}.
    *
    * @param user the authenticated user's domain object
+   * @param providerName the authentication provider name (e.g. "LOCAL", "KAKAO", "GOOGLE")
    * @param levelInfo level and XP data from the level module
    * @param attendance today's and weekly attendance data from the level module
    * @param workout today's workout completion status from the verification module
+   * @param walletAddress the user's active wallet address, or null
    * @return a fully populated result record
    */
   public static GetMyProfileResult from(
       User user,
+      String providerName,
       UserLevelInfo levelInfo,
       AttendanceSummary attendance,
       WorkoutCompletionInfo workout,
@@ -41,7 +44,7 @@ public record GetMyProfileResult(
     return new GetMyProfileResult(
         user.getNickname(),
         user.getEmail(),
-        user.getAuthProvider().name(),
+        providerName,
         user.getRole(),
         walletAddress,
         levelInfo.level(),
