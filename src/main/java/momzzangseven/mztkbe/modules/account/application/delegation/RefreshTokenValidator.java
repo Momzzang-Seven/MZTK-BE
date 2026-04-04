@@ -146,10 +146,11 @@ public class RefreshTokenValidator {
    *
    * @param refreshToken Token to mark
    */
-  public void markTokenUsed(RefreshToken refreshToken) {
-    refreshToken.markAsUsed();
-    saveRefreshTokenPort.save(refreshToken);
-    log.debug("Token marked as used at: {}", refreshToken.getUsedAt());
+  public RefreshToken markTokenUsed(RefreshToken refreshToken) {
+    RefreshToken usedToken = refreshToken.markAsUsed();
+    saveRefreshTokenPort.save(usedToken);
+    log.debug("Token marked as used at: {}", usedToken.getUsedAt());
+    return usedToken;
   }
 
   /**
@@ -173,8 +174,6 @@ public class RefreshTokenValidator {
     checkTokenReuse(dbRefreshToken, 5);
 
     // Step 5: mark token as used. Update the row from the DB
-    markTokenUsed(dbRefreshToken);
-
-    return dbRefreshToken;
+    return markTokenUsed(dbRefreshToken);
   }
 }

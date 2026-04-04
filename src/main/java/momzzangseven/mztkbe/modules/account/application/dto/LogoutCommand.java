@@ -1,18 +1,7 @@
 package momzzangseven.mztkbe.modules.account.application.dto;
 
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-
-@Getter
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
-public class LogoutCommand {
-
-  private String refreshToken;
-
-  private LogoutCommand(String refreshToken) {
-    this.refreshToken = refreshToken;
-  }
+/** Command for user logout operation. */
+public record LogoutCommand(String refreshToken) {
 
   public static LogoutCommand of(String refreshToken) {
     return new LogoutCommand(refreshToken);
