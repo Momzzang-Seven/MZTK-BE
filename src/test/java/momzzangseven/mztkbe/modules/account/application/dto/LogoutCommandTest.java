@@ -13,7 +13,7 @@ class LogoutCommandTest {
   void of_storesRefreshToken() {
     LogoutCommand command = LogoutCommand.of("refresh-token");
 
-    assertThat(command.getRefreshToken()).isEqualTo("refresh-token");
+    assertThat(command.refreshToken()).isEqualTo("refresh-token");
   }
 
   @Test
@@ -21,6 +21,6 @@ class LogoutCommandTest {
   void of_allowsNullRefreshToken() {
     LogoutCommand command = LogoutCommand.of(null);
 
-    assertThat(command.getRefreshToken()).isNull();
+    assertThat(command.refreshToken()).isNull();
   }
 }

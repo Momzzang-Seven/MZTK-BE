@@ -127,6 +127,20 @@ class ExternalDisconnectTaskPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("[M-146] deleteByStatusAndUpdatedAtBefore delegates and returns count")
+  void deleteByStatusAndUpdatedAtBefore_delegates() {
+    LocalDateTime cutoff = LocalDateTime.of(2026, 2, 21, 0, 0);
+    when(repository.deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus.SUCCESS, cutoff))
+        .thenReturn(5);
+
+    int deleted =
+        adapter.deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus.SUCCESS, cutoff);
+
+    assertThat(deleted).isEqualTo(5);
+    verify(repository).deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus.SUCCESS, cutoff);
+  }
+
+  @Test
   @DisplayName("deleteByUserIdIn delegates and returns repository count")
   void deleteByUserIdIn_delegates() {
     when(repository.deleteByUserIdIn(List.of(1L, 2L))).thenReturn(2);

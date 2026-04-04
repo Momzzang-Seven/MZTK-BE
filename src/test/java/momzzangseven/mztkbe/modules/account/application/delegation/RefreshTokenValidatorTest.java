@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.account.application.delegation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -134,12 +135,13 @@ class RefreshTokenValidatorTest {
   @Test
   void markTokenUsed_updatesUsedAtAndPersistsToken() {
     RefreshToken token = validToken(1L);
-    when(saveRefreshTokenPort.save(token)).thenReturn(token);
+    when(saveRefreshTokenPort.save(any(RefreshToken.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
-    validator.markTokenUsed(token);
+    RefreshToken usedToken = validator.markTokenUsed(token);
 
-    assertThat(token.getUsedAt()).isNotNull();
-    verify(saveRefreshTokenPort).save(token);
+    assertThat(usedToken.getUsedAt()).isNotNull();
+    verify(saveRefreshTokenPort).save(any(RefreshToken.class));
   }
 
   @Test
@@ -147,13 +149,15 @@ class RefreshTokenValidatorTest {
     RefreshToken token = validToken(7L);
     when(loadRefreshTokenPort.findByTokenValueWithLock("token-value"))
         .thenReturn(Optional.of(token));
-    when(saveRefreshTokenPort.save(token)).thenReturn(token);
+    when(saveRefreshTokenPort.save(any(RefreshToken.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     RefreshToken result = validator.inspectSecurityFlaw("token-value", 7L);
 
-    assertThat(result).isSameAs(token);
+    assertThat(result.getUserId()).isEqualTo(7L);
+    assertThat(result.getUsedAt()).isNotNull();
     verify(loadRefreshTokenPort).findByTokenValueWithLock("token-value");
-    verify(saveRefreshTokenPort).save(token);
+    verify(saveRefreshTokenPort).save(any(RefreshToken.class));
   }
 
   private RefreshToken validToken(Long userId) {

@@ -11,7 +11,6 @@ import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -398,14 +397,7 @@ class UserAccountJpaRepositoryTest {
 
   /** Persists a minimal UserEntity and returns its generated id. */
   private Long savedUser(String email) {
-    UserEntity user =
-        UserEntity.builder()
-            .email(email)
-            .provider(AuthProvider.LOCAL)
-            .providerUserId("LOCAL:" + email)
-            .role(UserRole.USER)
-            .status(UserStatus.ACTIVE)
-            .build();
+    UserEntity user = UserEntity.builder().email(email).role(UserRole.USER).build();
     return em.persistAndFlush(user).getId();
   }
 

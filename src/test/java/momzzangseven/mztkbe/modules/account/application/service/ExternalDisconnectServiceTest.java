@@ -93,6 +93,17 @@ class ExternalDisconnectServiceTest {
   }
 
   @Test
+  @DisplayName("[M-124] disconnectOnWithdrawal calls executor for GOOGLE provider")
+  void disconnectOnWithdrawal_withGoogle_callsExecutor() {
+    UserAccount googleAccount = baseAccount(AuthProvider.GOOGLE);
+
+    service.disconnectOnWithdrawal(10L, googleAccount);
+
+    verify(executor).disconnect(AuthProvider.GOOGLE, "provider-user", "encrypted-refresh");
+    verify(externalDisconnectTaskPort, never()).save(any(ExternalDisconnectTask.class));
+  }
+
+  @Test
   @DisplayName("disconnectOnWithdrawal - provider=null이면 즉시 종료")
   void disconnectOnWithdrawal_withNullProvider_skipsAll() {
     UserAccount accountWithNullProvider = baseAccount(null);

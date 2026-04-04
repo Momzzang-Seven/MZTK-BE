@@ -210,28 +210,28 @@ class RefreshTokenTest {
     void revoke_CallsRevoke_TokenBecomeRevoked() {
       RefreshToken token = createValidToken();
 
-      token.revoke();
+      RefreshToken revokedToken = token.revoke();
 
-      assertThat(token.isRevoked()).isTrue();
-      assertThat(token.getRevokedAt()).isNotNull();
+      assertThat(revokedToken.isRevoked()).isTrue();
+      assertThat(revokedToken.getRevokedAt()).isNotNull();
     }
 
     @Test
     @DisplayName("이미 revoke된 토큰에 revoke 재호출해도 예외 미발생 (멱등성)")
     void revoke_AlreadyRevoked_NoException() {
       RefreshToken token = createValidToken();
-      token.revoke();
+      RefreshToken revokedToken = token.revoke();
 
-      assertThatCode(token::revoke).doesNotThrowAnyException();
+      assertThatCode(revokedToken::revoke).doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("revoke 후 isValid=false")
     void revoke_TokenBecomesInvalid() {
       RefreshToken token = createValidToken();
-      token.revoke();
+      RefreshToken revokedToken = token.revoke();
 
-      assertThat(token.isValid()).isFalse();
+      assertThat(revokedToken.isValid()).isFalse();
     }
   }
 
@@ -248,18 +248,18 @@ class RefreshTokenTest {
     void markAsUsed_ValidToken_SetsUsedAt() {
       RefreshToken token = createValidToken();
 
-      token.markAsUsed();
+      RefreshToken usedToken = token.markAsUsed();
 
-      assertThat(token.getUsedAt()).isNotNull();
+      assertThat(usedToken.getUsedAt()).isNotNull();
     }
 
     @Test
     @DisplayName("revoke된 토큰에 markAsUsed 호출 시 예외 발생")
     void markAsUsed_RevokedToken_ThrowsException() {
       RefreshToken token = createValidToken();
-      token.revoke();
+      RefreshToken revokedToken = token.revoke();
 
-      assertThatThrownBy(token::markAsUsed).isInstanceOf(RefreshTokenInvalidException.class);
+      assertThatThrownBy(revokedToken::markAsUsed).isInstanceOf(RefreshTokenInvalidException.class);
     }
 
     @Test
@@ -297,9 +297,9 @@ class RefreshTokenTest {
     @DisplayName("방금 사용된 토큰은 wasRecentlyUsed=true")
     void wasRecentlyUsed_JustUsed_ReturnsTrue() {
       RefreshToken token = createValidToken();
-      token.markAsUsed();
+      RefreshToken usedToken = token.markAsUsed();
 
-      assertThat(token.wasRecentlyUsed(5)).isTrue();
+      assertThat(usedToken.wasRecentlyUsed(5)).isTrue();
     }
 
     @Test
@@ -352,9 +352,9 @@ class RefreshTokenTest {
     @DisplayName("revoke된 토큰의 remainingSeconds는 0")
     void getRemainingSeconds_RevokedToken_ReturnsZero() {
       RefreshToken token = createValidToken();
-      token.revoke();
+      RefreshToken revokedToken = token.revoke();
 
-      assertThat(token.getRemainingSeconds()).isEqualTo(0);
+      assertThat(revokedToken.getRemainingSeconds()).isEqualTo(0);
     }
 
     @Test

@@ -106,8 +106,7 @@ class LogoutServiceTest {
     @DisplayName("이미 revoke된 토큰으로 로그아웃 시 revoke 재호출 (멱등성)")
     void execute_AlreadyRevokedToken_NoException() {
       LogoutCommand command = LogoutCommand.of(VALID_TOKEN_VALUE);
-      RefreshToken alreadyRevokedToken = createActiveToken();
-      alreadyRevokedToken.revoke(); // 이미 revoke
+      RefreshToken alreadyRevokedToken = createActiveToken().revoke(); // 이미 revoke
 
       willDoNothing().given(refreshTokenValidator).validateJwtFormat(VALID_TOKEN_VALUE);
       given(loadRefreshTokenPort.findByTokenValueWithLock(VALID_TOKEN_VALUE))
