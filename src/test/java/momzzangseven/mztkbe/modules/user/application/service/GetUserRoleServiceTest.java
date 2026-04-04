@@ -10,7 +10,6 @@ import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -87,7 +86,6 @@ class GetUserRoleServiceTest {
         .email("test@example.com")
         .nickname("tester")
         .role(role)
-        .status(UserStatus.ACTIVE)
         .createdAt(now)
         .updatedAt(now)
         .build();

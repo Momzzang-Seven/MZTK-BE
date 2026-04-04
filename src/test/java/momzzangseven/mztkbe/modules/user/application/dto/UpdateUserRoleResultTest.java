@@ -5,10 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDateTime;
-import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -26,9 +24,7 @@ class UpdateUserRoleResultTest {
             .email("user@example.com")
             .nickname("nick")
             .profileImageUrl("https://example.com/profile.png")
-            .authProvider(AuthProvider.LOCAL)
             .role(UserRole.TRAINER)
-            .status(UserStatus.ACTIVE)
             .createdAt(createdAt)
             .updatedAt(updatedAt)
             .build();

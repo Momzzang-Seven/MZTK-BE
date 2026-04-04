@@ -8,9 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.Arrays;
 import java.util.Map;
-import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.UserJpaRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -66,12 +64,9 @@ class UserControllerIntegrationTest {
     UserEntity saved =
         userJpaRepository.save(
             UserEntity.builder()
-                .provider(AuthProvider.LOCAL)
-                .providerUserId("local-realflow-user-1")
                 .email("realflow-user-1@example.com")
                 .role(UserRole.USER)
                 .nickname("realflow")
-                .status(UserStatus.ACTIVE)
                 .build());
 
     mockMvc

@@ -12,14 +12,12 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.user.IllegalTrainerGrantException;
 import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
-import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -118,9 +116,7 @@ class UpdateUserRoleServiceTest {
         .id(id)
         .email(email)
         .nickname("tester")
-        .authProvider(AuthProvider.LOCAL)
         .role(role)
-        .status(UserStatus.ACTIVE)
         .createdAt(now.minusDays(5))
         .updatedAt(now.minusDays(1))
         .build();
