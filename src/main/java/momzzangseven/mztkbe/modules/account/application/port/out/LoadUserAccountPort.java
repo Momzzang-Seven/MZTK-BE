@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 
 /** Output port for loading {@link UserAccount} records from persistence. */
 public interface LoadUserAccountPort {
