@@ -3,13 +3,12 @@ package momzzangseven.mztkbe.modules.user.api.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Arrays;
 import java.util.Map;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
@@ -90,36 +89,8 @@ class UserControllerIntegrationTest {
     assertThat(updated.getRole()).isEqualTo(UserRole.TRAINER);
   }
 
-  @Test
-  @DisplayName("POST /users/me/withdrawal 요청이 실제 DB soft-delete로 반영된다")
-  void withdraw_realFlow_marksUserAsDeletedInH2() throws Exception {
-    UserEntity saved =
-        userJpaRepository.save(
-            UserEntity.builder()
-                .provider(AuthProvider.LOCAL)
-                .providerUserId("local-realflow-user-2")
-                .email("realflow-user-2@example.com")
-                .role(UserRole.USER)
-                .nickname("realflow2")
-                .status(UserStatus.ACTIVE)
-                .build());
-
-    mockMvc
-        .perform(post("/users/me/withdrawal").with(stepUpPrincipal(saved.getId())))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
-
-    UserEntity withdrawn = userJpaRepository.findById(saved.getId()).orElseThrow();
-    assertThat(withdrawn.getStatus()).isEqualTo(UserStatus.DELETED);
-    assertThat(withdrawn.getDeletedAt()).isNotNull();
-  }
-
   private RequestPostProcessor userPrincipal(Long userId) {
     return authenticatedPrincipal(userId, "ROLE_USER");
-  }
-
-  private RequestPostProcessor stepUpPrincipal(Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_USER", "ROLE_STEP_UP");
   }
 
   private RequestPostProcessor authenticatedPrincipal(Long userId, String... authorities) {

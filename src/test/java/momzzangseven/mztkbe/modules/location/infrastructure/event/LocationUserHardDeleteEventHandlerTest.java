@@ -6,8 +6,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import momzzangseven.mztkbe.modules.account.domain.event.UsersHardDeletedEvent;
 import momzzangseven.mztkbe.modules.location.application.service.LocationHardDeleteService;
-import momzzangseven.mztkbe.modules.user.domain.event.UsersHardDeletedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
