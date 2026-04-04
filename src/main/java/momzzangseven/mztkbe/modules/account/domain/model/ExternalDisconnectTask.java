@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.account.domain.model;
 
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
@@ -8,18 +10,19 @@ import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 /** A retryable task to disconnect a social provider account during withdrawal. */
 @Getter
 @Builder(toBuilder = true)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class ExternalDisconnectTask {
-  private Long id;
-  private Long userId;
-  private AuthProvider provider;
-  private String providerUserId;
-  private String encryptedToken; // e.g., Google refresh token (encrypted)
-  private ExternalDisconnectStatus status;
-  private int attemptCount;
-  private LocalDateTime nextAttemptAt;
-  private String lastError;
-  private LocalDateTime createdAt;
-  private LocalDateTime updatedAt;
+  private final Long id;
+  private final Long userId;
+  private final AuthProvider provider;
+  private final String providerUserId;
+  private final String encryptedToken; // e.g., Google refresh token (encrypted)
+  private final ExternalDisconnectStatus status;
+  private final int attemptCount;
+  private final LocalDateTime nextAttemptAt;
+  private final String lastError;
+  private final LocalDateTime createdAt;
+  private final LocalDateTime updatedAt;
 
   /** Mark this task as successfully disconnected. */
   public ExternalDisconnectTask markSuccess() {
