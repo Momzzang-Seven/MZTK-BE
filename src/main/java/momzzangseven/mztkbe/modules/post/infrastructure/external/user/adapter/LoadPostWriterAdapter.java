@@ -18,10 +18,7 @@ public class LoadPostWriterAdapter implements LoadPostWriterPort {
 
   @Override
   public Optional<WriterSummary> loadWriterById(Long userId) {
-    return loadUserPort
-        .loadUserById(userId)
-        .or(() -> loadUserPort.loadDeletedUserById(userId))
-        .map(this::toWriterSummary);
+    return loadUserPort.loadUserById(userId).map(this::toWriterSummary);
   }
 
   @Override
