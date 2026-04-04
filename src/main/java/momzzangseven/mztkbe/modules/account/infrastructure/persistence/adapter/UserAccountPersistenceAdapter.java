@@ -10,9 +10,9 @@ import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccount
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.repository.UserAccountJpaRepository;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -94,6 +94,8 @@ public class UserAccountPersistenceAdapter
     UserAccountEntity entity;
 
     if (userAccount.getId() != null) {
+      // If the userAccount domain object has its own id, it means it is not a fresh user account.
+      // Update the entity with new values.
       entity =
           userAccountJpaRepository
               .findById(userAccount.getId())
@@ -103,6 +105,7 @@ public class UserAccountPersistenceAdapter
                           "UserAccount not found with ID: " + userAccount.getId()));
       updateEntityFromDomain(entity, userAccount);
     } else {
+      // Make new entity object for given userAccount
       entity = toEntity(userAccount);
     }
 

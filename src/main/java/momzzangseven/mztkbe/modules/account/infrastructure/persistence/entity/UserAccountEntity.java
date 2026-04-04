@@ -18,7 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import org.hibernate.annotations.ColumnDefault;
 
 /** JPA entity for the {@code users_account} table. */
