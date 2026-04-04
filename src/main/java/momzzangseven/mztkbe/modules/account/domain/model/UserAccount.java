@@ -4,7 +4,7 @@ import java.time.Instant;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 
 /** Domain model representing the authentication and lifecycle data for a user account. */
 @Getter
