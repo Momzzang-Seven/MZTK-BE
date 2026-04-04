@@ -1,9 +1,10 @@
 package momzzangseven.mztkbe.modules.account.domain.model;
 
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
 
 /**
@@ -15,34 +16,34 @@ import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
  * <p>Business Rules: - Token can only be used if not expired and not revoked - Token can be revoked
  * at any time - Token usage is tracked for security audit.
  */
-@Slf4j
 @Getter
-@Builder
+@Builder(toBuilder = true)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class RefreshToken {
 
   /** Maximum allowed token validity period (in days). */
   private static final int MAX_TOKEN_DAYS = 7;
 
   /** Unique identifier (database primary key). */
-  private Long id;
+  private final Long id;
 
   /** User ID who owns this token. */
-  private Long userId;
+  private final Long userId;
 
   /** Actual JWT token value (encrypted string). */
-  private String tokenValue;
+  private final String tokenValue;
 
   /** Token expiration timestamp. */
-  private LocalDateTime expiresAt;
+  private final LocalDateTime expiresAt;
 
   /** Token Revocation timestamp. */
-  private LocalDateTime revokedAt;
+  private final LocalDateTime revokedAt;
 
   /** Token creation timestamp. */
-  private LocalDateTime createdAt;
+  private final LocalDateTime createdAt;
 
   /** Last time this token was used for reissuing. */
-  private LocalDateTime usedAt;
+  private final LocalDateTime usedAt;
 
   // ============================================
   // Factory Methods
@@ -85,13 +86,7 @@ public class RefreshToken {
    * @return true if token can be used, false otherwise
    */
   public boolean isValid() {
-    boolean valid = !isExpired() && !isRevoked();
-
-    if (!valid) {
-      log.debug("Token validation failed: expired={}, revoked={}", isExpired(), isRevoked());
-    }
-
-    return valid;
+    return !isExpired() && !isRevoked();
   }
 
   /**
@@ -109,14 +104,7 @@ public class RefreshToken {
    * @return true if current time is after expiration time
    */
   public boolean isExpired() {
-    LocalDateTime now = LocalDateTime.now();
-    boolean expired = now.isAfter(expiresAt);
-
-    if (expired) {
-      log.debug("Token expired: expiresAt={}, now={}", expiresAt, now);
-    }
-
-    return expired;
+    return LocalDateTime.now().isAfter(expiresAt);
   }
 
   /**
@@ -126,18 +114,12 @@ public class RefreshToken {
    *
    * @throws IllegalStateException if token is not valid
    */
-  public void markAsUsed() {
+  public RefreshToken markAsUsed() {
     if (!isValid()) {
-      log.error(
-          "Attempt to use invalid token: userId={}, expired={}, revoked={}",
-          userId,
-          isExpired(),
-          isRevoked());
       throw new RefreshTokenInvalidException("Cannot mark invalid token as used");
     }
 
-    this.usedAt = LocalDateTime.now();
-    log.debug("Token marked as used: userId={}, usedAt={}", userId, usedAt);
+    return this.toBuilder().usedAt(LocalDateTime.now()).build();
   }
 
   /**
@@ -146,14 +128,12 @@ public class RefreshToken {
    * <p>Business Rule: Once revoked, token cannot be used anymore. This is typically done when: -
    * User logs out - Security breach detected - Token rotation (old token replaced with new one)
    */
-  public void revoke() {
+  public RefreshToken revoke() {
     if (this.isRevoked()) {
-      log.warn("Token already revoked at {}: userId={}", revokedAt, userId);
-      return;
+      return this;
     }
 
-    this.revokedAt = LocalDateTime.now();
-    log.info("Token revoked: userId={}, tokenId={}, revokedAt={}", userId, id, revokedAt);
+    return this.toBuilder().revokedAt(LocalDateTime.now()).build();
   }
 
   /**
