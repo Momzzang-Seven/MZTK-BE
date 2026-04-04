@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
 import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /** Domain model representing an application user. */

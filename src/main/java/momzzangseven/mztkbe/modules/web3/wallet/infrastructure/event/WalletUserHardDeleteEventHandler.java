@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.event;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.user.domain.event.UsersHardDeletedEvent;
+import momzzangseven.mztkbe.modules.account.domain.event.UsersHardDeletedEvent;
 import momzzangseven.mztkbe.modules.web3.wallet.application.service.WalletHardDeleteService;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
