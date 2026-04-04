@@ -93,8 +93,8 @@ public class RefreshTokenManager {
    */
   public void revokeToken(RefreshToken refreshToken) {
     log.debug("Revoking refresh token for userId: {}", refreshToken.getUserId());
-    refreshToken.revoke();
-    saveRefreshTokenPort.save(refreshToken);
+    RefreshToken revokedToken = refreshToken.revoke();
+    saveRefreshTokenPort.save(revokedToken);
     log.debug("Token revoked");
   }
 }

@@ -21,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SignupService implements SignupUseCase {
 
+  private static final String DEFAULT_ROLE = "USER";
+
   private final LoadAccountUserInfoPort loadAccountUserInfoPort;
   private final CreateAccountUserPort createAccountUserPort;
   private final SaveUserAccountPort saveUserAccountPort;
@@ -44,7 +46,7 @@ public class SignupService implements SignupUseCase {
 
     // role 설정은 리팩토링 후 role 설정을 위한 기능 추가 때 진행 예정. 지금은 "USER"로 hard-coded.
     AccountUserSnapshot snapshot =
-        createAccountUserPort.createUser(command.email(), command.nickname(), null, "USER");
+        createAccountUserPort.createUser(command.email(), command.nickname(), null, DEFAULT_ROLE);
     log.debug("User profile created for email: {}", command.email());
 
     UserAccount userAccount = UserAccount.createLocal(snapshot.userId(), encodedPassword);

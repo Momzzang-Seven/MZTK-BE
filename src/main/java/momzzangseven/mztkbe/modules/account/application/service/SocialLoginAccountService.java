@@ -23,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SocialLoginAccountService {
 
+  private static final String DEFAULT_ROLE = "USER";
+
   private final LoadUserAccountPort loadUserAccountPort;
   private final SaveUserAccountPort saveUserAccountPort;
   private final LoadAccountUserInfoPort loadAccountUserInfoPort;
@@ -89,7 +91,7 @@ public class SocialLoginAccountService {
     verifyEmailAvailable(email);
     String resolvedNickname = resolveNickname(authProvider, nickname);
     AccountUserSnapshot snapshot =
-        createAccountUserPort.createUser(email, resolvedNickname, profileImageUrl, "USER");
+        createAccountUserPort.createUser(email, resolvedNickname, profileImageUrl, DEFAULT_ROLE);
     saveUserAccountPort.save(
         UserAccount.createSocial(snapshot.userId(), authProvider, providerUserId));
     return SocialLoginAccountOutcome.newUser(snapshot);

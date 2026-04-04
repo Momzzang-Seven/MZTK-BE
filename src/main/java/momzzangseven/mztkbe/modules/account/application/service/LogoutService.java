@@ -24,7 +24,7 @@ public class LogoutService implements LogoutUseCase {
   @Override
   @Transactional
   public void execute(LogoutCommand command) {
-    String refreshTokenValue = command.getRefreshToken();
+    String refreshTokenValue = command.refreshToken();
     try {
       refreshTokenValidator.validateJwtFormat(refreshTokenValue);
     } catch (RefreshTokenNotFoundException e) {
@@ -38,7 +38,7 @@ public class LogoutService implements LogoutUseCase {
   }
 
   private void revokeIfNeeded(RefreshToken token) {
-    token.revoke();
-    saveRefreshTokenPort.save(token);
+    RefreshToken revokedToken = token.revoke();
+    saveRefreshTokenPort.save(revokedToken);
   }
 }
