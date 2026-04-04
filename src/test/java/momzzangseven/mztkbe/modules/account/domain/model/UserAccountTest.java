@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

@@ -5,7 +5,7 @@ import static org.mockito.Mockito.*;
 
 import java.util.Collections;
 import java.util.List;
-import momzzangseven.mztkbe.modules.user.domain.event.UsersHardDeletedEvent;
+import momzzangseven.mztkbe.modules.account.domain.event.UsersHardDeletedEvent;
 import momzzangseven.mztkbe.modules.web3.wallet.application.service.WalletHardDeleteService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
