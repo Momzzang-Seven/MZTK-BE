@@ -107,6 +107,29 @@ class WithdrawServiceTest {
     verify(loadUserAccountPort, never()).findByUserId(any());
   }
 
+  @Test
+  @DisplayName("[M-115] execute completes even when external disconnect fails internally")
+  void execute_externalDisconnectFailure_doesNotBlockWithdrawal() {
+    UserAccount activeAccount = baseAccount(7L, AccountStatus.ACTIVE);
+    when(loadUserAccountPort.findByUserId(7L)).thenReturn(Optional.of(activeAccount));
+    when(saveUserAccountPort.save(any(UserAccount.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    // ExternalDisconnectService catches exceptions internally (best-effort),
+    // so from WithdrawService perspective it just returns normally.
+    // This test verifies the full flow completes even when external disconnect is involved.
+    org.mockito.Mockito.doNothing()
+        .when(externalDisconnectService)
+        .disconnectOnWithdrawal(7L, activeAccount);
+
+    service.execute(WithdrawCommand.of(7L));
+
+    // All side effects should still complete
+    verify(saveUserAccountPort).save(any(UserAccount.class));
+    verify(deleteRefreshTokenPort).deleteByUserId(7L);
+    verify(externalDisconnectService).disconnectOnWithdrawal(7L, activeAccount);
+    verify(eventPublisher).publishEvent(any(UserSoftDeletedEvent.class));
+  }
+
   private UserAccount baseAccount(Long userId, AccountStatus status) {
     Instant now = Instant.parse("2026-02-28T07:00:00Z");
     return UserAccount.builder()

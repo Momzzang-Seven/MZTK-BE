@@ -21,9 +21,11 @@ import momzzangseven.mztkbe.modules.account.application.dto.LoginResult;
 import momzzangseven.mztkbe.modules.account.application.port.in.ReactivateUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
+import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
+import momzzangseven.mztkbe.modules.account.infrastructure.persistence.repository.UserAccountJpaRepository;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
 import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.UserJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
@@ -62,15 +64,13 @@ import org.springframework.transaction.annotation.Transactional;
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("AccountController MockMVC + H2 통합 테스트")
-@org.junit.jupiter.api.Disabled(
-    "Phase 3: UserEntity still has auth columns (provider_user_id NOT NULL). "
-        + "Will be fixed in Phase 5 when UserEntity is cleaned up.")
 class AccountControllerTest {
 
   @Autowired private MockMvc mockMvc;
   @Autowired private ObjectMapper objectMapper;
   @Autowired private JwtTokenProvider jwtTokenProvider;
   @Autowired private UserJpaRepository userJpaRepository;
+  @Autowired private UserAccountJpaRepository userAccountJpaRepository;
 
   // Kakao / Google 외부 API는 MockBean으로 대체 (실제 HTTP 호출 차단)
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -137,13 +137,17 @@ class AccountControllerTest {
     UserEntity saved =
         userJpaRepository.save(
             UserEntity.builder()
-                .provider(provider)
-                .providerUserId(providerUserId)
                 .email(email)
                 .role(UserRole.USER)
-                .status(UserStatus.ACTIVE)
                 .nickname(provider.name().toLowerCase() + "-user")
                 .build());
+    userAccountJpaRepository.save(
+        UserAccountEntity.builder()
+            .userId(saved.getId())
+            .provider(provider)
+            .providerUserId(providerUserId)
+            .status(AccountStatus.ACTIVE)
+            .build());
     return jwtTokenProvider.generateAccessToken(saved.getId(), saved.getEmail(), saved.getRole());
   }
 

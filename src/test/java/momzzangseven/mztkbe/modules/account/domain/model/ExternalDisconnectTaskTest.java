@@ -38,6 +38,34 @@ class ExternalDisconnectTaskTest {
   }
 
   @Test
+  @DisplayName("[M-103] markSuccess() no-arg uses current attemptCount")
+  void markSuccess_noArg_usesCurrentAttemptCount() {
+    ExternalDisconnectTask task = baseTask();
+
+    ExternalDisconnectTask updated = task.markSuccess();
+
+    assertThat(updated.getStatus()).isEqualTo(ExternalDisconnectStatus.SUCCESS);
+    assertThat(updated.getAttemptCount()).isEqualTo(task.getAttemptCount());
+    assertThat(updated.getNextAttemptAt()).isNull();
+    assertThat(updated.getLastError()).isNull();
+    assertThat(updated.getUpdatedAt()).isAfter(task.getUpdatedAt());
+  }
+
+  @Test
+  @DisplayName("[M-107] markSuccess returns new object — original is unchanged")
+  void markSuccess_immutability_originalUnchanged() {
+    ExternalDisconnectTask original = baseTask();
+    ExternalDisconnectStatus originalStatus = original.getStatus();
+    String originalError = original.getLastError();
+
+    ExternalDisconnectTask updated = original.markSuccess(4);
+
+    assertThat(original.getStatus()).isEqualTo(originalStatus);
+    assertThat(original.getLastError()).isEqualTo(originalError);
+    assertThat(updated.getStatus()).isEqualTo(ExternalDisconnectStatus.SUCCESS);
+  }
+
+  @Test
   @DisplayName("scheduleRetry keeps task pending and updates attempt metadata")
   void scheduleRetry_setsPendingWithNextAttempt() {
     ExternalDisconnectTask task = baseTask();
