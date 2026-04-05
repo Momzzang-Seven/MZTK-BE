@@ -1,7 +1,7 @@
 /**
  * MZTK — 회원 탈퇴 Playwright E2E 테스트
  *
- * 테스트 대상: POST /users/me/withdrawal (회원 탈퇴 플로우)
+ * 테스트 대상: POST /auth/withdrawal (회원 탈퇴 플로우)
  *
  * 외부 의존성:
  *   - 로컬 계정 탈퇴: 외부 API 없음 (단순 DB soft-delete)
@@ -512,7 +512,7 @@ test.describe("Suite A — 정상 탈퇴 플로우", () => {
 
       // 탈퇴 요청
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         {
           headers: { Authorization: `Bearer ${stepUpToken}` },
         }
@@ -536,7 +536,7 @@ test.describe("Suite A — 정상 탈퇴 플로우", () => {
       // step-up → 탈퇴
       const stepUpToken = await performStepUp(request, accessToken, password);
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         {
           headers: { Authorization: `Bearer ${stepUpToken}` },
         }
@@ -565,7 +565,7 @@ test.describe("Suite A — 정상 탈퇴 플로우", () => {
       // step-up → 탈퇴
       const stepUpToken = await performStepUp(request, accessToken, password);
       const firstWithdraw = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         {
           headers: { Authorization: `Bearer ${stepUpToken}` },
         }
@@ -574,7 +574,7 @@ test.describe("Suite A — 정상 탈퇴 플로우", () => {
 
       // 동일 step-up 토큰으로 재탈퇴 시도 (토큰이 아직 유효하더라도 계정이 탈퇴됨)
       const secondWithdraw = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         {
           headers: { Authorization: `Bearer ${stepUpToken}` },
         }
@@ -601,7 +601,7 @@ test.describe("Suite B — 권한 오류", () => {
 
       // step-up 없이 일반 accessToken 으로 탈퇴 시도
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
         }
@@ -618,7 +618,7 @@ test.describe("Suite B — 권한 오류", () => {
     "TC-UW-B-02 | 미인증 탈퇴 요청 → 401 Unauthorized",
     async ({ request }) => {
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`
+        `${ENV.BACKEND_URL}/auth/withdrawal`
       );
 
       expect(withdrawRes.status()).toBe(401);
@@ -650,7 +650,7 @@ test.describe("Suite C — Soft Delete 연쇄 검증", () => {
       // step-up → 탈퇴
       const stepUpToken = await performStepUp(request, accessToken, password);
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         { headers: { Authorization: `Bearer ${stepUpToken}` } }
       );
       expect(withdrawRes.status()).toBe(200);
@@ -698,7 +698,7 @@ test.describe("Suite D — Hard Delete 연쇄 검증", () => {
       // step-up → 탈퇴 (soft delete)
       const stepUpToken = await performStepUp(request, accessToken, password);
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         { headers: { Authorization: `Bearer ${stepUpToken}` } }
       );
       expect(withdrawRes.status()).toBe(200);
@@ -717,6 +717,8 @@ test.describe("Suite D — Hard Delete 연쇄 검증", () => {
         `DELETE FROM user_wallets WHERE user_id = $1 AND status = 'USER_DELETED'`,
         [userId]
       );
+      // users_account 가 users.id 를 FK 로 참조하므로 users 보다 먼저 삭제
+      await queryDb(`DELETE FROM users_account WHERE user_id = $1`, [userId]);
       await queryDb(`DELETE FROM users WHERE id = $1`, [userId]);
 
       // wallet 레코드가 완전히 사라졌는지 확인
@@ -754,7 +756,7 @@ test.describe.serial("Suite E — Kakao 소셜 계정 탈퇴", () => {
     // 이전 테스트 실행에서 탈퇴된 Kakao 계정을 복구합니다.
     // 서버는 status 필드를 우선 확인하므로 deleted_at 과 status 를 함께 복구해야 합니다.
     const restored = await queryDb<{ id: number }>(
-      `UPDATE users SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'KAKAO' AND status = 'DELETED' RETURNING id`
+      `UPDATE users_account SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'KAKAO' AND status = 'DELETED' RETURNING user_id AS id`
     );
     if (restored.length > 0) {
       console.log(
@@ -766,7 +768,7 @@ test.describe.serial("Suite E — Kakao 소셜 계정 탈퇴", () => {
   test.afterAll(async () => {
     // 테스트 완료(성공/실패 무관) 후 탈퇴된 Kakao 계정을 복구합니다.
     await queryDb(
-      `UPDATE users SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'KAKAO' AND status = 'DELETED'`
+      `UPDATE users_account SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'KAKAO' AND status = 'DELETED'`
     );
   });
 
@@ -840,20 +842,20 @@ test.describe.serial("Suite E — Kakao 소셜 계정 탈퇴", () => {
       // ── Step 3: 탈퇴 요청 ──
       console.log("  [3/4] 탈퇴 요청 중...");
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         { headers: { Authorization: `Bearer ${kakaoStepUpToken}` } }
       );
       expect(withdrawRes.status(), "Kakao 소셜 계정 탈퇴 API 실패").toBe(200);
       console.log("  [3/4] 탈퇴 성공 (200 OK)");
 
       // ── Step 4: DB soft-delete 확인 ──
-      // 탈퇴 후 users.deleted_at 이 설정되었는지 확인
+      // 탈퇴 후 users_account.deleted_at 이 설정되었는지 확인
       if (userId) {
         const rows = await queryDb<{ deleted_at: unknown }>(
-          `SELECT deleted_at FROM users WHERE id = $1`,
+          `SELECT deleted_at FROM users_account WHERE user_id = $1`,
           [userId]
         );
-        expect(rows.length, "users 레코드가 없음").toBeGreaterThan(0);
+        expect(rows.length, "users_account 레코드가 없음").toBeGreaterThan(0);
         expect(
           rows[0].deleted_at,
           "deleted_at 이 NULL — soft delete 미수행"
@@ -882,7 +884,7 @@ test.describe.serial("Suite E — Kakao 소셜 계정 탈퇴", () => {
       }
 
       const secondWithdraw = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         { headers: { Authorization: `Bearer ${kakaoStepUpToken}` } }
       );
       expect(
@@ -919,7 +921,7 @@ test.describe.serial("Suite F — Google 소셜 계정 탈퇴", () => {
     // 이전 테스트 실행에서 탈퇴된 Google 계정을 복구합니다.
     // 서버는 status 필드를 우선 확인하므로 deleted_at 과 status 를 함께 복구해야 합니다.
     const restored = await queryDb<{ id: number }>(
-      `UPDATE users SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'GOOGLE' AND status = 'DELETED' RETURNING id`
+      `UPDATE users_account SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'GOOGLE' AND status = 'DELETED' RETURNING user_id AS id`
     );
     if (restored.length > 0) {
       console.log(
@@ -931,7 +933,7 @@ test.describe.serial("Suite F — Google 소셜 계정 탈퇴", () => {
   test.afterAll(async () => {
     // 테스트 완료(성공/실패 무관) 후 탈퇴된 Google 계정을 복구합니다.
     await queryDb(
-      `UPDATE users SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'GOOGLE' AND status = 'DELETED'`
+      `UPDATE users_account SET deleted_at = NULL, status = 'ACTIVE' WHERE provider = 'GOOGLE' AND status = 'DELETED'`
     );
   });
 
@@ -1002,7 +1004,7 @@ test.describe.serial("Suite F — Google 소셜 계정 탈퇴", () => {
       // ── Step 3: 탈퇴 요청 ──
       console.log("  [3/4] 탈퇴 요청 중...");
       const withdrawRes = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         { headers: { Authorization: `Bearer ${googleStepUpToken}` } }
       );
       expect(withdrawRes.status(), "Google 소셜 계정 탈퇴 API 실패").toBe(200);
@@ -1011,10 +1013,10 @@ test.describe.serial("Suite F — Google 소셜 계정 탈퇴", () => {
       // ── Step 4: DB soft-delete 확인 ──
       if (userId) {
         const rows = await queryDb<{ deleted_at: unknown }>(
-          `SELECT deleted_at FROM users WHERE id = $1`,
+          `SELECT deleted_at FROM users_account WHERE user_id = $1`,
           [userId]
         );
-        expect(rows.length, "users 레코드가 없음").toBeGreaterThan(0);
+        expect(rows.length, "users_account 레코드가 없음").toBeGreaterThan(0);
         expect(
           rows[0].deleted_at,
           "deleted_at 이 NULL — soft delete 미수행"
@@ -1043,7 +1045,7 @@ test.describe.serial("Suite F — Google 소셜 계정 탈퇴", () => {
       }
 
       const secondWithdraw = await request.post(
-        `${ENV.BACKEND_URL}/users/me/withdrawal`,
+        `${ENV.BACKEND_URL}/auth/withdrawal`,
         { headers: { Authorization: `Bearer ${googleStepUpToken}` } }
       );
       expect(
