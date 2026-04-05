@@ -71,6 +71,42 @@ class LikePostServiceTest {
   }
 
   @Test
+  @DisplayName("likes an answer when it belongs to the post")
+  void like_answer_success() {
+    LikePostCommand command = LikePostCommand.forAnswer(10L, 20L, 7L);
+
+    when(loadAnswerLikeTargetPort.loadAnswerTarget(20L))
+        .thenReturn(Optional.of(new LoadAnswerLikeTargetPort.AnswerLikeTarget(20L, 10L)));
+    when(postLikePersistencePort.saveIfAbsent(org.mockito.ArgumentMatchers.any(PostLike.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(postLikePersistencePort.countByTarget(PostLikeTargetType.ANSWER, 20L)).thenReturn(3L);
+
+    PostLikeResult result = likePostService.like(command);
+
+    assertThat(result.targetType()).isEqualTo(PostLikeTargetType.ANSWER);
+    assertThat(result.targetId()).isEqualTo(20L);
+    assertThat(result.liked()).isTrue();
+    assertThat(result.likeCount()).isEqualTo(3L);
+  }
+
+  @Test
+  @DisplayName("unlikes a post when target exists")
+  void unlike_post_success() {
+    LikePostCommand command = LikePostCommand.forPost(10L, 7L);
+
+    when(postPersistencePort.existsPost(10L)).thenReturn(true);
+    when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(4L);
+
+    PostLikeResult result = likePostService.unlike(command);
+
+    assertThat(result.targetType()).isEqualTo(PostLikeTargetType.POST);
+    assertThat(result.targetId()).isEqualTo(10L);
+    assertThat(result.liked()).isFalse();
+    assertThat(result.likeCount()).isEqualTo(4L);
+    verify(postLikePersistencePort).delete(PostLikeTargetType.POST, 10L, 7L);
+  }
+
+  @Test
   @DisplayName("treats duplicate-like insert as idempotent success via persistence port")
   void like_post_duplicateInsert_returnsLikedState() {
     LikePostCommand command = LikePostCommand.forPost(10L, 7L);
@@ -84,6 +120,21 @@ class LikePostServiceTest {
 
     assertThat(result.liked()).isTrue();
     assertThat(result.likeCount()).isEqualTo(5L);
+  }
+
+  @Test
+  @DisplayName("treats unlike on a non-liked post as idempotent success")
+  void unlike_post_withoutExistingLike_returnsUnlikedState() {
+    LikePostCommand command = LikePostCommand.forPost(10L, 7L);
+
+    when(postPersistencePort.existsPost(10L)).thenReturn(true);
+    when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(0L);
+
+    PostLikeResult result = likePostService.unlike(command);
+
+    assertThat(result.liked()).isFalse();
+    assertThat(result.likeCount()).isZero();
+    verify(postLikePersistencePort).delete(PostLikeTargetType.POST, 10L, 7L);
   }
 
   @Test
