@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.account.domain.model;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,16 +35,16 @@ public class RefreshToken {
   private final String tokenValue;
 
   /** Token expiration timestamp. */
-  private final LocalDateTime expiresAt;
+  private final Instant expiresAt;
 
   /** Token Revocation timestamp. */
-  private final LocalDateTime revokedAt;
+  private final Instant revokedAt;
 
   /** Token creation timestamp. */
-  private final LocalDateTime createdAt;
+  private final Instant createdAt;
 
   /** Last time this token was used for reissuing. */
-  private final LocalDateTime usedAt;
+  private final Instant usedAt;
 
   // ============================================
   // Factory Methods
@@ -55,14 +56,15 @@ public class RefreshToken {
    * @param userId User ID
    * @param tokenValue JWT token string
    * @param expiresAt Expiration timestamp
+   * @param createdAt Creation timestamp (used as reference for validation)
    * @return New RefreshToken instance
    * @throws IllegalArgumentException if validation fails
    */
   public static RefreshToken create(
-      Long userId, String tokenValue, LocalDateTime expiresAt, LocalDateTime createdAt) {
+      Long userId, String tokenValue, Instant expiresAt, Instant createdAt) {
     validateUserId(userId);
     validateTokenValue(tokenValue);
-    validateExpiresAt(expiresAt);
+    validateExpiresAt(expiresAt, createdAt);
 
     return RefreshToken.builder()
         .userId(userId)
@@ -83,10 +85,11 @@ public class RefreshToken {
    *
    * <p>Business Rule: Token is valid only if: 1. Not expired 2. Not revoked
    *
+   * @param now Current instant for time comparison
    * @return true if token can be used, false otherwise
    */
-  public boolean isValid() {
-    return !isExpired() && !isRevoked();
+  public boolean isValid(Instant now) {
+    return !isExpired(now) && !isRevoked();
   }
 
   /**
@@ -101,10 +104,11 @@ public class RefreshToken {
   /**
    * Check if token has expired.
    *
+   * @param now Current instant for time comparison
    * @return true if current time is after expiration time
    */
-  public boolean isExpired() {
-    return LocalDateTime.now().isAfter(expiresAt);
+  public boolean isExpired(Instant now) {
+    return now.isAfter(expiresAt);
   }
 
   /**
@@ -112,14 +116,15 @@ public class RefreshToken {
    *
    * <p>Business Rule: Track usage for security audit and potential token rotation detection.
    *
+   * @param now Current instant for the used-at timestamp
    * @throws IllegalStateException if token is not valid
    */
-  public RefreshToken markAsUsed() {
-    if (!isValid()) {
+  public RefreshToken markAsUsed(Instant now) {
+    if (!isValid(now)) {
       throw new RefreshTokenInvalidException("Cannot mark invalid token as used");
     }
 
-    return this.toBuilder().usedAt(LocalDateTime.now()).build();
+    return this.toBuilder().usedAt(now).build();
   }
 
   /**
@@ -127,13 +132,15 @@ public class RefreshToken {
    *
    * <p>Business Rule: Once revoked, token cannot be used anymore. This is typically done when: -
    * User logs out - Security breach detected - Token rotation (old token replaced with new one)
+   *
+   * @param now Current instant for the revoked-at timestamp
    */
-  public RefreshToken revoke() {
+  public RefreshToken revoke(Instant now) {
     if (this.isRevoked()) {
       return this;
     }
 
-    return this.toBuilder().revokedAt(LocalDateTime.now()).build();
+    return this.toBuilder().revokedAt(now).build();
   }
 
   /**
@@ -142,43 +149,45 @@ public class RefreshToken {
    * <p>This can be used for detecting token replay attacks.
    *
    * @param withinMinutes Time window in minutes
+   * @param now Current instant for time comparison
    * @return true if token was used within the time window
    */
-  public boolean wasRecentlyUsed(int withinMinutes) {
+  public boolean wasRecentlyUsed(int withinMinutes, Instant now) {
     if (usedAt == null) {
       return false;
     }
 
-    LocalDateTime threshold = LocalDateTime.now().minusMinutes(withinMinutes);
+    Instant threshold = now.minus(Duration.ofMinutes(withinMinutes));
     return usedAt.isAfter(threshold);
   }
 
   /**
    * Get remaining time until expiration in seconds.
    *
+   * @param now Current instant for time comparison
    * @return Remaining seconds, or 0 if already expired
    */
-  public long getRemainingSeconds() {
-    if (isExpired() || isRevoked()) {
+  public long getRemainingSeconds(Instant now) {
+    if (isExpired(now) || isRevoked()) {
       return 0;
     }
 
-    LocalDateTime now = LocalDateTime.now();
-    return java.time.Duration.between(now, expiresAt).getSeconds();
+    return Duration.between(now, expiresAt).getSeconds();
   }
 
   /**
    * Check if this token is about to expire soon.
    *
    * @param thresholdMinutes Minutes before expiration
+   * @param now Current instant for time comparison
    * @return true if token will expire within threshold
    */
-  public boolean isExpiringSoon(int thresholdMinutes) {
-    if (isExpired()) {
+  public boolean isExpiringSoon(int thresholdMinutes, Instant now) {
+    if (isExpired(now)) {
       return true;
     }
 
-    long remainingMinutes = getRemainingSeconds() / 60;
+    long remainingMinutes = getRemainingSeconds(now) / 60;
     return remainingMinutes <= thresholdMinutes;
   }
 
@@ -209,20 +218,22 @@ public class RefreshToken {
   }
 
   /**
-   * Validate expiration timestamp. This method is used when a new Refresh Token is created. This
-   * method checks whether the provided expiration date is valid or not.
+   * Validate expiration timestamp against a reference time. This method is used when a new Refresh
+   * Token is created. This method checks whether the provided expiration date is valid or not.
+   *
+   * @param expiresAt Expiration timestamp to validate
+   * @param referenceTime Reference point for validation (typically createdAt)
    */
-  private static void validateExpiresAt(LocalDateTime expiresAt) {
+  private static void validateExpiresAt(Instant expiresAt, Instant referenceTime) {
     if (expiresAt == null) {
       throw new IllegalArgumentException("Expiration time is required");
     }
 
-    LocalDateTime now = LocalDateTime.now();
-    if (expiresAt.isBefore(now)) {
+    if (expiresAt.isBefore(referenceTime)) {
       throw new IllegalArgumentException("Expiration time must be in the future");
     }
 
-    LocalDateTime maxExpiration = now.plusDays(MAX_TOKEN_DAYS);
+    Instant maxExpiration = referenceTime.plus(Duration.ofDays(MAX_TOKEN_DAYS));
     if (expiresAt.isAfter(maxExpiration)) {
       throw new IllegalArgumentException(
           "Token expiration cannot exceed " + MAX_TOKEN_DAYS + " days");
@@ -240,8 +251,6 @@ public class RefreshToken {
         + id
         + ", userId="
         + userId
-        + ", expired="
-        + isExpired()
         + ", revoked="
         + isRevoked()
         + ", revokedAt="

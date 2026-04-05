@@ -5,7 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.*;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
@@ -35,17 +36,18 @@ class RefreshTokenPersistenceAdapterTest {
   // SHA-256("eyJhbGciOiJIUzI1NiJ9.validTokenForPersistence12345")
   // 미리 계산하지 않고, 어댑터의 동작(hash 후 조회)만 검증
   private RefreshToken createDomainToken() {
-    return RefreshToken.create(
-        USER_ID, TOKEN_VALUE, LocalDateTime.now().plusDays(1), LocalDateTime.now());
+    Instant now = Instant.now();
+    return RefreshToken.create(USER_ID, TOKEN_VALUE, now.plus(Duration.ofDays(1)), now);
   }
 
   private RefreshTokenEntity createEntityWithId(Long id) {
+    Instant now = Instant.now();
     return RefreshTokenEntity.builder()
         .id(id)
         .userId(USER_ID)
         .tokenHash("any-hash-value")
-        .expiresAt(LocalDateTime.now().plusDays(1))
-        .createdAt(LocalDateTime.now())
+        .expiresAt(now.plus(Duration.ofDays(1)))
+        .createdAt(now)
         .build();
   }
 
@@ -232,13 +234,14 @@ class RefreshTokenPersistenceAdapterTest {
     @Test
     @DisplayName("id가 있는 토큰은 기존 엔티티 조회 후 업데이트")
     void save_ExistingToken_UpdatesEntity() {
+      Instant now = Instant.now();
       RefreshToken tokenWithId =
           RefreshToken.builder()
               .id(5L)
               .userId(USER_ID)
               .tokenValue(TOKEN_VALUE)
-              .expiresAt(LocalDateTime.now().plusDays(1))
-              .createdAt(LocalDateTime.now())
+              .expiresAt(now.plus(Duration.ofDays(1)))
+              .createdAt(now)
               .build();
 
       RefreshTokenEntity existingEntity = createEntityWithId(5L);
@@ -255,13 +258,14 @@ class RefreshTokenPersistenceAdapterTest {
     @Test
     @DisplayName("업데이트 시 id로 조회된 엔티티가 없으면 RefreshTokenNotFoundException 발생")
     void save_ExistingToken_NotFoundById_ThrowsException() {
+      Instant now = Instant.now();
       RefreshToken tokenWithId =
           RefreshToken.builder()
               .id(999L)
               .userId(USER_ID)
               .tokenValue(TOKEN_VALUE)
-              .expiresAt(LocalDateTime.now().plusDays(1))
-              .createdAt(LocalDateTime.now())
+              .expiresAt(now.plus(Duration.ofDays(1)))
+              .createdAt(now)
               .build();
 
       given(repository.findById(999L)).willReturn(Optional.empty());

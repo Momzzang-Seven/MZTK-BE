@@ -3,7 +3,8 @@ package momzzangseven.mztkbe.modules.account.application.service;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.*;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenValidator;
@@ -32,8 +33,8 @@ class LogoutServiceTest {
   private static final String VALID_TOKEN_VALUE = "eyJhbGciOiJIUzI1NiJ9.validTokenForLogout1234";
 
   private RefreshToken createActiveToken() {
-    return RefreshToken.create(
-        1L, VALID_TOKEN_VALUE, LocalDateTime.now().plusDays(1), LocalDateTime.now());
+    Instant now = Instant.now();
+    return RefreshToken.create(1L, VALID_TOKEN_VALUE, now.plus(Duration.ofDays(1)), now);
   }
 
   // ============================================
@@ -106,7 +107,7 @@ class LogoutServiceTest {
     @DisplayName("이미 revoke된 토큰으로 로그아웃 시 revoke 재호출 (멱등성)")
     void execute_AlreadyRevokedToken_NoException() {
       LogoutCommand command = LogoutCommand.of(VALID_TOKEN_VALUE);
-      RefreshToken alreadyRevokedToken = createActiveToken().revoke(); // 이미 revoke
+      RefreshToken alreadyRevokedToken = createActiveToken().revoke(Instant.now()); // 이미 revoke
 
       willDoNothing().given(refreshTokenValidator).validateJwtFormat(VALID_TOKEN_VALUE);
       given(loadRefreshTokenPort.findByTokenValueWithLock(VALID_TOKEN_VALUE))

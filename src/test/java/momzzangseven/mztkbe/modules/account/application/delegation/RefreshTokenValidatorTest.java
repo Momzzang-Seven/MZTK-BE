@@ -6,7 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
@@ -83,13 +84,14 @@ class RefreshTokenValidatorTest {
 
   @Test
   void validateDomainRules_throwsExpired_whenTokenExpired() {
+    Instant now = Instant.now();
     RefreshToken expiredToken =
         RefreshToken.builder()
             .id(1L)
             .userId(1L)
             .tokenValue("refresh-token-12345")
-            .createdAt(LocalDateTime.now().minusDays(1))
-            .expiresAt(LocalDateTime.now().minusMinutes(1))
+            .createdAt(now.minus(Duration.ofDays(1)))
+            .expiresAt(now.minusSeconds(60))
             .build();
 
     assertThatThrownBy(() -> validator.validateDomainRules(expiredToken))
@@ -99,14 +101,15 @@ class RefreshTokenValidatorTest {
 
   @Test
   void validateDomainRules_throwsRevoked_whenTokenRevoked() {
+    Instant now = Instant.now();
     RefreshToken revokedToken =
         RefreshToken.builder()
             .id(1L)
             .userId(1L)
             .tokenValue("refresh-token-12345")
-            .createdAt(LocalDateTime.now().minusDays(1))
-            .expiresAt(LocalDateTime.now().plusDays(1))
-            .revokedAt(LocalDateTime.now().minusMinutes(1))
+            .createdAt(now.minus(Duration.ofDays(1)))
+            .expiresAt(now.plus(Duration.ofDays(1)))
+            .revokedAt(now.minusSeconds(60))
             .build();
 
     assertThatThrownBy(() -> validator.validateDomainRules(revokedToken))
@@ -116,14 +119,15 @@ class RefreshTokenValidatorTest {
 
   @Test
   void checkTokenReuse_revokesAndThrows_whenTokenUsedRecently() {
+    Instant now = Instant.now();
     RefreshToken recentlyUsedToken =
         RefreshToken.builder()
             .id(1L)
             .userId(1L)
             .tokenValue("refresh-token-12345")
-            .createdAt(LocalDateTime.now().minusDays(1))
-            .expiresAt(LocalDateTime.now().plusDays(1))
-            .usedAt(LocalDateTime.now().minusMinutes(1))
+            .createdAt(now.minus(Duration.ofDays(1)))
+            .expiresAt(now.plus(Duration.ofDays(1)))
+            .usedAt(now.minusSeconds(60))
             .build();
 
     assertThatThrownBy(() -> validator.checkTokenReuse(recentlyUsedToken, 5))
@@ -161,12 +165,13 @@ class RefreshTokenValidatorTest {
   }
 
   private RefreshToken validToken(Long userId) {
+    Instant now = Instant.now();
     return RefreshToken.builder()
         .id(1L)
         .userId(userId)
         .tokenValue("refresh-token-12345")
-        .createdAt(LocalDateTime.now().minusDays(1))
-        .expiresAt(LocalDateTime.now().plusDays(1))
+        .createdAt(now.minus(Duration.ofDays(1)))
+        .expiresAt(now.plus(Duration.ofDays(1)))
         .build();
   }
 }

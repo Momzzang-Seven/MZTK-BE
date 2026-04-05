@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.account.infrastructure.persistence.repository;
 
 import jakarta.persistence.LockModeType;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.RefreshTokenEntity;
@@ -71,7 +71,7 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshTokenEnt
           + "AND rt.revokedAt is NULL "
           + "AND rt.expiresAt > :now")
   List<RefreshTokenEntity> findAllActiveByUserId(
-      @Param("userId") Long userId, @Param("now") LocalDateTime now);
+      @Param("userId") Long userId, @Param("now") Instant now);
 
   /**
    * Check if token exists by token hash.
@@ -106,7 +106,7 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshTokenEnt
    */
   @Modifying
   @Query("DELETE FROM RefreshTokenEntity rt WHERE rt.expiresAt < :now")
-  int deleteExpiredTokens(@Param("now") LocalDateTime now);
+  int deleteExpiredTokens(@Param("now") Instant now);
 
   /**
    * Count active tokens for a user.
@@ -122,5 +122,5 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshTokenEnt
           + "WHERE rt.userId = :userId "
           + "AND rt.revokedAt is NULL "
           + "AND rt.expiresAt > :now")
-  long countActiveTokensByUserId(@Param("userId") Long userId, @Param("now") LocalDateTime now);
+  long countActiveTokensByUserId(@Param("userId") Long userId, @Param("now") Instant now);
 }

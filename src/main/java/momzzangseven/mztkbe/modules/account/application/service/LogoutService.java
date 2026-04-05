@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.account.application.service;
 
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
@@ -38,7 +39,7 @@ public class LogoutService implements LogoutUseCase {
   }
 
   private void revokeIfNeeded(RefreshToken token) {
-    RefreshToken revokedToken = token.revoke();
+    RefreshToken revokedToken = token.revoke(Instant.now());
     saveRefreshTokenPort.save(revokedToken);
   }
 }
