@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.post.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.post.infrastructure.external.answer.adapter;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
