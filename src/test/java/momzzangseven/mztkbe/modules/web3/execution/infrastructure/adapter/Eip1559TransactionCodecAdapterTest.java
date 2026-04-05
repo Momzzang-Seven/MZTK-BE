@@ -9,6 +9,8 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3Co
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter.Eip1559TransferSigner;
 import org.junit.jupiter.api.Test;
 import org.web3j.crypto.Credentials;
+import org.web3j.crypto.ECKeyPair;
+import org.web3j.utils.Numeric;
 
 class Eip1559TransactionCodecAdapterTest {
 
@@ -16,15 +18,16 @@ class Eip1559TransactionCodecAdapterTest {
 
   @Test
   void decodeAndVerify_returnsDecodedTransaction_whenSnapshotMatches() {
-    String privateKey = "4f3edf983ac636a65a842ce7c78d9aa706d3b113bce036f3f4f6383a6d3f8d31";
-    String fromAddress = Credentials.create(privateKey).getAddress().toLowerCase();
+    String signingKeyHex = Numeric.toHexStringNoPrefixZeroPadded(BigInteger.TEN, 64);
+    String fromAddress =
+        Credentials.create(ECKeyPair.create(BigInteger.TEN)).getAddress().toLowerCase();
     String tokenContract = "0x" + "1".repeat(40);
     String receiver = "0x" + "2".repeat(40);
 
     Web3ContractPort.SignedTransaction signedTransaction =
         Eip1559TransferSigner.signTransfer(
             new Web3ContractPort.SignTransferCommand(
-                privateKey,
+                signingKeyHex,
                 tokenContract,
                 receiver,
                 BigInteger.valueOf(1234),
