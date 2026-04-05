@@ -14,6 +14,7 @@ import java.math.BigInteger;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -38,6 +39,7 @@ class SignedRecoveryWorkerTest {
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private Web3ContractPort web3ContractPort;
+  @Mock private MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase;
   @Mock private RetryStrategy retryStrategy;
 
   private SignedRecoveryWorker worker;
@@ -52,6 +54,7 @@ class SignedRecoveryWorkerTest {
             updateTransactionPort,
             recordTransactionAuditPort,
             web3ContractPort,
+            markExecutionIntentPendingOnchainUseCase,
             properties,
             retryStrategy);
   }
@@ -105,6 +108,7 @@ class SignedRecoveryWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort).markPending(1L, "0x" + "b".repeat(64));
+    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
     verify(recordTransactionAuditPort, times(2))
         .record(any(RecordTransactionAuditPort.AuditCommand.class));
     verify(updateTransactionPort, never()).scheduleRetry(eq(1L), eq(DEFAULT_REASON), any());
@@ -122,6 +126,7 @@ class SignedRecoveryWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort).markPending(1L, existingHash);
+    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
   }
 
   @Test
@@ -136,6 +141,7 @@ class SignedRecoveryWorkerTest {
     worker.processBatch(1);
 
     verify(updateTransactionPort).markPending(1L, existingHash);
+    verify(markExecutionIntentPendingOnchainUseCase).execute(1L);
   }
 
   @Test

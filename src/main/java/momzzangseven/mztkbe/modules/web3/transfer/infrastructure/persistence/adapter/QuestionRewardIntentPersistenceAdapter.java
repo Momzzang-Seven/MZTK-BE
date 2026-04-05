@@ -69,6 +69,8 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
     entity.setToUserId(domain.getToUserId());
     entity.setAmountWei(domain.getAmountWei());
     entity.setStatus(domain.getStatus());
+    entity.setLastExecutionIntentErrorCode(domain.getLastExecutionIntentErrorCode());
+    entity.setLastExecutionIntentErrorReason(domain.getLastExecutionIntentErrorReason());
   }
 
   private QuestionRewardIntent toDomain(QuestionRewardIntentEntity entity) {
@@ -80,6 +82,8 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
         .toUserId(entity.getToUserId())
         .amountWei(entity.getAmountWei())
         .status(entity.getStatus())
+        .lastExecutionIntentErrorCode(entity.getLastExecutionIntentErrorCode())
+        .lastExecutionIntentErrorReason(entity.getLastExecutionIntentErrorReason())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();

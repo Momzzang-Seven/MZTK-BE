@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import org.springframework.stereotype.Component;

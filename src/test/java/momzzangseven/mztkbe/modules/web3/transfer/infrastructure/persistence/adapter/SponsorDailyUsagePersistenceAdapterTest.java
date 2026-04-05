@@ -40,7 +40,8 @@ class SponsorDailyUsagePersistenceAdapterTest {
             .id(1L)
             .userId(7L)
             .usageDateKst(LocalDate.of(2026, 3, 1))
-            .estimatedCostWei(BigInteger.ONE)
+            .reservedCostWei(BigInteger.ZERO)
+            .consumedCostWei(BigInteger.ONE)
             .build();
 
     assertThatThrownBy(() -> adapter.create(usage))
@@ -54,7 +55,8 @@ class SponsorDailyUsagePersistenceAdapterTest {
         SponsorDailyUsage.builder()
             .userId(7L)
             .usageDateKst(LocalDate.of(2026, 3, 1))
-            .estimatedCostWei(BigInteger.ONE)
+            .reservedCostWei(BigInteger.ZERO)
+            .consumedCostWei(BigInteger.ONE)
             .build();
 
     assertThatThrownBy(() -> adapter.update(usage))
@@ -69,7 +71,8 @@ class SponsorDailyUsagePersistenceAdapterTest {
         SponsorDailyUsage.builder()
             .userId(7L)
             .usageDateKst(LocalDate.of(2026, 3, 1))
-            .estimatedCostWei(BigInteger.TEN)
+            .reservedCostWei(BigInteger.ONE)
+            .consumedCostWei(BigInteger.TEN)
             .build();
 
     SponsorDailyUsage created = adapter.create(usage);
@@ -78,7 +81,8 @@ class SponsorDailyUsagePersistenceAdapterTest {
         ArgumentCaptor.forClass(Web3SponsorDailyUsageEntity.class);
     verify(repository).save(captor.capture());
     assertThat(captor.getValue().getUserId()).isEqualTo(7L);
-    assertThat(created.getEstimatedCostWei()).isEqualTo(BigInteger.TEN);
+    assertThat(captor.getValue().getReservedCostWei()).isEqualTo(BigInteger.ONE);
+    assertThat(created.getConsumedCostWei()).isEqualTo(BigInteger.TEN);
   }
 
   @Test

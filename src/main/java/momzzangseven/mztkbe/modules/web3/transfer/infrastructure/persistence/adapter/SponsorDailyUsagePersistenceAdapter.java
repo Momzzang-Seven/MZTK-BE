@@ -63,7 +63,8 @@ public class SponsorDailyUsagePersistenceAdapter implements SponsorDailyUsagePer
   private void merge(SponsorDailyUsage usage, Web3SponsorDailyUsageEntity entity) {
     entity.setUserId(usage.getUserId());
     entity.setUsageDateKst(usage.getUsageDateKst());
-    entity.setEstimatedCostWei(usage.getEstimatedCostWei());
+    entity.setReservedCostWei(usage.getReservedCostWei());
+    entity.setConsumedCostWei(usage.getConsumedCostWei());
   }
 
   private SponsorDailyUsage toDomain(Web3SponsorDailyUsageEntity entity) {
@@ -71,7 +72,8 @@ public class SponsorDailyUsagePersistenceAdapter implements SponsorDailyUsagePer
         .id(entity.getId())
         .userId(entity.getUserId())
         .usageDateKst(entity.getUsageDateKst())
-        .estimatedCostWei(entity.getEstimatedCostWei())
+        .reservedCostWei(entity.getReservedCostWei())
+        .consumedCostWei(entity.getConsumedCostWei())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();

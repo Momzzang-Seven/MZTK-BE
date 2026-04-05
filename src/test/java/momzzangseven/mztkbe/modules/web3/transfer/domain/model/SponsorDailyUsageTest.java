@@ -9,18 +9,20 @@ import org.junit.jupiter.api.Test;
 class SponsorDailyUsageTest {
 
   @Test
-  void addEstimatedCost_returnsNewAggregateWithAddedValue() {
+  void consume_returnsNewAggregateWithAddedValue() {
     SponsorDailyUsage usage =
         SponsorDailyUsage.builder()
             .id(1L)
             .userId(7L)
             .usageDateKst(LocalDate.of(2026, 3, 1))
-            .estimatedCostWei(BigInteger.valueOf(100))
+            .reservedCostWei(BigInteger.valueOf(100))
+            .consumedCostWei(BigInteger.valueOf(200))
             .build();
 
-    SponsorDailyUsage updated = usage.addEstimatedCost(BigInteger.valueOf(250));
+    SponsorDailyUsage updated = usage.consume(BigInteger.valueOf(250));
 
-    assertThat(updated.getEstimatedCostWei()).isEqualTo(BigInteger.valueOf(350));
-    assertThat(usage.getEstimatedCostWei()).isEqualTo(BigInteger.valueOf(100));
+    assertThat(updated.getConsumedCostWei()).isEqualTo(BigInteger.valueOf(450));
+    assertThat(updated.getReservedCostWei()).isEqualTo(BigInteger.valueOf(100));
+    assertThat(usage.getConsumedCostWei()).isEqualTo(BigInteger.valueOf(200));
   }
 }

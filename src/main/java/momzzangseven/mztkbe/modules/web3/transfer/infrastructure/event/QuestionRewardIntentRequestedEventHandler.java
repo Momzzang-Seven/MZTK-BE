@@ -2,9 +2,14 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateQuestionRewardExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RecordQuestionRewardIntentCreationFailureUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RegisterQuestionRewardIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentRequestedEvent;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -12,24 +17,89 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+    prefix = "web3",
+    name = {"eip7702.enabled", "reward-token.enabled"},
+    havingValue = "true")
 public class QuestionRewardIntentRequestedEventHandler {
 
+  private static final String EXECUTION_INTENT_CREATE_FAILED = "EXECUTION_INTENT_CREATE_FAILED";
+
   private final RegisterQuestionRewardIntentUseCase registerQuestionRewardIntentUseCase;
+  private final CreateQuestionRewardExecutionIntentUseCase
+      createQuestionRewardExecutionIntentUseCase;
+  private final RecordQuestionRewardIntentCreationFailureUseCase
+      recordQuestionRewardIntentCreationFailureUseCase;
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
   public void handle(QuestionRewardIntentRequestedEvent event) {
-    registerQuestionRewardIntentUseCase.execute(
+    RegisterQuestionRewardIntentCommand command =
         new RegisterQuestionRewardIntentCommand(
             event.postId(),
             event.acceptedCommentId(),
             event.fromUserId(),
             event.toUserId(),
-            event.amountWei()));
-    log.info(
-        "QUESTION_REWARD intent registered from event: postId={}, acceptedCommentId={}, fromUserId={}, toUserId={}",
-        event.postId(),
-        event.acceptedCommentId(),
-        event.fromUserId(),
-        event.toUserId());
+            event.amountWei());
+    try {
+      registerQuestionRewardIntentUseCase.execute(command);
+    } catch (RuntimeException e) {
+      log.error(
+          "QUESTION_REWARD legacy intent registration failed after commit: postId={}, acceptedCommentId={}, fromUserId={}, toUserId={}",
+          event.postId(),
+          event.acceptedCommentId(),
+          event.fromUserId(),
+          event.toUserId(),
+          e);
+      return;
+    }
+
+    try {
+      CreateExecutionIntentResult executionIntent =
+          createQuestionRewardExecutionIntentUseCase.execute(command);
+
+      log.info(
+          "QUESTION_REWARD intent registered from event: postId={}, acceptedCommentId={}, fromUserId={}, toUserId={}, executionIntentId={}, existing={}",
+          event.postId(),
+          event.acceptedCommentId(),
+          event.fromUserId(),
+          event.toUserId(),
+          executionIntent.executionIntentId(),
+          executionIntent.existing());
+    } catch (RuntimeException e) {
+      recordCreationFailure(event.postId(), e);
+      log.error(
+          "QUESTION_REWARD execution intent creation failed after commit: postId={}, acceptedCommentId={}, fromUserId={}, toUserId={}",
+          event.postId(),
+          event.acceptedCommentId(),
+          event.fromUserId(),
+          event.toUserId(),
+          e);
+    }
+  }
+
+  private void recordCreationFailure(Long postId, RuntimeException e) {
+    try {
+      recordQuestionRewardIntentCreationFailureUseCase.execute(
+          postId, resolveErrorCode(e), resolveErrorReason(e));
+    } catch (RuntimeException persistError) {
+      log.error(
+          "failed to persist QUESTION_REWARD execution intent creation failure: postId={}",
+          postId,
+          persistError);
+    }
+  }
+
+  private String resolveErrorCode(RuntimeException e) {
+    if (e instanceof BusinessException businessException) {
+      return businessException.getCode();
+    }
+    return EXECUTION_INTENT_CREATE_FAILED;
+  }
+
+  private String resolveErrorReason(RuntimeException e) {
+    if (e.getMessage() == null || e.getMessage().isBlank()) {
+      return e.getClass().getSimpleName();
+    }
+    return e.getMessage();
   }
 }

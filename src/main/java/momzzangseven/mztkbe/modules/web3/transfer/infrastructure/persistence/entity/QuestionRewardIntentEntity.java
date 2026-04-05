@@ -62,6 +62,12 @@ public class QuestionRewardIntentEntity {
   @Column(name = "status", nullable = false, length = 20)
   private QuestionRewardIntentStatus status;
 
+  @Column(name = "last_execution_intent_error_code", length = 120)
+  private String lastExecutionIntentErrorCode;
+
+  @Column(name = "last_execution_intent_error_reason", columnDefinition = "TEXT")
+  private String lastExecutionIntentErrorReason;
+
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 

@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.MarkAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.RequestQuestionRewardOnAcceptPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -34,6 +35,7 @@ class AcceptAnswerServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private LoadAcceptedAnswerPort loadAcceptedAnswerPort;
   @Mock private MarkAcceptedAnswerPort markAcceptedAnswerPort;
+  @Mock private RequestQuestionRewardOnAcceptPort requestQuestionRewardOnAcceptPort;
 
   @InjectMocks private AcceptAnswerService acceptAnswerService;
 
@@ -56,6 +58,7 @@ class AcceptAnswerServiceTest {
     assertThat(result.status()).isEqualTo(PostStatus.RESOLVED);
     verify(postPersistencePort).savePost(any(Post.class));
     verify(markAcceptedAnswerPort).markAccepted(20L);
+    verify(requestQuestionRewardOnAcceptPort).request(10L, 20L, 1L, 2L, 100L);
   }
 
   @Test
@@ -69,6 +72,7 @@ class AcceptAnswerServiceTest {
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 3L)))
         .isInstanceOf(OnlyPostWriterCanAcceptException.class);
     verifyNoInteractions(markAcceptedAnswerPort);
+    verifyNoInteractions(requestQuestionRewardOnAcceptPort);
   }
 
   @Test
@@ -82,6 +86,7 @@ class AcceptAnswerServiceTest {
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
         .isInstanceOf(AnswerNotBelongToPostException.class);
     verifyNoInteractions(markAcceptedAnswerPort);
+    verifyNoInteractions(requestQuestionRewardOnAcceptPort);
   }
 
   @Test
@@ -95,6 +100,7 @@ class AcceptAnswerServiceTest {
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
         .isInstanceOf(PostAlreadySolvedException.class);
     verifyNoInteractions(markAcceptedAnswerPort);
+    verifyNoInteractions(requestQuestionRewardOnAcceptPort);
   }
 
   private Post questionPost(Long id, Long userId, PostStatus status, Long acceptedAnswerId) {

@@ -6,6 +6,7 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
 public class SignedRecoveryWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
+  private final MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase;
 
   private final String workerId = "signed-recovery-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -35,6 +37,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
+      MarkExecutionIntentPendingOnchainUseCase markExecutionIntentPendingOnchainUseCase,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy) {
     super(
@@ -44,6 +47,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
         rewardTokenProperties,
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
+    this.markExecutionIntentPendingOnchainUseCase = markExecutionIntentPendingOnchainUseCase;
   }
 
   @Scheduled(fixedDelay = 1000L)
@@ -87,6 +91,7 @@ public class SignedRecoveryWorker extends AbstractWeb3Worker {
               ? item.txHash()
               : broadcast.txHash();
       updateTransactionPort.markPending(item.transactionId(), txHash);
+      markExecutionIntentPendingOnchainUseCase.execute(item.transactionId());
       auditStateChange(item.transactionId(), Web3TxStatus.SIGNED, Web3TxStatus.PENDING);
       return;
     }
