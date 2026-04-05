@@ -100,7 +100,7 @@ public class SecurityConfig {
                     // --- User & Me Endpoints ---
                     .requestMatchers(HttpMethod.GET, "/users/me")
                     .authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/withdrawal")
+                    .requestMatchers(HttpMethod.POST, "/auth/withdrawal")
                     .hasAuthority("ROLE_STEP_UP")
                     .requestMatchers(HttpMethod.PATCH, "/users/me/role")
                     .authenticated()
