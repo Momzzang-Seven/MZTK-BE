@@ -294,6 +294,38 @@ class PostControllerTest {
   }
 
   @Test
+  @DisplayName("DELETE /posts/{postId}/likes succeeds")
+  void unlikePost_success() throws Exception {
+    given(likePostUseCase.unlike(any()))
+        .willReturn(new PostLikeResult(PostLikeTargetType.POST, 1L, false, 4L));
+
+    mockMvc
+        .perform(delete("/posts/1/likes").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.targetType").value("POST"))
+        .andExpect(jsonPath("$.data.targetId").value(1))
+        .andExpect(jsonPath("$.data.liked").value(false))
+        .andExpect(jsonPath("$.data.likeCount").value(4));
+  }
+
+  @Test
+  @DisplayName("POST /questions/{postId}/answers/{answerId}/likes succeeds")
+  void likeAnswer_success() throws Exception {
+    given(likePostUseCase.like(any()))
+        .willReturn(new PostLikeResult(PostLikeTargetType.ANSWER, 2L, true, 2L));
+
+    mockMvc
+        .perform(post("/questions/1/answers/2/likes").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.targetType").value("ANSWER"))
+        .andExpect(jsonPath("$.data.targetId").value(2))
+        .andExpect(jsonPath("$.data.liked").value(true))
+        .andExpect(jsonPath("$.data.likeCount").value(2));
+  }
+
+  @Test
   @DisplayName("DELETE /questions/{postId}/answers/{answerId}/likes succeeds")
   void unlikeAnswer_success() throws Exception {
     given(likePostUseCase.unlike(any()))
@@ -307,6 +339,26 @@ class PostControllerTest {
         .andExpect(jsonPath("$.data.targetId").value(2))
         .andExpect(jsonPath("$.data.liked").value(false))
         .andExpect(jsonPath("$.data.likeCount").value(1));
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/likes returns 401 when principal is null")
+  void likePost_nullPrincipal_returns401() throws Exception {
+    mockMvc
+        .perform(post("/posts/1/likes").with(nullUserPrincipal()))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("AUTH_006"));
+
+    verifyNoInteractions(likePostUseCase);
+  }
+
+  @Test
+  @DisplayName("DELETE /posts/{postId}/likes returns 401 when unauthenticated")
+  void unlikePost_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(delete("/posts/1/likes")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(likePostUseCase);
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {
