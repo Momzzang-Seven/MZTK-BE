@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.account.application.delegation;
 
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
@@ -100,8 +101,9 @@ public class RefreshTokenValidator {
    * @throws RefreshTokenInvalidException if revoked
    */
   public void validateDomainRules(RefreshToken refreshToken) {
-    if (!refreshToken.isValid()) {
-      if (refreshToken.isExpired()) {
+    Instant now = Instant.now();
+    if (!refreshToken.isValid(now)) {
+      if (refreshToken.isExpired(now)) {
         log.warn("Refresh token expired: userId={}", refreshToken.getUserId());
         throw new RefreshTokenInvalidException("expired");
       }
@@ -126,7 +128,7 @@ public class RefreshTokenValidator {
    * @throws TokenSecurityException if reuse detected
    */
   public void checkTokenReuse(RefreshToken refreshToken, int thresholdMinutes) {
-    if (refreshToken.wasRecentlyUsed(thresholdMinutes)) {
+    if (refreshToken.wasRecentlyUsed(thresholdMinutes, Instant.now())) {
       log.error(
           "Token reuse detected! Possible replay attack. userId={}", refreshToken.getUserId());
 
@@ -147,7 +149,7 @@ public class RefreshTokenValidator {
    * @param refreshToken Token to mark
    */
   public RefreshToken markTokenUsed(RefreshToken refreshToken) {
-    RefreshToken usedToken = refreshToken.markAsUsed();
+    RefreshToken usedToken = refreshToken.markAsUsed(Instant.now());
     saveRefreshTokenPort.save(usedToken);
     log.debug("Token marked as used at: {}", usedToken.getUsedAt());
     return usedToken;

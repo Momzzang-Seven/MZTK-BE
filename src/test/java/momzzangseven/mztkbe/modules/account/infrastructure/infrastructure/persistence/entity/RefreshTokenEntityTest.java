@@ -2,7 +2,8 @@ package momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import momzzangseven.mztkbe.modules.account.domain.model.RefreshToken;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,8 +14,9 @@ class RefreshTokenEntityTest {
   @Test
   @DisplayName("updateFrom() updates mutable token fields")
   void updateFrom_updatesMutableTokenFields() {
-    LocalDateTime initialExpiresAt = LocalDateTime.now().plusDays(1);
-    LocalDateTime createdAt = LocalDateTime.now().minusDays(1);
+    Instant now = Instant.now();
+    Instant initialExpiresAt = now.plus(Duration.ofDays(1));
+    Instant createdAt = now.minus(Duration.ofDays(1));
 
     RefreshTokenEntity entity =
         RefreshTokenEntity.builder()
@@ -25,9 +27,9 @@ class RefreshTokenEntityTest {
             .createdAt(createdAt)
             .build();
 
-    LocalDateTime newExpiresAt = LocalDateTime.now().plusDays(2);
-    LocalDateTime revokedAt = LocalDateTime.now().minusHours(1);
-    LocalDateTime usedAt = LocalDateTime.now().minusMinutes(30);
+    Instant newExpiresAt = now.plus(Duration.ofDays(2));
+    Instant revokedAt = now.minus(Duration.ofHours(1));
+    Instant usedAt = now.minus(Duration.ofMinutes(30));
     RefreshToken token =
         RefreshToken.builder()
             .userId(10L)
@@ -50,11 +52,12 @@ class RefreshTokenEntityTest {
   @Test
   @DisplayName("onCreate() sets createdAt when missing")
   void onCreate_setsCreatedAtWhenMissing() {
+    Instant now = Instant.now();
     RefreshTokenEntity entity =
         RefreshTokenEntity.builder()
             .userId(10L)
             .tokenHash("hash")
-            .expiresAt(LocalDateTime.now().plusDays(1))
+            .expiresAt(now.plus(Duration.ofDays(1)))
             .build();
 
     entity.onCreate();
@@ -65,12 +68,13 @@ class RefreshTokenEntityTest {
   @Test
   @DisplayName("onCreate() does not overwrite existing createdAt")
   void onCreate_doesNotOverwriteExistingCreatedAt() {
-    LocalDateTime createdAt = LocalDateTime.now().minusDays(2);
+    Instant now = Instant.now();
+    Instant createdAt = now.minus(Duration.ofDays(2));
     RefreshTokenEntity entity =
         RefreshTokenEntity.builder()
             .userId(10L)
             .tokenHash("hash")
-            .expiresAt(LocalDateTime.now().plusDays(1))
+            .expiresAt(now.plus(Duration.ofDays(1)))
             .createdAt(createdAt)
             .build();
 

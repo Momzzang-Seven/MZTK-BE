@@ -13,7 +13,17 @@ import momzzangseven.mztkbe.modules.account.api.dto.SignupResponseDTO;
 import momzzangseven.mztkbe.modules.account.api.dto.StepUpRequestDTO;
 import momzzangseven.mztkbe.modules.account.api.dto.StepUpResponseDTO;
 import momzzangseven.mztkbe.modules.account.api.dto.token.ReissueTokenResponseDTO;
-import momzzangseven.mztkbe.modules.account.application.dto.*;
+import momzzangseven.mztkbe.modules.account.application.dto.LoginCommand;
+import momzzangseven.mztkbe.modules.account.application.dto.LoginResult;
+import momzzangseven.mztkbe.modules.account.application.dto.LogoutCommand;
+import momzzangseven.mztkbe.modules.account.application.dto.ReactivateCommand;
+import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenCommand;
+import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenResult;
+import momzzangseven.mztkbe.modules.account.application.dto.SignupCommand;
+import momzzangseven.mztkbe.modules.account.application.dto.SignupResult;
+import momzzangseven.mztkbe.modules.account.application.dto.StepUpCommand;
+import momzzangseven.mztkbe.modules.account.application.dto.StepUpResult;
+import momzzangseven.mztkbe.modules.account.application.dto.WithdrawCommand;
 import momzzangseven.mztkbe.modules.account.application.port.in.LoginUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.in.LogoutUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.in.ReactivateUseCase;
@@ -62,30 +72,12 @@ public class AccountController {
   @PostMapping("/login")
   public ResponseEntity<ApiResponse<LoginResponseDTO>> login(
       @Valid @RequestBody LoginRequestDTO request) {
-    // 1. Convert API DTO -> Application DTO
     LoginCommand command = request.toCommand();
-
-    // 2. Execute Login UseCase
     LoginResult result = loginUseCase.execute(command);
-
-    // 3. Convert Application DTO -> API DTO
     LoginResponseDTO response = LoginResponseDTO.from(result);
 
-    // 4. Set Response Cookie
-    ResponseCookie refreshTokenCookie =
-        ResponseCookie.from("refreshToken", result.refreshToken())
-            .httpOnly(true)
-            .secure(false)
-            .path("/auth")
-            .maxAge(Duration.ofMillis(result.refreshTokenExpiresIn()))
-            .sameSite("Strict")
-            .build();
-
-    // 5. Set headers
-    HttpHeaders headers = new HttpHeaders();
-    headers.add(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString());
-
-    // 6. Return Response
+    HttpHeaders headers =
+        refreshTokenHeaders(result.refreshToken(), result.refreshTokenExpiresIn());
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .headers(headers)
@@ -106,19 +98,8 @@ public class AccountController {
     LoginResult result = reactivateUseCase.execute(command);
     LoginResponseDTO response = LoginResponseDTO.from(result);
 
-    // Refresh token cookie is issued on successful reactivation, same as login.
-    ResponseCookie refreshTokenCookie =
-        ResponseCookie.from("refreshToken", result.refreshToken())
-            .httpOnly(true)
-            .secure(false)
-            .path("/auth")
-            .maxAge(Duration.ofMillis(result.refreshTokenExpiresIn()))
-            .sameSite("Strict")
-            .build();
-
-    HttpHeaders headers = new HttpHeaders();
-    headers.add(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString());
-
+    HttpHeaders headers =
+        refreshTokenHeaders(result.refreshToken(), result.refreshTokenExpiresIn());
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .headers(headers)
@@ -129,16 +110,10 @@ public class AccountController {
   @PostMapping("/signup")
   public ResponseEntity<ApiResponse<SignupResponseDTO>> signup(
       @Valid @RequestBody SignupRequestDTO request) {
-    // 1. Convert API DTO -> Application DTO
     SignupCommand command = request.toCommand();
-
-    // 2. Execute Signup UseCase
     SignupResult result = signupUseCase.execute(command);
-
-    // 3. Convert Application DTO -> API DTO
     SignupResponseDTO response = SignupResponseDTO.from(result);
 
-    // 4. Return Response
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .body(ApiResponse.success("Sign Up Success", response));
@@ -147,32 +122,13 @@ public class AccountController {
   /** Reissue access/refresh tokens based on the stored refresh token cookie. */
   @PostMapping("/reissue")
   public ResponseEntity<ApiResponse<ReissueTokenResponseDTO>> reissue(
-      @CookieValue(value = "refreshToken", required = true) String refreshToken) {
-
-    // 1. Convert to Application Command
+      @CookieValue("refreshToken") String refreshToken) {
     ReissueTokenCommand command = ReissueTokenCommand.of(refreshToken);
-
-    // 2. Execute Token Reissue UseCase
     ReissueTokenResult result = reissueTokenUseCase.execute(command);
-
-    // 3. Convert Application Result -> API DTO (Access Token only)
     ReissueTokenResponseDTO response = ReissueTokenResponseDTO.from(result);
 
-    // 4. Set Response Cookie (New Refresh Token)
-    ResponseCookie newRefreshTokenCookie =
-        ResponseCookie.from("refreshToken", result.refreshToken())
-            .httpOnly(true)
-            .secure(false)
-            .path("/auth")
-            .maxAge(Duration.ofMillis(result.refreshTokenExpiresIn()))
-            .sameSite("Strict")
-            .build();
-
-    // 5. Set headers
-    HttpHeaders headers = new HttpHeaders();
-    headers.add(HttpHeaders.SET_COOKIE, newRefreshTokenCookie.toString());
-
-    // 6. Return Response
+    HttpHeaders headers =
+        refreshTokenHeaders(result.refreshToken(), result.refreshTokenExpiresIn());
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .headers(headers)
@@ -187,18 +143,7 @@ public class AccountController {
       logoutUseCase.execute(LogoutCommand.of(refreshToken));
     }
 
-    ResponseCookie deleteRefreshTokenCookie =
-        ResponseCookie.from("refreshToken", "")
-            .httpOnly(true)
-            .secure(false)
-            .path("/auth")
-            .maxAge(Duration.ZERO)
-            .sameSite("Strict")
-            .build();
-
-    HttpHeaders headers = new HttpHeaders();
-    headers.add(HttpHeaders.SET_COOKIE, deleteRefreshTokenCookie.toString());
-
+    HttpHeaders headers = refreshTokenHeaders("", 0);
     return ResponseEntity.noContent().headers(headers).build();
   }
 
@@ -224,18 +169,27 @@ public class AccountController {
       throw new UserNotAuthenticatedException();
     }
 
-    // Convert API DTO -> Application DTO
     StepUpCommand command = request.toCommand(userId);
-
-    // Execute Step-up UseCase
     StepUpResult result = stepUpUseCase.execute(command);
-
-    // Convert Application Result -> API DTO
     StepUpResponseDTO response = StepUpResponseDTO.from(result);
 
-    // Return Response
     return ResponseEntity.ok()
         .contentType(MediaType.APPLICATION_JSON)
         .body(ApiResponse.success("Step-up authentication successful", response));
+  }
+
+  private HttpHeaders refreshTokenHeaders(String tokenValue, long expiresInMillis) {
+    ResponseCookie cookie =
+        ResponseCookie.from("refreshToken", tokenValue)
+            .httpOnly(true)
+            .secure(false)
+            .path("/auth")
+            .maxAge(Duration.ofMillis(expiresInMillis))
+            .sameSite("Strict")
+            .build();
+
+    HttpHeaders headers = new HttpHeaders();
+    headers.add(HttpHeaders.SET_COOKIE, cookie.toString());
+    return headers;
   }
 }

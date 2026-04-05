@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.account.application.delegation;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
@@ -74,11 +74,10 @@ public class RefreshTokenManager {
 
     String refreshTokenValue = jwtTokenProvider.generateRefreshToken(userId);
 
-    LocalDateTime expiresAt =
-        LocalDateTime.now().plus(Duration.ofMillis(jwtTokenProvider.getRefreshTokenExpiresIn()));
+    Instant now = Instant.now();
+    Instant expiresAt = now.plus(Duration.ofMillis(jwtTokenProvider.getRefreshTokenExpiresIn()));
 
-    RefreshToken refreshToken =
-        RefreshToken.create(userId, refreshTokenValue, expiresAt, LocalDateTime.now());
+    RefreshToken refreshToken = RefreshToken.create(userId, refreshTokenValue, expiresAt, now);
 
     saveRefreshTokenPort.save(refreshToken);
     log.debug("Refresh token saved to database for userId: {}", userId);
@@ -93,7 +92,7 @@ public class RefreshTokenManager {
    */
   public void revokeToken(RefreshToken refreshToken) {
     log.debug("Revoking refresh token for userId: {}", refreshToken.getUserId());
-    RefreshToken revokedToken = refreshToken.revoke();
+    RefreshToken revokedToken = refreshToken.revoke(Instant.now());
     saveRefreshTokenPort.save(revokedToken);
     log.debug("Token revoked");
   }

@@ -7,7 +7,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
@@ -45,13 +46,14 @@ class ReissueTokenServiceTest {
   void execute_validCommand_reissuesToken() {
     String incomingRefreshToken = "refresh-token-12345";
     ReissueTokenCommand command = new ReissueTokenCommand(incomingRefreshToken);
+    Instant now = Instant.now();
     RefreshToken dbToken =
         RefreshToken.builder()
             .id(10L)
             .userId(1L)
             .tokenValue(incomingRefreshToken)
-            .expiresAt(LocalDateTime.now().plusDays(1))
-            .createdAt(LocalDateTime.now())
+            .expiresAt(now.plus(Duration.ofDays(1)))
+            .createdAt(now)
             .build();
 
     given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(1L);
