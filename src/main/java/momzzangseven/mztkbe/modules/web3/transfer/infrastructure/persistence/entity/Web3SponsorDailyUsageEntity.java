@@ -46,8 +46,11 @@ public class Web3SponsorDailyUsageEntity {
   @Column(name = "usage_date_kst", nullable = false)
   private LocalDate usageDateKst;
 
-  @Column(name = "estimated_cost_wei", nullable = false, precision = 78, scale = 0)
-  private BigInteger estimatedCostWei;
+  @Column(name = "reserved_cost_wei", nullable = false, precision = 78, scale = 0)
+  private BigInteger reservedCostWei;
+
+  @Column(name = "consumed_cost_wei", nullable = false, precision = 78, scale = 0)
+  private BigInteger consumedCostWei;
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
@@ -64,8 +67,11 @@ public class Web3SponsorDailyUsageEntity {
     if (updatedAt == null) {
       updatedAt = now;
     }
-    if (estimatedCostWei == null) {
-      estimatedCostWei = BigInteger.ZERO;
+    if (reservedCostWei == null) {
+      reservedCostWei = BigInteger.ZERO;
+    }
+    if (consumedCostWei == null) {
+      consumedCostWei = BigInteger.ZERO;
     }
   }
 

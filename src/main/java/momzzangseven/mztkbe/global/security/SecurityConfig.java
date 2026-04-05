@@ -120,9 +120,16 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/users/me/locations/register")
                     .authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/prepare")
+                    .requestMatchers(HttpMethod.POST, "/users/me/transfers")
                     .authenticated()
-                    .requestMatchers(HttpMethod.POST, "/users/me/token-transfers/submit")
+                    .requestMatchers(HttpMethod.GET, "/users/me/transfers/{resourceId}")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.GET, "/users/me/web3/execution-intents/{executionIntentId}")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/users/me/web3/execution-intents/{executionIntentId}/execute")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/verification/photo")
                     .authenticated()

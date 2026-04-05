@@ -1,15 +1,26 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.LocalDateTime;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CancelQuestionRewardIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateQuestionRewardExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RecordQuestionRewardIntentCreationFailureUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RegisterQuestionRewardIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentCanceledEvent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentRequestedEvent;
@@ -23,13 +34,39 @@ class QuestionRewardIntentEventHandlersTest {
   void requestedHandler_forwardsMappedCommandToUseCase() {
     RegisterQuestionRewardIntentUseCase useCase =
         org.mockito.Mockito.mock(RegisterQuestionRewardIntentUseCase.class);
+    CreateQuestionRewardExecutionIntentUseCase createExecutionIntentUseCase =
+        org.mockito.Mockito.mock(CreateQuestionRewardExecutionIntentUseCase.class);
+    RecordQuestionRewardIntentCreationFailureUseCase recordFailureUseCase =
+        org.mockito.Mockito.mock(RecordQuestionRewardIntentCreationFailureUseCase.class);
     QuestionRewardIntentRequestedEventHandler handler =
-        new QuestionRewardIntentRequestedEventHandler(useCase);
+        new QuestionRewardIntentRequestedEventHandler(
+            useCase, createExecutionIntentUseCase, recordFailureUseCase);
     when(useCase.execute(
             org.mockito.ArgumentMatchers.any(RegisterQuestionRewardIntentCommand.class)))
         .thenReturn(
             new RegisterQuestionRewardIntentResult(
                 101L, QuestionRewardIntentStatus.PREPARE_REQUIRED, true));
+    when(createExecutionIntentUseCase.execute(
+            org.mockito.ArgumentMatchers.any(RegisterQuestionRewardIntentCommand.class)))
+        .thenReturn(
+            new CreateExecutionIntentResult(
+                ExecutionResourceType.QUESTION,
+                "101",
+                "PENDING_EXECUTION",
+                "intent-1",
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                LocalDateTime.now().plusMinutes(5),
+                ExecutionMode.EIP7702,
+                2,
+                SignRequestBundle.forEip7702(
+                    new SignRequestBundle.AuthorizationSignRequest(
+                        11155111L, "0x" + "1".repeat(40), 3L, "0x" + "a".repeat(64)),
+                    new SignRequestBundle.SubmitSignRequest(
+                        "0x" + "b".repeat(64),
+                        LocalDateTime.now()
+                            .plusMinutes(5)
+                            .toEpochSecond(java.time.ZoneOffset.UTC))),
+                false));
 
     handler.handle(new QuestionRewardIntentRequestedEvent(101L, 1001L, 1L, 2L, BigInteger.TEN));
 
@@ -42,6 +79,36 @@ class QuestionRewardIntentEventHandlersTest {
     assertThat(command.fromUserId()).isEqualTo(1L);
     assertThat(command.toUserId()).isEqualTo(2L);
     assertThat(command.amountWei()).isEqualByComparingTo(BigInteger.TEN);
+    verify(createExecutionIntentUseCase).execute(captor.getValue());
+  }
+
+  @Test
+  void requestedHandler_persistsFailure_whenExecutionIntentCreationFails() {
+    RegisterQuestionRewardIntentUseCase useCase =
+        org.mockito.Mockito.mock(RegisterQuestionRewardIntentUseCase.class);
+    CreateQuestionRewardExecutionIntentUseCase createExecutionIntentUseCase =
+        org.mockito.Mockito.mock(CreateQuestionRewardExecutionIntentUseCase.class);
+    RecordQuestionRewardIntentCreationFailureUseCase recordFailureUseCase =
+        org.mockito.Mockito.mock(RecordQuestionRewardIntentCreationFailureUseCase.class);
+    QuestionRewardIntentRequestedEventHandler handler =
+        new QuestionRewardIntentRequestedEventHandler(
+            useCase, createExecutionIntentUseCase, recordFailureUseCase);
+    when(useCase.execute(
+            org.mockito.ArgumentMatchers.any(RegisterQuestionRewardIntentCommand.class)))
+        .thenReturn(
+            new RegisterQuestionRewardIntentResult(
+                101L, QuestionRewardIntentStatus.PREPARE_REQUIRED, true));
+    when(createExecutionIntentUseCase.execute(
+            org.mockito.ArgumentMatchers.any(RegisterQuestionRewardIntentCommand.class)))
+        .thenThrow(new BusinessException(ErrorCode.WALLET_NOT_CONNECTED, "wallet missing"));
+
+    handler.handle(new QuestionRewardIntentRequestedEvent(101L, 1001L, 1L, 2L, BigInteger.TEN));
+
+    verify(recordFailureUseCase)
+        .execute(
+            anyLong(),
+            org.mockito.ArgumentMatchers.eq(ErrorCode.WALLET_NOT_CONNECTED.getCode()),
+            org.mockito.ArgumentMatchers.eq("wallet missing"));
   }
 
   @Test

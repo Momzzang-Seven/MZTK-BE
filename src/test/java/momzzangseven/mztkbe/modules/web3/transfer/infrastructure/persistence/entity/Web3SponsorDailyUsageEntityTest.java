@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class Web3SponsorDailyUsageEntityTest {
 
   @Test
-  void onCreate_setsEstimatedCostZero_whenNull() {
+  void onCreate_setsCostColumnsZero_whenNull() {
     Web3SponsorDailyUsageEntity entity =
         Web3SponsorDailyUsageEntity.builder()
             .userId(7L)
@@ -19,7 +19,8 @@ class Web3SponsorDailyUsageEntityTest {
 
     entity.onCreate();
 
-    assertThat(entity.getEstimatedCostWei()).isEqualTo(BigInteger.ZERO);
+    assertThat(entity.getReservedCostWei()).isEqualTo(BigInteger.ZERO);
+    assertThat(entity.getConsumedCostWei()).isEqualTo(BigInteger.ZERO);
     assertThat(entity.getCreatedAt()).isNotNull();
     assertThat(entity.getUpdatedAt()).isNotNull();
   }
@@ -30,7 +31,8 @@ class Web3SponsorDailyUsageEntityTest {
         Web3SponsorDailyUsageEntity.builder()
             .userId(7L)
             .usageDateKst(LocalDate.of(2026, 3, 1))
-            .estimatedCostWei(BigInteger.ONE)
+            .reservedCostWei(BigInteger.ONE)
+            .consumedCostWei(BigInteger.ONE)
             .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
             .build();
 
