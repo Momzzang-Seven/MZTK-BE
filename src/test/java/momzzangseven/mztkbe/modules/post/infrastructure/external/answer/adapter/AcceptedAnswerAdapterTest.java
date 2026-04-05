@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.post.infrastructure.external.answer;
+package momzzangseven.mztkbe.modules.post.infrastructure.external.answer.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
