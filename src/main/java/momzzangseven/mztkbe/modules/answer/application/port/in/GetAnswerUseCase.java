@@ -5,5 +5,5 @@ import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 
 public interface GetAnswerUseCase {
 
-  List<AnswerResult> execute(Long postId);
+  List<AnswerResult> execute(Long postId, Long currentUserId);
 }

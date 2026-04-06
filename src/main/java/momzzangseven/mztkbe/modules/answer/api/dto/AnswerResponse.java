@@ -11,6 +11,8 @@ public record AnswerResponse(
     String profileImageUrl,
     String content,
     boolean isAccepted,
+    long likeCount,
+    boolean isLiked,
     List<String> imageUrls,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
@@ -23,6 +25,8 @@ public record AnswerResponse(
         answer.profileImageUrl(),
         answer.content(),
         answer.accepted(),
+        answer.likeCount(),
+        answer.liked(),
         answer.imageUrls() == null ? List.of() : answer.imageUrls(),
         answer.createdAt(),
         answer.updatedAt());
