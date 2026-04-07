@@ -15,7 +15,7 @@ import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreResult;
  * @param phoneNumber phone number
  * @param homepageUrl homepage URL
  * @param instagramUrl Instagram URL
- * @param xUrl X (Twitter) URL
+ * @param xProfileUrl X (Twitter) profile URL
  */
 @Builder
 public record GetStoreResponseDTO(
@@ -28,7 +28,7 @@ public record GetStoreResponseDTO(
     String phoneNumber,
     String homepageUrl,
     String instagramUrl,
-    String xUrl) {
+    String xProfileUrl) {
 
   /**
    * Create from GetStoreResult.
@@ -47,7 +47,7 @@ public record GetStoreResponseDTO(
         .phoneNumber(result.phoneNumber())
         .homepageUrl(result.homepageUrl())
         .instagramUrl(result.instagramUrl())
-        .xUrl(result.xUrl())
+        .xProfileUrl(result.xProfileUrl())
         .build();
   }
 }

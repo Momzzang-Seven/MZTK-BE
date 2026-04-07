@@ -12,22 +12,23 @@ import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
 public interface SaveStorePort {
 
   /**
-   * Atomically creates or updates a trainer store.
+   * Persist a trainer store via standard JPA save.
    *
-   * <p><b>Conflict resolution:</b> Uses {@code trainerId} as the unique key. If a store for the
-   * same trainerId already exists, all mutable fields are overwritten.
+   * <p>When {@code store.getId()} is null, a new entity is created (INSERT). When non-null, the
+   * existing entity is updated (merge). The application service is responsible for determining
+   * create-vs-update logic and setting the ID before calling this method.
    *
    * <p><b>Postcondition:</b> The returned TrainerStore will have:
    *
    * <ul>
-   *   <li>non-null {@code id} (database-generated)
-   *   <li>non-null {@code createdAt} (original creation time, never overwritten on update)
-   *   <li>non-null {@code updatedAt} (current transaction time)
+   *   <li>non-null {@code id} (database-generated or carried over)
+   *   <li>non-null {@code createdAt} (managed by Hibernate @CreationTimestamp)
+   *   <li>non-null {@code updatedAt} (managed by Hibernate @UpdateTimestamp)
    * </ul>
    *
-   * @param store the store data to persist ({@code id} field is ignored for conflict resolution)
+   * @param store the store data to persist
    * @return the persisted store with all fields populated from the database
-   * @throws IllegalStateException if the store cannot be read back after persistence
    */
   TrainerStore save(TrainerStore store);
 }
+

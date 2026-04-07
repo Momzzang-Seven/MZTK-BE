@@ -8,11 +8,11 @@ import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.api.dto.GetStoreResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.api.dto.UpsertStoreRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.api.dto.UpsertStoreResponseDTO;
-import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreQuery;
+import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreResult;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.UpsertStoreResult;
-import momzzangseven.mztkbe.modules.marketplace.application.port.in.GetStoreQueryHandler;
-import momzzangseven.mztkbe.modules.marketplace.application.port.in.UpsertStoreCommandHandler;
+import momzzangseven.mztkbe.modules.marketplace.application.port.in.GetStoreUseCase;
+import momzzangseven.mztkbe.modules.marketplace.application.port.in.UpsertStoreUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,27 +27,26 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class StoreController {
 
-  private final UpsertStoreCommandHandler upsertStoreCommandHandler;
-  private final GetStoreQueryHandler getStoreQueryHandler;
+  private final UpsertStoreUseCase upsertStoreUseCase;
+  private final GetStoreUseCase getStoreUseCase;
 
   /**
    * Create or update a trainer store.
    *
-   * <p>Always returns 200 OK regardless of whether the store was created or updated, because the
-   * native upsert operation is atomic and does not distinguish between the two cases.
+   * <p>Always returns 200 OK regardless of whether the store was created or updated.
    */
   @PutMapping
   public ResponseEntity<ApiResponse<UpsertStoreResponseDTO>> upsertStore(
       @Valid @RequestBody UpsertStoreRequestDTO request, @AuthenticationPrincipal Long trainerId) {
 
-    requireTrainerId(trainerId);
+    trainerId = requireUserId(trainerId);
 
     log.debug(
         "Store upsert request received: trainerId={}, storeName={}",
         trainerId,
         request.storeName());
 
-    UpsertStoreResult result = upsertStoreCommandHandler.execute(request.toCommand(trainerId));
+    UpsertStoreResult result = upsertStoreUseCase.execute(request.toCommand(trainerId));
     UpsertStoreResponseDTO response = UpsertStoreResponseDTO.from(result);
 
     log.debug("Store upserted successfully: storeId={}", result.storeId());
@@ -59,11 +58,11 @@ public class StoreController {
   public ResponseEntity<ApiResponse<GetStoreResponseDTO>> getStore(
       @AuthenticationPrincipal Long trainerId) {
 
-    requireTrainerId(trainerId);
+    trainerId = requireUserId(trainerId);
 
     log.debug("Store retrieval request received: trainerId={}", trainerId);
 
-    GetStoreResult result = getStoreQueryHandler.execute(new GetStoreQuery(trainerId));
+    GetStoreResult result = getStoreUseCase.execute(new GetStoreCommand(trainerId));
     GetStoreResponseDTO response = GetStoreResponseDTO.from(result);
 
     log.debug("Store retrieved successfully: storeId={}", result.storeId());
@@ -74,17 +73,10 @@ public class StoreController {
   // Utility methods (private)
   // ============================================
 
-  /**
-   * Safety-net check for authenticated trainer ID.
-   *
-   * <p>This guard exists as a defense-in-depth measure. When Spring Security is properly
-   * configured, the JWT filter should guarantee a non-null principal. This method prevents
-   * NullPointerException in case of security misconfiguration rather than silently propagating
-   * null.
-   */
-  private void requireTrainerId(Long trainerId) {
-    if (trainerId == null) {
+  private Long requireUserId(Long userId) {
+    if (userId == null) {
       throw new UserNotAuthenticatedException();
     }
+    return userId;
   }
 }

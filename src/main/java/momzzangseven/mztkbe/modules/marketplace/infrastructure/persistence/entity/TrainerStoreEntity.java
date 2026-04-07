@@ -13,6 +13,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
@@ -20,10 +22,8 @@ import org.locationtech.jts.geom.Point;
 /**
  * JPA Entity for trainer_stores table.
  *
- * <p><b>Timestamp management:</b> {@code createdAt} and {@code updatedAt} are managed exclusively
- * by the native upsert query using {@code CURRENT_TIMESTAMP}. JPA Auditing annotations are
- * intentionally omitted because the entity is never persisted through JPA's standard persist/merge
- * lifecycle.
+ * <p>Timestamps are managed by Hibernate's {@code @CreationTimestamp} and {@code @UpdateTimestamp},
+ * following the same pattern as {@code UserWalletEntity} and other project entities.
  */
 @Entity
 @Table(name = "trainer_stores")
@@ -42,33 +42,35 @@ public class TrainerStoreEntity {
   @Column(name = "user_id", nullable = false, unique = true)
   private Long trainerId;
 
-  @Column(name = "store_name")
+  @Column(name = "store_name", nullable = false, length = 100)
   private String storeName;
 
-  @Column(nullable = false)
+  @Column(nullable = false, length = 255)
   private String address;
 
-  @Column(name = "detail_address")
+  @Column(name = "detail_address", nullable = false, length = 255)
   private String detailAddress;
 
   @Column(name = "location", columnDefinition = "geometry(Point,4326)")
   private Point location;
 
-  @Column(name = "phone_number")
+  @Column(name = "phone_number", nullable = false, length = 20)
   private String phoneNumber;
 
-  @Column(name = "homepage_url")
+  @Column(name = "homepage_url", length = 500)
   private String homepageUrl;
 
-  @Column(name = "instagram_url")
+  @Column(name = "instagram_url", length = 500)
   private String instagramUrl;
 
-  @Column(name = "x_url")
-  private String xUrl;
+  @Column(name = "x_profile_url", length = 500)
+  private String xProfileUrl;
 
+  @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private LocalDateTime createdAt;
 
+  @UpdateTimestamp
   @Column(name = "updated_at", nullable = false)
   private LocalDateTime updatedAt;
 
@@ -91,11 +93,9 @@ public class TrainerStoreEntity {
   /**
    * Convert a domain model to an entity for persistence.
    *
-   * <p><b>Note on id field:</b> When called from the save path (via {@code TrainerStore.create()}),
-   * {@code store.getId()} is always null because the domain factory does not assign IDs. The native
-   * upsert query ignores the id column entirely (uses IDENTITY generation). The id is included here
-   * only for completeness, supporting potential future use cases where an entity is reconstructed
-   * from a database-loaded domain model.
+   * <p>When {@code store.getId()} is non-null (update case), the ID is carried over so that JPA
+   * performs a merge (UPDATE). When null (create case), JPA performs an INSERT with IDENTITY
+   * generation.
    *
    * @param store the domain model to convert
    * @return the JPA entity
@@ -118,9 +118,7 @@ public class TrainerStoreEntity {
         .phoneNumber(store.getPhoneNumber())
         .homepageUrl(store.getHomepageUrl())
         .instagramUrl(store.getInstagramUrl())
-        .xUrl(store.getXUrl())
-        .createdAt(store.getCreatedAt())
-        .updatedAt(store.getUpdatedAt())
+        .xProfileUrl(store.getXProfileUrl())
         .build();
   }
 
@@ -141,7 +139,7 @@ public class TrainerStoreEntity {
         .phoneNumber(this.phoneNumber)
         .homepageUrl(this.homepageUrl)
         .instagramUrl(this.instagramUrl)
-        .xUrl(this.xUrl)
+        .xProfileUrl(this.xProfileUrl)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)
         .build();
