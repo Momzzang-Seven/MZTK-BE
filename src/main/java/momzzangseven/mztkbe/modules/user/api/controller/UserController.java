@@ -11,15 +11,12 @@ import momzzangseven.mztkbe.modules.user.api.dto.UserResponseDTO;
 import momzzangseven.mztkbe.modules.user.application.dto.GetMyProfileResult;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
-import momzzangseven.mztkbe.modules.user.application.dto.WithdrawUserCommand;
 import momzzangseven.mztkbe.modules.user.application.port.in.GetMyProfileUseCase;
 import momzzangseven.mztkbe.modules.user.application.port.in.UpdateUserRoleUseCase;
-import momzzangseven.mztkbe.modules.user.application.port.in.WithdrawUserUseCase;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,7 +29,6 @@ public class UserController {
 
   private final GetMyProfileUseCase getMyProfileUseCase;
   private final UpdateUserRoleUseCase updateUserRoleUseCase;
-  private final WithdrawUserUseCase withdrawUserUseCase;
 
   /** Retrieve the full profile of the currently authenticated user. */
   @GetMapping("/me")
@@ -63,16 +59,6 @@ public class UserController {
 
     log.info("Role updated successfully: userId={}, newRole={}", userId, result.role());
     return ResponseEntity.ok(ApiResponse.success("Role updated successfully", response));
-  }
-
-  /** Withdraw (soft-delete) the current user after step-up verification. */
-  @PostMapping("/me/withdrawal")
-  public ResponseEntity<ApiResponse<Void>> withdrawMe(@AuthenticationPrincipal Long userId) {
-
-    userId = requireUserId(userId);
-    WithdrawUserCommand command = WithdrawUserCommand.of(userId);
-    withdrawUserUseCase.execute(command);
-    return ResponseEntity.ok(ApiResponse.success("User withdrawn successfully", null));
   }
 
   // ============================================

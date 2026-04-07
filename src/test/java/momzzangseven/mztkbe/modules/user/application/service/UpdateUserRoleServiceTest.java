@@ -7,19 +7,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.user.IllegalTrainerGrantException;
 import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -113,16 +112,14 @@ class UpdateUserRoleServiceTest {
   }
 
   private User baseUser(Long id, String email, UserRole role) {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 12, 0);
+    Instant now = Instant.parse("2026-02-28T12:00:00Z");
     return User.builder()
         .id(id)
         .email(email)
         .nickname("tester")
-        .authProvider(AuthProvider.LOCAL)
         .role(role)
-        .status(UserStatus.ACTIVE)
-        .createdAt(now.minusDays(5))
-        .updatedAt(now.minusDays(1))
+        .createdAt(now.minus(5, ChronoUnit.DAYS))
+        .updatedAt(now.minus(1, ChronoUnit.DAYS))
         .build();
   }
 }

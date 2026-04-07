@@ -1,0 +1,177 @@
+package momzzangseven.mztkbe.modules.account.application.delegation;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Optional;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenInvalidException;
+import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
+import momzzangseven.mztkbe.global.error.token.TokenSecurityException;
+import momzzangseven.mztkbe.global.security.JwtTokenProvider;
+import momzzangseven.mztkbe.modules.account.application.port.out.LoadRefreshTokenPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.SaveRefreshTokenPort;
+import momzzangseven.mztkbe.modules.account.domain.model.RefreshToken;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+class RefreshTokenValidatorTest {
+
+  @Mock private JwtTokenProvider jwtTokenProvider;
+  @Mock private LoadRefreshTokenPort loadRefreshTokenPort;
+  @Mock private SaveRefreshTokenPort saveRefreshTokenPort;
+  @Mock private RefreshTokenManager refreshTokenManager;
+
+  private RefreshTokenValidator validator;
+
+  @BeforeEach
+  void setUp() {
+    validator =
+        new RefreshTokenValidator(
+            jwtTokenProvider, loadRefreshTokenPort, saveRefreshTokenPort, refreshTokenManager);
+  }
+
+  @Test
+  void validateJwtFormat_throws_whenTokenSignatureInvalid() {
+    when(jwtTokenProvider.validateToken("bad-token")).thenReturn(false);
+
+    assertThatThrownBy(() -> validator.validateJwtFormat("bad-token"))
+        .isInstanceOf(RefreshTokenNotFoundException.class);
+  }
+
+  @Test
+  void validateJwtFormat_throws_whenTokenIsNotRefreshType() {
+    when(jwtTokenProvider.validateToken("token")).thenReturn(true);
+    when(jwtTokenProvider.isRefreshToken("token")).thenReturn(false);
+
+    assertThatThrownBy(() -> validator.validateJwtFormat("token"))
+        .isInstanceOf(RefreshTokenNotFoundException.class);
+  }
+
+  @Test
+  void validateJwtFormat_passes_whenTokenValidAndRefreshType() {
+    when(jwtTokenProvider.validateToken("token")).thenReturn(true);
+    when(jwtTokenProvider.isRefreshToken("token")).thenReturn(true);
+
+    validator.validateJwtFormat("token");
+  }
+
+  @Test
+  void loadTokenByValueWithLock_throws_whenTokenMissingInDatabase() {
+    when(loadRefreshTokenPort.findByTokenValueWithLock("token")).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> validator.loadTokenByValueWithLock("token"))
+        .isInstanceOf(RefreshTokenNotFoundException.class)
+        .hasMessageContaining("Refresh token not found in database");
+  }
+
+  @Test
+  void validateUserIdConsistency_revokesAndThrows_whenUserIdMismatch() {
+    RefreshToken token = validToken(99L);
+
+    assertThatThrownBy(() -> validator.validateUserIdConsistency(1L, token))
+        .isInstanceOf(TokenSecurityException.class);
+    verify(refreshTokenManager).revokeToken(token);
+  }
+
+  @Test
+  void validateDomainRules_throwsExpired_whenTokenExpired() {
+    Instant now = Instant.now();
+    RefreshToken expiredToken =
+        RefreshToken.builder()
+            .id(1L)
+            .userId(1L)
+            .tokenValue("refresh-token-12345")
+            .createdAt(now.minus(Duration.ofDays(1)))
+            .expiresAt(now.minusSeconds(60))
+            .build();
+
+    assertThatThrownBy(() -> validator.validateDomainRules(expiredToken))
+        .isInstanceOf(RefreshTokenInvalidException.class)
+        .hasMessageContaining("expired");
+  }
+
+  @Test
+  void validateDomainRules_throwsRevoked_whenTokenRevoked() {
+    Instant now = Instant.now();
+    RefreshToken revokedToken =
+        RefreshToken.builder()
+            .id(1L)
+            .userId(1L)
+            .tokenValue("refresh-token-12345")
+            .createdAt(now.minus(Duration.ofDays(1)))
+            .expiresAt(now.plus(Duration.ofDays(1)))
+            .revokedAt(now.minusSeconds(60))
+            .build();
+
+    assertThatThrownBy(() -> validator.validateDomainRules(revokedToken))
+        .isInstanceOf(RefreshTokenInvalidException.class)
+        .hasMessageContaining("revoked");
+  }
+
+  @Test
+  void checkTokenReuse_revokesAndThrows_whenTokenUsedRecently() {
+    Instant now = Instant.now();
+    RefreshToken recentlyUsedToken =
+        RefreshToken.builder()
+            .id(1L)
+            .userId(1L)
+            .tokenValue("refresh-token-12345")
+            .createdAt(now.minus(Duration.ofDays(1)))
+            .expiresAt(now.plus(Duration.ofDays(1)))
+            .usedAt(now.minusSeconds(60))
+            .build();
+
+    assertThatThrownBy(() -> validator.checkTokenReuse(recentlyUsedToken, 5))
+        .isInstanceOf(TokenSecurityException.class)
+        .hasMessageContaining("Token reuse detected");
+    verify(refreshTokenManager).revokeToken(recentlyUsedToken);
+  }
+
+  @Test
+  void markTokenUsed_updatesUsedAtAndPersistsToken() {
+    RefreshToken token = validToken(1L);
+    when(saveRefreshTokenPort.save(any(RefreshToken.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    RefreshToken usedToken = validator.markTokenUsed(token);
+
+    assertThat(usedToken.getUsedAt()).isNotNull();
+    verify(saveRefreshTokenPort).save(any(RefreshToken.class));
+  }
+
+  @Test
+  void inspectSecurityFlaw_runsAllChecksAndReturnsToken_whenTokenSafe() {
+    RefreshToken token = validToken(7L);
+    when(loadRefreshTokenPort.findByTokenValueWithLock("token-value"))
+        .thenReturn(Optional.of(token));
+    when(saveRefreshTokenPort.save(any(RefreshToken.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    RefreshToken result = validator.inspectSecurityFlaw("token-value", 7L);
+
+    assertThat(result.getUserId()).isEqualTo(7L);
+    assertThat(result.getUsedAt()).isNotNull();
+    verify(loadRefreshTokenPort).findByTokenValueWithLock("token-value");
+    verify(saveRefreshTokenPort).save(any(RefreshToken.class));
+  }
+
+  private RefreshToken validToken(Long userId) {
+    Instant now = Instant.now();
+    return RefreshToken.builder()
+        .id(1L)
+        .userId(userId)
+        .tokenValue("refresh-token-12345")
+        .createdAt(now.minus(Duration.ofDays(1)))
+        .expiresAt(now.plus(Duration.ofDays(1)))
+        .build();
+  }
+}
