@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.api.dto;
 
-import lombok.Builder;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreResult;
 
 /**
@@ -17,7 +16,6 @@ import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreResult;
  * @param instagramUrl Instagram URL
  * @param xProfileUrl X (Twitter) profile URL
  */
-@Builder
 public record GetStoreResponseDTO(
     Long storeId,
     String storeName,
@@ -37,17 +35,16 @@ public record GetStoreResponseDTO(
    * @return GetStoreResponseDTO
    */
   public static GetStoreResponseDTO from(GetStoreResult result) {
-    return GetStoreResponseDTO.builder()
-        .storeId(result.storeId())
-        .storeName(result.storeName())
-        .address(result.address())
-        .detailAddress(result.detailAddress())
-        .latitude(result.latitude())
-        .longitude(result.longitude())
-        .phoneNumber(result.phoneNumber())
-        .homepageUrl(result.homepageUrl())
-        .instagramUrl(result.instagramUrl())
-        .xProfileUrl(result.xProfileUrl())
-        .build();
+    return new GetStoreResponseDTO(
+        result.storeId(),
+        result.storeName(),
+        result.address(),
+        result.detailAddress(),
+        result.latitude(),
+        result.longitude(),
+        result.phoneNumber(),
+        result.homepageUrl(),
+        result.instagramUrl(),
+        result.xProfileUrl());
   }
 }

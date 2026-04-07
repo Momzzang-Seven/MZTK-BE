@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.application.dto;
 
-import lombok.Builder;
 import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
 
 /**
@@ -17,7 +16,6 @@ import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
  * @param instagramUrl Instagram URL
  * @param xProfileUrl X (Twitter) profile URL
  */
-@Builder
 public record GetStoreResult(
     Long storeId,
     String storeName,
@@ -37,17 +35,16 @@ public record GetStoreResult(
    * @return GetStoreResult
    */
   public static GetStoreResult from(TrainerStore store) {
-    return GetStoreResult.builder()
-        .storeId(store.getId())
-        .storeName(store.getStoreName())
-        .address(store.getAddress())
-        .detailAddress(store.getDetailAddress())
-        .latitude(store.getLatitude())
-        .longitude(store.getLongitude())
-        .phoneNumber(store.getPhoneNumber())
-        .homepageUrl(store.getHomepageUrl())
-        .instagramUrl(store.getInstagramUrl())
-        .xProfileUrl(store.getXProfileUrl())
-        .build();
+    return new GetStoreResult(
+        store.getId(),
+        store.getStoreName(),
+        store.getAddress(),
+        store.getDetailAddress(),
+        store.getLatitude(),
+        store.getLongitude(),
+        store.getPhoneNumber(),
+        store.getHomepageUrl(),
+        store.getInstagramUrl(),
+        store.getXProfileUrl());
   }
 }

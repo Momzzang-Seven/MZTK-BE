@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.application.dto;
 
+import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
+
 /**
  * Command for creating or updating a trainer store.
  *
@@ -43,14 +45,18 @@ public record UpsertStoreCommand(
     if (detailAddress == null || detailAddress.isBlank()) {
       throw new IllegalArgumentException("Detail address must not be blank");
     }
-    if (latitude == null) {
-      throw new IllegalArgumentException("Latitude must not be null");
+    if (latitude == null || latitude < -90.0 || latitude > 90.0) {
+      throw new IllegalArgumentException("Latitude must be between -90.0 and 90.0");
     }
-    if (longitude == null) {
-      throw new IllegalArgumentException("Longitude must not be null");
+    if (longitude == null || longitude < -180.0 || longitude > 180.0) {
+      throw new IllegalArgumentException("Longitude must be between -180.0 and 180.0");
     }
     if (phoneNumber == null || phoneNumber.isBlank()) {
       throw new IllegalArgumentException("Phone number must not be blank");
+    }
+    if (!phoneNumber.matches(TrainerStore.PHONE_NUMBER_PATTERN)) {
+      throw new IllegalArgumentException(
+          "Phone number must be a valid format (e.g., 010-1234-5678 or +82-10-1234-5678)");
     }
   }
 }

@@ -281,18 +281,20 @@ class UpsertStoreServiceTest {
     }
 
     @Test
-    @DisplayName("도메인 검증 실패(잘못된 전화번호) 시 예외가 발생한다")
-    void execute_throwsException_whenDomainValidationFails() {
-      // given — 잘못된 전화번호 포맷
+    @DisplayName("잘못된 전화번호 포맷은 command.validate()에서 실패한다")
+    void execute_throwsException_whenPhoneInvalidFormat() {
+      // given — 잘못된 전화번호 포맷 (이제 command.validate()에서 잡힌다)
       UpsertStoreCommand invalidCommand =
           new UpsertStoreCommand(
               1L, "Store", "Address", "Detail", 37.0, 127.0, "abc", null, null, null);
 
       // when & then
       assertThatThrownBy(() -> upsertStoreService.execute(invalidCommand))
-          .isInstanceOf(IllegalArgumentException.class);
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Phone number");
 
-      // save는 호출되지 않아야 한다
+      // command.validate()에서 실패하므로 포트 호출 없음
+      then(loadStorePort).shouldHaveNoInteractions();
       then(saveStorePort).should(never()).save(any(TrainerStore.class));
     }
 
@@ -353,6 +355,38 @@ class UpsertStoreServiceTest {
       assertThatThrownBy(() -> upsertStoreService.execute(invalidCommand))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Latitude");
+    }
+
+    @Test
+    @DisplayName("latitude가 범위(-90~90) 초과인 커맨드는 command.validate()에서 실패한다")
+    void execute_throwsException_whenLatitudeOutOfRange() {
+      // given
+      UpsertStoreCommand invalidCommand =
+          new UpsertStoreCommand(
+              1L, "Store", "Address", "Detail", -91.0, 127.0, "010-1234-5678", null, null, null);
+
+      // when & then
+      assertThatThrownBy(() -> upsertStoreService.execute(invalidCommand))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Latitude");
+
+      then(loadStorePort).shouldHaveNoInteractions();
+    }
+
+    @Test
+    @DisplayName("longitude가 범위(-180~180) 초과인 커맨드는 command.validate()에서 실패한다")
+    void execute_throwsException_whenLongitudeOutOfRange() {
+      // given
+      UpsertStoreCommand invalidCommand =
+          new UpsertStoreCommand(
+              1L, "Store", "Address", "Detail", 37.0, 181.0, "010-1234-5678", null, null, null);
+
+      // when & then
+      assertThatThrownBy(() -> upsertStoreService.execute(invalidCommand))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Longitude");
+
+      then(loadStorePort).shouldHaveNoInteractions();
     }
   }
 }
