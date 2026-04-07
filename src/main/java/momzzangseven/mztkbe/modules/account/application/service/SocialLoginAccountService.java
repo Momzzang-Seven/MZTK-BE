@@ -100,16 +100,18 @@ public class SocialLoginAccountService {
   /**
    * Ensures the email is not taken by an active user or reserved by a soft-deleted account.
    *
-   * <p>Uses {@code existsByEmail} (existence check only) instead of a full snapshot load to avoid
-   * fetching unnecessary data.
+   * <p>Checks for a soft-deleted account first so that withdrawn users receive {@link
+   * UserWithdrawnException} and can be redirected to {@code /auth/reactivate}. Only then checks for
+   * active users; {@code existsByEmail} has no soft-delete filter, so checking it first would
+   * incorrectly surface deleted accounts as active conflicts.
    */
   private void verifyEmailAvailable(String email) {
-    if (loadAccountUserInfoPort.existsByEmail(email)) {
-      throw new InvalidCredentialsException("Invalid social login");
-    }
     if (loadUserAccountPort.findDeletedByEmail(email).isPresent()) {
       log.info("Withdrawn social account login attempt: email={}", email);
       throw new UserWithdrawnException();
+    }
+    if (loadAccountUserInfoPort.existsByEmail(email)) {
+      throw new InvalidCredentialsException("Invalid social login");
     }
   }
 
