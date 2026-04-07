@@ -73,6 +73,12 @@ public enum ErrorCode {
 
   USER_WITHDRAWN("USER_004", "User account is withdrawn", HttpStatus.CONFLICT),
 
+  ACCOUNT_NOT_DELETED(
+      "USER_005",
+      "Account is not in a deleted state and cannot be reactivated",
+      HttpStatus.CONFLICT // 409
+      ),
+
   // ========================================
   // Level Errors (LEVEL_xxx)
   // ========================================
