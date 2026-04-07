@@ -2,7 +2,8 @@ package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -17,7 +18,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("PostLikePersistenceAdapter unit test")
@@ -28,8 +28,8 @@ class PostLikePersistenceAdapterTest {
   @InjectMocks private PostLikePersistenceAdapter postLikePersistenceAdapter;
 
   @Test
-  @DisplayName("saveIfAbsent returns existing like when unique constraint collision occurs")
-  void saveIfAbsent_returnsExistingLike_onDuplicateInsert() {
+  @DisplayName("saveIfAbsent returns stored like after idempotent insert")
+  void saveIfAbsent_returnsStoredLike_afterInsertIfAbsent() {
     PostLike postLike = PostLike.create(PostLikeTargetType.POST, 10L, 7L);
     PostLikeEntity existingEntity =
         PostLikeEntity.builder()
@@ -40,8 +40,7 @@ class PostLikePersistenceAdapterTest {
             .build();
     setCreatedAt(existingEntity, LocalDateTime.of(2026, 4, 2, 10, 0));
 
-    when(postLikeJpaRepository.save(any(PostLikeEntity.class)))
-        .thenThrow(new DataIntegrityViolationException("duplicate"));
+    when(postLikeJpaRepository.insertIfAbsent(anyString(), anyLong(), anyLong())).thenReturn(1);
     when(postLikeJpaRepository.findByTargetTypeAndTargetIdAndUserId(
             PostLikeTargetType.POST, 10L, 7L))
         .thenReturn(Optional.of(existingEntity));
@@ -55,18 +54,18 @@ class PostLikePersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("saveIfAbsent rethrows when collision happens without recoverable existing row")
-  void saveIfAbsent_rethrows_whenExistingRowCannotBeLoaded() {
+  @DisplayName("saveIfAbsent throws when row cannot be loaded after idempotent insert")
+  void saveIfAbsent_throws_whenRowCannotBeLoaded() {
     PostLike postLike = PostLike.create(PostLikeTargetType.POST, 10L, 7L);
 
-    when(postLikeJpaRepository.save(any(PostLikeEntity.class)))
-        .thenThrow(new DataIntegrityViolationException("duplicate"));
+    when(postLikeJpaRepository.insertIfAbsent(anyString(), anyLong(), anyLong())).thenReturn(0);
     when(postLikeJpaRepository.findByTargetTypeAndTargetIdAndUserId(
             PostLikeTargetType.POST, 10L, 7L))
         .thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> postLikePersistenceAdapter.saveIfAbsent(postLike))
-        .isInstanceOf(DataIntegrityViolationException.class);
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Failed to load post_like row after idempotent insert");
   }
 
   private void setCreatedAt(PostLikeEntity entity, LocalDateTime createdAt) {

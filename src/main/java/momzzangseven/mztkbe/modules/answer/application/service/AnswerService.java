@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.answer.application.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
@@ -104,7 +106,7 @@ public class AnswerService
     List<Long> answerIds = answers.stream().map(Answer::getId).toList();
     Map<Long, Long> likeCounts =
         answers.isEmpty() ? Map.of() : loadAnswerLikePort.countLikeByAnswerIds(answerIds);
-    java.util.Set<Long> likedAnswerIds =
+    Set<Long> likedAnswerIds =
         answers.isEmpty()
             ? java.util.Set.of()
             : loadAnswerLikePort.loadLikedAnswerIds(answerIds, currentUserId);
@@ -116,7 +118,7 @@ public class AnswerService
 
   @Override
   @Transactional(readOnly = true)
-  public java.util.Optional<GetAnswerSummaryUseCase.AnswerSummary> getAnswerSummary(Long answerId) {
+  public Optional<GetAnswerSummaryUseCase.AnswerSummary> getAnswerSummary(Long answerId) {
     if (answerId == null) {
       throw new AnswerInvalidInputException("answerId is required.");
     }
@@ -204,7 +206,7 @@ public class AnswerService
       Map<Long, LoadAnswerWriterPort.WriterSummary> writers,
       Map<Long, AnswerImageResult> imagesByAnswerId,
       Map<Long, Long> likeCounts,
-      java.util.Set<Long> likedAnswerIds) {
+      Set<Long> likedAnswerIds) {
     return answerReadAssembler.assemble(
         answer,
         writers.get(answer.getUserId()),
