@@ -29,7 +29,7 @@ public class LikePostService implements LikePostUseCase {
     command.validate();
     validateTarget(command);
 
-    postLikePersistencePort.saveIfAbsent(
+    postLikePersistencePort.insertIfAbsent(
         PostLike.create(command.targetType(), command.targetId(), command.userId()));
 
     long likeCount =
