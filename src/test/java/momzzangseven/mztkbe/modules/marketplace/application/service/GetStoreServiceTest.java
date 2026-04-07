@@ -9,7 +9,7 @@ import static org.mockito.Mockito.times;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.marketplace.StoreNotFoundException;
-import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreQuery;
+import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetStoreResult;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadStorePort;
 import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
@@ -22,12 +22,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("StoreQueryHandler 단위 테스트")
-class StoreQueryHandlerTest {
+@DisplayName("GetStoreService 단위 테스트")
+class GetStoreServiceTest {
 
   @Mock private LoadStorePort loadStorePort;
 
-  @InjectMocks private StoreQueryHandler storeQueryHandler;
+  @InjectMocks private GetStoreService getStoreService;
 
   // ============================================
   // Test Fixtures
@@ -45,7 +45,7 @@ class StoreQueryHandlerTest {
         .phoneNumber("010-1234-5678")
         .homepageUrl("https://example.com")
         .instagramUrl("https://instagram.com/test")
-        .xUrl("https://x.com/test")
+        .xProfileUrl("https://x.com/test")
         .createdAt(LocalDateTime.of(2026, 1, 1, 0, 0))
         .updatedAt(LocalDateTime.of(2026, 4, 1, 12, 0))
         .build();
@@ -64,12 +64,12 @@ class StoreQueryHandlerTest {
     void execute_returnsResult_whenStoreExists() {
       // given
       Long trainerId = 1L;
-      GetStoreQuery query = new GetStoreQuery(trainerId);
+      GetStoreCommand command = new GetStoreCommand(trainerId);
       TrainerStore existingStore = createExistingStore();
       given(loadStorePort.findByTrainerId(trainerId)).willReturn(Optional.of(existingStore));
 
       // when
-      GetStoreResult result = storeQueryHandler.execute(query);
+      GetStoreResult result = getStoreService.execute(command);
 
       // then
       assertThat(result.storeId()).isEqualTo(100L);
@@ -81,7 +81,7 @@ class StoreQueryHandlerTest {
       assertThat(result.phoneNumber()).isEqualTo("010-1234-5678");
       assertThat(result.homepageUrl()).isEqualTo("https://example.com");
       assertThat(result.instagramUrl()).isEqualTo("https://instagram.com/test");
-      assertThat(result.xUrl()).isEqualTo("https://x.com/test");
+      assertThat(result.xProfileUrl()).isEqualTo("https://x.com/test");
     }
 
     @Test
@@ -89,12 +89,12 @@ class StoreQueryHandlerTest {
     void execute_callsLoadStorePortOnce() {
       // given
       Long trainerId = 1L;
-      GetStoreQuery query = new GetStoreQuery(trainerId);
+      GetStoreCommand command = new GetStoreCommand(trainerId);
       given(loadStorePort.findByTrainerId(trainerId))
           .willReturn(Optional.of(createExistingStore()));
 
       // when
-      storeQueryHandler.execute(query);
+      getStoreService.execute(command);
 
       // then
       then(loadStorePort).should(times(1)).findByTrainerId(trainerId);
@@ -114,11 +114,11 @@ class StoreQueryHandlerTest {
     void execute_throwsStoreNotFoundException_whenNotFound() {
       // given
       Long trainerId = 999L;
-      GetStoreQuery query = new GetStoreQuery(trainerId);
+      GetStoreCommand command = new GetStoreCommand(trainerId);
       given(loadStorePort.findByTrainerId(trainerId)).willReturn(Optional.empty());
 
       // when & then
-      assertThatThrownBy(() -> storeQueryHandler.execute(query))
+      assertThatThrownBy(() -> getStoreService.execute(command))
           .isInstanceOf(StoreNotFoundException.class);
     }
   }

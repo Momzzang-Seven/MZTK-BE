@@ -26,7 +26,7 @@ class TrainerStoreTest {
   private static final String VALID_PHONE = "010-1234-5678";
   private static final String VALID_HOMEPAGE = "https://example.com";
   private static final String VALID_INSTAGRAM = "https://instagram.com/trainer";
-  private static final String VALID_X_URL = "https://x.com/trainer";
+  private static final String VALID_X_PROFILE_URL = "https://x.com/trainer";
 
   private TrainerStore createValidStore() {
     return TrainerStore.create(
@@ -39,7 +39,7 @@ class TrainerStoreTest {
         VALID_PHONE,
         VALID_HOMEPAGE,
         VALID_INSTAGRAM,
-        VALID_X_URL);
+        VALID_X_PROFILE_URL);
   }
 
   // ============================================
@@ -66,7 +66,7 @@ class TrainerStoreTest {
       assertThat(store.getPhoneNumber()).isEqualTo(VALID_PHONE);
       assertThat(store.getHomepageUrl()).isEqualTo(VALID_HOMEPAGE);
       assertThat(store.getInstagramUrl()).isEqualTo(VALID_INSTAGRAM);
-      assertThat(store.getXUrl()).isEqualTo(VALID_X_URL);
+      assertThat(store.getXProfileUrl()).isEqualTo(VALID_X_PROFILE_URL);
     }
 
     @Test
@@ -82,7 +82,7 @@ class TrainerStoreTest {
     }
 
     @Test
-    @DisplayName("선택 필드(detailAddress, phoneNumber, URL들)가 null이어도 생성된다")
+    @DisplayName("선택 필드(URL들)가 null이어도 생성된다")
     void create_withNullOptionalFields_succeeds() {
       // when
       TrainerStore store =
@@ -90,35 +90,32 @@ class TrainerStoreTest {
               VALID_TRAINER_ID,
               VALID_STORE_NAME,
               VALID_ADDRESS,
-              null, // detailAddress
+              VALID_DETAIL_ADDRESS,
               VALID_LATITUDE,
               VALID_LONGITUDE,
-              null, // phoneNumber
+              VALID_PHONE,
               null, // homepageUrl
               null, // instagramUrl
-              null); // xUrl
+              null); // xProfileUrl
 
       // then
-      assertThat(store.getDetailAddress()).isNull();
-      assertThat(store.getPhoneNumber()).isNull();
       assertThat(store.getHomepageUrl()).isNull();
       assertThat(store.getInstagramUrl()).isNull();
-      assertThat(store.getXUrl()).isNull();
+      assertThat(store.getXProfileUrl()).isNull();
     }
 
     @Test
     @DisplayName("위도 경계값(-90.0, 90.0)으로 생성된다")
     void create_withLatitudeBoundary_succeeds() {
-      // when & then — no exception
       TrainerStore storeMin =
           TrainerStore.create(
               VALID_TRAINER_ID,
               VALID_STORE_NAME,
               VALID_ADDRESS,
-              null,
+              VALID_DETAIL_ADDRESS,
               -90.0,
               VALID_LONGITUDE,
-              null,
+              VALID_PHONE,
               null,
               null,
               null);
@@ -127,10 +124,10 @@ class TrainerStoreTest {
               VALID_TRAINER_ID,
               VALID_STORE_NAME,
               VALID_ADDRESS,
-              null,
+              VALID_DETAIL_ADDRESS,
               90.0,
               VALID_LONGITUDE,
-              null,
+              VALID_PHONE,
               null,
               null,
               null);
@@ -142,16 +139,15 @@ class TrainerStoreTest {
     @Test
     @DisplayName("경도 경계값(-180.0, 180.0)으로 생성된다")
     void create_withLongitudeBoundary_succeeds() {
-      // when & then — no exception
       TrainerStore storeMin =
           TrainerStore.create(
               VALID_TRAINER_ID,
               VALID_STORE_NAME,
               VALID_ADDRESS,
-              null,
+              VALID_DETAIL_ADDRESS,
               VALID_LATITUDE,
               -180.0,
-              null,
+              VALID_PHONE,
               null,
               null,
               null);
@@ -160,16 +156,30 @@ class TrainerStoreTest {
               VALID_TRAINER_ID,
               VALID_STORE_NAME,
               VALID_ADDRESS,
-              null,
+              VALID_DETAIL_ADDRESS,
               VALID_LATITUDE,
               180.0,
-              null,
+              VALID_PHONE,
               null,
               null,
               null);
 
       assertThat(storeMin.getLongitude()).isEqualTo(-180.0);
       assertThat(storeMax.getLongitude()).isEqualTo(180.0);
+    }
+
+    @Test
+    @DisplayName("toBuilder()로 새 객체를 불변적으로 생성할 수 있다")
+    void toBuilder_createsNewImmutableInstance() {
+      // given
+      TrainerStore original = createValidStore();
+
+      // when
+      TrainerStore modified = original.toBuilder().storeName("New Studio").build();
+
+      // then
+      assertThat(modified.getStoreName()).isEqualTo("New Studio");
+      assertThat(original.getStoreName()).isEqualTo(VALID_STORE_NAME); // 원본 불변
     }
   }
 
@@ -190,10 +200,10 @@ class TrainerStoreTest {
                       null,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -210,10 +220,10 @@ class TrainerStoreTest {
                       0L,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -230,10 +240,10 @@ class TrainerStoreTest {
                       -1L,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -261,15 +271,36 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       storeName,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Store name must not be null or blank");
+    }
+
+    @Test
+    @DisplayName("storeName이 최대 길이를 초과하면 예외 발생")
+    void create_withTooLongStoreName_throwsException() {
+      String longName = "A".repeat(TrainerStore.MAX_STORE_NAME_LENGTH + 1);
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      longName,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("must not exceed");
     }
   }
 
@@ -292,15 +323,88 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       address,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Address must not be null or blank");
+    }
+
+    @Test
+    @DisplayName("address가 최대 길이를 초과하면 예외 발생")
+    void create_withTooLongAddress_throwsException() {
+      String longAddress = "A".repeat(TrainerStore.MAX_ADDRESS_LENGTH + 1);
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      longAddress,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("must not exceed");
+    }
+  }
+
+  // ============================================
+  // create() — detailAddress 검증
+  // ============================================
+
+  @Nested
+  @DisplayName("create() - detailAddress 검증")
+  class DetailAddressValidation {
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "   "})
+    @DisplayName("detailAddress가 null 또는 공백이면 예외 발생")
+    void create_withInvalidDetailAddress_throwsException(String detailAddress) {
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      detailAddress,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Detail address must not be null or blank");
+    }
+
+    @Test
+    @DisplayName("detailAddress가 최대 길이를 초과하면 예외 발생")
+    void create_withTooLongDetailAddress_throwsException() {
+      String longDetail = "A".repeat(TrainerStore.MAX_DETAIL_ADDRESS_LENGTH + 1);
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      longDetail,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("must not exceed");
     }
   }
 
@@ -321,10 +425,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       null,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -341,10 +445,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       null,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -361,10 +465,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       90.1,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -381,10 +485,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       -90.1,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -401,10 +505,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       180.1,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
@@ -421,15 +525,106 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       -180.1,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("Longitude must be between");
+    }
+  }
+
+  // ============================================
+  // create() — phoneNumber 검증
+  // ============================================
+
+  @Nested
+  @DisplayName("create() - phoneNumber 검증")
+  class PhoneNumberValidation {
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", "   "})
+    @DisplayName("phoneNumber가 null 또는 공백이면 예외 발생")
+    void create_withInvalidPhoneNumber_throwsException(String phoneNumber) {
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      phoneNumber,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Phone number must not be null or blank");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"010-1234-5678", "02-1234-5678", "+82-10-1234-5678", "01012345678"})
+    @DisplayName("유효한 전화번호 포맷이 통과한다")
+    void create_withValidPhoneFormats_succeeds(String phone) {
+      TrainerStore store =
+          TrainerStore.create(
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              VALID_LATITUDE,
+              VALID_LONGITUDE,
+              phone,
+              null,
+              null,
+              null);
+      assertThat(store.getPhoneNumber()).isEqualTo(phone);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"abc", "12", "phone-number", "!@#$%"})
+    @DisplayName("잘못된 전화번호 포맷이면 예외 발생")
+    void create_withInvalidPhoneFormat_throwsException(String phone) {
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      phone,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Phone number must be a valid format");
+    }
+
+    @Test
+    @DisplayName("phoneNumber가 최대 길이를 초과하면 예외 발생")
+    void create_withTooLongPhoneNumber_throwsException() {
+      String longPhone = "+82-10-1234-5678-9012345";
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      longPhone,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class);
     }
   }
 
@@ -449,10 +644,10 @@ class TrainerStoreTest {
               VALID_TRAINER_ID,
               VALID_STORE_NAME,
               VALID_ADDRESS,
-              null,
+              VALID_DETAIL_ADDRESS,
               VALID_LATITUDE,
               VALID_LONGITUDE,
-              null,
+              VALID_PHONE,
               "https://example.com",
               null,
               null);
@@ -468,10 +663,10 @@ class TrainerStoreTest {
               VALID_TRAINER_ID,
               VALID_STORE_NAME,
               VALID_ADDRESS,
-              null,
+              VALID_DETAIL_ADDRESS,
               VALID_LATITUDE,
               VALID_LONGITUDE,
-              null,
+              VALID_PHONE,
               "http://example.com",
               null,
               null);
@@ -488,10 +683,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       "ftp://example.com/files",
                       null,
                       null))
@@ -508,10 +703,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       "file:///etc/passwd",
                       null,
                       null))
@@ -528,34 +723,15 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       "not a url at all",
                       null,
                       null))
           .isInstanceOf(IllegalArgumentException.class)
           .hasMessageContaining("must be a valid URL");
-    }
-
-    @Test
-    @DisplayName("빈 문자열 URL은 허용된다 (optional field)")
-    void create_withEmptyUrl_succeeds() {
-      TrainerStore store =
-          TrainerStore.create(
-              VALID_TRAINER_ID,
-              VALID_STORE_NAME,
-              VALID_ADDRESS,
-              null,
-              VALID_LATITUDE,
-              VALID_LONGITUDE,
-              null,
-              "",
-              null,
-              null);
-
-      assertThat(store.getHomepageUrl()).isEmpty();
     }
 
     @Test
@@ -567,10 +743,10 @@ class TrainerStoreTest {
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       "ftp://invalid",
                       null))
@@ -579,23 +755,44 @@ class TrainerStoreTest {
     }
 
     @Test
-    @DisplayName("X URL 검증도 동일하게 작동한다")
-    void create_withInvalidXUrl_throwsException() {
+    @DisplayName("X Profile URL 검증도 동일하게 작동한다")
+    void create_withInvalidXProfileUrl_throwsException() {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
                       VALID_TRAINER_ID,
                       VALID_STORE_NAME,
                       VALID_ADDRESS,
-                      null,
+                      VALID_DETAIL_ADDRESS,
                       VALID_LATITUDE,
                       VALID_LONGITUDE,
-                      null,
+                      VALID_PHONE,
                       null,
                       null,
                       "ftp://invalid"))
           .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("X URL");
+          .hasMessageContaining("X Profile URL");
+    }
+
+    @Test
+    @DisplayName("URL이 최대 길이를 초과하면 예외 발생")
+    void create_withTooLongUrl_throwsException() {
+      String longUrl = "https://example.com/" + "a".repeat(TrainerStore.MAX_URL_LENGTH);
+      assertThatThrownBy(
+              () ->
+                  TrainerStore.create(
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      longUrl,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("must not exceed");
     }
   }
 }
