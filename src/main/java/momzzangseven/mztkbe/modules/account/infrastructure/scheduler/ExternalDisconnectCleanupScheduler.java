@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.account.infrastructure.scheduler;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.account.application.service.ExternalDisconnectCleanupService;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,6 +15,6 @@ public class ExternalDisconnectCleanupScheduler {
   /** Cleanup old SUCCESS/FAILED rows based on retention. */
   @Scheduled(fixedDelayString = "${withdrawal.external-disconnect.cleanup.fixed-delay}")
   public void run() {
-    cleanupService.cleanup(LocalDateTime.now());
+    cleanupService.cleanup(Instant.now());
   }
 }

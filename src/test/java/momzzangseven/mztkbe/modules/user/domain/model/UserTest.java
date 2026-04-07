@@ -3,7 +3,8 @@ package momzzangseven.mztkbe.modules.user.domain.model;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
 import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
 import org.junit.jupiter.api.DisplayName;
@@ -118,22 +119,22 @@ class UserTest {
             .id(1L)
             .email(null)
             .role(UserRole.USER)
-            .createdAt(LocalDateTime.now())
-            .updatedAt(LocalDateTime.now())
+            .createdAt(Instant.now())
+            .updatedAt(Instant.now())
             .build();
 
     assertThat(user.canBecomeTrainer()).isFalse();
   }
 
   private User baseUser(UserRole role) {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 18, 0);
+    Instant now = Instant.parse("2026-02-28T18:00:00Z");
     return User.builder()
         .id(21L)
         .email("user@example.com")
         .nickname("tester")
         .role(role)
-        .createdAt(now.minusDays(10))
-        .updatedAt(now.minusDays(1))
+        .createdAt(now.minus(10, ChronoUnit.DAYS))
+        .updatedAt(now.minus(1, ChronoUnit.DAYS))
         .build();
   }
 }

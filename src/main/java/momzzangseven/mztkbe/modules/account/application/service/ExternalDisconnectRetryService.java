@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.account.application.service;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,16 +27,16 @@ public class ExternalDisconnectRetryService {
    * @return number of tasks picked up for processing
    */
   public int runBatch() {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     List<ExternalDisconnectTask> tasks =
         externalDisconnectTaskPort.findDueTasks(now, policyPort.getBatchSize());
     for (ExternalDisconnectTask task : tasks) {
-      processOne(task);
+      processOne(task, now);
     }
     return tasks.size();
   }
 
-  private void processOne(ExternalDisconnectTask task) {
+  private void processOne(ExternalDisconnectTask task, Instant now) {
     if (task.getStatus() != ExternalDisconnectStatus.PENDING) {
       return;
     }
@@ -46,7 +45,7 @@ public class ExternalDisconnectRetryService {
     try {
       executor.disconnect(task.getProvider(), task.getProviderUserId(), task.getEncryptedToken());
 
-      externalDisconnectTaskPort.save(task.markSuccess(attemptNumber));
+      externalDisconnectTaskPort.save(task.markSuccess(attemptNumber, now));
     } catch (Exception e) {
       String error = e.getClass().getSimpleName() + ": " + e.getMessage();
       log.warn(
@@ -59,13 +58,13 @@ public class ExternalDisconnectRetryService {
           error,
           e);
       if (attemptNumber >= policyPort.getMaxAttempts()) {
-        externalDisconnectTaskPort.save(task.markFailedTerminal(attemptNumber, error));
+        externalDisconnectTaskPort.save(task.markFailedTerminal(attemptNumber, error, now));
         return;
       }
 
       long delayMillis = computeBackoffMillis(attemptNumber);
-      LocalDateTime nextAttemptAt = LocalDateTime.now().plus(delayMillis, ChronoUnit.MILLIS);
-      externalDisconnectTaskPort.save(task.scheduleRetry(attemptNumber, nextAttemptAt, error));
+      Instant nextAttemptAt = now.plusMillis(delayMillis);
+      externalDisconnectTaskPort.save(task.scheduleRetry(attemptNumber, nextAttemptAt, error, now));
     }
   }
 

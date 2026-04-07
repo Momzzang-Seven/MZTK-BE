@@ -7,7 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import momzzangseven.mztkbe.modules.account.application.port.out.ExternalDisconnectTaskPort;
@@ -43,7 +43,7 @@ class ExternalDisconnectRetryServiceTest {
   void runBatch_skipsNonPendingTask() {
     when(policyPort.getBatchSize()).thenReturn(10);
     ExternalDisconnectTask nonPending = baseTask(ExternalDisconnectStatus.SUCCESS, 2);
-    when(externalDisconnectTaskPort.findDueTasks(any(LocalDateTime.class), eq(10)))
+    when(externalDisconnectTaskPort.findDueTasks(any(Instant.class), eq(10)))
         .thenReturn(List.of(nonPending));
 
     int processed = service.runBatch();
@@ -58,7 +58,7 @@ class ExternalDisconnectRetryServiceTest {
   void runBatch_onSuccess_marksSuccess() {
     when(policyPort.getBatchSize()).thenReturn(10);
     ExternalDisconnectTask pending = baseTask(ExternalDisconnectStatus.PENDING, 1);
-    when(externalDisconnectTaskPort.findDueTasks(any(LocalDateTime.class), eq(10)))
+    when(externalDisconnectTaskPort.findDueTasks(any(Instant.class), eq(10)))
         .thenReturn(List.of(pending));
 
     service.runBatch();
@@ -81,7 +81,7 @@ class ExternalDisconnectRetryServiceTest {
     when(policyPort.getBatchSize()).thenReturn(10);
     when(policyPort.getMaxAttempts()).thenReturn(3);
     ExternalDisconnectTask pending = baseTask(ExternalDisconnectStatus.PENDING, 2);
-    when(externalDisconnectTaskPort.findDueTasks(any(LocalDateTime.class), eq(10)))
+    when(externalDisconnectTaskPort.findDueTasks(any(Instant.class), eq(10)))
         .thenReturn(List.of(pending));
     RuntimeException boom = new RuntimeException("boom");
     org.mockito.Mockito.doThrow(boom)
@@ -110,13 +110,13 @@ class ExternalDisconnectRetryServiceTest {
     when(policyPort.getMaxBackoff()).thenReturn(5_000L);
 
     ExternalDisconnectTask pending = baseTask(ExternalDisconnectStatus.PENDING, 10);
-    when(externalDisconnectTaskPort.findDueTasks(any(LocalDateTime.class), eq(10)))
+    when(externalDisconnectTaskPort.findDueTasks(any(Instant.class), eq(10)))
         .thenReturn(List.of(pending));
     org.mockito.Mockito.doThrow(new IllegalStateException("downstream"))
         .when(executor)
         .disconnect(AuthProvider.GOOGLE, "provider-user", "encrypted-token");
 
-    LocalDateTime before = LocalDateTime.now();
+    Instant before = Instant.now();
     service.runBatch();
 
     ArgumentCaptor<ExternalDisconnectTask> savedCaptor =
@@ -132,7 +132,7 @@ class ExternalDisconnectRetryServiceTest {
   }
 
   private ExternalDisconnectTask baseTask(ExternalDisconnectStatus status, int attemptCount) {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 10, 0);
+    Instant now = Instant.parse("2026-02-28T10:00:00Z");
     return ExternalDisconnectTask.builder()
         .id(1L)
         .userId(99L)
@@ -143,8 +143,8 @@ class ExternalDisconnectRetryServiceTest {
         .attemptCount(attemptCount)
         .nextAttemptAt(now)
         .lastError("previous")
-        .createdAt(now.minusDays(1))
-        .updatedAt(now.minusHours(1))
+        .createdAt(now.minus(1, ChronoUnit.DAYS))
+        .updatedAt(now.minus(1, ChronoUnit.HOURS))
         .build();
   }
 }

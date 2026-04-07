@@ -7,7 +7,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import momzzangseven.mztkbe.modules.account.application.port.out.ExternalDisconnectTaskPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadExternalDisconnectCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadHardDeletePolicyPort;
@@ -39,54 +40,57 @@ class ExternalDisconnectCleanupServiceTest {
   @Test
   @DisplayName("cleanup clamps retention days and sums deleted rows")
   void cleanup_clampsRetentionAndDeletesBothStatuses() {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 9, 0);
+    Instant now = Instant.parse("2026-02-28T09:00:00Z");
     when(hardDeletePolicyPort.getRetentionDays()).thenReturn(30);
     when(cleanupPolicyPort.getSuccessRetentionDays()).thenReturn(60);
     when(cleanupPolicyPort.getFailedRetentionDays()).thenReturn(45);
 
     when(externalDisconnectTaskPort.deleteByStatusAndUpdatedAtBefore(
-            ExternalDisconnectStatus.SUCCESS, now.minusDays(30)))
+            ExternalDisconnectStatus.SUCCESS, now.minus(30, ChronoUnit.DAYS)))
         .thenReturn(2);
     when(externalDisconnectTaskPort.deleteByStatusAndUpdatedAtBefore(
-            ExternalDisconnectStatus.FAILED, now.minusDays(30)))
+            ExternalDisconnectStatus.FAILED, now.minus(30, ChronoUnit.DAYS)))
         .thenReturn(3);
 
     int deleted = service.cleanup(now);
 
     assertThat(deleted).isEqualTo(5);
     verify(externalDisconnectTaskPort)
-        .deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus.SUCCESS, now.minusDays(30));
+        .deleteByStatusAndUpdatedAtBefore(
+            ExternalDisconnectStatus.SUCCESS, now.minus(30, ChronoUnit.DAYS));
     verify(externalDisconnectTaskPort)
-        .deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus.FAILED, now.minusDays(30));
+        .deleteByStatusAndUpdatedAtBefore(
+            ExternalDisconnectStatus.FAILED, now.minus(30, ChronoUnit.DAYS));
   }
 
   @Test
   @DisplayName("cleanup skips failed cleanup when failed retention is disabled")
   void cleanup_skipsFailedStatusWhenRetentionDisabled() {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 9, 0);
+    Instant now = Instant.parse("2026-02-28T09:00:00Z");
     when(hardDeletePolicyPort.getRetentionDays()).thenReturn(30);
     when(cleanupPolicyPort.getSuccessRetentionDays()).thenReturn(10);
     when(cleanupPolicyPort.getFailedRetentionDays()).thenReturn(0);
 
     when(externalDisconnectTaskPort.deleteByStatusAndUpdatedAtBefore(
-            ExternalDisconnectStatus.SUCCESS, now.minusDays(10)))
+            ExternalDisconnectStatus.SUCCESS, now.minus(10, ChronoUnit.DAYS)))
         .thenReturn(4);
 
     int deleted = service.cleanup(now);
 
     assertThat(deleted).isEqualTo(4);
     verify(externalDisconnectTaskPort)
-        .deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus.SUCCESS, now.minusDays(10));
+        .deleteByStatusAndUpdatedAtBefore(
+            ExternalDisconnectStatus.SUCCESS, now.minus(10, ChronoUnit.DAYS));
     verify(externalDisconnectTaskPort, never())
         .deleteByStatusAndUpdatedAtBefore(
             org.mockito.ArgumentMatchers.eq(ExternalDisconnectStatus.FAILED),
-            org.mockito.ArgumentMatchers.any(LocalDateTime.class));
+            org.mockito.ArgumentMatchers.any(Instant.class));
   }
 
   @Test
   @DisplayName("cleanup throws when configured retention is invalid")
   void cleanup_withNonPositiveRetention_throwsIllegalArgumentException() {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 9, 0);
+    Instant now = Instant.parse("2026-02-28T09:00:00Z");
     when(hardDeletePolicyPort.getRetentionDays()).thenReturn(30);
     when(cleanupPolicyPort.getSuccessRetentionDays()).thenReturn(0);
 
@@ -98,7 +102,7 @@ class ExternalDisconnectCleanupServiceTest {
   @Test
   @DisplayName("cleanup throws when hard-delete retention is invalid")
   void cleanup_withInvalidHardDeleteRetention_throwsIllegalArgumentException() {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 9, 0);
+    Instant now = Instant.parse("2026-02-28T09:00:00Z");
     when(hardDeletePolicyPort.getRetentionDays()).thenReturn(0);
     when(cleanupPolicyPort.getSuccessRetentionDays()).thenReturn(7);
 

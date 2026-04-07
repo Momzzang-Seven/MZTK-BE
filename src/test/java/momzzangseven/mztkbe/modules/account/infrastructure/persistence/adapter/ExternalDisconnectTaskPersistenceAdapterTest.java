@@ -6,7 +6,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import momzzangseven.mztkbe.modules.account.domain.model.ExternalDisconnectStatus;
 import momzzangseven.mztkbe.modules.account.domain.model.ExternalDisconnectTask;
@@ -38,7 +39,7 @@ class ExternalDisconnectTaskPersistenceAdapterTest {
   @Test
   @DisplayName("findDueTasks delegates query and maps entity fields")
   void findDueTasks_mapsEntityListToDomainList() {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 19, 0);
+    Instant now = Instant.parse("2026-02-28T19:00:00Z");
     ExternalDisconnectTaskEntity entity =
         ExternalDisconnectTaskEntity.builder()
             .id(1L)
@@ -48,10 +49,10 @@ class ExternalDisconnectTaskPersistenceAdapterTest {
             .encryptedToken("encrypted")
             .status(ExternalDisconnectStatus.PENDING)
             .attemptCount(2)
-            .nextAttemptAt(now.minusMinutes(5))
+            .nextAttemptAt(now.minus(5, ChronoUnit.MINUTES))
             .lastError("last")
-            .createdAt(now.minusDays(1))
-            .updatedAt(now.minusHours(1))
+            .createdAt(now.minus(1, ChronoUnit.DAYS))
+            .updatedAt(now.minus(1, ChronoUnit.HOURS))
             .build();
     when(repository.findDueTasks(
             eq(ExternalDisconnectStatus.PENDING), eq(now), any(Pageable.class)))
@@ -78,7 +79,7 @@ class ExternalDisconnectTaskPersistenceAdapterTest {
   @Test
   @DisplayName("save maps domain to entity and returns mapped domain")
   void save_mapsBothDirections() {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 19, 0);
+    Instant now = Instant.parse("2026-02-28T19:00:00Z");
     ExternalDisconnectTask task =
         ExternalDisconnectTask.builder()
             .userId(100L)
@@ -87,9 +88,9 @@ class ExternalDisconnectTaskPersistenceAdapterTest {
             .encryptedToken(null)
             .status(ExternalDisconnectStatus.PENDING)
             .attemptCount(1)
-            .nextAttemptAt(now.plusHours(1))
+            .nextAttemptAt(now.plus(1, ChronoUnit.HOURS))
             .lastError("error")
-            .createdAt(now.minusDays(1))
+            .createdAt(now.minus(1, ChronoUnit.DAYS))
             .updatedAt(now)
             .build();
 
@@ -129,7 +130,7 @@ class ExternalDisconnectTaskPersistenceAdapterTest {
   @Test
   @DisplayName("[M-146] deleteByStatusAndUpdatedAtBefore delegates and returns count")
   void deleteByStatusAndUpdatedAtBefore_delegates() {
-    LocalDateTime cutoff = LocalDateTime.of(2026, 2, 21, 0, 0);
+    Instant cutoff = Instant.parse("2026-02-21T00:00:00Z");
     when(repository.deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus.SUCCESS, cutoff))
         .thenReturn(5);
 

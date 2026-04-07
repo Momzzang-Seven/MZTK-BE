@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.account.application.service;
 
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.account.application.port.out.ExternalDisconnectTaskPort;
@@ -58,7 +57,7 @@ public class ExternalDisconnectService {
 
   private void enqueueRetryTask(
       Long userId, UserAccount account, AuthProvider provider, Exception error) {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     ExternalDisconnectTask task =
         ExternalDisconnectTask.builder()
             .userId(userId)
@@ -68,7 +67,7 @@ public class ExternalDisconnectService {
                 provider == AuthProvider.GOOGLE ? account.getGoogleRefreshToken() : null)
             .status(ExternalDisconnectStatus.PENDING)
             .attemptCount(1)
-            .nextAttemptAt(now.plus(policyPort.getInitialBackoff(), ChronoUnit.MILLIS))
+            .nextAttemptAt(now.plusMillis(policyPort.getInitialBackoff()))
             .lastError(error.getClass().getSimpleName() + ": " + error.getMessage())
             .createdAt(now)
             .updatedAt(now)

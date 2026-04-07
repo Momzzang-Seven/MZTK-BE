@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,11 +28,11 @@ class UserEntityTest {
         UserEntity.builder()
             .email("user@example.com")
             .role(UserRole.USER)
-            .createdAt(LocalDateTime.of(2026, 2, 1, 10, 0))
-            .updatedAt(LocalDateTime.of(2026, 2, 1, 11, 0))
+            .createdAt(Instant.parse("2026-02-01T10:00:00Z"))
+            .updatedAt(Instant.parse("2026-02-01T11:00:00Z"))
             .build();
 
-    LocalDateTime before = LocalDateTime.now();
+    Instant before = Instant.now();
     entity.onUpdate();
 
     assertThat(entity.getUpdatedAt()).isAfterOrEqualTo(before);

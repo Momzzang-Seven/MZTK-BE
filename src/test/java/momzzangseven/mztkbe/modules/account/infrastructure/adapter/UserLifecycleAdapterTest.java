@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import momzzangseven.mztkbe.modules.account.application.dto.AccountUserSnapshot;
 import momzzangseven.mztkbe.modules.user.application.dto.CreateUserCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UserInfo;
@@ -30,13 +30,7 @@ class UserLifecycleAdapterTest {
   void shouldCreateAndConvert() {
     UserInfo createdUserInfo =
         new UserInfo(
-            10L,
-            "new@example.com",
-            "newuser",
-            null,
-            UserRole.USER,
-            LocalDateTime.now(),
-            LocalDateTime.now());
+            10L, "new@example.com", "newuser", null, UserRole.USER, Instant.now(), Instant.now());
     when(createUserUseCase.createUser(any(CreateUserCommand.class))).thenReturn(createdUserInfo);
 
     AccountUserSnapshot result =

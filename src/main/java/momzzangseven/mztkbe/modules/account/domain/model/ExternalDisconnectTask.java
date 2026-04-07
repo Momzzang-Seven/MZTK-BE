@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.account.domain.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -19,19 +19,18 @@ public class ExternalDisconnectTask {
   private final String encryptedToken; // e.g., Google refresh token (encrypted)
   private final ExternalDisconnectStatus status;
   private final int attemptCount;
-  private final LocalDateTime nextAttemptAt;
+  private final Instant nextAttemptAt;
   private final String lastError;
-  private final LocalDateTime createdAt;
-  private final LocalDateTime updatedAt;
+  private final Instant createdAt;
+  private final Instant updatedAt;
 
-  /** Mark this task as successfully disconnected. */
-  public ExternalDisconnectTask markSuccess() {
-    return markSuccess(this.attemptCount);
-  }
-
-  /** Mark this task as successfully disconnected with the updated attempt count. */
-  public ExternalDisconnectTask markSuccess(int attemptCount) {
-    LocalDateTime now = LocalDateTime.now();
+  /**
+   * Mark this task as successfully disconnected with the updated attempt count.
+   *
+   * @param attemptCount total number of attempts including this one
+   * @param now current time used to set updatedAt
+   */
+  public ExternalDisconnectTask markSuccess(int attemptCount, Instant now) {
     return this.toBuilder()
         .status(ExternalDisconnectStatus.SUCCESS)
         .attemptCount(attemptCount)
@@ -41,14 +40,14 @@ public class ExternalDisconnectTask {
         .build();
   }
 
-  /** Mark this task as terminally failed (no more retries). */
-  public ExternalDisconnectTask markFailedTerminal(String error) {
-    return markFailedTerminal(this.attemptCount, error);
-  }
-
-  /** Mark this task as terminally failed (no more retries) with the updated attempt count. */
-  public ExternalDisconnectTask markFailedTerminal(int attemptCount, String error) {
-    LocalDateTime now = LocalDateTime.now();
+  /**
+   * Mark this task as terminally failed (no more retries) with the updated attempt count.
+   *
+   * @param attemptCount total number of attempts including this one
+   * @param error last error message
+   * @param now current time used to set updatedAt
+   */
+  public ExternalDisconnectTask markFailedTerminal(int attemptCount, String error, Instant now) {
     return this.toBuilder()
         .status(ExternalDisconnectStatus.FAILED)
         .attemptCount(attemptCount)
@@ -64,11 +63,11 @@ public class ExternalDisconnectTask {
    * @param nextAttemptCount total number of attempts after this failure
    * @param nextAttemptAt next scheduled time
    * @param error last error message
+   * @param now current time used to set updatedAt
    * @return updated task
    */
   public ExternalDisconnectTask scheduleRetry(
-      int nextAttemptCount, LocalDateTime nextAttemptAt, String error) {
-    LocalDateTime now = LocalDateTime.now();
+      int nextAttemptCount, Instant nextAttemptAt, String error, Instant now) {
     return this.toBuilder()
         .status(ExternalDisconnectStatus.PENDING)
         .attemptCount(nextAttemptCount)

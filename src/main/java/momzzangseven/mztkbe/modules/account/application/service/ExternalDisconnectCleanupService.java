@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.account.application.service;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,14 +26,14 @@ public class ExternalDisconnectCleanupService {
    *
    * @return number of deleted rows
    */
-  public int cleanup(LocalDateTime now) {
+  public int cleanup(Instant now) {
     int deleted = 0;
 
     int hardDeleteRetentionDays = hardDeletePolicyPort.getRetentionDays();
 
     int successRetentionDays =
         clampRetentionDays(cleanupPolicyPort.getSuccessRetentionDays(), hardDeleteRetentionDays);
-    LocalDateTime successCutoff = now.minus(successRetentionDays, ChronoUnit.DAYS);
+    Instant successCutoff = now.minus(successRetentionDays, ChronoUnit.DAYS);
     deleted +=
         externalDisconnectTaskPort.deleteByStatusAndUpdatedAtBefore(
             ExternalDisconnectStatus.SUCCESS, successCutoff);
@@ -41,7 +41,7 @@ public class ExternalDisconnectCleanupService {
     if (cleanupPolicyPort.getFailedRetentionDays() > 0) {
       int failedRetentionDays =
           clampRetentionDays(cleanupPolicyPort.getFailedRetentionDays(), hardDeleteRetentionDays);
-      LocalDateTime failedCutoff = now.minus(failedRetentionDays, ChronoUnit.DAYS);
+      Instant failedCutoff = now.minus(failedRetentionDays, ChronoUnit.DAYS);
       deleted +=
           externalDisconnectTaskPort.deleteByStatusAndUpdatedAtBefore(
               ExternalDisconnectStatus.FAILED, failedCutoff);

@@ -6,7 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
@@ -89,8 +90,8 @@ class UserPersistenceAdapterTest {
             .email("new@example.com")
             .nickname("new-nick")
             .role(UserRole.USER)
-            .createdAt(LocalDateTime.of(2026, 2, 1, 10, 0))
-            .updatedAt(LocalDateTime.of(2026, 2, 1, 10, 0))
+            .createdAt(Instant.parse("2026-02-01T10:00:00Z"))
+            .updatedAt(Instant.parse("2026-02-01T10:00:00Z"))
             .build();
 
     when(userJpaRepository.save(any(UserEntity.class)))
@@ -128,7 +129,7 @@ class UserPersistenceAdapterTest {
             .nickname("updated-nick")
             .profileImageUrl("https://image")
             .role(UserRole.TRAINER)
-            .updatedAt(LocalDateTime.of(2026, 2, 28, 9, 0))
+            .updatedAt(Instant.parse("2026-02-28T09:00:00Z"))
             .build();
 
     User result = adapter.saveUser(update);
@@ -163,14 +164,14 @@ class UserPersistenceAdapterTest {
   }
 
   private UserEntity baseEntity(Long id) {
-    LocalDateTime now = LocalDateTime.of(2026, 2, 28, 9, 0);
+    Instant now = Instant.parse("2026-02-28T09:00:00Z");
     return UserEntity.builder()
         .id(id)
         .email("active@example.com")
         .role(UserRole.USER)
         .nickname("nick")
-        .createdAt(now.minusDays(30))
-        .updatedAt(now.minusDays(1))
+        .createdAt(now.minus(30, ChronoUnit.DAYS))
+        .updatedAt(now.minus(1, ChronoUnit.DAYS))
         .build();
   }
 }

@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.account.infrastructure.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.account.application.dto.AccountUserSnapshot;
 import momzzangseven.mztkbe.modules.user.application.dto.UserInfo;
@@ -32,8 +32,8 @@ class UserInfoAdapterTest {
         "tester",
         "https://img.url/pic.jpg",
         UserRole.USER,
-        LocalDateTime.now(),
-        LocalDateTime.now());
+        Instant.now(),
+        Instant.now());
   }
 
   @Nested
