@@ -6,7 +6,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLike;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
@@ -14,7 +13,6 @@ import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostL
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostLikeJpaRepository;
 import org.springframework.stereotype.Component;
 
-@Slf4j
 @Component
 @RequiredArgsConstructor
 public class PostLikePersistenceAdapter implements PostLikePersistencePort {
@@ -33,20 +31,9 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
   }
 
   @Override
-  public PostLike saveIfAbsent(PostLike postLike) {
-    return postLikeJpaRepository
-        .insertIfAbsentReturning(
-            postLike.getTargetType().name(), postLike.getTargetId(), postLike.getUserId())
-        .map(this::toDomain)
-        .orElseThrow(
-            () -> {
-              log.error(
-                  "Failed to load post like after idempotent insert: targetType={}, targetId={}, userId={}",
-                  postLike.getTargetType(),
-                  postLike.getTargetId(),
-                  postLike.getUserId());
-              return new IllegalStateException("Failed to load post like after insert.");
-            });
+  public void insertIfAbsent(PostLike postLike) {
+    postLikeJpaRepository.insertIfAbsent(
+        postLike.getTargetType().name(), postLike.getTargetId(), postLike.getUserId());
   }
 
   @Override

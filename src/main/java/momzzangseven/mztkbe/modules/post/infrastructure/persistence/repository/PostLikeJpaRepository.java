@@ -12,14 +12,25 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface PostLikeJpaRepository
-    extends JpaRepository<PostLikeEntity, Long>, PostLikeJpaRepositoryCustom {
+public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Long> {
 
   boolean existsByTargetTypeAndTargetIdAndUserId(
       PostLikeTargetType targetType, Long targetId, Long userId);
 
   Optional<PostLikeEntity> findByTargetTypeAndTargetIdAndUserId(
       PostLikeTargetType targetType, Long targetId, Long userId);
+
+  @Modifying
+  @Query(
+      value =
+          "INSERT INTO post_like (target_type, target_id, user_id, created_at) "
+              + "VALUES (:targetType, :targetId, :userId, CURRENT_TIMESTAMP) "
+              + "ON CONFLICT (target_type, target_id, user_id) DO NOTHING",
+      nativeQuery = true)
+  int insertIfAbsent(
+      @Param("targetType") String targetType,
+      @Param("targetId") Long targetId,
+      @Param("userId") Long userId);
 
   @Modifying
   @Query(

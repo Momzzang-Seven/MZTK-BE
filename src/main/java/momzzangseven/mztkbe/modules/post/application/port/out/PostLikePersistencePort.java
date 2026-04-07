@@ -13,7 +13,7 @@ public interface PostLikePersistencePort {
 
   PostLike save(PostLike postLike);
 
-  PostLike saveIfAbsent(PostLike postLike);
+  void insertIfAbsent(PostLike postLike);
 
   void delete(PostLikeTargetType targetType, Long targetId, Long userId);
 

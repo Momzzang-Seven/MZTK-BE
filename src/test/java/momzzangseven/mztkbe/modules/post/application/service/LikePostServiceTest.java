@@ -40,8 +40,6 @@ class LikePostServiceTest {
     LikePostCommand command = LikePostCommand.forPost(10L, 7L);
 
     when(postPersistencePort.existsPost(10L)).thenReturn(true);
-    when(postLikePersistencePort.saveIfAbsent(org.mockito.ArgumentMatchers.any(PostLike.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(4L);
 
     PostLikeResult result = likePostService.like(command);
@@ -77,8 +75,6 @@ class LikePostServiceTest {
 
     when(loadAnswerLikeTargetPort.loadAnswerTarget(20L))
         .thenReturn(Optional.of(new LoadAnswerLikeTargetPort.AnswerLikeTarget(20L, 10L)));
-    when(postLikePersistencePort.saveIfAbsent(org.mockito.ArgumentMatchers.any(PostLike.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.ANSWER, 20L)).thenReturn(3L);
 
     PostLikeResult result = likePostService.like(command);
@@ -112,8 +108,6 @@ class LikePostServiceTest {
     LikePostCommand command = LikePostCommand.forPost(10L, 7L);
 
     when(postPersistencePort.existsPost(10L)).thenReturn(true);
-    when(postLikePersistencePort.saveIfAbsent(org.mockito.ArgumentMatchers.any(PostLike.class)))
-        .thenReturn(PostLike.create(PostLikeTargetType.POST, 10L, 7L));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(5L);
 
     PostLikeResult result = likePostService.like(command);
@@ -146,7 +140,7 @@ class LikePostServiceTest {
         .isInstanceOf(PostNotFoundException.class);
 
     verify(postLikePersistencePort, never())
-        .saveIfAbsent(org.mockito.ArgumentMatchers.any(PostLike.class));
+        .insertIfAbsent(org.mockito.ArgumentMatchers.any(PostLike.class));
   }
 
   @Test
