@@ -6,6 +6,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostLikeEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -19,8 +20,26 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
   Optional<PostLikeEntity> findByTargetTypeAndTargetIdAndUserId(
       PostLikeTargetType targetType, Long targetId, Long userId);
 
+  @Modifying
+  @Query(
+      value =
+          "INSERT INTO post_like (target_type, target_id, user_id, created_at) "
+              + "VALUES (:targetType, :targetId, :userId, CURRENT_TIMESTAMP) "
+              + "ON CONFLICT (target_type, target_id, user_id) DO NOTHING",
+      nativeQuery = true)
+  int insertIfAbsent(
+      @Param("targetType") String targetType,
+      @Param("targetId") Long targetId,
+      @Param("userId") Long userId);
+
+  @Modifying
+  @Query(
+      "delete from PostLikeEntity p "
+          + "where p.targetType = :targetType and p.targetId = :targetId and p.userId = :userId")
   void deleteByTargetTypeAndTargetIdAndUserId(
-      PostLikeTargetType targetType, Long targetId, Long userId);
+      @Param("targetType") PostLikeTargetType targetType,
+      @Param("targetId") Long targetId,
+      @Param("userId") Long userId);
 
   long countByTargetTypeAndTargetId(PostLikeTargetType targetType, Long targetId);
 
@@ -42,7 +61,10 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
       @Param("targetIds") Collection<Long> targetIds,
       @Param("userId") Long userId);
 
-  void deleteByTargetTypeAndTargetId(PostLikeTargetType targetType, Long targetId);
+  @Modifying
+  @Query("delete from PostLikeEntity p where p.targetType = :targetType and p.targetId = :targetId")
+  void deleteByTargetTypeAndTargetId(
+      @Param("targetType") PostLikeTargetType targetType, @Param("targetId") Long targetId);
 
   interface TargetLikeCountProjection {
     Long getTargetId();

@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.event;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
@@ -31,6 +33,18 @@ class PostLikePostDeletedEventHandlerTest {
   void handle_deletesPostLikes() {
     handler.handle(new PostDeletedEvent(10L, PostType.FREE));
 
+    verify(postLikePersistencePort).deleteByTarget(PostLikeTargetType.POST, 10L);
+  }
+
+  @Test
+  @DisplayName("swallows exception because post like cleanup runs after commit")
+  void handle_swallowsException() {
+    doThrow(new RuntimeException("db fail"))
+        .when(postLikePersistencePort)
+        .deleteByTarget(PostLikeTargetType.POST, 10L);
+
+    assertThatCode(() -> handler.handle(new PostDeletedEvent(10L, PostType.FREE)))
+        .doesNotThrowAnyException();
     verify(postLikePersistencePort).deleteByTarget(PostLikeTargetType.POST, 10L);
   }
 

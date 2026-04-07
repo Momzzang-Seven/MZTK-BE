@@ -6,17 +6,17 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostLikePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLike;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostLikeEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostLikeJpaRepository;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class PostLikePersistenceAdapter implements PostLikePersistencePort {
+public class PostLikePersistenceAdapter implements PostLikePersistencePort, LoadPostLikePort {
 
   private final PostLikeJpaRepository postLikeJpaRepository;
 
@@ -33,15 +33,20 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
 
   @Override
   public PostLike saveIfAbsent(PostLike postLike) {
-    try {
-      return save(postLike);
-    } catch (DataIntegrityViolationException e) {
-      return postLikeJpaRepository
-          .findByTargetTypeAndTargetIdAndUserId(
-              postLike.getTargetType(), postLike.getTargetId(), postLike.getUserId())
-          .map(this::toDomain)
-          .orElseThrow(() -> e);
-    }
+    postLikeJpaRepository.insertIfAbsent(
+        postLike.getTargetType().name(), postLike.getTargetId(), postLike.getUserId());
+    return postLikeJpaRepository
+        .findByTargetTypeAndTargetIdAndUserId(
+            postLike.getTargetType(), postLike.getTargetId(), postLike.getUserId())
+        .map(this::toDomain)
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "Failed to load post_like row after idempotent insert: targetType=%s, targetId=%d, userId=%d"
+                        .formatted(
+                            postLike.getTargetType(),
+                            postLike.getTargetId(),
+                            postLike.getUserId())));
   }
 
   @Override
