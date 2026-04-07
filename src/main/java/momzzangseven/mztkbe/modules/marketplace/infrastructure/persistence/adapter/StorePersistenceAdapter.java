@@ -13,9 +13,9 @@ import org.springframework.stereotype.Component;
 /**
  * Persistence adapter implementing store port interfaces.
  *
- * <p>Thin JPA pass-through following the project convention (see {@code
- * WalletPersistenceAdapter}). Domain ↔ Entity conversion is the only responsibility; all business
- * branching logic (create vs. update) lives in the application service layer.
+ * <p>Thin JPA pass-through following the project convention (see {@code WalletPersistenceAdapter}).
+ * Domain ↔ Entity conversion is the only responsibility; all business branching logic (create vs.
+ * update) lives in the application service layer.
  */
 @Slf4j
 @Component

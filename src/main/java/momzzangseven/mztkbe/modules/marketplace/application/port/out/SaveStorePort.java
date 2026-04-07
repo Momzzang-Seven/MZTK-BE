@@ -31,4 +31,3 @@ public interface SaveStorePort {
    */
   TrainerStore save(TrainerStore store);
 }
-

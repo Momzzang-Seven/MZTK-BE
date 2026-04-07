@@ -47,7 +47,8 @@ public record UpsertStoreRequestDTO(
         @Size(max = 20, message = "Phone number must not exceed 20 characters")
         @Pattern(
             regexp = "^\\+?\\d[\\d \\-]{6,14}\\d$",
-            message = "Phone number must be a valid format (e.g., 010-1234-5678 or +82-10-1234-5678)")
+            message =
+                "Phone number must be a valid format (e.g., 010-1234-5678 or +82-10-1234-5678)")
         String phoneNumber,
     @URL(message = "Homepage URL must be a valid URL")
         @Size(max = 500, message = "Homepage URL must not exceed 500 characters")

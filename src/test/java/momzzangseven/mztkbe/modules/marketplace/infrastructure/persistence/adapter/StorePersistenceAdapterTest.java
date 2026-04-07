@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.times;
@@ -17,6 +18,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,6 +33,8 @@ class StorePersistenceAdapterTest {
   @Mock private TrainerStoreJpaRepository trainerStoreJpaRepository;
 
   @InjectMocks private StorePersistenceAdapter storagePersistenceAdapter;
+
+  @Captor private ArgumentCaptor<TrainerStoreEntity> entityCaptor;
 
   // ============================================
   // Test Fixtures
@@ -49,7 +54,7 @@ class StorePersistenceAdapterTest {
         .phoneNumber("010-1234-5678")
         .homepageUrl("https://example.com")
         .instagramUrl("https://instagram.com/test")
-        .xUrl("https://x.com/test")
+        .xProfileUrl("https://x.com/test")
         .createdAt(LocalDateTime.of(2026, 1, 1, 0, 0))
         .updatedAt(LocalDateTime.of(2026, 4, 1, 12, 0))
         .build();
@@ -83,6 +88,7 @@ class StorePersistenceAdapterTest {
       assertThat(store.getAddress()).isEqualTo("서울시 강남구");
       assertThat(store.getLatitude()).isEqualTo(37.4979);
       assertThat(store.getLongitude()).isEqualTo(127.0276);
+      assertThat(store.getXProfileUrl()).isEqualTo("https://x.com/test");
     }
 
     @Test
@@ -115,6 +121,66 @@ class StorePersistenceAdapterTest {
   }
 
   // ============================================
+  // save() — SaveStorePort
+  // ============================================
+
+  @Nested
+  @DisplayName("save() - SaveStorePort 구현")
+  class SaveTests {
+
+    @Test
+    @DisplayName("도메인 모델을 Entity로 변환하여 JPA save하고 도메인 모델로 반환한다")
+    void save_convertsAndSavesEntity() {
+      // given
+      TrainerStore domain =
+          TrainerStore.builder()
+              .trainerId(1L)
+              .storeName("PT Studio")
+              .address("서울시 강남구")
+              .detailAddress("2층")
+              .latitude(37.4979)
+              .longitude(127.0276)
+              .phoneNumber("010-1234-5678")
+              .build();
+
+      TrainerStoreEntity savedEntity = createStoreEntity();
+      given(trainerStoreJpaRepository.save(any(TrainerStoreEntity.class))).willReturn(savedEntity);
+
+      // when
+      TrainerStore result = storagePersistenceAdapter.save(domain);
+
+      // then
+      assertThat(result.getId()).isEqualTo(100L);
+      assertThat(result.getStoreName()).isEqualTo("PT Studio");
+    }
+
+    @Test
+    @DisplayName("JPA repository.save()를 정확히 1번 호출한다")
+    void save_callsRepositorySaveOnce() {
+      // given
+      TrainerStore domain =
+          TrainerStore.builder()
+              .trainerId(1L)
+              .storeName("PT Studio")
+              .address("서울시 강남구")
+              .detailAddress("2층")
+              .latitude(37.4979)
+              .longitude(127.0276)
+              .phoneNumber("010-1234-5678")
+              .build();
+
+      TrainerStoreEntity savedEntity = createStoreEntity();
+      given(trainerStoreJpaRepository.save(any(TrainerStoreEntity.class))).willReturn(savedEntity);
+
+      // when
+      storagePersistenceAdapter.save(domain);
+
+      // then
+      then(trainerStoreJpaRepository).should(times(1)).save(any(TrainerStoreEntity.class));
+    }
+  }
+
+  // ============================================
   // Entity ↔ Domain 변환 검증
   // ============================================
 
@@ -142,7 +208,7 @@ class StorePersistenceAdapterTest {
       assertThat(domain.getPhoneNumber()).isEqualTo(entity.getPhoneNumber());
       assertThat(domain.getHomepageUrl()).isEqualTo(entity.getHomepageUrl());
       assertThat(domain.getInstagramUrl()).isEqualTo(entity.getInstagramUrl());
-      assertThat(domain.getXUrl()).isEqualTo(entity.getXUrl());
+      assertThat(domain.getXProfileUrl()).isEqualTo(entity.getXProfileUrl());
       assertThat(domain.getCreatedAt()).isEqualTo(entity.getCreatedAt());
       assertThat(domain.getUpdatedAt()).isEqualTo(entity.getUpdatedAt());
     }
@@ -156,8 +222,10 @@ class StorePersistenceAdapterTest {
               .trainerId(1L)
               .storeName("PT Studio")
               .address("서울시 강남구")
+              .detailAddress("2층")
               .latitude(37.4979)
               .longitude(127.0276)
+              .phoneNumber("010-1234-5678")
               .build();
 
       // when
@@ -179,6 +247,8 @@ class StorePersistenceAdapterTest {
               .trainerId(1L)
               .storeName("PT Studio")
               .address("서울시 강남구")
+              .detailAddress("2층")
+              .phoneNumber("010-1234-5678")
               .latitude(null)
               .longitude(null)
               .build();
