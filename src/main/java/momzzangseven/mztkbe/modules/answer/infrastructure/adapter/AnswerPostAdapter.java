@@ -3,26 +3,22 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.adapter;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
-import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class AnswerPostAdapter implements LoadPostPort {
 
-  private final PostPersistencePort postPersistencePort;
+  private final GetPostContextUseCase getPostContextUseCase;
 
   @Override
   public Optional<PostContext> loadPost(Long postId) {
-    return postPersistencePort
-        .loadPost(postId)
+    return getPostContextUseCase
+        .getPostContext(postId)
         .map(
             post ->
                 new PostContext(
-                    post.getId(),
-                    post.getUserId(),
-                    Boolean.TRUE.equals(post.getIsSolved()),
-                    PostType.QUESTION.equals(post.getType())));
+                    post.postId(), post.writerId(), post.solved(), post.questionPost()));
   }
 }

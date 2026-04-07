@@ -108,7 +108,7 @@ public class AnswerService
         answers.isEmpty() ? Map.of() : loadAnswerLikePort.countLikeByAnswerIds(answerIds);
     Set<Long> likedAnswerIds =
         answers.isEmpty()
-            ? java.util.Set.of()
+            ? Set.of()
             : loadAnswerLikePort.loadLikedAnswerIds(answerIds, currentUserId);
 
     return answers.stream()
