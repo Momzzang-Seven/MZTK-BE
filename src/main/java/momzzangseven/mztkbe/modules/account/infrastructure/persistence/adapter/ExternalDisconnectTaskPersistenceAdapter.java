@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.account.infrastructure.persistence.adapter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.account.application.port.out.ExternalDisconnectTaskPort;
@@ -18,7 +18,7 @@ public class ExternalDisconnectTaskPersistenceAdapter implements ExternalDisconn
   private final ExternalDisconnectTaskJpaRepository repository;
 
   @Override
-  public List<ExternalDisconnectTask> findDueTasks(LocalDateTime now, int limit) {
+  public List<ExternalDisconnectTask> findDueTasks(Instant now, int limit) {
     return repository
         .findDueTasks(ExternalDisconnectStatus.PENDING, now, PageRequest.of(0, limit))
         .stream()
@@ -39,8 +39,7 @@ public class ExternalDisconnectTaskPersistenceAdapter implements ExternalDisconn
   }
 
   @Override
-  public int deleteByStatusAndUpdatedAtBefore(
-      ExternalDisconnectStatus status, LocalDateTime cutoff) {
+  public int deleteByStatusAndUpdatedAtBefore(ExternalDisconnectStatus status, Instant cutoff) {
     return repository.deleteByStatusAndUpdatedAtBefore(status, cutoff);
   }
 

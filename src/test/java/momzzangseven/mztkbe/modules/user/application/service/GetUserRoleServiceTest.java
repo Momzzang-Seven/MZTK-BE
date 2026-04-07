@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
@@ -80,7 +80,7 @@ class GetUserRoleServiceTest {
   }
 
   private User buildUser(Long id, UserRole role) {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     return User.builder()
         .id(id)
         .email("test@example.com")

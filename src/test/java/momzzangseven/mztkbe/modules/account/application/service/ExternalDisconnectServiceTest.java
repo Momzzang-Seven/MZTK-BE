@@ -7,7 +7,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import momzzangseven.mztkbe.modules.account.application.port.out.ExternalDisconnectTaskPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadExternalDisconnectPolicyPort;
@@ -72,7 +71,7 @@ class ExternalDisconnectServiceTest {
         .when(executor)
         .disconnect(AuthProvider.GOOGLE, "provider-user", "encrypted-refresh");
 
-    LocalDateTime before = LocalDateTime.now();
+    Instant before = Instant.now();
     service.disconnectOnWithdrawal(10L, googleAccount);
 
     ArgumentCaptor<ExternalDisconnectTask> taskCaptor =

@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.user.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.user.application.dto.UserInfo;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
@@ -31,7 +31,7 @@ class LoadUserInfoServiceTest {
   void setUp() {
     service = new LoadUserInfoService(loadUserPort);
 
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     testUser =
         User.builder()
             .id(1L)

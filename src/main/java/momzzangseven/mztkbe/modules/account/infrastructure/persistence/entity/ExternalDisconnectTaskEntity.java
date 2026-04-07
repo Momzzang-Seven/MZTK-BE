@@ -11,7 +11,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -55,20 +55,20 @@ public class ExternalDisconnectTaskEntity {
   private int attemptCount;
 
   @Column(name = "next_attempt_at")
-  private LocalDateTime nextAttemptAt;
+  private Instant nextAttemptAt;
 
   @Column(name = "last_error", length = 4000)
   private String lastError;
 
   @Column(name = "created_at", nullable = false)
-  private LocalDateTime createdAt;
+  private Instant createdAt;
 
   @Column(name = "updated_at", nullable = false)
-  private LocalDateTime updatedAt;
+  private Instant updatedAt;
 
   @PrePersist
   protected void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     if (this.createdAt == null) {
       this.createdAt = now;
     }
@@ -82,6 +82,6 @@ public class ExternalDisconnectTaskEntity {
 
   @PreUpdate
   protected void onUpdate() {
-    this.updatedAt = LocalDateTime.now();
+    this.updatedAt = Instant.now();
   }
 }

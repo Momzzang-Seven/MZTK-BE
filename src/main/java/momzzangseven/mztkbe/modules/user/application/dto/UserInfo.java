@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.user.application.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 
@@ -14,8 +14,8 @@ public record UserInfo(
     String nickname,
     String profileImageUrl,
     UserRole role,
-    LocalDateTime createdAt,
-    LocalDateTime updatedAt) {
+    Instant createdAt,
+    Instant updatedAt) {
 
   /** Convert from the User domain model. */
   public static UserInfo from(User user) {

@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.user.domain.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,8 +18,8 @@ public class User {
   private final String nickname;
   private final String profileImageUrl;
   private final UserRole role;
-  private final LocalDateTime createdAt;
-  private final LocalDateTime updatedAt;
+  private final Instant createdAt;
+  private final Instant updatedAt;
 
   // ============================================
   // Factory Methods (Creator Pattern)
@@ -40,7 +40,7 @@ public class User {
     validateEmail(email);
     validateNickname(nickname);
 
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     return User.builder()
         .email(email)
         .nickname(nickname)
@@ -68,7 +68,7 @@ public class User {
     return this.toBuilder()
         .nickname(newNickname)
         .profileImageUrl(newProfileImageUrl)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(Instant.now())
         .build();
   }
 
@@ -92,7 +92,7 @@ public class User {
       throw new IllegalAdminGrantException();
     }
 
-    return this.toBuilder().role(newRole).updatedAt(LocalDateTime.now()).build();
+    return this.toBuilder().role(newRole).updatedAt(Instant.now()).build();
   }
 
   /** Check if user is admin. */

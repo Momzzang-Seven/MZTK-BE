@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import momzzangseven.mztkbe.modules.account.domain.model.ExternalDisconnectStatus;
 import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import org.junit.jupiter.api.DisplayName;
@@ -35,8 +35,8 @@ class ExternalDisconnectTaskEntityTest {
   @Test
   @DisplayName("onCreate preserves explicitly provided status and timestamps")
   void onCreate_withPresetFields_keepsValues() {
-    LocalDateTime createdAt = LocalDateTime.of(2026, 2, 1, 10, 0);
-    LocalDateTime updatedAt = LocalDateTime.of(2026, 2, 2, 10, 0);
+    Instant createdAt = Instant.parse("2026-02-01T10:00:00Z");
+    Instant updatedAt = Instant.parse("2026-02-02T10:00:00Z");
     ExternalDisconnectTaskEntity entity =
         ExternalDisconnectTaskEntity.builder()
             .userId(1L)
@@ -65,11 +65,11 @@ class ExternalDisconnectTaskEntityTest {
             .providerUserId("kakao-user")
             .attemptCount(1)
             .status(ExternalDisconnectStatus.PENDING)
-            .createdAt(LocalDateTime.of(2026, 2, 1, 10, 0))
-            .updatedAt(LocalDateTime.of(2026, 2, 1, 11, 0))
+            .createdAt(Instant.parse("2026-02-01T10:00:00Z"))
+            .updatedAt(Instant.parse("2026-02-01T11:00:00Z"))
             .build();
 
-    LocalDateTime before = LocalDateTime.now();
+    Instant before = Instant.now();
     entity.onUpdate();
 
     assertThat(entity.getUpdatedAt()).isAfterOrEqualTo(before);

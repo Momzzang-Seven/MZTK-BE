@@ -7,7 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserProfileCommand;
@@ -39,7 +39,7 @@ class UpdateUserProfileServiceTest {
   void setUp() {
     service = new UpdateUserProfileService(loadUserPort, saveUserPort);
 
-    LocalDateTime now = LocalDateTime.now();
+    Instant now = Instant.now();
     existingUser =
         User.builder()
             .id(1L)

@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
@@ -16,8 +16,8 @@ class UpdateUserRoleResultTest {
   @Test
   @DisplayName("from() maps user fields")
   void from_mapsFields() {
-    LocalDateTime createdAt = LocalDateTime.of(2026, 3, 1, 10, 0);
-    LocalDateTime updatedAt = LocalDateTime.of(2026, 3, 1, 10, 5);
+    Instant createdAt = Instant.parse("2026-03-01T10:00:00Z");
+    Instant updatedAt = Instant.parse("2026-03-01T10:05:00Z");
     User user =
         User.builder()
             .id(1L)

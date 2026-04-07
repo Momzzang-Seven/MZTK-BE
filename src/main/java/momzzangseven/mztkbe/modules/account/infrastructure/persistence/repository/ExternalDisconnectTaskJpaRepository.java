@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.account.infrastructure.persistence.repository;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import momzzangseven.mztkbe.modules.account.domain.model.ExternalDisconnectStatus;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.ExternalDisconnectTaskEntity;
@@ -20,7 +20,7 @@ public interface ExternalDisconnectTaskJpaRepository
           + "order by t.nextAttemptAt asc, t.id asc")
   List<ExternalDisconnectTaskEntity> findDueTasks(
       @Param("status") ExternalDisconnectStatus status,
-      @Param("now") LocalDateTime now,
+      @Param("now") Instant now,
       Pageable pageable);
 
   @Modifying
@@ -28,7 +28,7 @@ public interface ExternalDisconnectTaskJpaRepository
       "delete from ExternalDisconnectTaskEntity t "
           + "where t.status = :status and t.updatedAt < :cutoff")
   int deleteByStatusAndUpdatedAtBefore(
-      @Param("status") ExternalDisconnectStatus status, @Param("cutoff") LocalDateTime cutoff);
+      @Param("status") ExternalDisconnectStatus status, @Param("cutoff") Instant cutoff);
 
   @Modifying
   @Query("delete from ExternalDisconnectTaskEntity t where t.userId in :userIds")
