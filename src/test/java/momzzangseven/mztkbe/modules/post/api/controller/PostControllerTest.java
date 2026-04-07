@@ -26,10 +26,10 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.LikePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.service.GetPostService;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -76,7 +76,7 @@ class PostControllerTest {
       txSignedRecoveryWorker;
 
   @MockitoBean private CreatePostUseCase createPostUseCase;
-  @MockitoBean private GetPostUseCase getPostUseCase;
+  @MockitoBean private GetPostService getPostService;
   @MockitoBean private UpdatePostUseCase updatePostUseCase;
   @MockitoBean private DeletePostUseCase deletePostUseCase;
   @MockitoBean private SearchPostsUseCase searchPostsUseCase;
@@ -124,7 +124,7 @@ class PostControllerTest {
   @Test
   @DisplayName("GET /posts/{postId} succeeds")
   void getPost_success() throws Exception {
-    given(getPostUseCase.getPost(1L, 1L))
+    given(getPostService.getPost(1L, 1L))
         .willReturn(
             new PostDetailResult(
                 1L,
@@ -208,7 +208,7 @@ class PostControllerTest {
   @Test
   @DisplayName("GET /posts/{postId} includes question info")
   void getPost_questionType_includesQuestionInfo() throws Exception {
-    given(getPostUseCase.getPost(5L, 1L))
+    given(getPostService.getPost(5L, 1L))
         .willReturn(
             new PostDetailResult(
                 5L,
