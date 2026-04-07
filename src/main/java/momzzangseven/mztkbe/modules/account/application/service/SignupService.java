@@ -3,12 +3,14 @@ package momzzangseven.mztkbe.modules.account.application.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.DuplicateEmailException;
+import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.modules.account.application.dto.AccountUserSnapshot;
 import momzzangseven.mztkbe.modules.account.application.dto.SignupCommand;
 import momzzangseven.mztkbe.modules.account.application.dto.SignupResult;
 import momzzangseven.mztkbe.modules.account.application.port.in.SignupUseCase;
 import momzzangseven.mztkbe.modules.account.application.port.out.CreateAccountUserPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadAccountUserInfoPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,6 +26,7 @@ public class SignupService implements SignupUseCase {
   private static final String DEFAULT_ROLE = "USER";
 
   private final LoadAccountUserInfoPort loadAccountUserInfoPort;
+  private final LoadUserAccountPort loadUserAccountPort;
   private final CreateAccountUserPort createAccountUserPort;
   private final SaveUserAccountPort saveUserAccountPort;
   private final PasswordEncoder passwordEncoder;
@@ -35,6 +38,10 @@ public class SignupService implements SignupUseCase {
     command.validate();
     log.debug("Command validation passed");
 
+    if (loadUserAccountPort.findDeletedByEmail(command.email()).isPresent()) {
+      log.warn("Signup failed: Email belongs to a withdrawn account - {}", command.email());
+      throw new UserWithdrawnException();
+    }
     if (loadAccountUserInfoPort.existsByEmail(command.email())) {
       log.warn("Signup failed: Email already exists - {}", command.email());
       throw new DuplicateEmailException(command.email());

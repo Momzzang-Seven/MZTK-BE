@@ -130,9 +130,11 @@ class SocialLoginAccountServiceTest {
   class EmailConflict {
 
     @Test
-    @DisplayName("should throw InvalidCredentialsException when email already exists")
+    @DisplayName("should throw InvalidCredentialsException when email already exists as active")
     void shouldThrowForEmailConflict() {
       when(loadUserAccountPort.findByProviderAndProviderUserId(AuthProvider.GOOGLE, "google123"))
+          .thenReturn(Optional.empty());
+      when(loadUserAccountPort.findDeletedByEmail("existing@example.com"))
           .thenReturn(Optional.empty());
       when(loadAccountUserInfoPort.existsByEmail("existing@example.com")).thenReturn(true);
 
@@ -141,6 +143,30 @@ class SocialLoginAccountServiceTest {
                   service.loginOrRegister(
                       AuthProvider.GOOGLE, "google123", "existing@example.com", "nick", null))
           .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    @Test
+    @DisplayName("should throw UserWithdrawnException when email belongs to a withdrawn account")
+    void shouldThrowForWithdrawnEmail() {
+      UserAccount deletedAccount =
+          UserAccount.builder()
+              .id(2L)
+              .userId(2L)
+              .provider(AuthProvider.KAKAO)
+              .providerUserId("kakao999")
+              .status(AccountStatus.DELETED)
+              .build();
+
+      when(loadUserAccountPort.findByProviderAndProviderUserId(AuthProvider.GOOGLE, "google456"))
+          .thenReturn(Optional.empty());
+      when(loadUserAccountPort.findDeletedByEmail("withdrawn@example.com"))
+          .thenReturn(Optional.of(deletedAccount));
+
+      assertThatThrownBy(
+              () ->
+                  service.loginOrRegister(
+                      AuthProvider.GOOGLE, "google456", "withdrawn@example.com", "nick", null))
+          .isInstanceOf(UserWithdrawnException.class);
     }
   }
 }

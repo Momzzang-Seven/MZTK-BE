@@ -6,13 +6,19 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.*;
 
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.DuplicateEmailException;
+import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.modules.account.application.dto.AccountUserSnapshot;
 import momzzangseven.mztkbe.modules.account.application.dto.SignupCommand;
 import momzzangseven.mztkbe.modules.account.application.dto.SignupResult;
 import momzzangseven.mztkbe.modules.account.application.port.out.CreateAccountUserPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadAccountUserInfoPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
+import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
+import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -27,6 +33,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class SignupServiceTest {
 
   @Mock private LoadAccountUserInfoPort loadAccountUserInfoPort;
+  @Mock private LoadUserAccountPort loadUserAccountPort;
   @Mock private CreateAccountUserPort createAccountUserPort;
   @Mock private SaveUserAccountPort saveUserAccountPort;
   @Mock private PasswordEncoder passwordEncoder;
@@ -58,6 +65,7 @@ class SignupServiceTest {
       SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
       given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
       given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
       given(
@@ -80,6 +88,7 @@ class SignupServiceTest {
       SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
       given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
       given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
       given(
@@ -100,6 +109,7 @@ class SignupServiceTest {
       SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
       given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
       given(passwordEncoder.encode(anyString())).willReturn(ENCODED_PASSWORD);
       given(
@@ -132,12 +142,35 @@ class SignupServiceTest {
     void execute_DuplicateEmail_ThrowsDuplicateEmailException() {
       SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
 
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
       given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(true);
 
       assertThatThrownBy(() -> signupService.execute(command))
           .isInstanceOf(DuplicateEmailException.class);
 
       verifyNoInteractions(passwordEncoder, createAccountUserPort, saveUserAccountPort);
+    }
+
+    @Test
+    @DisplayName("탈퇴 계정 이메일로 회원가입 시 UserWithdrawnException 발생")
+    void execute_WithdrawnEmail_ThrowsUserWithdrawnException() {
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      UserAccount deletedAccount =
+          UserAccount.builder()
+              .id(1L)
+              .userId(1L)
+              .provider(AuthProvider.LOCAL)
+              .status(AccountStatus.DELETED)
+              .build();
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL))
+          .willReturn(Optional.of(deletedAccount));
+
+      assertThatThrownBy(() -> signupService.execute(command))
+          .isInstanceOf(UserWithdrawnException.class);
+
+      verifyNoInteractions(
+          loadAccountUserInfoPort, passwordEncoder, createAccountUserPort, saveUserAccountPort);
     }
 
     @Test
