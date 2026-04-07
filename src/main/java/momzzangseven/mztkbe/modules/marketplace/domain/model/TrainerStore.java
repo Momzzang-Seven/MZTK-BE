@@ -12,11 +12,11 @@ import lombok.Getter;
  * Domain model representing a trainer's store (marketplace).
  *
  * <p>All fields are {@code private final} to enforce immutability. New instances are created
- * exclusively via {@link #create} (for new stores) or via {@code toBuilder()} (for modifications).
+ * exclusively via {@link #create} (for new stores) or via {@code toBuilder()} (for modifications
+ * such as carry-over of the existing ID during updates).
  *
- * <p>Current version supports only create/replace semantics via native upsert. Partial update
- * methods (e.g., deactivate, changeBusinessHours) should be added here as business requirements
- * emerge, NOT in the service layer.
+ * <p>Partial update methods (e.g., deactivate, changeBusinessHours) should be added here as
+ * business requirements emerge, NOT in the service layer.
  */
 @Getter
 @Builder(toBuilder = true)
