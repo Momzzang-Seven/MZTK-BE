@@ -40,6 +40,35 @@ class GetPostServiceTest {
   @InjectMocks private GetPostService getPostService;
 
   @Test
+  @DisplayName("returns minimal post context for external module queries")
+  void getPostContextSuccess() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(40L)
+            .userId(15L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(100L)
+            .isSolved(true)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(40L)).thenReturn(Optional.of(post));
+
+    var result = getPostService.getPostContext(40L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().postId()).isEqualTo(40L);
+    assertThat(result.get().writerId()).isEqualTo(15L);
+    assertThat(result.get().solved()).isTrue();
+    assertThat(result.get().questionPost()).isTrue();
+    verify(loadTagPort, never()).findTagNamesByPostId(40L);
+  }
+
+  @Test
   @DisplayName("returns mapped post with tags and images from image module")
   void getPostSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);

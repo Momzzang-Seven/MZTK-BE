@@ -6,8 +6,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
-import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
-import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
+import momzzangseven.mztkbe.modules.post.application.port.in.DeleteAnswerLikesUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,7 +22,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @DisplayName("PostLikeAnswerDeletedEventHandler unit test")
 class PostLikeAnswerDeletedEventHandlerTest {
 
-  @Mock private PostLikePersistencePort postLikePersistencePort;
+  @Mock private DeleteAnswerLikesUseCase deleteAnswerLikesUseCase;
 
   @InjectMocks private PostLikeAnswerDeletedEventHandler handler;
 
@@ -32,18 +31,16 @@ class PostLikeAnswerDeletedEventHandlerTest {
   void handle_deletesAnswerLikes() {
     handler.handle(new AnswerDeletedEvent(20L));
 
-    verify(postLikePersistencePort).deleteByTarget(PostLikeTargetType.ANSWER, 20L);
+    verify(deleteAnswerLikesUseCase).deleteAnswerLikes(20L);
   }
 
   @Test
   @DisplayName("swallows exception because answer like cleanup runs after commit")
   void handle_swallowsException() {
-    doThrow(new RuntimeException("db fail"))
-        .when(postLikePersistencePort)
-        .deleteByTarget(PostLikeTargetType.ANSWER, 20L);
+    doThrow(new RuntimeException("db fail")).when(deleteAnswerLikesUseCase).deleteAnswerLikes(20L);
 
     assertThatCode(() -> handler.handle(new AnswerDeletedEvent(20L))).doesNotThrowAnyException();
-    verify(postLikePersistencePort).deleteByTarget(PostLikeTargetType.ANSWER, 20L);
+    verify(deleteAnswerLikesUseCase).deleteAnswerLikes(20L);
   }
 
   @Test

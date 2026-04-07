@@ -2,8 +2,6 @@ package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -40,9 +38,7 @@ class PostLikePersistenceAdapterTest {
             .build();
     setCreatedAt(existingEntity, LocalDateTime.of(2026, 4, 2, 10, 0));
 
-    when(postLikeJpaRepository.insertIfAbsent(anyString(), anyLong(), anyLong())).thenReturn(1);
-    when(postLikeJpaRepository.findByTargetTypeAndTargetIdAndUserId(
-            PostLikeTargetType.POST, 10L, 7L))
+    when(postLikeJpaRepository.insertIfAbsentReturning(PostLikeTargetType.POST.name(), 10L, 7L))
         .thenReturn(Optional.of(existingEntity));
 
     PostLike saved = postLikePersistenceAdapter.saveIfAbsent(postLike);
@@ -58,14 +54,12 @@ class PostLikePersistenceAdapterTest {
   void saveIfAbsent_throws_whenRowCannotBeLoaded() {
     PostLike postLike = PostLike.create(PostLikeTargetType.POST, 10L, 7L);
 
-    when(postLikeJpaRepository.insertIfAbsent(anyString(), anyLong(), anyLong())).thenReturn(0);
-    when(postLikeJpaRepository.findByTargetTypeAndTargetIdAndUserId(
-            PostLikeTargetType.POST, 10L, 7L))
+    when(postLikeJpaRepository.insertIfAbsentReturning(PostLikeTargetType.POST.name(), 10L, 7L))
         .thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> postLikePersistenceAdapter.saveIfAbsent(postLike))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("Failed to load post_like row after idempotent insert");
+        .hasMessageContaining("Failed to load post like after insert.");
   }
 
   private void setCreatedAt(PostLikeEntity entity, LocalDateTime createdAt) {
