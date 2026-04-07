@@ -15,7 +15,7 @@ import momzzangseven.mztkbe.modules.marketplace.domain.model.TrainerStore;
  * @param phoneNumber phone number
  * @param homepageUrl homepage URL
  * @param instagramUrl Instagram URL
- * @param xUrl X (Twitter) URL
+ * @param xProfileUrl X (Twitter) profile URL
  */
 @Builder
 public record GetStoreResult(
@@ -28,7 +28,7 @@ public record GetStoreResult(
     String phoneNumber,
     String homepageUrl,
     String instagramUrl,
-    String xUrl) {
+    String xProfileUrl) {
 
   /**
    * Create from TrainerStore domain model.
@@ -47,7 +47,7 @@ public record GetStoreResult(
         .phoneNumber(store.getPhoneNumber())
         .homepageUrl(store.getHomepageUrl())
         .instagramUrl(store.getInstagramUrl())
-        .xUrl(store.getXUrl())
+        .xProfileUrl(store.getXProfileUrl())
         .build();
   }
 }

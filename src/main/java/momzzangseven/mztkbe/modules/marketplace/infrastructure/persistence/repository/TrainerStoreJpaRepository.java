@@ -8,12 +8,8 @@ import org.springframework.stereotype.Repository;
 /**
  * Spring Data JPA Repository for TrainerStoreEntity.
  *
- * <p>Infrastructure Layer: Provides standard database access methods. Used by
- * StorePersistenceAdapter (not directly by application layer).
- *
- * <p><b>Note:</b> The native upsert query is implemented in {@code StorePersistenceAdapter} using
- * {@code EntityManager} to leverage {@code RETURNING id}, which is incompatible with Spring Data
- * JPA's {@code @Modifying} annotation (only supports void/int return types).
+ * <p>Infrastructure Layer: Provides standard database access methods. Used exclusively by {@code
+ * StorePersistenceAdapter} (not directly by the application layer).
  */
 @Repository
 public interface TrainerStoreJpaRepository extends JpaRepository<TrainerStoreEntity, Long> {
