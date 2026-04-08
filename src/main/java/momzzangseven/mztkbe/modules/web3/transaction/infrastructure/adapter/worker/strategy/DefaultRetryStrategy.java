@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+/** Default retry strategy using fixed backoff from reward-token worker configuration. */
 public class DefaultRetryStrategy implements RetryStrategy {
 
   private final Clock appClock;
@@ -20,6 +21,7 @@ public class DefaultRetryStrategy implements RetryStrategy {
     return nonRetryableExceptions.stream().noneMatch(type -> type.isInstance(throwable));
   }
 
+  /** Returns next retry timestamp based on configured backoff seconds. */
   @Override
   public LocalDateTime nextRetryAt(
       TransactionRewardTokenProperties properties,

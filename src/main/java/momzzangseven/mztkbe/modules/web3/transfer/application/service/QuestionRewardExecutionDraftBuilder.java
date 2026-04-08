@@ -35,6 +35,12 @@ import org.springframework.stereotype.Component;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/**
+ * Builds execution draft for question-reward transfer action.
+ *
+ * <p>This builder follows the same shared execution contract as transfer while encoding QnA domain
+ * payload and reference metadata.
+ */
 public class QuestionRewardExecutionDraftBuilder {
 
   private final LoadWalletPort loadWalletPort;
@@ -47,6 +53,7 @@ public class QuestionRewardExecutionDraftBuilder {
   private final ExecutionPayloadSerializer executionPayloadSerializer;
   private final Clock appClock;
 
+  /** Builds a validated question-reward execution draft from domain command. */
   public ExecutionDraft build(RegisterQuestionRewardIntentCommand command) {
     command.validate();
 

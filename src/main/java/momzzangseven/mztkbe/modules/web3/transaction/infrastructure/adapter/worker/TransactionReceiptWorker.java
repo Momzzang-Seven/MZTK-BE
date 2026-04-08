@@ -28,6 +28,12 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
+/**
+ * Worker that polls on-chain receipts for pending transactions.
+ *
+ * <p>It maps receipt outcomes to transaction status transitions and publishes execution intent
+ * outcome events through {@link TransactionOutcomePublisher}.
+ */
 public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
@@ -61,6 +67,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     processBatch(20);
   }
 
+  /** Processes one bounded polling batch for {@code PENDING} transactions. */
   void processBatch(int limit) {
     int claimTtlSeconds =
         Math.max(claimTtlSeconds(), rewardTokenProperties.getWorker().getReceiptTimeoutSeconds());

@@ -13,6 +13,12 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 @Getter
 @Builder(toBuilder = true)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
+/**
+ * Immutable aggregate representing one execution attempt for a Web3 action.
+ *
+ * <p>Each logical action can create multiple attempts via the same root idempotency key while
+ * preserving attempt number and payload immutability.
+ */
 public class ExecutionIntent {
 
   private final Long id;
@@ -44,6 +50,12 @@ public class ExecutionIntent {
   private final LocalDateTime createdAt;
   private final LocalDateTime updatedAt;
 
+  /**
+   * Creates a new intent in {@code AWAITING_SIGNATURE} state.
+   *
+   * <p>The method validates mode-specific fields and initializes both created/updated timestamps
+   * with supplied business clock value.
+   */
   public static ExecutionIntent create(
       String publicId,
       String rootIdempotencyKey,
@@ -123,10 +135,12 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Returns whether payload hash matches for idempotent reuse checks. */
   public boolean hasSamePayload(String candidatePayloadHash) {
     return payloadHash != null && payloadHash.equals(candidatePayloadHash);
   }
 
+  /** Returns whether this intent can still be reused for the same logical request. */
   public boolean isActiveForReuse() {
     return status == ExecutionIntentStatus.AWAITING_SIGNATURE
         || status == ExecutionIntentStatus.SIGNED
@@ -134,6 +148,7 @@ public class ExecutionIntent {
         || status == ExecutionIntentStatus.CONFIRMED;
   }
 
+  /** Returns whether this intent can be superseded by a new attempt. */
   public boolean canStartNewAttempt() {
     return status == ExecutionIntentStatus.FAILED_ONCHAIN
         || status == ExecutionIntentStatus.EXPIRED
@@ -141,10 +156,12 @@ public class ExecutionIntent {
         || status == ExecutionIntentStatus.CANCELED;
   }
 
+  /** Returns whether sign request payload should be exposed to caller. */
   public boolean shouldExposeSignRequest() {
     return status == ExecutionIntentStatus.AWAITING_SIGNATURE;
   }
 
+  /** Resolves sponsor usage date using persisted field first, then created date fallback. */
   public LocalDate resolveSponsorUsageDateKst() {
     if (sponsorUsageDateKst != null) {
       return sponsorUsageDateKst;
@@ -155,6 +172,7 @@ public class ExecutionIntent {
     throw new IllegalStateException("sponsorUsageDateKst is missing");
   }
 
+  /** Transitions intent to {@code SIGNED} with submitted transaction id. */
   public ExecutionIntent markSigned(Long nextSubmittedTxId, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
     requireSubmittedTxId(nextSubmittedTxId);
@@ -166,6 +184,7 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Transitions intent to {@code PENDING_ONCHAIN}. */
   public ExecutionIntent markPendingOnchain(Long nextSubmittedTxId, LocalDateTime now) {
     if (status != ExecutionIntentStatus.AWAITING_SIGNATURE
         && status != ExecutionIntentStatus.SIGNED) {
@@ -180,12 +199,14 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Confirms pending intent to {@code CONFIRMED}. */
   public ExecutionIntent confirm(LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.PENDING_ONCHAIN);
     requireNow(now);
     return toBuilder().status(ExecutionIntentStatus.CONFIRMED).updatedAt(now).build();
   }
 
+  /** Transitions signed/pending intent to {@code FAILED_ONCHAIN}. */
   public ExecutionIntent failOnchain(String errorCode, String errorReason, LocalDateTime now) {
     if (status != ExecutionIntentStatus.PENDING_ONCHAIN && status != ExecutionIntentStatus.SIGNED) {
       throw new IllegalStateException("intent cannot fail onchain from " + status);
@@ -199,6 +220,7 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Expires signable intent with error context. */
   public ExecutionIntent expire(String errorCode, String errorReason, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
     requireNow(now);
@@ -210,6 +232,7 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Cancels signable intent with cancellation reason. */
   public ExecutionIntent cancel(String errorCode, String errorReason, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
     requireNow(now);
@@ -221,6 +244,7 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Marks signable intent as nonce stale to force new attempt generation. */
   public ExecutionIntent markNonceStale(String errorCode, String errorReason, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
     requireNow(now);

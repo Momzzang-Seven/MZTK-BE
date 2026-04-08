@@ -10,10 +10,12 @@ import org.web3j.utils.Numeric;
 
 @Component
 @RequiredArgsConstructor
+/** Serializes execution payload snapshots and produces deterministic SHA-256 hash values. */
 public class ExecutionPayloadSerializer {
 
   private final ObjectMapper objectMapper;
 
+  /** Serializes arbitrary payload object into JSON text for snapshot persistence. */
   public String serialize(Object payload) {
     try {
       return objectMapper.writeValueAsString(payload);
@@ -22,6 +24,7 @@ public class ExecutionPayloadSerializer {
     }
   }
 
+  /** Computes lowercase hex-encoded SHA-256 digest for serialized payload JSON. */
   public String hashHex(Object payload) {
     try {
       byte[] digest =

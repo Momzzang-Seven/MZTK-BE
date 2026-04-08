@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/** Synchronizes execution intent state to {@code PENDING_ONCHAIN} from tx worker callbacks. */
 public class MarkExecutionIntentPendingOnchainService
     implements MarkExecutionIntentPendingOnchainUseCase {
 
@@ -28,6 +29,7 @@ public class MarkExecutionIntentPendingOnchainService
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final Clock appClock;
 
+  /** Marks the linked intent as pending on-chain when the submitted tx starts pending state. */
   @Override
   public void execute(Long submittedTxId) {
     if (submittedTxId == null || submittedTxId <= 0) {

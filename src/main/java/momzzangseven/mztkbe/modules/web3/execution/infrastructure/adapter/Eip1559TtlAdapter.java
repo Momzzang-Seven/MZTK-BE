@@ -7,10 +7,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+/** Infrastructure adapter that exposes configured EIP-1559 TTL as execution output port. */
 public class Eip1559TtlAdapter implements LoadEip1559TtlPort {
 
   private final Eip7702Properties eip7702Properties;
 
+  /** Returns configured TTL seconds from {@code web3.eip7702.authorization.eip1559-ttl-seconds}. */
   @Override
   public long loadTtlSeconds() {
     return eip7702Properties.getAuthorization().getEip1559TtlSeconds();

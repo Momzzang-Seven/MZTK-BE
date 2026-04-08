@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 
+/** Result contract returned after execution intent create/reuse. */
 public record CreateExecutionIntentResult(
     ExecutionResourceType resourceType,
     String resourceId,
@@ -20,6 +21,7 @@ public record CreateExecutionIntentResult(
     SignRequestBundle signRequest,
     boolean existing) {
 
+  /** Validates required create result fields before exposing API contract. */
   public CreateExecutionIntentResult {
     if (resourceType == null) {
       throw new Web3InvalidInputException("resourceType is required");

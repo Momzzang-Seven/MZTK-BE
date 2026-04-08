@@ -16,11 +16,13 @@ import org.springframework.transaction.annotation.Transactional;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/** Transfer use case entry that builds and submits execution draft in one step. */
 public class CreateTransferService implements CreateTransferUseCase {
 
   private final TransferExecutionDraftBuilder transferExecutionDraftBuilder;
   private final SubmitExecutionDraftPort submitExecutionDraftPort;
 
+  /** Creates transfer execution intent and returns client-facing sign request contract. */
   @Override
   public CreateExecutionIntentResult execute(CreateTransferCommand command) {
     return submitExecutionDraftPort.submit(transferExecutionDraftBuilder.build(command));

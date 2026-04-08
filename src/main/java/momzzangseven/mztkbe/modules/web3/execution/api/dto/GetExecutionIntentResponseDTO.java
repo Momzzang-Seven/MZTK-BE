@@ -5,6 +5,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
+/** API response DTO for execution intent read endpoint. */
 public record GetExecutionIntentResponseDTO(
     ResourceDTO resource,
     ExecutionIntentDTO executionIntent,
@@ -12,6 +13,7 @@ public record GetExecutionIntentResponseDTO(
     SignRequestBundle signRequest,
     TransactionDTO transaction) {
 
+  /** Maps application read result to stable API response shape. */
   public static GetExecutionIntentResponseDTO from(GetExecutionIntentResult result) {
     return new GetExecutionIntentResponseDTO(
         new ResourceDTO(
@@ -26,11 +28,15 @@ public record GetExecutionIntentResponseDTO(
                 result.transactionId(), result.transactionStatus(), result.txHash()));
   }
 
+  /** Resource section containing domain resource identifier and derived status. */
   public record ResourceDTO(String type, String id, String status) {}
 
+  /** Execution intent section containing lifecycle state and expiration timestamp. */
   public record ExecutionIntentDTO(String id, String status, LocalDateTime expiresAt) {}
 
+  /** Execution metadata section containing selected mode and required sign count. */
   public record ExecutionDTO(String mode, int signCount) {}
 
+  /** Linked transaction summary section when execution has submitted transaction. */
   public record TransactionDTO(Long id, Web3TxStatus status, String txHash) {}
 }

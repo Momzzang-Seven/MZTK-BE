@@ -17,6 +17,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+/**
+ * Selects execution mode for a newly created intent.
+ *
+ * <p>The selector evaluates sponsor policy and current user exposure to decide whether EIP-7702 is
+ * eligible, otherwise falls back to EIP-1559 when draft fallback is allowed.
+ */
 public class ExecutionModeSelector {
 
   private static final BigInteger WEI_SCALE = BigInteger.TEN.pow(18);
@@ -28,6 +34,7 @@ public class ExecutionModeSelector {
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final Clock appClock;
 
+  /** Returns selected mode and reservation metadata used during intent creation. */
   public ExecutionModeSelection select(CreateExecutionIntentCommand command) {
     SponsorPolicy sponsorPolicy = loadSponsorPolicyPort.loadSponsorPolicy();
     LocalDate usageDateKst = LocalDate.now(appClock);
@@ -86,6 +93,7 @@ public class ExecutionModeSelector {
     return base.multiply(RESERVATION_NUMERATOR).divide(RESERVATION_DENOMINATOR);
   }
 
+  /** Immutable selection result for mode and sponsor reservation context. */
   public record ExecutionModeSelection(
       ExecutionMode mode, BigInteger reservedSponsorCostWei, LocalDate sponsorUsageDateKst) {}
 }
