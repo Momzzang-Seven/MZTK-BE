@@ -232,7 +232,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         created.getId(),
         Web3TransactionAuditEventType.AUTHORIZATION,
         null,
-        java.util.Map.of("mode", "EIP7702"));
+        java.util.Map.of("mode", intent.getMode().name()));
 
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(signedPayload.rawTx()));
@@ -335,7 +335,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         created.getId(),
         Web3TransactionAuditEventType.SIGN,
         null,
-        java.util.Map.of("mode", "EIP1559"));
+        java.util.Map.of("mode", intent.getMode().name()));
 
     Web3ContractPort.BroadcastResult broadcast =
         web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(decoded.rawTransaction()));

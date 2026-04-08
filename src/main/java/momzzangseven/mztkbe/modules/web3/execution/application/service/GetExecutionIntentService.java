@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -103,10 +104,9 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
 
   private String toResourceStatus(ExecutionIntentStatus status) {
     return switch (status) {
-      case AWAITING_SIGNATURE, SIGNED, PENDING_ONCHAIN -> "PENDING_EXECUTION";
-      case CONFIRMED -> "COMPLETED";
-      case FAILED_ONCHAIN -> "FAILED";
-      case EXPIRED, NONCE_STALE, CANCELED -> "FAILED";
+      case AWAITING_SIGNATURE, SIGNED, PENDING_ONCHAIN -> ExecutionResourceStatus.PENDING_EXECUTION.name();
+      case CONFIRMED -> ExecutionResourceStatus.COMPLETED.name();
+      case FAILED_ONCHAIN, EXPIRED, NONCE_STALE, CANCELED -> ExecutionResourceStatus.FAILED.name();
     };
   }
 }

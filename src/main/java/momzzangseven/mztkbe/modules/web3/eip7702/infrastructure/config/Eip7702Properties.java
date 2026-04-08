@@ -71,6 +71,9 @@ public class Eip7702Properties {
     @Min(1)
     private int ttlSeconds = 300;
 
+    @Min(1)
+    private int eip1559TtlSeconds = 90;
+
     @NotBlank private String noncePolicy = "ONCHAIN";
 
     private boolean requireChainIdMatch = true;

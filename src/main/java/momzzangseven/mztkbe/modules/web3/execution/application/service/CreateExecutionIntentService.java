@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
@@ -35,18 +37,18 @@ import org.springframework.transaction.annotation.Transactional;
     havingValue = "true")
 public class CreateExecutionIntentService implements CreateExecutionIntentUseCase {
 
-  private static final long EIP1559_TTL_SECONDS = 90L;
-
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
   private final LoadSponsorPolicyPort loadSponsorPolicyPort;
+  private final LoadEip1559TtlPort loadEip1559TtlPort;
   private final BuildExecutionDigestPort buildExecutionDigestPort;
   private final ExecutionModeSelector executionModeSelector;
+  private final ZoneId appZoneId;
 
   @Override
   public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = LocalDateTime.now(appZoneId);
     ExecutionIntent existing =
         executionIntentPersistencePort
             .findLatestByRootIdempotencyKeyForUpdate(command.draft().rootIdempotencyKey())
@@ -246,7 +248,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     if (mode == ExecutionMode.EIP7702) {
       return command.draft().expiresAt();
     }
-    return now.plusSeconds(EIP1559_TTL_SECONDS);
+    return now.plusSeconds(loadEip1559TtlPort.loadTtlSeconds());
   }
 
   private CreateExecutionIntentResult toResult(
