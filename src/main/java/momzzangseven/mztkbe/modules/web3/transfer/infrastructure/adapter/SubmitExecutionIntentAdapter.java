@@ -15,7 +15,10 @@ public class SubmitExecutionIntentAdapter implements SubmitExecutionDraftPort {
 
   private final CreateExecutionIntentUseCase createExecutionIntentUseCase;
 
-  /** Delegates draft submission to execution module without transfer-module coupling to service impl. */
+  /**
+   * Delegates draft submission to execution module without transfer-module coupling to service
+   * impl.
+   */
   @Override
   public CreateExecutionIntentResult submit(ExecutionDraft draft) {
     return createExecutionIntentUseCase.execute(new CreateExecutionIntentCommand(draft));
