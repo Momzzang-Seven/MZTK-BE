@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.account.application.strategy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import momzzangseven.mztkbe.modules.account.application.dto.AccountUserSnapshot;
@@ -78,6 +79,68 @@ class KakaoAuthenticationStrategyTest {
     AuthenticatedUser authenticated = strategy.authenticate(context);
 
     assertThat(authenticated.isNewUser()).isTrue();
+  }
+
+  @Test
+  void authenticate_passesTrainerRoleToService_whenContextHasTrainerRole() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", "TRAINER");
+    KakaoUserInfo userInfo =
+        KakaoUserInfo.builder()
+            .providerUserId("kakao-id")
+            .email("kakao@example.com")
+            .nickname("kakao-user")
+            .profileImageUrl("https://img")
+            .build();
+
+    when(kakaoAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
+    when(kakaoAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
+    when(socialLoginAccountService.loginOrRegister(
+            AuthProvider.KAKAO,
+            "kakao-id",
+            "kakao@example.com",
+            "kakao-user",
+            "https://img",
+            "TRAINER"))
+        .thenReturn(SocialLoginAccountOutcome.newUser(snapshot()));
+
+    strategy.authenticate(context);
+
+    verify(socialLoginAccountService)
+        .loginOrRegister(
+            AuthProvider.KAKAO,
+            "kakao-id",
+            "kakao@example.com",
+            "kakao-user",
+            "https://img",
+            "TRAINER");
+  }
+
+  @Test
+  void authenticate_passesNullRoleToService_whenContextHasNoRole() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
+    KakaoUserInfo userInfo =
+        KakaoUserInfo.builder()
+            .providerUserId("kakao-id")
+            .email("kakao@example.com")
+            .nickname("kakao-user")
+            .profileImageUrl("https://img")
+            .build();
+
+    when(kakaoAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
+    when(kakaoAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
+    when(socialLoginAccountService.loginOrRegister(
+            AuthProvider.KAKAO, "kakao-id", "kakao@example.com", "kakao-user", "https://img", null))
+        .thenReturn(SocialLoginAccountOutcome.existing(snapshot()));
+
+    strategy.authenticate(context);
+
+    verify(socialLoginAccountService)
+        .loginOrRegister(
+            AuthProvider.KAKAO, "kakao-id", "kakao@example.com", "kakao-user", "https://img", null);
   }
 
   @Test
