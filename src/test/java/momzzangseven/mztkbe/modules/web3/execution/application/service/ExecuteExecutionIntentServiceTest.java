@@ -17,19 +17,18 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -39,17 +38,11 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
-import momzzangseven.mztkbe.modules.web3.transfer.application.service.TransferExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,16 +60,9 @@ class ExecuteExecutionIntentServiceTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
-  @Mock private TransferTransactionPersistencePort transferTransactionPersistencePort;
-  @Mock private UpdateTransactionPort updateTransactionPort;
-  @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
-  @Mock private LoadTreasuryKeyPort loadTreasuryKeyPort;
-  @Mock private ReserveNoncePort reserveNoncePort;
-  @Mock private Web3ContractPort web3ContractPort;
-  @Mock private Eip7702AuthorizationPort eip7702AuthorizationPort;
-  @Mock private Eip7702ChainPort eip7702ChainPort;
-  @Mock private Eip7702TransactionCodecPort eip7702TransactionCodecPort;
-  @Mock private VerifyExecutionSignaturePort verifyExecutionSignaturePort;
+  @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
+  @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  @Mock private ExecutionEip7702GatewayPort executionEip7702GatewayPort;
   @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
   @Mock private LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
@@ -91,16 +77,9 @@ class ExecuteExecutionIntentServiceTest {
         new ExecuteExecutionIntentService(
             executionIntentPersistencePort,
             sponsorDailyUsagePersistencePort,
-            transferTransactionPersistencePort,
-            updateTransactionPort,
-            recordTransactionAuditPort,
-            loadTreasuryKeyPort,
-            reserveNoncePort,
-            web3ContractPort,
-            eip7702AuthorizationPort,
-            eip7702ChainPort,
-            eip7702TransactionCodecPort,
-            verifyExecutionSignaturePort,
+            executionTransactionGatewayPort,
+            loadExecutionSponsorKeyPort,
+            executionEip7702GatewayPort,
             eip1559TransactionCodecPort,
             loadExecutionChainIdPort,
             loadExecutionSponsorWalletConfigPort,
@@ -147,7 +126,7 @@ class ExecuteExecutionIntentServiceTest {
 
     when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
         .thenReturn(Optional.of(intent));
-    when(transferTransactionPersistencePort.findById(99L)).thenReturn(Optional.of(transaction));
+    when(executionTransactionGatewayPort.findById(99L)).thenReturn(Optional.of(transaction));
 
     ExecuteExecutionIntentResult result =
         service.execute(new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, null));
@@ -173,7 +152,8 @@ class ExecuteExecutionIntentServiceTest {
     when(eip1559TransactionCodecPort.decodeAndVerify(
             "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
         .thenReturn(decoded);
-    when(eip7702ChainPort.loadPendingAccountNonce(intent.getUnsignedTxSnapshot().fromAddress()))
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
         .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce() + 1));
     when(executionIntentPersistencePort.update(any()))
         .thenAnswer(invocation -> invocation.getArgument(0));

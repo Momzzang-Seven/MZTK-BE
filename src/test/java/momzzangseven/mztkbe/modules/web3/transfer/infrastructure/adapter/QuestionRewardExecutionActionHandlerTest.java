@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.application.service;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.QuestionRewardExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
@@ -36,13 +37,13 @@ class QuestionRewardExecutionActionHandlerTest {
   @Mock private QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
   private ObjectMapper objectMapper;
-  private QuestionRewardExecutionActionHandler handler;
+  private QuestionRewardExecutionActionHandlerAdapter handler;
 
   @BeforeEach
   void setUp() {
     objectMapper = new ObjectMapper();
     handler =
-        new QuestionRewardExecutionActionHandler(
+        new QuestionRewardExecutionActionHandlerAdapter(
             objectMapper, eip7702TransactionCodecPort, questionRewardIntentPersistencePort);
   }
 

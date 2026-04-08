@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.application.service;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -50,12 +50,12 @@ class QuestionRewardExecutionDraftBuilderTest {
   @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   @Mock private ExecutionPayloadSerializer executionPayloadSerializer;
 
-  private QuestionRewardExecutionDraftBuilder builder;
+  private QuestionRewardExecutionDraftBuilderAdapter builder;
 
   @BeforeEach
   void setUp() {
     builder =
-        new QuestionRewardExecutionDraftBuilder(
+        new QuestionRewardExecutionDraftBuilderAdapter(
             loadWalletPort,
             loadTransferRuntimeConfigPort,
             eip7702ChainPort,

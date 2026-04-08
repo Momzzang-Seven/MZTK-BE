@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.application.service;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import java.math.BigInteger;
 import java.time.Clock;
@@ -18,10 +18,11 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CreateTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.BuildTransferExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
-import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferRootIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
@@ -36,12 +37,12 @@ import org.springframework.stereotype.Component;
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
 /**
- * Builds execution draft for question-reward transfer action.
+ * Builds execution draft payload for user-to-user token transfer.
  *
- * <p>This builder follows the same shared execution contract as transfer while encoding QnA domain
- * payload and reference metadata.
+ * <p>The draft includes both EIP-7702 call metadata and EIP-1559 fallback unsigned transaction
+ * snapshot to support mode selection at execution intent creation time.
  */
-public class QuestionRewardExecutionDraftBuilder {
+public class TransferExecutionDraftBuilderAdapter implements BuildTransferExecutionDraftPort {
 
   private final LoadWalletPort loadWalletPort;
   private final LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
@@ -53,13 +54,13 @@ public class QuestionRewardExecutionDraftBuilder {
   private final ExecutionPayloadSerializer executionPayloadSerializer;
   private final Clock appClock;
 
-  /** Builds a validated question-reward execution draft from domain command. */
-  public ExecutionDraft build(RegisterQuestionRewardIntentCommand command) {
+  /** Builds a validated transfer execution draft from API command. */
+  public ExecutionDraft build(CreateTransferCommand command) {
     command.validate();
 
     TransferRuntimeConfig runtimeConfig = loadTransferRuntimeConfigPort.load();
-    String authorityAddress = resolveActiveWalletAddress(command.fromUserId(), "question owner");
-    String toAddress = resolveActiveWalletAddress(command.toUserId(), "answer writer");
+    String authorityAddress = resolveActiveWalletAddress(command.userId(), "requester");
+    String toAddress = resolveActiveWalletAddress(command.toUserId(), "recipient");
     long authorityNonce = resolveAuthorityNonce(authorityAddress);
     String delegateTarget = EvmAddress.of(runtimeConfig.delegationBatchImplAddress()).value();
     String authorizationPayloadHash =
@@ -80,26 +81,27 @@ public class QuestionRewardExecutionDraftBuilder {
             command.amountWei(),
             transferData);
 
-    QuestionRewardExecutionPayload payload =
-        new QuestionRewardExecutionPayload(
-            command.postId(),
-            command.acceptedCommentId(),
-            command.fromUserId(),
+    TransferExecutionPayload payload =
+        new TransferExecutionPayload(
+            command.clientRequestId(),
+            command.userId(),
             command.toUserId(),
             authorityAddress,
             toAddress,
             runtimeConfig.tokenContractAddress(),
             command.amountWei());
 
+    String resourceId =
+        TransferRootIdempotencyKeyFactory.create(command.userId(), command.clientRequestId());
+
     return new ExecutionDraft(
-        ExecutionResourceType.QUESTION,
-        String.valueOf(command.postId()),
+        ExecutionResourceType.TRANSFER,
+        resourceId,
         ExecutionResourceStatus.PENDING_EXECUTION,
-        ExecutionActionType.QNA_ANSWER_ACCEPT,
-        command.fromUserId(),
+        ExecutionActionType.TRANSFER_SEND,
+        command.userId(),
         command.toUserId(),
-        TokenTransferIdempotencyKeyFactory.create(
-            DomainReferenceType.QUESTION_REWARD, command.fromUserId(), command.referenceId()),
+        resourceId,
         executionPayloadSerializer.hashHex(payload),
         executionPayloadSerializer.serialize(payload),
         java.util.List.of(transferCall),
@@ -125,7 +127,7 @@ public class QuestionRewardExecutionDraftBuilder {
             new Web3ContractPort.PrevalidateCommand(authorityAddress, toAddress, amountWei));
     if (!prevalidateResult.ok()) {
       throw new Web3InvalidInputException(
-          "failed to prepare question reward EIP-1559 fallback: "
+          "failed to prepare EIP-1559 fallback: "
               + (prevalidateResult.failureReason() == null
                   ? "PREVALIDATE_FAILED"
                   : prevalidateResult.failureReason()));
@@ -148,7 +150,10 @@ public class QuestionRewardExecutionDraftBuilder {
     java.util.List<UserWallet> activeWallets =
         loadWalletPort.findWalletsByUserIdAndStatus(userId, WalletStatus.ACTIVE);
     if (activeWallets.isEmpty()) {
-      throw new WalletNotConnectedException(userId);
+      if ("requester".equals(role)) {
+        throw new WalletNotConnectedException(userId);
+      }
+      throw new Web3InvalidInputException(role + " user has no ACTIVE wallet");
     }
     return EvmAddress.of(activeWallets.getFirst().getWalletAddress()).value();
   }
