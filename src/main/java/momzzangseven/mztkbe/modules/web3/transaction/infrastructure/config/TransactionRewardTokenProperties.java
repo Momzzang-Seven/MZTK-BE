@@ -41,25 +41,44 @@ public class TransactionRewardTokenProperties {
   @Getter
   @Setter
   public static class Worker {
-    @Min(1) private int claimTtlSeconds;
-    @Min(1) private int receiptTimeoutSeconds;
-    @Min(1) private int receiptPollMinSeconds;
-    @Min(1) private int receiptPollMaxSeconds;
-    @Min(1) private int retryBackoffSeconds;
+    @Min(1)
+    private int claimTtlSeconds;
+
+    @Min(1)
+    private int receiptTimeoutSeconds;
+
+    @Min(1)
+    private int receiptPollMinSeconds;
+
+    @Min(1)
+    private int receiptPollMaxSeconds;
+
+    @Min(1)
+    private int retryBackoffSeconds;
   }
 
   @Getter
   @Setter
   public static class Prevalidate {
-    @NotNull @DecimalMin("0") private BigDecimal ethWarningThreshold;
-    @NotNull @DecimalMin("0") private BigDecimal ethCriticalThreshold;
+    @NotNull
+    @DecimalMin("0")
+    private BigDecimal ethWarningThreshold;
+
+    @NotNull
+    @DecimalMin("0")
+    private BigDecimal ethCriticalThreshold;
   }
 
   @Getter
   @Setter
   public static class Gas {
-    @Min(21_000) private long defaultGasLimit;
-    @Min(1) private long defaultMaxPriorityFeePerGasWei;
-    @Min(1) private int maxFeeMultiplier;
+    @Min(21_000)
+    private long defaultGasLimit;
+
+    @Min(1)
+    private long defaultMaxPriorityFeePerGasWei;
+
+    @Min(1)
+    private int maxFeeMultiplier;
   }
 }

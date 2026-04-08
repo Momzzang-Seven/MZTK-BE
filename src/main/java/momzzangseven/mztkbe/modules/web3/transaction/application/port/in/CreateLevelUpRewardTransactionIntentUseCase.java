@@ -5,5 +5,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevel
 
 public interface CreateLevelUpRewardTransactionIntentUseCase {
 
-  CreateLevelUpRewardTransactionIntentResult execute(CreateLevelUpRewardTransactionIntentCommand command);
+  CreateLevelUpRewardTransactionIntentResult execute(
+      CreateLevelUpRewardTransactionIntentCommand command);
 }

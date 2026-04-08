@@ -37,7 +37,10 @@ class QuestionRewardExecutionDraftBuilderTest {
 
   @Mock private GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
   @Mock private LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
-  @Mock private PrepareTokenTransferExecutionSupportUseCase prepareTokenTransferExecutionSupportUseCase;
+
+  @Mock
+  private PrepareTokenTransferExecutionSupportUseCase prepareTokenTransferExecutionSupportUseCase;
+
   @Mock private PrepareTokenTransferPrevalidationUseCase prepareTokenTransferPrevalidationUseCase;
   @Mock private ExecutionPayloadSerializer executionPayloadSerializer;
   @Mock private TransferUnsignedTxFingerprintFactory transferUnsignedTxFingerprintFactory;
@@ -85,7 +88,8 @@ class QuestionRewardExecutionDraftBuilderTest {
     when(getActiveWalletAddressUseCase.execute(7L)).thenReturn(Optional.of("0x" + "1".repeat(40)));
     when(getActiveWalletAddressUseCase.execute(22L)).thenReturn(Optional.of("0x" + "2".repeat(40)));
     when(prepareTokenTransferExecutionSupportUseCase.execute(any()))
-        .thenReturn(new PrepareTokenTransferExecutionSupportResult(9L, "0x" + "a".repeat(64), "0x1234"));
+        .thenReturn(
+            new PrepareTokenTransferExecutionSupportResult(9L, "0x" + "a".repeat(64), "0x1234"));
     when(prepareTokenTransferPrevalidationUseCase.execute(any()))
         .thenReturn(
             new PrepareTokenTransferPrevalidationResult(

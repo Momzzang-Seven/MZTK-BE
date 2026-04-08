@@ -52,7 +52,8 @@ class CreateQuestionRewardExecutionIntentServiceTest {
             "domain:QUESTION_REWARD:101:7",
             "0xhash",
             "{}",
-            List.of(new TransferExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234")),
+            List.of(
+                new TransferExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234")),
             true,
             "0x" + "2".repeat(40),
             3L,

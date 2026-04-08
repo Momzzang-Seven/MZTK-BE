@@ -16,9 +16,7 @@ public class TransferExecutionIntentLookupAdapter implements LoadTransferExecuti
   @Override
   public Optional<String> findLatestExecutionIntentId(Long requesterUserId, String resourceId) {
     return findLatestExecutionIntentUseCase
-        .execute(
-            new FindLatestExecutionIntentQuery(
-                requesterUserId, "TRANSFER", resourceId))
+        .execute(new FindLatestExecutionIntentQuery(requesterUserId, "TRANSFER", resourceId))
         .map(result -> result.executionIntentId());
   }
 }

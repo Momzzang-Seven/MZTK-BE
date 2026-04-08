@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigInteger;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.DefaultGasFeeCalculator;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,7 +50,8 @@ class DefaultGasFeeCalculatorTest {
   @Test
   void calculate_fallbackToPriorityMultiplier_whenBaseFeeAndGasPriceMissing() {
     DefaultGasFeeCalculator.FeeInputs inputs =
-        new DefaultGasFeeCalculator.FeeInputs(BigInteger.valueOf(23000), BigInteger.valueOf(7), null, null);
+        new DefaultGasFeeCalculator.FeeInputs(
+            BigInteger.valueOf(23000), BigInteger.valueOf(7), null, null);
 
     DefaultGasFeeCalculator.FeePlan plan = strategy.calculate(inputs);
 
@@ -60,7 +60,8 @@ class DefaultGasFeeCalculatorTest {
 
   @Test
   void calculate_usesDefaults_whenEstimatedGasOrPriorityMissing() {
-    DefaultGasFeeCalculator.FeeInputs inputs = new DefaultGasFeeCalculator.FeeInputs(null, null, null, null);
+    DefaultGasFeeCalculator.FeeInputs inputs =
+        new DefaultGasFeeCalculator.FeeInputs(null, null, null, null);
 
     DefaultGasFeeCalculator.FeePlan plan = strategy.calculate(inputs);
 
@@ -75,9 +76,11 @@ class DefaultGasFeeCalculatorTest {
     properties.getGas().setDefaultGasLimit(120_000L);
     properties.getGas().setDefaultMaxPriorityFeePerGasWei(10L);
     properties.getGas().setMaxFeeMultiplier(-1);
-    DefaultGasFeeCalculator strategyWithNegativeMultiplier = new DefaultGasFeeCalculator(properties);
+    DefaultGasFeeCalculator strategyWithNegativeMultiplier =
+        new DefaultGasFeeCalculator(properties);
     DefaultGasFeeCalculator.FeeInputs inputs =
-        new DefaultGasFeeCalculator.FeeInputs(BigInteger.valueOf(21000), BigInteger.valueOf(10), null, null);
+        new DefaultGasFeeCalculator.FeeInputs(
+            BigInteger.valueOf(21000), BigInteger.valueOf(10), null, null);
 
     DefaultGasFeeCalculator.FeePlan plan = strategyWithNegativeMultiplier.calculate(inputs);
 

@@ -77,8 +77,7 @@ public class ManageExecutionEip7702Service implements ManageExecutionEip7702UseC
   @Override
   public Eip7702ExecutionFeePlan loadSponsorFeePlan() {
     Eip7702ChainPort.FeePlan feePlan = eip7702ChainPort.loadSponsorFeePlan();
-    return new Eip7702ExecutionFeePlan(
-        feePlan.maxPriorityFeePerGas(), feePlan.maxFeePerGas());
+    return new Eip7702ExecutionFeePlan(feePlan.maxPriorityFeePerGas(), feePlan.maxFeePerGas());
   }
 
   @Override
@@ -90,7 +89,9 @@ public class ManageExecutionEip7702Service implements ManageExecutionEip7702UseC
   public String hashCalls(List<Eip7702ExecutionBatchCall> calls) {
     return eip7702TransactionCodecPort.hashCalls(
         calls.stream()
-            .map(call -> new Eip7702TransactionCodecPort.BatchCall(call.to(), call.value(), call.data()))
+            .map(
+                call ->
+                    new Eip7702TransactionCodecPort.BatchCall(call.to(), call.value(), call.data()))
             .toList());
   }
 
@@ -98,7 +99,9 @@ public class ManageExecutionEip7702Service implements ManageExecutionEip7702UseC
   public String encodeExecute(List<Eip7702ExecutionBatchCall> calls, byte[] executionSignature) {
     return eip7702TransactionCodecPort.encodeExecute(
         calls.stream()
-            .map(call -> new Eip7702TransactionCodecPort.BatchCall(call.to(), call.value(), call.data()))
+            .map(
+                call ->
+                    new Eip7702TransactionCodecPort.BatchCall(call.to(), call.value(), call.data()))
             .toList(),
         executionSignature);
   }

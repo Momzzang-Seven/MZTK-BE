@@ -27,7 +27,8 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
   private static final String SUCCEEDED = "SUCCEEDED";
   private static final String UNCONFIRMED = "UNCONFIRMED";
 
-  private final CreateLevelUpRewardTransactionIntentUseCase createLevelUpRewardTransactionIntentUseCase;
+  private final CreateLevelUpRewardTransactionIntentUseCase
+      createLevelUpRewardTransactionIntentUseCase;
   private final TransferRewardTokenProperties rewardTokenProperties;
 
   @Override
@@ -85,7 +86,8 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
       return RewardMztkResult.unconfirmed(transaction.failureReason(), transaction.txHash());
     }
 
-    return new RewardMztkResult(toRewardTxStatus(status), transaction.txHash(), transaction.failureReason());
+    return new RewardMztkResult(
+        toRewardTxStatus(status), transaction.txHash(), transaction.failureReason());
   }
 
   private RewardTxStatus toRewardTxStatus(String status) {

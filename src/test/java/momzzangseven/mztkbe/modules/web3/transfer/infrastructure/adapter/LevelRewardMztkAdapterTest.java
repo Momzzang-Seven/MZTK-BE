@@ -32,7 +32,8 @@ class LevelRewardMztkAdapterTest {
   private static final String TREASURY = "0x" + "a".repeat(40);
   private static final String TO_WALLET = "0x" + "b".repeat(40);
 
-  @Mock private CreateLevelUpRewardTransactionIntentUseCase createLevelUpRewardTransactionIntentUseCase;
+  @Mock
+  private CreateLevelUpRewardTransactionIntentUseCase createLevelUpRewardTransactionIntentUseCase;
 
   private TransferRewardTokenProperties properties;
   private LevelRewardMztkAdapter adapter;
@@ -75,8 +76,7 @@ class LevelRewardMztkAdapterTest {
   void reward_mapsOtherStatusUsingNameMapping() {
     when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
         .thenReturn(
-            new CreateLevelUpRewardTransactionIntentResult(
-                "PENDING", "0x" + "c".repeat(64), null));
+            new CreateLevelUpRewardTransactionIntentResult("PENDING", "0x" + "c".repeat(64), null));
 
     RewardMztkResult result = adapter.reward(validCommand(1));
 

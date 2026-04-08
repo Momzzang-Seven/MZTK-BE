@@ -36,23 +36,39 @@ public class TransferEip7702Properties {
   public static class Sponsor {
     @NotBlank private String keyEncryptionKeyB64;
     @NotBlank private String walletAlias;
-    @Min(21_000) private long maxGasLimit;
-    @NotNull @DecimalMin("0") private BigDecimal maxTransferAmountEth;
-    @NotNull @DecimalMin("0") private BigDecimal perTxCapEth;
-    @NotNull @DecimalMin("0") private BigDecimal perDayUserCapEth;
+
+    @Min(21_000)
+    private long maxGasLimit;
+
+    @NotNull
+    @DecimalMin("0")
+    private BigDecimal maxTransferAmountEth;
+
+    @NotNull
+    @DecimalMin("0")
+    private BigDecimal perTxCapEth;
+
+    @NotNull
+    @DecimalMin("0")
+    private BigDecimal perDayUserCapEth;
   }
 
   @Getter
   @Setter
   public static class Authorization {
-    @Min(1) private int ttlSeconds;
+    @Min(1)
+    private int ttlSeconds;
   }
 
   @Getter
   @Setter
   public static class Cleanup {
-    @Min(1) private int retentionDays;
-    @Min(1) private int batchSize;
+    @Min(1)
+    private int retentionDays;
+
+    @Min(1)
+    private int batchSize;
+
     @NotBlank private String zone;
   }
 }

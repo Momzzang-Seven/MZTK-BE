@@ -38,8 +38,7 @@ public class TransferExecutionDraftBuilderAdapter implements BuildTransferExecut
   private final LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
   private final PrepareTokenTransferExecutionSupportUseCase
       prepareTokenTransferExecutionSupportUseCase;
-  private final PrepareTokenTransferPrevalidationUseCase
-      prepareTokenTransferPrevalidationUseCase;
+  private final PrepareTokenTransferPrevalidationUseCase prepareTokenTransferPrevalidationUseCase;
   private final ExecutionPayloadSerializer executionPayloadSerializer;
   private final TransferUnsignedTxFingerprintFactory transferUnsignedTxFingerprintFactory;
   private final Clock appClock;

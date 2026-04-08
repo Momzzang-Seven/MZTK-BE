@@ -17,7 +17,8 @@ class ExecutionIntentEventHandlersTest {
   void succeededHandler_catchesExceptionsWithoutRethrowing() {
     MarkExecutionIntentSucceededUseCase useCase =
         org.mockito.Mockito.mock(MarkExecutionIntentSucceededUseCase.class);
-    ExecutionIntentSucceededEventHandler handler = new ExecutionIntentSucceededEventHandler(useCase);
+    ExecutionIntentSucceededEventHandler handler =
+        new ExecutionIntentSucceededEventHandler(useCase);
     doThrow(new IllegalStateException("boom")).when(useCase).execute(10L);
 
     assertThatNoException()

@@ -21,7 +21,8 @@ public class LoadTransferExecutionAdapter implements LoadTransferExecutionPort {
   @Override
   public TransferExecutionIntentResult load(Long requesterUserId, String executionIntentId) {
     GetExecutionIntentResult result =
-        getExecutionIntentUseCase.execute(new GetExecutionIntentQuery(requesterUserId, executionIntentId));
+        getExecutionIntentUseCase.execute(
+            new GetExecutionIntentQuery(requesterUserId, executionIntentId));
     return new TransferExecutionIntentResult(
         result.resourceType().name(),
         result.resourceId(),

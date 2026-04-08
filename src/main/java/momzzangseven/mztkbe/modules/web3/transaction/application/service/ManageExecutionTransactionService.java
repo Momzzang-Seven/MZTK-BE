@@ -53,7 +53,8 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
-  public ExecutionTransactionRecordResult createAndFlush(ExecutionTransactionRecordCommand command) {
+  public ExecutionTransactionRecordResult createAndFlush(
+      ExecutionTransactionRecordCommand command) {
     TransferTransaction transaction =
         transferTransactionPersistencePort.createAndFlush(
             TransferTransaction.builder()
