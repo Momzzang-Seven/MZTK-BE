@@ -1,9 +1,16 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Transaction module local view of web3.reward-token properties.
@@ -13,28 +20,46 @@ import org.springframework.stereotype.Component;
 @Getter
 @Setter
 @Component
+@Validated
 @ConfigurationProperties(prefix = "web3.reward-token")
 public class TransactionRewardTokenProperties {
 
-  private boolean enabled = true;
-  private String tokenContractAddress;
-  private Treasury treasury = new Treasury();
-  private Worker worker = new Worker();
+  @NotNull private Boolean enabled;
+  @NotBlank private String tokenContractAddress;
+  @Valid private Treasury treasury = new Treasury();
+  @Valid private Prevalidate prevalidate = new Prevalidate();
+  @Valid private Gas gas = new Gas();
+  @Valid private Worker worker = new Worker();
 
   @Getter
   @Setter
   public static class Treasury {
-    private String walletAlias = "reward-treasury";
-    private String keyEncryptionKeyB64;
+    @NotBlank private String walletAlias;
+    @NotBlank private String keyEncryptionKeyB64;
   }
 
   @Getter
   @Setter
   public static class Worker {
-    private int claimTtlSeconds = 120;
-    private int receiptTimeoutSeconds = 900;
-    private int receiptPollMinSeconds = 1;
-    private int receiptPollMaxSeconds = 5;
-    private int retryBackoffSeconds = 60;
+    @Min(1) private int claimTtlSeconds;
+    @Min(1) private int receiptTimeoutSeconds;
+    @Min(1) private int receiptPollMinSeconds;
+    @Min(1) private int receiptPollMaxSeconds;
+    @Min(1) private int retryBackoffSeconds;
+  }
+
+  @Getter
+  @Setter
+  public static class Prevalidate {
+    @NotNull @DecimalMin("0") private BigDecimal ethWarningThreshold;
+    @NotNull @DecimalMin("0") private BigDecimal ethCriticalThreshold;
+  }
+
+  @Getter
+  @Setter
+  public static class Gas {
+    @Min(21_000) private long defaultGasLimit;
+    @Min(1) private long defaultMaxPriorityFeePerGasWei;
+    @Min(1) private int maxFeeMultiplier;
   }
 }

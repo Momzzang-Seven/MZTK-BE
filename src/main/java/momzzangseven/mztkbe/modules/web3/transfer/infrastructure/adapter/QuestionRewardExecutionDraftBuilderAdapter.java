@@ -6,28 +6,24 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.PrepareTokenTransferExecutionSupportCommand;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.PrepareTokenTransferExecutionSupportResult;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.PrepareTokenTransferExecutionSupportUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.PrepareTokenTransferPrevalidationCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.PrepareTokenTransferPrevalidationResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PrepareTokenTransferPrevalidationUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.QuestionRewardExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraft;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.BuildQuestionRewardExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
-import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
-import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -37,51 +33,50 @@ import org.springframework.stereotype.Component;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
-/**
- * Builds execution draft for question-reward transfer action.
- *
- * <p>This builder follows the same shared execution contract as transfer while encoding QnA domain
- * payload and reference metadata.
- */
 public class QuestionRewardExecutionDraftBuilderAdapter
     implements BuildQuestionRewardExecutionDraftPort {
 
-  private final LoadWalletPort loadWalletPort;
+  private final GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
   private final LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
-  private final Eip7702ChainPort eip7702ChainPort;
-  private final Eip7702AuthorizationPort eip7702AuthorizationPort;
-  private final Eip7702TransactionCodecPort eip7702TransactionCodecPort;
-  private final Web3ContractPort web3ContractPort;
-  private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
+  private final PrepareTokenTransferExecutionSupportUseCase
+      prepareTokenTransferExecutionSupportUseCase;
+  private final PrepareTokenTransferPrevalidationUseCase
+      prepareTokenTransferPrevalidationUseCase;
   private final ExecutionPayloadSerializer executionPayloadSerializer;
+  private final TransferUnsignedTxFingerprintFactory transferUnsignedTxFingerprintFactory;
   private final Clock appClock;
 
-  /** Builds a validated question-reward execution draft from domain command. */
-  public ExecutionDraft build(RegisterQuestionRewardIntentCommand command) {
+  @Override
+  public TransferExecutionDraft build(RegisterQuestionRewardIntentCommand command) {
     command.validate();
 
     TransferRuntimeConfig runtimeConfig = loadTransferRuntimeConfigPort.load();
-    String authorityAddress = resolveActiveWalletAddress(command.fromUserId(), "question owner");
-    String toAddress = resolveActiveWalletAddress(command.toUserId(), "answer writer");
-    long authorityNonce = resolveAuthorityNonce(authorityAddress);
+    String authorityAddress = resolveActiveWalletAddress(command.fromUserId());
+    String toAddress = resolveActiveWalletAddress(command.toUserId());
     String delegateTarget = EvmAddress.of(runtimeConfig.delegationBatchImplAddress()).value();
-    String authorizationPayloadHash =
-        eip7702AuthorizationPort.buildSigningHashHex(
-            runtimeConfig.chainId(), delegateTarget, BigInteger.valueOf(authorityNonce));
 
-    String transferData =
-        eip7702TransactionCodecPort.encodeTransferData(toAddress, command.amountWei());
-    ExecutionDraftCall transferCall =
-        new ExecutionDraftCall(runtimeConfig.tokenContractAddress(), BigInteger.ZERO, transferData);
+    PrepareTokenTransferExecutionSupportResult executionSupport =
+        prepareTokenTransferExecutionSupportUseCase.execute(
+            new PrepareTokenTransferExecutionSupportCommand(
+                runtimeConfig.chainId(),
+                delegateTarget,
+                authorityAddress,
+                toAddress,
+                command.amountWei()));
 
-    UnsignedTxSnapshot unsignedTxSnapshot =
+    TransferExecutionDraftCall transferCall =
+        new TransferExecutionDraftCall(
+            runtimeConfig.tokenContractAddress(), BigInteger.ZERO, executionSupport.transferData());
+
+    TransferUnsignedTxSnapshot unsignedTxSnapshot =
         buildUnsignedTxSnapshot(
             runtimeConfig.chainId(),
             runtimeConfig.tokenContractAddress(),
             authorityAddress,
             toAddress,
             command.amountWei(),
-            transferData);
+            executionSupport.transferData(),
+            executionSupport.authorityNonce());
 
     QuestionRewardExecutionPayload payload =
         new QuestionRewardExecutionPayload(
@@ -92,13 +87,14 @@ public class QuestionRewardExecutionDraftBuilderAdapter
             authorityAddress,
             toAddress,
             runtimeConfig.tokenContractAddress(),
-            command.amountWei());
+            command.amountWei(),
+            executionSupport.transferData());
 
-    return new ExecutionDraft(
-        ExecutionResourceType.QUESTION,
+    return new TransferExecutionDraft(
+        "QUESTION",
         String.valueOf(command.postId()),
-        ExecutionResourceStatus.PENDING_EXECUTION,
-        ExecutionActionType.QNA_ANSWER_ACCEPT,
+        "PENDING_EXECUTION",
+        "QNA_ANSWER_ACCEPT",
         command.fromUserId(),
         command.toUserId(),
         TokenTransferIdempotencyKeyFactory.create(
@@ -108,59 +104,49 @@ public class QuestionRewardExecutionDraftBuilderAdapter
         java.util.List.of(transferCall),
         true,
         authorityAddress,
-        authorityNonce,
+        executionSupport.authorityNonce(),
         delegateTarget,
-        authorizationPayloadHash,
+        executionSupport.authorizationPayloadHash(),
         unsignedTxSnapshot,
-        eip1559TransactionCodecPort.computeFingerprint(unsignedTxSnapshot),
+        transferUnsignedTxFingerprintFactory.compute(unsignedTxSnapshot),
         LocalDateTime.now(appClock).plusSeconds(runtimeConfig.authorizationTtlSeconds()));
   }
 
-  private UnsignedTxSnapshot buildUnsignedTxSnapshot(
+  private TransferUnsignedTxSnapshot buildUnsignedTxSnapshot(
       long chainId,
       String tokenContractAddress,
       String authorityAddress,
       String toAddress,
       BigInteger amountWei,
-      String transferData) {
-    Web3ContractPort.PrevalidateResult prevalidateResult =
-        web3ContractPort.prevalidate(
-            new Web3ContractPort.PrevalidateCommand(authorityAddress, toAddress, amountWei));
-    if (!prevalidateResult.ok()) {
+      String transferData,
+      long expectedNonce) {
+    PrepareTokenTransferPrevalidationResult prevalidation =
+        prepareTokenTransferPrevalidationUseCase.execute(
+            new PrepareTokenTransferPrevalidationCommand(authorityAddress, toAddress, amountWei));
+    if (!prevalidation.ok()) {
       throw new Web3InvalidInputException(
           "failed to prepare question reward EIP-1559 fallback: "
-              + (prevalidateResult.failureReason() == null
+              + (prevalidation.failureReason() == null
                   ? "PREVALIDATE_FAILED"
-                  : prevalidateResult.failureReason()));
+                  : prevalidation.failureReason()));
     }
 
-    BigInteger pendingNonce = eip7702ChainPort.loadPendingAccountNonce(authorityAddress);
-    return new UnsignedTxSnapshot(
+    return new TransferUnsignedTxSnapshot(
         chainId,
         authorityAddress,
         tokenContractAddress,
         BigInteger.ZERO,
         transferData,
-        pendingNonce.longValueExact(),
-        prevalidateResult.gasLimit(),
-        prevalidateResult.maxPriorityFeePerGas(),
-        prevalidateResult.maxFeePerGas());
+        expectedNonce,
+        prevalidation.gasLimit(),
+        prevalidation.maxPriorityFeePerGas(),
+        prevalidation.maxFeePerGas());
   }
 
-  private String resolveActiveWalletAddress(Long userId, String role) {
-    java.util.List<UserWallet> activeWallets =
-        loadWalletPort.findWalletsByUserIdAndStatus(userId, WalletStatus.ACTIVE);
-    if (activeWallets.isEmpty()) {
-      throw new WalletNotConnectedException(userId);
-    }
-    return EvmAddress.of(activeWallets.getFirst().getWalletAddress()).value();
-  }
-
-  private long resolveAuthorityNonce(String authorityAddress) {
-    try {
-      return eip7702ChainPort.loadPendingAccountNonce(authorityAddress).longValueExact();
-    } catch (ArithmeticException ex) {
-      throw new Web3InvalidInputException("authority nonce overflow");
-    }
+  private String resolveActiveWalletAddress(Long userId) {
+    return getActiveWalletAddressUseCase
+        .execute(userId)
+        .map(address -> EvmAddress.of(address).value())
+        .orElseThrow(() -> new WalletNotConnectedException(userId));
   }
 }

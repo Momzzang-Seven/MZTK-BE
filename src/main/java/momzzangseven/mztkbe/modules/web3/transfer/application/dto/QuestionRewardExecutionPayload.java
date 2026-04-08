@@ -10,4 +10,5 @@ public record QuestionRewardExecutionPayload(
     String authorityAddress,
     String toAddress,
     String tokenContractAddress,
-    BigInteger amountWei) {}
+    BigInteger amountWei,
+    String transferData) {}

@@ -38,10 +38,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,7 +90,7 @@ class ExecuteExecutionIntentServiceTest {
         .thenReturn(
             new ExecutionActionPlan(
                 BigInteger.valueOf(100),
-                Web3ReferenceType.USER_TO_USER,
+                "USER_TO_USER",
                 List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234"))));
     lenient()
         .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
@@ -108,21 +104,8 @@ class ExecuteExecutionIntentServiceTest {
   @Test
   void execute_returnsExistingTransaction_whenIntentAlreadyHasSubmittedTxId() throws Exception {
     ExecutionIntent intent = existingEip1559Intent().toBuilder().submittedTxId(99L).build();
-    TransferTransaction transaction =
-        TransferTransaction.builder()
-            .id(99L)
-            .idempotencyKey("root-1:1")
-            .referenceType(Web3ReferenceType.USER_TO_USER)
-            .referenceId(intent.getResourceId())
-            .fromUserId(7L)
-            .toUserId(8L)
-            .fromAddress("0x" + "1".repeat(40))
-            .toAddress("0x" + "2".repeat(40))
-            .amountWei(BigInteger.valueOf(100))
-            .status(Web3TxStatus.SIGNED)
-            .txType(Web3TxType.EIP1559)
-            .txHash("0xhash")
-            .build();
+    ExecutionTransactionGatewayPort.TransactionRecord transaction =
+        new ExecutionTransactionGatewayPort.TransactionRecord(99L, "SIGNED", "0xhash");
 
     when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
         .thenReturn(Optional.of(intent));
@@ -132,7 +115,7 @@ class ExecuteExecutionIntentServiceTest {
         service.execute(new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, null));
 
     assertThat(result.transactionId()).isEqualTo(99L);
-    assertThat(result.transactionStatus()).isEqualTo(Web3TxStatus.SIGNED);
+    assertThat(result.transactionStatus()).isEqualTo("SIGNED");
     assertThat(result.txHash()).isEqualTo("0xhash");
   }
 
@@ -197,7 +180,8 @@ class ExecuteExecutionIntentServiceTest {
             "0x" + "1".repeat(40),
             "0x" + "2".repeat(40),
             "0x" + "3".repeat(40),
-            BigInteger.valueOf(100));
+            BigInteger.valueOf(100),
+            "0x1234");
 
     return ExecutionIntent.create(
         "intent-1",

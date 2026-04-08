@@ -2,12 +2,11 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.service;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetTransferQuery;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.GetTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferExecutionIntentPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferExecutionPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +21,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class GetTransferService implements GetTransferUseCase {
 
   private final LoadTransferExecutionIntentPort loadTransferExecutionIntentPort;
-  private final GetExecutionIntentUseCase getExecutionIntentUseCase;
+  private final LoadTransferExecutionPort loadTransferExecutionPort;
 
   @Override
-  public GetExecutionIntentResult execute(GetTransferQuery query) {
+  public TransferExecutionIntentResult execute(GetTransferQuery query) {
     String executionIntentId =
         loadTransferExecutionIntentPort
             .findLatestExecutionIntentId(query.requesterUserId(), query.resourceId())
@@ -34,7 +33,6 @@ public class GetTransferService implements GetTransferUseCase {
                     new Web3InvalidInputException(
                         "transfer resource not found: " + query.resourceId()));
 
-    return getExecutionIntentUseCase.execute(
-        new GetExecutionIntentQuery(query.requesterUserId(), executionIntentId));
+    return loadTransferExecutionPort.load(query.requesterUserId(), executionIntentId);
   }
 }

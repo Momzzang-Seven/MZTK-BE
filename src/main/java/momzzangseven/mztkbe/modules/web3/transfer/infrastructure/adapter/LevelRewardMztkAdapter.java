@@ -9,10 +9,9 @@ import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
 import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTxIntentCommand;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SaveTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.RewardIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,7 +24,10 @@ import org.web3j.crypto.WalletUtils;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class LevelRewardMztkAdapter implements RewardMztkPort {
 
-  private final SaveTransactionPort saveTransactionPort;
+  private static final String SUCCEEDED = "SUCCEEDED";
+  private static final String UNCONFIRMED = "UNCONFIRMED";
+
+  private final CreateLevelUpRewardTransactionIntentUseCase createLevelUpRewardTransactionIntentUseCase;
   private final TransferRewardTokenProperties rewardTokenProperties;
 
   @Override
@@ -38,9 +40,9 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
     BigInteger amountWei = toWei(command.rewardMztk());
     String treasuryAddress = resolveTreasuryAddress();
 
-    Web3Transaction transaction =
-        saveTransactionPort.saveLevelUpRewardIntent(
-            new CreateLevelUpRewardTxIntentCommand(
+    CreateLevelUpRewardTransactionIntentResult transaction =
+        createLevelUpRewardTransactionIntentUseCase.execute(
+            new CreateLevelUpRewardTransactionIntentCommand(
                 command.userId(),
                 command.referenceId(),
                 idempotencyKey,
@@ -74,21 +76,20 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
         .multiply(BigInteger.TEN.pow(Math.max(0, rewardTokenProperties.getDecimals())));
   }
 
-  private RewardMztkResult map(Web3Transaction transaction) {
-    Web3TxStatus status = transaction.getStatus();
-    if (status == Web3TxStatus.SUCCEEDED) {
-      return RewardMztkResult.success(transaction.getTxHash());
+  private RewardMztkResult map(CreateLevelUpRewardTransactionIntentResult transaction) {
+    String status = transaction.status();
+    if (SUCCEEDED.equals(status)) {
+      return RewardMztkResult.success(transaction.txHash());
     }
-    if (status == Web3TxStatus.UNCONFIRMED) {
-      return RewardMztkResult.unconfirmed(transaction.getFailureReason(), transaction.getTxHash());
+    if (UNCONFIRMED.equals(status)) {
+      return RewardMztkResult.unconfirmed(transaction.failureReason(), transaction.txHash());
     }
 
-    return new RewardMztkResult(
-        toRewardTxStatus(status), transaction.getTxHash(), transaction.getFailureReason());
+    return new RewardMztkResult(toRewardTxStatus(status), transaction.txHash(), transaction.failureReason());
   }
 
-  private RewardTxStatus toRewardTxStatus(Web3TxStatus status) {
-    return RewardTxStatus.valueOf(status.name());
+  private RewardTxStatus toRewardTxStatus(String status) {
+    return RewardTxStatus.valueOf(status);
   }
 
   private String resolveTreasuryAddress() {

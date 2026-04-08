@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transfer.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -12,16 +11,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.Map;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CreateTransferCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetTransferQuery;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.GetTransferUseCase;
 import org.junit.jupiter.api.DisplayName;
@@ -67,26 +60,29 @@ class TransferControllerTest {
   @Test
   @DisplayName("POST /users/me/transfers 성공")
   void create_success() throws Exception {
-    given(createTransferUseCase.execute(any(CreateTransferCommand.class)))
+    org.mockito.BDDMockito.given(createTransferUseCase.execute(any(CreateTransferCommand.class)))
         .willReturn(
-            new CreateExecutionIntentResult(
-                ExecutionResourceType.TRANSFER,
+            new TransferExecutionIntentResult(
+                "TRANSFER",
                 "web3:TRANSFER_SEND:1:req-77",
-                ExecutionResourceStatus.PENDING_EXECUTION,
+                "PENDING_EXECUTION",
                 "intent-1",
-                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                "AWAITING_SIGNATURE",
                 LocalDateTime.now().plusMinutes(5),
-                ExecutionMode.EIP7702,
+                "EIP7702",
                 2,
-                SignRequestBundle.forEip7702(
-                    new SignRequestBundle.AuthorizationSignRequest(
+                TransferSignRequestBundle.forEip7702(
+                    new TransferSignRequestBundle.AuthorizationSignRequest(
                         11155111L, "0x" + "1".repeat(40), 7L, "0x" + "a".repeat(64)),
-                    new SignRequestBundle.SubmitSignRequest(
+                    new TransferSignRequestBundle.SubmitSignRequest(
                         "0x" + "b".repeat(64),
                         LocalDateTime.now()
                             .plusMinutes(5)
                             .toEpochSecond(java.time.ZoneOffset.UTC))),
-                false));
+                false,
+                null,
+                null,
+                null));
 
     mockMvc
         .perform(
@@ -111,20 +107,21 @@ class TransferControllerTest {
   @Test
   @DisplayName("GET /users/me/transfers/{resourceId} 성공")
   void get_success() throws Exception {
-    given(getTransferUseCase.execute(any(GetTransferQuery.class)))
+    org.mockito.BDDMockito.given(getTransferUseCase.execute(any(GetTransferQuery.class)))
         .willReturn(
-            new GetExecutionIntentResult(
-                ExecutionResourceType.TRANSFER,
+            new TransferExecutionIntentResult(
+                "TRANSFER",
                 "web3:TRANSFER_SEND:1:req-77",
-                ExecutionResourceStatus.PENDING_EXECUTION,
+                "PENDING_EXECUTION",
                 "intent-1",
-                ExecutionIntentStatus.PENDING_ONCHAIN,
+                "PENDING_ONCHAIN",
                 LocalDateTime.now().plusMinutes(5),
-                ExecutionMode.EIP7702,
+                "EIP7702",
                 2,
                 null,
+                false,
                 10L,
-                Web3TxStatus.PENDING,
+                "PENDING",
                 "0x" + "c".repeat(64)));
 
     mockMvc

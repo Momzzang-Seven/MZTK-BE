@@ -2,13 +2,12 @@ package momzzangseven.mztkbe.modules.web3.execution.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
 public record ExecuteExecutionIntentResult(
     String executionIntentId,
     ExecutionIntentStatus executionIntentStatus,
     Long transactionId,
-    Web3TxStatus transactionStatus,
+    String transactionStatus,
     String txHash) {
 
   public ExecuteExecutionIntentResult {

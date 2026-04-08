@@ -1,10 +1,11 @@
 package momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
@@ -20,13 +21,13 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "web3.eip7702")
 public class Eip7702Properties {
 
-  private boolean enabled = true;
+  @NotNull private Boolean enabled;
 
-  private Delegation delegation = new Delegation();
-  private Sponsor sponsor = new Sponsor();
-  private Authorization authorization = new Authorization();
-  private Execution execution = new Execution();
-  private Cleanup cleanup = new Cleanup();
+  @Valid private Delegation delegation = new Delegation();
+  @Valid private Sponsor sponsor = new Sponsor();
+  @Valid private Authorization authorization = new Authorization();
+  @Valid private Execution execution = new Execution();
+  @Valid private Cleanup cleanup = new Cleanup();
 
   @Getter
   @Setter
@@ -40,68 +41,71 @@ public class Eip7702Properties {
   @Getter
   @Setter
   public static class Sponsor {
-    private boolean enabled = true;
+    @NotNull private Boolean enabled;
 
     @NotBlank private String keyEncryptionKeyB64;
 
     @NotBlank private String walletAlias;
 
     @Min(21_000)
-    private long maxGasLimit = 500_000L;
+    private long maxGasLimit;
 
     @Min(1)
-    private long maxMaxFeeGwei = 60L;
+    private long maxMaxFeeGwei;
 
     @Min(1)
-    private long maxPriorityFeeGwei = 2L;
+    private long maxPriorityFeeGwei;
 
+    @NotNull
     @DecimalMin("0")
-    private BigDecimal maxTransferAmountEth = new BigDecimal("5000");
+    private BigDecimal maxTransferAmountEth;
 
+    @NotNull
     @DecimalMin("0")
-    private BigDecimal perTxCapEth = new BigDecimal("0.002");
+    private BigDecimal perTxCapEth;
 
+    @NotNull
     @DecimalMin("0")
-    private BigDecimal perDayUserCapEth = new BigDecimal("0.01");
+    private BigDecimal perDayUserCapEth;
   }
 
   @Getter
   @Setter
   public static class Authorization {
     @Min(1)
-    private int ttlSeconds = 300;
+    private int ttlSeconds;
 
     @Min(1)
-    private int eip1559TtlSeconds = 90;
+    private int eip1559TtlSeconds;
 
-    @NotBlank private String noncePolicy = "ONCHAIN";
+    @NotBlank private String noncePolicy;
 
-    private boolean requireChainIdMatch = true;
+    @NotNull private Boolean requireChainIdMatch;
 
     @Min(1)
-    private int maxAuthListLength = 1;
+    private int maxAuthListLength;
   }
 
   @Getter
   @Setter
   public static class Execution {
-    private List<String> allowedTargetContracts = new ArrayList<>();
-    private List<String> blockedFunctionSelectors = new ArrayList<>();
+    @NotNull private List<String> allowedTargetContracts;
+    @NotNull private List<String> blockedFunctionSelectors;
   }
 
   @Getter
   @Setter
   public static class Cleanup {
-    private boolean enabled = true;
+    @NotNull private Boolean enabled;
 
     @Min(1)
-    private int retentionDays = 180;
+    private int retentionDays;
 
     @Min(1)
-    private int batchSize = 500;
+    private int batchSize;
 
-    @NotBlank private String cron = "0 30 4 * * *";
+    @NotBlank private String cron;
 
-    @NotBlank private String zone = "Asia/Seoul";
+    @NotBlank private String zone;
   }
 }

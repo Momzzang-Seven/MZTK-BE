@@ -5,8 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.HandleTransferFailedOnchainCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CheckLevelUpHistoryExistsPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import org.junit.jupiter.api.Test;
@@ -28,7 +27,7 @@ class LevelUpRewardFailureCompensatorTest {
     CheckLevelUpHistoryExistsPort port = Mockito.mock(CheckLevelUpHistoryExistsPort.class);
     LevelUpRewardFailureCompensator compensator = new LevelUpRewardFailureCompensator(port);
 
-    compensator.compensate(event("not-a-number"));
+    compensator.compensate(command("not-a-number"));
 
     verifyNoInteractions(port);
   }
@@ -39,7 +38,7 @@ class LevelUpRewardFailureCompensatorTest {
     when(port.existsById(55L)).thenReturn(false);
     LevelUpRewardFailureCompensator compensator = new LevelUpRewardFailureCompensator(port);
 
-    compensator.compensate(event("55"));
+    compensator.compensate(command("55"));
 
     verify(port).existsById(55L);
   }
@@ -50,16 +49,16 @@ class LevelUpRewardFailureCompensatorTest {
     when(port.existsById(55L)).thenReturn(true);
     LevelUpRewardFailureCompensator compensator = new LevelUpRewardFailureCompensator(port);
 
-    compensator.compensate(event("55"));
+    compensator.compensate(command("55"));
 
     verify(port).existsById(55L);
   }
 
-  private Web3TransactionFailedOnchainEvent event(String referenceId) {
-    return new Web3TransactionFailedOnchainEvent(
+  private HandleTransferFailedOnchainCommand command(String referenceId) {
+    return new HandleTransferFailedOnchainCommand(
         100L,
         "reward:11:" + referenceId,
-        Web3ReferenceType.LEVEL_UP_REWARD,
+        "LEVEL_UP_REWARD",
         referenceId,
         null,
         11L,

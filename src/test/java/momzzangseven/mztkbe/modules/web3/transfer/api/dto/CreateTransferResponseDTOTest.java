@@ -3,30 +3,26 @@ package momzzangseven.mztkbe.modules.web3.transfer.api.dto;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
 import org.junit.jupiter.api.Test;
 
 class CreateTransferResponseDTOTest {
 
   @Test
   void from_mapsResourceIdInsteadOfExecutionIntentId() {
-    CreateExecutionIntentResult result =
-        new CreateExecutionIntentResult(
-            ExecutionResourceType.TRANSFER,
+    TransferExecutionIntentResult result =
+        new TransferExecutionIntentResult(
+            "TRANSFER",
             "web3:TRANSFER_SEND:7:req-1",
-            ExecutionResourceStatus.PENDING_EXECUTION,
+            "PENDING_EXECUTION",
             "intent-1",
-            ExecutionIntentStatus.AWAITING_SIGNATURE,
+            "AWAITING_SIGNATURE",
             LocalDateTime.now().plusMinutes(5),
-            ExecutionMode.EIP1559,
+            "EIP1559",
             1,
-            SignRequestBundle.forEip1559(
-                new SignRequestBundle.TransactionSignRequest(
+            TransferSignRequestBundle.forEip1559(
+                new TransferSignRequestBundle.TransactionSignRequest(
                     11155111L,
                     "0x" + "1".repeat(40),
                     "0x" + "2".repeat(40),
@@ -37,7 +33,10 @@ class CreateTransferResponseDTOTest {
                     "0x77359400",
                     "0xba43b7400",
                     1L)),
-            false);
+            false,
+            null,
+            null,
+            null);
 
     CreateTransferResponseDTO response = CreateTransferResponseDTO.from(result);
 

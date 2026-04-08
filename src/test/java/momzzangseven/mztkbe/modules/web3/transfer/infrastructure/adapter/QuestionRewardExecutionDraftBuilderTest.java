@@ -10,22 +10,16 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.List;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.PrepareTokenTransferExecutionSupportResult;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.PrepareTokenTransferExecutionSupportUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.PrepareTokenTransferPrevalidationResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.PrepareTokenTransferPrevalidationUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
-import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
-import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
-import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,14 +35,12 @@ class QuestionRewardExecutionDraftBuilderTest {
   private static final LocalDateTime FIXED_NOW =
       LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
 
-  @Mock private LoadWalletPort loadWalletPort;
+  @Mock private GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
   @Mock private LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
-  @Mock private Eip7702ChainPort eip7702ChainPort;
-  @Mock private Eip7702AuthorizationPort eip7702AuthorizationPort;
-  @Mock private Eip7702TransactionCodecPort eip7702TransactionCodecPort;
-  @Mock private Web3ContractPort web3ContractPort;
-  @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
+  @Mock private PrepareTokenTransferExecutionSupportUseCase prepareTokenTransferExecutionSupportUseCase;
+  @Mock private PrepareTokenTransferPrevalidationUseCase prepareTokenTransferPrevalidationUseCase;
   @Mock private ExecutionPayloadSerializer executionPayloadSerializer;
+  @Mock private TransferUnsignedTxFingerprintFactory transferUnsignedTxFingerprintFactory;
 
   private QuestionRewardExecutionDraftBuilderAdapter builder;
 
@@ -56,14 +48,12 @@ class QuestionRewardExecutionDraftBuilderTest {
   void setUp() {
     builder =
         new QuestionRewardExecutionDraftBuilderAdapter(
-            loadWalletPort,
+            getActiveWalletAddressUseCase,
             loadTransferRuntimeConfigPort,
-            eip7702ChainPort,
-            eip7702AuthorizationPort,
-            eip7702TransactionCodecPort,
-            web3ContractPort,
-            eip1559TransactionCodecPort,
+            prepareTokenTransferExecutionSupportUseCase,
+            prepareTokenTransferPrevalidationUseCase,
             executionPayloadSerializer,
+            transferUnsignedTxFingerprintFactory,
             FIXED_CLOCK);
   }
 
@@ -91,52 +81,31 @@ class QuestionRewardExecutionDraftBuilderTest {
     when(loadTransferRuntimeConfigPort.load()).thenReturn(runtimeConfig);
     when(executionPayloadSerializer.serialize(any())).thenReturn("{\"payload\":true}");
     when(executionPayloadSerializer.hashHex(any())).thenReturn("0x" + "a".repeat(64));
-    when(loadWalletPort.findWalletsByUserIdAndStatus(7L, WalletStatus.ACTIVE))
-        .thenReturn(List.of(wallet(7L, "0x" + "1".repeat(40))));
-    when(loadWalletPort.findWalletsByUserIdAndStatus(22L, WalletStatus.ACTIVE))
-        .thenReturn(List.of(wallet(22L, "0x" + "2".repeat(40))));
-    when(eip7702ChainPort.loadPendingAccountNonce("0x" + "1".repeat(40)))
-        .thenReturn(BigInteger.valueOf(9));
-    when(eip7702AuthorizationPort.buildSigningHashHex(
-            11155111L, "0x" + "4".repeat(40), BigInteger.valueOf(9)))
-        .thenReturn("0x" + "a".repeat(64));
-    when(eip7702TransactionCodecPort.encodeTransferData(
-            "0x" + "2".repeat(40), BigInteger.valueOf(500)))
-        .thenReturn("0x1234");
-    when(web3ContractPort.prevalidate(org.mockito.ArgumentMatchers.any()))
+    when(transferUnsignedTxFingerprintFactory.compute(any())).thenReturn("0x" + "b".repeat(64));
+    when(getActiveWalletAddressUseCase.execute(7L)).thenReturn(Optional.of("0x" + "1".repeat(40)));
+    when(getActiveWalletAddressUseCase.execute(22L)).thenReturn(Optional.of("0x" + "2".repeat(40)));
+    when(prepareTokenTransferExecutionSupportUseCase.execute(any()))
+        .thenReturn(new PrepareTokenTransferExecutionSupportResult(9L, "0x" + "a".repeat(64), "0x1234"));
+    when(prepareTokenTransferPrevalidationUseCase.execute(any()))
         .thenReturn(
-            new Web3ContractPort.PrevalidateResult(
+            new PrepareTokenTransferPrevalidationResult(
                 true,
-                false,
                 null,
                 BigInteger.valueOf(90_000),
                 BigInteger.valueOf(2_000_000_000L),
-                BigInteger.valueOf(50_000_000_000L),
-                java.util.Map.of("amountWei", BigInteger.valueOf(500))));
-    when(eip1559TransactionCodecPort.computeFingerprint(org.mockito.ArgumentMatchers.any()))
-        .thenReturn("0x" + "b".repeat(64));
+                BigInteger.valueOf(50_000_000_000L)));
 
-    ExecutionDraft draft = builder.build(command);
+    TransferExecutionDraft draft = builder.build(command);
 
-    assertThat(draft.resourceType()).isEqualTo(ExecutionResourceType.QUESTION);
+    assertThat(draft.resourceType()).isEqualTo("QUESTION");
     assertThat(draft.resourceId()).isEqualTo("101");
-    assertThat(draft.resourceStatus()).isEqualTo(ExecutionResourceStatus.PENDING_EXECUTION);
-    assertThat(draft.actionType()).isEqualTo(ExecutionActionType.QNA_ANSWER_ACCEPT);
+    assertThat(draft.resourceStatus()).isEqualTo("PENDING_EXECUTION");
+    assertThat(draft.actionType()).isEqualTo("QNA_ANSWER_ACCEPT");
     assertThat(draft.rootIdempotencyKey()).isEqualTo("domain:QUESTION_REWARD:101:7");
     assertThat(draft.authorityAddress()).isEqualTo("0x" + "1".repeat(40));
     assertThat(draft.counterpartyUserId()).isEqualTo(22L);
     assertThat(draft.unsignedTxSnapshot().toAddress()).isEqualTo("0x" + "3".repeat(40));
     assertThat(draft.expiresAt())
         .isEqualTo(FIXED_NOW.plusSeconds(runtimeConfig.authorizationTtlSeconds()));
-  }
-
-  private UserWallet wallet(Long userId, String address) {
-    return UserWallet.builder()
-        .id(userId)
-        .userId(userId)
-        .walletAddress(address)
-        .status(WalletStatus.ACTIVE)
-        .registeredAt(Instant.now())
-        .build();
   }
 }

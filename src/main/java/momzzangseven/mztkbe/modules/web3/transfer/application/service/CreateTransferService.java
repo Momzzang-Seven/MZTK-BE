@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.service;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CreateTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.BuildTransferExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SubmitExecutionDraftPort;
@@ -25,7 +25,7 @@ public class CreateTransferService implements CreateTransferUseCase {
 
   /** Creates transfer execution intent and returns client-facing sign request contract. */
   @Override
-  public CreateExecutionIntentResult execute(CreateTransferCommand command) {
+  public TransferExecutionIntentResult execute(CreateTransferCommand command) {
     return submitExecutionDraftPort.submit(buildTransferExecutionDraftPort.build(command));
   }
 }

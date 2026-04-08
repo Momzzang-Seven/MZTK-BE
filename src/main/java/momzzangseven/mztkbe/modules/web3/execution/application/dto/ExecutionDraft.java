@@ -3,17 +3,14 @@ package momzzangseven.mztkbe.modules.web3.execution.application.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 
 /** Domain-neutral draft payload used to create a shared execution intent. */
 public record ExecutionDraft(
-    ExecutionResourceType resourceType,
+    String resourceType,
     String resourceId,
-    ExecutionResourceStatus resourceStatus,
-    ExecutionActionType actionType,
+    String resourceStatus,
+    String actionType,
     Long requesterUserId,
     Long counterpartyUserId,
     String rootIdempotencyKey,
@@ -31,16 +28,16 @@ public record ExecutionDraft(
 
   /** Validates minimal draft requirements for mode selection and sign request generation. */
   public ExecutionDraft {
-    if (resourceType == null) {
+    if (resourceType == null || resourceType.isBlank()) {
       throw new Web3InvalidInputException("resourceType is required");
     }
     if (resourceId == null || resourceId.isBlank()) {
       throw new Web3InvalidInputException("resourceId is required");
     }
-    if (resourceStatus == null) {
+    if (resourceStatus == null || resourceStatus.isBlank()) {
       throw new Web3InvalidInputException("resourceStatus is required");
     }
-    if (actionType == null) {
+    if (actionType == null || actionType.isBlank()) {
       throw new Web3InvalidInputException("actionType is required");
     }
     if (requesterUserId == null || requesterUserId <= 0) {

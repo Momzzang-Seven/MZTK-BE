@@ -9,16 +9,12 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CancelQuestionRewardIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateQuestionRewardExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RecordQuestionRewardIntentCreationFailureUseCase;
@@ -50,24 +46,27 @@ class QuestionRewardIntentEventHandlersTest {
     when(createExecutionIntentUseCase.execute(
             org.mockito.ArgumentMatchers.any(RegisterQuestionRewardIntentCommand.class)))
         .thenReturn(
-            new CreateExecutionIntentResult(
-                ExecutionResourceType.QUESTION,
+            new TransferExecutionIntentResult(
+                "QUESTION",
                 "101",
-                ExecutionResourceStatus.PENDING_EXECUTION,
+                "PENDING_EXECUTION",
                 "intent-1",
-                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                "AWAITING_SIGNATURE",
                 LocalDateTime.now().plusMinutes(5),
-                ExecutionMode.EIP7702,
+                "EIP7702",
                 2,
-                SignRequestBundle.forEip7702(
-                    new SignRequestBundle.AuthorizationSignRequest(
+                TransferSignRequestBundle.forEip7702(
+                    new TransferSignRequestBundle.AuthorizationSignRequest(
                         11155111L, "0x" + "1".repeat(40), 3L, "0x" + "a".repeat(64)),
-                    new SignRequestBundle.SubmitSignRequest(
+                    new TransferSignRequestBundle.SubmitSignRequest(
                         "0x" + "b".repeat(64),
                         LocalDateTime.now()
                             .plusMinutes(5)
                             .toEpochSecond(java.time.ZoneOffset.UTC))),
-                false));
+                false,
+                null,
+                null,
+                null));
 
     handler.handle(new QuestionRewardIntentRequestedEvent(101L, 1001L, 1L, 2L, BigInteger.TEN));
 
