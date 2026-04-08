@@ -204,8 +204,16 @@ public class SecurityConfig {
                     .requestMatchers("/actuator/**")
                     .hasAuthority("ROLE_ADMIN")
 
+                    // --- Marketplace Endpoints ---
+                    .requestMatchers(HttpMethod.PUT, "/marketplace/trainer/store")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.GET, "/marketplace/trainer/store")
+                    .hasAuthority("ROLE_TRAINER")
+
                     // --- Internal Endpoints ---
-                    .requestMatchers("/internal/**")
+
+                    .requestMatchers(
+                        "/internal/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                     .permitAll()
 
                     // Fallback
