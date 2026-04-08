@@ -156,5 +156,4 @@ public class TransferExecutionDraftBuilder {
       throw new Web3InvalidInputException("authority nonce overflow");
     }
   }
-
 }

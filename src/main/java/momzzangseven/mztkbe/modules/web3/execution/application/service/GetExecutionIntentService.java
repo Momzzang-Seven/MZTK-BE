@@ -104,7 +104,8 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
 
   private String toResourceStatus(ExecutionIntentStatus status) {
     return switch (status) {
-      case AWAITING_SIGNATURE, SIGNED, PENDING_ONCHAIN -> ExecutionResourceStatus.PENDING_EXECUTION.name();
+      case AWAITING_SIGNATURE, SIGNED, PENDING_ONCHAIN ->
+          ExecutionResourceStatus.PENDING_EXECUTION.name();
       case CONFIRMED -> ExecutionResourceStatus.COMPLETED.name();
       case FAILED_ONCHAIN, EXPIRED, NONCE_STALE, CANCELED -> ExecutionResourceStatus.FAILED.name();
     };
