@@ -3,14 +3,13 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.en
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigInteger;
-import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import org.junit.jupiter.api.Test;
 
 class QuestionRewardIntentEntityTest {
 
   @Test
-  void onCreate_setsDefaultsAndTimestamps() {
+  void onCreate_setsDefaultStatus() {
     QuestionRewardIntentEntity entity =
         QuestionRewardIntentEntity.builder()
             .postId(101L)
@@ -23,12 +22,10 @@ class QuestionRewardIntentEntityTest {
     entity.onCreate();
 
     assertThat(entity.getStatus()).isEqualTo(QuestionRewardIntentStatus.PREPARE_REQUIRED);
-    assertThat(entity.getCreatedAt()).isNotNull();
-    assertThat(entity.getUpdatedAt()).isNotNull();
   }
 
   @Test
-  void onUpdate_updatesUpdatedAt() {
+  void onCreate_keepsExplicitStatus() {
     QuestionRewardIntentEntity entity =
         QuestionRewardIntentEntity.builder()
             .postId(101L)
@@ -37,11 +34,10 @@ class QuestionRewardIntentEntityTest {
             .toUserId(22L)
             .amountWei(BigInteger.TEN)
             .status(QuestionRewardIntentStatus.SUBMITTED)
-            .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
             .build();
 
-    entity.onUpdate();
+    entity.onCreate();
 
-    assertThat(entity.getUpdatedAt()).isAfter(LocalDateTime.of(2026, 1, 1, 0, 0));
+    assertThat(entity.getStatus()).isEqualTo(QuestionRewardIntentStatus.SUBMITTED);
   }
 }

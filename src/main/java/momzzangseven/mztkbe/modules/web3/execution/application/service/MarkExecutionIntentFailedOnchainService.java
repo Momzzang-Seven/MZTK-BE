@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -20,6 +22,7 @@ public class MarkExecutionIntentFailedOnchainService
     implements MarkExecutionIntentFailedOnchainUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
+  private final Clock appClock;
 
   @Override
   public void execute(Long submittedTxId, String failureReason) {
@@ -40,7 +43,9 @@ public class MarkExecutionIntentFailedOnchainService
         || intent.getStatus() == ExecutionIntentStatus.SIGNED) {
       executionIntentPersistencePort.update(
           intent.failOnchain(
-              "FAILED_ONCHAIN", failureReason == null ? "FAILED_ONCHAIN" : failureReason));
+              ExecutionIntentStatus.FAILED_ONCHAIN.name(),
+              failureReason == null ? ExecutionIntentStatus.FAILED_ONCHAIN.name() : failureReason,
+              LocalDateTime.now(appClock)));
     }
   }
 }

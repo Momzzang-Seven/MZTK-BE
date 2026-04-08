@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetTransferQuery;
@@ -43,7 +44,7 @@ class GetTransferServiceTest {
         new GetExecutionIntentResult(
             ExecutionResourceType.TRANSFER,
             "web3:TRANSFER_SEND:7:req-1",
-            "PENDING_EXECUTION",
+            ExecutionResourceStatus.PENDING_EXECUTION,
             "intent-latest",
             latestIntent.getStatus(),
             latestIntent.getExpiresAt(),
@@ -106,6 +107,6 @@ class GetTransferServiceTest {
         .toBuilder()
         .id(2L)
         .build()
-        .markSigned(12L);
+        .markSigned(12L, LocalDateTime.of(2026, 4, 7, 12, 0));
   }
 }

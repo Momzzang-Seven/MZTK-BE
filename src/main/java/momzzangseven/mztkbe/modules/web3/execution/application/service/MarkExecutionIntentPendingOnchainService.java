@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -24,6 +26,7 @@ public class MarkExecutionIntentPendingOnchainService
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  private final Clock appClock;
 
   @Override
   public void execute(Long submittedTxId) {
@@ -41,7 +44,8 @@ public class MarkExecutionIntentPendingOnchainService
       return;
     }
 
-    executionIntentPersistencePort.update(intent.markPendingOnchain(intent.getSubmittedTxId()));
+    executionIntentPersistencePort.update(
+        intent.markPendingOnchain(intent.getSubmittedTxId(), LocalDateTime.now(appClock)));
     if (intent.getMode() == ExecutionMode.EIP7702
         && intent.getReservedSponsorCostWei().signum() > 0) {
       moveReservedToConsumed(intent);

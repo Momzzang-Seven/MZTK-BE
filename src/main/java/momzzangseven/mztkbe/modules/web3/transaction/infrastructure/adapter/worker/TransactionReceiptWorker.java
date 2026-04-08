@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,6 +32,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
   private final TransactionOutcomePublisher transactionOutcomePublisher;
+  private final Clock appClock;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -41,7 +43,8 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       Web3ContractPort web3ContractPort,
       TransactionOutcomePublisher transactionOutcomePublisher,
       TransactionRewardTokenProperties rewardTokenProperties,
-      RetryStrategy retryStrategy) {
+      RetryStrategy retryStrategy,
+      Clock appClock) {
     super(
         loadTransactionWorkPort,
         updateTransactionPort,
@@ -50,6 +53,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
     this.transactionOutcomePublisher = transactionOutcomePublisher;
+    this.appClock = appClock;
   }
 
   @Scheduled(fixedDelay = 1000L)
@@ -135,7 +139,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     int nextPollSeconds = Math.max(1, Math.min(pollMinSeconds, pollMaxSeconds));
 
     updateTransactionPort.scheduleRetry(
-        transactionId, null, LocalDateTime.now().plusSeconds(nextPollSeconds));
+        transactionId, null, LocalDateTime.now(appClock).plusSeconds(nextPollSeconds));
   }
 
   private long elapsedSeconds(LoadTransactionWorkPort.TransactionWorkItem item) {
@@ -143,7 +147,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     if (baseline == null) {
       return Long.MAX_VALUE;
     }
-    return Math.max(0, Duration.between(baseline, LocalDateTime.now()).getSeconds());
+    return Math.max(0, Duration.between(baseline, LocalDateTime.now(appClock)).getSeconds());
   }
 
   private void timeout(Long transactionId, String txHash, int timeoutSeconds) {

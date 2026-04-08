@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import org.junit.jupiter.api.Test;
@@ -18,7 +19,7 @@ class CreateTransferResponseDTOTest {
         new CreateExecutionIntentResult(
             ExecutionResourceType.TRANSFER,
             "web3:TRANSFER_SEND:7:req-1",
-            "PENDING_EXECUTION",
+            ExecutionResourceStatus.PENDING_EXECUTION,
             "intent-1",
             ExecutionIntentStatus.AWAITING_SIGNATURE,
             LocalDateTime.now().plusMinutes(5),

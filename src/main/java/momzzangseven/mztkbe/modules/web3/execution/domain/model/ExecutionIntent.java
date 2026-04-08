@@ -155,76 +155,83 @@ public class ExecutionIntent {
     throw new IllegalStateException("sponsorUsageDateKst is missing");
   }
 
-  public ExecutionIntent markSigned(Long nextSubmittedTxId) {
+  public ExecutionIntent markSigned(Long nextSubmittedTxId, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
     requireSubmittedTxId(nextSubmittedTxId);
+    requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.SIGNED)
         .submittedTxId(nextSubmittedTxId)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(now)
         .build();
   }
 
-  public ExecutionIntent markPendingOnchain(Long nextSubmittedTxId) {
+  public ExecutionIntent markPendingOnchain(Long nextSubmittedTxId, LocalDateTime now) {
     if (status != ExecutionIntentStatus.AWAITING_SIGNATURE
         && status != ExecutionIntentStatus.SIGNED) {
       throw new IllegalStateException("intent cannot move to PENDING_ONCHAIN from " + status);
     }
     requireSubmittedTxId(nextSubmittedTxId);
+    requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.PENDING_ONCHAIN)
         .submittedTxId(nextSubmittedTxId)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(now)
         .build();
   }
 
-  public ExecutionIntent confirm() {
+  public ExecutionIntent confirm(LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.PENDING_ONCHAIN);
+    requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.CONFIRMED)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(now)
         .build();
   }
 
-  public ExecutionIntent failOnchain(String errorCode, String errorReason) {
+  public ExecutionIntent failOnchain(String errorCode, String errorReason, LocalDateTime now) {
     if (status != ExecutionIntentStatus.PENDING_ONCHAIN && status != ExecutionIntentStatus.SIGNED) {
       throw new IllegalStateException("intent cannot fail onchain from " + status);
     }
+    requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.FAILED_ONCHAIN)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(now)
         .build();
   }
 
-  public ExecutionIntent expire(String errorCode, String errorReason) {
+  public ExecutionIntent expire(String errorCode, String errorReason, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.EXPIRED)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(now)
         .build();
   }
 
-  public ExecutionIntent cancel(String errorCode, String errorReason) {
+  public ExecutionIntent cancel(String errorCode, String errorReason, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.CANCELED)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(now)
         .build();
   }
 
-  public ExecutionIntent markNonceStale(String errorCode, String errorReason) {
+  public ExecutionIntent markNonceStale(String errorCode, String errorReason, LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    requireNow(now);
     return toBuilder()
         .status(ExecutionIntentStatus.NONCE_STALE)
         .lastErrorCode(errorCode)
         .lastErrorReason(errorReason)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(now)
         .build();
   }
 
@@ -238,6 +245,12 @@ public class ExecutionIntent {
   private static void requireSubmittedTxId(Long submittedTxId) {
     if (submittedTxId == null || submittedTxId <= 0) {
       throw new Web3InvalidInputException("submittedTxId must be positive");
+    }
+  }
+
+  private static void requireNow(LocalDateTime now) {
+    if (now == null) {
+      throw new Web3InvalidInputException("now is required");
     }
   }
 

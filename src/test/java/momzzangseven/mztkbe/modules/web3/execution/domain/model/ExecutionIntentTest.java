@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 
 class ExecutionIntentTest {
 
+  private static final LocalDateTime FIXED_NOW = LocalDateTime.of(2026, 4, 7, 12, 0);
+
   @Test
   void eip7702IntentTransitionsFromAwaitingSignatureToSignedAndPendingOnchain() {
     ExecutionIntent intent =
@@ -30,25 +32,25 @@ class ExecutionIntentTest {
             "0xauthority",
             3L,
             "0xdelegate",
-            LocalDateTime.now().plusMinutes(5),
+            FIXED_NOW.plusMinutes(5),
             "0xauth-hash",
             "0xexecution-digest",
             null,
             null,
             BigInteger.TEN,
             LocalDate.of(2026, 4, 6),
-            LocalDateTime.now());
+            FIXED_NOW);
 
     assertTrue(intent.shouldExposeSignRequest());
     assertTrue(intent.hasSamePayload("0xpayload"));
     assertTrue(intent.isActiveForReuse());
 
-    ExecutionIntent signed = intent.markSigned(11L);
+    ExecutionIntent signed = intent.markSigned(11L, FIXED_NOW.plusSeconds(1));
     assertEquals(ExecutionIntentStatus.SIGNED, signed.getStatus());
     assertEquals(11L, signed.getSubmittedTxId());
     assertFalse(signed.shouldExposeSignRequest());
 
-    ExecutionIntent pending = signed.markPendingOnchain(11L);
+    ExecutionIntent pending = signed.markPendingOnchain(11L, FIXED_NOW.plusSeconds(2));
     assertEquals(ExecutionIntentStatus.PENDING_ONCHAIN, pending.getStatus());
     assertEquals(11L, pending.getSubmittedTxId());
   }
@@ -71,7 +73,7 @@ class ExecutionIntentTest {
             null,
             null,
             null,
-            LocalDateTime.now().plusMinutes(1),
+            FIXED_NOW.plusMinutes(1),
             null,
             null,
             new UnsignedTxSnapshot(
@@ -87,9 +89,9 @@ class ExecutionIntentTest {
             "0xfingerprint",
             BigInteger.ZERO,
             LocalDate.of(2026, 4, 6),
-            LocalDateTime.now());
+            FIXED_NOW);
 
-    ExecutionIntent stale = intent.markNonceStale("NONCE_STALE", "nonce moved");
+    ExecutionIntent stale = intent.markNonceStale("NONCE_STALE", "nonce moved", FIXED_NOW.plusSeconds(1));
     assertEquals(ExecutionIntentStatus.NONCE_STALE, stale.getStatus());
     assertTrue(stale.canStartNewAttempt());
     assertFalse(stale.isActiveForReuse());
@@ -110,7 +112,7 @@ class ExecutionIntentTest {
             .mode(ExecutionMode.EIP7702)
             .status(ExecutionIntentStatus.AWAITING_SIGNATURE)
             .payloadHash("0xpayload")
-            .expiresAt(LocalDateTime.now().plusMinutes(5))
+            .expiresAt(FIXED_NOW.plusMinutes(5))
             .createdAt(LocalDateTime.of(2026, 4, 7, 0, 3))
             .build();
 

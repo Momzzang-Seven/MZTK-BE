@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigInteger;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
 class Web3SponsorDailyUsageEntityTest {
@@ -21,23 +20,21 @@ class Web3SponsorDailyUsageEntityTest {
 
     assertThat(entity.getReservedCostWei()).isEqualTo(BigInteger.ZERO);
     assertThat(entity.getConsumedCostWei()).isEqualTo(BigInteger.ZERO);
-    assertThat(entity.getCreatedAt()).isNotNull();
-    assertThat(entity.getUpdatedAt()).isNotNull();
   }
 
   @Test
-  void onUpdate_updatesUpdatedAt() {
+  void onCreate_keepsExistingCosts() {
     Web3SponsorDailyUsageEntity entity =
         Web3SponsorDailyUsageEntity.builder()
             .userId(7L)
             .usageDateKst(LocalDate.of(2026, 3, 1))
             .reservedCostWei(BigInteger.ONE)
             .consumedCostWei(BigInteger.ONE)
-            .updatedAt(LocalDateTime.of(2026, 1, 1, 0, 0))
             .build();
 
-    entity.onUpdate();
+    entity.onCreate();
 
-    assertThat(entity.getUpdatedAt()).isAfter(LocalDateTime.of(2026, 1, 1, 0, 0));
+    assertThat(entity.getReservedCostWei()).isEqualTo(BigInteger.ONE);
+    assertThat(entity.getConsumedCostWei()).isEqualTo(BigInteger.ONE);
   }
 }

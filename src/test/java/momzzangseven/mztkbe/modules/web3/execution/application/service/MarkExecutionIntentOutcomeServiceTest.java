@@ -5,8 +5,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -23,6 +26,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class MarkExecutionIntentOutcomeServiceTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-07T03:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
 
   private MarkExecutionIntentSucceededService succeededService;
@@ -30,9 +39,9 @@ class MarkExecutionIntentOutcomeServiceTest {
 
   @BeforeEach
   void setUp() {
-    succeededService = new MarkExecutionIntentSucceededService(executionIntentPersistencePort);
+    succeededService = new MarkExecutionIntentSucceededService(executionIntentPersistencePort, FIXED_CLOCK);
     failedOnchainService =
-        new MarkExecutionIntentFailedOnchainService(executionIntentPersistencePort);
+        new MarkExecutionIntentFailedOnchainService(executionIntentPersistencePort, FIXED_CLOCK);
   }
 
   @Test
@@ -94,7 +103,7 @@ class MarkExecutionIntentOutcomeServiceTest {
             null,
             null,
             null,
-            LocalDateTime.now().plusMinutes(5),
+            FIXED_NOW.plusMinutes(5),
             null,
             null,
             new UnsignedTxSnapshot(
@@ -110,11 +119,11 @@ class MarkExecutionIntentOutcomeServiceTest {
             "0x" + "b".repeat(64),
             BigInteger.ZERO,
             LocalDate.of(2026, 4, 6),
-            LocalDateTime.now())
+            FIXED_NOW)
         .toBuilder()
         .id(1L)
         .build()
-        .markSigned(12L)
-        .markPendingOnchain(12L);
+        .markSigned(12L, FIXED_NOW.plusSeconds(1))
+        .markPendingOnchain(12L, FIXED_NOW.plusSeconds(2));
   }
 }

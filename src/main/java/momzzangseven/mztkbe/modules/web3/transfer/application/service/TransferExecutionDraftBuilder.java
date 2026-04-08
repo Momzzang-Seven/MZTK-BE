@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.service;
 
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -44,7 +44,7 @@ public class TransferExecutionDraftBuilder {
   private final Web3ContractPort web3ContractPort;
   private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   private final ExecutionPayloadSerializer executionPayloadSerializer;
-  private final ZoneId appZoneId;
+  private final Clock appClock;
 
   public ExecutionDraft build(CreateTransferCommand command) {
     command.validate();
@@ -88,7 +88,7 @@ public class TransferExecutionDraftBuilder {
     return new ExecutionDraft(
         ExecutionResourceType.TRANSFER,
         resourceId,
-        ExecutionResourceStatus.PENDING_EXECUTION.name(),
+        ExecutionResourceStatus.PENDING_EXECUTION,
         ExecutionActionType.TRANSFER_SEND,
         command.userId(),
         command.toUserId(),
@@ -103,7 +103,7 @@ public class TransferExecutionDraftBuilder {
         authorizationPayloadHash,
         unsignedTxSnapshot,
         eip1559TransactionCodecPort.computeFingerprint(unsignedTxSnapshot),
-        LocalDateTime.now(appZoneId).plusSeconds(runtimeConfig.authorizationTtlSeconds()));
+        LocalDateTime.now(appClock).plusSeconds(runtimeConfig.authorizationTtlSeconds()));
   }
 
   private UnsignedTxSnapshot buildUnsignedTxSnapshot(

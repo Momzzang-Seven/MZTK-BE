@@ -4,13 +4,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 
 public record ExecutionDraft(
     ExecutionResourceType resourceType,
     String resourceId,
-    String resourceStatus,
+    ExecutionResourceStatus resourceStatus,
     ExecutionActionType actionType,
     Long requesterUserId,
     Long counterpartyUserId,
@@ -34,7 +35,7 @@ public record ExecutionDraft(
     if (resourceId == null || resourceId.isBlank()) {
       throw new Web3InvalidInputException("resourceId is required");
     }
-    if (resourceStatus == null || resourceStatus.isBlank()) {
+    if (resourceStatus == null) {
       throw new Web3InvalidInputException("resourceStatus is required");
     }
     if (actionType == null) {

@@ -3,11 +3,14 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -25,6 +28,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorD
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
@@ -37,6 +41,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class CreateExecutionIntentServiceTest {
+
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-07T03:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+  private static final LocalDate FIXED_DATE = FIXED_NOW.toLocalDate();
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
@@ -51,7 +62,7 @@ class CreateExecutionIntentServiceTest {
   @BeforeEach
   void setUp() {
     executionModeSelector =
-        new ExecutionModeSelector(loadSponsorPolicyPort, sponsorDailyUsagePersistencePort);
+        new ExecutionModeSelector(loadSponsorPolicyPort, sponsorDailyUsagePersistencePort, FIXED_CLOCK);
     service =
         new CreateExecutionIntentService(
             executionIntentPersistencePort,
@@ -61,7 +72,7 @@ class CreateExecutionIntentServiceTest {
             loadEip1559TtlPort,
             buildExecutionDigestPort,
             executionModeSelector,
-            ZoneId.of("Asia/Seoul"));
+            FIXED_CLOCK);
   }
 
   @Test
@@ -70,14 +81,10 @@ class CreateExecutionIntentServiceTest {
         .thenReturn(
             new SponsorPolicy(
                 true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
-    when(sponsorDailyUsagePersistencePort.find(
-            7L, LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))))
-        .thenReturn(
-            Optional.of(
-                SponsorDailyUsage.create(7L, LocalDate.now(java.time.ZoneId.of("Asia/Seoul")))));
-    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(
-            7L, LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))))
-        .thenReturn(SponsorDailyUsage.create(7L, LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))));
+    when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
+        .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
     when(buildExecutionDigestPort.buildExecutionDigestHex(any(), any(), any(), any()))
         .thenReturn("0x" + "d".repeat(64));
     when(loadExecutionChainIdPort.loadChainId()).thenReturn(11155111L);
@@ -101,11 +108,12 @@ class CreateExecutionIntentServiceTest {
                 intent ->
                     intent
                         .getSponsorUsageDateKst()
-                        .equals(LocalDate.now(java.time.ZoneId.of("Asia/Seoul")))));
+                        .equals(FIXED_DATE)));
   }
 
   @Test
   void execute_fallsBackToEip1559_whenSponsorIneligible() {
+    lenient().when(loadEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
     when(loadSponsorPolicyPort.loadSponsorPolicy())
         .thenReturn(
             new SponsorPolicy(
@@ -119,6 +127,7 @@ class CreateExecutionIntentServiceTest {
     assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
     assertThat(result.signCount()).isEqualTo(1);
     assertThat(result.signRequest().transaction()).isNotNull();
+    assertThat(result.expiresAt()).isEqualTo(FIXED_NOW.plusSeconds(90));
   }
 
   @Test
@@ -140,14 +149,14 @@ class CreateExecutionIntentServiceTest {
                 null,
                 null,
                 null,
-                LocalDateTime.now().plusSeconds(60),
+                FIXED_NOW.plusSeconds(60),
                 null,
                 null,
                 unsignedTxSnapshot(),
                 "0x" + "b".repeat(64),
                 BigInteger.ZERO,
-                LocalDate.now(java.time.ZoneId.of("Asia/Seoul")),
-                LocalDateTime.now()),
+                FIXED_DATE,
+                FIXED_NOW),
             77L);
     when(executionIntentPersistencePort.findLatestByRootIdempotencyKeyForUpdate("root-transfer-1"))
         .thenReturn(Optional.of(existing));
@@ -163,7 +172,7 @@ class CreateExecutionIntentServiceTest {
     return new ExecutionDraft(
         ExecutionResourceType.TRANSFER,
         "web3:TRANSFER_SEND:7:req-1",
-        "PENDING_EXECUTION",
+        ExecutionResourceStatus.PENDING_EXECUTION,
         ExecutionActionType.TRANSFER_SEND,
         7L,
         8L,
@@ -179,7 +188,7 @@ class CreateExecutionIntentServiceTest {
         "0x" + "5".repeat(64),
         unsignedTxSnapshot(),
         "0x" + "b".repeat(64),
-        LocalDateTime.now().plusSeconds(300));
+        FIXED_NOW.plusSeconds(300));
   }
 
   private UnsignedTxSnapshot unsignedTxSnapshot() {

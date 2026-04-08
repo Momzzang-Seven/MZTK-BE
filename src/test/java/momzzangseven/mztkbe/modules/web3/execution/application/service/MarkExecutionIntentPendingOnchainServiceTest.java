@@ -6,8 +6,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
@@ -25,6 +28,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class MarkExecutionIntentPendingOnchainServiceTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-07T03:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
 
@@ -34,7 +43,7 @@ class MarkExecutionIntentPendingOnchainServiceTest {
   void setUp() {
     service =
         new MarkExecutionIntentPendingOnchainService(
-            executionIntentPersistencePort, sponsorDailyUsagePersistencePort);
+            executionIntentPersistencePort, sponsorDailyUsagePersistencePort, FIXED_CLOCK);
   }
 
   @Test
@@ -89,17 +98,17 @@ class MarkExecutionIntentPendingOnchainServiceTest {
             "0x" + "1".repeat(40),
             3L,
             "0x" + "2".repeat(40),
-            LocalDateTime.now().plusMinutes(5),
+            FIXED_NOW.plusMinutes(5),
             "0x" + "b".repeat(64),
             "0x" + "c".repeat(64),
             null,
             null,
             BigInteger.TEN,
             LocalDate.of(2026, 4, 5),
-            LocalDateTime.now())
+            FIXED_NOW)
         .toBuilder()
         .id(1L)
         .build()
-        .markSigned(12L);
+        .markSigned(12L, FIXED_NOW.plusSeconds(1));
   }
 }

@@ -1,9 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorD
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
@@ -44,11 +45,11 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private final LoadEip1559TtlPort loadEip1559TtlPort;
   private final BuildExecutionDigestPort buildExecutionDigestPort;
   private final ExecutionModeSelector executionModeSelector;
-  private final ZoneId appZoneId;
+  private final Clock appClock;
 
   @Override
   public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
-    LocalDateTime now = LocalDateTime.now(appZoneId);
+    LocalDateTime now = LocalDateTime.now(appClock);
     ExecutionIntent existing =
         executionIntentPersistencePort
             .findLatestByRootIdempotencyKeyForUpdate(command.draft().rootIdempotencyKey())
@@ -112,7 +113,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     if (existing.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
         && existing.getExpiresAt().isBefore(now)) {
       executionIntentPersistencePort.update(
-          existing.expire(ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage()));
+          existing.expire(
+              ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage(), now));
       if (existing.getMode() == ExecutionMode.EIP7702
           && existing.getReservedSponsorCostWei().signum() > 0) {
         releaseSponsorExposure(
@@ -126,7 +128,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     if (!existing.hasSamePayload(command.draft().payloadHash())) {
       if (existing.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE) {
         executionIntentPersistencePort.update(
-            existing.cancel(ErrorCode.IDEMPOTENCY_CONFLICT.name(), "superseded by new payload"));
+            existing.cancel(
+                ErrorCode.IDEMPOTENCY_CONFLICT.name(), "superseded by new payload", now));
         if (existing.getMode() == ExecutionMode.EIP7702
             && existing.getReservedSponsorCostWei().signum() > 0) {
           releaseSponsorExposure(
@@ -252,7 +255,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   }
 
   private CreateExecutionIntentResult toResult(
-      ExecutionIntent intent, String resourceStatus, boolean existing) {
+      ExecutionIntent intent, ExecutionResourceStatus resourceStatus, boolean existing) {
     return new CreateExecutionIntentResult(
         intent.getResourceType(),
         intent.getResourceId(),
@@ -261,7 +264,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
         intent.getStatus(),
         intent.getExpiresAt(),
         intent.getMode(),
-        intent.getMode() == ExecutionMode.EIP7702 ? 2 : 1,
+        intent.getMode().requiredSignCount(),
         buildSignRequest(intent),
         existing);
   }

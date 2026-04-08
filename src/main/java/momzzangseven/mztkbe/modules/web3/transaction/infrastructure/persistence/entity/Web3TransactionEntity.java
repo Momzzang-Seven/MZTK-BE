@@ -9,7 +9,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.math.BigInteger;
@@ -126,23 +125,11 @@ public class Web3TransactionEntity {
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
-    if (createdAt == null) {
-      createdAt = now;
-    }
-    if (updatedAt == null) {
-      updatedAt = now;
-    }
     if (status == null) {
       status = Web3TxStatus.CREATED;
     }
     if (txType == null) {
       txType = Web3TxType.EIP1559;
     }
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    updatedAt = LocalDateTime.now();
   }
 }

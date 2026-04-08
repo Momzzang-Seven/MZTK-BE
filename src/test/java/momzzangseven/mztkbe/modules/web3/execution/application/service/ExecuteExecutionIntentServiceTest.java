@@ -4,11 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -55,6 +59,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ExecuteExecutionIntentServiceTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-07T03:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   @Mock private TransferTransactionPersistencePort transferTransactionPersistencePort;
@@ -95,7 +105,8 @@ class ExecuteExecutionIntentServiceTest {
             loadExecutionChainIdPort,
             loadExecutionSponsorWalletConfigPort,
             loadExecutionRetryPolicyPort,
-            List.of(executionActionHandlerPort));
+            List.of(executionActionHandlerPort),
+            FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
         .thenReturn(true);
@@ -176,6 +187,27 @@ class ExecuteExecutionIntentServiceTest {
         .isEqualTo(ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getCode());
   }
 
+  @Test
+  void execute_marksExpired_whenIntentExpiredRelativeToInjectedClock() throws Exception {
+    ExecutionIntent intent =
+        existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.minusSeconds(1)).build();
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned")))
+        .isInstanceOf(Web3TransferException.class)
+        .extracting(ex -> ((Web3TransferException) ex).getCode())
+        .isEqualTo(ErrorCode.EXECUTION_INTENT_EXPIRED.getCode());
+
+    verify(executionIntentPersistencePort).update(any());
+  }
+
   private ExecutionIntent existingEip1559Intent() throws Exception {
     TransferExecutionPayload payload =
         new TransferExecutionPayload(
@@ -202,7 +234,7 @@ class ExecuteExecutionIntentServiceTest {
         null,
         null,
         null,
-        LocalDateTime.now().plusMinutes(5),
+        FIXED_NOW.plusMinutes(5),
         null,
         null,
         new UnsignedTxSnapshot(
@@ -218,6 +250,6 @@ class ExecuteExecutionIntentServiceTest {
         "0x" + "b".repeat(64),
         BigInteger.ZERO,
         LocalDate.of(2026, 4, 6),
-        LocalDateTime.now());
+        FIXED_NOW);
   }
 }

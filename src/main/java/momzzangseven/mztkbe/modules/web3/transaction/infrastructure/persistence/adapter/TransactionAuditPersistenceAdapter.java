@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
@@ -15,6 +17,7 @@ public class TransactionAuditPersistenceAdapter implements RecordTransactionAudi
 
   private final Web3TransactionAuditJpaRepository repository;
   private final AuditLogSerializer auditLogSerializer;
+  private final Clock appClock;
 
   @Override
   @Transactional
@@ -35,6 +38,7 @@ public class TransactionAuditPersistenceAdapter implements RecordTransactionAudi
             .eventType(command.eventType())
             .rpcAlias(command.rpcAlias())
             .detailJson(auditLogSerializer.toJson(command.detail()))
+            .createdAt(LocalDateTime.now(appClock))
             .build());
   }
 }

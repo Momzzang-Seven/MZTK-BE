@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -71,7 +72,7 @@ class TransferControllerTest {
             new CreateExecutionIntentResult(
                 ExecutionResourceType.TRANSFER,
                 "web3:TRANSFER_SEND:1:req-77",
-                "PENDING_EXECUTION",
+                ExecutionResourceStatus.PENDING_EXECUTION,
                 "intent-1",
                 ExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.now().plusMinutes(5),
@@ -115,7 +116,7 @@ class TransferControllerTest {
             new GetExecutionIntentResult(
                 ExecutionResourceType.TRANSFER,
                 "web3:TRANSFER_SEND:1:req-77",
-                "PENDING_EXECUTION",
+                ExecutionResourceStatus.PENDING_EXECUTION,
                 "intent-1",
                 ExecutionIntentStatus.PENDING_ONCHAIN,
                 LocalDateTime.now().plusMinutes(5),

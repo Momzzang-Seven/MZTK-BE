@@ -41,7 +41,7 @@ public class ExecutionIntentCleanupService {
     List<Long> expiredIntentIds =
         executionIntentPersistencePort.findExpiredAwaitingSignatureIds(
             expiredNow, cleanupPolicy.batchSize());
-    int expiredIntentCount = expireAwaitingSignatureIntents(expiredIntentIds);
+    int expiredIntentCount = expireAwaitingSignatureIntents(expiredIntentIds, expiredNow);
 
     List<Long> retainedIntentIds =
         executionIntentPersistencePort.findRetainedFinalizedIds(
@@ -62,7 +62,7 @@ public class ExecutionIntentCleanupService {
     return new CleanupBatchResult(expiredIntentCount, deletedIntentCount, deletedUsage);
   }
 
-  private int expireAwaitingSignatureIntents(List<Long> expiredIntentIds) {
+  private int expireAwaitingSignatureIntents(List<Long> expiredIntentIds, LocalDateTime expiredNow) {
     if (expiredIntentIds.isEmpty()) {
       return 0;
     }
@@ -78,7 +78,8 @@ public class ExecutionIntentCleanupService {
       executionIntentPersistencePort.update(
           intent.expire(
               ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
-              ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage()));
+              ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
+              expiredNow));
       updatedCount++;
     }
     return updatedCount;

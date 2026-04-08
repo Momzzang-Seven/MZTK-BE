@@ -7,7 +7,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.entity.Web3SponsorDailyUsageEntity;
@@ -22,13 +26,19 @@ import org.springframework.dao.DataIntegrityViolationException;
 @ExtendWith(MockitoExtension.class)
 class SponsorDailyUsagePersistenceAdapterTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private Web3SponsorDailyUsageJpaRepository repository;
 
   private SponsorDailyUsagePersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new SponsorDailyUsagePersistenceAdapter(repository);
+    adapter = new SponsorDailyUsagePersistenceAdapter(repository, FIXED_CLOCK);
   }
 
   @Test
@@ -43,6 +53,8 @@ class SponsorDailyUsagePersistenceAdapterTest {
 
     assertThat(usage.getUserId()).isEqualTo(7L);
     assertThat(usage.getUsageDateKst()).isEqualTo(usageDate);
+    assertThat(usage.getCreatedAt()).isEqualTo(FIXED_NOW);
+    assertThat(usage.getUpdatedAt()).isEqualTo(FIXED_NOW);
     verify(repository).save(any());
     verify(repository, times(2)).findForUpdate(7L, usageDate);
   }
@@ -70,6 +82,8 @@ class SponsorDailyUsagePersistenceAdapterTest {
         .usageDateKst(usageDateKst)
         .reservedCostWei(BigInteger.ZERO)
         .consumedCostWei(BigInteger.ZERO)
+        .createdAt(FIXED_NOW)
+        .updatedAt(FIXED_NOW)
         .build();
   }
 }

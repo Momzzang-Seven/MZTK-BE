@@ -4,13 +4,14 @@ import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 
 public record CreateExecutionIntentResult(
     ExecutionResourceType resourceType,
     String resourceId,
-    String resourceStatus,
+    ExecutionResourceStatus resourceStatus,
     String executionIntentId,
     ExecutionIntentStatus executionIntentStatus,
     LocalDateTime expiresAt,
@@ -26,7 +27,7 @@ public record CreateExecutionIntentResult(
     if (resourceId == null || resourceId.isBlank()) {
       throw new Web3InvalidInputException("resourceId is required");
     }
-    if (resourceStatus == null || resourceStatus.isBlank()) {
+    if (resourceStatus == null) {
       throw new Web3InvalidInputException("resourceStatus is required");
     }
     if (executionIntentId == null || executionIntentId.isBlank()) {
