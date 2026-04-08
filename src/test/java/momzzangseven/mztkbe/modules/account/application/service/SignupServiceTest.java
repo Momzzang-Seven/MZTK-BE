@@ -51,6 +51,10 @@ class SignupServiceTest {
     return new AccountUserSnapshot(42L, VALID_EMAIL, VALID_NICKNAME, null, "USER");
   }
 
+  private AccountUserSnapshot createSavedSnapshot(String role) {
+    return new AccountUserSnapshot(42L, VALID_EMAIL, VALID_NICKNAME, null, role);
+  }
+
   // ============================================
   // 성공 케이스
   // ============================================
@@ -101,6 +105,96 @@ class SignupServiceTest {
 
       verify(passwordEncoder, times(1)).encode(VALID_PASSWORD);
       verify(saveUserAccountPort, times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("[M-1] USER role 명시 시 USER role로 생성")
+    void execute_WithUserRole_ReturnsSignupResultWithUserRole() {
+      SignupCommand command =
+          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "USER");
+      AccountUserSnapshot snapshot = createSavedSnapshot("USER");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER")))
+          .willReturn(snapshot);
+      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+      SignupResult result = signupService.execute(command);
+
+      assertThat(result.role()).isEqualTo("USER");
+      verify(createAccountUserPort)
+          .createUser(eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER"));
+    }
+
+    @Test
+    @DisplayName("[M-2] TRAINER role 명시 시 TRAINER role로 생성")
+    void execute_WithTrainerRole_ReturnsSignupResultWithTrainerRole() {
+      SignupCommand command =
+          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "TRAINER");
+      AccountUserSnapshot snapshot = createSavedSnapshot("TRAINER");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("TRAINER")))
+          .willReturn(snapshot);
+      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+      SignupResult result = signupService.execute(command);
+
+      assertThat(result.role()).isEqualTo("TRAINER");
+      verify(createAccountUserPort)
+          .createUser(eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("TRAINER"));
+    }
+
+    @Test
+    @DisplayName("[M-3] role이 null이면 기본값 USER로 생성")
+    void execute_WithNullRole_DefaultsToUser() {
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
+      AccountUserSnapshot snapshot = createSavedSnapshot("USER");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER")))
+          .willReturn(snapshot);
+      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+      SignupResult result = signupService.execute(command);
+
+      assertThat(result.role()).isEqualTo("USER");
+      verify(createAccountUserPort)
+          .createUser(eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER"));
+    }
+
+    @Test
+    @DisplayName("[M-4] SignupResult에 role 필드 포함 확인")
+    void execute_ReturnsSignupResultWithRole() {
+      SignupCommand command =
+          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "TRAINER");
+      AccountUserSnapshot snapshot = createSavedSnapshot("TRAINER");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("TRAINER")))
+          .willReturn(snapshot);
+      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+      SignupResult result = signupService.execute(command);
+
+      assertThat(result).isNotNull();
+      assertThat(result.role()).isEqualTo("TRAINER");
     }
 
     @Test

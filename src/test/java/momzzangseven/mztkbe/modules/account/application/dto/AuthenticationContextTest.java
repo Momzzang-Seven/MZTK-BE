@@ -14,7 +14,7 @@ class AuthenticationContextTest {
   void from_mapsAllFields() {
     LoginCommand command =
         new LoginCommand(
-            AuthProvider.GOOGLE, "user@example.com", "pw", "auth-code", "redirect", null);
+            AuthProvider.GOOGLE, "user@example.com", "pw", "auth-code", "redirect", "USER");
 
     AuthenticationContext context = AuthenticationContext.from(command);
 
@@ -23,6 +23,18 @@ class AuthenticationContextTest {
     assertThat(context.password()).isEqualTo("pw");
     assertThat(context.authorizationCode()).isEqualTo("auth-code");
     assertThat(context.redirectUri()).isEqualTo("redirect");
+    assertThat(context.role()).isEqualTo("USER");
+  }
+
+  @Test
+  @DisplayName("[M-17] from() maps null role from LoginCommand")
+  void from_mapsNullRole() {
+    LoginCommand command =
+        new LoginCommand(AuthProvider.KAKAO, null, null, "auth-code", "redirect", null);
+
+    AuthenticationContext context = AuthenticationContext.from(command);
+
+    assertThat(context.role()).isNull();
   }
 
   @Test
