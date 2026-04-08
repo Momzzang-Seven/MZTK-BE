@@ -153,8 +153,11 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     List<ExecutionEip7702GatewayPort.BatchCall> calls =
         actionPlan.calls().stream()
             .map(
-                call -> new ExecutionEip7702GatewayPort.BatchCall(
-                    call.toAddress(), call.valueWei(), Numeric.hexStringToByteArray(call.data())))
+                call ->
+                    new ExecutionEip7702GatewayPort.BatchCall(
+                        call.toAddress(),
+                        call.valueWei(),
+                        Numeric.hexStringToByteArray(call.data())))
             .toList();
     String callDataHash = executionEip7702GatewayPort.hashCalls(calls);
 
@@ -188,8 +191,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             intent.getAuthorityAddress(),
             executeCalldata,
             java.util.List.of(authTuple));
-    ExecutionEip7702GatewayPort.FeePlan feePlan =
-        executionEip7702GatewayPort.loadSponsorFeePlan();
+    ExecutionEip7702GatewayPort.FeePlan feePlan = executionEip7702GatewayPort.loadSponsorFeePlan();
     long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
 
     ExecutionEip7702GatewayPort.SignedPayload signedPayload =

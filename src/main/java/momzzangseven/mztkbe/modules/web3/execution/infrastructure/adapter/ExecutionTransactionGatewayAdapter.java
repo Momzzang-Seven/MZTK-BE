@@ -43,7 +43,8 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   }
 
   @Override
-  public void scheduleRetry(Long transactionId, String failureReason, LocalDateTime processingUntil) {
+  public void scheduleRetry(
+      Long transactionId, String failureReason, LocalDateTime processingUntil) {
     updateTransactionPort.scheduleRetry(transactionId, failureReason, processingUntil);
   }
 
