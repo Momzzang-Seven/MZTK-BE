@@ -169,17 +169,77 @@ class TrainerStoreTest {
     }
 
     @Test
-    @DisplayName("toBuilder()로 새 객체를 불변적으로 생성할 수 있다")
-    void toBuilder_createsNewImmutableInstance() {
+    @DisplayName("update()로 기존 ID/trainerId를 유지하면서 필드를 변경할 수 있다")
+    void update_preservesIdentityAndUpdatesFields() {
+      // given
+      TrainerStore original =
+          TrainerStore.builder()
+              .id(100L)
+              .trainerId(VALID_TRAINER_ID)
+              .storeName(VALID_STORE_NAME)
+              .address(VALID_ADDRESS)
+              .detailAddress(VALID_DETAIL_ADDRESS)
+              .latitude(VALID_LATITUDE)
+              .longitude(VALID_LONGITUDE)
+              .phoneNumber(VALID_PHONE)
+              .homepageUrl(VALID_HOMEPAGE)
+              .instagramUrl(VALID_INSTAGRAM)
+              .xProfileUrl(VALID_X_PROFILE_URL)
+              .build();
+
+      // when
+      TrainerStore updated =
+          original.update(
+              "New Studio",
+              "서울시 서초구",
+              "3층 301호",
+              37.5000,
+              127.0300,
+              "02-1234-5678",
+              "https://newsite.com",
+              null,
+              null);
+
+      // then — identity preserved
+      assertThat(updated.getId()).isEqualTo(100L);
+      assertThat(updated.getTrainerId()).isEqualTo(VALID_TRAINER_ID);
+
+      // then — fields updated
+      assertThat(updated.getStoreName()).isEqualTo("New Studio");
+      assertThat(updated.getAddress()).isEqualTo("서울시 서초구");
+      assertThat(updated.getDetailAddress()).isEqualTo("3층 301호");
+      assertThat(updated.getLatitude()).isEqualTo(37.5000);
+      assertThat(updated.getLongitude()).isEqualTo(127.0300);
+      assertThat(updated.getPhoneNumber()).isEqualTo("02-1234-5678");
+      assertThat(updated.getHomepageUrl()).isEqualTo("https://newsite.com");
+      assertThat(updated.getInstagramUrl()).isNull();
+      assertThat(updated.getXProfileUrl()).isNull();
+
+      // then — original immutable
+      assertThat(original.getStoreName()).isEqualTo(VALID_STORE_NAME);
+    }
+
+    @Test
+    @DisplayName("update()에서 잘못된 값이 들어오면 validation 예외가 발생한다")
+    void update_withInvalidValues_throwsException() {
       // given
       TrainerStore original = createValidStore();
 
-      // when
-      TrainerStore modified = original.toBuilder().storeName("New Studio").build();
-
-      // then
-      assertThat(modified.getStoreName()).isEqualTo("New Studio");
-      assertThat(original.getStoreName()).isEqualTo(VALID_STORE_NAME); // 원본 불변
+      // when & then — blank storeName
+      assertThatThrownBy(
+              () ->
+                  original.update(
+                      "",
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Store name must not be null or blank");
     }
   }
 

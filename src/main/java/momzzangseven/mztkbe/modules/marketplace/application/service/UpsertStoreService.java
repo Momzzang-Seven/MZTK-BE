@@ -18,10 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ol>
  *   <li>Validate command
- *   <li>Create domain model with business validation
  *   <li>Check if a store already exists for this trainer
- *   <li>If exists: update via domain model's toBuilder() (immutable pattern), then JPA save
- *   <li>If not: save as new entity via JPA save
+ *   <li>If exists: delegate to domain model's {@code update()} method (validation enforced)
+ *   <li>If not: create via domain model's {@code create()} factory method (validation enforced)
  * </ol>
  *
  * <p>The create-or-update branching logic lives HERE (application layer), not in the persistence
@@ -43,33 +42,42 @@ public class UpsertStoreService implements UpsertStoreUseCase {
     // Step 1: Validate command (project convention — all services call command.validate())
     command.validate();
 
-    // Step 2: Create domain instance (TrainerStore.create handles all business invariants)
-    TrainerStore store =
-        TrainerStore.create(
-            command.trainerId(),
-            command.storeName(),
-            command.address(),
-            command.detailAddress(),
-            command.latitude(),
-            command.longitude(),
-            command.phoneNumber(),
-            command.homepageUrl(),
-            command.instagramUrl(),
-            command.xProfileUrl());
-
-    // Step 3: Check if store already exists (upsert branching in application layer)
+    // Step 2: Check if store already exists (upsert branching in application layer)
     TrainerStore savedStore =
         loadStorePort
             .findByTrainerId(command.trainerId())
             .map(
                 existing -> {
-                  // Update: carry over the existing ID so JPA performs UPDATE (not INSERT)
-                  TrainerStore updated = store.toBuilder().id(existing.getId()).build();
+                  // Update: domain's update() validates all fields and preserves identity
+                  TrainerStore updated =
+                      existing.update(
+                          command.storeName(),
+                          command.address(),
+                          command.detailAddress(),
+                          command.latitude(),
+                          command.longitude(),
+                          command.phoneNumber(),
+                          command.homepageUrl(),
+                          command.instagramUrl(),
+                          command.xProfileUrl());
                   log.debug("Existing store found (id={}), updating...", existing.getId());
                   return saveStorePort.save(updated);
                 })
             .orElseGet(
                 () -> {
+                  // Create: factory method validates all fields
+                  TrainerStore store =
+                      TrainerStore.create(
+                          command.trainerId(),
+                          command.storeName(),
+                          command.address(),
+                          command.detailAddress(),
+                          command.latitude(),
+                          command.longitude(),
+                          command.phoneNumber(),
+                          command.homepageUrl(),
+                          command.instagramUrl(),
+                          command.xProfileUrl());
                   log.debug("No existing store, creating new...");
                   return saveStorePort.save(store);
                 });
