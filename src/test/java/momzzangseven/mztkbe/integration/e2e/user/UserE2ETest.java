@@ -4,12 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
-import momzzangseven.mztkbe.modules.auth.application.port.out.GoogleAuthPort;
-import momzzangseven.mztkbe.modules.auth.application.port.out.KakaoAuthPort;
-import momzzangseven.mztkbe.modules.user.application.service.WithdrawalHardDeleteService;
+import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.account.application.service.WithdrawalHardDeleteService;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -303,7 +302,7 @@ class UserE2ETest {
   void withdrawal_withNormalToken_returns403() {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/withdrawal",
+            baseUrl + "/auth/withdrawal",
             HttpMethod.POST,
             new HttpEntity<>(authHeaders()),
             String.class);
@@ -319,7 +318,7 @@ class UserE2ETest {
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/withdrawal",
+            baseUrl + "/auth/withdrawal",
             HttpMethod.POST,
             new HttpEntity<>(bearerHeaders(stepUpToken)),
             String.class);
@@ -350,7 +349,7 @@ class UserE2ETest {
     String stepUpToken = performStepUpAndGetToken(TEST_PASSWORD);
     ResponseEntity<String> withdrawRes =
         restTemplate.exchange(
-            baseUrl + "/users/me/withdrawal",
+            baseUrl + "/auth/withdrawal",
             HttpMethod.POST,
             new HttpEntity<>(bearerHeaders(stepUpToken)),
             String.class);
@@ -381,7 +380,7 @@ class UserE2ETest {
     String stepUpToken = performStepUpAndGetToken(TEST_PASSWORD);
     ResponseEntity<String> withdrawRes =
         restTemplate.exchange(
-            baseUrl + "/users/me/withdrawal",
+            baseUrl + "/auth/withdrawal",
             HttpMethod.POST,
             new HttpEntity<>(bearerHeaders(stepUpToken)),
             String.class);
@@ -398,7 +397,8 @@ class UserE2ETest {
     // Hard delete 실행
     // now.plusDays(999) 를 전달하면 cutoff = now+999-retentionDays 가 미래가 되어
     // 방금 soft-delete 된 사용자도 즉시 배치 대상에 포함됩니다.
-    withdrawalHardDeleteService.runBatch(LocalDateTime.now().plusDays(999));
+    withdrawalHardDeleteService.runBatch(
+        java.time.Instant.now().plus(java.time.Duration.ofDays(999)));
 
     // DB 확인: LocationUserHardDeleteEventHandler 가 soft-deleted location 을 물리 삭제
     Integer remaining =

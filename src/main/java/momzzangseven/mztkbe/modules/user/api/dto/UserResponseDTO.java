@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.user.api.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.Builder;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
@@ -14,8 +14,8 @@ public record UserResponseDTO(
     String nickname,
     String profileImageUrl,
     UserRole role,
-    LocalDateTime createdAt,
-    LocalDateTime updatedAt) {
+    Instant createdAt,
+    Instant updatedAt) {
 
   /** Create from UpdateUserRoleResult. Used when converting application layer result DTO. */
   public static UserResponseDTO from(UpdateUserRoleResult result) {

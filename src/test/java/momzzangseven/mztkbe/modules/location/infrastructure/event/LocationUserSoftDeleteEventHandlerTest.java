@@ -8,10 +8,10 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import momzzangseven.mztkbe.modules.account.domain.event.UserSoftDeletedEvent;
 import momzzangseven.mztkbe.modules.location.application.port.out.LoadLocationPort;
 import momzzangseven.mztkbe.modules.location.application.port.out.SaveLocationPort;
 import momzzangseven.mztkbe.modules.location.domain.model.Location;
-import momzzangseven.mztkbe.modules.user.domain.event.UserSoftDeletedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

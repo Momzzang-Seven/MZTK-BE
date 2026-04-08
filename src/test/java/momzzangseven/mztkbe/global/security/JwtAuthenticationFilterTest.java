@@ -13,9 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.Optional;
-import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
-import momzzangseven.mztkbe.modules.user.domain.model.User;
+import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,12 +32,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class JwtAuthenticationFilterTest {
 
   @Mock private JwtTokenProvider jwtTokenProvider;
-  @Mock private LoadUserPort loadUserPort;
+  @Mock private CheckAccountStatusUseCase checkAccountStatusUseCase;
   @Mock private ObjectMapper objectMapper;
   @Mock private HttpServletRequest request;
   @Mock private HttpServletResponse response;
   @Mock private FilterChain filterChain;
-  @Mock private User mockUser;
 
   @InjectMocks private JwtAuthenticationFilter filter;
 
@@ -167,7 +164,7 @@ class JwtAuthenticationFilterTest {
       when(jwtTokenProvider.getUserIdFromToken("access-token")).thenReturn(1L);
       when(jwtTokenProvider.getRoleFromToken("access-token")).thenReturn(UserRole.USER);
       when(jwtTokenProvider.isStepUpAccessToken("access-token")).thenReturn(false);
-      when(loadUserPort.loadUserById(1L)).thenReturn(Optional.of(mockUser));
+      when(checkAccountStatusUseCase.isActive(1L)).thenReturn(true);
 
       filter.doFilterInternal(request, response, filterChain);
 
@@ -188,7 +185,7 @@ class JwtAuthenticationFilterTest {
       when(jwtTokenProvider.getUserIdFromToken("stepup-token")).thenReturn(2L);
       when(jwtTokenProvider.getRoleFromToken("stepup-token")).thenReturn(UserRole.USER);
       when(jwtTokenProvider.isStepUpAccessToken("stepup-token")).thenReturn(true);
-      when(loadUserPort.loadUserById(2L)).thenReturn(Optional.of(mockUser));
+      when(checkAccountStatusUseCase.isActive(2L)).thenReturn(true);
 
       filter.doFilterInternal(request, response, filterChain);
 
@@ -211,8 +208,8 @@ class JwtAuthenticationFilterTest {
       when(jwtTokenProvider.getUserIdFromToken("withdrawn-token")).thenReturn(3L);
       when(jwtTokenProvider.getRoleFromToken("withdrawn-token")).thenReturn(UserRole.USER);
       when(jwtTokenProvider.isStepUpAccessToken("withdrawn-token")).thenReturn(false);
-      when(loadUserPort.loadUserById(3L)).thenReturn(Optional.empty());
-      when(loadUserPort.loadDeletedUserById(3L)).thenReturn(Optional.of(mockUser));
+      when(checkAccountStatusUseCase.isActive(3L)).thenReturn(false);
+      when(checkAccountStatusUseCase.isDeleted(3L)).thenReturn(true);
       when(response.getWriter()).thenReturn(pw);
 
       filter.doFilterInternal(request, response, filterChain);
@@ -230,8 +227,8 @@ class JwtAuthenticationFilterTest {
       when(jwtTokenProvider.getUserIdFromToken("inactive-token")).thenReturn(4L);
       when(jwtTokenProvider.getRoleFromToken("inactive-token")).thenReturn(UserRole.USER);
       when(jwtTokenProvider.isStepUpAccessToken("inactive-token")).thenReturn(false);
-      when(loadUserPort.loadUserById(4L)).thenReturn(Optional.empty());
-      when(loadUserPort.loadDeletedUserById(4L)).thenReturn(Optional.empty());
+      when(checkAccountStatusUseCase.isActive(4L)).thenReturn(false);
+      when(checkAccountStatusUseCase.isDeleted(4L)).thenReturn(false);
 
       filter.doFilterInternal(request, response, filterChain);
 
