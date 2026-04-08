@@ -68,7 +68,7 @@ public class SignupService implements SignupUseCase {
   }
 
   /** Returns the given role or falls back to {@code "USER"} when {@code null}. */
-  private String resolveRole(String role) {
+  private static String resolveRole(String role) {
     return role == null ? DEFAULT_ROLE : role;
   }
 }
