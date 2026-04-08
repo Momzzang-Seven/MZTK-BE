@@ -10,10 +10,15 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Transf
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+    prefix = "web3",
+    name = {"eip7702.enabled", "reward-token.enabled"},
+    havingValue = "true")
 public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionGatewayPort {
 
   private final TransferTransactionPersistencePort transferTransactionPersistencePort;

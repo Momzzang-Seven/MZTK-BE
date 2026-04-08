@@ -4,10 +4,15 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+    prefix = "web3",
+    name = {"eip7702.enabled", "reward-token.enabled"},
+    havingValue = "true")
 public class ExecutionSponsorKeyAdapter implements LoadExecutionSponsorKeyPort {
 
   private final LoadTreasuryKeyPort loadTreasuryKeyPort;
