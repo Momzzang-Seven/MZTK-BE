@@ -12,7 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
+import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -45,7 +45,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private static final String BEARER_PREFIX = "Bearer ";
 
   private final JwtTokenProvider jwtTokenProvider;
-  private final LoadUserPort loadUserPort;
+  private final CheckAccountStatusUseCase checkAccountStatusUseCase;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -113,12 +113,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
   }
 
   private boolean isActiveUser(Long userId) {
-    // Immediately block access tokens for soft-deleted users.
-    return loadUserPort.loadUserById(userId).isPresent();
+    return checkAccountStatusUseCase.isActive(userId);
   }
 
   private boolean isWithdrawnUser(Long userId) {
-    return loadUserPort.loadDeletedUserById(userId).isPresent();
+    return checkAccountStatusUseCase.isDeleted(userId);
   }
 
   private void writeErrorResponse(HttpServletResponse response, ErrorCode errorCode)

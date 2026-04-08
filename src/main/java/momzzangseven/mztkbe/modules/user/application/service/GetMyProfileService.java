@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.user.application.dto.UserLevelInfo;
 import momzzangseven.mztkbe.modules.user.application.dto.WorkoutCompletionInfo;
 import momzzangseven.mztkbe.modules.user.application.port.in.GetMyProfileUseCase;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadAttendanceSummaryPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.LoadAuthProviderPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadTodayWorkoutCompletionPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserLevelPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GetMyProfileService implements GetMyProfileUseCase {
 
   private final LoadUserPort loadUserPort;
+  private final LoadAuthProviderPort loadAuthProviderPort;
   private final LoadUserLevelPort loadUserLevelPort;
   private final LoadAttendanceSummaryPort loadAttendanceSummaryPort;
   private final LoadTodayWorkoutCompletionPort loadTodayWorkoutCompletionPort;
@@ -44,11 +46,13 @@ public class GetMyProfileService implements GetMyProfileUseCase {
     User user =
         loadUserPort.loadUserById(userId).orElseThrow(() -> new UserNotFoundException(userId));
 
+    String providerName = loadAuthProviderPort.loadProviderName(userId).orElse(null);
     UserLevelInfo levelInfo = loadUserLevelPort.loadLevelInfo(userId);
     AttendanceSummary attendance = loadAttendanceSummaryPort.loadSummary(userId);
     WorkoutCompletionInfo workout = loadTodayWorkoutCompletionPort.loadCompletion(userId);
     String walletAddress = loadUserWalletPort.loadActiveWalletAddress(userId).orElse(null);
 
-    return GetMyProfileResult.from(user, levelInfo, attendance, workout, walletAddress);
+    return GetMyProfileResult.from(
+        user, providerName, levelInfo, attendance, workout, walletAddress);
   }
 }

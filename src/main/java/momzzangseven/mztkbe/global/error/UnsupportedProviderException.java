@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.global.error;
 
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
+import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 
 /** Thrown when an authentication provider is not supported. */
 public class UnsupportedProviderException extends BusinessException {

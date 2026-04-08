@@ -9,19 +9,18 @@ import static org.mockito.Mockito.verify;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
 import momzzangseven.mztkbe.modules.user.application.dto.AttendanceSummary;
 import momzzangseven.mztkbe.modules.user.application.dto.GetMyProfileResult;
 import momzzangseven.mztkbe.modules.user.application.dto.UserLevelInfo;
 import momzzangseven.mztkbe.modules.user.application.dto.WorkoutCompletionInfo;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadAttendanceSummaryPort;
+import momzzangseven.mztkbe.modules.user.application.port.out.LoadAuthProviderPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadTodayWorkoutCompletionPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserLevelPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserPort;
 import momzzangseven.mztkbe.modules.user.application.port.out.LoadUserWalletPort;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
-import momzzangseven.mztkbe.modules.user.domain.model.UserStatus;
 import momzzangseven.mztkbe.modules.user.domain.vo.WorkoutCompletedMethod;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -36,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GetMyProfileServiceTest {
 
   @Mock private LoadUserPort loadUserPort;
+  @Mock private LoadAuthProviderPort loadAuthProviderPort;
   @Mock private LoadUserLevelPort loadUserLevelPort;
   @Mock private LoadAttendanceSummaryPort loadAttendanceSummaryPort;
   @Mock private LoadTodayWorkoutCompletionPort loadTodayWorkoutCompletionPort;
@@ -56,11 +56,10 @@ class GetMyProfileServiceTest {
               .id(1L)
               .nickname("테스터")
               .email("test@example.com")
-              .authProvider(AuthProvider.LOCAL)
               .role(UserRole.USER)
-              .status(UserStatus.ACTIVE)
               .build();
       given(loadUserPort.loadUserById(1L)).willReturn(Optional.of(user));
+      given(loadAuthProviderPort.loadProviderName(1L)).willReturn(Optional.of("LOCAL"));
       given(loadUserLevelPort.loadLevelInfo(1L)).willReturn(new UserLevelInfo(3, 120, 200));
       given(loadAttendanceSummaryPort.loadSummary(1L)).willReturn(new AttendanceSummary(true, 5));
       given(loadTodayWorkoutCompletionPort.loadCompletion(1L))
@@ -95,11 +94,10 @@ class GetMyProfileServiceTest {
               .id(2L)
               .nickname("지갑없음")
               .email("nowallet@example.com")
-              .authProvider(AuthProvider.LOCAL)
               .role(UserRole.USER)
-              .status(UserStatus.ACTIVE)
               .build();
       given(loadUserPort.loadUserById(2L)).willReturn(Optional.of(user));
+      given(loadAuthProviderPort.loadProviderName(2L)).willReturn(Optional.of("LOCAL"));
       given(loadUserLevelPort.loadLevelInfo(2L)).willReturn(new UserLevelInfo(1, 0, 100));
       given(loadAttendanceSummaryPort.loadSummary(2L)).willReturn(new AttendanceSummary(false, 0));
       given(loadTodayWorkoutCompletionPort.loadCompletion(2L))
@@ -123,11 +121,10 @@ class GetMyProfileServiceTest {
               .id(3L)
               .nickname("미출석")
               .email("absent@example.com")
-              .authProvider(AuthProvider.LOCAL)
               .role(UserRole.USER)
-              .status(UserStatus.ACTIVE)
               .build();
       given(loadUserPort.loadUserById(3L)).willReturn(Optional.of(user));
+      given(loadAuthProviderPort.loadProviderName(3L)).willReturn(Optional.of("LOCAL"));
       given(loadUserLevelPort.loadLevelInfo(3L)).willReturn(new UserLevelInfo(2, 50, 150));
       given(loadAttendanceSummaryPort.loadSummary(3L)).willReturn(new AttendanceSummary(false, 2));
       given(loadTodayWorkoutCompletionPort.loadCompletion(3L))

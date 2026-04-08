@@ -1,11 +1,12 @@
 package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.event;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 import java.util.Collections;
 import java.util.List;
-import momzzangseven.mztkbe.modules.user.domain.event.UsersHardDeletedEvent;
+import momzzangseven.mztkbe.modules.account.domain.event.UsersHardDeletedEvent;
 import momzzangseven.mztkbe.modules.web3.wallet.application.service.WalletHardDeleteService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -129,8 +130,8 @@ class UserHardDeleteEventHandlerTest {
   class ErrorHandlingCases {
 
     @Test
-    @DisplayName("Service exception does not propagate")
-    void handleUsersHardDeleted_ServiceThrowsException_DoesNotPropagate() {
+    @DisplayName("Service exception propagates to roll back TX and trigger scheduler retry")
+    void handleUsersHardDeleted_ServiceThrowsException_Propagates() {
       // Given
       List<Long> userIds = List.of(1L);
       UsersHardDeletedEvent event = new UsersHardDeletedEvent(userIds);
@@ -138,15 +139,17 @@ class UserHardDeleteEventHandlerTest {
       when(walletHardDeleteService.deleteByUserIds(userIds))
           .thenThrow(new RuntimeException("Database error"));
 
-      // When & Then - should not throw
-      eventHandler.handleUsersHardDeleted(event);
+      // When & Then — exception must propagate so the enclosing TX is rolled back
+      assertThatThrownBy(() -> eventHandler.handleUsersHardDeleted(event))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessage("Database error");
 
       verify(walletHardDeleteService, times(1)).deleteByUserIds(userIds);
     }
 
     @Test
-    @DisplayName("Multiple service calls with exception handling")
-    void handleUsersHardDeleted_ExceptionInFirstCall_StillLogsError() {
+    @DisplayName("Service exception propagates regardless of exception type")
+    void handleUsersHardDeleted_ExceptionPropagates() {
       // Given
       List<Long> userIds = List.of(1L, 2L, 3L);
       UsersHardDeletedEvent event = new UsersHardDeletedEvent(userIds);
@@ -154,12 +157,12 @@ class UserHardDeleteEventHandlerTest {
       when(walletHardDeleteService.deleteByUserIds(userIds))
           .thenThrow(new IllegalStateException("Invalid state"));
 
-      // When
-      eventHandler.handleUsersHardDeleted(event);
+      // When & Then — exception re-thrown so TX rolls back and scheduler retries
+      assertThatThrownBy(() -> eventHandler.handleUsersHardDeleted(event))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessage("Invalid state");
 
-      // Then
       verify(walletHardDeleteService, times(1)).deleteByUserIds(userIds);
-      // Exception is logged but not propagated
     }
   }
 }

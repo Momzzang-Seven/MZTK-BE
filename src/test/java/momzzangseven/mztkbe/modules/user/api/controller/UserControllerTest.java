@@ -6,11 +6,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Map;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.modules.user.application.dto.GetMyProfileResult;
@@ -18,7 +17,6 @@ import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleCommand;
 import momzzangseven.mztkbe.modules.user.application.dto.UpdateUserRoleResult;
 import momzzangseven.mztkbe.modules.user.application.port.in.GetMyProfileUseCase;
 import momzzangseven.mztkbe.modules.user.application.port.in.UpdateUserRoleUseCase;
-import momzzangseven.mztkbe.modules.user.application.port.in.WithdrawUserUseCase;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import momzzangseven.mztkbe.modules.user.domain.vo.WorkoutCompletedMethod;
 import org.junit.jupiter.api.DisplayName;
@@ -58,7 +56,6 @@ class UserControllerTest {
 
   @MockitoBean private GetMyProfileUseCase getMyProfileUseCase;
   @MockitoBean private UpdateUserRoleUseCase updateUserRoleUseCase;
-  @MockitoBean private WithdrawUserUseCase withdrawUserUseCase;
 
   @Test
   @DisplayName("PATCH /users/me/role 성공")
@@ -72,8 +69,8 @@ class UserControllerTest {
                 .nickname("닉네임")
                 .profileImageUrl("https://example.com/profile.png")
                 .role(UserRole.TRAINER)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .createdAt(Instant.now())
+                .updatedAt(Instant.now())
                 .build());
 
     mockMvc
@@ -129,37 +126,6 @@ class UserControllerTest {
                 .content("{\"role\":\"INVALID\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
-  }
-
-  @Test
-  @DisplayName("POST /users/me/withdrawal ROLE_STEP_UP 권한이면 성공")
-  void withdraw_stepUpRole_success() throws Exception {
-    mockMvc
-        .perform(post("/users/me/withdrawal").with(stepUpPrincipal(1L)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
-  }
-
-  @Test
-  @DisplayName("POST /users/me/withdrawal ROLE_STEP_UP 없으면 403")
-  void withdraw_withoutStepUpRole_returns403() throws Exception {
-    mockMvc
-        .perform(post("/users/me/withdrawal").with(userPrincipal(1L)))
-        .andExpect(status().isForbidden());
-  }
-
-  @Test
-  @DisplayName("POST /users/me/withdrawal 인증 없으면 401")
-  void withdraw_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(post("/users/me/withdrawal")).andExpect(status().isUnauthorized());
-  }
-
-  @Test
-  @DisplayName("POST /users/me/withdrawal principal이 null이면 401")
-  void withdraw_nullPrincipal_returns401() throws Exception {
-    mockMvc
-        .perform(post("/users/me/withdrawal").with(nullStepUpPrincipal()))
-        .andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -236,21 +202,12 @@ class UserControllerTest {
     return authenticatedPrincipal(userId, "ROLE_ADMIN");
   }
 
-  private org.springframework.test.web.servlet.request.RequestPostProcessor stepUpPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_USER", "ROLE_STEP_UP");
-  }
-
   private org.springframework.test.web.servlet.request.RequestPostProcessor nullUserPrincipal() {
     return nullPrincipalWithRoles("ROLE_USER");
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor nullAdminPrincipal() {
     return nullPrincipalWithRoles("ROLE_ADMIN");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullStepUpPrincipal() {
-    return nullPrincipalWithRoles("ROLE_USER", "ROLE_STEP_UP");
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor nullPrincipalWithRoles(
