@@ -9,10 +9,15 @@ import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702Cha
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+    prefix = "web3",
+    name = {"eip7702.enabled", "reward-token.enabled"},
+    havingValue = "true")
 public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPort {
 
   private final Eip7702AuthorizationPort eip7702AuthorizationPort;
