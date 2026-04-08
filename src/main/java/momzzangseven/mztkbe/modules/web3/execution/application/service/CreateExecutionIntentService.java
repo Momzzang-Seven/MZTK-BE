@@ -113,8 +113,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     if (existing.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
         && existing.getExpiresAt().isBefore(now)) {
       executionIntentPersistencePort.update(
-          existing.expire(
-              ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage(), now));
+          existing.expire(ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage(), now));
       if (existing.getMode() == ExecutionMode.EIP7702
           && existing.getReservedSponsorCostWei().signum() > 0) {
         releaseSponsorExposure(

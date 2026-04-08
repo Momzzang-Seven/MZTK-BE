@@ -39,7 +39,8 @@ class MarkExecutionIntentOutcomeServiceTest {
 
   @BeforeEach
   void setUp() {
-    succeededService = new MarkExecutionIntentSucceededService(executionIntentPersistencePort, FIXED_CLOCK);
+    succeededService =
+        new MarkExecutionIntentSucceededService(executionIntentPersistencePort, FIXED_CLOCK);
     failedOnchainService =
         new MarkExecutionIntentFailedOnchainService(executionIntentPersistencePort, FIXED_CLOCK);
   }

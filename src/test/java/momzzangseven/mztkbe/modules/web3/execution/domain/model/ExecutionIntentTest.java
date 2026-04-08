@@ -91,7 +91,8 @@ class ExecutionIntentTest {
             LocalDate.of(2026, 4, 6),
             FIXED_NOW);
 
-    ExecutionIntent stale = intent.markNonceStale("NONCE_STALE", "nonce moved", FIXED_NOW.plusSeconds(1));
+    ExecutionIntent stale =
+        intent.markNonceStale("NONCE_STALE", "nonce moved", FIXED_NOW.plusSeconds(1));
     assertEquals(ExecutionIntentStatus.NONCE_STALE, stale.getStatus());
     assertTrue(stale.canStartNewAttempt());
     assertFalse(stale.isActiveForReuse());

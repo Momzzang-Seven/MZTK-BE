@@ -183,10 +183,7 @@ public class ExecutionIntent {
   public ExecutionIntent confirm(LocalDateTime now) {
     requireStatus(ExecutionIntentStatus.PENDING_ONCHAIN);
     requireNow(now);
-    return toBuilder()
-        .status(ExecutionIntentStatus.CONFIRMED)
-        .updatedAt(now)
-        .build();
+    return toBuilder().status(ExecutionIntentStatus.CONFIRMED).updatedAt(now).build();
   }
 
   public ExecutionIntent failOnchain(String errorCode, String errorReason, LocalDateTime now) {

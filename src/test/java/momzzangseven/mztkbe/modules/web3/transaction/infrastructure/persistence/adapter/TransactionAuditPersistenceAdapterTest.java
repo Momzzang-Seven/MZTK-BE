@@ -86,7 +86,8 @@ class TransactionAuditPersistenceAdapterTest {
         ArgumentCaptor.forClass(Web3TransactionAuditEntity.class);
     verify(repository).save(captor.capture());
     assertThat(captor.getValue().getWeb3TransactionId()).isEqualTo(7L);
-    assertThat(captor.getValue().getEventType()).isEqualTo(Web3TransactionAuditEventType.STATE_CHANGE);
+    assertThat(captor.getValue().getEventType())
+        .isEqualTo(Web3TransactionAuditEventType.STATE_CHANGE);
     assertThat(captor.getValue().getDetailJson()).contains("SIGNED");
     assertThat(captor.getValue().getCreatedAt()).isEqualTo(FIXED_NOW);
   }

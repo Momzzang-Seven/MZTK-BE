@@ -19,10 +19,7 @@ class Web3NonceStateEntityTest {
   @Test
   void onCreate_keepsExistingNonce() {
     Web3NonceStateEntity entity =
-        Web3NonceStateEntity.builder()
-            .fromAddress("0x" + "a".repeat(40))
-            .nextNonce(3L)
-            .build();
+        Web3NonceStateEntity.builder().fromAddress("0x" + "a".repeat(40)).nextNonce(3L).build();
 
     entity.onCreate();
 
