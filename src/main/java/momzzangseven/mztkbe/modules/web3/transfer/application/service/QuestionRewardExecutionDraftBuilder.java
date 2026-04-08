@@ -153,5 +153,4 @@ public class QuestionRewardExecutionDraftBuilder {
       throw new Web3InvalidInputException("authority nonce overflow");
     }
   }
-
 }
