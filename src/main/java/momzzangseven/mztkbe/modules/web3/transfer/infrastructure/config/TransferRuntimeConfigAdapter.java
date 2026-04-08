@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TransferRuntimeConfigAdapter implements LoadTransferRuntimeConfigPort {
 
-  private final Eip7702Properties eip7702Properties;
+  private final TransferEip7702Properties transferEip7702Properties;
   private final TransferRewardTokenProperties rewardTokenProperties;
   private final TransferCoreProperties web3CoreProperties;
 
@@ -19,17 +19,17 @@ public class TransferRuntimeConfigAdapter implements LoadTransferRuntimeConfigPo
         web3CoreProperties.getChainId(),
         rewardTokenProperties.getTokenContractAddress(),
         rewardTokenProperties.getWorker().getRetryBackoffSeconds(),
-        eip7702Properties.getDelegation().getBatchImplAddress(),
-        eip7702Properties.getDelegation().getDefaultReceiverAddress(),
-        eip7702Properties.getSponsor().getWalletAlias(),
-        eip7702Properties.getSponsor().getKeyEncryptionKeyB64(),
-        eip7702Properties.getSponsor().getMaxGasLimit(),
-        eip7702Properties.getSponsor().getMaxTransferAmountEth(),
-        eip7702Properties.getSponsor().getPerTxCapEth(),
-        eip7702Properties.getSponsor().getPerDayUserCapEth(),
-        eip7702Properties.getAuthorization().getTtlSeconds(),
-        eip7702Properties.getCleanup().getZone(),
-        eip7702Properties.getCleanup().getRetentionDays(),
-        eip7702Properties.getCleanup().getBatchSize());
+        transferEip7702Properties.getDelegation().getBatchImplAddress(),
+        transferEip7702Properties.getDelegation().getDefaultReceiverAddress(),
+        transferEip7702Properties.getSponsor().getWalletAlias(),
+        transferEip7702Properties.getSponsor().getKeyEncryptionKeyB64(),
+        transferEip7702Properties.getSponsor().getMaxGasLimit(),
+        transferEip7702Properties.getSponsor().getMaxTransferAmountEth(),
+        transferEip7702Properties.getSponsor().getPerTxCapEth(),
+        transferEip7702Properties.getSponsor().getPerDayUserCapEth(),
+        transferEip7702Properties.getAuthorization().getTtlSeconds(),
+        transferEip7702Properties.getCleanup().getZone(),
+        transferEip7702Properties.getCleanup().getRetentionDays(),
+        transferEip7702Properties.getCleanup().getBatchSize());
   }
 }

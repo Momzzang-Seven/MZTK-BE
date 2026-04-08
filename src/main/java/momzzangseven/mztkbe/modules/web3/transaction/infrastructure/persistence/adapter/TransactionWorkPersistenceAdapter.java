@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
 import jakarta.persistence.EntityManager;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -27,6 +28,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+/**
+ * Persistence adapter for transaction worker lifecycle operations.
+ *
+ * <p>This adapter handles claim-lock semantics, state transitions, and snapshot reads used by
+ * issuer/receipt/recovery workers.
+ */
 public class TransactionWorkPersistenceAdapter
     implements LoadTransactionWorkPort, LoadTransactionPort, UpdateTransactionPort {
 
@@ -42,7 +49,7 @@ public class TransactionWorkPersistenceAdapter
       SELECT id
       FROM web3_transactions
       WHERE status = :status
-        AND (processing_until IS NULL OR processing_until < NOW())
+        AND (processing_until IS NULL OR processing_until < :now)
         AND (
             failure_reason IS NULL
             OR failure_reason NOT IN (%s)
@@ -55,7 +62,9 @@ public class TransactionWorkPersistenceAdapter
 
   private final EntityManager entityManager;
   private final Web3TransactionJpaRepository repository;
+  private final Clock appClock;
 
+  /** Claims transactions by status with lock ttl and worker ownership in one transaction. */
   @Override
   @Transactional
   @SuppressWarnings("unchecked")
@@ -71,10 +80,10 @@ public class TransactionWorkPersistenceAdapter
       throw new Web3InvalidInputException("workerId is required");
     }
 
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = LocalDateTime.now(appClock);
     LocalDateTime processingUntil = now.plus(claimTtl == null ? Duration.ofMinutes(2) : claimTtl);
 
-    List<Number> ids = selectClaimableIds(status, limit);
+    List<Number> ids = selectClaimableIds(status, limit, now);
 
     if (ids.isEmpty()) {
       return List.of();
@@ -85,9 +94,10 @@ public class TransactionWorkPersistenceAdapter
     entityManager
         .createQuery(
             "update Web3TransactionEntity t set t.processingBy = :workerId,"
-                + " t.processingUntil = :processingUntil where t.id in :ids")
+                + " t.processingUntil = :processingUntil, t.updatedAt = :updatedAt where t.id in :ids")
         .setParameter("workerId", workerId)
         .setParameter("processingUntil", processingUntil)
+        .setParameter("updatedAt", now)
         .setParameter("ids", longIds)
         .executeUpdate();
 
@@ -113,6 +123,7 @@ public class TransactionWorkPersistenceAdapter
     Web3Transaction transaction = toDomain(entity);
     transaction.assignNonce(nonce);
     apply(entity, transaction);
+    entity.setUpdatedAt(LocalDateTime.now(appClock));
   }
 
   @Override
@@ -124,8 +135,10 @@ public class TransactionWorkPersistenceAdapter
 
     Web3TransactionEntity entity = load(transactionId);
     Web3Transaction transaction = toDomain(entity);
-    transaction.markSigned(nonce, signedRawTx, txHash, LocalDateTime.now());
+    LocalDateTime now = LocalDateTime.now(appClock);
+    transaction.markSigned(nonce, signedRawTx, txHash, now);
     apply(entity, transaction);
+    entity.setUpdatedAt(now);
   }
 
   @Override
@@ -137,8 +150,10 @@ public class TransactionWorkPersistenceAdapter
 
     Web3TransactionEntity entity = load(transactionId);
     Web3Transaction transaction = toDomain(entity);
-    transaction.markPending(txHash, LocalDateTime.now());
+    LocalDateTime now = LocalDateTime.now(appClock);
+    transaction.markPending(txHash, now);
     apply(entity, transaction);
+    entity.setUpdatedAt(now);
   }
 
   @Override
@@ -147,8 +162,10 @@ public class TransactionWorkPersistenceAdapter
       Long transactionId, Web3TxStatus status, String txHash, String failureReason) {
     Web3TransactionEntity entity = load(transactionId);
     Web3Transaction transaction = toDomain(entity);
-    transaction.updateStatus(status, txHash, failureReason, LocalDateTime.now());
+    LocalDateTime now = LocalDateTime.now(appClock);
+    transaction.updateStatus(status, txHash, failureReason, now);
     apply(entity, transaction);
+    entity.setUpdatedAt(now);
   }
 
   @Override
@@ -159,6 +176,7 @@ public class TransactionWorkPersistenceAdapter
     Web3Transaction transaction = toDomain(entity);
     transaction.scheduleRetry(failureReason, processingUntil);
     apply(entity, transaction);
+    entity.setUpdatedAt(LocalDateTime.now(appClock));
   }
 
   @Override
@@ -168,6 +186,7 @@ public class TransactionWorkPersistenceAdapter
     Web3Transaction transaction = toDomain(entity);
     transaction.clearProcessingLock();
     apply(entity, transaction);
+    entity.setUpdatedAt(LocalDateTime.now(appClock));
   }
 
   @Override
@@ -282,10 +301,11 @@ public class TransactionWorkPersistenceAdapter
   }
 
   @SuppressWarnings("unchecked")
-  private List<Number> selectClaimableIds(Web3TxStatus status, int limit) {
+  private List<Number> selectClaimableIds(Web3TxStatus status, int limit, LocalDateTime now) {
     return entityManager
         .createNativeQuery(CLAIM_BY_STATUS_SQL)
         .setParameter("status", status.name())
+        .setParameter("now", now)
         .setParameter("limit", limit)
         .getResultList();
   }

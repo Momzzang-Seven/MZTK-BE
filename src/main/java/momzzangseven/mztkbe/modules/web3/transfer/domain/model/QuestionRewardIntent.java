@@ -21,6 +21,8 @@ public class QuestionRewardIntent {
   private final Long toUserId;
   private final BigInteger amountWei;
   private final QuestionRewardIntentStatus status;
+  private final String lastExecutionIntentErrorCode;
+  private final String lastExecutionIntentErrorReason;
   private final LocalDateTime createdAt;
   private final LocalDateTime updatedAt;
 
@@ -76,6 +78,16 @@ public class QuestionRewardIntent {
         .toUserId(newToUserId)
         .amountWei(newAmountWei)
         .status(QuestionRewardIntentStatus.PREPARE_REQUIRED)
+        .lastExecutionIntentErrorCode(null)
+        .lastExecutionIntentErrorReason(null)
+        .build();
+  }
+
+  public QuestionRewardIntent markExecutionIntentCreationFailed(
+      String errorCode, String errorReason) {
+    return toBuilder()
+        .lastExecutionIntentErrorCode(errorCode)
+        .lastExecutionIntentErrorReason(errorReason)
         .build();
   }
 
@@ -94,24 +106,5 @@ public class QuestionRewardIntent {
 
   public QuestionRewardIntent cancel() {
     return toBuilder().status(QuestionRewardIntentStatus.CANCELED).build();
-  }
-
-  public void assertSubmittableByPrepare(TransferPrepare prepare) {
-    if (status == QuestionRewardIntentStatus.CANCELED) {
-      throw new Web3InvalidInputException("question reward intent is canceled");
-    }
-    if (status == QuestionRewardIntentStatus.SUCCEEDED) {
-      throw new Web3InvalidInputException("question reward is already settled");
-    }
-    boolean acceptedCommentMatched =
-        prepare.getAcceptedCommentId() == null
-            || Objects.equals(acceptedCommentId, prepare.getAcceptedCommentId());
-    if (!acceptedCommentMatched
-        || !Objects.equals(toUserId, prepare.getToUserId())
-        || amountWei == null
-        || amountWei.compareTo(prepare.getAmountWei()) != 0) {
-      throw new Web3InvalidInputException(
-          "prepared transfer session is stale against latest question reward intent");
-    }
   }
 }

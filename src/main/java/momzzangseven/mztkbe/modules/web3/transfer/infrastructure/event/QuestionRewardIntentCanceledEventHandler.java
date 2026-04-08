@@ -6,6 +6,8 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestion
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CancelQuestionRewardIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentCanceledEvent;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -17,16 +19,25 @@ public class QuestionRewardIntentCanceledEventHandler {
   private final CancelQuestionRewardIntentUseCase cancelQuestionRewardIntentUseCase;
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void handle(QuestionRewardIntentCanceledEvent event) {
-    var result =
-        cancelQuestionRewardIntentUseCase.execute(
-            new CancelQuestionRewardIntentCommand(event.postId(), event.acceptedCommentId()));
-    log.info(
-        "QUESTION_REWARD cancel handled: postId={}, acceptedCommentId={}, found={}, changed={}, status={}",
-        event.postId(),
-        event.acceptedCommentId(),
-        result.found(),
-        result.changed(),
-        result.status());
+    try {
+      var result =
+          cancelQuestionRewardIntentUseCase.execute(
+              new CancelQuestionRewardIntentCommand(event.postId(), event.acceptedCommentId()));
+      log.info(
+          "QUESTION_REWARD cancel handled: postId={}, acceptedCommentId={}, found={}, changed={}, status={}",
+          event.postId(),
+          event.acceptedCommentId(),
+          result.found(),
+          result.changed(),
+          result.status());
+    } catch (Exception e) {
+      log.error(
+          "failed to handle QUESTION_REWARD cancel event: postId={}, acceptedCommentId={}",
+          event.postId(),
+          event.acceptedCommentId(),
+          e);
+    }
   }
 }

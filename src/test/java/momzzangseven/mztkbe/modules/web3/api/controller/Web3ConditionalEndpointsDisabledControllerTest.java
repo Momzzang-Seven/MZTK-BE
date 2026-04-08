@@ -94,43 +94,39 @@ class Web3ConditionalEndpointsDisabledControllerTest {
   }
 
   @Test
-  @DisplayName("reward-token 비활성화 시 token-transfers endpoint는 404")
-  void tokenTransferEndpoint_disabled_returns404() throws Exception {
+  @DisplayName("reward-token 비활성화 시 transfers endpoint는 404")
+  void transferCreateEndpoint_disabled_returns404() throws Exception {
     mockMvc
         .perform(
-            post("/users/me/token-transfers/prepare")
+            post("/users/me/transfers")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(
                     json(
                         Map.of(
-                            "domainType",
-                            "QUESTION_REWARD",
-                            "referenceId",
-                            "77",
                             "toUserId",
                             2,
+                            "clientRequestId",
+                            "req-77",
                             "amountWei",
                             "1000000000000000000"))))
         .andExpect(status().isNotFound());
   }
 
   @Test
-  @DisplayName("reward-token 비활성화 시 token-transfers submit endpoint는 404")
-  void tokenTransferSubmitEndpoint_disabled_returns404() throws Exception {
+  @DisplayName("reward-token 비활성화 시 execution-intents execute endpoint는 404")
+  void executionIntentExecuteEndpoint_disabled_returns404() throws Exception {
     mockMvc
         .perform(
-            post("/users/me/token-transfers/submit")
+            post("/users/me/web3/execution-intents/intent-1/execute")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
                 .content(
                     json(
                         Map.of(
-                            "prepareId",
-                            "123e4567-e89b-12d3-a456-426614174000",
                             "authorizationSignature",
                             "0x" + "a".repeat(130),
-                            "executionSignature",
+                            "submitSignature",
                             "0x" + "b".repeat(130)))))
         .andExpect(status().isNotFound());
   }

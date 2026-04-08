@@ -4,15 +4,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
@@ -34,6 +36,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class TransactionReceiptWorkerTest {
 
   private static final String DEFAULT_REASON = Web3TxFailureReason.RPC_UNAVAILABLE.code();
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
 
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
@@ -60,7 +67,8 @@ class TransactionReceiptWorkerTest {
             web3ContractPort,
             transactionOutcomePublisher,
             properties,
-            retryStrategy);
+            retryStrategy,
+            FIXED_CLOCK);
   }
 
   @Test
@@ -78,7 +86,7 @@ class TransactionReceiptWorkerTest {
   void processBatch_missingTxHash_marksUnconfirmedImmediately() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(" ", LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(" ", FIXED_NOW.minusSeconds(1))));
 
     worker.processBatch(1);
 
@@ -92,7 +100,7 @@ class TransactionReceiptWorkerTest {
   void processBatch_nullTxHash_marksUnconfirmedImmediately() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(null, LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(null, FIXED_NOW.minusSeconds(1))));
 
     worker.processBatch(1);
 
@@ -108,7 +116,7 @@ class TransactionReceiptWorkerTest {
     String txHash = "0x" + "a".repeat(64);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now())));
+        .thenReturn(List.of(item(txHash, FIXED_NOW)));
 
     worker.processBatch(1);
 
@@ -123,7 +131,7 @@ class TransactionReceiptWorkerTest {
     String txHash = "0x" + "a".repeat(64);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now().minusSeconds(5))));
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(5))));
 
     worker.processBatch(1);
 
@@ -151,7 +159,7 @@ class TransactionReceiptWorkerTest {
     String txHash = "0x" + "a".repeat(64);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
     when(web3ContractPort.getReceipt(txHash))
         .thenReturn(new Web3ContractPort.ReceiptResult(txHash, true, true, "rpc-a", false, null));
 
@@ -168,7 +176,7 @@ class TransactionReceiptWorkerTest {
     String txHash = "0x" + "a".repeat(64);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
     when(web3ContractPort.getReceipt(txHash))
         .thenReturn(new Web3ContractPort.ReceiptResult(txHash, true, false, "rpc-a", false, null));
 
@@ -188,11 +196,11 @@ class TransactionReceiptWorkerTest {
 
   @Test
   void processBatch_receiptRpcError_retriesWithFailureReason() {
-    LocalDateTime retryAt = LocalDateTime.now().plusSeconds(30);
+    LocalDateTime retryAt = FIXED_NOW.plusSeconds(30);
     String txHash = "0x" + "a".repeat(64);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
     when(web3ContractPort.getReceipt(txHash))
         .thenReturn(
             new Web3ContractPort.ReceiptResult(
@@ -210,13 +218,13 @@ class TransactionReceiptWorkerTest {
     String txHash = "0x" + "a".repeat(64);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
     when(web3ContractPort.getReceipt(txHash))
         .thenReturn(new Web3ContractPort.ReceiptResult(txHash, false, null, "rpc-a", false, null));
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort).scheduleRetry(eq(1L), isNull(), any(LocalDateTime.class));
+    verify(updateTransactionPort).scheduleRetry(1L, null, FIXED_NOW.plusSeconds(2));
   }
 
   @Test
@@ -224,7 +232,7 @@ class TransactionReceiptWorkerTest {
     String txHash = "0x" + "a".repeat(64);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
     when(web3ContractPort.getReceipt(txHash)).thenThrow(new RuntimeException("boom"));
     when(retryStrategy.shouldRetry(any(Throwable.class), anyList())).thenReturn(false);
 
@@ -236,10 +244,10 @@ class TransactionReceiptWorkerTest {
   @Test
   void processBatch_exceptionAndShouldRetry_schedulesRetry() {
     String txHash = "0x" + "a".repeat(64);
-    LocalDateTime retryAt = LocalDateTime.now().plusSeconds(45);
+    LocalDateTime retryAt = FIXED_NOW.plusSeconds(45);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.PENDING), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(txHash, LocalDateTime.now().minusSeconds(1))));
+        .thenReturn(List.of(item(txHash, FIXED_NOW.minusSeconds(1))));
     when(web3ContractPort.getReceipt(txHash)).thenThrow(new RuntimeException("boom"));
     when(retryStrategy.shouldRetry(any(Throwable.class), anyList())).thenReturn(true);
     when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))

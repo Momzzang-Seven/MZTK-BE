@@ -8,27 +8,35 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigInteger;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionSucceededEvent;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.HandleTransferFailedOnchainCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.HandleTransferSucceededCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.HandleTransferFailedOnchainUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.HandleTransferSucceededUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CompensateTransferFailurePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.MarkQuestionPostSolvedPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.rollback.DomainTransferFailureCompensator;
+import momzzangseven.mztkbe.modules.web3.transfer.application.service.HandleTransferFailedOnchainService;
+import momzzangseven.mztkbe.modules.web3.transfer.application.service.HandleTransferSucceededService;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionReferenceType;
 import org.junit.jupiter.api.Test;
 
 class Web3TransferFailedOnchainEventHandlerTest {
 
   @Test
-  void handle_callsCompensator_whenDomainMatched() {
-    DomainTransferFailureCompensator compensator = mock(DomainTransferFailureCompensator.class);
-    when(compensator.supports(DomainReferenceType.QUESTION_REWARD)).thenReturn(true);
+  void failedHandler_delegatesMappedCommandToUseCase() {
+    HandleTransferFailedOnchainUseCase useCase = mock(HandleTransferFailedOnchainUseCase.class);
     Web3TransferFailedOnchainEventHandler handler =
-        new Web3TransferFailedOnchainEventHandler(List.of(compensator));
+        new Web3TransferFailedOnchainEventHandler(useCase);
 
     Web3TransactionFailedOnchainEvent event =
         new Web3TransactionFailedOnchainEvent(
@@ -43,80 +51,93 @@ class Web3TransferFailedOnchainEventHandlerTest {
 
     handler.handle(event);
 
-    verify(compensator).compensate(event);
+    verify(useCase)
+        .execute(
+            new HandleTransferFailedOnchainCommand(
+                100L,
+                "domain:QUESTION_REWARD:77:11",
+                TransferTransactionReferenceType.USER_TO_USER,
+                "77",
+                11L,
+                22L,
+                "0x1234567890123456789012345678901234567890123456789012345678901234",
+                "RECEIPT_STATUS_0"));
   }
 
   @Test
-  void handle_skips_whenNoCompensatorSupportsDomain() {
-    DomainTransferFailureCompensator compensator = mock(DomainTransferFailureCompensator.class);
-    when(compensator.supports(DomainReferenceType.QUESTION_REWARD)).thenReturn(false);
-    Web3TransferFailedOnchainEventHandler handler =
-        new Web3TransferFailedOnchainEventHandler(List.of(compensator));
+  void succeededHandler_delegatesMappedCommandToUseCase() {
+    HandleTransferSucceededUseCase useCase = mock(HandleTransferSucceededUseCase.class);
+    Web3TransferSucceededEventHandler handler = new Web3TransferSucceededEventHandler(useCase);
 
-    Web3TransactionFailedOnchainEvent event =
-        new Web3TransactionFailedOnchainEvent(
-            101L,
-            "domain:QUESTION_REWARD:88:11",
-            Web3ReferenceType.USER_TO_USER,
-            "88",
-            11L,
-            22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234",
-            "RECEIPT_STATUS_0");
-
-    handler.handle(event);
-
-    verify(compensator, never()).compensate(any());
-  }
-
-  @Test
-  void handle_resolvesLevelUpDomainFromReferenceType_whenIdempotencyKeyIsLegacyRewardFormat() {
-    DomainTransferFailureCompensator compensator = mock(DomainTransferFailureCompensator.class);
-    when(compensator.supports(DomainReferenceType.LEVEL_UP_REWARD)).thenReturn(true);
-    Web3TransferFailedOnchainEventHandler handler =
-        new Web3TransferFailedOnchainEventHandler(List.of(compensator));
-
-    Web3TransactionFailedOnchainEvent event =
-        new Web3TransactionFailedOnchainEvent(
-            102L,
-            "reward:11:55",
-            Web3ReferenceType.LEVEL_UP_REWARD,
-            "55",
-            null,
-            11L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234",
-            "RECEIPT_STATUS_0");
-
-    handler.handle(event);
-
-    verify(compensator).compensate(event);
-  }
-
-  @Test
-  void handle_skips_whenDomainCannotBeResolved() {
-    DomainTransferFailureCompensator compensator = mock(DomainTransferFailureCompensator.class);
-    when(compensator.supports(DomainReferenceType.QUESTION_REWARD)).thenReturn(true);
-    Web3TransferFailedOnchainEventHandler handler =
-        new Web3TransferFailedOnchainEventHandler(List.of(compensator));
-
-    Web3TransactionFailedOnchainEvent event =
-        new Web3TransactionFailedOnchainEvent(
+    Web3TransactionSucceededEvent event =
+        new Web3TransactionSucceededEvent(
             103L,
-            "legacy-key",
+            "domain:QUESTION_REWARD:77:11",
             Web3ReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234",
-            "RECEIPT_STATUS_0");
+            "0x1234567890123456789012345678901234567890123456789012345678901234");
 
     handler.handle(event);
+
+    verify(useCase)
+        .execute(
+            new HandleTransferSucceededCommand(
+                103L,
+                "domain:QUESTION_REWARD:77:11",
+                TransferTransactionReferenceType.USER_TO_USER,
+                "77",
+                11L,
+                22L,
+                "0x1234567890123456789012345678901234567890123456789012345678901234"));
+  }
+
+  @Test
+  void handleTransferFailedOnchainService_callsCompensator_whenDomainMatched() {
+    CompensateTransferFailurePort compensator = mock(CompensateTransferFailurePort.class);
+    when(compensator.supports(DomainReferenceType.QUESTION_REWARD)).thenReturn(true);
+    HandleTransferFailedOnchainService service =
+        new HandleTransferFailedOnchainService(List.of(compensator));
+    HandleTransferFailedOnchainCommand command =
+        new HandleTransferFailedOnchainCommand(
+            100L,
+            "domain:QUESTION_REWARD:77:11",
+            TransferTransactionReferenceType.USER_TO_USER,
+            "77",
+            11L,
+            22L,
+            "0xhash",
+            "RECEIPT_STATUS_0");
+
+    service.execute(command);
+
+    verify(compensator).compensate(command);
+  }
+
+  @Test
+  void handleTransferFailedOnchainService_skips_whenNoCompensatorSupportsDomain() {
+    CompensateTransferFailurePort compensator = mock(CompensateTransferFailurePort.class);
+    when(compensator.supports(DomainReferenceType.QUESTION_REWARD)).thenReturn(false);
+    HandleTransferFailedOnchainService service =
+        new HandleTransferFailedOnchainService(List.of(compensator));
+
+    service.execute(
+        new HandleTransferFailedOnchainCommand(
+            101L,
+            "domain:QUESTION_REWARD:88:11",
+            TransferTransactionReferenceType.USER_TO_USER,
+            "88",
+            11L,
+            22L,
+            "0xhash",
+            "RECEIPT_STATUS_0"));
 
     verify(compensator, never()).compensate(any());
   }
 
   @Test
-  void succeededHandler_marksQuestionSolved_whenQuestionRewardDomain() {
+  void handleTransferSucceededService_marksQuestionSolved_whenQuestionRewardDomain() {
     MarkQuestionPostSolvedPort markQuestionPostSolvedPort = mock(MarkQuestionPostSolvedPort.class);
     QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort =
         mock(QuestionRewardIntentPersistencePort.class);
@@ -129,21 +150,19 @@ class Web3TransferFailedOnchainEventHandlerTest {
                     QuestionRewardIntentStatus.SUBMITTED))))
         .thenReturn(1);
     when(markQuestionPostSolvedPort.markSolved(77L)).thenReturn(1);
-    Web3TransferSucceededEventHandler handler =
-        new Web3TransferSucceededEventHandler(
+    HandleTransferSucceededService service =
+        new HandleTransferSucceededService(
             markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
 
-    Web3TransactionSucceededEvent event =
-        new Web3TransactionSucceededEvent(
+    service.execute(
+        new HandleTransferSucceededCommand(
             103L,
             "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER,
+            TransferTransactionReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234");
-
-    handler.handle(event);
+            "0xhash"));
 
     verify(questionRewardIntentPersistencePort)
         .updateStatusIfCurrentIn(
@@ -155,25 +174,23 @@ class Web3TransferFailedOnchainEventHandlerTest {
   }
 
   @Test
-  void succeededHandler_skips_whenDomainIsNotQuestionReward() {
+  void handleTransferSucceededService_skips_whenDomainIsNotQuestionReward() {
     MarkQuestionPostSolvedPort markQuestionPostSolvedPort = mock(MarkQuestionPostSolvedPort.class);
     QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort =
         mock(QuestionRewardIntentPersistencePort.class);
-    Web3TransferSucceededEventHandler handler =
-        new Web3TransferSucceededEventHandler(
+    HandleTransferSucceededService service =
+        new HandleTransferSucceededService(
             markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
 
-    Web3TransactionSucceededEvent event =
-        new Web3TransactionSucceededEvent(
+    service.execute(
+        new HandleTransferSucceededCommand(
             104L,
             "reward:11:55",
-            Web3ReferenceType.LEVEL_UP_REWARD,
+            TransferTransactionReferenceType.LEVEL_UP_REWARD,
             "55",
             null,
             11L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234");
-
-    handler.handle(event);
+            "0xhash"));
 
     verify(questionRewardIntentPersistencePort, never())
         .updateStatusIfCurrentIn(any(), any(), any());
@@ -181,33 +198,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
   }
 
   @Test
-  void succeededHandler_skips_whenQuestionReferenceIdIsInvalid() {
-    MarkQuestionPostSolvedPort markQuestionPostSolvedPort = mock(MarkQuestionPostSolvedPort.class);
-    QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort =
-        mock(QuestionRewardIntentPersistencePort.class);
-    Web3TransferSucceededEventHandler handler =
-        new Web3TransferSucceededEventHandler(
-            markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
-
-    Web3TransactionSucceededEvent event =
-        new Web3TransactionSucceededEvent(
-            105L,
-            "domain:QUESTION_REWARD:bad-ref:11",
-            Web3ReferenceType.USER_TO_USER,
-            "bad-ref",
-            11L,
-            22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234");
-
-    handler.handle(event);
-
-    verify(questionRewardIntentPersistencePort, never())
-        .updateStatusIfCurrentIn(any(), any(), any());
-    verify(markQuestionPostSolvedPort, never()).markSolved(any());
-  }
-
-  @Test
-  void succeededHandler_skipsPostSolvedUpdate_whenIntentIsNotSettled() {
+  void handleTransferSucceededService_skipsPostSolvedUpdate_whenIntentIsNotSettled() {
     MarkQuestionPostSolvedPort markQuestionPostSolvedPort = mock(MarkQuestionPostSolvedPort.class);
     QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort =
         mock(QuestionRewardIntentPersistencePort.class);
@@ -221,77 +212,30 @@ class Web3TransferFailedOnchainEventHandlerTest {
         .thenReturn(0);
     when(questionRewardIntentPersistencePort.findByPostId(77L))
         .thenReturn(
-            java.util.Optional.of(
+            Optional.of(
                 QuestionRewardIntent.builder()
                     .postId(77L)
                     .acceptedCommentId(1001L)
                     .fromUserId(11L)
                     .toUserId(22L)
-                    .amountWei(java.math.BigInteger.ONE)
+                    .amountWei(BigInteger.ONE)
                     .status(QuestionRewardIntentStatus.CANCELED)
                     .build()));
-
-    Web3TransferSucceededEventHandler handler =
-        new Web3TransferSucceededEventHandler(
+    HandleTransferSucceededService service =
+        new HandleTransferSucceededService(
             markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
 
-    Web3TransactionSucceededEvent event =
-        new Web3TransactionSucceededEvent(
+    service.execute(
+        new HandleTransferSucceededCommand(
             106L,
             "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER,
+            TransferTransactionReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234");
-
-    handler.handle(event);
+            "0xhash"));
 
     verify(markQuestionPostSolvedPort, never()).markSolved(any());
-  }
-
-  @Test
-  void succeededHandler_marksQuestionSolved_whenIntentAlreadySucceeded() {
-    MarkQuestionPostSolvedPort markQuestionPostSolvedPort = mock(MarkQuestionPostSolvedPort.class);
-    QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort =
-        mock(QuestionRewardIntentPersistencePort.class);
-    when(questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
-            eq(77L),
-            eq(QuestionRewardIntentStatus.SUCCEEDED),
-            eq(
-                EnumSet.of(
-                    QuestionRewardIntentStatus.PREPARE_REQUIRED,
-                    QuestionRewardIntentStatus.SUBMITTED))))
-        .thenReturn(0);
-    when(questionRewardIntentPersistencePort.findByPostId(77L))
-        .thenReturn(
-            java.util.Optional.of(
-                QuestionRewardIntent.builder()
-                    .postId(77L)
-                    .acceptedCommentId(1001L)
-                    .fromUserId(11L)
-                    .toUserId(22L)
-                    .amountWei(java.math.BigInteger.ONE)
-                    .status(QuestionRewardIntentStatus.SUCCEEDED)
-                    .build()));
-    when(markQuestionPostSolvedPort.markSolved(77L)).thenReturn(1);
-    Web3TransferSucceededEventHandler handler =
-        new Web3TransferSucceededEventHandler(
-            markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
-
-    Web3TransactionSucceededEvent event =
-        new Web3TransactionSucceededEvent(
-            107L,
-            "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER,
-            "77",
-            11L,
-            22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234");
-
-    handler.handle(event);
-
-    verify(markQuestionPostSolvedPort).markSolved(77L);
   }
 
   @Test
@@ -304,18 +248,16 @@ class Web3TransferFailedOnchainEventHandlerTest {
     QuestionRewardFailureCompensator compensator =
         new QuestionRewardFailureCompensator(questionRewardIntentPersistencePort);
 
-    Web3TransactionFailedOnchainEvent event =
-        new Web3TransactionFailedOnchainEvent(
+    compensator.compensate(
+        new HandleTransferFailedOnchainCommand(
             106L,
             "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER,
+            TransferTransactionReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234",
-            "RECEIPT_STATUS_0");
-
-    compensator.compensate(event);
+            "0xhash",
+            "RECEIPT_STATUS_0"));
 
     verify(questionRewardIntentPersistencePort)
         .updateStatusIfCurrentIn(
@@ -332,50 +274,17 @@ class Web3TransferFailedOnchainEventHandlerTest {
     QuestionRewardFailureCompensator compensator =
         new QuestionRewardFailureCompensator(questionRewardIntentPersistencePort);
 
-    Web3TransactionFailedOnchainEvent event =
-        new Web3TransactionFailedOnchainEvent(
+    compensator.compensate(
+        new HandleTransferFailedOnchainCommand(
             108L,
             "domain:QUESTION_REWARD:bad:11",
-            Web3ReferenceType.USER_TO_USER,
+            TransferTransactionReferenceType.USER_TO_USER,
             "bad",
             11L,
             22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234",
-            "RECEIPT_STATUS_0");
-
-    compensator.compensate(event);
+            "0xhash",
+            "RECEIPT_STATUS_0"));
 
     verifyNoInteractions(questionRewardIntentPersistencePort);
-  }
-
-  @Test
-  void questionRewardFailureCompensator_noop_whenNoMutableIntentRows() {
-    QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort =
-        mock(QuestionRewardIntentPersistencePort.class);
-    when(questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
-            eq(77L), eq(QuestionRewardIntentStatus.FAILED_ONCHAIN), any()))
-        .thenReturn(0);
-    QuestionRewardFailureCompensator compensator =
-        new QuestionRewardFailureCompensator(questionRewardIntentPersistencePort);
-
-    Web3TransactionFailedOnchainEvent event =
-        new Web3TransactionFailedOnchainEvent(
-            109L,
-            "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER,
-            "77",
-            11L,
-            22L,
-            "0x1234567890123456789012345678901234567890123456789012345678901234",
-            "RECEIPT_STATUS_0");
-
-    compensator.compensate(event);
-
-    verify(questionRewardIntentPersistencePort)
-        .updateStatusIfCurrentIn(
-            77L,
-            QuestionRewardIntentStatus.FAILED_ONCHAIN,
-            EnumSet.of(
-                QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
   }
 }

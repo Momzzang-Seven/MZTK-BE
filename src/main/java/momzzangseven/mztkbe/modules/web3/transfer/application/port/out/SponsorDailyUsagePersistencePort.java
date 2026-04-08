@@ -8,6 +8,8 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.model.SponsorDailyUsage
 /** Persistence port for user-based sponsor daily usage rows. */
 public interface SponsorDailyUsagePersistencePort {
 
+  Optional<SponsorDailyUsage> find(Long userId, LocalDate usageDateKst);
+
   Optional<SponsorDailyUsage> findForUpdate(Long userId, LocalDate usageDateKst);
 
   SponsorDailyUsage create(SponsorDailyUsage usage);

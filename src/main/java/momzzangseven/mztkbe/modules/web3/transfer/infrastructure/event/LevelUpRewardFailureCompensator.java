@@ -2,9 +2,9 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.HandleTransferFailedOnchainCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CheckLevelUpHistoryExistsPort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.rollback.DomainTransferFailureCompensator;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CompensateTransferFailurePort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import org.springframework.stereotype.Component;
 
@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class LevelUpRewardFailureCompensator implements DomainTransferFailureCompensator {
+public class LevelUpRewardFailureCompensator implements CompensateTransferFailurePort {
 
   private final CheckLevelUpHistoryExistsPort checkLevelUpHistoryExistsPort;
 
@@ -22,19 +22,19 @@ public class LevelUpRewardFailureCompensator implements DomainTransferFailureCom
   }
 
   @Override
-  public void compensate(Web3TransactionFailedOnchainEvent event) {
-    Long levelUpHistoryId = parseLongOrNull(event.referenceId());
+  public void compensate(HandleTransferFailedOnchainCommand command) {
+    Long levelUpHistoryId = parseLongOrNull(command.referenceId());
     if (levelUpHistoryId == null) {
       log.warn(
           "LEVEL_UP_REWARD compensation skipped: txId={}, invalid referenceId={}",
-          event.transactionId(),
-          event.referenceId());
+          command.transactionId(),
+          command.referenceId());
       return;
     }
     if (!checkLevelUpHistoryExistsPort.existsById(levelUpHistoryId)) {
       log.warn(
           "LEVEL_UP_REWARD compensation skipped: txId={}, levelUpHistoryId={} not found",
-          event.transactionId(),
+          command.transactionId(),
           levelUpHistoryId);
       return;
     }
@@ -42,9 +42,9 @@ public class LevelUpRewardFailureCompensator implements DomainTransferFailureCom
     // No mutable state to roll back in level_up_histories after V010.
     log.info(
         "LEVEL_UP_REWARD compensation acknowledged: txId={}, levelUpHistoryId={}, failureReason={}",
-        event.transactionId(),
+        command.transactionId(),
         levelUpHistoryId,
-        event.failureReason());
+        command.failureReason());
   }
 
   private Long parseLongOrNull(String value) {
