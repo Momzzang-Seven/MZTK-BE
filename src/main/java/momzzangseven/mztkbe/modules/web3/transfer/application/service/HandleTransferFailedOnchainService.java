@@ -23,7 +23,8 @@ public class HandleTransferFailedOnchainService implements HandleTransferFailedO
   @Override
   @Transactional
   public void execute(HandleTransferFailedOnchainCommand command) {
-    DomainReferenceType domainType = resolveDomainType(command.idempotencyKey(), command.referenceType());
+    DomainReferenceType domainType =
+        resolveDomainType(command.idempotencyKey(), command.referenceType());
     if (domainType == null) {
       return;
     }
@@ -46,8 +47,7 @@ public class HandleTransferFailedOnchainService implements HandleTransferFailedO
     compensator.compensate(command);
   }
 
-  private DomainReferenceType resolveDomainType(
-      String idempotencyKey, String referenceType) {
+  private DomainReferenceType resolveDomainType(String idempotencyKey, String referenceType) {
     DomainReferenceType parsedFromIdempotency =
         TokenTransferIdempotencyKeyFactory.parseDomainType(idempotencyKey);
     if (parsedFromIdempotency != null) {

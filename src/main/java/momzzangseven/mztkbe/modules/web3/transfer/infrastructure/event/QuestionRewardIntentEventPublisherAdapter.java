@@ -9,7 +9,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class QuestionRewardIntentEventPublisherAdapter implements PublishQuestionRewardIntentEventPort {
+public class QuestionRewardIntentEventPublisherAdapter
+    implements PublishQuestionRewardIntentEventPort {
 
   private final ApplicationEventPublisher eventPublisher;
 

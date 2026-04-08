@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;

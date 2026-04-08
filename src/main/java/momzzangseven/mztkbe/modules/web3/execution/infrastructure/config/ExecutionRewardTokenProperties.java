@@ -20,6 +20,7 @@ public class ExecutionRewardTokenProperties {
   @Getter
   @Setter
   public static class Worker {
-    @Min(1) private int retryBackoffSeconds;
+    @Min(1)
+    private int retryBackoffSeconds;
   }
 }

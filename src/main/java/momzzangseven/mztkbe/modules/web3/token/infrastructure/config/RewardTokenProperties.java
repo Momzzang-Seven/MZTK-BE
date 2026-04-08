@@ -24,7 +24,9 @@ public class RewardTokenProperties {
 
   @NotBlank private String tokenContractAddress;
 
-  @NotNull @Min(0) private Integer decimals;
+  @NotNull
+  @Min(0)
+  private Integer decimals;
 
   @Valid private Treasury treasury = new Treasury();
   @Valid private Prevalidate prevalidate = new Prevalidate();

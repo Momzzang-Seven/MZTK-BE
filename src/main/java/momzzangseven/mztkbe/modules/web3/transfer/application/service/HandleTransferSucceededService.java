@@ -26,7 +26,8 @@ public class HandleTransferSucceededService implements HandleTransferSucceededUs
   @Override
   @Transactional
   public void execute(HandleTransferSucceededCommand command) {
-    DomainReferenceType domainType = resolveDomainType(command.idempotencyKey(), command.referenceType());
+    DomainReferenceType domainType =
+        resolveDomainType(command.idempotencyKey(), command.referenceType());
     if (domainType != DomainReferenceType.QUESTION_REWARD) {
       return;
     }
@@ -71,8 +72,7 @@ public class HandleTransferSucceededService implements HandleTransferSucceededUs
         postId);
   }
 
-  private DomainReferenceType resolveDomainType(
-      String idempotencyKey, String referenceType) {
+  private DomainReferenceType resolveDomainType(String idempotencyKey, String referenceType) {
     DomainReferenceType parsedFromIdempotency =
         TokenTransferIdempotencyKeyFactory.parseDomainType(idempotencyKey);
     if (parsedFromIdempotency != null) {

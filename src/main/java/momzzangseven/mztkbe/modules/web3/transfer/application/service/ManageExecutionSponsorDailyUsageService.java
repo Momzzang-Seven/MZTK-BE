@@ -33,21 +33,21 @@ public class ManageExecutionSponsorDailyUsageService
 
   @Override
   @Transactional(readOnly = true)
-  public Optional<ExecutionSponsorDailyUsageRecord> findForUpdate(Long userId, LocalDate usageDateKst) {
+  public Optional<ExecutionSponsorDailyUsageRecord> findForUpdate(
+      Long userId, LocalDate usageDateKst) {
     return sponsorDailyUsagePersistencePort.findForUpdate(userId, usageDateKst).map(this::toRecord);
   }
 
   @Override
-  public ExecutionSponsorDailyUsageRecord getOrCreateForUpdate(Long userId, LocalDate usageDateKst) {
+  public ExecutionSponsorDailyUsageRecord getOrCreateForUpdate(
+      Long userId, LocalDate usageDateKst) {
     Optional<ExecutionSponsorDailyUsageRecord> existing = findForUpdate(userId, usageDateKst);
     if (existing.isPresent()) {
       return existing.get();
     }
 
     try {
-      create(
-          toRecord(
-              SponsorDailyUsage.create(userId, usageDateKst)));
+      create(toRecord(SponsorDailyUsage.create(userId, usageDateKst)));
     } catch (DataIntegrityViolationException ignored) {
       // Another transaction created the same day row first. Re-read under lock below.
     }

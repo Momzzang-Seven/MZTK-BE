@@ -439,10 +439,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   }
 
   private void audit(
-      Long transactionId,
-      String eventType,
-      String rpcAlias,
-      java.util.Map<String, Object> detail) {
+      Long transactionId, String eventType, String rpcAlias, java.util.Map<String, Object> detail) {
     try {
       executionTransactionGatewayPort.recordAudit(
           new ExecutionTransactionGatewayPort.AuditCommand(

@@ -9,7 +9,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -56,7 +55,8 @@ class QuestionRewardExecutionActionHandlerTest {
   @Test
   void beforeExecute_logsLegacyIntentAndMarksSubmittedAfterBroadcast() throws Exception {
     ExecutionIntent intent = executionIntent();
-    when(getQuestionRewardIntentSnapshotUseCase.execute(new GetQuestionRewardIntentSnapshotQuery(101L)))
+    when(getQuestionRewardIntentSnapshotUseCase.execute(
+            new GetQuestionRewardIntentSnapshotQuery(101L)))
         .thenReturn(new QuestionRewardIntentSnapshotResult(true, "PREPARE_REQUIRED"));
 
     ExecutionActionPlan plan = handler.buildActionPlan(intent);
@@ -73,7 +73,8 @@ class QuestionRewardExecutionActionHandlerTest {
   @Test
   void beforeExecute_doesNotThrowWhenLegacyIntentMissing() throws Exception {
     ExecutionIntent intent = executionIntent();
-    when(getQuestionRewardIntentSnapshotUseCase.execute(new GetQuestionRewardIntentSnapshotQuery(101L)))
+    when(getQuestionRewardIntentSnapshotUseCase.execute(
+            new GetQuestionRewardIntentSnapshotQuery(101L)))
         .thenReturn(new QuestionRewardIntentSnapshotResult(false, null));
 
     ExecutionActionPlan plan = handler.buildActionPlan(intent);

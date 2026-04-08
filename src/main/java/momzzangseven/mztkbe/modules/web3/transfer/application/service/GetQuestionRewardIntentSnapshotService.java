@@ -11,7 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class GetQuestionRewardIntentSnapshotService implements GetQuestionRewardIntentSnapshotUseCase {
+public class GetQuestionRewardIntentSnapshotService
+    implements GetQuestionRewardIntentSnapshotUseCase {
 
   private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
@@ -19,9 +20,7 @@ public class GetQuestionRewardIntentSnapshotService implements GetQuestionReward
   public QuestionRewardIntentSnapshotResult execute(GetQuestionRewardIntentSnapshotQuery query) {
     return questionRewardIntentPersistencePort
         .findByPostId(query.postId())
-        .map(
-            intent ->
-                new QuestionRewardIntentSnapshotResult(true, intent.getStatus().name()))
+        .map(intent -> new QuestionRewardIntentSnapshotResult(true, intent.getStatus().name()))
         .orElseGet(() -> new QuestionRewardIntentSnapshotResult(false, null));
   }
 }

@@ -82,8 +82,7 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
   public String hashCalls(List<BatchCall> calls) {
     return manageExecutionEip7702UseCase.hashCalls(
         calls.stream()
-            .map(
-                call -> new Eip7702ExecutionBatchCall(call.to(), call.value(), call.data()))
+            .map(call -> new Eip7702ExecutionBatchCall(call.to(), call.value(), call.data()))
             .toList());
   }
 
@@ -91,8 +90,7 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
   public String encodeExecute(List<BatchCall> calls, byte[] executionSignature) {
     return manageExecutionEip7702UseCase.encodeExecute(
         calls.stream()
-            .map(
-                call -> new Eip7702ExecutionBatchCall(call.to(), call.value(), call.data()))
+            .map(call -> new Eip7702ExecutionBatchCall(call.to(), call.value(), call.data()))
             .toList(),
         executionSignature);
   }

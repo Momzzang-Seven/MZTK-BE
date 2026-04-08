@@ -38,7 +38,10 @@ public class TransferController {
     userId = requireUserId(userId);
 
     return ResponseEntity.status(201)
-        .body(ApiResponse.success(CreateTransferResponseDTO.from(createTransferUseCase.execute(request.toCommand(userId)))));
+        .body(
+            ApiResponse.success(
+                CreateTransferResponseDTO.from(
+                    createTransferUseCase.execute(request.toCommand(userId)))));
   }
 
   @GetMapping("/{resourceId}")

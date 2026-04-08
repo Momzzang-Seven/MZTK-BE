@@ -79,8 +79,7 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
 
   @Override
   public BroadcastResult broadcast(String rawTx) {
-    ExecutionTransactionBroadcastResult result =
-        manageExecutionTransactionUseCase.broadcast(rawTx);
+    ExecutionTransactionBroadcastResult result = manageExecutionTransactionUseCase.broadcast(rawTx);
     return new BroadcastResult(
         result.success(), result.txHash(), result.failureReason(), result.rpcAlias());
   }

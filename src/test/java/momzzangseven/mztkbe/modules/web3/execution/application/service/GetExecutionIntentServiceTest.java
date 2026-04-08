@@ -119,8 +119,7 @@ class GetExecutionIntentServiceTest {
 
     when(executionIntentPersistencePort.findByPublicId("intent-2")).thenReturn(Optional.of(intent));
     when(loadExecutionTransactionPort.findById(99L))
-        .thenReturn(
-            Optional.of(new ExecutionTransactionSummary(99L, "PENDING", "0xhash")));
+        .thenReturn(Optional.of(new ExecutionTransactionSummary(99L, "PENDING", "0xhash")));
 
     GetExecutionIntentResult result = service.execute(new GetExecutionIntentQuery(7L, "intent-2"));
 

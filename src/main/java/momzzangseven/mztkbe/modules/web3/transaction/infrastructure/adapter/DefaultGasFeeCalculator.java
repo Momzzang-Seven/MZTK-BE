@@ -70,7 +70,8 @@ public class DefaultGasFeeCalculator {
     }
   }
 
-  public record FeePlan(BigInteger gasLimit, BigInteger maxPriorityFeePerGas, BigInteger maxFeePerGas) {
+  public record FeePlan(
+      BigInteger gasLimit, BigInteger maxPriorityFeePerGas, BigInteger maxFeePerGas) {
 
     public FeePlan {
       if (gasLimit == null || gasLimit.signum() <= 0) {

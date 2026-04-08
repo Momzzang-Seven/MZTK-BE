@@ -34,7 +34,8 @@ class Web3TransferFailedOnchainEventHandlerTest {
   @Test
   void failedHandler_delegatesMappedCommandToUseCase() {
     HandleTransferFailedOnchainUseCase useCase = mock(HandleTransferFailedOnchainUseCase.class);
-    Web3TransferFailedOnchainEventHandler handler = new Web3TransferFailedOnchainEventHandler(useCase);
+    Web3TransferFailedOnchainEventHandler handler =
+        new Web3TransferFailedOnchainEventHandler(useCase);
 
     Web3TransactionFailedOnchainEvent event =
         new Web3TransactionFailedOnchainEvent(
@@ -142,11 +143,15 @@ class Web3TransferFailedOnchainEventHandlerTest {
     when(questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
             eq(77L),
             eq(QuestionRewardIntentStatus.SUCCEEDED),
-            eq(EnumSet.of(QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED))))
+            eq(
+                EnumSet.of(
+                    QuestionRewardIntentStatus.PREPARE_REQUIRED,
+                    QuestionRewardIntentStatus.SUBMITTED))))
         .thenReturn(1);
     when(markQuestionPostSolvedPort.markSolved(77L)).thenReturn(1);
     HandleTransferSucceededService service =
-        new HandleTransferSucceededService(markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
+        new HandleTransferSucceededService(
+            markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
 
     service.execute(
         new HandleTransferSucceededCommand(
@@ -162,7 +167,8 @@ class Web3TransferFailedOnchainEventHandlerTest {
         .updateStatusIfCurrentIn(
             77L,
             QuestionRewardIntentStatus.SUCCEEDED,
-            EnumSet.of(QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
+            EnumSet.of(
+                QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
     verify(markQuestionPostSolvedPort).markSolved(77L);
   }
 
@@ -172,7 +178,8 @@ class Web3TransferFailedOnchainEventHandlerTest {
     QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort =
         mock(QuestionRewardIntentPersistencePort.class);
     HandleTransferSucceededService service =
-        new HandleTransferSucceededService(markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
+        new HandleTransferSucceededService(
+            markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
 
     service.execute(
         new HandleTransferSucceededCommand(
@@ -184,7 +191,8 @@ class Web3TransferFailedOnchainEventHandlerTest {
             11L,
             "0xhash"));
 
-    verify(questionRewardIntentPersistencePort, never()).updateStatusIfCurrentIn(any(), any(), any());
+    verify(questionRewardIntentPersistencePort, never())
+        .updateStatusIfCurrentIn(any(), any(), any());
     verify(markQuestionPostSolvedPort, never()).markSolved(any());
   }
 
@@ -196,7 +204,10 @@ class Web3TransferFailedOnchainEventHandlerTest {
     when(questionRewardIntentPersistencePort.updateStatusIfCurrentIn(
             eq(77L),
             eq(QuestionRewardIntentStatus.SUCCEEDED),
-            eq(EnumSet.of(QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED))))
+            eq(
+                EnumSet.of(
+                    QuestionRewardIntentStatus.PREPARE_REQUIRED,
+                    QuestionRewardIntentStatus.SUBMITTED))))
         .thenReturn(0);
     when(questionRewardIntentPersistencePort.findByPostId(77L))
         .thenReturn(
@@ -210,7 +221,8 @@ class Web3TransferFailedOnchainEventHandlerTest {
                     .status(QuestionRewardIntentStatus.CANCELED)
                     .build()));
     HandleTransferSucceededService service =
-        new HandleTransferSucceededService(markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
+        new HandleTransferSucceededService(
+            markQuestionPostSolvedPort, questionRewardIntentPersistencePort);
 
     service.execute(
         new HandleTransferSucceededCommand(
@@ -250,7 +262,8 @@ class Web3TransferFailedOnchainEventHandlerTest {
         .updateStatusIfCurrentIn(
             77L,
             QuestionRewardIntentStatus.FAILED_ONCHAIN,
-            EnumSet.of(QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
+            EnumSet.of(
+                QuestionRewardIntentStatus.PREPARE_REQUIRED, QuestionRewardIntentStatus.SUBMITTED));
   }
 
   @Test
