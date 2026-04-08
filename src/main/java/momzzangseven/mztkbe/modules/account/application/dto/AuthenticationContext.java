@@ -22,7 +22,8 @@ public record AuthenticationContext(
     String email,
     String password,
     String authorizationCode,
-    String redirectUri) {
+    String redirectUri,
+    String role) {
 
   /**
    * Create AuthenticationContext from LoginCommand.
@@ -36,7 +37,8 @@ public record AuthenticationContext(
         command.email(),
         command.password(),
         command.authorizationCode(),
-        command.redirectUri());
+        command.redirectUri(),
+        command.role());
   }
 
   /**

@@ -55,7 +55,7 @@ class LoginServiceTest {
     void execute_LocalLogin_WithWallet_Success() {
       AccountUserSnapshot snapshot = createFakeSnapshot();
       LoginCommand command =
-          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null);
+          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null, null);
 
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(snapshot));
@@ -79,7 +79,7 @@ class LoginServiceTest {
     void execute_LocalLogin_NoWallet_WalletAddressNull() {
       AccountUserSnapshot snapshot = createFakeSnapshot();
       LoginCommand command =
-          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null);
+          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null, null);
 
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(snapshot));
@@ -96,7 +96,7 @@ class LoginServiceTest {
     void execute_SocialLogin_NewUser_Success() {
       AccountUserSnapshot snapshot = createFakeSnapshot();
       LoginCommand command =
-          new LoginCommand(AuthProvider.KAKAO, null, null, "kakao-auth-code", null);
+          new LoginCommand(AuthProvider.KAKAO, null, null, "kakao-auth-code", null, null);
 
       given(strategyFactory.getStrategy(AuthProvider.KAKAO)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.newUser(snapshot));
@@ -120,7 +120,7 @@ class LoginServiceTest {
     @Test
     @DisplayName("provider가 null이면 IllegalArgumentException 발생")
     void execute_NullProvider_ThrowsException() {
-      LoginCommand command = new LoginCommand(null, "email@test.com", "pw", null, null);
+      LoginCommand command = new LoginCommand(null, "email@test.com", "pw", null, null, null);
 
       assertThatThrownBy(() -> loginService.execute(command))
           .isInstanceOf(IllegalArgumentException.class)
@@ -132,7 +132,8 @@ class LoginServiceTest {
     @Test
     @DisplayName("지원하지 않는 provider이면 UnsupportedProviderException 발생")
     void execute_UnsupportedProvider_ThrowsException() {
-      LoginCommand command = new LoginCommand(AuthProvider.KAKAO, null, null, "auth-code", null);
+      LoginCommand command =
+          new LoginCommand(AuthProvider.KAKAO, null, null, "auth-code", null, null);
 
       given(strategyFactory.getStrategy(AuthProvider.KAKAO))
           .willThrow(new UnsupportedProviderException(AuthProvider.KAKAO));
@@ -148,7 +149,7 @@ class LoginServiceTest {
     void execute_WalletLookupThrows_LoginSucceedsWithNullWallet() {
       AccountUserSnapshot snapshot = createFakeSnapshot();
       LoginCommand command =
-          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null);
+          new LoginCommand(AuthProvider.LOCAL, "user@example.com", "password123", null, null, null);
 
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any())).willReturn(AuthenticatedUser.existing(snapshot));
@@ -167,7 +168,7 @@ class LoginServiceTest {
     @DisplayName("인증 전략이 예외를 던지면 그대로 전파됨")
     void execute_StrategyThrowsException_PropagatesException() {
       LoginCommand command =
-          new LoginCommand(AuthProvider.LOCAL, "email@test.com", "wrong-pw", null, null);
+          new LoginCommand(AuthProvider.LOCAL, "email@test.com", "wrong-pw", null, null, null);
 
       given(strategyFactory.getStrategy(AuthProvider.LOCAL)).willReturn(mockStrategy);
       given(mockStrategy.authenticate(any()))

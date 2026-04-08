@@ -9,7 +9,8 @@ package momzzangseven.mztkbe.modules.account.application.dto;
 public record SignupCommand(
     String email,
     String password, // Plain text password (will be encoded in service)
-    String nickname) {
+    String nickname,
+    String role) {
 
   /**
    * Validate command data.

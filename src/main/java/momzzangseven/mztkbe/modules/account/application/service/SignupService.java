@@ -51,18 +51,24 @@ public class SignupService implements SignupUseCase {
     String encodedPassword = passwordEncoder.encode(command.password());
     log.debug("Password encoded successfully");
 
-    // role 설정은 리팩토링 후 role 설정을 위한 기능 추가 때 진행 예정. 지금은 "USER"로 hard-coded.
+    String effectiveRole = resolveRole(command.role());
     AccountUserSnapshot snapshot =
-        createAccountUserPort.createUser(command.email(), command.nickname(), null, DEFAULT_ROLE);
+        createAccountUserPort.createUser(command.email(), command.nickname(), null, effectiveRole);
     log.debug("User profile created for email: {}", command.email());
 
     UserAccount userAccount = UserAccount.createLocal(snapshot.userId(), encodedPassword);
     saveUserAccountPort.save(userAccount);
     log.info("UserAccount created successfully for userId: {}", snapshot.userId());
 
-    SignupResult result = SignupResult.of(snapshot.userId(), snapshot.email(), snapshot.nickname());
+    SignupResult result =
+        SignupResult.of(snapshot.userId(), snapshot.email(), snapshot.nickname(), snapshot.role());
     log.info("Signup completed successfully for user ID: {}", result.userId());
 
     return result;
+  }
+
+  /** Returns the given role or falls back to {@code "USER"} when {@code null}. */
+  private static String resolveRole(String role) {
+    return role == null ? DEFAULT_ROLE : role;
   }
 }

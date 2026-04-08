@@ -1,6 +1,8 @@
+name: pr-main-guard
+
 on:
   pull_request:
-    branches: [ "main", "dev" ]
+    branches: [ "main", "develop" ]
     types: [opened, synchronize, reopened, edited]
 
 jobs:
@@ -19,10 +21,10 @@ jobs:
           fi
 
           # 여기부터는 main PR만 들어옴
-          if [ "${{ github.head_ref }}" != "dev" ]; then
+          if [ "${{ github.head_ref }}" != "develop" ]; then
             echo "❌ Only PRs from 'dev' can be merged into 'main'."
             echo "Current source: ${{ github.head_ref }}"
             exit 1
           fi
 
-          echo "✅ Valid: dev -> main"
+          echo "✅ Valid: develop -> main"

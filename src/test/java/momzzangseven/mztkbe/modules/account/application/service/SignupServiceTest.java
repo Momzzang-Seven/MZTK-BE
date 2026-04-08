@@ -51,6 +51,10 @@ class SignupServiceTest {
     return new AccountUserSnapshot(42L, VALID_EMAIL, VALID_NICKNAME, null, "USER");
   }
 
+  private AccountUserSnapshot createSavedSnapshot(String role) {
+    return new AccountUserSnapshot(42L, VALID_EMAIL, VALID_NICKNAME, null, role);
+  }
+
   // ============================================
   // 성공 케이스
   // ============================================
@@ -62,7 +66,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("정상 입력으로 회원가입 시 userId 반환")
     void execute_ValidCommand_ReturnsSignupResult() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
@@ -85,7 +89,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("회원가입 시 비밀번호가 BCrypt로 인코딩되어 저장")
     void execute_ValidCommand_EncodesPassword() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
@@ -104,9 +108,77 @@ class SignupServiceTest {
     }
 
     @Test
+    @DisplayName("[M-1] USER role 명시 시 USER role로 생성")
+    void execute_WithUserRole_ReturnsSignupResultWithUserRole() {
+      SignupCommand command =
+          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "USER");
+      AccountUserSnapshot snapshot = createSavedSnapshot("USER");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER")))
+          .willReturn(snapshot);
+      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+      SignupResult result = signupService.execute(command);
+
+      assertThat(result.role()).isEqualTo("USER");
+      verify(createAccountUserPort)
+          .createUser(eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER"));
+    }
+
+    @Test
+    @DisplayName("[M-2] TRAINER role 명시 시 TRAINER role로 생성")
+    void execute_WithTrainerRole_ReturnsSignupResultWithTrainerRole() {
+      SignupCommand command =
+          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "TRAINER");
+      AccountUserSnapshot snapshot = createSavedSnapshot("TRAINER");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("TRAINER")))
+          .willReturn(snapshot);
+      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+      SignupResult result = signupService.execute(command);
+
+      assertThat(result.role()).isEqualTo("TRAINER");
+      verify(createAccountUserPort)
+          .createUser(eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("TRAINER"));
+    }
+
+    @Test
+    @DisplayName("[M-3] role이 null이면 기본값 USER로 생성")
+    void execute_WithNullRole_DefaultsToUser() {
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
+      AccountUserSnapshot snapshot = createSavedSnapshot("USER");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER")))
+          .willReturn(snapshot);
+      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+      SignupResult result = signupService.execute(command);
+
+      assertThat(result.role()).isEqualTo("USER");
+      verify(createAccountUserPort)
+          .createUser(eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("USER"));
+    }
+
+    @Test
     @DisplayName("저장된 유저에 이메일 중복 체크 수행 후 저장")
     void execute_ChecksEmailDuplication_BeforeSaving() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
@@ -140,7 +212,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("이메일 중복 시 DuplicateEmailException 발생")
     void execute_DuplicateEmail_ThrowsDuplicateEmailException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
       given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(true);
@@ -154,7 +226,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("탈퇴 계정 이메일로 회원가입 시 UserWithdrawnException 발생")
     void execute_WithdrawnEmail_ThrowsUserWithdrawnException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       UserAccount deletedAccount =
           UserAccount.builder()
               .id(1L)
@@ -176,7 +248,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("이메일이 null이면 validate()에서 예외 발생")
     void execute_NullEmail_ThrowsIllegalArgumentException() {
-      SignupCommand command = new SignupCommand(null, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(null, VALID_PASSWORD, VALID_NICKNAME, null);
 
       assertThatThrownBy(() -> signupService.execute(command))
           .isInstanceOf(IllegalArgumentException.class)
@@ -189,7 +261,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("비밀번호가 null이면 validate()에서 예외 발생")
     void execute_NullPassword_ThrowsIllegalArgumentException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, null, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, null, VALID_NICKNAME, null);
 
       assertThatThrownBy(() -> signupService.execute(command))
           .isInstanceOf(IllegalArgumentException.class)
@@ -200,9 +272,28 @@ class SignupServiceTest {
     }
 
     @Test
+    @DisplayName("유효하지 않은 role 문자열이면 어댑터에서 IllegalArgumentException 발생")
+    void execute_InvalidRole_ThrowsIllegalArgumentException() {
+      SignupCommand command =
+          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "INVALID_ROLE");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("INVALID_ROLE")))
+          .willThrow(new IllegalArgumentException("Invalid role: INVALID_ROLE"));
+
+      assertThatThrownBy(() -> signupService.execute(command))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("INVALID_ROLE");
+    }
+
+    @Test
     @DisplayName("닉네임이 null이면 validate()에서 예외 발생")
     void execute_NullNickname_ThrowsIllegalArgumentException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, null);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, null, null);
 
       assertThatThrownBy(() -> signupService.execute(command))
           .isInstanceOf(IllegalArgumentException.class)
