@@ -14,5 +14,7 @@ public interface ExecutionActionHandlerPort {
   default void beforeExecute(ExecutionIntent intent, ExecutionActionPlan actionPlan) {}
 
   default void afterTransactionSubmitted(
-      ExecutionIntent intent, ExecutionActionPlan actionPlan, ExecutionTransactionStatus txStatus) {}
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionTransactionStatus txStatus) {}
 }

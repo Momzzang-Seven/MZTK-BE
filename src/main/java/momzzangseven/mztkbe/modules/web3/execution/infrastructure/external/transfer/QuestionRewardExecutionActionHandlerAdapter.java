@@ -71,9 +71,7 @@ public class QuestionRewardExecutionActionHandlerAdapter implements ExecutionAct
 
   @Override
   public void afterTransactionSubmitted(
-      ExecutionIntent intent,
-      ExecutionActionPlan actionPlan,
-      ExecutionTransactionStatus txStatus) {
+      ExecutionIntent intent, ExecutionActionPlan actionPlan, ExecutionTransactionStatus txStatus) {
     if (txStatus != ExecutionTransactionStatus.SIGNED
         && txStatus != ExecutionTransactionStatus.PENDING) {
       return;
