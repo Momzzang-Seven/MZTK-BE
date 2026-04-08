@@ -1,4 +1,4 @@
--- V030__create_trainer_stores_table.sql
+-- V032__create_trainer_stores_table.sql
 -- Creates the trainer_stores table with PostGIS location support.
 -- All constraints are included from the start (no separate ALTER migration needed).
 
