@@ -12,8 +12,8 @@ import lombok.Getter;
  * Domain model representing a trainer's store (marketplace).
  *
  * <p>All fields are {@code private final} to enforce immutability. New instances are created
- * exclusively via {@link #create} (for new stores) or via {@link #update} (for modifications).
- * Both methods enforce all domain invariants.
+ * exclusively via {@link #create} (for new stores) or via {@link #update} (for modifications). Both
+ * methods enforce all domain invariants.
  *
  * <p>Additional mutation methods (e.g., deactivate, changeBusinessHours) should be added here as
  * business requirements emerge, NOT in the service layer.
