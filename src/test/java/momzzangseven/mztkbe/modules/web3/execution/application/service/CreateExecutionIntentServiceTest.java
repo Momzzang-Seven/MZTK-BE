@@ -166,10 +166,10 @@ class CreateExecutionIntentServiceTest {
 
   private ExecutionDraft transferDraft(boolean differentPayloadHash) {
     return new ExecutionDraft(
-        ExecutionResourceType.TRANSFER,
+        ExecutionResourceType.TRANSFER.name(),
         "web3:TRANSFER_SEND:7:req-1",
-        ExecutionResourceStatus.PENDING_EXECUTION,
-        ExecutionActionType.TRANSFER_SEND,
+        ExecutionResourceStatus.PENDING_EXECUTION.name(),
+        ExecutionActionType.TRANSFER_SEND.name(),
         7L,
         8L,
         "root-transfer-1",

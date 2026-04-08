@@ -1,10 +1,19 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraft;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SubmitExecutionDraftPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -22,7 +31,95 @@ public class SubmitExecutionIntentAdapter implements SubmitExecutionDraftPort {
    * impl.
    */
   @Override
-  public CreateExecutionIntentResult submit(ExecutionDraft draft) {
-    return createExecutionIntentUseCase.execute(new CreateExecutionIntentCommand(draft));
+  public TransferExecutionIntentResult submit(TransferExecutionDraft draft) {
+    CreateExecutionIntentResult result =
+        createExecutionIntentUseCase.execute(
+            new CreateExecutionIntentCommand(toExecutionDraft(draft)));
+    return new TransferExecutionIntentResult(
+        result.resourceType().name(),
+        result.resourceId(),
+        result.resourceStatus().name(),
+        result.executionIntentId(),
+        result.executionIntentStatus().name(),
+        result.expiresAt(),
+        result.mode().name(),
+        result.signCount(),
+        toTransferSignRequest(result.signRequest()),
+        result.existing(),
+        null,
+        null,
+        null);
+  }
+
+  private ExecutionDraft toExecutionDraft(TransferExecutionDraft draft) {
+    return new ExecutionDraft(
+        draft.resourceType(),
+        draft.resourceId(),
+        draft.resourceStatus(),
+        draft.actionType(),
+        draft.requesterUserId(),
+        draft.counterpartyUserId(),
+        draft.rootIdempotencyKey(),
+        draft.payloadHash(),
+        draft.payloadSnapshotJson(),
+        mapCalls(draft.calls()),
+        draft.fallbackAllowed(),
+        draft.authorityAddress(),
+        draft.authorityNonce(),
+        draft.delegateTarget(),
+        draft.authorizationPayloadHash(),
+        toUnsignedTxSnapshot(draft.unsignedTxSnapshot()),
+        draft.unsignedTxFingerprint(),
+        draft.expiresAt());
+  }
+
+  private List<ExecutionDraftCall> mapCalls(List<TransferExecutionDraftCall> calls) {
+    return calls.stream()
+        .map(call -> new ExecutionDraftCall(call.target(), call.value(), call.data()))
+        .toList();
+  }
+
+  private UnsignedTxSnapshot toUnsignedTxSnapshot(TransferUnsignedTxSnapshot snapshot) {
+    if (snapshot == null) {
+      return null;
+    }
+    return new UnsignedTxSnapshot(
+        snapshot.chainId(),
+        snapshot.fromAddress(),
+        snapshot.toAddress(),
+        snapshot.value(),
+        snapshot.data(),
+        snapshot.nonce(),
+        snapshot.gasLimit(),
+        snapshot.maxPriorityFeePerGas(),
+        snapshot.maxFeePerGas());
+  }
+
+  private TransferSignRequestBundle toTransferSignRequest(SignRequestBundle signRequest) {
+    if (signRequest == null) {
+      return null;
+    }
+    if (signRequest.authorization() != null || signRequest.submit() != null) {
+      return TransferSignRequestBundle.forEip7702(
+          new TransferSignRequestBundle.AuthorizationSignRequest(
+              signRequest.authorization().chainId(),
+              signRequest.authorization().delegateTarget(),
+              signRequest.authorization().authorityNonce(),
+              signRequest.authorization().payloadHashToSign()),
+          new TransferSignRequestBundle.SubmitSignRequest(
+              signRequest.submit().executionDigest(), signRequest.submit().deadlineEpochSeconds()));
+    }
+    return TransferSignRequestBundle.forEip1559(
+        new TransferSignRequestBundle.TransactionSignRequest(
+            signRequest.transaction().chainId(),
+            signRequest.transaction().fromAddress(),
+            signRequest.transaction().toAddress(),
+            signRequest.transaction().valueHex(),
+            signRequest.transaction().data(),
+            signRequest.transaction().nonce(),
+            signRequest.transaction().gasLimitHex(),
+            signRequest.transaction().maxPriorityFeePerGasHex(),
+            signRequest.transaction().maxFeePerGasHex(),
+            signRequest.transaction().expectedNonce()));
   }
 }

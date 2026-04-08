@@ -5,9 +5,9 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.PublishQuestionRewardIntentEventUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.PublishQuestionRewardIntentEventPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentCanceledEvent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentRequestedEvent;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PublishQuestionRewardIntentEventService
     implements PublishQuestionRewardIntentEventUseCase {
 
-  private final ApplicationEventPublisher eventPublisher;
+  private final PublishQuestionRewardIntentEventPort publishQuestionRewardIntentEventPort;
 
   @Override
   @Transactional
@@ -25,7 +25,7 @@ public class PublishQuestionRewardIntentEventService
       throw new Web3InvalidInputException("command is required");
     }
     command.validate();
-    eventPublisher.publishEvent(
+    publishQuestionRewardIntentEventPort.publishRequested(
         new QuestionRewardIntentRequestedEvent(
             command.postId(),
             command.acceptedCommentId(),
@@ -41,7 +41,7 @@ public class PublishQuestionRewardIntentEventService
       throw new Web3InvalidInputException("command is required");
     }
     command.validate();
-    eventPublisher.publishEvent(
+    publishQuestionRewardIntentEventPort.publishCanceled(
         new QuestionRewardIntentCanceledEvent(command.postId(), command.acceptedCommentId()));
   }
 }

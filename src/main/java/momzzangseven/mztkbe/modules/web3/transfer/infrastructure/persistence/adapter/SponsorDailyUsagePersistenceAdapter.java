@@ -22,6 +22,11 @@ public class SponsorDailyUsagePersistenceAdapter implements SponsorDailyUsagePer
   private final Clock appClock;
 
   @Override
+  public Optional<SponsorDailyUsage> find(Long userId, LocalDate usageDateKst) {
+    return repository.findByUserIdAndUsageDateKst(userId, usageDateKst).map(this::toDomain);
+  }
+
+  @Override
   public Optional<SponsorDailyUsage> findForUpdate(Long userId, LocalDate usageDateKst) {
     return repository.findForUpdate(userId, usageDateKst).map(this::toDomain);
   }

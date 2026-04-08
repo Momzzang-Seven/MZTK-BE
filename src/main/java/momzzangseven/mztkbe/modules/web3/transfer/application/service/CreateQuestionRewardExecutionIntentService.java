@@ -1,12 +1,11 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.service;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateQuestionRewardExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.BuildQuestionRewardExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SubmitExecutionDraftPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +21,10 @@ public class CreateQuestionRewardExecutionIntentService
     implements CreateQuestionRewardExecutionIntentUseCase {
 
   private final BuildQuestionRewardExecutionDraftPort buildQuestionRewardExecutionDraftPort;
-  private final CreateExecutionIntentUseCase createExecutionIntentUseCase;
+  private final SubmitExecutionDraftPort submitExecutionDraftPort;
 
   @Override
-  public CreateExecutionIntentResult execute(RegisterQuestionRewardIntentCommand command) {
-    return createExecutionIntentUseCase.execute(
-        new CreateExecutionIntentCommand(buildQuestionRewardExecutionDraftPort.build(command)));
+  public TransferExecutionIntentResult execute(RegisterQuestionRewardIntentCommand command) {
+    return submitExecutionDraftPort.submit(buildQuestionRewardExecutionDraftPort.build(command));
   }
 }

@@ -19,7 +19,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -121,14 +120,14 @@ class GetExecutionIntentServiceTest {
     when(executionIntentPersistencePort.findByPublicId("intent-2")).thenReturn(Optional.of(intent));
     when(loadExecutionTransactionPort.findById(99L))
         .thenReturn(
-            Optional.of(new ExecutionTransactionSummary(99L, Web3TxStatus.PENDING, "0xhash")));
+            Optional.of(new ExecutionTransactionSummary(99L, "PENDING", "0xhash")));
 
     GetExecutionIntentResult result = service.execute(new GetExecutionIntentQuery(7L, "intent-2"));
 
     assertThat(result.resourceStatus()).isEqualTo(ExecutionResourceStatus.PENDING_EXECUTION);
     assertThat(result.signRequest()).isNull();
     assertThat(result.transactionId()).isEqualTo(99L);
-    assertThat(result.transactionStatus()).isEqualTo(Web3TxStatus.PENDING);
+    assertThat(result.transactionStatus()).isEqualTo("PENDING");
     assertThat(result.txHash()).isEqualTo("0xhash");
   }
 }

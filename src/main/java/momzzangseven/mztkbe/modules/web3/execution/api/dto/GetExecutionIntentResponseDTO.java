@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.execution.api.dto;
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
 /** API response DTO for execution intent read endpoint. */
 public record GetExecutionIntentResponseDTO(
@@ -38,5 +37,5 @@ public record GetExecutionIntentResponseDTO(
   public record ExecutionDTO(String mode, int signCount) {}
 
   /** Linked transaction summary section when execution has submitted transaction. */
-  public record TransactionDTO(Long id, Web3TxStatus status, String txHash) {}
+  public record TransactionDTO(Long id, String status, String txHash) {}
 }

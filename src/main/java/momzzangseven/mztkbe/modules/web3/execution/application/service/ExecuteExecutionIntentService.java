@@ -29,11 +29,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentS
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +49,17 @@ import org.web3j.utils.Numeric;
  * then delegates mode-specific signing/broadcast flow for EIP-7702 and EIP-1559.
  */
 public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseCase {
+
+  private static final String TX_STATUS_CREATED = "CREATED";
+  private static final String TX_STATUS_SIGNED = "SIGNED";
+  private static final String TX_STATUS_PENDING = "PENDING";
+  private static final String TX_TYPE_EIP1559 = "EIP1559";
+  private static final String TX_TYPE_EIP7702 = "EIP7702";
+  private static final String REFERENCE_USER_TO_USER = "USER_TO_USER";
+  private static final String AUDIT_SIGN = "SIGN";
+  private static final String AUDIT_BROADCAST = "BROADCAST";
+  private static final String AUDIT_AUTHORIZATION = "AUTHORIZATION";
+  private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
@@ -208,40 +214,40 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                 java.util.List.of(authTuple),
                 sponsorKey.privateKeyHex()));
 
-    TransferTransaction created =
+    ExecutionTransactionGatewayPort.TransactionRecord created =
         executionTransactionGatewayPort.createAndFlush(
-            TransferTransaction.builder()
-                .idempotencyKey(intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo())
-                .referenceType(actionPlan.referenceType())
-                .referenceId(intent.getResourceId())
-                .fromUserId(intent.getRequesterUserId())
-                .toUserId(intent.getCounterpartyUserId())
-                .fromAddress(sponsorAddress)
-                .toAddress(intent.getAuthorityAddress())
-                .amountWei(actionPlan.amountWei())
-                .status(Web3TxStatus.CREATED)
-                .txType(Web3TxType.EIP7702)
-                .authorityAddress(intent.getAuthorityAddress())
-                .authorizationNonce(intent.getAuthorityNonce())
-                .delegateTarget(intent.getDelegateTarget())
-                .authorizationExpiresAt(intent.getExpiresAt())
-                .build());
+            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
+                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
+                actionPlan.referenceType(),
+                intent.getResourceId(),
+                intent.getRequesterUserId(),
+                intent.getCounterpartyUserId(),
+                sponsorAddress,
+                intent.getAuthorityAddress(),
+                actionPlan.amountWei(),
+                null,
+                TX_STATUS_CREATED,
+                TX_TYPE_EIP7702,
+                intent.getAuthorityAddress(),
+                intent.getAuthorityNonce(),
+                intent.getDelegateTarget(),
+                intent.getExpiresAt()));
 
     executionTransactionGatewayPort.markSigned(
-        created.getId(), sponsorNonce, signedPayload.rawTx(), signedPayload.txHash());
+        created.transactionId(), sponsorNonce, signedPayload.rawTx(), signedPayload.txHash());
     executionIntentPersistencePort.update(
-        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
+        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
     audit(
-        created.getId(),
-        Web3TransactionAuditEventType.AUTHORIZATION,
+        created.transactionId(),
+        AUDIT_AUTHORIZATION,
         null,
         java.util.Map.of("mode", intent.getMode().name()));
 
     ExecutionTransactionGatewayPort.BroadcastResult broadcast =
         executionTransactionGatewayPort.broadcast(signedPayload.rawTx());
     audit(
-        created.getId(),
-        Web3TransactionAuditEventType.BROADCAST,
+        created.transactionId(),
+        AUDIT_BROADCAST,
         broadcast.rpcAlias(),
         java.util.Map.of(
             "success", broadcast.success(),
@@ -253,39 +259,39 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
           broadcast.txHash() == null || broadcast.txHash().isBlank()
               ? signedPayload.txHash()
               : broadcast.txHash();
-      executionTransactionGatewayPort.markPending(created.getId(), txHash);
+      executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
       executionIntentPersistencePort.update(
-          intent.markPendingOnchain(created.getId(), LocalDateTime.now(appClock)));
+          intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
       moveReservedSponsorExposureToConsumed(
           intent.getRequesterUserId(),
           intent.resolveSponsorUsageDateKst(),
           intent.getReservedSponsorCostWei());
-      actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.PENDING);
+      actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_PENDING);
       return new ExecuteExecutionIntentResult(
           intent.getPublicId(),
           ExecutionIntentStatus.PENDING_ONCHAIN,
-          created.getId(),
-          Web3TxStatus.PENDING,
+          created.transactionId(),
+          TX_STATUS_PENDING,
           txHash);
     }
 
     String reason =
         broadcast.failureReason() == null || broadcast.failureReason().isBlank()
-            ? Web3TxFailureReason.BROADCAST_FAILED.code()
+            ? BROADCAST_FAILED
             : broadcast.failureReason();
     executionTransactionGatewayPort.scheduleRetry(
-        created.getId(),
+        created.transactionId(),
         reason,
         LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     executionIntentPersistencePort.update(
-        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.SIGNED);
+        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
-        created.getId(),
-        Web3TxStatus.SIGNED,
+        created.transactionId(),
+        TX_STATUS_SIGNED,
         signedPayload.txHash());
   }
 
@@ -315,40 +321,43 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       throw new Web3TransferException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
     }
 
-    TransferTransaction created =
+    ExecutionTransactionGatewayPort.TransactionRecord created =
         executionTransactionGatewayPort.createAndFlush(
-            TransferTransaction.builder()
-                .idempotencyKey(intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo())
-                .referenceType(actionPlan.referenceType())
-                .referenceId(intent.getResourceId())
-                .fromUserId(intent.getRequesterUserId())
-                .toUserId(intent.getCounterpartyUserId())
-                .fromAddress(decoded.signerAddress())
-                .toAddress(intent.getUnsignedTxSnapshot().toAddress())
-                .amountWei(actionPlan.amountWei())
-                .nonce(intent.getUnsignedTxSnapshot().expectedNonce())
-                .status(Web3TxStatus.CREATED)
-                .txType(Web3TxType.EIP1559)
-                .build());
+            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
+                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
+                actionPlan.referenceType(),
+                intent.getResourceId(),
+                intent.getRequesterUserId(),
+                intent.getCounterpartyUserId(),
+                decoded.signerAddress(),
+                intent.getUnsignedTxSnapshot().toAddress(),
+                actionPlan.amountWei(),
+                intent.getUnsignedTxSnapshot().expectedNonce(),
+                TX_STATUS_CREATED,
+                TX_TYPE_EIP1559,
+                null,
+                null,
+                null,
+                null));
 
     executionTransactionGatewayPort.markSigned(
-        created.getId(),
+        created.transactionId(),
         intent.getUnsignedTxSnapshot().expectedNonce(),
         decoded.rawTransaction(),
         decoded.txHash());
     executionIntentPersistencePort.update(
-        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
+        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
     audit(
-        created.getId(),
-        Web3TransactionAuditEventType.SIGN,
+        created.transactionId(),
+        AUDIT_SIGN,
         null,
         java.util.Map.of("mode", intent.getMode().name()));
 
     ExecutionTransactionGatewayPort.BroadcastResult broadcast =
         executionTransactionGatewayPort.broadcast(decoded.rawTransaction());
     audit(
-        created.getId(),
-        Web3TransactionAuditEventType.BROADCAST,
+        created.transactionId(),
+        AUDIT_BROADCAST,
         broadcast.rpcAlias(),
         java.util.Map.of(
             "success", broadcast.success(),
@@ -360,35 +369,35 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
           broadcast.txHash() == null || broadcast.txHash().isBlank()
               ? decoded.txHash()
               : broadcast.txHash();
-      executionTransactionGatewayPort.markPending(created.getId(), txHash);
+      executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
       executionIntentPersistencePort.update(
-          intent.markPendingOnchain(created.getId(), LocalDateTime.now(appClock)));
-      actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.PENDING);
+          intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
+      actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_PENDING);
       return new ExecuteExecutionIntentResult(
           intent.getPublicId(),
           ExecutionIntentStatus.PENDING_ONCHAIN,
-          created.getId(),
-          Web3TxStatus.PENDING,
+          created.transactionId(),
+          TX_STATUS_PENDING,
           txHash);
     }
 
     String reason =
         broadcast.failureReason() == null || broadcast.failureReason().isBlank()
-            ? Web3TxFailureReason.BROADCAST_FAILED.code()
+            ? BROADCAST_FAILED
             : broadcast.failureReason();
     executionTransactionGatewayPort.scheduleRetry(
-        created.getId(),
+        created.transactionId(),
         reason,
         LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     executionIntentPersistencePort.update(
-        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.SIGNED);
+        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
-        created.getId(),
-        Web3TxStatus.SIGNED,
+        created.transactionId(),
+        TX_STATUS_SIGNED,
         decoded.txHash());
   }
 
@@ -412,7 +421,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     sponsorDailyUsagePersistencePort.update(usage.release(amountWei).consume(amountWei));
   }
 
-  private TransferTransaction loadTransaction(Long transactionId) {
+  private ExecutionTransactionGatewayPort.TransactionRecord loadTransaction(Long transactionId) {
     return executionTransactionGatewayPort
         .findById(transactionId)
         .orElseThrow(
@@ -420,18 +429,18 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   }
 
   private ExecuteExecutionIntentResult toResult(
-      ExecutionIntent intent, TransferTransaction transaction) {
+      ExecutionIntent intent, ExecutionTransactionGatewayPort.TransactionRecord transaction) {
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         intent.getStatus(),
-        transaction == null ? intent.getSubmittedTxId() : transaction.getId(),
-        transaction == null ? null : transaction.getStatus(),
-        transaction == null ? null : transaction.getTxHash());
+        transaction == null ? intent.getSubmittedTxId() : transaction.transactionId(),
+        transaction == null ? null : transaction.status(),
+        transaction == null ? null : transaction.txHash());
   }
 
   private void audit(
       Long transactionId,
-      Web3TransactionAuditEventType eventType,
+      String eventType,
       String rpcAlias,
       java.util.Map<String, Object> detail) {
     try {

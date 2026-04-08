@@ -3,9 +3,9 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.event;
 import java.util.EnumSet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.HandleTransferFailedOnchainCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CompensateTransferFailurePort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionRewardIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.transfer.application.rollback.DomainTransferFailureCompensator;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import org.springframework.stereotype.Component;
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class QuestionRewardFailureCompensator implements DomainTransferFailureCompensator {
+public class QuestionRewardFailureCompensator implements CompensateTransferFailurePort {
 
   private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
 
@@ -23,13 +23,13 @@ public class QuestionRewardFailureCompensator implements DomainTransferFailureCo
   }
 
   @Override
-  public void compensate(Web3TransactionFailedOnchainEvent event) {
-    Long postId = parseLongOrNull(event.referenceId());
+  public void compensate(HandleTransferFailedOnchainCommand command) {
+    Long postId = parseLongOrNull(command.referenceId());
     if (postId == null) {
       log.warn(
           "QUESTION_REWARD compensation skipped: txId={}, invalid referenceId={}",
-          event.transactionId(),
-          event.referenceId());
+          command.transactionId(),
+          command.referenceId());
       return;
     }
 
@@ -43,15 +43,15 @@ public class QuestionRewardFailureCompensator implements DomainTransferFailureCo
     if (updated > 0) {
       log.info(
           "QUESTION_REWARD compensation completed: txId={}, postId={}, failureReason={}",
-          event.transactionId(),
+          command.transactionId(),
           postId,
-          event.failureReason());
+          command.failureReason());
       return;
     }
 
     log.info(
         "QUESTION_REWARD compensation no-op: txId={}, postId={} (intent not found or already finalized)",
-        event.transactionId(),
+        command.transactionId(),
         postId);
   }
 

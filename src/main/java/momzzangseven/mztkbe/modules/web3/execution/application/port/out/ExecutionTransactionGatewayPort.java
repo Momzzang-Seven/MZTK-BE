@@ -1,16 +1,15 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.port.out;
 
+import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 
 public interface ExecutionTransactionGatewayPort {
 
-  Optional<TransferTransaction> findById(Long transactionId);
+  Optional<TransactionRecord> findById(Long transactionId);
 
-  TransferTransaction createAndFlush(TransferTransaction transaction);
+  TransactionRecord createAndFlush(CreateTransactionCommand command);
 
   void markSigned(Long transactionId, long nonce, String signedRawTx, String txHash);
 
@@ -25,10 +24,26 @@ public interface ExecutionTransactionGatewayPort {
   BroadcastResult broadcast(String rawTx);
 
   record AuditCommand(
-      Long transactionId,
-      Web3TransactionAuditEventType eventType,
-      String rpcAlias,
-      Map<String, Object> detail) {}
+      Long transactionId, String eventType, String rpcAlias, Map<String, Object> detail) {}
 
   record BroadcastResult(boolean success, String txHash, String failureReason, String rpcAlias) {}
+
+  record TransactionRecord(Long transactionId, String status, String txHash) {}
+
+  record CreateTransactionCommand(
+      String idempotencyKey,
+      String referenceType,
+      String referenceId,
+      Long fromUserId,
+      Long toUserId,
+      String fromAddress,
+      String toAddress,
+      BigInteger amountWei,
+      Long nonce,
+      String status,
+      String txType,
+      String authorityAddress,
+      Long authorizationNonce,
+      String delegateTarget,
+      LocalDateTime authorizationExpiresAt) {}
 }

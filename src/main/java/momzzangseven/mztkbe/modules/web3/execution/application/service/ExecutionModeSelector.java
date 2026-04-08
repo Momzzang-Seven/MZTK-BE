@@ -13,10 +13,15 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorD
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+    prefix = "web3",
+    name = {"eip7702.enabled", "reward-token.enabled"},
+    havingValue = "true")
 /**
  * Selects execution mode for a newly created intent.
  *

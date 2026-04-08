@@ -8,23 +8,17 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraft;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.BuildQuestionRewardExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SubmitExecutionDraftPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -32,7 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CreateQuestionRewardExecutionIntentServiceTest {
 
   @Mock private BuildQuestionRewardExecutionDraftPort buildQuestionRewardExecutionDraftPort;
-  @Mock private CreateExecutionIntentUseCase createExecutionIntentUseCase;
+  @Mock private SubmitExecutionDraftPort submitExecutionDraftPort;
 
   private CreateQuestionRewardExecutionIntentService service;
 
@@ -40,32 +34,31 @@ class CreateQuestionRewardExecutionIntentServiceTest {
   void setUp() {
     service =
         new CreateQuestionRewardExecutionIntentService(
-            buildQuestionRewardExecutionDraftPort, createExecutionIntentUseCase);
+            buildQuestionRewardExecutionDraftPort, submitExecutionDraftPort);
   }
 
   @Test
   void execute_buildsDraftAndDelegates() {
     RegisterQuestionRewardIntentCommand command =
         new RegisterQuestionRewardIntentCommand(101L, 201L, 7L, 22L, BigInteger.TEN);
-    ExecutionDraft draft =
-        new ExecutionDraft(
-            ExecutionResourceType.QUESTION,
+    TransferExecutionDraft draft =
+        new TransferExecutionDraft(
+            "QUESTION",
             "101",
-            ExecutionResourceStatus.PENDING_EXECUTION,
-            momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType
-                .QNA_ANSWER_ACCEPT,
+            "PENDING_EXECUTION",
+            "QNA_ANSWER_ACCEPT",
             7L,
             22L,
             "domain:QUESTION_REWARD:101:7",
             "0xhash",
             "{}",
-            List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234")),
+            List.of(new TransferExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234")),
             true,
             "0x" + "2".repeat(40),
             3L,
             "0x" + "3".repeat(40),
             "0x" + "4".repeat(64),
-            new UnsignedTxSnapshot(
+            new TransferUnsignedTxSnapshot(
                 11155111L,
                 "0x" + "2".repeat(40),
                 "0x" + "1".repeat(40),
@@ -77,34 +70,34 @@ class CreateQuestionRewardExecutionIntentServiceTest {
                 BigInteger.valueOf(50_000_000_000L)),
             "0x" + "5".repeat(64),
             LocalDateTime.now().plusMinutes(5));
-    CreateExecutionIntentResult expected =
-        new CreateExecutionIntentResult(
-            ExecutionResourceType.QUESTION,
+    TransferExecutionIntentResult expected =
+        new TransferExecutionIntentResult(
+            "QUESTION",
             "101",
-            ExecutionResourceStatus.PENDING_EXECUTION,
+            "PENDING_EXECUTION",
             "intent-1",
-            ExecutionIntentStatus.AWAITING_SIGNATURE,
+            "AWAITING_SIGNATURE",
             LocalDateTime.now().plusMinutes(5),
-            ExecutionMode.EIP7702,
+            "EIP7702",
             2,
-            SignRequestBundle.forEip7702(
-                new SignRequestBundle.AuthorizationSignRequest(
+            TransferSignRequestBundle.forEip7702(
+                new TransferSignRequestBundle.AuthorizationSignRequest(
                     11155111L, "0x" + "3".repeat(40), 3L, "0x" + "4".repeat(64)),
-                new SignRequestBundle.SubmitSignRequest(
+                new TransferSignRequestBundle.SubmitSignRequest(
                     "0x" + "5".repeat(64),
                     LocalDateTime.now().plusMinutes(5).toEpochSecond(ZoneOffset.UTC))),
-            false);
+            false,
+            null,
+            null,
+            null);
 
     when(buildQuestionRewardExecutionDraftPort.build(command)).thenReturn(draft);
-    when(createExecutionIntentUseCase.execute(org.mockito.ArgumentMatchers.any()))
-        .thenReturn(expected);
+    when(submitExecutionDraftPort.submit(draft)).thenReturn(expected);
 
-    CreateExecutionIntentResult result = service.execute(command);
+    TransferExecutionIntentResult result = service.execute(command);
 
     assertThat(result.executionIntentId()).isEqualTo("intent-1");
-    ArgumentCaptor<CreateExecutionIntentCommand> captor =
-        ArgumentCaptor.forClass(CreateExecutionIntentCommand.class);
-    verify(createExecutionIntentUseCase).execute(captor.capture());
-    assertThat(captor.getValue().draft()).isSameAs(draft);
+    verify(buildQuestionRewardExecutionDraftPort).build(command);
+    verify(submitExecutionDraftPort).submit(draft);
   }
 }

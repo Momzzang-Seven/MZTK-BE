@@ -7,6 +7,7 @@ import java.math.BigInteger;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CancelQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.PublishQuestionRewardIntentEventPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentCanceledEvent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentRequestedEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,18 +16,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class PublishQuestionRewardIntentEventServiceTest {
 
-  @Mock private ApplicationEventPublisher eventPublisher;
+  @Mock private PublishQuestionRewardIntentEventPort publishQuestionRewardIntentEventPort;
 
   private PublishQuestionRewardIntentEventService service;
 
   @BeforeEach
   void setUp() {
-    service = new PublishQuestionRewardIntentEventService(eventPublisher);
+    service = new PublishQuestionRewardIntentEventService(publishQuestionRewardIntentEventPort);
   }
 
   @Test
@@ -38,7 +38,7 @@ class PublishQuestionRewardIntentEventServiceTest {
 
     ArgumentCaptor<QuestionRewardIntentRequestedEvent> captor =
         ArgumentCaptor.forClass(QuestionRewardIntentRequestedEvent.class);
-    verify(eventPublisher).publishEvent(captor.capture());
+    verify(publishQuestionRewardIntentEventPort).publishRequested(captor.capture());
     QuestionRewardIntentRequestedEvent event = captor.getValue();
     org.assertj.core.api.Assertions.assertThat(event.postId()).isEqualTo(101L);
   }
@@ -51,7 +51,7 @@ class PublishQuestionRewardIntentEventServiceTest {
 
     ArgumentCaptor<QuestionRewardIntentCanceledEvent> captor =
         ArgumentCaptor.forClass(QuestionRewardIntentCanceledEvent.class);
-    verify(eventPublisher).publishEvent(captor.capture());
+    verify(publishQuestionRewardIntentEventPort).publishCanceled(captor.capture());
     QuestionRewardIntentCanceledEvent event = captor.getValue();
     org.assertj.core.api.Assertions.assertThat(event.postId()).isEqualTo(101L);
     org.assertj.core.api.Assertions.assertThat(event.acceptedCommentId()).isEqualTo(1001L);

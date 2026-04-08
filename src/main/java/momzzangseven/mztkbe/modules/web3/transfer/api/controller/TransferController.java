@@ -1,14 +1,12 @@
 package momzzangseven.mztkbe.modules.web3.transfer.api.controller;
 
 import jakarta.validation.Valid;
-import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.web3.execution.api.dto.GetExecutionIntentResponseDTO;
 import momzzangseven.mztkbe.modules.web3.transfer.api.dto.CreateTransferRequestDTO;
 import momzzangseven.mztkbe.modules.web3.transfer.api.dto.CreateTransferResponseDTO;
-import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CreateTransferCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.api.dto.GetTransferResponseDTO;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetTransferQuery;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.GetTransferUseCase;
@@ -39,27 +37,18 @@ public class TransferController {
       @AuthenticationPrincipal Long userId, @Valid @RequestBody CreateTransferRequestDTO request) {
     userId = requireUserId(userId);
 
-    CreateTransferCommand command =
-        new CreateTransferCommand(
-            userId,
-            request.toUserId(),
-            request.clientRequestId(),
-            new BigInteger(request.amountWei()));
-
     return ResponseEntity.status(201)
-        .body(
-            ApiResponse.success(
-                CreateTransferResponseDTO.from(createTransferUseCase.execute(command))));
+        .body(ApiResponse.success(CreateTransferResponseDTO.from(createTransferUseCase.execute(request.toCommand(userId)))));
   }
 
   @GetMapping("/{resourceId}")
-  public ResponseEntity<ApiResponse<GetExecutionIntentResponseDTO>> get(
+  public ResponseEntity<ApiResponse<GetTransferResponseDTO>> get(
       @AuthenticationPrincipal Long userId, @PathVariable String resourceId) {
     userId = requireUserId(userId);
 
     return ResponseEntity.ok(
         ApiResponse.success(
-            GetExecutionIntentResponseDTO.from(
+            GetTransferResponseDTO.from(
                 getTransferUseCase.execute(new GetTransferQuery(userId, resourceId)))));
   }
 

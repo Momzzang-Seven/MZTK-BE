@@ -21,7 +21,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorD
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
@@ -95,9 +97,9 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
             publicId,
             command.draft().rootIdempotencyKey(),
             attemptNo,
-            command.draft().resourceType(),
+            ExecutionResourceType.valueOf(command.draft().resourceType()),
             command.draft().resourceId(),
-            command.draft().actionType(),
+            ExecutionActionType.valueOf(command.draft().actionType()),
             command.draft().requesterUserId(),
             command.draft().counterpartyUserId(),
             modeDecision.mode(),
@@ -117,7 +119,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
 
     created = executionIntentPersistencePort.create(created);
 
-    return toResult(created, command.draft().resourceStatus(), false);
+    return toResult(
+        created, ExecutionResourceStatus.valueOf(command.draft().resourceStatus()), false);
   }
 
   private CreateExecutionIntentResult tryReuseExisting(
@@ -158,7 +161,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     }
 
     if (existing.isActiveForReuse()) {
-      return toResult(existing, command.draft().resourceStatus(), true);
+      return toResult(
+          existing, ExecutionResourceStatus.valueOf(command.draft().resourceStatus()), true);
     }
 
     return null;

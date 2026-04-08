@@ -1,25 +1,24 @@
 package momzzangseven.mztkbe.modules.web3.transfer.api.dto;
 
 import java.time.LocalDateTime;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
 
 /** API response DTO returned by transfer create endpoint. */
 public record CreateTransferResponseDTO(
     ResourceDTO resource,
     ExecutionIntentDTO executionIntent,
     ExecutionDTO execution,
-    SignRequestBundle signRequest,
+    TransferSignRequestBundle signRequest,
     boolean existing) {
 
-  /** Maps shared execution create result into transfer API response contract. */
-  public static CreateTransferResponseDTO from(CreateExecutionIntentResult result) {
+  /** Maps transfer execution create result into transfer API response contract. */
+  public static CreateTransferResponseDTO from(TransferExecutionIntentResult result) {
     return new CreateTransferResponseDTO(
-        new ResourceDTO(
-            result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
+        new ResourceDTO(result.resourceType(), result.resourceId(), result.resourceStatus()),
         new ExecutionIntentDTO(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
-        new ExecutionDTO(result.mode().name(), result.signCount()),
+            result.executionIntentId(), result.executionIntentStatus(), result.expiresAt()),
+        new ExecutionDTO(result.mode(), result.signCount()),
         result.signRequest(),
         result.existing());
   }
