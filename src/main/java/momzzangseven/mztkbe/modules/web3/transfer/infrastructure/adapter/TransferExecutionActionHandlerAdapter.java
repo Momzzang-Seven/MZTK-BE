@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.application.service;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
-public class TransferExecutionActionHandler implements ExecutionActionHandlerPort {
+public class TransferExecutionActionHandlerAdapter implements ExecutionActionHandlerPort {
 
   private final ObjectMapper objectMapper;
   private final Eip7702TransactionCodecPort eip7702TransactionCodecPort;

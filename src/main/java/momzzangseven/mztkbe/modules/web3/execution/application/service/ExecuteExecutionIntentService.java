@@ -10,19 +10,18 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -30,12 +29,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentS
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.TransferTransaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
@@ -64,16 +57,9 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
-  private final TransferTransactionPersistencePort transferTransactionPersistencePort;
-  private final UpdateTransactionPort updateTransactionPort;
-  private final RecordTransactionAuditPort recordTransactionAuditPort;
-  private final LoadTreasuryKeyPort loadTreasuryKeyPort;
-  private final ReserveNoncePort reserveNoncePort;
-  private final Web3ContractPort web3ContractPort;
-  private final Eip7702AuthorizationPort eip7702AuthorizationPort;
-  private final Eip7702ChainPort eip7702ChainPort;
-  private final Eip7702TransactionCodecPort eip7702TransactionCodecPort;
-  private final VerifyExecutionSignaturePort verifyExecutionSignaturePort;
+  private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
+  private final LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  private final ExecutionEip7702GatewayPort executionEip7702GatewayPort;
   private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
   private final LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
@@ -150,32 +136,29 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     }
 
     var sponsorWalletConfig = loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig();
-    LoadTreasuryKeyPort.TreasuryKeyMaterial sponsorKey =
-        loadTreasuryKeyPort
+    LoadExecutionSponsorKeyPort.ExecutionSponsorKey sponsorKey =
+        loadExecutionSponsorKeyPort
             .loadByAlias(
                 sponsorWalletConfig.walletAlias(), sponsorWalletConfig.keyEncryptionKeyB64())
             .orElseThrow(() -> new Web3InvalidInputException("sponsor signer key is missing"));
 
-    String sponsorAddress = EvmAddress.of(sponsorKey.treasuryAddress()).value();
-    Eip7702ChainPort.AuthorizationTuple authTuple =
-        eip7702AuthorizationPort.toAuthorizationTuple(
+    String sponsorAddress = EvmAddress.of(sponsorKey.address()).value();
+    ExecutionEip7702GatewayPort.AuthorizationTuple authTuple =
+        executionEip7702GatewayPort.toAuthorizationTuple(
             loadExecutionChainIdPort.loadChainId(),
             intent.getDelegateTarget(),
             BigInteger.valueOf(intent.getAuthorityNonce()),
             command.authorizationSignature());
 
-    List<Eip7702TransactionCodecPort.BatchCall> calls =
+    List<ExecutionEip7702GatewayPort.BatchCall> calls =
         actionPlan.calls().stream()
             .map(
-                call ->
-                    new Eip7702TransactionCodecPort.BatchCall(
-                        call.toAddress(),
-                        call.valueWei(),
-                        Numeric.hexStringToByteArray(call.data())))
+                call -> new ExecutionEip7702GatewayPort.BatchCall(
+                    call.toAddress(), call.valueWei(), Numeric.hexStringToByteArray(call.data())))
             .toList();
-    String callDataHash = eip7702TransactionCodecPort.hashCalls(calls);
+    String callDataHash = executionEip7702GatewayPort.hashCalls(calls);
 
-    if (!eip7702AuthorizationPort.verifySigner(
+    if (!executionEip7702GatewayPort.verifyAuthorizationSigner(
         loadExecutionChainIdPort.loadChainId(),
         intent.getDelegateTarget(),
         BigInteger.valueOf(intent.getAuthorityNonce()),
@@ -186,7 +169,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
 
     BigInteger deadlineEpochSeconds =
         BigInteger.valueOf(intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC));
-    if (!verifyExecutionSignaturePort.verify(
+    if (!executionEip7702GatewayPort.verifyExecutionSignature(
         intent.getAuthorityAddress(),
         intent.getPublicId(),
         callDataHash,
@@ -196,21 +179,22 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     }
 
     String executeCalldata =
-        eip7702TransactionCodecPort.encodeExecute(
+        executionEip7702GatewayPort.encodeExecute(
             calls, Numeric.hexStringToByteArray(command.submitSignature()));
 
     BigInteger estimatedGas =
-        eip7702ChainPort.estimateGasWithAuthorization(
+        executionEip7702GatewayPort.estimateGasWithAuthorization(
             sponsorAddress,
             intent.getAuthorityAddress(),
             executeCalldata,
             java.util.List.of(authTuple));
-    Eip7702ChainPort.FeePlan feePlan = eip7702ChainPort.loadSponsorFeePlan();
-    long sponsorNonce = reserveNoncePort.reserveNextNonce(sponsorAddress);
+    ExecutionEip7702GatewayPort.FeePlan feePlan =
+        executionEip7702GatewayPort.loadSponsorFeePlan();
+    long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
 
-    Eip7702TransactionCodecPort.SignedPayload signedPayload =
-        eip7702TransactionCodecPort.signAndEncode(
-            new Eip7702TransactionCodecPort.SignCommand(
+    ExecutionEip7702GatewayPort.SignedPayload signedPayload =
+        executionEip7702GatewayPort.signAndEncode(
+            new ExecutionEip7702GatewayPort.SignCommand(
                 loadExecutionChainIdPort.loadChainId(),
                 BigInteger.valueOf(sponsorNonce),
                 feePlan.maxPriorityFeePerGas(),
@@ -223,7 +207,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                 sponsorKey.privateKeyHex()));
 
     TransferTransaction created =
-        transferTransactionPersistencePort.createAndFlush(
+        executionTransactionGatewayPort.createAndFlush(
             TransferTransaction.builder()
                 .idempotencyKey(intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo())
                 .referenceType(actionPlan.referenceType())
@@ -241,7 +225,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                 .authorizationExpiresAt(intent.getExpiresAt())
                 .build());
 
-    updateTransactionPort.markSigned(
+    executionTransactionGatewayPort.markSigned(
         created.getId(), sponsorNonce, signedPayload.rawTx(), signedPayload.txHash());
     executionIntentPersistencePort.update(
         intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
@@ -251,8 +235,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         null,
         java.util.Map.of("mode", intent.getMode().name()));
 
-    Web3ContractPort.BroadcastResult broadcast =
-        web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(signedPayload.rawTx()));
+    ExecutionTransactionGatewayPort.BroadcastResult broadcast =
+        executionTransactionGatewayPort.broadcast(signedPayload.rawTx());
     audit(
         created.getId(),
         Web3TransactionAuditEventType.BROADCAST,
@@ -267,7 +251,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
           broadcast.txHash() == null || broadcast.txHash().isBlank()
               ? signedPayload.txHash()
               : broadcast.txHash();
-      updateTransactionPort.markPending(created.getId(), txHash);
+      executionTransactionGatewayPort.markPending(created.getId(), txHash);
       executionIntentPersistencePort.update(
           intent.markPendingOnchain(created.getId(), LocalDateTime.now(appClock)));
       moveReservedSponsorExposureToConsumed(
@@ -287,7 +271,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         broadcast.failureReason() == null || broadcast.failureReason().isBlank()
             ? Web3TxFailureReason.BROADCAST_FAILED.code()
             : broadcast.failureReason();
-    updateTransactionPort.scheduleRetry(
+    executionTransactionGatewayPort.scheduleRetry(
         created.getId(),
         reason,
         LocalDateTime.now(appClock)
@@ -319,7 +303,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             intent.getUnsignedTxFingerprint());
 
     BigInteger currentPendingNonce =
-        eip7702ChainPort.loadPendingAccountNonce(decoded.signerAddress());
+        executionEip7702GatewayPort.loadPendingAccountNonce(decoded.signerAddress());
     if (currentPendingNonce.longValueExact() != intent.getUnsignedTxSnapshot().expectedNonce()) {
       executionIntentPersistencePort.update(
           intent.markNonceStale(
@@ -330,7 +314,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     }
 
     TransferTransaction created =
-        transferTransactionPersistencePort.createAndFlush(
+        executionTransactionGatewayPort.createAndFlush(
             TransferTransaction.builder()
                 .idempotencyKey(intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo())
                 .referenceType(actionPlan.referenceType())
@@ -345,7 +329,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                 .txType(Web3TxType.EIP1559)
                 .build());
 
-    updateTransactionPort.markSigned(
+    executionTransactionGatewayPort.markSigned(
         created.getId(),
         intent.getUnsignedTxSnapshot().expectedNonce(),
         decoded.rawTransaction(),
@@ -358,8 +342,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         null,
         java.util.Map.of("mode", intent.getMode().name()));
 
-    Web3ContractPort.BroadcastResult broadcast =
-        web3ContractPort.broadcast(new Web3ContractPort.BroadcastCommand(decoded.rawTransaction()));
+    ExecutionTransactionGatewayPort.BroadcastResult broadcast =
+        executionTransactionGatewayPort.broadcast(decoded.rawTransaction());
     audit(
         created.getId(),
         Web3TransactionAuditEventType.BROADCAST,
@@ -374,7 +358,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
           broadcast.txHash() == null || broadcast.txHash().isBlank()
               ? decoded.txHash()
               : broadcast.txHash();
-      updateTransactionPort.markPending(created.getId(), txHash);
+      executionTransactionGatewayPort.markPending(created.getId(), txHash);
       executionIntentPersistencePort.update(
           intent.markPendingOnchain(created.getId(), LocalDateTime.now(appClock)));
       actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.PENDING);
@@ -390,7 +374,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         broadcast.failureReason() == null || broadcast.failureReason().isBlank()
             ? Web3TxFailureReason.BROADCAST_FAILED.code()
             : broadcast.failureReason();
-    updateTransactionPort.scheduleRetry(
+    executionTransactionGatewayPort.scheduleRetry(
         created.getId(),
         reason,
         LocalDateTime.now(appClock)
@@ -427,7 +411,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   }
 
   private TransferTransaction loadTransaction(Long transactionId) {
-    return transferTransactionPersistencePort
+    return executionTransactionGatewayPort
         .findById(transactionId)
         .orElseThrow(
             () -> new Web3InvalidInputException("transaction not found: " + transactionId));
@@ -449,8 +433,9 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       String rpcAlias,
       java.util.Map<String, Object> detail) {
     try {
-      recordTransactionAuditPort.record(
-          new RecordTransactionAuditPort.AuditCommand(transactionId, eventType, rpcAlias, detail));
+      executionTransactionGatewayPort.recordAudit(
+          new ExecutionTransactionGatewayPort.AuditCommand(
+              transactionId, eventType, rpcAlias, detail));
     } catch (Exception e) {
       log.warn(
           "failed to record transaction audit: txId={}, eventType={}", transactionId, eventType, e);

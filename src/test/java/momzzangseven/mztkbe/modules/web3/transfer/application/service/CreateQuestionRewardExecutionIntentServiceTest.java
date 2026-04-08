@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.BuildQuestionRewardExecutionDraftPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,7 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class CreateQuestionRewardExecutionIntentServiceTest {
 
-  @Mock private QuestionRewardExecutionDraftBuilder questionRewardExecutionDraftBuilder;
+  @Mock private BuildQuestionRewardExecutionDraftPort buildQuestionRewardExecutionDraftPort;
   @Mock private CreateExecutionIntentUseCase createExecutionIntentUseCase;
 
   private CreateQuestionRewardExecutionIntentService service;
@@ -39,7 +40,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
   void setUp() {
     service =
         new CreateQuestionRewardExecutionIntentService(
-            questionRewardExecutionDraftBuilder, createExecutionIntentUseCase);
+            buildQuestionRewardExecutionDraftPort, createExecutionIntentUseCase);
   }
 
   @Test
@@ -94,7 +95,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
                     LocalDateTime.now().plusMinutes(5).toEpochSecond(ZoneOffset.UTC))),
             false);
 
-    when(questionRewardExecutionDraftBuilder.build(command)).thenReturn(draft);
+    when(buildQuestionRewardExecutionDraftPort.build(command)).thenReturn(draft);
     when(createExecutionIntentUseCase.execute(org.mockito.ArgumentMatchers.any()))
         .thenReturn(expected);
 

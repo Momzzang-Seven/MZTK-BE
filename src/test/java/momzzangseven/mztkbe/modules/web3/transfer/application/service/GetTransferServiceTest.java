@@ -10,7 +10,6 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -18,6 +17,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetTransferQuery;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferExecutionIntentPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,14 +27,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GetTransferServiceTest {
 
-  @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
+  @Mock private LoadTransferExecutionIntentPort loadTransferExecutionIntentPort;
   @Mock private GetExecutionIntentUseCase getExecutionIntentUseCase;
 
   private GetTransferService service;
 
   @BeforeEach
   void setUp() {
-    service = new GetTransferService(executionIntentPersistencePort, getExecutionIntentUseCase);
+    service = new GetTransferService(loadTransferExecutionIntentPort, getExecutionIntentUseCase);
   }
 
   @Test
@@ -55,9 +55,9 @@ class GetTransferServiceTest {
             null,
             "0xtx");
 
-    when(executionIntentPersistencePort.findLatestByRequesterAndResource(
-            7L, ExecutionResourceType.TRANSFER, "web3:TRANSFER_SEND:7:req-1"))
-        .thenReturn(Optional.of(latestIntent));
+    when(loadTransferExecutionIntentPort.findLatestExecutionIntentId(
+            7L, "web3:TRANSFER_SEND:7:req-1"))
+        .thenReturn(Optional.of("intent-latest"));
     when(getExecutionIntentUseCase.execute(new GetExecutionIntentQuery(7L, "intent-latest")))
         .thenReturn(expected);
 
@@ -65,9 +65,8 @@ class GetTransferServiceTest {
         service.execute(new GetTransferQuery(7L, "web3:TRANSFER_SEND:7:req-1"));
 
     assertThat(result).isEqualTo(expected);
-    verify(executionIntentPersistencePort)
-        .findLatestByRequesterAndResource(
-            7L, ExecutionResourceType.TRANSFER, "web3:TRANSFER_SEND:7:req-1");
+    verify(loadTransferExecutionIntentPort)
+        .findLatestExecutionIntentId(7L, "web3:TRANSFER_SEND:7:req-1");
     verify(getExecutionIntentUseCase).execute(new GetExecutionIntentQuery(7L, "intent-latest"));
   }
 
