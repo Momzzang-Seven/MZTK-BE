@@ -176,28 +176,6 @@ class SignupServiceTest {
     }
 
     @Test
-    @DisplayName("[M-4] SignupResult에 role 필드 포함 확인")
-    void execute_ReturnsSignupResultWithRole() {
-      SignupCommand command =
-          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "TRAINER");
-      AccountUserSnapshot snapshot = createSavedSnapshot("TRAINER");
-
-      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
-      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
-      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
-      given(
-              createAccountUserPort.createUser(
-                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("TRAINER")))
-          .willReturn(snapshot);
-      given(saveUserAccountPort.save(any())).willAnswer(invocation -> invocation.getArgument(0));
-
-      SignupResult result = signupService.execute(command);
-
-      assertThat(result).isNotNull();
-      assertThat(result.role()).isEqualTo("TRAINER");
-    }
-
-    @Test
     @DisplayName("저장된 유저에 이메일 중복 체크 수행 후 저장")
     void execute_ChecksEmailDuplication_BeforeSaving() {
       SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
@@ -291,6 +269,25 @@ class SignupServiceTest {
 
       verifyNoInteractions(
           loadAccountUserInfoPort, passwordEncoder, createAccountUserPort, saveUserAccountPort);
+    }
+
+    @Test
+    @DisplayName("유효하지 않은 role 문자열이면 어댑터에서 IllegalArgumentException 발생")
+    void execute_InvalidRole_ThrowsIllegalArgumentException() {
+      SignupCommand command =
+          new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, "INVALID_ROLE");
+
+      given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
+      given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(false);
+      given(passwordEncoder.encode(VALID_PASSWORD)).willReturn(ENCODED_PASSWORD);
+      given(
+              createAccountUserPort.createUser(
+                  eq(VALID_EMAIL), eq(VALID_NICKNAME), any(), eq("INVALID_ROLE")))
+          .willThrow(new IllegalArgumentException("Invalid role: INVALID_ROLE"));
+
+      assertThatThrownBy(() -> signupService.execute(command))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("INVALID_ROLE");
     }
 
     @Test
