@@ -62,7 +62,8 @@ class CreateExecutionIntentServiceTest {
   @BeforeEach
   void setUp() {
     executionModeSelector =
-        new ExecutionModeSelector(loadSponsorPolicyPort, sponsorDailyUsagePersistencePort, FIXED_CLOCK);
+        new ExecutionModeSelector(
+            loadSponsorPolicyPort, sponsorDailyUsagePersistencePort, FIXED_CLOCK);
     service =
         new CreateExecutionIntentService(
             executionIntentPersistencePort,
@@ -103,12 +104,7 @@ class CreateExecutionIntentServiceTest {
     verify(buildExecutionDigestPort).buildExecutionDigestHex(any(), any(), any(), any());
     verify(sponsorDailyUsagePersistencePort).update(any());
     verify(executionIntentPersistencePort)
-        .create(
-            argThat(
-                intent ->
-                    intent
-                        .getSponsorUsageDateKst()
-                        .equals(FIXED_DATE)));
+        .create(argThat(intent -> intent.getSponsorUsageDateKst().equals(FIXED_DATE)));
   }
 
   @Test

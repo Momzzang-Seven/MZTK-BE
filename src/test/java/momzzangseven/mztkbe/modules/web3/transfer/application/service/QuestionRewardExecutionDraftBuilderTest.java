@@ -126,7 +126,8 @@ class QuestionRewardExecutionDraftBuilderTest {
     assertThat(draft.authorityAddress()).isEqualTo("0x" + "1".repeat(40));
     assertThat(draft.counterpartyUserId()).isEqualTo(22L);
     assertThat(draft.unsignedTxSnapshot().toAddress()).isEqualTo("0x" + "3".repeat(40));
-    assertThat(draft.expiresAt()).isEqualTo(FIXED_NOW.plusSeconds(runtimeConfig.authorizationTtlSeconds()));
+    assertThat(draft.expiresAt())
+        .isEqualTo(FIXED_NOW.plusSeconds(runtimeConfig.authorizationTtlSeconds()));
   }
 
   private UserWallet wallet(Long userId, String address) {

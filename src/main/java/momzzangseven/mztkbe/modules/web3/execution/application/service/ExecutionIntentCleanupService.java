@@ -62,7 +62,8 @@ public class ExecutionIntentCleanupService {
     return new CleanupBatchResult(expiredIntentCount, deletedIntentCount, deletedUsage);
   }
 
-  private int expireAwaitingSignatureIntents(List<Long> expiredIntentIds, LocalDateTime expiredNow) {
+  private int expireAwaitingSignatureIntents(
+      List<Long> expiredIntentIds, LocalDateTime expiredNow) {
     if (expiredIntentIds.isEmpty()) {
       return 0;
     }
