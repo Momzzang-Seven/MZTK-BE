@@ -40,6 +40,10 @@ public class User {
     validateEmail(email);
     validateNickname(nickname);
 
+    if (role == UserRole.ADMIN) {
+      throw new IllegalAdminGrantException();
+    }
+
     Instant now = Instant.now();
     return User.builder()
         .email(email)
