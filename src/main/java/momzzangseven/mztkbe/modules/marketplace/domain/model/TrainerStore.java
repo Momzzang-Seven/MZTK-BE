@@ -12,14 +12,14 @@ import lombok.Getter;
  * Domain model representing a trainer's store (marketplace).
  *
  * <p>All fields are {@code private final} to enforce immutability. New instances are created
- * exclusively via {@link #create} (for new stores) or via {@code toBuilder()} (for modifications
- * such as carry-over of the existing ID during updates).
+ * exclusively via {@link #create} (for new stores) or via {@link #update} (for modifications).
+ * Both methods enforce all domain invariants.
  *
- * <p>Partial update methods (e.g., deactivate, changeBusinessHours) should be added here as
+ * <p>Additional mutation methods (e.g., deactivate, changeBusinessHours) should be added here as
  * business requirements emerge, NOT in the service layer.
  */
 @Getter
-@Builder(toBuilder = true)
+@Builder
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class TrainerStore {
 
@@ -114,6 +114,59 @@ public class TrainerStore {
         .homepageUrl(homepageUrl)
         .instagramUrl(instagramUrl)
         .xProfileUrl(xProfileUrl)
+        .build();
+  }
+
+  /**
+   * Update this store with new values while preserving identity (id, trainerId, createdAt).
+   *
+   * <p>All domain validations are re-applied to ensure business invariants are never bypassed.
+   *
+   * @param storeName new store name
+   * @param address new address
+   * @param detailAddress new detail address
+   * @param latitude new latitude
+   * @param longitude new longitude
+   * @param phoneNumber new phone number
+   * @param homepageUrl new homepage URL
+   * @param instagramUrl new Instagram URL
+   * @param xProfileUrl new X (Twitter) profile URL
+   * @return new TrainerStore instance with updated values and preserved identity
+   */
+  public TrainerStore update(
+      String storeName,
+      String address,
+      String detailAddress,
+      Double latitude,
+      Double longitude,
+      String phoneNumber,
+      String homepageUrl,
+      String instagramUrl,
+      String xProfileUrl) {
+
+    validateStoreName(storeName);
+    validateAddress(address);
+    validateDetailAddress(detailAddress);
+    validateCoordinates(latitude, longitude);
+    validatePhoneNumber(phoneNumber);
+    validateUrl("Homepage URL", homepageUrl, MAX_URL_LENGTH);
+    validateUrl("Instagram URL", instagramUrl, MAX_URL_LENGTH);
+    validateUrl("X Profile URL", xProfileUrl, MAX_URL_LENGTH);
+
+    return TrainerStore.builder()
+        .id(this.id)
+        .trainerId(this.trainerId)
+        .storeName(storeName)
+        .address(address)
+        .detailAddress(detailAddress)
+        .latitude(latitude)
+        .longitude(longitude)
+        .phoneNumber(phoneNumber)
+        .homepageUrl(homepageUrl)
+        .instagramUrl(instagramUrl)
+        .xProfileUrl(xProfileUrl)
+        .createdAt(this.createdAt)
+        .updatedAt(this.updatedAt)
         .build();
   }
 
