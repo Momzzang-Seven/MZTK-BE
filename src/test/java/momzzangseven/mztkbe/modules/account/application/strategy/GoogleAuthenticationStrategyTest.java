@@ -34,7 +34,8 @@ class GoogleAuthenticationStrategyTest {
   @Test
   void authenticate_returnsExistingUser_whenOutcomeIsExisting() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -46,7 +47,12 @@ class GoogleAuthenticationStrategyTest {
     when(googleAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
     when(googleAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
     when(socialLoginAccountService.loginOrRegister(
-            AuthProvider.GOOGLE, "google-sub", "google@example.com", "google-user", "https://img"))
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            null))
         .thenReturn(SocialLoginAccountOutcome.existing(snapshot()));
 
     AuthenticatedUser authenticated = strategy.authenticate(context);
@@ -58,7 +64,8 @@ class GoogleAuthenticationStrategyTest {
   @Test
   void authenticate_returnsNewUser_whenOutcomeIsNew() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -70,7 +77,12 @@ class GoogleAuthenticationStrategyTest {
     when(googleAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
     when(googleAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
     when(socialLoginAccountService.loginOrRegister(
-            AuthProvider.GOOGLE, "google-sub", "google@example.com", "google-user", "https://img"))
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            null))
         .thenReturn(SocialLoginAccountOutcome.newUser(snapshot()));
 
     AuthenticatedUser authenticated = strategy.authenticate(context);
@@ -81,7 +93,8 @@ class GoogleAuthenticationStrategyTest {
   @Test
   void authenticate_throws_whenEmailIsMissing() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")

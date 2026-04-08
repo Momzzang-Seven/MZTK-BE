@@ -13,7 +13,8 @@ class AuthenticationContextTest {
   @DisplayName("from() maps all fields from LoginCommand")
   void from_mapsAllFields() {
     LoginCommand command =
-        new LoginCommand(AuthProvider.GOOGLE, "user@example.com", "pw", "auth-code", "redirect");
+        new LoginCommand(
+            AuthProvider.GOOGLE, "user@example.com", "pw", "auth-code", "redirect", null);
 
     AuthenticationContext context = AuthenticationContext.from(command);
 
@@ -28,11 +29,12 @@ class AuthenticationContextTest {
   @DisplayName("isValidForLocal returns true only when email and password are non-blank")
   void isValidForLocal_checksNonBlankEmailAndPassword() {
     AuthenticationContext valid =
-        new AuthenticationContext(AuthProvider.LOCAL, "user@example.com", "password", null, null);
+        new AuthenticationContext(
+            AuthProvider.LOCAL, "user@example.com", "password", null, null, null);
     AuthenticationContext blankEmail =
-        new AuthenticationContext(AuthProvider.LOCAL, " ", "password", null, null);
+        new AuthenticationContext(AuthProvider.LOCAL, " ", "password", null, null, null);
     AuthenticationContext blankPassword =
-        new AuthenticationContext(AuthProvider.LOCAL, "user@example.com", " ", null, null);
+        new AuthenticationContext(AuthProvider.LOCAL, "user@example.com", " ", null, null, null);
 
     assertThat(valid.isValidForLocal()).isTrue();
     assertThat(blankEmail.isValidForLocal()).isFalse();
@@ -43,9 +45,9 @@ class AuthenticationContextTest {
   @DisplayName("isValidForSocial returns true only when authorization code is non-blank")
   void isValidForSocial_checksAuthorizationCode() {
     AuthenticationContext valid =
-        new AuthenticationContext(AuthProvider.KAKAO, null, null, "code", null);
+        new AuthenticationContext(AuthProvider.KAKAO, null, null, "code", null, null);
     AuthenticationContext blank =
-        new AuthenticationContext(AuthProvider.KAKAO, null, null, "   ", null);
+        new AuthenticationContext(AuthProvider.KAKAO, null, null, "   ", null, null);
 
     assertThat(valid.isValidForSocial()).isTrue();
     assertThat(blank.isValidForSocial()).isFalse();

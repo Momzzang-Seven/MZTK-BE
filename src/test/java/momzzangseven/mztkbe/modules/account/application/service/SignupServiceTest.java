@@ -62,7 +62,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("정상 입력으로 회원가입 시 userId 반환")
     void execute_ValidCommand_ReturnsSignupResult() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
@@ -85,7 +85,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("회원가입 시 비밀번호가 BCrypt로 인코딩되어 저장")
     void execute_ValidCommand_EncodesPassword() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
@@ -106,7 +106,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("저장된 유저에 이메일 중복 체크 수행 후 저장")
     void execute_ChecksEmailDuplication_BeforeSaving() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       AccountUserSnapshot snapshot = createSavedSnapshot();
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
@@ -140,7 +140,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("이메일 중복 시 DuplicateEmailException 발생")
     void execute_DuplicateEmail_ThrowsDuplicateEmailException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
 
       given(loadUserAccountPort.findDeletedByEmail(VALID_EMAIL)).willReturn(Optional.empty());
       given(loadAccountUserInfoPort.existsByEmail(VALID_EMAIL)).willReturn(true);
@@ -154,7 +154,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("탈퇴 계정 이메일로 회원가입 시 UserWithdrawnException 발생")
     void execute_WithdrawnEmail_ThrowsUserWithdrawnException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
       UserAccount deletedAccount =
           UserAccount.builder()
               .id(1L)
@@ -176,7 +176,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("이메일이 null이면 validate()에서 예외 발생")
     void execute_NullEmail_ThrowsIllegalArgumentException() {
-      SignupCommand command = new SignupCommand(null, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(null, VALID_PASSWORD, VALID_NICKNAME, null);
 
       assertThatThrownBy(() -> signupService.execute(command))
           .isInstanceOf(IllegalArgumentException.class)
@@ -189,7 +189,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("비밀번호가 null이면 validate()에서 예외 발생")
     void execute_NullPassword_ThrowsIllegalArgumentException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, null, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, null, VALID_NICKNAME, null);
 
       assertThatThrownBy(() -> signupService.execute(command))
           .isInstanceOf(IllegalArgumentException.class)
@@ -202,7 +202,7 @@ class SignupServiceTest {
     @Test
     @DisplayName("닉네임이 null이면 validate()에서 예외 발생")
     void execute_NullNickname_ThrowsIllegalArgumentException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, null);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, null, null);
 
       assertThatThrownBy(() -> signupService.execute(command))
           .isInstanceOf(IllegalArgumentException.class)

@@ -64,7 +64,7 @@ class SocialLoginAccountServiceTest {
 
       SocialLoginAccountOutcome outcome =
           service.loginOrRegister(
-              AuthProvider.KAKAO, "kakao123", "kakao@example.com", "nick", null);
+              AuthProvider.KAKAO, "kakao123", "kakao@example.com", "nick", null, null);
 
       assertThat(outcome.isNewUser()).isFalse();
       assertThat(outcome.userSnapshot().userId()).isEqualTo(1L);
@@ -94,7 +94,7 @@ class SocialLoginAccountServiceTest {
       assertThatThrownBy(
               () ->
                   service.loginOrRegister(
-                      AuthProvider.KAKAO, "kakao123", "kakao@example.com", "nick", null))
+                      AuthProvider.KAKAO, "kakao123", "kakao@example.com", "nick", null, null))
           .isInstanceOf(UserWithdrawnException.class);
     }
   }
@@ -117,7 +117,7 @@ class SocialLoginAccountServiceTest {
 
       SocialLoginAccountOutcome outcome =
           service.loginOrRegister(
-              AuthProvider.KAKAO, "kakao123", "kakao@example.com", "kakaoUser", null);
+              AuthProvider.KAKAO, "kakao123", "kakao@example.com", "kakaoUser", null, null);
 
       assertThat(outcome.isNewUser()).isTrue();
       assertThat(outcome.userSnapshot().userId()).isEqualTo(1L);
@@ -141,7 +141,7 @@ class SocialLoginAccountServiceTest {
       assertThatThrownBy(
               () ->
                   service.loginOrRegister(
-                      AuthProvider.GOOGLE, "google123", "existing@example.com", "nick", null))
+                      AuthProvider.GOOGLE, "google123", "existing@example.com", "nick", null, null))
           .isInstanceOf(InvalidCredentialsException.class);
     }
 
@@ -165,7 +165,12 @@ class SocialLoginAccountServiceTest {
       assertThatThrownBy(
               () ->
                   service.loginOrRegister(
-                      AuthProvider.GOOGLE, "google456", "withdrawn@example.com", "nick", null))
+                      AuthProvider.GOOGLE,
+                      "google456",
+                      "withdrawn@example.com",
+                      "nick",
+                      null,
+                      null))
           .isInstanceOf(UserWithdrawnException.class);
     }
   }
