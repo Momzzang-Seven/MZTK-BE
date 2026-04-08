@@ -19,8 +19,8 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevel
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level.LevelRewardMztkAdapter;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level.LevelRewardMztkAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

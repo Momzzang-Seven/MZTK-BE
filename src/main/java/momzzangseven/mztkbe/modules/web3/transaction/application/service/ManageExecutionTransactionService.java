@@ -19,9 +19,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceT
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
