@@ -24,8 +24,14 @@ public class LoginRequestDTO {
 
   private String redirectUri;
 
+  /**
+   * Optional role selection. Uppercase only: "USER" or "TRAINER". Applied only to new social
+   * signups; ignored for existing users. Defaults to "USER" if omitted.
+   */
+  private String role;
+
   /** Convert this request to an application-layer command. */
   public LoginCommand toCommand() {
-    return new LoginCommand(provider, email, password, authorizationCode, redirectUri);
+    return new LoginCommand(provider, email, password, authorizationCode, redirectUri, role);
   }
 }

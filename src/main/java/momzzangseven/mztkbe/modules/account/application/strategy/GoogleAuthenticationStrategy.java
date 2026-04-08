@@ -38,7 +38,8 @@ public class GoogleAuthenticationStrategy implements AuthenticationStrategy {
             info.getProviderUserId(),
             info.getEmail(),
             info.getNickname(),
-            info.getProfileImageUrl());
+            info.getProfileImageUrl(),
+            context.role());
 
     return outcome.isNewUser()
         ? AuthenticatedUser.newUser(outcome.userSnapshot())
