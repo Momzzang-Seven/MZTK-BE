@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.adapter;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Component;
 public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardIntentPersistencePort {
 
   private final QuestionRewardIntentJpaRepository repository;
+  private final Clock appClock;
 
   @Override
   public Optional<QuestionRewardIntent> findByPostId(Long postId) {
@@ -32,7 +35,8 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
     if (intent.getId() != null) {
       throw new Web3InvalidInputException("create requires id to be null");
     }
-    return toDomain(repository.save(toEntity(intent)));
+    LocalDateTime now = LocalDateTime.now(appClock);
+    return toDomain(repository.save(toEntity(intent, now)));
   }
 
   @Override
@@ -45,6 +49,7 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
             .findById(intent.getId())
             .orElseThrow(() -> new Web3InvalidInputException("question reward intent not found"));
     merge(intent, entity);
+    entity.setUpdatedAt(LocalDateTime.now(appClock));
     return toDomain(repository.save(entity));
   }
 
@@ -56,9 +61,11 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
     return repository.updateStatusIfCurrentIn(postId, toStatus, fromStatuses);
   }
 
-  private QuestionRewardIntentEntity toEntity(QuestionRewardIntent domain) {
+  private QuestionRewardIntentEntity toEntity(QuestionRewardIntent domain, LocalDateTime now) {
     QuestionRewardIntentEntity entity = QuestionRewardIntentEntity.builder().build();
     merge(domain, entity);
+    entity.setCreatedAt(domain.getCreatedAt() != null ? domain.getCreatedAt() : now);
+    entity.setUpdatedAt(domain.getUpdatedAt() != null ? domain.getUpdatedAt() : now);
     return entity;
   }
 
@@ -69,6 +76,8 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
     entity.setToUserId(domain.getToUserId());
     entity.setAmountWei(domain.getAmountWei());
     entity.setStatus(domain.getStatus());
+    entity.setLastExecutionIntentErrorCode(domain.getLastExecutionIntentErrorCode());
+    entity.setLastExecutionIntentErrorReason(domain.getLastExecutionIntentErrorReason());
   }
 
   private QuestionRewardIntent toDomain(QuestionRewardIntentEntity entity) {
@@ -80,6 +89,8 @@ public class QuestionRewardIntentPersistenceAdapter implements QuestionRewardInt
         .toUserId(entity.getToUserId())
         .amountWei(entity.getAmountWei())
         .status(entity.getStatus())
+        .lastExecutionIntentErrorCode(entity.getLastExecutionIntentErrorCode())
+        .lastExecutionIntentErrorReason(entity.getLastExecutionIntentErrorReason())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
         .build();

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.RewardFailedOnchainException;
@@ -19,10 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+/** Persists level-up reward transaction intents and handles idempotent create semantics. */
 public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
 
   private final Web3TransactionJpaRepository repository;
+  private final Clock appClock;
 
+  /** Creates or reuses a level-up reward transaction intent row by reference/idempotency key. */
   @Override
   @Transactional
   public Web3Transaction saveLevelUpRewardIntent(CreateLevelUpRewardTxIntentCommand command) {
@@ -56,7 +60,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
                 command.fromAddress().value(),
                 command.toAddress().value(),
                 command.amountWei(),
-                LocalDateTime.now()));
+                LocalDateTime.now(appClock)));
 
     try {
       return toDomain(repository.saveAndFlush(created));

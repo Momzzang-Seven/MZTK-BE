@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -20,10 +22,17 @@ import org.web3j.protocol.http.HttpService;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+/**
+ * Reserves sequential nonce values for sponsor wallet addresses.
+ *
+ * <p>The adapter keeps a DB-backed nonce cursor and synchronizes it with on-chain pending nonce
+ * when local state lags behind.
+ */
 public class NonceStatePersistenceAdapter implements ReserveNoncePort {
 
   private final Web3NonceStateJpaRepository repository;
   private final Web3CoreProperties web3CoreProperties;
+  private final Clock appClock;
 
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
@@ -44,6 +53,7 @@ public class NonceStatePersistenceAdapter implements ReserveNoncePort {
     }
   }
 
+  /** Reserves one nonce for the given sender address under row-level lock. */
   @Override
   @Transactional
   public long reserveNextNonce(String fromAddress) {
@@ -61,6 +71,7 @@ public class NonceStatePersistenceAdapter implements ReserveNoncePort {
                     Web3NonceStateEntity.builder()
                         .fromAddress(normalizedAddress)
                         .nextNonce(0L)
+                        .updatedAt(LocalDateTime.now(appClock))
                         .build());
 
     // If the local nonce tracker is behind the chain (e.g. DB reset, external txs),
@@ -77,6 +88,7 @@ public class NonceStatePersistenceAdapter implements ReserveNoncePort {
 
     long reservedNonce = state.getNextNonce();
     state.setNextNonce(reservedNonce + 1);
+    state.setUpdatedAt(LocalDateTime.now(appClock));
     repository.save(state);
 
     return reservedNonce;

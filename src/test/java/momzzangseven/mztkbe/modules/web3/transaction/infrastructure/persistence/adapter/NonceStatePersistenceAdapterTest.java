@@ -7,6 +7,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
@@ -27,6 +31,12 @@ import org.web3j.protocol.core.methods.response.EthGetTransactionCount;
 @ExtendWith(MockitoExtension.class)
 class NonceStatePersistenceAdapterTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private Web3NonceStateJpaRepository repository;
   @Mock private Web3CoreProperties web3CoreProperties;
 
@@ -34,7 +44,7 @@ class NonceStatePersistenceAdapterTest {
 
   @BeforeEach
   void setUp() {
-    adapter = new NonceStatePersistenceAdapter(repository, web3CoreProperties);
+    adapter = new NonceStatePersistenceAdapter(repository, web3CoreProperties, FIXED_CLOCK);
   }
 
   @Test
@@ -62,6 +72,7 @@ class NonceStatePersistenceAdapterTest {
 
     assertThat(reserved).isEqualTo(5L);
     assertThat(entity.getNextNonce()).isEqualTo(6L);
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
     verify(repository).save(entity);
   }
 
@@ -77,6 +88,7 @@ class NonceStatePersistenceAdapterTest {
     assertThat(reserved).isEqualTo(0L);
     assertThat(captor.getValue().getFromAddress()).isEqualTo("0x" + "b".repeat(40));
     assertThat(captor.getValue().getNextNonce()).isEqualTo(1L);
+    assertThat(captor.getValue().getUpdatedAt()).isEqualTo(FIXED_NOW);
   }
 
   @Test

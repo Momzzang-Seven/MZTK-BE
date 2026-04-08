@@ -8,7 +8,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
-import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
 import momzzangseven.mztkbe.global.error.level.RewardTreasuryAddressInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -16,12 +15,12 @@ import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
 import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTxIntentCommand;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SaveTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level.LevelRewardMztkAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +34,8 @@ class LevelRewardMztkAdapterTest {
   private static final String TREASURY = "0x" + "a".repeat(40);
   private static final String TO_WALLET = "0x" + "b".repeat(40);
 
-  @Mock private SaveTransactionPort saveTransactionPort;
+  @Mock
+  private CreateLevelUpRewardTransactionIntentUseCase createLevelUpRewardTransactionIntentUseCase;
 
   private TransferRewardTokenProperties properties;
   private LevelRewardMztkAdapter adapter;
@@ -45,13 +45,15 @@ class LevelRewardMztkAdapterTest {
     properties = new TransferRewardTokenProperties();
     properties.setDecimals(18);
     properties.getTreasury().setTreasuryAddress(TREASURY);
-    adapter = new LevelRewardMztkAdapter(saveTransactionPort, properties);
+    adapter = new LevelRewardMztkAdapter(createLevelUpRewardTransactionIntentUseCase, properties);
   }
 
   @Test
   void reward_mapsSucceededTransactionToSuccessResult() {
-    when(saveTransactionPort.saveLevelUpRewardIntent(any(CreateLevelUpRewardTxIntentCommand.class)))
-        .thenReturn(web3Tx(Web3TxStatus.SUCCEEDED, "0x" + "c".repeat(64), null));
+    when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
+        .thenReturn(
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.SUCCEEDED, "0x" + "c".repeat(64), null));
 
     RewardMztkResult result = adapter.reward(validCommand(3));
 
@@ -61,8 +63,10 @@ class LevelRewardMztkAdapterTest {
 
   @Test
   void reward_mapsUnconfirmedTransactionToUnconfirmedResult() {
-    when(saveTransactionPort.saveLevelUpRewardIntent(any(CreateLevelUpRewardTxIntentCommand.class)))
-        .thenReturn(web3Tx(Web3TxStatus.UNCONFIRMED, "0x" + "c".repeat(64), "TIMEOUT"));
+    when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
+        .thenReturn(
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.UNCONFIRMED, "0x" + "c".repeat(64), "TIMEOUT"));
 
     RewardMztkResult result = adapter.reward(validCommand(2));
 
@@ -72,8 +76,10 @@ class LevelRewardMztkAdapterTest {
 
   @Test
   void reward_mapsOtherStatusUsingNameMapping() {
-    when(saveTransactionPort.saveLevelUpRewardIntent(any(CreateLevelUpRewardTxIntentCommand.class)))
-        .thenReturn(web3Tx(Web3TxStatus.PENDING, "0x" + "c".repeat(64), null));
+    when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
+        .thenReturn(
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.PENDING, "0x" + "c".repeat(64), null));
 
     RewardMztkResult result = adapter.reward(validCommand(1));
 
@@ -83,28 +89,32 @@ class LevelRewardMztkAdapterTest {
   @Test
   void reward_convertsRewardToWei_usingConfiguredDecimals() {
     properties.setDecimals(2);
-    when(saveTransactionPort.saveLevelUpRewardIntent(any(CreateLevelUpRewardTxIntentCommand.class)))
-        .thenReturn(web3Tx(Web3TxStatus.CREATED, null, "QUEUED"));
+    when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
+        .thenReturn(
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.CREATED, null, "QUEUED"));
 
     adapter.reward(validCommand(7));
 
-    ArgumentCaptor<CreateLevelUpRewardTxIntentCommand> captor =
-        ArgumentCaptor.forClass(CreateLevelUpRewardTxIntentCommand.class);
-    verify(saveTransactionPort).saveLevelUpRewardIntent(captor.capture());
+    ArgumentCaptor<CreateLevelUpRewardTransactionIntentCommand> captor =
+        ArgumentCaptor.forClass(CreateLevelUpRewardTransactionIntentCommand.class);
+    verify(createLevelUpRewardTransactionIntentUseCase).execute(captor.capture());
     assertThat(captor.getValue().amountWei()).isEqualTo(BigInteger.valueOf(700));
   }
 
   @Test
   void reward_usesZeroScale_whenDecimalsConfiguredNegative() {
     properties.setDecimals(-3);
-    when(saveTransactionPort.saveLevelUpRewardIntent(any(CreateLevelUpRewardTxIntentCommand.class)))
-        .thenReturn(web3Tx(Web3TxStatus.CREATED, null, "QUEUED"));
+    when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
+        .thenReturn(
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.CREATED, null, "QUEUED"));
 
     adapter.reward(validCommand(7));
 
-    ArgumentCaptor<CreateLevelUpRewardTxIntentCommand> captor =
-        ArgumentCaptor.forClass(CreateLevelUpRewardTxIntentCommand.class);
-    verify(saveTransactionPort).saveLevelUpRewardIntent(captor.capture());
+    ArgumentCaptor<CreateLevelUpRewardTransactionIntentCommand> captor =
+        ArgumentCaptor.forClass(CreateLevelUpRewardTransactionIntentCommand.class);
+    verify(createLevelUpRewardTransactionIntentUseCase).execute(captor.capture());
     assertThat(captor.getValue().amountWei()).isEqualTo(BigInteger.valueOf(7));
   }
 
@@ -229,31 +239,5 @@ class LevelRewardMztkAdapterTest {
 
   private RewardMztkCommand validCommand(int reward) {
     return new RewardMztkCommand(1L, reward, 77L, EvmAddress.of(TO_WALLET));
-  }
-
-  private Web3Transaction web3Tx(Web3TxStatus status, String txHash, String failureReason) {
-    LocalDateTime now = LocalDateTime.now();
-    return Web3Transaction.reconstitute(
-        11L,
-        "idem-1",
-        Web3ReferenceType.LEVEL_UP_REWARD,
-        "77",
-        1L,
-        2L,
-        TREASURY,
-        TO_WALLET,
-        BigInteger.ONE,
-        1L,
-        status,
-        txHash,
-        now,
-        now,
-        now,
-        "0xdead",
-        failureReason,
-        null,
-        null,
-        now,
-        now);
   }
 }
