@@ -6,9 +6,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SubmitExecutionDraftPort;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnBean(CreateExecutionIntentUseCase.class)
 @RequiredArgsConstructor
 /** Adapter that bridges transfer draft submission to shared execution create use case. */
 public class SubmitExecutionIntentAdapter implements SubmitExecutionDraftPort {
