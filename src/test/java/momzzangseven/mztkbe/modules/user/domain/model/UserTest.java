@@ -38,6 +38,13 @@ class UserTest {
   }
 
   @Test
+  @DisplayName("[M-13] create: ADMIN role로 생성 시 IllegalAdminGrantException 발생")
+  void create_withAdminRole_throwsIllegalAdminGrantException() {
+    assertThatThrownBy(() -> User.create("admin@example.com", "adminUser", null, UserRole.ADMIN))
+        .isInstanceOf(IllegalAdminGrantException.class);
+  }
+
+  @Test
   @DisplayName("[M-34] create: 이메일 형식 잘못된 경우 IllegalArgumentException")
   void create_withInvalidEmail_throws() {
     assertThatThrownBy(() -> User.create("invalid-email", "test", null, UserRole.USER))

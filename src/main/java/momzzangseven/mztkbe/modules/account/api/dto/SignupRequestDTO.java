@@ -50,8 +50,14 @@ public class SignupRequestDTO {
   @Size(min = 2, max = 50, message = "Nickname must be between 2 and 50 characters")
   private String nickname;
 
+  /**
+   * Optional role selection. Uppercase only: "USER" or "TRAINER". Defaults to "USER" if omitted.
+   * "ADMIN" is rejected by the domain layer.
+   */
+  private String role;
+
   /** Convert this request to an application-layer command. */
   public SignupCommand toCommand() {
-    return new SignupCommand(email, password, nickname);
+    return new SignupCommand(email, password, nickname, role);
   }
 }

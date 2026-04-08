@@ -12,7 +12,8 @@ public record LoginCommand(
     String email,
     String password,
     String authorizationCode,
-    String redirectUri) {
+    String redirectUri,
+    String role) {
 
   /**
    * Validate command based on provider.

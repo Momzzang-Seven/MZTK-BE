@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.account.application.strategy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import momzzangseven.mztkbe.modules.account.application.dto.AccountUserSnapshot;
@@ -34,7 +35,8 @@ class GoogleAuthenticationStrategyTest {
   @Test
   void authenticate_returnsExistingUser_whenOutcomeIsExisting() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -46,7 +48,12 @@ class GoogleAuthenticationStrategyTest {
     when(googleAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
     when(googleAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
     when(socialLoginAccountService.loginOrRegister(
-            AuthProvider.GOOGLE, "google-sub", "google@example.com", "google-user", "https://img"))
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            null))
         .thenReturn(SocialLoginAccountOutcome.existing(snapshot()));
 
     AuthenticatedUser authenticated = strategy.authenticate(context);
@@ -58,7 +65,8 @@ class GoogleAuthenticationStrategyTest {
   @Test
   void authenticate_returnsNewUser_whenOutcomeIsNew() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -70,7 +78,12 @@ class GoogleAuthenticationStrategyTest {
     when(googleAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
     when(googleAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
     when(socialLoginAccountService.loginOrRegister(
-            AuthProvider.GOOGLE, "google-sub", "google@example.com", "google-user", "https://img"))
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            null))
         .thenReturn(SocialLoginAccountOutcome.newUser(snapshot()));
 
     AuthenticatedUser authenticated = strategy.authenticate(context);
@@ -79,9 +92,82 @@ class GoogleAuthenticationStrategyTest {
   }
 
   @Test
+  void authenticate_passesTrainerRoleToService_whenContextHasTrainerRole() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", "TRAINER");
+    GoogleUserInfo userInfo =
+        GoogleUserInfo.builder()
+            .providerUserId("google-sub")
+            .email("google@example.com")
+            .nickname("google-user")
+            .profileImageUrl("https://img")
+            .build();
+
+    when(googleAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
+    when(googleAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
+    when(socialLoginAccountService.loginOrRegister(
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            "TRAINER"))
+        .thenReturn(SocialLoginAccountOutcome.newUser(snapshot()));
+
+    strategy.authenticate(context);
+
+    verify(socialLoginAccountService)
+        .loginOrRegister(
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            "TRAINER");
+  }
+
+  @Test
+  void authenticate_passesNullRoleToService_whenContextHasNoRole() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
+    GoogleUserInfo userInfo =
+        GoogleUserInfo.builder()
+            .providerUserId("google-sub")
+            .email("google@example.com")
+            .nickname("google-user")
+            .profileImageUrl("https://img")
+            .build();
+
+    when(googleAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
+    when(googleAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
+    when(socialLoginAccountService.loginOrRegister(
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            null))
+        .thenReturn(SocialLoginAccountOutcome.existing(snapshot()));
+
+    strategy.authenticate(context);
+
+    verify(socialLoginAccountService)
+        .loginOrRegister(
+            AuthProvider.GOOGLE,
+            "google-sub",
+            "google@example.com",
+            "google-user",
+            "https://img",
+            null);
+  }
+
+  @Test
   void authenticate_throws_whenEmailIsMissing() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")

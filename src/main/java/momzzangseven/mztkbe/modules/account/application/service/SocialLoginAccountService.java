@@ -41,16 +41,19 @@ public class SocialLoginAccountService {
       String providerUserId,
       String email,
       String nickname,
-      String profileImageUrl) {
+      String profileImageUrl,
+      String role) {
 
     Optional<UserAccount> existing =
         loadUserAccountPort.findByProviderAndProviderUserId(provider, providerUserId);
 
+    // If users_account row already exists -> login phase. ignore the role field of command.
     if (existing.isPresent()) {
       return handleExistingAccount(existing.get(), provider, providerUserId);
     }
 
-    return registerNewUser(provider, providerUserId, email, nickname, profileImageUrl);
+    // When register new user, must consider role field.
+    return registerNewUser(provider, providerUserId, email, nickname, profileImageUrl, role);
   }
 
   /**
@@ -87,11 +90,13 @@ public class SocialLoginAccountService {
       String providerUserId,
       String email,
       String nickname,
-      String profileImageUrl) {
+      String profileImageUrl,
+      String role) {
     verifyEmailAvailable(email);
     String resolvedNickname = resolveNickname(authProvider, nickname);
+    String effectiveRole = resolveRole(role);
     AccountUserSnapshot snapshot =
-        createAccountUserPort.createUser(email, resolvedNickname, profileImageUrl, DEFAULT_ROLE);
+        createAccountUserPort.createUser(email, resolvedNickname, profileImageUrl, effectiveRole);
     saveUserAccountPort.save(
         UserAccount.createSocial(snapshot.userId(), authProvider, providerUserId));
     return SocialLoginAccountOutcome.newUser(snapshot);
@@ -113,6 +118,11 @@ public class SocialLoginAccountService {
     if (loadAccountUserInfoPort.existsByEmail(email)) {
       throw new InvalidCredentialsException("Invalid social login");
     }
+  }
+
+  /** Returns the given role or falls back to {@code "USER"} when {@code null}. */
+  private static String resolveRole(String role) {
+    return role == null ? DEFAULT_ROLE : role;
   }
 
   /** Returns a non-blank nickname, generating a random one if the caller supplied none. */
