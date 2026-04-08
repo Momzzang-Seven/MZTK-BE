@@ -1,31 +1,50 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class GetPostService implements GetPostUseCase {
+public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
 
   private final PostPersistencePort postPersistencePort;
   private final LoadTagPort loadTagPort;
   private final LoadPostWriterPort loadPostWriterPort;
   private final LoadPostImagesPort loadPostImagesPort;
+  private final PostLikePersistencePort postLikePersistencePort;
 
   @Override
-  public PostDetailResult getPost(Long postId) {
+  public Optional<GetPostContextUseCase.PostContext> getPostContext(Long postId) {
+    return postPersistencePort
+        .loadPost(postId)
+        .map(
+            post ->
+                new GetPostContextUseCase.PostContext(
+                    post.getId(),
+                    post.getUserId(),
+                    Boolean.TRUE.equals(post.getIsSolved()),
+                    PostType.QUESTION.equals(post.getType())));
+  }
+
+  @Override
+  public PostDetailResult getPost(Long postId, Long requesterUserId) {
     Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
 
     List<String> tags = loadTagPort.findTagNamesByPostId(postId);
@@ -41,6 +60,12 @@ public class GetPostService implements GetPostUseCase {
 
     List<String> imageUrls = imageResult.slots().stream().map(slot -> slot.imageUrl()).toList();
 
-    return PostDetailResult.fromDomain(post, nickname, profileImageUrl, imageUrls);
+    long likeCount = postLikePersistencePort.countByTarget(PostLikeTargetType.POST, postId);
+    boolean liked =
+        requesterUserId != null
+            && postLikePersistencePort.exists(PostLikeTargetType.POST, postId, requesterUserId);
+
+    return PostDetailResult.fromDomain(
+        post, likeCount, liked, nickname, profileImageUrl, imageUrls);
   }
 }

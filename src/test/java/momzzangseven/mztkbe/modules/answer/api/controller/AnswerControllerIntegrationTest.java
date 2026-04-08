@@ -17,6 +17,7 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
@@ -80,12 +81,22 @@ class AnswerControllerIntegrationTest {
 
   @MockitoBean private LoadAnswerImagesPort loadAnswerImagesPort;
 
+  @MockitoBean private LoadAnswerLikePort loadAnswerLikePort;
+
   @BeforeEach
   void setUp() {
     org.mockito.BDDMockito.given(
             loadAnswerImagesPort.loadImagesByAnswerIds(
                 org.mockito.ArgumentMatchers.anyCollection()))
         .willReturn(Map.of());
+    org.mockito.BDDMockito.given(
+            loadAnswerLikePort.countLikeByAnswerIds(org.mockito.ArgumentMatchers.anyCollection()))
+        .willReturn(Map.of());
+    org.mockito.BDDMockito.given(
+            loadAnswerLikePort.loadLikedAnswerIds(
+                org.mockito.ArgumentMatchers.anyCollection(),
+                org.mockito.ArgumentMatchers.nullable(Long.class)))
+        .willReturn(java.util.Set.of());
   }
 
   @Nested
@@ -123,6 +134,10 @@ class AnswerControllerIntegrationTest {
                   answerId,
                   new AnswerImageResult(
                       List.of(new AnswerImageSlot(1L, "https://example.com/answer-1.png")))));
+      org.mockito.BDDMockito.given(loadAnswerLikePort.countLikeByAnswerIds(List.of(answerId)))
+          .willReturn(Map.of(answerId, 3L));
+      org.mockito.BDDMockito.given(loadAnswerLikePort.loadLikedAnswerIds(List.of(answerId), 501L))
+          .willReturn(java.util.Set.of(answerId));
 
       mockMvc
           .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
@@ -131,6 +146,8 @@ class AnswerControllerIntegrationTest {
           .andExpect(jsonPath("$.data[0].answerId").value(answerId))
           .andExpect(jsonPath("$.data[0].userId").value(502L))
           .andExpect(jsonPath("$.data[0].content").value("integration answer"))
+          .andExpect(jsonPath("$.data[0].likeCount").value(3))
+          .andExpect(jsonPath("$.data[0].isLiked").value(true))
           .andExpect(jsonPath("$.data[0].imageUrls[0]").value("https://example.com/answer-1.png"));
 
       mockMvc
@@ -309,6 +326,16 @@ class AnswerControllerIntegrationTest {
           .andExpect(status().isNotFound())
           .andExpect(jsonPath("$.status").value("FAIL"))
           .andExpect(jsonPath("$.code").value("POST_001"));
+    }
+
+    @Test
+    @DisplayName("GET answers returns 401 when unauthenticated")
+    void getAnswers_returns401_whenUnauthenticated() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+
+      mockMvc
+          .perform(get("/questions/" + savedPost.getId() + "/answers"))
+          .andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.answer.application.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
@@ -17,11 +19,13 @@ import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
@@ -38,6 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AnswerService
     implements CreateAnswerUseCase,
         GetAnswerUseCase,
+        GetAnswerSummaryUseCase,
         UpdateAnswerUseCase,
         DeleteAnswerUseCase,
         DeleteAnswersByPostUseCase,
@@ -49,6 +54,7 @@ public class AnswerService
   private final DeleteAnswerPort deleteAnswerPort;
   private final LoadAnswerWriterPort loadAnswerWriterPort;
   private final LoadAnswerImagesPort loadAnswerImagesPort;
+  private final LoadAnswerLikePort loadAnswerLikePort;
   private final UpdateAnswerImagesPort updateAnswerImagesPort;
   private final AnswerReadAssembler answerReadAssembler;
   private final ApplicationEventPublisher eventPublisher;
@@ -79,7 +85,7 @@ public class AnswerService
   /** Loads answers for a question post together with writer summary fields used by the API. */
   @Override
   @Transactional(readOnly = true)
-  public List<AnswerResult> execute(Long postId) {
+  public List<AnswerResult> execute(Long postId, Long currentUserId) {
     if (postId == null) {
       throw new AnswerInvalidInputException("postId is required.");
     }
@@ -97,8 +103,31 @@ public class AnswerService
             ? Map.of()
             : loadAnswerImagesPort.loadImagesByAnswerIds(
                 answers.stream().map(Answer::getId).toList());
+    List<Long> answerIds = answers.stream().map(Answer::getId).toList();
+    Map<Long, Long> likeCounts =
+        answers.isEmpty() ? Map.of() : loadAnswerLikePort.countLikeByAnswerIds(answerIds);
+    Set<Long> likedAnswerIds =
+        answers.isEmpty()
+            ? Set.of()
+            : loadAnswerLikePort.loadLikedAnswerIds(answerIds, currentUserId);
 
-    return answers.stream().map(answer -> toResult(answer, writers, imagesByAnswerId)).toList();
+    return answers.stream()
+        .map(answer -> toResult(answer, writers, imagesByAnswerId, likeCounts, likedAnswerIds))
+        .toList();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<GetAnswerSummaryUseCase.AnswerSummary> getAnswerSummary(Long answerId) {
+    if (answerId == null) {
+      throw new AnswerInvalidInputException("answerId is required.");
+    }
+    return loadAnswerPort
+        .loadAnswer(answerId)
+        .map(
+            answer ->
+                new GetAnswerSummaryUseCase.AnswerSummary(
+                    answer.getId(), answer.getPostId(), answer.getUserId()));
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */
@@ -175,9 +204,15 @@ public class AnswerService
   private AnswerResult toResult(
       Answer answer,
       Map<Long, LoadAnswerWriterPort.WriterSummary> writers,
-      Map<Long, AnswerImageResult> imagesByAnswerId) {
+      Map<Long, AnswerImageResult> imagesByAnswerId,
+      Map<Long, Long> likeCounts,
+      Set<Long> likedAnswerIds) {
     return answerReadAssembler.assemble(
-        answer, writers.get(answer.getUserId()), imagesByAnswerId.get(answer.getId()));
+        answer,
+        writers.get(answer.getUserId()),
+        imagesByAnswerId.get(answer.getId()),
+        likeCounts.getOrDefault(answer.getId(), 0L),
+        likedAnswerIds.contains(answer.getId()));
   }
 
   private void validateAnswerBelongsToPost(Answer answer, Long postId) {

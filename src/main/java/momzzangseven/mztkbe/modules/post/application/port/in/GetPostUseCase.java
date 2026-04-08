@@ -4,5 +4,5 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 
 public interface GetPostUseCase {
 
-  PostDetailResult getPost(Long postId);
+  PostDetailResult getPost(Long postId, Long requesterUserId);
 }

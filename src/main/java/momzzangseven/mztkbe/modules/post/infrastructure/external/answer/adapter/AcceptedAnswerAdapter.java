@@ -1,9 +1,9 @@
-package momzzangseven.mztkbe.modules.post.infrastructure.external.answer;
+package momzzangseven.mztkbe.modules.post.infrastructure.external.answer.adapter;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.MarkAcceptedAnswerPort;
 import org.springframework.stereotype.Component;
@@ -12,16 +12,14 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AcceptedAnswerAdapter implements LoadAcceptedAnswerPort, MarkAcceptedAnswerPort {
 
-  private final LoadAnswerPort loadAnswerPort;
+  private final GetAnswerSummaryUseCase getAnswerSummaryUseCase;
   private final MarkAnswerAcceptedUseCase markAnswerAcceptedUseCase;
 
   @Override
   public Optional<AcceptedAnswerInfo> loadAcceptedAnswer(Long answerId) {
-    return loadAnswerPort
-        .loadAnswer(answerId)
-        .map(
-            answer ->
-                new AcceptedAnswerInfo(answer.getId(), answer.getPostId(), answer.getUserId()));
+    return getAnswerSummaryUseCase
+        .getAnswerSummary(answerId)
+        .map(answer -> new AcceptedAnswerInfo(answer.answerId(), answer.postId(), answer.userId()));
   }
 
   @Override

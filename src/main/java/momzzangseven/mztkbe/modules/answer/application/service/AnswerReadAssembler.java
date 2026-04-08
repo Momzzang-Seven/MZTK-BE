@@ -11,7 +11,11 @@ import org.springframework.stereotype.Component;
 public class AnswerReadAssembler {
 
   public AnswerResult assemble(
-      Answer answer, LoadAnswerWriterPort.WriterSummary writer, AnswerImageResult imageResult) {
+      Answer answer,
+      LoadAnswerWriterPort.WriterSummary writer,
+      AnswerImageResult imageResult,
+      long likeCount,
+      boolean liked) {
     List<String> imageUrls =
         imageResult == null
             ? List.of()
@@ -23,6 +27,8 @@ public class AnswerReadAssembler {
         answer,
         writer != null ? writer.nickname() : null,
         writer != null ? writer.profileImageUrl() : null,
+        likeCount,
+        liked,
         imageUrls);
   }
 }

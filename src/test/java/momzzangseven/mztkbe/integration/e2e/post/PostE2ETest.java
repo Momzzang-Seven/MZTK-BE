@@ -102,6 +102,11 @@ class PostE2ETest {
   void tearDown() {
     for (Long postId : createdPostIds) {
       try {
+        jdbcTemplate.update(
+            "DELETE FROM post_like WHERE target_type = 'POST' AND target_id = ?", postId);
+      } catch (Exception ignored) {
+      }
+      try {
         jdbcTemplate.update("UPDATE posts SET accepted_answer_id = NULL WHERE id = ?", postId);
       } catch (Exception ignored) {
       }
@@ -218,6 +223,22 @@ class PostE2ETest {
     return objectMapper.readTree(res.getBody()).at("/data/answerId").asLong();
   }
 
+  private ResponseEntity<String> likePost(Long postId) {
+    return restTemplate.exchange(
+        baseUrl + "/posts/" + postId + "/likes",
+        HttpMethod.POST,
+        new HttpEntity<>(authHeaders()),
+        String.class);
+  }
+
+  private ResponseEntity<String> unlikePost(Long postId) {
+    return restTemplate.exchange(
+        baseUrl + "/posts/" + postId + "/likes",
+        HttpMethod.DELETE,
+        new HttpEntity<>(authHeaders()),
+        String.class);
+  }
+
   /** isSolved=true 는 web3 transfer 완료 이벤트로만 변경되므로 테스트 전제 조건 설정에 JdbcTemplate 사용. */
   private void markPostAsSolved(Long postId) {
     int updated =
@@ -240,6 +261,15 @@ class PostE2ETest {
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM posts WHERE id = ?", Integer.class, postId);
     return count != null && count > 0;
+  }
+
+  private int countPostLikes(Long postId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM post_like WHERE target_type = 'POST' AND target_id = ?",
+            Integer.class,
+            postId);
+    return count == null ? 0 : count;
   }
 
   private String getPostContentFromDb(Long postId) {
@@ -357,6 +387,82 @@ class PostE2ETest {
     assertThat(postExistsInDb(postId))
         .as("Deleted post should not exist in DB: postId=" + postId)
         .isFalse();
+  }
+
+  @Test
+  @DisplayName("free post likes update detail response and unlike resets the count")
+  void likeFreePost_success_reflectedInDetailAndUnlike() throws Exception {
+    Long postId = createFreePost("like target free post");
+
+    ResponseEntity<String> likeRes = likePost(postId);
+
+    assertThat(likeRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode likeRoot = parse(likeRes);
+    assertThat(likeRoot.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(likeRoot.at("/data/targetType").asText()).isEqualTo("POST");
+    assertThat(likeRoot.at("/data/targetId").asLong()).isEqualTo(postId);
+    assertThat(likeRoot.at("/data/liked").asBoolean()).isTrue();
+    assertThat(likeRoot.at("/data/likeCount").asLong()).isEqualTo(1L);
+    assertThat(countPostLikes(postId)).isEqualTo(1);
+
+    ResponseEntity<String> getRes =
+        restTemplate.exchange(
+            baseUrl + "/posts/" + postId,
+            HttpMethod.GET,
+            new HttpEntity<>(authHeaders()),
+            String.class);
+
+    assertThat(getRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode detailRoot = parse(getRes);
+    assertThat(detailRoot.at("/data/postId").asLong()).isEqualTo(postId);
+    assertThat(detailRoot.at("/data/likeCount").asLong()).isEqualTo(1L);
+    assertThat(detailRoot.at("/data/isLiked").asBoolean()).isTrue();
+
+    ResponseEntity<String> unlikeRes = unlikePost(postId);
+
+    assertThat(unlikeRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode unlikeRoot = parse(unlikeRes);
+    assertThat(unlikeRoot.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(unlikeRoot.at("/data/liked").asBoolean()).isFalse();
+    assertThat(unlikeRoot.at("/data/likeCount").asLong()).isZero();
+    assertThat(countPostLikes(postId)).isZero();
+  }
+
+  @Test
+  @DisplayName("liking an already liked free post stays idempotent with count unchanged")
+  void likeFreePost_duplicateLike_staysIdempotent() throws Exception {
+    Long postId = createFreePost("duplicate like free post");
+
+    ResponseEntity<String> firstLikeRes = likePost(postId);
+    ResponseEntity<String> secondLikeRes = likePost(postId);
+
+    assertThat(firstLikeRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(secondLikeRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(parse(firstLikeRes).at("/data/likeCount").asLong()).isEqualTo(1L);
+    assertThat(parse(secondLikeRes).at("/data/likeCount").asLong()).isEqualTo(1L);
+    assertThat(countPostLikes(postId)).isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("deleting a liked free post also removes post likes")
+  void deleteFreePost_removesPostLikes() throws Exception {
+    Long postId = createFreePost("liked post to delete");
+    ResponseEntity<String> likeRes = likePost(postId);
+
+    assertThat(likeRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(countPostLikes(postId)).isEqualTo(1);
+
+    ResponseEntity<String> deleteRes =
+        restTemplate.exchange(
+            baseUrl + "/posts/" + postId,
+            HttpMethod.DELETE,
+            new HttpEntity<>(authHeaders()),
+            String.class);
+
+    assertThat(deleteRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(parse(deleteRes).at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(postExistsInDb(postId)).isFalse();
+    assertThat(countPostLikes(postId)).isZero();
   }
 
   @Test
