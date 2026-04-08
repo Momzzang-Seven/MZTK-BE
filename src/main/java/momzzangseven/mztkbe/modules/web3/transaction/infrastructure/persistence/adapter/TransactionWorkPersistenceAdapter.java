@@ -28,6 +28,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+/**
+ * Persistence adapter for transaction worker lifecycle operations.
+ *
+ * <p>This adapter handles claim-lock semantics, state transitions, and snapshot reads used by
+ * issuer/receipt/recovery workers.
+ */
 public class TransactionWorkPersistenceAdapter
     implements LoadTransactionWorkPort, LoadTransactionPort, UpdateTransactionPort {
 
@@ -58,6 +64,7 @@ public class TransactionWorkPersistenceAdapter
   private final Web3TransactionJpaRepository repository;
   private final Clock appClock;
 
+  /** Claims transactions by status with lock ttl and worker ownership in one transaction. */
   @Override
   @Transactional
   @SuppressWarnings("unchecked")

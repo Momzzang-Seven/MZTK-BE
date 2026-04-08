@@ -29,6 +29,12 @@ public class ExecutionIntentCleanupService {
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
 
+  /**
+   * Runs one cleanup batch using configured retention policy.
+   *
+   * <p>Expired signable intents are first marked as {@code EXPIRED}, then finalized old intents and
+   * aged sponsor usage rows are deleted in bounded batch size.
+   */
   @Transactional
   public CleanupBatchResult runBatch(Instant now) {
     ExecutionCleanupPolicy cleanupPolicy = loadExecutionCleanupPolicyPort.loadCleanupPolicy();
@@ -99,6 +105,7 @@ public class ExecutionIntentCleanupService {
                     usage.release(intent.getReservedSponsorCostWei())));
   }
 
+  /** Batch counters returned by cleanup run. */
   public record CleanupBatchResult(
       int expiredExecutionIntent, int deletedExecutionIntent, int deletedDailyUsage) {
     public int totalDeleted() {

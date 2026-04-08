@@ -34,6 +34,12 @@ import org.springframework.stereotype.Component;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/**
+ * Builds execution draft payload for user-to-user token transfer.
+ *
+ * <p>The draft includes both EIP-7702 call metadata and EIP-1559 fallback unsigned transaction
+ * snapshot to support mode selection at execution intent creation time.
+ */
 public class TransferExecutionDraftBuilder {
 
   private final LoadWalletPort loadWalletPort;
@@ -46,6 +52,7 @@ public class TransferExecutionDraftBuilder {
   private final ExecutionPayloadSerializer executionPayloadSerializer;
   private final Clock appClock;
 
+  /** Builds a validated transfer execution draft from API command. */
   public ExecutionDraft build(CreateTransferCommand command) {
     command.validate();
 

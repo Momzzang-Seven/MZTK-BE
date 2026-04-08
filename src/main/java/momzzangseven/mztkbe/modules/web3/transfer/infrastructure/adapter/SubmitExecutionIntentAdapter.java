@@ -10,10 +10,12 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+/** Adapter that bridges transfer draft submission to shared execution create use case. */
 public class SubmitExecutionIntentAdapter implements SubmitExecutionDraftPort {
 
   private final CreateExecutionIntentUseCase createExecutionIntentUseCase;
 
+  /** Delegates draft submission to execution module without transfer-module coupling to service impl. */
   @Override
   public CreateExecutionIntentResult submit(ExecutionDraft draft) {
     return createExecutionIntentUseCase.execute(new CreateExecutionIntentCommand(draft));

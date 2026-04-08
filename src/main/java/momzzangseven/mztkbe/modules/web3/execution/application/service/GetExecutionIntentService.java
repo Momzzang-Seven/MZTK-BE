@@ -28,12 +28,19 @@ import org.web3j.utils.Numeric;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/**
+ * Reads execution intent details for client polling.
+ *
+ * <p>The result includes execution mode, sign count, conditional sign request payload, and linked
+ * transaction summary when available.
+ */
 public class GetExecutionIntentService implements GetExecutionIntentUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
 
+  /** Loads an execution intent visible to the requester and maps it to read DTO contract. */
   @Override
   public GetExecutionIntentResult execute(GetExecutionIntentQuery query) {
     ExecutionIntent intent =

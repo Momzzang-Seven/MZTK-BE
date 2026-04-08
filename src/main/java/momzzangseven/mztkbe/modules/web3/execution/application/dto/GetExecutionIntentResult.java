@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 
+/** Read contract for execution intent polling endpoint. */
 public record GetExecutionIntentResult(
     ExecutionResourceType resourceType,
     String resourceId,
@@ -23,6 +24,7 @@ public record GetExecutionIntentResult(
     Web3TxStatus transactionStatus,
     String txHash) {
 
+  /** Validates required fields for read response mapping. */
   public GetExecutionIntentResult {
     if (resourceType == null) {
       throw new Web3InvalidInputException("resourceType is required");

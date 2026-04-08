@@ -36,6 +36,12 @@ import org.springframework.transaction.annotation.Transactional;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/**
+ * Creates a new {@link ExecutionIntent} from a domain-provided draft.
+ *
+ * <p>This service applies idempotency reuse rules, selects execution mode (EIP-7702 or EIP-1559),
+ * reserves sponsor exposure when required, and returns the sign request contract used by clients.
+ */
 public class CreateExecutionIntentService implements CreateExecutionIntentUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
@@ -47,6 +53,12 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private final ExecutionModeSelector executionModeSelector;
   private final Clock appClock;
 
+  /**
+   * Creates or reuses an execution intent for the given draft command.
+   *
+   * <p>If an active intent with the same root idempotency key and payload exists, it is reused.
+   * Otherwise a new attempt is created.
+   */
   @Override
   public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
     LocalDateTime now = LocalDateTime.now(appClock);

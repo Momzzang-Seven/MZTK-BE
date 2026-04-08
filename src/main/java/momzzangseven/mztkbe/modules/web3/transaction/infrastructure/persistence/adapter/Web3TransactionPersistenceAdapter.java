@@ -20,11 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+/** Persists level-up reward transaction intents and handles idempotent create semantics. */
 public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
 
   private final Web3TransactionJpaRepository repository;
   private final Clock appClock;
 
+  /** Creates or reuses a level-up reward transaction intent row by reference/idempotency key. */
   @Override
   @Transactional
   public Web3Transaction saveLevelUpRewardIntent(CreateLevelUpRewardTxIntentCommand command) {

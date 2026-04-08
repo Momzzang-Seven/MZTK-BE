@@ -22,6 +22,12 @@ import org.web3j.protocol.http.HttpService;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+/**
+ * Reserves sequential nonce values for sponsor wallet addresses.
+ *
+ * <p>The adapter keeps a DB-backed nonce cursor and synchronizes it with on-chain pending nonce
+ * when local state lags behind.
+ */
 public class NonceStatePersistenceAdapter implements ReserveNoncePort {
 
   private final Web3NonceStateJpaRepository repository;
@@ -47,6 +53,7 @@ public class NonceStatePersistenceAdapter implements ReserveNoncePort {
     }
   }
 
+  /** Reserves one nonce for the given sender address under row-level lock. */
   @Override
   @Transactional
   public long reserveNextNonce(String fromAddress) {

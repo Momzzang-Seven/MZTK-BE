@@ -18,11 +18,13 @@ import org.springframework.transaction.annotation.Transactional;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/** Marks execution intent as confirmed when transaction outcome reports success. */
 public class MarkExecutionIntentSucceededService implements MarkExecutionIntentSucceededUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final Clock appClock;
 
+  /** Applies idempotent success transition for intent bound to submitted transaction id. */
   @Override
   public void execute(Long submittedTxId) {
     if (submittedTxId == null || submittedTxId <= 0) {

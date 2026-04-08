@@ -54,6 +54,12 @@ import org.web3j.utils.Numeric;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/**
+ * Executes a previously created execution intent.
+ *
+ * <p>This service validates caller ownership, enforces expiration and idempotent execute semantics,
+ * then delegates mode-specific signing/broadcast flow for EIP-7702 and EIP-1559.
+ */
 public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
@@ -75,6 +81,12 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final Clock appClock;
 
+  /**
+   * Executes the target intent and returns latest intent/transaction summary.
+   *
+   * <p>Repeated execute calls for already-submitted intents return current state without creating a
+   * new transaction.
+   */
   @Override
   public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
     ExecutionIntent intent =

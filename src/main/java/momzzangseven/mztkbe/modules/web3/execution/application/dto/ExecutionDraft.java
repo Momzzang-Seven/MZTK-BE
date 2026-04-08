@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 
+/** Domain-neutral draft payload used to create a shared execution intent. */
 public record ExecutionDraft(
     ExecutionResourceType resourceType,
     String resourceId,
@@ -28,6 +29,7 @@ public record ExecutionDraft(
     String unsignedTxFingerprint,
     LocalDateTime expiresAt) {
 
+  /** Validates minimal draft requirements for mode selection and sign request generation. */
   public ExecutionDraft {
     if (resourceType == null) {
       throw new Web3InvalidInputException("resourceType is required");

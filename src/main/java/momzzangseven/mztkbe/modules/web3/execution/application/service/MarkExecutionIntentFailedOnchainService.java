@@ -18,12 +18,14 @@ import org.springframework.transaction.annotation.Transactional;
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
+/** Marks execution intent as failed-onchain from transaction outcome callbacks. */
 public class MarkExecutionIntentFailedOnchainService
     implements MarkExecutionIntentFailedOnchainUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final Clock appClock;
 
+  /** Applies idempotent failed-onchain transition for intent linked by submitted tx id. */
   @Override
   public void execute(Long submittedTxId, String failureReason) {
     if (submittedTxId == null || submittedTxId <= 0) {
