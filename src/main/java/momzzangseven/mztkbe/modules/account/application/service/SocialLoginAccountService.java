@@ -47,10 +47,12 @@ public class SocialLoginAccountService {
     Optional<UserAccount> existing =
         loadUserAccountPort.findByProviderAndProviderUserId(provider, providerUserId);
 
+    // If users_account row already exists -> login phase. ignore the role field of command.
     if (existing.isPresent()) {
       return handleExistingAccount(existing.get(), provider, providerUserId);
     }
 
+    // When register new user, must consider role field.
     return registerNewUser(provider, providerUserId, email, nickname, profileImageUrl, role);
   }
 
