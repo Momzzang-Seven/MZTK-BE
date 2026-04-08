@@ -34,7 +34,8 @@ class KakaoAuthenticationStrategyTest {
   @Test
   void authenticate_returnsExistingUser_whenOutcomeIsExisting() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.KAKAO, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")
@@ -46,7 +47,7 @@ class KakaoAuthenticationStrategyTest {
     when(kakaoAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
     when(kakaoAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
     when(socialLoginAccountService.loginOrRegister(
-            AuthProvider.KAKAO, "kakao-id", "kakao@example.com", "kakao-user", "https://img"))
+            AuthProvider.KAKAO, "kakao-id", "kakao@example.com", "kakao-user", "https://img", null))
         .thenReturn(SocialLoginAccountOutcome.existing(snapshot()));
 
     AuthenticatedUser authenticated = strategy.authenticate(context);
@@ -58,7 +59,8 @@ class KakaoAuthenticationStrategyTest {
   @Test
   void authenticate_returnsNewUser_whenOutcomeIsNew() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.KAKAO, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")
@@ -70,7 +72,7 @@ class KakaoAuthenticationStrategyTest {
     when(kakaoAuthPort.getAccessToken("auth-code")).thenReturn("access-token");
     when(kakaoAuthPort.getUserInfo("access-token")).thenReturn(userInfo);
     when(socialLoginAccountService.loginOrRegister(
-            AuthProvider.KAKAO, "kakao-id", "kakao@example.com", "kakao-user", "https://img"))
+            AuthProvider.KAKAO, "kakao-id", "kakao@example.com", "kakao-user", "https://img", null))
         .thenReturn(SocialLoginAccountOutcome.newUser(snapshot()));
 
     AuthenticatedUser authenticated = strategy.authenticate(context);
@@ -81,7 +83,8 @@ class KakaoAuthenticationStrategyTest {
   @Test
   void authenticate_throws_whenEmailIsMissing() {
     AuthenticationContext context =
-        new AuthenticationContext(AuthProvider.KAKAO, null, null, "auth-code", "http://localhost");
+        new AuthenticationContext(
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")

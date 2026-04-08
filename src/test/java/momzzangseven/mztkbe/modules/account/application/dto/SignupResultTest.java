@@ -11,10 +11,11 @@ class SignupResultTest {
   @Test
   @DisplayName("of() maps id, email, nickname")
   void of_mapsFields() {
-    SignupResult result = SignupResult.of(5L, "user@example.com", "tester");
+    SignupResult result = SignupResult.of(5L, "user@example.com", "tester", "USER");
 
     assertThat(result.userId()).isEqualTo(5L);
     assertThat(result.email()).isEqualTo("user@example.com");
     assertThat(result.nickname()).isEqualTo("tester");
+    assertThat(result.role()).isEqualTo("USER");
   }
 }

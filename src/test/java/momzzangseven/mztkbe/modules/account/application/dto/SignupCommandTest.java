@@ -20,7 +20,7 @@ class SignupCommandTest {
     @Test
     @DisplayName("정상 입력 시 예외 없음")
     void validate_ValidCommand_NoException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, VALID_NICKNAME, null);
 
       assertThatCode(command::validate).doesNotThrowAnyException();
     }
@@ -33,7 +33,7 @@ class SignupCommandTest {
     @Test
     @DisplayName("이메일이 null이면 예외 발생")
     void validate_NullEmail_ThrowsException() {
-      SignupCommand command = new SignupCommand(null, VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(null, VALID_PASSWORD, VALID_NICKNAME, null);
 
       assertThatThrownBy(command::validate)
           .isInstanceOf(IllegalArgumentException.class)
@@ -43,7 +43,7 @@ class SignupCommandTest {
     @Test
     @DisplayName("이메일이 빈 문자열이면 예외 발생")
     void validate_BlankEmail_ThrowsException() {
-      SignupCommand command = new SignupCommand("   ", VALID_PASSWORD, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand("   ", VALID_PASSWORD, VALID_NICKNAME, null);
 
       assertThatThrownBy(command::validate)
           .isInstanceOf(IllegalArgumentException.class)
@@ -58,7 +58,7 @@ class SignupCommandTest {
     @Test
     @DisplayName("비밀번호가 null이면 예외 발생")
     void validate_NullPassword_ThrowsException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, null, VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, null, VALID_NICKNAME, null);
 
       assertThatThrownBy(command::validate)
           .isInstanceOf(IllegalArgumentException.class)
@@ -68,7 +68,7 @@ class SignupCommandTest {
     @Test
     @DisplayName("비밀번호가 빈 문자열이면 예외 발생")
     void validate_BlankPassword_ThrowsException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, "   ", VALID_NICKNAME);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, "   ", VALID_NICKNAME, null);
 
       assertThatThrownBy(command::validate)
           .isInstanceOf(IllegalArgumentException.class)
@@ -83,7 +83,7 @@ class SignupCommandTest {
     @Test
     @DisplayName("닉네임이 null이면 예외 발생")
     void validate_NullNickname_ThrowsException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, null);
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, null, null);
 
       assertThatThrownBy(command::validate)
           .isInstanceOf(IllegalArgumentException.class)
@@ -93,7 +93,7 @@ class SignupCommandTest {
     @Test
     @DisplayName("닉네임이 빈 문자열이면 예외 발생")
     void validate_BlankNickname_ThrowsException() {
-      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, "  ");
+      SignupCommand command = new SignupCommand(VALID_EMAIL, VALID_PASSWORD, "  ", null);
 
       assertThatThrownBy(command::validate)
           .isInstanceOf(IllegalArgumentException.class)
