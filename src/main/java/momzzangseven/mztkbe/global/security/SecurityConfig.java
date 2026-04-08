@@ -162,6 +162,10 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/posts/{postId}")
                     .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/posts/{postId}/likes")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/posts/{postId}/likes")
+                    .authenticated()
                     .requestMatchers(HttpMethod.POST, "/questions/{postId}/answers")
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/questions/{postId}/answers")
@@ -169,6 +173,12 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT, "/questions/{postId}/answers/{answerId}")
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/questions/{postId}/answers/{answerId}")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST, "/questions/{postId}/answers/{answerId}/likes")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.DELETE, "/questions/{postId}/answers/{answerId}/likes")
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/users/me/locations/**")
                     .authenticated()

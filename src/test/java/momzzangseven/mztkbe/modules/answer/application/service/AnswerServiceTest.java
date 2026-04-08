@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
@@ -60,6 +61,7 @@ class AnswerServiceTest {
   @Mock private DeleteAnswerPort deleteAnswerPort;
   @Mock private LoadAnswerWriterPort loadAnswerWriterPort;
   @Mock private LoadAnswerImagesPort loadAnswerImagesPort;
+  @Mock private LoadAnswerLikePort loadAnswerLikePort;
   @Mock private UpdateAnswerImagesPort updateAnswerImagesPort;
   @Mock private ApplicationEventPublisher eventPublisher;
   @Spy private AnswerReadAssembler answerReadAssembler = new AnswerReadAssembler();
@@ -118,7 +120,8 @@ class AnswerServiceTest {
     }
 
     @Test
-    @DisplayName("execute(Long) returns writer summary and image urls loaded in batch")
+    @DisplayName(
+        "execute(Long, Long) returns writer summary, like data, and image urls loaded in batch")
     void getAnswers_returnsDtos_whenPostExists() {
       Long postId = 10L;
       List<Answer> answers =
@@ -142,15 +145,49 @@ class AnswerServiceTest {
                       List.of(
                           new AnswerImageSlot(101L, "https://cdn.example.com/a.webp"),
                           new AnswerImageSlot(102L, null)))));
+      given(loadAnswerLikePort.countLikeByAnswerIds(List.of(1L, 2L)))
+          .willReturn(Map.of(1L, 4L, 2L, 1L));
+      given(loadAnswerLikePort.loadLikedAnswerIds(List.of(1L, 2L), 999L))
+          .willReturn(java.util.Set.of(2L));
 
-      List<AnswerResult> result = answerService.execute(postId);
+      List<AnswerResult> result = answerService.execute(postId, 999L);
 
       assertThat(result).hasSize(2);
       assertThat(result.get(0).answerId()).isEqualTo(1L);
       assertThat(result.get(0).nickname()).isEqualTo("writer-a");
+      assertThat(result.get(0).likeCount()).isEqualTo(4L);
+      assertThat(result.get(0).liked()).isFalse();
       assertThat(result.get(0).imageUrls()).isEmpty();
+      assertThat(result.get(1).likeCount()).isEqualTo(1L);
+      assertThat(result.get(1).liked()).isTrue();
       assertThat(result.get(1).imageUrls()).containsExactly("https://cdn.example.com/a.webp", null);
       verify(loadAnswerImagesPort).loadImagesByAnswerIds(List.of(1L, 2L));
+      verify(loadAnswerLikePort).countLikeByAnswerIds(List.of(1L, 2L));
+      verify(loadAnswerLikePort).loadLikedAnswerIds(List.of(1L, 2L), 999L);
+    }
+
+    @Test
+    @DisplayName("execute(Long, null) returns false isLiked for anonymous users")
+    void getAnswers_anonymousUser_returnsUnlikedState() {
+      Long postId = 10L;
+      List<Answer> answers = List.of(buildAnswer(1L, 10L, 20L, "first", false));
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+
+      given(loadPostPort.loadPost(postId)).willReturn(Optional.of(postContext));
+      given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
+      given(loadAnswerWriterPort.loadWritersByIds(List.of(20L)))
+          .willReturn(
+              Map.of(20L, new LoadAnswerWriterPort.WriterSummary(20L, "writer-a", "profile-a")));
+      given(loadAnswerImagesPort.loadImagesByAnswerIds(List.of(1L))).willReturn(Map.of());
+      given(loadAnswerLikePort.countLikeByAnswerIds(List.of(1L))).willReturn(Map.of(1L, 2L));
+      given(loadAnswerLikePort.loadLikedAnswerIds(List.of(1L), null))
+          .willReturn(java.util.Set.of());
+
+      List<AnswerResult> result = answerService.execute(postId, null);
+
+      assertThat(result).hasSize(1);
+      assertThat(result.get(0).likeCount()).isEqualTo(2L);
+      assertThat(result.get(0).liked()).isFalse();
     }
 
     @Test
@@ -318,7 +355,7 @@ class AnswerServiceTest {
     @Test
     @DisplayName("execute(Long) throws when postId is null")
     void getAnswers_throws_whenPostIdIsNull() {
-      assertThatThrownBy(() -> answerService.execute((Long) null))
+      assertThatThrownBy(() -> answerService.execute(null, 1L))
           .isInstanceOf(AnswerInvalidInputException.class);
     }
 
@@ -327,7 +364,7 @@ class AnswerServiceTest {
     void getAnswers_throws_whenPostNotFound() {
       given(loadPostPort.loadPost(10L)).willReturn(Optional.empty());
 
-      assertThatThrownBy(() -> answerService.execute(10L))
+      assertThatThrownBy(() -> answerService.execute(10L, 1L))
           .isInstanceOf(AnswerPostNotFoundException.class);
       verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
       verifyNoInteractions(loadAnswerImagesPort);
@@ -340,7 +377,7 @@ class AnswerServiceTest {
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
-      assertThatThrownBy(() -> answerService.execute(10L))
+      assertThatThrownBy(() -> answerService.execute(10L, 1L))
           .isInstanceOf(AnswerUnsupportedPostTypeException.class);
       verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
       verifyNoInteractions(loadAnswerImagesPort);

@@ -11,12 +11,19 @@ public record AnswerResult(
     String profileImageUrl,
     String content,
     boolean accepted,
+    long likeCount,
+    boolean liked,
     List<String> imageUrls,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
   public static AnswerResult from(
-      Answer answer, String nickname, String profileImageUrl, List<String> imageUrls) {
+      Answer answer,
+      String nickname,
+      String profileImageUrl,
+      long likeCount,
+      boolean liked,
+      List<String> imageUrls) {
     return new AnswerResult(
         answer.getId(),
         answer.getUserId(),
@@ -24,6 +31,8 @@ public record AnswerResult(
         profileImageUrl,
         answer.getContent(),
         answer.getIsAccepted(),
+        likeCount,
+        liked,
         imageUrls == null ? List.of() : imageUrls,
         answer.getCreatedAt(),
         answer.getUpdatedAt());

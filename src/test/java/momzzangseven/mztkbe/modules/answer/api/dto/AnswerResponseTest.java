@@ -29,6 +29,8 @@ class AnswerResponseTest {
               "https://cdn.example.com/profile.webp",
               "answer content",
               true,
+              5L,
+              true,
               List.of("https://cdn.example.com/answer.webp"),
               createdAt,
               updatedAt);
@@ -41,6 +43,8 @@ class AnswerResponseTest {
       assertThat(response.profileImageUrl()).isEqualTo("https://cdn.example.com/profile.webp");
       assertThat(response.content()).isEqualTo("answer content");
       assertThat(response.isAccepted()).isTrue();
+      assertThat(response.likeCount()).isEqualTo(5L);
+      assertThat(response.isLiked()).isTrue();
       assertThat(response.imageUrls()).containsExactly("https://cdn.example.com/answer.webp");
       assertThat(response.createdAt()).isEqualTo(createdAt);
       assertThat(response.updatedAt()).isEqualTo(updatedAt);
@@ -57,12 +61,16 @@ class AnswerResponseTest {
               null,
               "answer content",
               false,
+              0L,
+              false,
               null,
               LocalDateTime.of(2026, 3, 3, 9, 15),
               LocalDateTime.of(2026, 3, 4, 10, 45));
 
       AnswerResponse response = AnswerResponse.from(result);
 
+      assertThat(response.likeCount()).isZero();
+      assertThat(response.isLiked()).isFalse();
       assertThat(response.imageUrls()).isEmpty();
     }
   }

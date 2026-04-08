@@ -35,13 +35,15 @@ class PostListResultTest {
     String nickname = "test nick name";
     String profileImageUrl = "test/image/url";
 
-    PostListResult result = PostListResult.fromDomain(post, nickname, profileImageUrl);
+    PostListResult result = PostListResult.fromDomain(post, 2L, true, nickname, profileImageUrl);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
     assertThat(result.type()).isEqualTo(PostType.QUESTION);
     assertThat(result.title()).isEqualTo("title");
     assertThat(result.content()).isEqualTo("content");
+    assertThat(result.likeCount()).isEqualTo(2L);
+    assertThat(result.liked()).isTrue();
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isFalse();
     assertThat(result.tags()).containsExactly("java");

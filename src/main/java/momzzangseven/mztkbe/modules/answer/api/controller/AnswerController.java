@@ -54,9 +54,10 @@ public class AnswerController {
   }
 
   @GetMapping
-  public ResponseEntity<ApiResponse<List<AnswerResponse>>> getAnswers(@PathVariable Long postId) {
+  public ResponseEntity<ApiResponse<List<AnswerResponse>>> getAnswers(
+      @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
     List<AnswerResponse> responses =
-        getAnswerUseCase.execute(postId).stream().map(AnswerResponse::from).toList();
+        getAnswerUseCase.execute(postId, userId).stream().map(AnswerResponse::from).toList();
 
     return ResponseEntity.ok(ApiResponse.success(responses));
   }

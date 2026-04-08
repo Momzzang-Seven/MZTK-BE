@@ -61,23 +61,27 @@ public class PostController {
 
   // [Read] 게시글 상세 조회
   @GetMapping("/{postId}")
-  public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(@PathVariable Long postId) {
-    PostDetailResult result = getPostUseCase.getPost(postId);
+  public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(
+      @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
+    Long validatedUserId = requireUserId(userId);
+    PostDetailResult result = getPostUseCase.getPost(postId, validatedUserId);
     return ResponseEntity.ok(ApiResponse.success(PostDetailResponse.from(result)));
   }
 
   // [Read] 게시글 목록 조회
   @GetMapping
   public ResponseEntity<ApiResponse<List<PostListResponse>>> getPosts(
+      @AuthenticationPrincipal Long userId,
       @RequestParam(required = false) PostType type,
       @RequestParam(required = false) String tag,
       @RequestParam(required = false) String search,
       @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable) {
+    Long validatedUserId = requireUserId(userId);
     PostSearchCondition condition =
         PostSearchCondition.of(type, tag, search, pageable.getPageNumber(), pageable.getPageSize());
 
-    List<PostListResult> results = searchPostsUseCase.searchPosts(condition);
+    List<PostListResult> results = searchPostsUseCase.searchPosts(condition, validatedUserId);
     List<PostListResponse> response = results.stream().map(PostListResponse::from).toList();
 
     return ResponseEntity.ok(ApiResponse.success(response));

@@ -64,6 +64,22 @@ class AnswerE2ETest {
 
   @AfterEach
   void tearDown() {
+    for (Long answerId : createdAnswerIds) {
+      try {
+        jdbcTemplate.update(
+            "DELETE FROM post_like WHERE target_type = 'ANSWER' AND target_id = ?", answerId);
+      } catch (Exception ignored) {
+      }
+    }
+
+    for (Long postId : createdPostIds) {
+      try {
+        jdbcTemplate.update(
+            "DELETE FROM post_like WHERE target_type = 'POST' AND target_id = ?", postId);
+      } catch (Exception ignored) {
+      }
+    }
+
     for (Long imageId : createdImageIds) {
       try {
         jdbcTemplate.update("DELETE FROM images WHERE id = ?", imageId);
@@ -221,6 +237,101 @@ class AnswerE2ETest {
     }
 
     @Test
+    @DisplayName("answer likes affect answer list likeCount and isLiked fields")
+    void answerLikes_success_reflectedInAnswerList() throws Exception {
+      TestUser author = signupAndLogin("liked-question-author");
+      TestUser answerer = signupAndLogin("liked-answerer");
+      TestUser liker = signupAndLogin("answer-liker");
+      Long postId = createQuestionPost(author.accessToken(), "Like question", "Need likes", 70L);
+      Long answerId = createAnswer(postId, answerer.accessToken(), "likeable answer", List.of());
+
+      ResponseEntity<String> likeResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
+              HttpMethod.POST,
+              new HttpEntity<>(authHeaders(liker.accessToken())),
+              String.class);
+
+      assertThat(likeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode likeRoot = parse(likeResponse);
+      assertThat(likeRoot.at("/status").asText()).isEqualTo("SUCCESS");
+      assertThat(likeRoot.at("/data/targetType").asText()).isEqualTo("ANSWER");
+      assertThat(likeRoot.at("/data/targetId").asLong()).isEqualTo(answerId);
+      assertThat(likeRoot.at("/data/liked").asBoolean()).isTrue();
+      assertThat(likeRoot.at("/data/likeCount").asLong()).isEqualTo(1L);
+
+      ResponseEntity<String> getResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers",
+              HttpMethod.GET,
+              new HttpEntity<>(authHeaders(liker.accessToken())),
+              String.class);
+
+      assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode answer = parse(getResponse).at("/data/0");
+      assertThat(answer.at("/answerId").asLong()).isEqualTo(answerId);
+      assertThat(answer.at("/likeCount").asLong()).isEqualTo(1L);
+      assertThat(answer.at("/isLiked").asBoolean()).isTrue();
+
+      ResponseEntity<String> unlikeResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
+              HttpMethod.DELETE,
+              new HttpEntity<>(authHeaders(liker.accessToken())),
+              String.class);
+
+      assertThat(unlikeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode unlikeRoot = parse(unlikeResponse);
+      assertThat(unlikeRoot.at("/status").asText()).isEqualTo("SUCCESS");
+      assertThat(unlikeRoot.at("/data/liked").asBoolean()).isFalse();
+      assertThat(unlikeRoot.at("/data/likeCount").asLong()).isZero();
+
+      ResponseEntity<String> getAfterUnlikeResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers",
+              HttpMethod.GET,
+              new HttpEntity<>(authHeaders(liker.accessToken())),
+              String.class);
+
+      JsonNode answerAfterUnlike = parse(getAfterUnlikeResponse).at("/data/0");
+      assertThat(answerAfterUnlike.at("/answerId").asLong()).isEqualTo(answerId);
+      assertThat(answerAfterUnlike.at("/likeCount").asLong()).isZero();
+      assertThat(answerAfterUnlike.at("/isLiked").asBoolean()).isFalse();
+      assertThat(countAnswerLikes(answerId)).isZero();
+    }
+
+    @Test
+    @DisplayName("liking an already liked answer stays idempotent with count unchanged")
+    void answerLikes_duplicateLike_staysIdempotent() throws Exception {
+      TestUser author = signupAndLogin("dup-like-question-author");
+      TestUser answerer = signupAndLogin("dup-like-answerer");
+      TestUser liker = signupAndLogin("dup-like-answer-liker");
+      Long postId =
+          createQuestionPost(author.accessToken(), "Duplicate answer like", "Question", 80L);
+      Long answerId =
+          createAnswer(postId, answerer.accessToken(), "duplicate like answer", List.of());
+
+      ResponseEntity<String> firstLikeResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
+              HttpMethod.POST,
+              new HttpEntity<>(authHeaders(liker.accessToken())),
+              String.class);
+      ResponseEntity<String> secondLikeResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
+              HttpMethod.POST,
+              new HttpEntity<>(authHeaders(liker.accessToken())),
+              String.class);
+
+      assertThat(firstLikeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(secondLikeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(parse(firstLikeResponse).at("/data/likeCount").asLong()).isEqualTo(1L);
+      assertThat(parse(secondLikeResponse).at("/data/likeCount").asLong()).isEqualTo(1L);
+      assertThat(countAnswerLikes(answerId)).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("update answer changes DB state and re-links image-module rows")
     void updateAnswer_success_updatesDbAndGetResponse() throws Exception {
       TestUser author = signupAndLogin("update-author");
@@ -293,10 +404,12 @@ class AnswerE2ETest {
     void deleteQuestionPost_success_removesAnswersAndUnlinksImages() throws Exception {
       TestUser author = signupAndLogin("post-delete-author");
       TestUser answerer = signupAndLogin("post-delete-answerer");
+      TestUser liker = signupAndLogin("post-delete-liker");
       Long postId = createQuestionPost(author.accessToken(), "Cascade question", "Cascade me", 35L);
       Long imageId = insertImage(answerer.userId(), "COMPLETED", "answers/post-delete.webp");
       Long answerId =
           createAnswer(postId, answerer.accessToken(), "cascade answer", List.of(imageId));
+      likeAnswer(postId, answerId, liker.accessToken());
 
       ResponseEntity<String> deleteResponse =
           restTemplate.exchange(
@@ -310,6 +423,7 @@ class AnswerE2ETest {
       assertThat(postExistsInDb(postId)).isFalse();
       assertThat(countAnswersById(answerId)).isZero();
       assertThat(countLinkedAnswerImages(answerId)).isZero();
+      assertThat(countAnswerLikes(answerId)).isZero();
       assertImageUnlinked(imageId);
     }
   }
@@ -570,6 +684,19 @@ class AnswerE2ETest {
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
   }
 
+  private void likeAnswer(Long postId, Long answerId, String accessToken) throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
+            HttpMethod.POST,
+            new HttpEntity<>(authHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = parse(response);
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+  }
+
   private int countAnswersByPostId(Long postId) {
     Integer count =
         jdbcTemplate.queryForObject(
@@ -597,6 +724,15 @@ class AnswerE2ETest {
     Integer count =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM images WHERE id = ?", Integer.class, imageId);
+    return count == null ? 0 : count;
+  }
+
+  private int countAnswerLikes(Long answerId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM post_like WHERE target_type = 'ANSWER' AND target_id = ?",
+            Integer.class,
+            answerId);
     return count == null ? 0 : count;
   }
 

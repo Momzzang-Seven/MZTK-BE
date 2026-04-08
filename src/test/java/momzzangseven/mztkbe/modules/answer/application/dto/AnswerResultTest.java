@@ -44,6 +44,8 @@ class AnswerResultTest {
               answer,
               "writer",
               "https://cdn.example.com/profile.webp",
+              3L,
+              true,
               List.of("https://cdn.example.com/answer-1.webp"));
 
       assertThat(result.answerId()).isEqualTo(100L);
@@ -52,6 +54,8 @@ class AnswerResultTest {
       assertThat(result.profileImageUrl()).isEqualTo("https://cdn.example.com/profile.webp");
       assertThat(result.content()).isEqualTo("answer content");
       assertThat(result.accepted()).isTrue();
+      assertThat(result.likeCount()).isEqualTo(3L);
+      assertThat(result.liked()).isTrue();
       assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/answer-1.webp");
       assertThat(result.createdAt()).isEqualTo(createdAt);
       assertThat(result.updatedAt()).isEqualTo(updatedAt);
@@ -76,8 +80,10 @@ class AnswerResultTest {
                   "getUpdatedAt",
                   LocalDateTime.of(2026, 3, 2, 11, 30)));
 
-      AnswerResult result = AnswerResult.from(answer, "writer", null, null);
+      AnswerResult result = AnswerResult.from(answer, "writer", null, 0L, false, null);
 
+      assertThat(result.likeCount()).isZero();
+      assertThat(result.liked()).isFalse();
       assertThat(result.imageUrls()).isEmpty();
     }
   }

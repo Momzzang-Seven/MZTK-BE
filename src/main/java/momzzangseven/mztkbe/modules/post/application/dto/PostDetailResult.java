@@ -10,6 +10,8 @@ public record PostDetailResult(
     PostType type,
     String title,
     String content,
+    long likeCount,
+    boolean liked,
     Long userId,
     String nickname,
     String profileImageUrl,
@@ -21,12 +23,19 @@ public record PostDetailResult(
     LocalDateTime updatedAt) {
 
   public static PostDetailResult fromDomain(
-      Post post, String nickname, String profileImageUrl, List<String> imageUrls) {
+      Post post,
+      long likeCount,
+      boolean liked,
+      String nickname,
+      String profileImageUrl,
+      List<String> imageUrls) {
     return new PostDetailResult(
         post.getId(),
         post.getType(),
         post.getTitle(),
         post.getContent(),
+        likeCount,
+        liked,
         post.getUserId(),
         nickname,
         profileImageUrl,
