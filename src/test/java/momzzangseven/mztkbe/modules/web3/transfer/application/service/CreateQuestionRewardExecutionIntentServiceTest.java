@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
@@ -49,7 +50,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
         new ExecutionDraft(
             ExecutionResourceType.QUESTION,
             "101",
-            "PENDING_EXECUTION",
+            ExecutionResourceStatus.PENDING_EXECUTION,
             momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType
                 .QNA_ANSWER_ACCEPT,
             7L,
@@ -79,7 +80,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
         new CreateExecutionIntentResult(
             ExecutionResourceType.QUESTION,
             "101",
-            "PENDING_EXECUTION",
+            ExecutionResourceStatus.PENDING_EXECUTION,
             "intent-1",
             ExecutionIntentStatus.AWAITING_SIGNATURE,
             LocalDateTime.now().plusMinutes(5),

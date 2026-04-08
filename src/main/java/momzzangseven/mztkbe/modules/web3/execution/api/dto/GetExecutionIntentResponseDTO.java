@@ -14,7 +14,8 @@ public record GetExecutionIntentResponseDTO(
 
   public static GetExecutionIntentResponseDTO from(GetExecutionIntentResult result) {
     return new GetExecutionIntentResponseDTO(
-        new ResourceDTO(result.resourceType().name(), result.resourceId(), result.resourceStatus()),
+        new ResourceDTO(
+            result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         new ExecutionIntentDTO(
             result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
         new ExecutionDTO(result.mode().name(), result.signCount()),

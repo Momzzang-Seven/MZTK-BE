@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -72,6 +73,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   private final LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
+  private final Clock appClock;
 
   @Override
   public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
@@ -91,12 +93,14 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       return toResult(intent, loadTransaction(intent.getSubmittedTxId()));
     }
 
-    if (intent.getExpiresAt().isBefore(LocalDateTime.now())) {
+    LocalDateTime now = LocalDateTime.now(appClock);
+    if (intent.getExpiresAt().isBefore(now)) {
       ExecutionIntent expired =
           executionIntentPersistencePort.update(
               intent.expire(
                   ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
-                  ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage()));
+                  ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
+                  now));
       if (expired.getMode() == ExecutionMode.EIP7702
           && expired.getReservedSponsorCostWei().signum() > 0) {
         releaseSponsorExposure(
@@ -227,7 +231,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
 
     updateTransactionPort.markSigned(
         created.getId(), sponsorNonce, signedPayload.rawTx(), signedPayload.txHash());
-    executionIntentPersistencePort.update(intent.markSigned(created.getId()));
+    executionIntentPersistencePort.update(
+        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
     audit(
         created.getId(),
         Web3TransactionAuditEventType.AUTHORIZATION,
@@ -251,7 +256,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
               ? signedPayload.txHash()
               : broadcast.txHash();
       updateTransactionPort.markPending(created.getId(), txHash);
-      executionIntentPersistencePort.update(intent.markPendingOnchain(created.getId()));
+      executionIntentPersistencePort.update(
+          intent.markPendingOnchain(created.getId(), LocalDateTime.now(appClock)));
       moveReservedSponsorExposureToConsumed(
           intent.getRequesterUserId(),
           intent.resolveSponsorUsageDateKst(),
@@ -272,9 +278,10 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     updateTransactionPort.scheduleRetry(
         created.getId(),
         reason,
-        LocalDateTime.now()
+        LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    executionIntentPersistencePort.update(intent.markSigned(created.getId()));
+    executionIntentPersistencePort.update(
+        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
     actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
@@ -305,7 +312,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       executionIntentPersistencePort.update(
           intent.markNonceStale(
               ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
-              ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage()));
+              ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
+              LocalDateTime.now(appClock)));
       throw new Web3TransferException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
     }
 
@@ -330,7 +338,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         intent.getUnsignedTxSnapshot().expectedNonce(),
         decoded.rawTransaction(),
         decoded.txHash());
-    executionIntentPersistencePort.update(intent.markSigned(created.getId()));
+    executionIntentPersistencePort.update(
+        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
     audit(
         created.getId(),
         Web3TransactionAuditEventType.SIGN,
@@ -354,7 +363,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
               ? decoded.txHash()
               : broadcast.txHash();
       updateTransactionPort.markPending(created.getId(), txHash);
-      executionIntentPersistencePort.update(intent.markPendingOnchain(created.getId()));
+      executionIntentPersistencePort.update(
+          intent.markPendingOnchain(created.getId(), LocalDateTime.now(appClock)));
       actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.PENDING);
       return new ExecuteExecutionIntentResult(
           intent.getPublicId(),
@@ -371,9 +381,10 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     updateTransactionPort.scheduleRetry(
         created.getId(),
         reason,
-        LocalDateTime.now()
+        LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    executionIntentPersistencePort.update(intent.markSigned(created.getId()));
+    executionIntentPersistencePort.update(
+        intent.markSigned(created.getId(), LocalDateTime.now(appClock)));
     actionHandler.afterTransactionSubmitted(intent, actionPlan, Web3TxStatus.SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),

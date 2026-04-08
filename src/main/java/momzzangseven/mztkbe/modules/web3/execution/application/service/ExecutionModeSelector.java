@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
@@ -19,7 +19,6 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ExecutionModeSelector {
 
-  private static final ZoneId KST = ZoneId.of("Asia/Seoul");
   private static final BigInteger WEI_SCALE = BigInteger.TEN.pow(18);
   private static final BigInteger WEI_PER_GWEI = BigInteger.valueOf(1_000_000_000L);
   private static final BigInteger RESERVATION_NUMERATOR = BigInteger.valueOf(12);
@@ -27,10 +26,11 @@ public class ExecutionModeSelector {
 
   private final LoadSponsorPolicyPort loadSponsorPolicyPort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
+  private final Clock appClock;
 
   public ExecutionModeSelection select(CreateExecutionIntentCommand command) {
     SponsorPolicy sponsorPolicy = loadSponsorPolicyPort.loadSponsorPolicy();
-    LocalDate usageDateKst = LocalDate.now(KST);
+    LocalDate usageDateKst = LocalDate.now(appClock);
     BigInteger reservedCostWei = estimateReservedCostWei(sponsorPolicy);
     if (isSponsorEligible(command, sponsorPolicy, reservedCostWei, usageDateKst)) {
       return new ExecutionModeSelection(ExecutionMode.EIP7702, reservedCostWei, usageDateKst);

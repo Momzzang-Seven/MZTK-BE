@@ -6,7 +6,9 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
@@ -15,6 +17,7 @@ import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702Tra
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
@@ -31,6 +34,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class QuestionRewardExecutionDraftBuilderTest {
+
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-07T03:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
 
   @Mock private LoadWalletPort loadWalletPort;
   @Mock private LoadTransferRuntimeConfigPort loadTransferRuntimeConfigPort;
@@ -55,7 +64,7 @@ class QuestionRewardExecutionDraftBuilderTest {
             web3ContractPort,
             eip1559TransactionCodecPort,
             executionPayloadSerializer,
-            ZoneId.of("Asia/Seoul"));
+            FIXED_CLOCK);
   }
 
   @Test
@@ -111,11 +120,13 @@ class QuestionRewardExecutionDraftBuilderTest {
 
     assertThat(draft.resourceType()).isEqualTo(ExecutionResourceType.QUESTION);
     assertThat(draft.resourceId()).isEqualTo("101");
+    assertThat(draft.resourceStatus()).isEqualTo(ExecutionResourceStatus.PENDING_EXECUTION);
     assertThat(draft.actionType()).isEqualTo(ExecutionActionType.QNA_ANSWER_ACCEPT);
     assertThat(draft.rootIdempotencyKey()).isEqualTo("domain:QUESTION_REWARD:101:7");
     assertThat(draft.authorityAddress()).isEqualTo("0x" + "1".repeat(40));
     assertThat(draft.counterpartyUserId()).isEqualTo(22L);
     assertThat(draft.unsignedTxSnapshot().toAddress()).isEqualTo("0x" + "3".repeat(40));
+    assertThat(draft.expiresAt()).isEqualTo(FIXED_NOW.plusSeconds(runtimeConfig.authorizationTtlSeconds()));
   }
 
   private UserWallet wallet(Long userId, String address) {

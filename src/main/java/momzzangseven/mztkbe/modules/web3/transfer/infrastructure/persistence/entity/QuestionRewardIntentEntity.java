@@ -9,7 +9,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
@@ -76,20 +75,8 @@ public class QuestionRewardIntentEntity {
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
-    if (createdAt == null) {
-      createdAt = now;
-    }
-    if (updatedAt == null) {
-      updatedAt = now;
-    }
     if (status == null) {
       status = QuestionRewardIntentStatus.PREPARE_REQUIRED;
     }
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    updatedAt = LocalDateTime.now();
   }
 }

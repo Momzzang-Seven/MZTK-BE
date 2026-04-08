@@ -12,8 +12,11 @@ import static org.mockito.Mockito.when;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.math.BigInteger;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -35,6 +38,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class TransactionWorkPersistenceAdapterTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private EntityManager entityManager;
   @Mock private Web3TransactionJpaRepository repository;
 
@@ -42,7 +51,7 @@ class TransactionWorkPersistenceAdapterTest {
 
   @BeforeEach
   void setUp() {
-    adapter = new TransactionWorkPersistenceAdapter(entityManager, repository);
+    adapter = new TransactionWorkPersistenceAdapter(entityManager, repository, FIXED_CLOCK);
   }
 
   @Test
@@ -95,7 +104,6 @@ class TransactionWorkPersistenceAdapterTest {
     when(updateQuery.executeUpdate()).thenReturn(2);
     when(repository.findByIdIn(List.of(1L, 2L))).thenReturn(List.of(first, second));
 
-    LocalDateTime startedAt = LocalDateTime.now();
     List<LoadTransactionWorkPort.TransactionWorkItem> result =
         adapter.claimByStatus(Web3TxStatus.CREATED, 2, "worker-a", null);
 
@@ -106,8 +114,7 @@ class TransactionWorkPersistenceAdapterTest {
     ArgumentCaptor<LocalDateTime> processingUntilCaptor =
         ArgumentCaptor.forClass(LocalDateTime.class);
     verify(updateQuery).setParameter(eq("processingUntil"), processingUntilCaptor.capture());
-    long seconds = Duration.between(startedAt, processingUntilCaptor.getValue()).getSeconds();
-    assertThat(seconds).isBetween(100L, 140L);
+    assertThat(processingUntilCaptor.getValue()).isEqualTo(FIXED_NOW.plusMinutes(2));
   }
 
   @Test
@@ -145,6 +152,7 @@ class TransactionWorkPersistenceAdapterTest {
     adapter.assignNonce(1L, 77L);
 
     assertThat(entity.getNonce()).isEqualTo(77L);
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
   }
 
   @Test
@@ -229,7 +237,8 @@ class TransactionWorkPersistenceAdapterTest {
     assertThat(entity.getNonce()).isEqualTo(3L);
     assertThat(entity.getSignedRawTx()).isEqualTo("0xdeadbeef");
     assertThat(entity.getTxHash()).isEqualTo("0x" + "a".repeat(64));
-    assertThat(entity.getSignedAt()).isNotNull();
+    assertThat(entity.getSignedAt()).isEqualTo(FIXED_NOW);
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
   }
 
   @Test
@@ -260,7 +269,8 @@ class TransactionWorkPersistenceAdapterTest {
 
     assertThat(entity.getStatus()).isEqualTo(Web3TxStatus.PENDING);
     assertThat(entity.getTxHash()).isEqualTo("0x" + "b".repeat(64));
-    assertThat(entity.getBroadcastedAt()).isNotNull();
+    assertThat(entity.getBroadcastedAt()).isEqualTo(FIXED_NOW);
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
   }
 
   @Test
@@ -284,7 +294,8 @@ class TransactionWorkPersistenceAdapterTest {
 
     assertThat(entity.getStatus()).isEqualTo(Web3TxStatus.SUCCEEDED);
     assertThat(entity.getTxHash()).isEqualTo("0x" + "c".repeat(64));
-    assertThat(entity.getConfirmedAt()).isNotNull();
+    assertThat(entity.getConfirmedAt()).isEqualTo(FIXED_NOW);
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
   }
 
   @Test

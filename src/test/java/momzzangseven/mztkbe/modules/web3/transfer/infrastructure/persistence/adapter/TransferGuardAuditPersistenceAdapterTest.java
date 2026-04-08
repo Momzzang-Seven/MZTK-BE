@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.RecordTransferGuardAuditPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
@@ -21,13 +25,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class TransferGuardAuditPersistenceAdapterTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private Web3TransferGuardAuditJpaRepository repository;
 
   private TransferGuardAuditPersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new TransferGuardAuditPersistenceAdapter(repository);
+    adapter = new TransferGuardAuditPersistenceAdapter(repository, FIXED_CLOCK);
   }
 
   @Test
@@ -61,5 +71,6 @@ class TransferGuardAuditPersistenceAdapterTest {
     assertThat(captor.getValue().getPrepareId()).isEqualTo("prepare-1");
     assertThat(captor.getValue().getReason())
         .isEqualTo(TransferGuardAuditReason.REQUEST_RESOLVED_MISMATCH);
+    assertThat(captor.getValue().getCreatedAt()).isEqualTo(FIXED_NOW);
   }
 }

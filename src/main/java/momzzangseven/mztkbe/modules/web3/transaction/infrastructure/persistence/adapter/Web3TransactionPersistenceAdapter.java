@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.level.RewardFailedOnchainException;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
 
   private final Web3TransactionJpaRepository repository;
+  private final Clock appClock;
 
   @Override
   @Transactional
@@ -56,7 +58,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
                 command.fromAddress().value(),
                 command.toAddress().value(),
                 command.amountWei(),
-                LocalDateTime.now()));
+                LocalDateTime.now(appClock)));
 
     try {
       return toDomain(repository.saveAndFlush(created));

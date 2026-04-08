@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarkExecutionIntentSucceededService implements MarkExecutionIntentSucceededUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
+  private final Clock appClock;
 
   @Override
   public void execute(Long submittedTxId) {
@@ -32,16 +35,17 @@ public class MarkExecutionIntentSucceededService implements MarkExecutionIntentS
   }
 
   private void markSucceededIfNecessary(ExecutionIntent intent) {
+    LocalDateTime now = LocalDateTime.now(appClock);
     if (intent.getStatus() == ExecutionIntentStatus.CONFIRMED) {
       return;
     }
     if (intent.getStatus() == ExecutionIntentStatus.PENDING_ONCHAIN) {
-      executionIntentPersistencePort.update(intent.confirm());
+      executionIntentPersistencePort.update(intent.confirm(now));
       return;
     }
     if (intent.getStatus() == ExecutionIntentStatus.SIGNED) {
       executionIntentPersistencePort.update(
-          intent.markPendingOnchain(intent.getSubmittedTxId()).confirm());
+          intent.markPendingOnchain(intent.getSubmittedTxId(), now).confirm(now));
     }
   }
 }

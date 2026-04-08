@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -73,7 +74,7 @@ class GetExecutionIntentServiceTest {
 
     GetExecutionIntentResult result = service.execute(new GetExecutionIntentQuery(7L, "intent-1"));
 
-    assertThat(result.resourceStatus()).isEqualTo("PENDING_EXECUTION");
+    assertThat(result.resourceStatus()).isEqualTo(ExecutionResourceStatus.PENDING_EXECUTION);
     assertThat(result.signRequest()).isNotNull();
     assertThat(result.signRequest().authorization()).isNotNull();
     assertThat(result.signRequest().submit()).isNotNull();
@@ -115,7 +116,7 @@ class GetExecutionIntentServiceTest {
                 BigInteger.ZERO,
                 LocalDate.of(2026, 4, 5),
                 LocalDateTime.of(2026, 4, 5, 11, 0))
-            .markPendingOnchain(99L);
+            .markPendingOnchain(99L, LocalDateTime.of(2026, 4, 5, 11, 30));
 
     when(executionIntentPersistencePort.findByPublicId("intent-2")).thenReturn(Optional.of(intent));
     when(loadExecutionTransactionPort.findById(99L))
@@ -124,7 +125,7 @@ class GetExecutionIntentServiceTest {
 
     GetExecutionIntentResult result = service.execute(new GetExecutionIntentQuery(7L, "intent-2"));
 
-    assertThat(result.resourceStatus()).isEqualTo("PENDING_EXECUTION");
+    assertThat(result.resourceStatus()).isEqualTo(ExecutionResourceStatus.PENDING_EXECUTION);
     assertThat(result.signRequest()).isNull();
     assertThat(result.transactionId()).isEqualTo(99L);
     assertThat(result.transactionStatus()).isEqualTo(Web3TxStatus.PENDING);

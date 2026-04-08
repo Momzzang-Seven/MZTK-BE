@@ -61,7 +61,7 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
         intent.getStatus(),
         intent.getExpiresAt(),
         intent.getMode(),
-        signCount(intent.getMode()),
+        intent.getMode().requiredSignCount(),
         intent.shouldExposeSignRequest() ? buildSignRequest(intent) : null,
         transaction.map(ExecutionTransactionSummary::transactionId).orElse(null),
         transaction.map(ExecutionTransactionSummary::status).orElse(null),
@@ -98,16 +98,11 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
             intent.getUnsignedTxSnapshot().expectedNonce()));
   }
 
-  private int signCount(ExecutionMode mode) {
-    return mode == ExecutionMode.EIP7702 ? 2 : 1;
-  }
-
-  private String toResourceStatus(ExecutionIntentStatus status) {
+  private ExecutionResourceStatus toResourceStatus(ExecutionIntentStatus status) {
     return switch (status) {
-      case AWAITING_SIGNATURE, SIGNED, PENDING_ONCHAIN ->
-          ExecutionResourceStatus.PENDING_EXECUTION.name();
-      case CONFIRMED -> ExecutionResourceStatus.COMPLETED.name();
-      case FAILED_ONCHAIN, EXPIRED, NONCE_STALE, CANCELED -> ExecutionResourceStatus.FAILED.name();
+      case AWAITING_SIGNATURE, SIGNED, PENDING_ONCHAIN -> ExecutionResourceStatus.PENDING_EXECUTION;
+      case CONFIRMED -> ExecutionResourceStatus.COMPLETED;
+      case FAILED_ONCHAIN, EXPIRED, NONCE_STALE, CANCELED -> ExecutionResourceStatus.FAILED;
     };
   }
 }

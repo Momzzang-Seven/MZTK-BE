@@ -8,7 +8,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.SponsorDailyUsage;
@@ -24,13 +28,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class SponsorDailyUsagePersistenceAdapterTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private Web3SponsorDailyUsageJpaRepository repository;
 
   private SponsorDailyUsagePersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new SponsorDailyUsagePersistenceAdapter(repository);
+    adapter = new SponsorDailyUsagePersistenceAdapter(repository, FIXED_CLOCK);
   }
 
   @Test
@@ -82,7 +92,11 @@ class SponsorDailyUsagePersistenceAdapterTest {
     verify(repository).save(captor.capture());
     assertThat(captor.getValue().getUserId()).isEqualTo(7L);
     assertThat(captor.getValue().getReservedCostWei()).isEqualTo(BigInteger.ONE);
+    assertThat(captor.getValue().getCreatedAt()).isEqualTo(FIXED_NOW);
+    assertThat(captor.getValue().getUpdatedAt()).isEqualTo(FIXED_NOW);
     assertThat(created.getConsumedCostWei()).isEqualTo(BigInteger.TEN);
+    assertThat(created.getCreatedAt()).isEqualTo(FIXED_NOW);
+    assertThat(created.getUpdatedAt()).isEqualTo(FIXED_NOW);
   }
 
   @Test

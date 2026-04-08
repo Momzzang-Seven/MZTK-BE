@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.adapter;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.RecordTransferGuardAuditPort;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TransferGuardAuditPersistenceAdapter implements RecordTransferGuardAuditPort {
 
   private final Web3TransferGuardAuditJpaRepository repository;
+  private final Clock appClock;
 
   @Override
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -34,6 +37,7 @@ public class TransferGuardAuditPersistenceAdapter implements RecordTransferGuard
             .resolvedToUserId(command.resolvedToUserId())
             .requestedAmountWei(command.requestedAmountWei())
             .resolvedAmountWei(command.resolvedAmountWei())
+            .createdAt(LocalDateTime.now(appClock))
             .build());
   }
 }

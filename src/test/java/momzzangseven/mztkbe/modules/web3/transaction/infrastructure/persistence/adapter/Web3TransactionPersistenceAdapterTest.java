@@ -2,9 +2,15 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.level.RewardFailedOnchainException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -24,13 +30,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class Web3TransactionPersistenceAdapterTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private Web3TransactionJpaRepository repository;
 
   private Web3TransactionPersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new Web3TransactionPersistenceAdapter(repository);
+    adapter = new Web3TransactionPersistenceAdapter(repository, FIXED_CLOCK);
   }
 
   @Test
@@ -59,6 +71,21 @@ class Web3TransactionPersistenceAdapterTest {
     assertThat(tx.getId()).isEqualTo(9L);
     assertThat(tx.getReferenceType()).isEqualTo(Web3ReferenceType.LEVEL_UP_REWARD);
     assertThat(tx.getReferenceId()).isEqualTo("101");
+  }
+
+  @Test
+  void saveLevelUpRewardIntent_createsNewIntentWithAppClock() {
+    when(repository.findByReferenceTypeAndReferenceId(Web3ReferenceType.LEVEL_UP_REWARD, "101"))
+        .thenReturn(Optional.empty());
+    when(repository.findByIdempotencyKey("idem-101")).thenReturn(Optional.empty());
+    when(repository.saveAndFlush(any(Web3TransactionEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0, Web3TransactionEntity.class));
+
+    var tx = adapter.saveLevelUpRewardIntent(validCommand());
+
+    assertThat(tx.getCreatedAt()).isEqualTo(FIXED_NOW);
+    assertThat(tx.getUpdatedAt()).isEqualTo(FIXED_NOW);
+    verify(repository).saveAndFlush(any(Web3TransactionEntity.class));
   }
 
   private CreateLevelUpRewardTxIntentCommand validCommand() {

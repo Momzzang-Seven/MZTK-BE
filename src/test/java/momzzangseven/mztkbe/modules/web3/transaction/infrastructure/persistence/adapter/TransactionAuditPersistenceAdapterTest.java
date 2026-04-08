@@ -6,6 +6,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Map;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
@@ -23,6 +27,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class TransactionAuditPersistenceAdapterTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-08T00:00:00Z"), APP_ZONE);
+  private static final LocalDateTime FIXED_NOW =
+      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+
   @Mock private Web3TransactionAuditJpaRepository repository;
   @Mock private AuditLogSerializer auditLogSerializer;
 
@@ -30,7 +40,7 @@ class TransactionAuditPersistenceAdapterTest {
 
   @BeforeEach
   void setUp() {
-    adapter = new TransactionAuditPersistenceAdapter(repository, auditLogSerializer);
+    adapter = new TransactionAuditPersistenceAdapter(repository, auditLogSerializer, FIXED_CLOCK);
   }
 
   @Test
@@ -76,7 +86,8 @@ class TransactionAuditPersistenceAdapterTest {
         ArgumentCaptor.forClass(Web3TransactionAuditEntity.class);
     verify(repository).save(captor.capture());
     assertThat(captor.getValue().getWeb3TransactionId()).isEqualTo(7L);
-    assertThat(captor.getValue().getEventType()).isEqualTo("STATE_CHANGE");
+    assertThat(captor.getValue().getEventType()).isEqualTo(Web3TransactionAuditEventType.STATE_CHANGE);
     assertThat(captor.getValue().getDetailJson()).contains("SIGNED");
+    assertThat(captor.getValue().getCreatedAt()).isEqualTo(FIXED_NOW);
   }
 }

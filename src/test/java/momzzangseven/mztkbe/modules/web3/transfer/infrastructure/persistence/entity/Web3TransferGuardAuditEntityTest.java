@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.persistence.en
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigInteger;
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TransferGuardAuditReason;
 import org.junit.jupiter.api.Test;
@@ -27,11 +28,11 @@ class Web3TransferGuardAuditEntityTest {
   }
 
   @Test
-  void onCreate_setsCreatedAt_whenMissing() {
-    Web3TransferGuardAuditEntity entity = Web3TransferGuardAuditEntity.builder().build();
+  void builder_preservesCreatedAt_whenProvided() {
+    LocalDateTime createdAt = LocalDateTime.of(2026, 4, 8, 9, 0);
+    Web3TransferGuardAuditEntity entity =
+        Web3TransferGuardAuditEntity.builder().createdAt(createdAt).build();
 
-    entity.onCreate();
-
-    assertThat(entity.getCreatedAt()).isNotNull();
+    assertThat(entity.getCreatedAt()).isEqualTo(createdAt);
   }
 }

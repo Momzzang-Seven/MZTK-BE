@@ -13,7 +13,8 @@ public record CreateTransferResponseDTO(
 
   public static CreateTransferResponseDTO from(CreateExecutionIntentResult result) {
     return new CreateTransferResponseDTO(
-        new ResourceDTO(result.resourceType().name(), result.resourceId(), result.resourceStatus()),
+        new ResourceDTO(
+            result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         new ExecutionIntentDTO(
             result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
         new ExecutionDTO(result.mode().name(), result.signCount()),
