@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.HandleTransferFailedOnchainCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.CheckLevelUpHistoryExistsPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionReferenceType;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -58,7 +59,7 @@ class LevelUpRewardFailureCompensatorTest {
     return new HandleTransferFailedOnchainCommand(
         100L,
         "reward:11:" + referenceId,
-        "LEVEL_UP_REWARD",
+        TransferTransactionReferenceType.LEVEL_UP_REWARD,
         referenceId,
         null,
         11L,

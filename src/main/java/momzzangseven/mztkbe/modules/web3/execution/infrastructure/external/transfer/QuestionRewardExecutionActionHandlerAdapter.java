@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.transfer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,6 +11,8 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetQuestionRewardIntentSnapshotQuery;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.MarkQuestionRewardIntentSubmittedCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.QuestionRewardExecutionPayload;
@@ -28,10 +30,6 @@ import org.springframework.stereotype.Component;
     havingValue = "true")
 public class QuestionRewardExecutionActionHandlerAdapter implements ExecutionActionHandlerPort {
 
-  private static final String USER_TO_USER = "USER_TO_USER";
-  private static final String TX_STATUS_SIGNED = "SIGNED";
-  private static final String TX_STATUS_PENDING = "PENDING";
-
   private final ObjectMapper objectMapper;
   private final GetQuestionRewardIntentSnapshotUseCase getQuestionRewardIntentSnapshotUseCase;
   private final MarkQuestionRewardIntentSubmittedUseCase markQuestionRewardIntentSubmittedUseCase;
@@ -46,7 +44,7 @@ public class QuestionRewardExecutionActionHandlerAdapter implements ExecutionAct
     QuestionRewardExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
     return new ExecutionActionPlan(
         payload.amountWei(),
-        USER_TO_USER,
+        ExecutionReferenceType.USER_TO_USER,
         List.of(
             new ExecutionDraftCall(
                 payload.tokenContractAddress(), BigInteger.ZERO, payload.transferData())));
@@ -73,8 +71,11 @@ public class QuestionRewardExecutionActionHandlerAdapter implements ExecutionAct
 
   @Override
   public void afterTransactionSubmitted(
-      ExecutionIntent intent, ExecutionActionPlan actionPlan, String txStatus) {
-    if (!TX_STATUS_SIGNED.equals(txStatus) && !TX_STATUS_PENDING.equals(txStatus)) {
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionTransactionStatus txStatus) {
+    if (txStatus != ExecutionTransactionStatus.SIGNED
+        && txStatus != ExecutionTransactionStatus.PENDING) {
       return;
     }
     QuestionRewardExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());

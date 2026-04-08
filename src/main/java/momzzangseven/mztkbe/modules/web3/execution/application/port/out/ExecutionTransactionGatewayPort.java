@@ -4,6 +4,10 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEventType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 
 public interface ExecutionTransactionGatewayPort {
 
@@ -24,15 +28,18 @@ public interface ExecutionTransactionGatewayPort {
   BroadcastResult broadcast(String rawTx);
 
   record AuditCommand(
-      Long transactionId, String eventType, String rpcAlias, Map<String, Object> detail) {}
+      Long transactionId,
+      ExecutionAuditEventType eventType,
+      String rpcAlias,
+      Map<String, Object> detail) {}
 
   record BroadcastResult(boolean success, String txHash, String failureReason, String rpcAlias) {}
 
-  record TransactionRecord(Long transactionId, String status, String txHash) {}
+  record TransactionRecord(Long transactionId, ExecutionTransactionStatus status, String txHash) {}
 
   record CreateTransactionCommand(
       String idempotencyKey,
-      String referenceType,
+      ExecutionReferenceType referenceType,
       String referenceId,
       Long fromUserId,
       Long toUserId,
@@ -40,8 +47,8 @@ public interface ExecutionTransactionGatewayPort {
       String toAddress,
       BigInteger amountWei,
       Long nonce,
-      String status,
-      String txType,
+      ExecutionTransactionStatus status,
+      ExecutionTransactionType txType,
       String authorityAddress,
       Long authorizationNonce,
       String delegateTarget,

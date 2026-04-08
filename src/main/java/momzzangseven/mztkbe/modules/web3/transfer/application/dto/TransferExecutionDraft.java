@@ -2,13 +2,16 @@ package momzzangseven.mztkbe.modules.web3.transfer.application.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
 
 /** Transfer-owned draft contract submitted to execution through an adapter boundary. */
 public record TransferExecutionDraft(
-    String resourceType,
+    TransferExecutionResourceType resourceType,
     String resourceId,
-    String resourceStatus,
-    String actionType,
+    TransferExecutionResourceStatus resourceStatus,
+    TransferExecutionActionType actionType,
     Long requesterUserId,
     Long counterpartyUserId,
     String rootIdempotencyKey,

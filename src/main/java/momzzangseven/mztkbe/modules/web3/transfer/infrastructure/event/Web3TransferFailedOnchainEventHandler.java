@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3TransactionFailedOnchainEvent;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.HandleTransferFailedOnchainCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.HandleTransferFailedOnchainUseCase;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionReferenceType;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +27,7 @@ public class Web3TransferFailedOnchainEventHandler {
           new HandleTransferFailedOnchainCommand(
               event.transactionId(),
               event.idempotencyKey(),
-              event.referenceType().name(),
+              TransferTransactionReferenceType.valueOf(event.referenceType().name()),
               event.referenceId(),
               event.fromUserId(),
               event.toUserId(),

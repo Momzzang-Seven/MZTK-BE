@@ -35,8 +35,10 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionT
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
 import org.junit.jupiter.api.BeforeEach;
@@ -90,7 +92,7 @@ class ExecuteExecutionIntentServiceTest {
         .thenReturn(
             new ExecutionActionPlan(
                 BigInteger.valueOf(100),
-                "USER_TO_USER",
+                ExecutionReferenceType.USER_TO_USER,
                 List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234"))));
     lenient()
         .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
@@ -105,7 +107,8 @@ class ExecuteExecutionIntentServiceTest {
   void execute_returnsExistingTransaction_whenIntentAlreadyHasSubmittedTxId() throws Exception {
     ExecutionIntent intent = existingEip1559Intent().toBuilder().submittedTxId(99L).build();
     ExecutionTransactionGatewayPort.TransactionRecord transaction =
-        new ExecutionTransactionGatewayPort.TransactionRecord(99L, "SIGNED", "0xhash");
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            99L, ExecutionTransactionStatus.SIGNED, "0xhash");
 
     when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
         .thenReturn(Optional.of(intent));
@@ -115,7 +118,7 @@ class ExecuteExecutionIntentServiceTest {
         service.execute(new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, null));
 
     assertThat(result.transactionId()).isEqualTo(99L);
-    assertThat(result.transactionStatus()).isEqualTo("SIGNED");
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
     assertThat(result.txHash()).isEqualTo("0xhash");
   }
 

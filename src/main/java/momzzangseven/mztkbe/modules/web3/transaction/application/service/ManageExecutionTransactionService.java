@@ -19,6 +19,9 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceT
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionReferenceType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +52,9 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
         .map(
             transaction ->
                 new ExecutionTransactionSummaryResult(
-                    transaction.getId(), transaction.getStatus().name(), transaction.getTxHash()));
+                    transaction.getId(),
+                    TransactionStatus.valueOf(transaction.getStatus().name()),
+                    transaction.getTxHash()));
   }
 
   @Override
@@ -59,7 +64,7 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
         transferTransactionPersistencePort.createAndFlush(
             TransferTransaction.builder()
                 .idempotencyKey(command.idempotencyKey())
-                .referenceType(Web3ReferenceType.valueOf(command.referenceType()))
+                .referenceType(Web3ReferenceType.valueOf(command.referenceType().name()))
                 .referenceId(command.referenceId())
                 .fromUserId(command.fromUserId())
                 .toUserId(command.toUserId())
@@ -67,8 +72,8 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
                 .toAddress(command.toAddress())
                 .amountWei(command.amountWei())
                 .nonce(command.nonce())
-                .status(Web3TxStatus.valueOf(command.status()))
-                .txType(Web3TxType.valueOf(command.txType()))
+                .status(Web3TxStatus.valueOf(command.status().name()))
+                .txType(Web3TxType.valueOf(command.txType().name()))
                 .authorityAddress(command.authorityAddress())
                 .authorizationNonce(command.authorizationNonce())
                 .delegateTarget(command.delegateTarget())
@@ -103,7 +108,7 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
     recordTransactionAuditPort.record(
         new RecordTransactionAuditPort.AuditCommand(
             command.transactionId(),
-            Web3TransactionAuditEventType.valueOf(command.eventType()),
+            Web3TransactionAuditEventType.valueOf(command.eventType().name()),
             command.rpcAlias(),
             command.detail()));
   }
@@ -118,6 +123,8 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
 
   private ExecutionTransactionRecordResult toResult(TransferTransaction transaction) {
     return new ExecutionTransactionRecordResult(
-        transaction.getId(), transaction.getStatus().name(), transaction.getTxHash());
+        transaction.getId(),
+        TransactionStatus.valueOf(transaction.getStatus().name()),
+        transaction.getTxHash());
   }
 }

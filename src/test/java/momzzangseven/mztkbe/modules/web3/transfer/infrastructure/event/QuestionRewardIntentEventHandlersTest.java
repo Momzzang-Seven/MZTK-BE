@@ -22,6 +22,10 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.RegisterQu
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentCanceledEvent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.event.QuestionRewardIntentRequestedEvent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionMode;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -47,13 +51,13 @@ class QuestionRewardIntentEventHandlersTest {
             org.mockito.ArgumentMatchers.any(RegisterQuestionRewardIntentCommand.class)))
         .thenReturn(
             new TransferExecutionIntentResult(
-                "QUESTION",
+                TransferExecutionResourceType.QUESTION,
                 "101",
-                "PENDING_EXECUTION",
+                TransferExecutionResourceStatus.PENDING_EXECUTION,
                 "intent-1",
-                "AWAITING_SIGNATURE",
+                TransferExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.now().plusMinutes(5),
-                "EIP7702",
+                TransferExecutionMode.EIP7702,
                 2,
                 TransferSignRequestBundle.forEip7702(
                     new TransferSignRequestBundle.AuthorizationSignRequest(

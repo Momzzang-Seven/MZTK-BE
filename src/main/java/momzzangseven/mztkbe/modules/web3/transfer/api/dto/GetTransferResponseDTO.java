@@ -13,15 +13,16 @@ public record GetTransferResponseDTO(
 
   public static GetTransferResponseDTO from(TransferExecutionIntentResult result) {
     return new GetTransferResponseDTO(
-        new ResourceDTO(result.resourceType(), result.resourceId(), result.resourceStatus()),
+        new ResourceDTO(
+            result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         new ExecutionIntentDTO(
-            result.executionIntentId(), result.executionIntentStatus(), result.expiresAt()),
-        new ExecutionDTO(result.mode(), result.signCount()),
+            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+        new ExecutionDTO(result.mode().name(), result.signCount()),
         result.signRequest(),
         result.transactionId() == null
             ? null
             : new TransactionDTO(
-                result.transactionId(), result.transactionStatus(), result.txHash()));
+                result.transactionId(), result.transactionStatus().name(), result.txHash()));
   }
 
   public record ResourceDTO(String type, String id, String status) {}

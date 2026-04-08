@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionMode;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
 import org.junit.jupiter.api.Test;
 
 class CreateTransferResponseDTOTest {
@@ -13,13 +17,13 @@ class CreateTransferResponseDTOTest {
   void from_mapsResourceIdInsteadOfExecutionIntentId() {
     TransferExecutionIntentResult result =
         new TransferExecutionIntentResult(
-            "TRANSFER",
+            TransferExecutionResourceType.TRANSFER,
             "web3:TRANSFER_SEND:7:req-1",
-            "PENDING_EXECUTION",
+            TransferExecutionResourceStatus.PENDING_EXECUTION,
             "intent-1",
-            "AWAITING_SIGNATURE",
+            TransferExecutionIntentStatus.AWAITING_SIGNATURE,
             LocalDateTime.now().plusMinutes(5),
-            "EIP1559",
+            TransferExecutionMode.EIP1559,
             1,
             TransferSignRequestBundle.forEip1559(
                 new TransferSignRequestBundle.TransactionSignRequest(

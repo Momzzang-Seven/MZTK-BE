@@ -14,6 +14,9 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionT
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.transfer.QuestionRewardExecutionActionHandlerAdapter;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetQuestionRewardIntentSnapshotQuery;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.MarkQuestionRewardIntentSubmittedCommand;
@@ -61,9 +64,9 @@ class QuestionRewardExecutionActionHandlerTest {
 
     ExecutionActionPlan plan = handler.buildActionPlan(intent);
     handler.beforeExecute(intent, plan);
-    handler.afterTransactionSubmitted(intent, plan, "PENDING");
+    handler.afterTransactionSubmitted(intent, plan, ExecutionTransactionStatus.PENDING);
 
-    assertThat(plan.referenceType()).isEqualTo("USER_TO_USER");
+    assertThat(plan.referenceType()).isEqualTo(ExecutionReferenceType.USER_TO_USER);
     assertThat(plan.calls()).hasSize(1);
     assertThat(plan.calls().getFirst().data()).isEqualTo("0x1234");
     verify(markQuestionRewardIntentSubmittedUseCase)

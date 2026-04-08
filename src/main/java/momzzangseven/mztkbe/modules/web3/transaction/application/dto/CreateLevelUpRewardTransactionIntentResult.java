@@ -1,4 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.dto;
 
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+
 public record CreateLevelUpRewardTransactionIntentResult(
-    String status, String txHash, String failureReason) {}
+    TransactionStatus status, String txHash, String failureReason) {}

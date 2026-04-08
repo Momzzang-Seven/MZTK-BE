@@ -18,6 +18,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.Prepare
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.RegisterQuestionRewardIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferRuntimeConfigPort;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.web3.QuestionRewardExecutionDraftBuilderAdapter;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferRuntimeConfig;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -101,10 +105,10 @@ class QuestionRewardExecutionDraftBuilderTest {
 
     TransferExecutionDraft draft = builder.build(command);
 
-    assertThat(draft.resourceType()).isEqualTo("QUESTION");
+    assertThat(draft.resourceType()).isEqualTo(TransferExecutionResourceType.QUESTION);
     assertThat(draft.resourceId()).isEqualTo("101");
-    assertThat(draft.resourceStatus()).isEqualTo("PENDING_EXECUTION");
-    assertThat(draft.actionType()).isEqualTo("QNA_ANSWER_ACCEPT");
+    assertThat(draft.resourceStatus()).isEqualTo(TransferExecutionResourceStatus.PENDING_EXECUTION);
+    assertThat(draft.actionType()).isEqualTo(TransferExecutionActionType.QNA_ANSWER_ACCEPT);
     assertThat(draft.rootIdempotencyKey()).isEqualTo("domain:QUESTION_REWARD:101:7");
     assertThat(draft.authorityAddress()).isEqualTo("0x" + "1".repeat(40));
     assertThat(draft.counterpartyUserId()).isEqualTo(22L);

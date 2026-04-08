@@ -15,6 +15,11 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.CreateTransfer
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetTransferQuery;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionMode;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.CreateTransferUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.GetTransferUseCase;
 import org.junit.jupiter.api.DisplayName;
@@ -63,13 +68,13 @@ class TransferControllerTest {
     org.mockito.BDDMockito.given(createTransferUseCase.execute(any(CreateTransferCommand.class)))
         .willReturn(
             new TransferExecutionIntentResult(
-                "TRANSFER",
+                TransferExecutionResourceType.TRANSFER,
                 "web3:TRANSFER_SEND:1:req-77",
-                "PENDING_EXECUTION",
+                TransferExecutionResourceStatus.PENDING_EXECUTION,
                 "intent-1",
-                "AWAITING_SIGNATURE",
+                TransferExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.now().plusMinutes(5),
-                "EIP7702",
+                TransferExecutionMode.EIP7702,
                 2,
                 TransferSignRequestBundle.forEip7702(
                     new TransferSignRequestBundle.AuthorizationSignRequest(
@@ -110,18 +115,18 @@ class TransferControllerTest {
     org.mockito.BDDMockito.given(getTransferUseCase.execute(any(GetTransferQuery.class)))
         .willReturn(
             new TransferExecutionIntentResult(
-                "TRANSFER",
+                TransferExecutionResourceType.TRANSFER,
                 "web3:TRANSFER_SEND:1:req-77",
-                "PENDING_EXECUTION",
+                TransferExecutionResourceStatus.PENDING_EXECUTION,
                 "intent-1",
-                "PENDING_ONCHAIN",
+                TransferExecutionIntentStatus.PENDING_ONCHAIN,
                 LocalDateTime.now().plusMinutes(5),
-                "EIP7702",
+                TransferExecutionMode.EIP7702,
                 2,
                 null,
                 false,
                 10L,
-                "PENDING",
+                TransferTransactionStatus.PENDING,
                 "0x" + "c".repeat(64)));
 
     mockMvc
