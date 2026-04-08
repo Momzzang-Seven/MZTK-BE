@@ -24,7 +24,7 @@ public record GetExecutionIntentResponseDTO(
         result.transactionId() == null
             ? null
             : new TransactionDTO(
-                result.transactionId(), result.transactionStatus(), result.txHash()));
+                result.transactionId(), result.transactionStatus().name(), result.txHash()));
   }
 
   /** Resource section containing domain resource identifier and derived status. */

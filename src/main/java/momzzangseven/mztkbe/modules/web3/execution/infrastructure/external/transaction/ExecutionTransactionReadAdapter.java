@@ -1,10 +1,11 @@
-package momzzangseven.mztkbe.modules.web3.execution.infrastructure.persistence.adapter;
+package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.transaction;
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +26,8 @@ public class ExecutionTransactionReadAdapter implements LoadExecutionTransaction
         .map(
             transaction ->
                 new ExecutionTransactionSummary(
-                    transaction.transactionId(), transaction.status(), transaction.txHash()));
+                    transaction.transactionId(),
+                    ExecutionTransactionStatus.valueOf(transaction.status().name()),
+                    transaction.txHash()));
   }
 }

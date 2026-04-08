@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.transfer.SponsorDailyUsagePersistenceAdapter;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.ExecutionSponsorDailyUsageRecord;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.ManageExecutionSponsorDailyUsageUseCase;
 import org.junit.jupiter.api.BeforeEach;

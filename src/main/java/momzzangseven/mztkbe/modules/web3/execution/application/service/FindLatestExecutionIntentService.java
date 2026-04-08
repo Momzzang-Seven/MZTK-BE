@@ -22,7 +22,7 @@ public class FindLatestExecutionIntentService implements FindLatestExecutionInte
     return executionIntentPersistencePort
         .findLatestByRequesterAndResource(
             query.requesterUserId(),
-            ExecutionResourceType.valueOf(query.resourceType()),
+            ExecutionResourceType.valueOf(query.resourceType().name()),
             query.resourceId())
         .map(intent -> new FindLatestExecutionIntentResult(intent.getPublicId()));
   }

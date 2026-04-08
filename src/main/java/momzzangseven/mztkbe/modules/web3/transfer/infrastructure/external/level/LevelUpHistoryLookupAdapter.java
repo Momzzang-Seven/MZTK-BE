@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.level.application.port.in.CheckLevelUpHistoryExistsUseCase;

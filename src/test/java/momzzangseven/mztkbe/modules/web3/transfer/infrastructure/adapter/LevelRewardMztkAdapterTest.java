@@ -18,6 +18,8 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level.LevelRewardMztkAdapter;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,7 +53,7 @@ class LevelRewardMztkAdapterTest {
     when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
         .thenReturn(
             new CreateLevelUpRewardTransactionIntentResult(
-                "SUCCEEDED", "0x" + "c".repeat(64), null));
+                TransactionStatus.SUCCEEDED, "0x" + "c".repeat(64), null));
 
     RewardMztkResult result = adapter.reward(validCommand(3));
 
@@ -64,7 +66,7 @@ class LevelRewardMztkAdapterTest {
     when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
         .thenReturn(
             new CreateLevelUpRewardTransactionIntentResult(
-                "UNCONFIRMED", "0x" + "c".repeat(64), "TIMEOUT"));
+                TransactionStatus.UNCONFIRMED, "0x" + "c".repeat(64), "TIMEOUT"));
 
     RewardMztkResult result = adapter.reward(validCommand(2));
 
@@ -76,7 +78,8 @@ class LevelRewardMztkAdapterTest {
   void reward_mapsOtherStatusUsingNameMapping() {
     when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
         .thenReturn(
-            new CreateLevelUpRewardTransactionIntentResult("PENDING", "0x" + "c".repeat(64), null));
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.PENDING, "0x" + "c".repeat(64), null));
 
     RewardMztkResult result = adapter.reward(validCommand(1));
 
@@ -87,7 +90,9 @@ class LevelRewardMztkAdapterTest {
   void reward_convertsRewardToWei_usingConfiguredDecimals() {
     properties.setDecimals(2);
     when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
-        .thenReturn(new CreateLevelUpRewardTransactionIntentResult("CREATED", null, "QUEUED"));
+        .thenReturn(
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.CREATED, null, "QUEUED"));
 
     adapter.reward(validCommand(7));
 
@@ -101,7 +106,9 @@ class LevelRewardMztkAdapterTest {
   void reward_usesZeroScale_whenDecimalsConfiguredNegative() {
     properties.setDecimals(-3);
     when(createLevelUpRewardTransactionIntentUseCase.execute(any()))
-        .thenReturn(new CreateLevelUpRewardTransactionIntentResult("CREATED", null, "QUEUED"));
+        .thenReturn(
+            new CreateLevelUpRewardTransactionIntentResult(
+                TransactionStatus.CREATED, null, "QUEUED"));
 
     adapter.reward(validCommand(7));
 

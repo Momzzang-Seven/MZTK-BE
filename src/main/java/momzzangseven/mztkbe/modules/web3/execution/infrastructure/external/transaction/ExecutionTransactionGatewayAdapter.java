@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.transaction;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -9,6 +9,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTr
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionAuditEventType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionReferenceType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -33,7 +37,7 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
         manageExecutionTransactionUseCase.createAndFlush(
             new ExecutionTransactionRecordCommand(
                 command.idempotencyKey(),
-                command.referenceType(),
+                TransactionReferenceType.valueOf(command.referenceType().name()),
                 command.referenceId(),
                 command.fromUserId(),
                 command.toUserId(),
@@ -41,8 +45,8 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
                 command.toAddress(),
                 command.amountWei(),
                 command.nonce(),
-                command.status(),
-                command.txType(),
+                TransactionStatus.valueOf(command.status().name()),
+                TransactionType.valueOf(command.txType().name()),
                 command.authorityAddress(),
                 command.authorizationNonce(),
                 command.delegateTarget(),
@@ -74,7 +78,10 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   public void recordAudit(AuditCommand command) {
     manageExecutionTransactionUseCase.recordAudit(
         new ExecutionTransactionAuditCommand(
-            command.transactionId(), command.eventType(), command.rpcAlias(), command.detail()));
+            command.transactionId(),
+            TransactionAuditEventType.valueOf(command.eventType().name()),
+            command.rpcAlias(),
+            command.detail()));
   }
 
   @Override
@@ -85,6 +92,10 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   }
 
   private TransactionRecord toRecord(ExecutionTransactionRecordResult result) {
-    return new TransactionRecord(result.transactionId(), result.status(), result.txHash());
+    return new TransactionRecord(
+        result.transactionId(),
+        momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus.valueOf(
+            result.status().name()),
+        result.txHash());
   }
 }

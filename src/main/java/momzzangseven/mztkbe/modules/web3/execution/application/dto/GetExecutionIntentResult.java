@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 
 /** Read contract for execution intent polling endpoint. */
 public record GetExecutionIntentResult(
@@ -20,7 +21,7 @@ public record GetExecutionIntentResult(
     int signCount,
     SignRequestBundle signRequest,
     Long transactionId,
-    String transactionStatus,
+    ExecutionTransactionStatus transactionStatus,
     String txHash) {
 
   /** Validates required fields for read response mapping. */

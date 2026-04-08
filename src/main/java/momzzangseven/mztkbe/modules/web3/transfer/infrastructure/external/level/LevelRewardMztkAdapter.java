@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.RewardIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,9 +24,6 @@ import org.web3j.crypto.WalletUtils;
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class LevelRewardMztkAdapter implements RewardMztkPort {
-
-  private static final String SUCCEEDED = "SUCCEEDED";
-  private static final String UNCONFIRMED = "UNCONFIRMED";
 
   private final CreateLevelUpRewardTransactionIntentUseCase
       createLevelUpRewardTransactionIntentUseCase;
@@ -78,20 +76,16 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
   }
 
   private RewardMztkResult map(CreateLevelUpRewardTransactionIntentResult transaction) {
-    String status = transaction.status();
-    if (SUCCEEDED.equals(status)) {
+    TransactionStatus status = transaction.status();
+    if (status == TransactionStatus.SUCCEEDED) {
       return RewardMztkResult.success(transaction.txHash());
     }
-    if (UNCONFIRMED.equals(status)) {
+    if (status == TransactionStatus.UNCONFIRMED) {
       return RewardMztkResult.unconfirmed(transaction.failureReason(), transaction.txHash());
     }
 
     return new RewardMztkResult(
-        toRewardTxStatus(status), transaction.txHash(), transaction.failureReason());
-  }
-
-  private RewardTxStatus toRewardTxStatus(String status) {
-    return RewardTxStatus.valueOf(status);
+        RewardTxStatus.valueOf(status.name()), transaction.txHash(), transaction.failureReason());
   }
 
   private String resolveTreasuryAddress() {

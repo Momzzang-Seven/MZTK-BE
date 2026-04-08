@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.service.HandleTran
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntent;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionReferenceType;
 import org.junit.jupiter.api.Test;
 
 class Web3TransferFailedOnchainEventHandlerTest {
@@ -55,7 +56,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
             new HandleTransferFailedOnchainCommand(
                 100L,
                 "domain:QUESTION_REWARD:77:11",
-                Web3ReferenceType.USER_TO_USER.name(),
+                TransferTransactionReferenceType.USER_TO_USER,
                 "77",
                 11L,
                 22L,
@@ -85,7 +86,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
             new HandleTransferSucceededCommand(
                 103L,
                 "domain:QUESTION_REWARD:77:11",
-                Web3ReferenceType.USER_TO_USER.name(),
+                TransferTransactionReferenceType.USER_TO_USER,
                 "77",
                 11L,
                 22L,
@@ -102,7 +103,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
         new HandleTransferFailedOnchainCommand(
             100L,
             "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER.name(),
+            TransferTransactionReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
@@ -125,7 +126,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
         new HandleTransferFailedOnchainCommand(
             101L,
             "domain:QUESTION_REWARD:88:11",
-            Web3ReferenceType.USER_TO_USER.name(),
+            TransferTransactionReferenceType.USER_TO_USER,
             "88",
             11L,
             22L,
@@ -157,7 +158,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
         new HandleTransferSucceededCommand(
             103L,
             "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER.name(),
+            TransferTransactionReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
@@ -185,7 +186,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
         new HandleTransferSucceededCommand(
             104L,
             "reward:11:55",
-            Web3ReferenceType.LEVEL_UP_REWARD.name(),
+            TransferTransactionReferenceType.LEVEL_UP_REWARD,
             "55",
             null,
             11L,
@@ -228,7 +229,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
         new HandleTransferSucceededCommand(
             106L,
             "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER.name(),
+            TransferTransactionReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
@@ -251,7 +252,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
         new HandleTransferFailedOnchainCommand(
             106L,
             "domain:QUESTION_REWARD:77:11",
-            Web3ReferenceType.USER_TO_USER.name(),
+            TransferTransactionReferenceType.USER_TO_USER,
             "77",
             11L,
             22L,
@@ -277,7 +278,7 @@ class Web3TransferFailedOnchainEventHandlerTest {
         new HandleTransferFailedOnchainCommand(
             108L,
             "domain:QUESTION_REWARD:bad:11",
-            Web3ReferenceType.USER_TO_USER.name(),
+            TransferTransactionReferenceType.USER_TO_USER,
             "bad",
             11L,
             22L,

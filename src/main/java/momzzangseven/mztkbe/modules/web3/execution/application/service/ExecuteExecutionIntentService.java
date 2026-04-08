@@ -28,6 +28,9 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEventType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -50,15 +53,6 @@ import org.web3j.utils.Numeric;
  */
 public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseCase {
 
-  private static final String TX_STATUS_CREATED = "CREATED";
-  private static final String TX_STATUS_SIGNED = "SIGNED";
-  private static final String TX_STATUS_PENDING = "PENDING";
-  private static final String TX_TYPE_EIP1559 = "EIP1559";
-  private static final String TX_TYPE_EIP7702 = "EIP7702";
-  private static final String REFERENCE_USER_TO_USER = "USER_TO_USER";
-  private static final String AUDIT_SIGN = "SIGN";
-  private static final String AUDIT_BROADCAST = "BROADCAST";
-  private static final String AUDIT_AUTHORIZATION = "AUTHORIZATION";
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
@@ -226,8 +220,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                 intent.getAuthorityAddress(),
                 actionPlan.amountWei(),
                 null,
-                TX_STATUS_CREATED,
-                TX_TYPE_EIP7702,
+                ExecutionTransactionStatus.CREATED,
+                ExecutionTransactionType.EIP7702,
                 intent.getAuthorityAddress(),
                 intent.getAuthorityNonce(),
                 intent.getDelegateTarget(),
@@ -239,7 +233,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
     audit(
         created.transactionId(),
-        AUDIT_AUTHORIZATION,
+        ExecutionAuditEventType.AUTHORIZATION,
         null,
         java.util.Map.of("mode", intent.getMode().name()));
 
@@ -247,7 +241,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         executionTransactionGatewayPort.broadcast(signedPayload.rawTx());
     audit(
         created.transactionId(),
-        AUDIT_BROADCAST,
+        ExecutionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
         java.util.Map.of(
             "success", broadcast.success(),
@@ -266,12 +260,13 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
           intent.getRequesterUserId(),
           intent.resolveSponsorUsageDateKst(),
           intent.getReservedSponsorCostWei());
-      actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_PENDING);
+      actionHandler.afterTransactionSubmitted(
+          intent, actionPlan, ExecutionTransactionStatus.PENDING);
       return new ExecuteExecutionIntentResult(
           intent.getPublicId(),
           ExecutionIntentStatus.PENDING_ONCHAIN,
           created.transactionId(),
-          TX_STATUS_PENDING,
+          ExecutionTransactionStatus.PENDING,
           txHash);
     }
 
@@ -286,12 +281,12 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     executionIntentPersistencePort.update(
         intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_SIGNED);
+    actionHandler.afterTransactionSubmitted(intent, actionPlan, ExecutionTransactionStatus.SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
         created.transactionId(),
-        TX_STATUS_SIGNED,
+        ExecutionTransactionStatus.SIGNED,
         signedPayload.txHash());
   }
 
@@ -333,8 +328,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                 intent.getUnsignedTxSnapshot().toAddress(),
                 actionPlan.amountWei(),
                 intent.getUnsignedTxSnapshot().expectedNonce(),
-                TX_STATUS_CREATED,
-                TX_TYPE_EIP1559,
+                ExecutionTransactionStatus.CREATED,
+                ExecutionTransactionType.EIP1559,
                 null,
                 null,
                 null,
@@ -349,7 +344,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
     audit(
         created.transactionId(),
-        AUDIT_SIGN,
+        ExecutionAuditEventType.SIGN,
         null,
         java.util.Map.of("mode", intent.getMode().name()));
 
@@ -357,7 +352,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         executionTransactionGatewayPort.broadcast(decoded.rawTransaction());
     audit(
         created.transactionId(),
-        AUDIT_BROADCAST,
+        ExecutionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
         java.util.Map.of(
             "success", broadcast.success(),
@@ -372,12 +367,13 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
       executionIntentPersistencePort.update(
           intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
-      actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_PENDING);
+      actionHandler.afterTransactionSubmitted(
+          intent, actionPlan, ExecutionTransactionStatus.PENDING);
       return new ExecuteExecutionIntentResult(
           intent.getPublicId(),
           ExecutionIntentStatus.PENDING_ONCHAIN,
           created.transactionId(),
-          TX_STATUS_PENDING,
+          ExecutionTransactionStatus.PENDING,
           txHash);
     }
 
@@ -392,12 +388,12 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     executionIntentPersistencePort.update(
         intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, TX_STATUS_SIGNED);
+    actionHandler.afterTransactionSubmitted(intent, actionPlan, ExecutionTransactionStatus.SIGNED);
     return new ExecuteExecutionIntentResult(
         intent.getPublicId(),
         ExecutionIntentStatus.SIGNED,
         created.transactionId(),
-        TX_STATUS_SIGNED,
+        ExecutionTransactionStatus.SIGNED,
         decoded.txHash());
   }
 
@@ -439,7 +435,10 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   }
 
   private void audit(
-      Long transactionId, String eventType, String rpcAlias, java.util.Map<String, Object> detail) {
+      Long transactionId,
+      ExecutionAuditEventType eventType,
+      String rpcAlias,
+      java.util.Map<String, Object> detail) {
     try {
       executionTransactionGatewayPort.recordAudit(
           new ExecutionTransactionGatewayPort.AuditCommand(

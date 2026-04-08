@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.execution;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -7,6 +7,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionActionTypeCode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceStatusCode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionDraft;
@@ -15,6 +18,10 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecut
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.SubmitExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionMode;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
@@ -36,13 +43,13 @@ public class SubmitExecutionIntentAdapter implements SubmitExecutionDraftPort {
         createExecutionIntentUseCase.execute(
             new CreateExecutionIntentCommand(toExecutionDraft(draft)));
     return new TransferExecutionIntentResult(
-        result.resourceType().name(),
+        TransferExecutionResourceType.valueOf(result.resourceType().name()),
         result.resourceId(),
-        result.resourceStatus().name(),
+        TransferExecutionResourceStatus.valueOf(result.resourceStatus().name()),
         result.executionIntentId(),
-        result.executionIntentStatus().name(),
+        TransferExecutionIntentStatus.valueOf(result.executionIntentStatus().name()),
         result.expiresAt(),
-        result.mode().name(),
+        TransferExecutionMode.valueOf(result.mode().name()),
         result.signCount(),
         toTransferSignRequest(result.signRequest()),
         result.existing(),
@@ -53,10 +60,10 @@ public class SubmitExecutionIntentAdapter implements SubmitExecutionDraftPort {
 
   private ExecutionDraft toExecutionDraft(TransferExecutionDraft draft) {
     return new ExecutionDraft(
-        draft.resourceType(),
+        ExecutionResourceTypeCode.valueOf(draft.resourceType().name()),
         draft.resourceId(),
-        draft.resourceStatus(),
-        draft.actionType(),
+        ExecutionResourceStatusCode.valueOf(draft.resourceStatus().name()),
+        ExecutionActionTypeCode.valueOf(draft.actionType().name()),
         draft.requesterUserId(),
         draft.counterpartyUserId(),
         draft.rootIdempotencyKey(),

@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.QuestionR
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.DomainReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.QuestionRewardIntentStatus;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.TokenTransferIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionReferenceType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,8 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class HandleTransferSucceededService implements HandleTransferSucceededUseCase {
-
-  private static final String LEVEL_UP_REWARD = "LEVEL_UP_REWARD";
 
   private final MarkQuestionPostSolvedPort markQuestionPostSolvedPort;
   private final QuestionRewardIntentPersistencePort questionRewardIntentPersistencePort;
@@ -72,13 +71,14 @@ public class HandleTransferSucceededService implements HandleTransferSucceededUs
         postId);
   }
 
-  private DomainReferenceType resolveDomainType(String idempotencyKey, String referenceType) {
+  private DomainReferenceType resolveDomainType(
+      String idempotencyKey, TransferTransactionReferenceType referenceType) {
     DomainReferenceType parsedFromIdempotency =
         TokenTransferIdempotencyKeyFactory.parseDomainType(idempotencyKey);
     if (parsedFromIdempotency != null) {
       return parsedFromIdempotency;
     }
-    if (LEVEL_UP_REWARD.equals(referenceType)) {
+    if (referenceType == TransferTransactionReferenceType.LEVEL_UP_REWARD) {
       return DomainReferenceType.LEVEL_UP_REWARD;
     }
     return null;

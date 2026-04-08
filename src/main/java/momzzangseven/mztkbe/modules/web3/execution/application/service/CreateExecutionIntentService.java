@@ -25,6 +25,9 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionActionTypeCode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceStatusCode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -97,9 +100,9 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
             publicId,
             command.draft().rootIdempotencyKey(),
             attemptNo,
-            ExecutionResourceType.valueOf(command.draft().resourceType()),
+            toModelResourceType(command.draft().resourceType()),
             command.draft().resourceId(),
-            ExecutionActionType.valueOf(command.draft().actionType()),
+            toModelActionType(command.draft().actionType()),
             command.draft().requesterUserId(),
             command.draft().counterpartyUserId(),
             modeDecision.mode(),
@@ -119,8 +122,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
 
     created = executionIntentPersistencePort.create(created);
 
-    return toResult(
-        created, ExecutionResourceStatus.valueOf(command.draft().resourceStatus()), false);
+    return toResult(created, toModelResourceStatus(command.draft().resourceStatus()), false);
   }
 
   private CreateExecutionIntentResult tryReuseExisting(
@@ -161,8 +163,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     }
 
     if (existing.isActiveForReuse()) {
-      return toResult(
-          existing, ExecutionResourceStatus.valueOf(command.draft().resourceStatus()), true);
+      return toResult(existing, toModelResourceStatus(command.draft().resourceStatus()), true);
     }
 
     return null;
@@ -282,6 +283,19 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
         intent.getMode().requiredSignCount(),
         buildSignRequest(intent),
         existing);
+  }
+
+  private ExecutionResourceType toModelResourceType(ExecutionResourceTypeCode resourceType) {
+    return ExecutionResourceType.valueOf(resourceType.name());
+  }
+
+  private ExecutionResourceStatus toModelResourceStatus(
+      ExecutionResourceStatusCode resourceStatus) {
+    return ExecutionResourceStatus.valueOf(resourceStatus.name());
+  }
+
+  private ExecutionActionType toModelActionType(ExecutionActionTypeCode actionType) {
+    return ExecutionActionType.valueOf(actionType.name());
   }
 
   private SignRequestBundle buildSignRequest(ExecutionIntent intent) {

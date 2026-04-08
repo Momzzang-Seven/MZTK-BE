@@ -1,3 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.dto;
 
-public record ExecutionTransactionRecordResult(Long transactionId, String status, String txHash) {}
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+
+public record ExecutionTransactionRecordResult(
+    Long transactionId, TransactionStatus status, String txHash) {}

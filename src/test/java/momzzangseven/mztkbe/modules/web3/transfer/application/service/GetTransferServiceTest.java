@@ -10,6 +10,11 @@ import momzzangseven.mztkbe.modules.web3.transfer.application.dto.GetTransferQue
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferExecutionIntentPort;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferExecutionPort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionMode;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,18 +38,18 @@ class GetTransferServiceTest {
   void execute_loadsLatestTransferIntentByResourceId() {
     TransferExecutionIntentResult expected =
         new TransferExecutionIntentResult(
-            "TRANSFER",
+            TransferExecutionResourceType.TRANSFER,
             "web3:TRANSFER_SEND:7:req-1",
-            "PENDING_EXECUTION",
+            TransferExecutionResourceStatus.PENDING_EXECUTION,
             "intent-latest",
-            "PENDING_ONCHAIN",
+            TransferExecutionIntentStatus.PENDING_ONCHAIN,
             LocalDateTime.now().plusMinutes(1),
-            "EIP1559",
+            TransferExecutionMode.EIP1559,
             1,
             null,
             false,
             12L,
-            "PENDING",
+            TransferTransactionStatus.PENDING,
             "0xtx");
 
     when(loadTransferExecutionIntentPort.findLatestExecutionIntentId(

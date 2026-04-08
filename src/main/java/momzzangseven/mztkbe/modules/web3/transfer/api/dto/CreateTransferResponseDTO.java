@@ -15,10 +15,11 @@ public record CreateTransferResponseDTO(
   /** Maps transfer execution create result into transfer API response contract. */
   public static CreateTransferResponseDTO from(TransferExecutionIntentResult result) {
     return new CreateTransferResponseDTO(
-        new ResourceDTO(result.resourceType(), result.resourceId(), result.resourceStatus()),
+        new ResourceDTO(
+            result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         new ExecutionIntentDTO(
-            result.executionIntentId(), result.executionIntentStatus(), result.expiresAt()),
-        new ExecutionDTO(result.mode(), result.signCount()),
+            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+        new ExecutionDTO(result.mode().name(), result.signCount()),
         result.signRequest(),
         result.existing());
   }

@@ -11,7 +11,7 @@ public record ExecuteExecutionIntentResponseDTO(
         result.transactionId() == null
             ? null
             : new TransactionDTO(
-                result.transactionId(), result.transactionStatus(), result.txHash()));
+                result.transactionId(), result.transactionStatus().name(), result.txHash()));
   }
 
   public record ExecutionIntentDTO(String id, String status) {}

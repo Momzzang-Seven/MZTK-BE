@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.execution;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
@@ -8,6 +8,11 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadTransferExecutionPort;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionMode;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.transfer.domain.vo.TransferTransactionStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
@@ -24,18 +29,20 @@ public class LoadTransferExecutionAdapter implements LoadTransferExecutionPort {
         getExecutionIntentUseCase.execute(
             new GetExecutionIntentQuery(requesterUserId, executionIntentId));
     return new TransferExecutionIntentResult(
-        result.resourceType().name(),
+        TransferExecutionResourceType.valueOf(result.resourceType().name()),
         result.resourceId(),
-        result.resourceStatus().name(),
+        TransferExecutionResourceStatus.valueOf(result.resourceStatus().name()),
         result.executionIntentId(),
-        result.executionIntentStatus().name(),
+        TransferExecutionIntentStatus.valueOf(result.executionIntentStatus().name()),
         result.expiresAt(),
-        result.mode().name(),
+        TransferExecutionMode.valueOf(result.mode().name()),
         result.signCount(),
         toTransferSignRequest(result.signRequest()),
         false,
         result.transactionId(),
-        result.transactionStatus(),
+        result.transactionStatus() == null
+            ? null
+            : TransferTransactionStatus.valueOf(result.transactionStatus().name()),
         result.txHash());
   }
 

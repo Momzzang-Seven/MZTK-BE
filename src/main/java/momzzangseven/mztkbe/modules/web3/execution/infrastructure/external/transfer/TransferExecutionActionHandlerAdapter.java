@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.transfer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -21,8 +22,6 @@ import org.springframework.stereotype.Component;
     name = {"eip7702.enabled", "reward-token.enabled"},
     havingValue = "true")
 public class TransferExecutionActionHandlerAdapter implements ExecutionActionHandlerPort {
-
-  private static final String USER_TO_USER = "USER_TO_USER";
 
   private final ObjectMapper objectMapper;
 
@@ -36,7 +35,7 @@ public class TransferExecutionActionHandlerAdapter implements ExecutionActionHan
     TransferExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
     return new ExecutionActionPlan(
         payload.amountWei(),
-        USER_TO_USER,
+        ExecutionReferenceType.USER_TO_USER,
         List.of(
             new ExecutionDraftCall(
                 payload.tokenContractAddress(), BigInteger.ZERO, payload.transferData())));

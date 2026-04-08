@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevel
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTxIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SaveTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +32,8 @@ public class CreateLevelUpRewardTransactionIntentService
                 command.amountWei()));
 
     return new CreateLevelUpRewardTransactionIntentResult(
-        transaction.getStatus().name(), transaction.getTxHash(), transaction.getFailureReason());
+        TransactionStatus.valueOf(transaction.getStatus().name()),
+        transaction.getTxHash(),
+        transaction.getFailureReason());
   }
 }
