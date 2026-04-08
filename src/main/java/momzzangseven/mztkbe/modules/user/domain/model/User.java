@@ -40,6 +40,7 @@ public class User {
     validateEmail(email);
     validateNickname(nickname);
 
+    // General user cannot grant himself a ADMIN role.
     if (role == UserRole.ADMIN) {
       throw new IllegalAdminGrantException();
     }
