@@ -32,7 +32,7 @@ public class TransactionAuditPersistenceAdapter implements RecordTransactionAudi
     repository.save(
         Web3TransactionAuditEntity.builder()
             .web3TransactionId(command.transactionId())
-            .eventType(command.eventType().name())
+            .eventType(command.eventType())
             .rpcAlias(command.rpcAlias())
             .detailJson(auditLogSerializer.toJson(command.detail()))
             .build());

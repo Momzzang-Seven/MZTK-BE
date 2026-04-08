@@ -1,10 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -15,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
@@ -29,7 +28,6 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.model.UserWallet;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletStatus;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.web3j.utils.Numeric;
 
 @Component
 @RequiredArgsConstructor
@@ -46,7 +44,8 @@ public class QuestionRewardExecutionDraftBuilder {
   private final Eip7702TransactionCodecPort eip7702TransactionCodecPort;
   private final Web3ContractPort web3ContractPort;
   private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
-  private final ObjectMapper objectMapper;
+  private final ExecutionPayloadSerializer executionPayloadSerializer;
+  private final ZoneId appZoneId;
 
   public ExecutionDraft build(RegisterQuestionRewardIntentCommand command) {
     command.validate();
@@ -88,14 +87,14 @@ public class QuestionRewardExecutionDraftBuilder {
     return new ExecutionDraft(
         ExecutionResourceType.QUESTION,
         String.valueOf(command.postId()),
-        "PENDING_EXECUTION",
+        ExecutionResourceStatus.PENDING_EXECUTION.name(),
         ExecutionActionType.QNA_ANSWER_ACCEPT,
         command.fromUserId(),
         command.toUserId(),
         TokenTransferIdempotencyKeyFactory.create(
             DomainReferenceType.QUESTION_REWARD, command.fromUserId(), command.referenceId()),
-        payloadHash(payload),
-        writePayload(payload),
+        executionPayloadSerializer.hashHex(payload),
+        executionPayloadSerializer.serialize(payload),
         java.util.List.of(transferCall),
         true,
         authorityAddress,
@@ -104,7 +103,7 @@ public class QuestionRewardExecutionDraftBuilder {
         authorizationPayloadHash,
         unsignedTxSnapshot,
         eip1559TransactionCodecPort.computeFingerprint(unsignedTxSnapshot),
-        LocalDateTime.now().plusSeconds(runtimeConfig.authorizationTtlSeconds()));
+        LocalDateTime.now(appZoneId).plusSeconds(runtimeConfig.authorizationTtlSeconds()));
   }
 
   private UnsignedTxSnapshot buildUnsignedTxSnapshot(
@@ -155,20 +154,4 @@ public class QuestionRewardExecutionDraftBuilder {
     }
   }
 
-  private String writePayload(QuestionRewardExecutionPayload payload) {
-    try {
-      return objectMapper.writeValueAsString(payload);
-    } catch (JsonProcessingException e) {
-      throw new IllegalStateException("failed to serialize question reward execution payload", e);
-    }
-  }
-
-  private String payloadHash(QuestionRewardExecutionPayload payload) {
-    try {
-      byte[] digest = MessageDigest.getInstance("SHA-256").digest(writePayload(payload).getBytes());
-      return Numeric.toHexString(digest);
-    } catch (Exception e) {
-      throw new IllegalStateException("failed to hash question reward execution payload", e);
-    }
-  }
 }

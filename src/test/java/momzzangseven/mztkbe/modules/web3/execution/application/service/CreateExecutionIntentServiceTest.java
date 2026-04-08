@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
@@ -17,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
@@ -40,6 +42,7 @@ class CreateExecutionIntentServiceTest {
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   @Mock private LoadSponsorPolicyPort loadSponsorPolicyPort;
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
+  @Mock private LoadEip1559TtlPort loadEip1559TtlPort;
   @Mock private BuildExecutionDigestPort buildExecutionDigestPort;
 
   private CreateExecutionIntentService service;
@@ -55,8 +58,10 @@ class CreateExecutionIntentServiceTest {
             sponsorDailyUsagePersistencePort,
             loadExecutionChainIdPort,
             loadSponsorPolicyPort,
+            loadEip1559TtlPort,
             buildExecutionDigestPort,
-            executionModeSelector);
+            executionModeSelector,
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Test

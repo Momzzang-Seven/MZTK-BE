@@ -1,12 +1,13 @@
 package momzzangseven.mztkbe.modules.web3.transfer.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
@@ -38,6 +39,7 @@ class QuestionRewardExecutionDraftBuilderTest {
   @Mock private Eip7702TransactionCodecPort eip7702TransactionCodecPort;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
+  @Mock private ExecutionPayloadSerializer executionPayloadSerializer;
 
   private QuestionRewardExecutionDraftBuilder builder;
 
@@ -52,7 +54,8 @@ class QuestionRewardExecutionDraftBuilderTest {
             eip7702TransactionCodecPort,
             web3ContractPort,
             eip1559TransactionCodecPort,
-            new ObjectMapper());
+            executionPayloadSerializer,
+            ZoneId.of("Asia/Seoul"));
   }
 
   @Test
@@ -77,6 +80,8 @@ class QuestionRewardExecutionDraftBuilderTest {
             7,
             100);
     when(loadTransferRuntimeConfigPort.load()).thenReturn(runtimeConfig);
+    when(executionPayloadSerializer.serialize(any())).thenReturn("{\"payload\":true}");
+    when(executionPayloadSerializer.hashHex(any())).thenReturn("0x" + "a".repeat(64));
     when(loadWalletPort.findWalletsByUserIdAndStatus(7L, WalletStatus.ACTIVE))
         .thenReturn(List.of(wallet(7L, "0x" + "1".repeat(40))));
     when(loadWalletPort.findWalletsByUserIdAndStatus(22L, WalletStatus.ACTIVE))
