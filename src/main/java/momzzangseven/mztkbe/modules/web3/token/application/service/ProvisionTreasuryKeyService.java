@@ -4,7 +4,7 @@ import java.util.Locale;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.audit.domain.vo.AuditSource;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
@@ -32,10 +32,9 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   @Transactional
   @AdminOnly(
       actionType = "TREASURY_KEY_PROVISION",
-      targetType = "TREASURY_KEY",
+      targetType = AuditTargetType.TREASURY_KEY,
       operatorId = "#operatorId",
-      targetId = "#result != null ? #result.treasuryAddress() : null",
-      auditSource = AuditSource.WEB3)
+      targetId = "#result != null ? #result.treasuryAddress() : null")
   public ProvisionTreasuryKeyResult execute(
       Long operatorId, String walletAlias, String rawPrivateKey) {
     validateOperatorId(operatorId);

@@ -18,7 +18,6 @@ class AdminActionAuditEntityTest {
         AdminActionAuditEntity.builder()
             .id(10L)
             .operatorId(1L)
-            .source("WEB3")
             .actionType("TRANSACTION_MARK_SUCCEEDED")
             .targetType("WEB3_TRANSACTION")
             .targetId("tx-1")
@@ -29,7 +28,6 @@ class AdminActionAuditEntityTest {
 
     assertThat(entity.getId()).isEqualTo(10L);
     assertThat(entity.getOperatorId()).isEqualTo(1L);
-    assertThat(entity.getSource()).isEqualTo("WEB3");
     assertThat(entity.getActionType()).isEqualTo("TRANSACTION_MARK_SUCCEEDED");
     assertThat(entity.getTargetType()).isEqualTo("WEB3_TRANSACTION");
     assertThat(entity.getTargetId()).isEqualTo("tx-1");
