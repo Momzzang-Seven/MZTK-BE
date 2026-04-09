@@ -14,9 +14,12 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.Ordered;
+import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.core.annotation.Order;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
@@ -48,12 +51,35 @@ public class AdminOnlyAspect {
 
   private final RecordAdminAuditPort recordAdminAuditPort;
 
-  @Around("@annotation(adminOnly)")
-  public Object around(ProceedingJoinPoint joinPoint, AdminOnly adminOnly) throws Throwable {
+  /**
+   * Matches every method annotated with {@link AdminOnly}. Centralising the FQN here means a future
+   * package move only requires updating this single string.
+   *
+   * <p>We intentionally avoid the {@code @annotation(adminOnly)} parameter-binding form: combined
+   * with {@link Order @Order(HIGHEST_PRECEDENCE)}, Spring AOP can fail to propagate the {@code
+   * JoinPointMatch} attribute through the surrounding interceptor chain, surfacing as {@code
+   * IllegalStateException: Required to bind 2 arguments, but only bound 1 (JoinPointMatch was NOT
+   * bound in invocation)}. Resolving the annotation manually inside the advice side-steps that
+   * binding entirely while preserving the desired aspect ordering.
+   */
+  @Pointcut("execution(@momzzangseven.mztkbe.global.security.aspect.AdminOnly * *(..))")
+  public void adminOnlyMethods() {}
+
+  @Around("adminOnlyMethods()")
+  public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
     MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-    Method method = signature.getMethod();
+    Method targetMethod = resolveTargetMethod(signature, joinPoint.getTarget());
+    AdminOnly adminOnly = AnnotationUtils.findAnnotation(targetMethod, AdminOnly.class);
+    if (adminOnly == null) {
+      // The pointcut guarantees @AdminOnly is present on the target method. Reaching here means
+      // the annotation was renamed/moved and the pointcut FQN above is now stale — fail loudly so
+      // the admin guard is never silently bypassed.
+      throw new IllegalStateException(
+          "@AdminOnly annotation could not be resolved on " + targetMethod);
+    }
+
     Object[] args = joinPoint.getArgs();
-    StandardEvaluationContext context = evaluationContext(method, args, null, null);
+    StandardEvaluationContext context = evaluationContext(targetMethod, args, null, null);
 
     Long operatorId = evalLong(adminOnly.operatorId(), context);
     validateAdmin(operatorId);
@@ -67,8 +93,13 @@ public class AdminOnlyAspect {
       runtimeException = e;
       throw e;
     } finally {
-      recordAdminAudit(adminOnly, method, args, operatorId, result, runtimeException);
+      recordAdminAudit(adminOnly, targetMethod, args, operatorId, result, runtimeException);
     }
+  }
+
+  private static Method resolveTargetMethod(MethodSignature signature, Object target) {
+    Method method = signature.getMethod();
+    return target != null ? AopUtils.getMostSpecificMethod(method, target.getClass()) : method;
   }
 
   private void recordAdminAudit(
