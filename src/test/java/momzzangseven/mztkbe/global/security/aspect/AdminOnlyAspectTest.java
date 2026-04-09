@@ -54,8 +54,6 @@ class AdminOnlyAspectTest {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
@@ -63,7 +61,7 @@ class AdminOnlyAspectTest {
     when(joinPoint.proceed()).thenReturn("OK");
     setAuthentication("ROLE_ADMIN");
 
-    Object result = aspect.around(joinPoint, adminOnly);
+    Object result = aspect.around(joinPoint);
 
     assertThat(result).isEqualTo("OK");
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
@@ -97,8 +95,6 @@ class AdminOnlyAspectTest {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
@@ -106,7 +102,7 @@ class AdminOnlyAspectTest {
     when(joinPoint.proceed()).thenReturn("NO_AUTH_OK");
     SecurityContextHolder.clearContext();
 
-    Object result = aspect.around(joinPoint, adminOnly);
+    Object result = aspect.around(joinPoint);
 
     assertThat(result).isEqualTo("NO_AUTH_OK");
     verify(recordAdminAuditPort).record(any(RecordAdminAuditPort.AuditCommand.class));
@@ -129,7 +125,7 @@ class AdminOnlyAspectTest {
     when(joinPoint.proceed()).thenThrow(boom);
     setAuthentication("ROLE_ADMIN");
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly)).isSameAs(boom);
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
 
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
@@ -143,13 +139,11 @@ class AdminOnlyAspectTest {
       "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
   void around_whenOperatorExpressionIsNotNumeric_throwsAuthenticationError() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("nonNumericOperator", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly))
+    assertThatThrownBy(() -> aspect.around(joinPoint))
         .isInstanceOf(UserNotAuthenticatedException.class)
         .hasMessageContaining("operatorId must resolve to a number");
 
@@ -163,15 +157,13 @@ class AdminOnlyAspectTest {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
         .thenReturn(new Object[] {1L, "target-4", "raw-secret", new Payload("dave", "k4", 9)});
     setAuthentication("ROLE_USER");
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly))
+    assertThatThrownBy(() -> aspect.around(joinPoint))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("Unauthorized access");
 
@@ -182,8 +174,6 @@ class AdminOnlyAspectTest {
   @DisplayName("audit 기록 단계에서 RecordAdminAuditPort 가 예외를 던져도, around 는 비즈니스 로직의 원래 반환값을 그대로 반환한다")
   void around_whenAuditRecordingFails_returnsOriginalResult() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
@@ -193,7 +183,7 @@ class AdminOnlyAspectTest {
         .record(any(RecordAdminAuditPort.AuditCommand.class));
     setAuthentication("ROLE_ADMIN");
 
-    Object result = aspect.around(joinPoint, adminOnly);
+    Object result = aspect.around(joinPoint);
 
     assertThat(result).isEqualTo("OK_WITH_AUDIT_FAILURE");
   }
@@ -212,7 +202,7 @@ class AdminOnlyAspectTest {
     when(joinPoint.proceed()).thenThrow(boom);
     setAuthentication("ROLE_ADMIN");
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly)).isSameAs(boom);
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
 
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
@@ -228,15 +218,13 @@ class AdminOnlyAspectTest {
       "@AdminOnly(auditSource=WEB3) 메서드 호출이 성공하면, around 는 AuditCommand.source 에 WEB3 을 전달한다")
   void around_withWeb3AuditSource_passesWeb3SourceToAuditCommand() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("web3Action", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
     when(joinPoint.proceed()).thenReturn("OK");
     setAuthentication("ROLE_ADMIN");
 
-    aspect.around(joinPoint, adminOnly);
+    aspect.around(joinPoint);
 
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
@@ -248,15 +236,13 @@ class AdminOnlyAspectTest {
   @DisplayName("@AdminOnly 의 targetId SpEL 표현식이 빈 문자열이면, around 는 audit 의 targetId 를 null 로 기록한다")
   void around_withBlankTargetExpression_recordsNullTargetId() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
     when(joinPoint.proceed()).thenReturn("OK");
     setAuthentication("ROLE_ADMIN");
 
-    aspect.around(joinPoint, adminOnly);
+    aspect.around(joinPoint);
 
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
@@ -270,14 +256,12 @@ class AdminOnlyAspectTest {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
         .thenReturn(new Object[] {0L, "target-5", "raw-secret", new Payload("erin", "k5", 1)});
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly))
+    assertThatThrownBy(() -> aspect.around(joinPoint))
         .isInstanceOf(UserNotAuthenticatedException.class);
   }
 
