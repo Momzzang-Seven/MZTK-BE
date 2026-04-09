@@ -4,6 +4,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditSource;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
@@ -16,4 +17,6 @@ public @interface AdminOnly {
   String operatorId() default "#p0";
 
   String targetId() default "";
+
+  AuditSource auditSource();
 }

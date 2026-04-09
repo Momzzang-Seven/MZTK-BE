@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditSource;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
@@ -38,7 +39,8 @@ public class MarkTransactionSucceededService implements MarkTransactionSucceeded
       actionType = "TRANSACTION_MARK_SUCCEEDED",
       targetType = "WEB3_TRANSACTION",
       operatorId = "#command.operatorId()",
-      targetId = "#command.transactionId()")
+      targetId = "#command.transactionId()",
+      auditSource = AuditSource.WEB3)
   public MarkTransactionSucceededResult execute(MarkTransactionSucceededCommand command) {
     if (command == null) {
       throw new Web3InvalidInputException(Web3ValidationMessage.COMMAND_REQUIRED);
