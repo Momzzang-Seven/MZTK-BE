@@ -3,9 +3,7 @@ package momzzangseven.mztkbe.global.security.aspect;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,9 +11,9 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
 import java.util.Map;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditSource;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditLogSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
@@ -32,7 +30,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 class AdminOnlyAspectTest {
 
   @Mock private RecordAdminAuditPort recordAdminAuditPort;
-  @Mock private AuditLogSerializer auditLogSerializer;
   @Mock private ProceedingJoinPoint joinPoint;
   @Mock private MethodSignature methodSignature;
 
@@ -40,10 +37,7 @@ class AdminOnlyAspectTest {
 
   @BeforeEach
   void setUp() {
-    aspect = new AdminOnlyAspect(recordAdminAuditPort, auditLogSerializer);
-    lenient()
-        .when(auditLogSerializer.normalize(anyMap()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    aspect = new AdminOnlyAspect(recordAdminAuditPort);
     SecurityContextHolder.clearContext();
   }
 
@@ -75,10 +69,11 @@ class AdminOnlyAspectTest {
 
     RecordAdminAuditPort.AuditCommand command = captor.getValue();
     assertThat(command.operatorId()).isEqualTo(1L);
+    assertThat(command.source()).isEqualTo(AuditSource.USER);
     assertThat(command.success()).isTrue();
     assertThat(command.targetId()).isEqualTo("target-1");
-    assertThat(command.detail()).containsEntry("success", true);
-    assertThat(command.detail()).containsEntry("failureReason", null);
+    assertThat(command.detail()).doesNotContainKeys("operatorId", "success", "targetId");
+    assertThat(command.detail()).doesNotContainKey("failureReason");
     assertThat(command.detail().get("arguments")).isInstanceOf(Map.class);
 
     @SuppressWarnings("unchecked")
@@ -193,6 +188,25 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  void around_withWeb3AuditSource_passesWeb3SourceToAuditCommand() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("web3Action", Long.class);
+    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
+
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    when(joinPoint.proceed()).thenReturn("OK");
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint, adminOnly);
+
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    assertThat(captor.getValue().source()).isEqualTo(AuditSource.WEB3);
+  }
+
+  @Test
   void around_withBlankTargetExpression_recordsNullTargetId() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
     AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
@@ -234,18 +248,41 @@ class AdminOnlyAspectTest {
 
   private static class DummyAdminMethods {
 
-    @AdminOnly(actionType = "DELETE", targetType = "USER", operatorId = "#p0", targetId = "#p1")
+    @AdminOnly(
+        actionType = "DELETE",
+        targetType = "USER",
+        operatorId = "#p0",
+        targetId = "#p1",
+        auditSource = AuditSource.USER)
     String adminAction(Long operatorId, String targetId, String privateKey, Payload payload) {
       return "OK";
     }
 
-    @AdminOnly(actionType = "READ", targetType = "USER", operatorId = "'abc'")
+    @AdminOnly(
+        actionType = "READ",
+        targetType = "USER",
+        operatorId = "'abc'",
+        auditSource = AuditSource.USER)
     String nonNumericOperator(Long operatorId) {
       return "NO";
     }
 
-    @AdminOnly(actionType = "LIST", targetType = "USER", operatorId = "#p0", targetId = "")
+    @AdminOnly(
+        actionType = "LIST",
+        targetType = "USER",
+        operatorId = "#p0",
+        targetId = "",
+        auditSource = AuditSource.USER)
     String blankTarget(Long operatorId) {
+      return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "TRANSACTION_MARK_SUCCEEDED",
+        targetType = "WEB3_TRANSACTION",
+        operatorId = "#p0",
+        auditSource = AuditSource.WEB3)
+    String web3Action(Long operatorId) {
       return "OK";
     }
   }

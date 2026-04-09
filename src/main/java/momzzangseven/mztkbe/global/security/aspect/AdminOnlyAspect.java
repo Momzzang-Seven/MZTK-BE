@@ -6,16 +6,18 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.audit.application.AdminAuditDetailNormalizer;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditLogSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.core.DefaultParameterNameDiscoverer;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
@@ -23,10 +25,21 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+/**
+ * Validates the admin role and records an admin action audit row around any {@code @AdminOnly}
+ * method.
+ *
+ * <p>Pinned to {@link Ordered#HIGHEST_PRECEDENCE} so this aspect always runs outside Spring's
+ * transaction interceptor. That way the audit recording in the {@code finally} block executes after
+ * the surrounding transaction has fully committed (or rolled back), and the audit adapter's {@code
+ * REQUIRES_NEW} propagation is not the only thing keeping audit writes independent of the caller's
+ * transaction.
+ */
 @Aspect
 @Component
 @Slf4j
 @RequiredArgsConstructor
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class AdminOnlyAspect {
 
   private static final ExpressionParser SPEL = new SpelExpressionParser();
@@ -34,7 +47,6 @@ public class AdminOnlyAspect {
       new DefaultParameterNameDiscoverer();
 
   private final RecordAdminAuditPort recordAdminAuditPort;
-  private final AuditLogSerializer auditLogSerializer;
 
   @Around("@annotation(adminOnly)")
   public Object around(ProceedingJoinPoint joinPoint, AdminOnly adminOnly) throws Throwable {
@@ -72,22 +84,23 @@ public class AdminOnlyAspect {
       boolean success = runtimeException == null;
       String failureReason = success ? null : runtimeException.getClass().getSimpleName();
 
+      // operatorId, success, source, actionType, targetType and targetId are persisted as
+      // dedicated columns on admin_action_audits — keep them out of detail_json so the row has
+      // a single source of truth for those fields.
       Map<String, Object> rawDetail = new LinkedHashMap<>();
       rawDetail.put("method", method.getDeclaringClass().getSimpleName() + "." + method.getName());
-      rawDetail.put("operatorId", operatorId);
-      rawDetail.put("success", success);
       rawDetail.put("failureReason", failureReason);
       rawDetail.put("arguments", sanitizeArguments(method, args));
-      rawDetail.put("targetId", targetId);
 
       recordAdminAuditPort.record(
           new RecordAdminAuditPort.AuditCommand(
               operatorId,
+              adminOnly.auditSource(),
               adminOnly.actionType(),
               adminOnly.targetType(),
               targetId,
               success,
-              auditLogSerializer.normalize(rawDetail)));
+              AdminAuditDetailNormalizer.normalize(rawDetail)));
     } catch (Exception auditException) {
       log.warn(
           "Failed to record admin audit via aspect: action={}, operatorId={}",
