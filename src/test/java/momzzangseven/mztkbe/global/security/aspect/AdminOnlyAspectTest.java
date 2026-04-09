@@ -18,6 +18,7 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -27,6 +28,7 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 @ExtendWith(MockitoExtension.class)
+@DisplayName("AdminOnlyAspect 단위 테스트")
 class AdminOnlyAspectTest {
 
   @Mock private RecordAdminAuditPort recordAdminAuditPort;
@@ -47,6 +49,7 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("ROLE_ADMIN 사용자가 호출하면, around 는 성공 audit 를 기록하고 민감 인자(privateKey/secretKey)를 마스킹한다")
   void around_withAdminRole_recordsSuccessAuditAndSanitizedArguments() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
@@ -89,6 +92,7 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("SecurityContext 인증 정보가 없는 시스템 호출이면, around 는 실행을 허용하고 audit 를 기록한다")
   void around_withoutAuthentication_allowsExecutionAndRecordsAudit() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
@@ -109,6 +113,8 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName(
+      "내부 비즈니스 메서드가 예외를 던지면, around 는 예외를 재전파하면서 success=false + failureReason 의 audit 를 기록한다")
   void around_whenProceedThrows_rethrowsAndRecordsFailure() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
@@ -133,6 +139,8 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName(
+      "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
   void around_whenOperatorExpressionIsNotNumeric_throwsAuthenticationError() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("nonNumericOperator", Long.class);
     AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
@@ -149,6 +157,8 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName(
+      "ROLE_USER 등 비-admin 으로 인증된 호출이면, around 는 BusinessException(Unauthorized) 을 던지고 audit 를 기록하지 않는다")
   void around_whenNonAdminAuthentication_throwsBusinessException() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
@@ -169,6 +179,7 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("audit 기록 단계에서 RecordAdminAuditPort 가 예외를 던져도, around 는 비즈니스 로직의 원래 반환값을 그대로 반환한다")
   void around_whenAuditRecordingFails_returnsOriginalResult() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
     AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
@@ -188,6 +199,33 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName(
+      "auditSource=WEB3 메서드의 비즈니스 로직이 예외를 던지면, around 는 source=WEB3 + success=false 의 실패 audit 를 기록한다")
+  void around_whenWeb3ProceedThrows_recordsFailureAuditWithWeb3Source() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("web3Action", Long.class);
+    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
+
+    RuntimeException boom = new RuntimeException("web3-boom");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    when(joinPoint.proceed()).thenThrow(boom);
+    setAuthentication("ROLE_ADMIN");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly)).isSameAs(boom);
+
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    RecordAdminAuditPort.AuditCommand command = captor.getValue();
+    assertThat(command.source()).isEqualTo(AuditSource.WEB3);
+    assertThat(command.success()).isFalse();
+    assertThat(command.detail()).containsEntry("failureReason", "RuntimeException");
+  }
+
+  @Test
+  @DisplayName(
+      "@AdminOnly(auditSource=WEB3) 메서드 호출이 성공하면, around 는 AuditCommand.source 에 WEB3 을 전달한다")
   void around_withWeb3AuditSource_passesWeb3SourceToAuditCommand() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("web3Action", Long.class);
     AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
@@ -207,6 +245,7 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("@AdminOnly 의 targetId SpEL 표현식이 빈 문자열이면, around 는 audit 의 targetId 를 null 로 기록한다")
   void around_withBlankTargetExpression_recordsNullTargetId() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
     AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
@@ -226,6 +265,7 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("operatorId SpEL 결과가 0 이하 숫자이면, around 는 UserNotAuthenticatedException 을 던진다")
   void around_whenOperatorIdNonPositive_throwsAuthenticationError() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
