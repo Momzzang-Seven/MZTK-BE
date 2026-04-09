@@ -49,9 +49,8 @@ public class AdminActionAuditPersistenceAdapter implements RecordAdminAuditPort 
     repository.save(
         AdminActionAuditEntity.builder()
             .operatorId(command.operatorId())
-            .source(command.source().name())
             .actionType(command.actionType())
-            .targetType(command.targetType())
+            .targetType(command.targetType().name())
             .targetId(command.targetId())
             .success(command.success())
             .detailJson(toJson(command.detail()))

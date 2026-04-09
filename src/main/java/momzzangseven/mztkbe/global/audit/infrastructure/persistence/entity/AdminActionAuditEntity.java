@@ -28,9 +28,6 @@ public class AdminActionAuditEntity {
   @Column(name = "operator_id", nullable = false)
   private Long operatorId;
 
-  @Column(name = "source", nullable = false, length = 20)
-  private String source;
-
   @Column(name = "action_type", nullable = false, length = 60)
   private String actionType;
 

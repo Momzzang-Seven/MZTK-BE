@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
-import momzzangseven.mztkbe.global.audit.domain.vo.AuditSource;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.audit.infrastructure.persistence.entity.AdminActionAuditEntity;
 import momzzangseven.mztkbe.global.audit.infrastructure.persistence.repository.AdminActionAuditJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,9 +53,8 @@ class AdminActionAuditPersistenceAdapterTest {
     RecordAdminAuditPort.AuditCommand command =
         new RecordAdminAuditPort.AuditCommand(
             5L,
-            AuditSource.WEB3,
             "TRANSACTION_MARK_SUCCEEDED",
-            "WEB3_TRANSACTION",
+            AuditTargetType.WEB3_TRANSACTION,
             "tx-22",
             true,
             Map.of("k", "v"));
@@ -67,7 +66,6 @@ class AdminActionAuditPersistenceAdapterTest {
     verify(repository).save(captor.capture());
     AdminActionAuditEntity saved = captor.getValue();
     assertThat(saved.getOperatorId()).isEqualTo(5L);
-    assertThat(saved.getSource()).isEqualTo("WEB3");
     assertThat(saved.getActionType()).isEqualTo("TRANSACTION_MARK_SUCCEEDED");
     assertThat(saved.getTargetType()).isEqualTo("WEB3_TRANSACTION");
     assertThat(saved.getTargetId()).isEqualTo("tx-22");
@@ -82,7 +80,7 @@ class AdminActionAuditPersistenceAdapterTest {
   void record_savesNullDetailJson_whenDetailIsEmpty() {
     RecordAdminAuditPort.AuditCommand command =
         new RecordAdminAuditPort.AuditCommand(
-            1L, AuditSource.USER, "USER_ROLE_UPDATE", "USER", "u-1", true, Map.of());
+            1L, "TREASURY_KEY_PROVISION", AuditTargetType.TREASURY_KEY, "u-1", true, Map.of());
 
     adapter.record(command);
 
@@ -105,9 +103,8 @@ class AdminActionAuditPersistenceAdapterTest {
     RecordAdminAuditPort.AuditCommand command =
         new RecordAdminAuditPort.AuditCommand(
             1L,
-            AuditSource.WEB3,
             "TREASURY_KEY_PROVISION",
-            "TREASURY_KEY",
+            AuditTargetType.TREASURY_KEY,
             null,
             true,
             Map.of("k", "v"));
@@ -127,7 +124,7 @@ class AdminActionAuditPersistenceAdapterTest {
     assertThatThrownBy(
             () ->
                 new RecordAdminAuditPort.AuditCommand(
-                    null, AuditSource.USER, "X", "Y", null, true, Map.of()))
+                    null, "X", AuditTargetType.TREASURY_KEY, null, true, Map.of()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("operatorId");
   }
@@ -138,18 +135,9 @@ class AdminActionAuditPersistenceAdapterTest {
     assertThatThrownBy(
             () ->
                 new RecordAdminAuditPort.AuditCommand(
-                    0L, AuditSource.USER, "X", "Y", null, true, Map.of()))
+                    0L, "X", AuditTargetType.TREASURY_KEY, null, true, Map.of()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("operatorId");
-  }
-
-  @Test
-  @DisplayName("source 가 null 이면, AuditCommand 생성자는 IllegalArgumentException 을 던진다")
-  void auditCommand_rejectsNullSource() {
-    assertThatThrownBy(
-            () -> new RecordAdminAuditPort.AuditCommand(1L, null, "X", "Y", null, true, Map.of()))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("source");
   }
 
   @ParameterizedTest
@@ -160,38 +148,30 @@ class AdminActionAuditPersistenceAdapterTest {
     assertThatThrownBy(
             () ->
                 new RecordAdminAuditPort.AuditCommand(
-                    1L, AuditSource.USER, actionType, "Y", null, true, Map.of()))
+                    1L, actionType, AuditTargetType.TREASURY_KEY, null, true, Map.of()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("actionType");
   }
 
-  @ParameterizedTest
-  @NullAndEmptySource
-  @ValueSource(strings = {" "})
-  @DisplayName("targetType 이 null/빈문자열/공백이면, AuditCommand 생성자는 IllegalArgumentException 을 던진다")
-  void auditCommand_rejectsNullOrBlankTargetType(String targetType) {
+  @Test
+  @DisplayName("targetType 이 null 이면, AuditCommand 생성자는 IllegalArgumentException 을 던진다")
+  void auditCommand_rejectsNullTargetType() {
     assertThatThrownBy(
-            () ->
-                new RecordAdminAuditPort.AuditCommand(
-                    1L, AuditSource.USER, "X", targetType, null, true, Map.of()))
+            () -> new RecordAdminAuditPort.AuditCommand(1L, "X", null, null, true, Map.of()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("targetType");
   }
 
   @Test
-  @DisplayName("USER/WEB3 양쪽 source 와 null 허용 필드(targetId/detail) 가 주어지면, AuditCommand 는 값을 보존한다")
-  void auditCommand_acceptsBothAuditSourceValues_andPreservesNullables() {
-    RecordAdminAuditPort.AuditCommand userCommand =
-        new RecordAdminAuditPort.AuditCommand(1L, AuditSource.USER, "X", "Y", null, true, null);
-    RecordAdminAuditPort.AuditCommand web3Command =
-        new RecordAdminAuditPort.AuditCommand(1L, AuditSource.WEB3, "X", "Y", null, true, null);
+  @DisplayName("nullable 필드(targetId/detail) 가 null 이어도, AuditCommand 는 값을 보존한다")
+  void auditCommand_preservesNullableFields() {
+    RecordAdminAuditPort.AuditCommand command =
+        new RecordAdminAuditPort.AuditCommand(
+            1L, "X", AuditTargetType.WEB3_TRANSACTION, null, true, null);
 
-    assertThat(userCommand.source()).isEqualTo(AuditSource.USER);
-    assertThat(userCommand.targetId()).isNull();
-    assertThat(userCommand.detail()).isNull();
-    assertThat(web3Command.source()).isEqualTo(AuditSource.WEB3);
-    assertThat(web3Command.targetId()).isNull();
-    assertThat(web3Command.detail()).isNull();
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+    assertThat(command.targetId()).isNull();
+    assertThat(command.detail()).isNull();
   }
 
   @Test

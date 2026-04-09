@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
 import java.util.Map;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
-import momzzangseven.mztkbe.global.audit.domain.vo.AuditSource;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -49,7 +49,9 @@ class AdminOnlyAspectTest {
   }
 
   @Test
-  @DisplayName("ROLE_ADMIN 사용자가 호출하면, around 는 성공 audit 를 기록하고 민감 인자(privateKey/secretKey)를 마스킹한다")
+  @DisplayName(
+      "ROLE_ADMIN 사용자가 호출하면, around 는 어노테이션의 targetType 을 그대로 전달하는 성공 audit 를 기록하고 "
+          + "민감 인자(privateKey/secretKey)를 마스킹한다")
   void around_withAdminRole_recordsSuccessAuditAndSanitizedArguments() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
@@ -70,7 +72,7 @@ class AdminOnlyAspectTest {
 
     RecordAdminAuditPort.AuditCommand command = captor.getValue();
     assertThat(command.operatorId()).isEqualTo(1L);
-    assertThat(command.source()).isEqualTo(AuditSource.USER);
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.TREASURY_KEY);
     assertThat(command.success()).isTrue();
     assertThat(command.targetId()).isEqualTo("target-1");
     assertThat(command.detail()).doesNotContainKeys("operatorId", "success", "targetId");
@@ -115,7 +117,6 @@ class AdminOnlyAspectTest {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
 
     RuntimeException boom = new IllegalStateException("boom");
     when(joinPoint.getSignature()).thenReturn(methodSignature);
@@ -190,33 +191,9 @@ class AdminOnlyAspectTest {
 
   @Test
   @DisplayName(
-      "auditSource=WEB3 메서드의 비즈니스 로직이 예외를 던지면, around 는 source=WEB3 + success=false 의 실패 audit 를 기록한다")
-  void around_whenWeb3ProceedThrows_recordsFailureAuditWithWeb3Source() throws Throwable {
-    Method method = DummyAdminMethods.class.getDeclaredMethod("web3Action", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
-    RuntimeException boom = new RuntimeException("web3-boom");
-    when(joinPoint.getSignature()).thenReturn(methodSignature);
-    when(methodSignature.getMethod()).thenReturn(method);
-    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
-    when(joinPoint.proceed()).thenThrow(boom);
-    setAuthentication("ROLE_ADMIN");
-
-    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
-
-    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
-        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
-    verify(recordAdminAuditPort).record(captor.capture());
-    RecordAdminAuditPort.AuditCommand command = captor.getValue();
-    assertThat(command.source()).isEqualTo(AuditSource.WEB3);
-    assertThat(command.success()).isFalse();
-    assertThat(command.detail()).containsEntry("failureReason", "RuntimeException");
-  }
-
-  @Test
-  @DisplayName(
-      "@AdminOnly(auditSource=WEB3) 메서드 호출이 성공하면, around 는 AuditCommand.source 에 WEB3 을 전달한다")
-  void around_withWeb3AuditSource_passesWeb3SourceToAuditCommand() throws Throwable {
+      "@AdminOnly(targetType=WEB3_TRANSACTION) 메서드 호출이 성공하면, "
+          + "around 는 AuditCommand.targetType 에 WEB3_TRANSACTION 을 전달한다")
+  void around_passesAnnotationTargetTypeToAuditCommand() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("web3Action", Long.class);
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
@@ -229,7 +206,7 @@ class AdminOnlyAspectTest {
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
     verify(recordAdminAuditPort).record(captor.capture());
-    assertThat(captor.getValue().source()).isEqualTo(AuditSource.WEB3);
+    assertThat(captor.getValue().targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
   }
 
   @Test
@@ -274,38 +251,31 @@ class AdminOnlyAspectTest {
 
     @AdminOnly(
         actionType = "DELETE",
-        targetType = "USER",
+        targetType = AuditTargetType.TREASURY_KEY,
         operatorId = "#p0",
-        targetId = "#p1",
-        auditSource = AuditSource.USER)
+        targetId = "#p1")
     String adminAction(Long operatorId, String targetId, String privateKey, Payload payload) {
       return "OK";
     }
 
-    @AdminOnly(
-        actionType = "READ",
-        targetType = "USER",
-        operatorId = "'abc'",
-        auditSource = AuditSource.USER)
+    @AdminOnly(actionType = "READ", targetType = AuditTargetType.TREASURY_KEY, operatorId = "'abc'")
     String nonNumericOperator(Long operatorId) {
       return "NO";
     }
 
     @AdminOnly(
         actionType = "LIST",
-        targetType = "USER",
+        targetType = AuditTargetType.TREASURY_KEY,
         operatorId = "#p0",
-        targetId = "",
-        auditSource = AuditSource.USER)
+        targetId = "")
     String blankTarget(Long operatorId) {
       return "OK";
     }
 
     @AdminOnly(
         actionType = "TRANSACTION_MARK_SUCCEEDED",
-        targetType = "WEB3_TRANSACTION",
-        operatorId = "#p0",
-        auditSource = AuditSource.WEB3)
+        targetType = AuditTargetType.WEB3_TRANSACTION,
+        operatorId = "#p0")
     String web3Action(Long operatorId) {
       return "OK";
     }

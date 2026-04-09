@@ -47,7 +47,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *
  * <ul>
  *   <li>Successful and failing {@code @AdminOnly} web3 invocations land in {@code
- *       admin_action_audits} with {@code source = 'WEB3'}.
+ *       admin_action_audits} with the expected {@code target_type} value.
  *   <li>{@code REQUIRES_NEW} keeps the audit row committed even when the outer business transaction
  *       rolls back.
  *   <li>Out-of-scope audit systems ({@code web3_transaction_audits}, {@code
@@ -330,12 +330,14 @@ class AdminActionAuditE2ETest {
   private record AdminUser(Long userId, String accessToken) {}
 
   // ============================================================
-  // E-1: mark-succeeded happy path → admin_action_audits row with source='WEB3'
+  // E-1: mark-succeeded happy path → admin_action_audits row with target_type='WEB3_TRANSACTION'
   // ============================================================
 
   @Test
-  @DisplayName("[E-1] MarkTransactionSucceeded 성공 → admin_action_audits 에 source='WEB3' row 적재")
-  void markTransactionSucceeded_success_recordsAdminActionAuditWithWeb3Source() throws Exception {
+  @DisplayName(
+      "[E-1] MarkTransactionSucceeded 성공 → admin_action_audits 에 target_type='WEB3_TRANSACTION' row 적재")
+  void markTransactionSucceeded_success_recordsAdminActionAuditWithWeb3TransactionTargetType()
+      throws Exception {
     AdminUser admin = createAdminAndLogin();
     String txHash = "0x" + repeat('a', 64);
     long txId = seedUnconfirmedTransaction(txHash, admin.userId());
@@ -357,8 +359,9 @@ class AdminActionAuditE2ETest {
     Integer auditCount =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM admin_action_audits "
-                + "WHERE source='WEB3' AND action_type=? AND target_id=? AND operator_id=?",
+                + "WHERE target_type=? AND action_type=? AND target_id=? AND operator_id=?",
             Integer.class,
+            TARGET_TYPE_WEB3_TRANSACTION,
             ACTION_TX_MARK_SUCCEEDED,
             String.valueOf(txId),
             admin.userId());
@@ -369,7 +372,8 @@ class AdminActionAuditE2ETest {
         jdbcTemplate.queryForMap(
             "SELECT operator_id, success, target_type, detail_json, created_at "
                 + "FROM admin_action_audits "
-                + "WHERE source='WEB3' AND action_type=? AND target_id=? AND operator_id=?",
+                + "WHERE target_type=? AND action_type=? AND target_id=? AND operator_id=?",
+            TARGET_TYPE_WEB3_TRANSACTION,
             ACTION_TX_MARK_SUCCEEDED,
             String.valueOf(txId),
             admin.userId());
@@ -438,7 +442,8 @@ class AdminActionAuditE2ETest {
     Map<String, Object> row =
         jdbcTemplate.queryForMap(
             "SELECT success, detail_json FROM admin_action_audits "
-                + "WHERE source='WEB3' AND action_type=? AND target_id=? AND operator_id=?",
+                + "WHERE target_type=? AND action_type=? AND target_id=? AND operator_id=?",
+            TARGET_TYPE_WEB3_TRANSACTION,
             ACTION_TX_MARK_SUCCEEDED,
             String.valueOf(txId),
             admin.userId());
@@ -509,7 +514,8 @@ class AdminActionAuditE2ETest {
 
   @Test
   @DisplayName(
-      "[E-4] ProvisionTreasuryKey 성공 → admin_action_audits source='WEB3', rawPrivateKey 마스킹, web3_treasury_keys 저장")
+      "[E-4] ProvisionTreasuryKey 성공 → admin_action_audits target_type='TREASURY_KEY', "
+          + "rawPrivateKey 마스킹, web3_treasury_keys 저장")
   void provisionTreasuryKey_success_recordsAuditAndMasksPrivateKey() throws Exception {
     AdminUser admin = createAdminAndLogin();
     String walletAlias = "reward-treasury";
@@ -526,8 +532,9 @@ class AdminActionAuditE2ETest {
     Map<String, Object> row =
         jdbcTemplate.queryForMap(
             "SELECT target_id, target_type, success, detail_json FROM admin_action_audits "
-                + "WHERE action_type=? AND source='WEB3' AND operator_id=?",
+                + "WHERE action_type=? AND target_type=? AND operator_id=?",
             ACTION_TREASURY_KEY_PROVISION,
+            TARGET_TYPE_TREASURY_KEY,
             admin.userId());
     assertThat(row.get("success")).isEqualTo(true);
     assertThat(row.get("target_type")).isEqualTo(TARGET_TYPE_TREASURY_KEY);
@@ -581,8 +588,9 @@ class AdminActionAuditE2ETest {
     Map<String, Object> row =
         jdbcTemplate.queryForMap(
             "SELECT target_id, success, detail_json FROM admin_action_audits "
-                + "WHERE action_type=? AND source='WEB3' AND operator_id=?",
+                + "WHERE action_type=? AND target_type=? AND operator_id=?",
             ACTION_TREASURY_KEY_PROVISION,
+            TARGET_TYPE_TREASURY_KEY,
             admin.userId());
     assertThat(row.get("success")).isEqualTo(false);
     assertThat(row.get("target_id")).isNull();
@@ -628,8 +636,9 @@ class AdminActionAuditE2ETest {
     Map<String, Object> row =
         jdbcTemplate.queryForMap(
             "SELECT target_id, success, detail_json FROM admin_action_audits "
-                + "WHERE action_type=? AND source='WEB3' AND operator_id=?",
+                + "WHERE action_type=? AND target_type=? AND operator_id=?",
             ACTION_TREASURY_KEY_PROVISION,
+            TARGET_TYPE_TREASURY_KEY,
             admin.userId());
     assertThat(row.get("success")).isEqualTo(false);
     assertThat(row.get("target_id")).isNull();
@@ -742,9 +751,10 @@ class AdminActionAuditE2ETest {
     Integer auditCount =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM admin_action_audits "
-                + "WHERE source='WEB3' AND action_type=? AND operator_id=? "
+                + "WHERE target_type=? AND action_type=? AND operator_id=? "
                 + "AND target_id IN (?, ?)",
             Integer.class,
+            TARGET_TYPE_WEB3_TRANSACTION,
             ACTION_TX_MARK_SUCCEEDED,
             admin.userId(),
             String.valueOf(txIdA),
@@ -770,7 +780,6 @@ class AdminActionAuditE2ETest {
         List.of(
             "id",
             "operator_id",
-            "source",
             "action_type",
             "target_type",
             "target_id",
@@ -784,6 +793,8 @@ class AdminActionAuditE2ETest {
                 + "ORDER BY ordinal_position",
             String.class);
     assertThat(actualColumns).containsAll(expectedColumns);
+    // source column was removed when AuditSource enum was deleted
+    assertThat(actualColumns).doesNotContain("source");
 
     // 3. NOT NULL constraints on critical columns
     List<String> notNullColumns =
@@ -793,8 +804,7 @@ class AdminActionAuditE2ETest {
                 + "AND is_nullable = 'NO' ORDER BY column_name",
             String.class);
     assertThat(notNullColumns)
-        .contains(
-            "id", "operator_id", "source", "action_type", "target_type", "success", "created_at");
+        .contains("id", "operator_id", "action_type", "target_type", "success", "created_at");
     // target_id and detail_json must be nullable
     assertThat(notNullColumns).doesNotContain("target_id");
     assertThat(notNullColumns).doesNotContain("detail_json");

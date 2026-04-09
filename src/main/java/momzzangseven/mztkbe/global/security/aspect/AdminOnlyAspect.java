@@ -115,9 +115,9 @@ public class AdminOnlyAspect {
       boolean success = runtimeException == null;
       String failureReason = success ? null : runtimeException.getClass().getSimpleName();
 
-      // operatorId, success, source, actionType, targetType and targetId are persisted as
-      // dedicated columns on admin_action_audits — keep them out of detail_json so the row has
-      // a single source of truth for those fields.
+      // operatorId, success, actionType, targetType and targetId are persisted as dedicated
+      // columns on admin_action_audits — keep them out of detail_json so the row has a single
+      // source of truth for those fields.
       Map<String, Object> rawDetail = new LinkedHashMap<>();
       rawDetail.put("method", method.getDeclaringClass().getSimpleName() + "." + method.getName());
       rawDetail.put("failureReason", failureReason);
@@ -126,7 +126,6 @@ public class AdminOnlyAspect {
       recordAdminAuditPort.record(
           new RecordAdminAuditPort.AuditCommand(
               operatorId,
-              adminOnly.auditSource(),
               adminOnly.actionType(),
               adminOnly.targetType(),
               targetId,
