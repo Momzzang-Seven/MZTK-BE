@@ -5,11 +5,13 @@ import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   private final ApplicationEventPublisher eventPublisher;
   private final LinkTagPort linkTagPort;
   private final UpdatePostImagesPort updatePostImagesPort;
+  private final CountAnswersPort countAnswersPort;
 
   @Override
   public void updatePost(Long currentUserId, Long postId, UpdatePostCommand command) {
@@ -30,8 +33,10 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
+    long activeAnswerCount = countActiveAnswers(post);
 
-    Post updatedPost = post.update(command.title(), command.content(), command.tags());
+    Post updatedPost =
+        post.update(command.title(), command.content(), command.tags(), activeAnswerCount);
     postPersistencePort.savePost(updatedPost);
 
     if (command.tags() != null) {
@@ -48,7 +53,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   public void deletePost(Long currentUserId, Long postId) {
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
-    post.validateDeletable();
+    post.validateDeletable(countActiveAnswers(post));
 
     postPersistencePort.deletePost(post);
     eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
@@ -56,5 +61,12 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
   private Post loadPostOrThrow(Long postId) {
     return postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
+  }
+
+  private long countActiveAnswers(Post post) {
+    if (!PostType.QUESTION.equals(post.getType())) {
+      return 0L;
+    }
+    return countAnswersPort.countAnswers(post.getId());
   }
 }

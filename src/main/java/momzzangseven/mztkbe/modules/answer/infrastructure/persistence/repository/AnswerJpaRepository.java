@@ -15,6 +15,8 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
 
   List<AnswerEntity> findByPostIdOrderByIsAcceptedDescCreatedAtAsc(Long postId);
 
+  long countByPostId(Long postId);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select a from AnswerEntity a where a.id = :answerId")
   Optional<AnswerEntity> findByIdForUpdate(@Param("answerId") Long answerId);
