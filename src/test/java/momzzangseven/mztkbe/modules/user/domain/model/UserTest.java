@@ -8,9 +8,10 @@ import java.time.temporal.ChronoUnit;
 import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
 import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("User unit test")
+@DisplayName("User 단위 테스트")
 class UserTest {
 
   // ── User.create() factory method tests ──
@@ -131,6 +132,237 @@ class UserTest {
             .build();
 
     assertThat(user.canBecomeTrainer()).isFalse();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Commit 1 — MOM-330: createAdmin() factory method tests
+  // ══════════════════════════════════════════════════════════════
+
+  @Nested
+  @DisplayName("createAdmin 성공 케이스")
+  class CreateAdminSuccessCases {
+
+    @Test
+    @DisplayName("[M-20] createAdmin with ADMIN_SEED creates admin user")
+    void createAdmin_withAdminSeed_createsAdminUser() {
+      // given / when
+      User user = User.createAdmin("seed@admin.local", "SeedAdmin", UserRole.ADMIN_SEED);
+
+      // then
+      assertThat(user.getEmail()).isEqualTo("seed@admin.local");
+      assertThat(user.getNickname()).isEqualTo("SeedAdmin");
+      assertThat(user.getRole()).isEqualTo(UserRole.ADMIN_SEED);
+      assertThat(user.getProfileImageUrl()).isNull();
+      assertThat(user.getCreatedAt()).isNotNull();
+      assertThat(user.getUpdatedAt()).isNotNull();
+      assertThat(user.getCreatedAt()).isEqualTo(user.getUpdatedAt());
+      assertThat(user.getId()).isNull();
+    }
+
+    @Test
+    @DisplayName("[M-21] createAdmin with ADMIN_GENERATED creates admin user")
+    void createAdmin_withAdminGenerated_createsAdminUser() {
+      // given / when
+      User user = User.createAdmin("gen@admin.local", "GenAdmin", UserRole.ADMIN_GENERATED);
+
+      // then
+      assertThat(user.getRole()).isEqualTo(UserRole.ADMIN_GENERATED);
+      assertThat(user.getEmail()).isEqualTo("gen@admin.local");
+      assertThat(user.getNickname()).isEqualTo("GenAdmin");
+      assertThat(user.getProfileImageUrl()).isNull();
+      assertThat(user.getCreatedAt()).isNotNull();
+      assertThat(user.getUpdatedAt()).isNotNull();
+    }
+  }
+
+  @Nested
+  @DisplayName("createAdmin 역할 검증")
+  class CreateAdminRoleValidation {
+
+    @Test
+    @DisplayName("[M-22] createAdmin rejects ADMIN role (logical parent)")
+    void createAdmin_withAdmin_throwsIllegalArgumentException() {
+      assertThatThrownBy(() -> User.createAdmin("admin@admin.local", "PlainAdmin", UserRole.ADMIN))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("not allowed");
+    }
+
+    @Test
+    @DisplayName("[M-23] createAdmin rejects USER role")
+    void createAdmin_withUser_throwsIllegalArgumentException() {
+      assertThatThrownBy(() -> User.createAdmin("user@admin.local", "NotAdmin", UserRole.USER))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("not allowed");
+    }
+
+    @Test
+    @DisplayName("[M-24] createAdmin rejects TRAINER role")
+    void createAdmin_withTrainer_throwsIllegalArgumentException() {
+      assertThatThrownBy(
+              () -> User.createAdmin("trainer@admin.local", "NotAdmin", UserRole.TRAINER))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("not allowed");
+    }
+  }
+
+  @Nested
+  @DisplayName("createAdmin 입력값 검증")
+  class CreateAdminInputValidation {
+
+    @Test
+    @DisplayName("[M-25] createAdmin rejects invalid email")
+    void createAdmin_withInvalidEmail_throwsIllegalArgumentException() {
+      assertThatThrownBy(() -> User.createAdmin("bad-email", "Admin", UserRole.ADMIN_SEED))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("[M-26] createAdmin rejects null nickname")
+    void createAdmin_withNullNickname_throwsIllegalArgumentException() {
+      assertThatThrownBy(() -> User.createAdmin("admin@test.com", null, UserRole.ADMIN_SEED))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Nickname is required");
+    }
+
+    @Test
+    @DisplayName("[M-27] createAdmin rejects too-short nickname")
+    void createAdmin_withTooShortNickname_throwsIllegalArgumentException() {
+      assertThatThrownBy(() -> User.createAdmin("admin@test.com", "A", UserRole.ADMIN_SEED))
+          .isInstanceOf(IllegalArgumentException.class)
+          .hasMessageContaining("Nickname must be between 2 and 50 characters");
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Commit 1 — MOM-330: create() factory method — new admin guard
+  // ══════════════════════════════════════════════════════════════
+
+  @Nested
+  @DisplayName("create — isAdmin() 기반 관리자 차단 검증")
+  class CreateAdminGuard {
+
+    @Test
+    @DisplayName("[M-28] create rejects ADMIN_SEED role")
+    void create_withAdminSeed_throwsIllegalAdminGrantException() {
+      assertThatThrownBy(() -> User.create("user@test.com", "tester", null, UserRole.ADMIN_SEED))
+          .isInstanceOf(IllegalAdminGrantException.class);
+    }
+
+    @Test
+    @DisplayName("[M-29] create rejects ADMIN_GENERATED role")
+    void create_withAdminGenerated_throwsIllegalAdminGrantException() {
+      assertThatThrownBy(
+              () -> User.create("user@test.com", "tester", null, UserRole.ADMIN_GENERATED))
+          .isInstanceOf(IllegalAdminGrantException.class);
+    }
+
+    @Test
+    @DisplayName("[M-30] create still rejects plain ADMIN role (existing behavior preserved)")
+    void create_withAdmin_throwsIllegalAdminGrantException() {
+      assertThatThrownBy(() -> User.create("user@test.com", "tester", null, UserRole.ADMIN))
+          .isInstanceOf(IllegalAdminGrantException.class);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Commit 1 — MOM-330: updateRole() — new admin guard
+  // ══════════════════════════════════════════════════════════════
+
+  @Nested
+  @DisplayName("updateRole — isAdmin() 기반 관리자 차단 검증")
+  class UpdateRoleAdminGuard {
+
+    @Test
+    @DisplayName("[M-31] updateRole rejects ADMIN_SEED")
+    void updateRole_withAdminSeed_throwsIllegalAdminGrantException() {
+      // given
+      User user = baseUser(UserRole.USER);
+
+      // when / then
+      assertThatThrownBy(() -> user.updateRole(UserRole.ADMIN_SEED))
+          .isInstanceOf(IllegalAdminGrantException.class);
+    }
+
+    @Test
+    @DisplayName("[M-32] updateRole rejects ADMIN_GENERATED")
+    void updateRole_withAdminGenerated_throwsIllegalAdminGrantException() {
+      // given
+      User user = baseUser(UserRole.USER);
+
+      // when / then
+      assertThatThrownBy(() -> user.updateRole(UserRole.ADMIN_GENERATED))
+          .isInstanceOf(IllegalAdminGrantException.class);
+    }
+
+    @Test
+    @DisplayName("[M-33] updateRole still rejects plain ADMIN (existing behavior preserved)")
+    void updateRole_withAdmin_throwsIllegalAdminGrantException() {
+      // given
+      User user = baseUser(UserRole.USER);
+
+      // when / then
+      assertThatThrownBy(() -> user.updateRole(UserRole.ADMIN))
+          .isInstanceOf(IllegalAdminGrantException.class);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Commit 1 — MOM-330: isAdmin() delegation
+  // ══════════════════════════════════════════════════════════════
+
+  @Nested
+  @DisplayName("isAdmin — 역할별 관리자 여부 검증")
+  class IsAdminDelegation {
+
+    @Test
+    @DisplayName("[M-34] User.isAdmin returns true when role is ADMIN_SEED")
+    void isAdmin_withAdminSeed_returnsTrue() {
+      // given
+      User user = baseUser(UserRole.ADMIN_SEED);
+
+      // when / then
+      assertThat(user.isAdmin()).isTrue();
+    }
+
+    @Test
+    @DisplayName("[M-35] User.isAdmin returns true when role is ADMIN_GENERATED")
+    void isAdmin_withAdminGenerated_returnsTrue() {
+      // given
+      User user = baseUser(UserRole.ADMIN_GENERATED);
+
+      // when / then
+      assertThat(user.isAdmin()).isTrue();
+    }
+
+    @Test
+    @DisplayName("[M-36] User.isAdmin returns true when role is ADMIN")
+    void isAdmin_withAdmin_returnsTrue() {
+      // given
+      User user = baseUser(UserRole.ADMIN);
+
+      // when / then
+      assertThat(user.isAdmin()).isTrue();
+    }
+
+    @Test
+    @DisplayName("[M-37] User.isAdmin returns false when role is USER")
+    void isAdmin_withUser_returnsFalse() {
+      // given
+      User user = baseUser(UserRole.USER);
+
+      // when / then
+      assertThat(user.isAdmin()).isFalse();
+    }
+
+    @Test
+    @DisplayName("[M-38] User.isAdmin returns false when role is TRAINER")
+    void isAdmin_withTrainer_returnsFalse() {
+      // given
+      User user = baseUser(UserRole.TRAINER);
+
+      // when / then
+      assertThat(user.isAdmin()).isFalse();
+    }
   }
 
   private User baseUser(UserRole role) {

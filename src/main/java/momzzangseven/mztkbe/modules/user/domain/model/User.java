@@ -40,8 +40,8 @@ public class User {
     validateEmail(email);
     validateNickname(nickname);
 
-    // General user cannot grant himself a ADMIN role.
-    if (role == UserRole.ADMIN) {
+    // General user cannot grant themselves any admin role.
+    if (role.isAdmin()) {
       throw new IllegalAdminGrantException();
     }
 
@@ -51,6 +51,35 @@ public class User {
         .nickname(nickname)
         .profileImageUrl(profileImageUrl)
         .role(role)
+        .createdAt(now)
+        .updatedAt(now)
+        .build();
+  }
+
+  /**
+   * Create an admin user. Only ADMIN_SEED or ADMIN_GENERATED roles are accepted. The plain ADMIN
+   * role cannot be directly assigned — it exists only as a logical parent in the role hierarchy.
+   *
+   * @param email synthetic email address
+   * @param nickname admin display name
+   * @param adminRole must be ADMIN_SEED or ADMIN_GENERATED
+   * @return new admin User instance
+   * @throws IllegalArgumentException if adminRole is not ADMIN_SEED or ADMIN_GENERATED
+   */
+  public static User createAdmin(String email, String nickname, UserRole adminRole) {
+    validateEmail(email);
+    validateNickname(nickname);
+
+    if (adminRole != UserRole.ADMIN_SEED && adminRole != UserRole.ADMIN_GENERATED) {
+      throw new IllegalArgumentException("This role is not allowed.");
+    }
+
+    Instant now = Instant.now();
+    return User.builder()
+        .email(email)
+        .nickname(nickname)
+        .profileImageUrl(null)
+        .role(adminRole)
         .createdAt(now)
         .updatedAt(now)
         .build();
@@ -92,17 +121,17 @@ public class User {
       throw new InvalidUserRoleException("New role is same as current role");
     }
 
-    // Business rule: Cannot change to ADMIN (only system can do this)
-    if (newRole == UserRole.ADMIN) {
+    // Business rule: Cannot change to any admin role through this path
+    if (newRole.isAdmin()) {
       throw new IllegalAdminGrantException();
     }
 
     return this.toBuilder().role(newRole).updatedAt(Instant.now()).build();
   }
 
-  /** Check if user is admin. */
+  /** Check if user is admin (ADMIN, ADMIN_SEED, or ADMIN_GENERATED). */
   public boolean isAdmin() {
-    return UserRole.ADMIN.equals(this.role);
+    return this.role.isAdmin();
   }
 
   /**
