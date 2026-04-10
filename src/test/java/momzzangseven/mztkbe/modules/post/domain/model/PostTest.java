@@ -113,7 +113,7 @@ class PostTest {
   void updateReturnsSameInstanceWhenNothingProvided() {
     Post post = basePost();
 
-    Post updated = post.update(null, null, null);
+    Post updated = post.update(null, null, null, 0L);
 
     assertThat(updated).isSameAs(post);
   }
@@ -123,11 +123,11 @@ class PostTest {
   void updateRejectsBlankValues() {
     Post post = basePost();
 
-    assertThatThrownBy(() -> post.update(" ", null, null))
+    assertThatThrownBy(() -> post.update(" ", null, null, 0L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Title cannot be blank.");
 
-    assertThatThrownBy(() -> post.update(null, " ", null))
+    assertThatThrownBy(() -> post.update(null, " ", null, 0L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Content cannot be blank.");
   }
@@ -137,7 +137,7 @@ class PostTest {
   void updateChangesFields() {
     Post post = basePost();
 
-    Post updated = post.update("new", "new-content", List.of("tag2"));
+    Post updated = post.update("new", "new-content", List.of("tag2"), 0L);
 
     assertThat(updated).isNotSameAs(post);
     assertThat(updated.getTitle()).isEqualTo("new");
@@ -147,8 +147,8 @@ class PostTest {
   }
 
   @Test
-  @DisplayName("solved question post cannot be updated")
-  void updateSolvedQuestionThrows() {
+  @DisplayName("answered question post cannot be updated")
+  void updateAnsweredQuestionThrows() {
     Post post =
         Post.builder()
             .id(2L)
@@ -157,21 +157,21 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .isSolved(true)
+            .isSolved(false)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
 
-    assertThatThrownBy(() -> post.update("edited", null, null))
+    assertThatThrownBy(() -> post.update("edited", null, null, 1L))
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("cannot be edited");
   }
 
   @Test
-  @DisplayName("validateDeletable allows free posts but rejects solved question posts")
+  @DisplayName("validateDeletable allows unanswered questions but rejects answered question posts")
   void validateDeletableBranches() {
     Post freePost = basePost();
-    Post solvedQuestion =
+    Post unansweredQuestion =
         Post.builder()
             .id(3L)
             .userId(1L)
@@ -179,15 +179,37 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .isSolved(true)
+            .isSolved(false)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
 
-    assertThatCode(freePost::validateDeletable).doesNotThrowAnyException();
-    assertThatThrownBy(solvedQuestion::validateDeletable)
+    assertThatCode(() -> freePost.validateDeletable(0L)).doesNotThrowAnyException();
+    assertThatCode(() -> unansweredQuestion.validateDeletable(0L)).doesNotThrowAnyException();
+    assertThatThrownBy(() -> unansweredQuestion.validateDeletable(1L))
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("cannot be deleted");
+  }
+
+  @Test
+  @DisplayName("answered question with count greater than one is still not editable")
+  void updateAnsweredQuestionThrowsWhenCountIsGreaterThanOne() {
+    Post post =
+        Post.builder()
+            .id(4L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .isSolved(false)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> post.update("edited", null, null, 2L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("cannot be edited");
   }
 
   @Test

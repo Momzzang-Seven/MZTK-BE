@@ -94,6 +94,17 @@ class AnswerPersistenceAdapterTest {
     }
 
     @Test
+    @DisplayName("countAnswers() delegates to repository count query")
+    void countAnswers_delegatesToRepository() {
+      given(answerJpaRepository.countByPostId(10L)).willReturn(2L);
+
+      long result = answerPersistenceAdapter.countAnswers(10L);
+
+      assertThat(result).isEqualTo(2L);
+      verify(answerJpaRepository).countByPostId(10L);
+    }
+
+    @Test
     @DisplayName("deleteAnswer() delegates to deleteById")
     void deleteAnswer_deletesById() {
       answerPersistenceAdapter.deleteAnswer(100L);

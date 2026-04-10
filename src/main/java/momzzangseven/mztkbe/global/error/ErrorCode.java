@@ -347,6 +347,10 @@ public enum ErrorCode {
   REQUIRE_USER_LOGIN(
       "ANSWER_008", "User login is required", HttpStatus.UNAUTHORIZED // 401
       ),
+  CANNOT_UPDATE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_009", "Cannot update an answer on a solved post", HttpStatus.BAD_REQUEST),
+  CANNOT_DELETE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_010", "Cannot delete an answer on a solved post", HttpStatus.BAD_REQUEST),
   // ========================================
   // Image Errors (IMAGE_xxx)
   // ========================================

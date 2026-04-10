@@ -551,7 +551,7 @@ class AnswerE2ETest {
     }
 
     @Test
-    @DisplayName("accepted answer cannot be updated or deleted and DB rows remain")
+    @DisplayName("answers on a solved question cannot be updated or deleted and DB rows remain")
     void acceptedAnswer_blocksUpdateAndDelete() throws Exception {
       TestUser author = signupAndLogin("accepted-delete-author");
       TestUser answerer = signupAndLogin("accepted-delete-answerer");
@@ -579,7 +579,7 @@ class AnswerE2ETest {
       assertThat(updateResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
       JsonNode updateRoot = parse(updateResponse);
       assertThat(updateRoot.at("/status").asText()).isEqualTo("FAIL");
-      assertThat(updateRoot.at("/code").asText()).isEqualTo("ANSWER_005");
+      assertThat(updateRoot.at("/code").asText()).isEqualTo("ANSWER_009");
       assertThat(answerContent(answerId)).isEqualTo("cannot delete me");
       assertImageUnlinked(replacementImageId);
 
@@ -593,7 +593,7 @@ class AnswerE2ETest {
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
       JsonNode root = parse(response);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
-      assertThat(root.at("/code").asText()).isEqualTo("ANSWER_006");
+      assertThat(root.at("/code").asText()).isEqualTo("ANSWER_010");
       assertThat(countAnswersById(answerId)).isEqualTo(1);
       assertThat(countLinkedAnswerImages(answerId)).isEqualTo(1);
     }

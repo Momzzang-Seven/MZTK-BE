@@ -331,15 +331,98 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("accepted answer cannot be updated after acceptance")
-  void acceptAnswer_success_blocksAnswerUpdate() throws Exception {
+  @DisplayName("question update/delete is blocked immediately after the first answer is committed")
+  void answeredQuestion_blocksUpdateAndDelete() throws Exception {
+    Long postId = createQuestionPost(421L, "answered title", "answered content", 100L, List.of());
+
+    mockMvc
+        .perform(
+            post("/questions/" + postId + "/answers")
+                .with(userPrincipal(422L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "first answer"))))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(421L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "blocked edit"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
+
+    mockMvc
+        .perform(delete("/posts/" + postId).with(userPrincipal(421L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
+  }
+
+  @Test
+  @DisplayName("question update/delete is re-enabled after the last answer is deleted")
+  void questionBecomesEditableAgainAfterLastAnswerDeletion() throws Exception {
     Long postId = createQuestionPost(421L, "accept title", "accept content", 100L, List.of());
+    mockMvc
+        .perform(
+            post("/questions/" + postId + "/answers")
+                .with(userPrincipal(422L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "candidate"))))
+        .andExpect(status().isCreated());
+
+    Long answerId =
+        answerJpaRepository.findAll().stream()
+            .filter(answer -> answer.getPostId().equals(postId))
+            .map(AnswerEntity::getId)
+            .findFirst()
+            .orElseThrow();
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(421L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "blocked edit"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("POST_003"));
+
+    mockMvc
+        .perform(delete("/questions/" + postId + "/answers/" + answerId).with(userPrincipal(422L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(421L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "updated after delete"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(postId));
+
+    mockMvc
+        .perform(delete("/posts/" + postId).with(userPrincipal(421L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(postId));
+
+    assertThat(postJpaRepository.findById(postId)).isEmpty();
+  }
+
+  @Test
+  @DisplayName("solved question answer cannot be updated after acceptance")
+  void acceptAnswer_success_blocksAnswerUpdate() throws Exception {
+    Long postId = createQuestionPost(431L, "accept title", "accept content", 100L, List.of());
     Long answerId =
         answerJpaRepository
             .save(
                 AnswerEntity.builder()
                     .postId(postId)
-                    .userId(422L)
+                    .userId(432L)
                     .content("candidate")
                     .isAccepted(false)
                     .build())
@@ -347,18 +430,18 @@ class PostControllerIntegrationTest {
 
     mockMvc
         .perform(
-            post("/posts/" + postId + "/answers/" + answerId + "/accept").with(userPrincipal(421L)))
+            post("/posts/" + postId + "/answers/" + answerId + "/accept").with(userPrincipal(431L)))
         .andExpect(status().isOk());
 
     mockMvc
         .perform(
             put("/questions/" + postId + "/answers/" + answerId)
-                .with(userPrincipal(422L))
+                .with(userPrincipal(432L))
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("content", "updated after accept"))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"))
-        .andExpect(jsonPath("$.code").value("ANSWER_005"));
+        .andExpect(jsonPath("$.code").value("ANSWER_009"));
   }
 
   private Long extractPostId(MvcResult result) throws Exception {
