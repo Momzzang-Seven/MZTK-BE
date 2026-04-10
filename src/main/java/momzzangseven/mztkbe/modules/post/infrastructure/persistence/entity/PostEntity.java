@@ -87,11 +87,13 @@ public class PostEntity {
         .reward(post.getReward())
         .acceptedAnswerId(post.getAcceptedAnswerId())
         .status(post.getStatus())
-        .isSolved(post.getIsSolved())
         .build();
   }
 
   public Post toDomain(List<String> tags) {
+    NormalizedPostState normalizedState =
+        normalizeForDomain(this.type, this.status, this.acceptedAnswerId, this.isSolved);
+
     return Post.builder()
         .id(this.id)
         .userId(this.userId)
@@ -99,9 +101,8 @@ public class PostEntity {
         .title(this.title)
         .content(this.content)
         .reward(this.reward)
-        .acceptedAnswerId(this.acceptedAnswerId)
-        .status(this.status)
-        .isSolved(this.isSolved)
+        .acceptedAnswerId(normalizedState.acceptedAnswerId())
+        .status(normalizedState.status())
         .tags(tags)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)
@@ -118,4 +119,24 @@ public class PostEntity {
     }
     return Boolean.TRUE.equals(isSolved) ? PostStatus.RESOLVED : PostStatus.OPEN;
   }
+
+  private static NormalizedPostState normalizeForDomain(
+      PostType type, PostStatus status, Long acceptedAnswerId, Boolean isSolved) {
+    PostStatus resolvedStatus = resolveStatus(status, isSolved);
+
+    if (type == PostType.FREE) {
+      return new NormalizedPostState(PostStatus.OPEN, null);
+    }
+
+    if (type == PostType.QUESTION) {
+      if (acceptedAnswerId != null) {
+        return new NormalizedPostState(PostStatus.RESOLVED, acceptedAnswerId);
+      }
+      return new NormalizedPostState(PostStatus.OPEN, null);
+    }
+
+    return new NormalizedPostState(resolvedStatus, acceptedAnswerId);
+  }
+
+  private record NormalizedPostState(PostStatus status, Long acceptedAnswerId) {}
 }

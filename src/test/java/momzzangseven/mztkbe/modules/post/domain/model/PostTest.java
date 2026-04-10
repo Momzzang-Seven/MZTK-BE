@@ -23,6 +23,7 @@ class PostTest {
 
     assertThat(post.getReward()).isZero();
     assertThat(post.getTitle()).isNull();
+    assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
     assertThat(post.getIsSolved()).isFalse();
     assertThat(post.getTags()).isEmpty();
     assertThat(post.getCreatedAt()).isNotNull();
@@ -50,6 +51,7 @@ class PostTest {
 
     assertThat(post.getReward()).isEqualTo(25L);
     assertThat(post.getType()).isEqualTo(PostType.QUESTION);
+    assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
     assertThat(post.getIsSolved()).isFalse();
   }
 
@@ -157,7 +159,8 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .isSolved(true)
+            .status(PostStatus.RESOLVED)
+            .acceptedAnswerId(10L)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
@@ -179,7 +182,8 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .isSolved(true)
+            .status(PostStatus.RESOLVED)
+            .acceptedAnswerId(11L)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
@@ -212,7 +216,7 @@ class PostTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .tags(null)
             .build();
 
@@ -243,6 +247,61 @@ class PostTest {
   }
 
   @Test
+  @DisplayName("resolved question requires accepted answer id")
+  void resolvedQuestionRequiresAcceptedAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Post.builder()
+                    .id(30L)
+                    .userId(1L)
+                    .type(PostType.QUESTION)
+                    .title("question")
+                    .content("content")
+                    .reward(10L)
+                    .status(PostStatus.RESOLVED)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("acceptedAnswerId");
+  }
+
+  @Test
+  @DisplayName("open question cannot have accepted answer id")
+  void openQuestionCannotHaveAcceptedAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Post.builder()
+                    .id(32L)
+                    .userId(1L)
+                    .type(PostType.QUESTION)
+                    .title("question")
+                    .content("content")
+                    .reward(10L)
+                    .acceptedAnswerId(99L)
+                    .status(PostStatus.OPEN)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("acceptedAnswerId");
+  }
+
+  @Test
+  @DisplayName("free post cannot be resolved")
+  void freePostCannotBeResolved() {
+    assertThatThrownBy(
+            () ->
+                Post.builder()
+                    .id(31L)
+                    .userId(1L)
+                    .type(PostType.FREE)
+                    .title("title")
+                    .content("content")
+                    .reward(0L)
+                    .status(PostStatus.RESOLVED)
+                    .acceptedAnswerId(99L)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   @DisplayName("accept rejects already resolved question with PostAlreadySolvedException")
   void accept_rejectsResolvedQuestion() {
     Post post =
@@ -270,7 +329,7 @@ class PostTest {
         .title("title")
         .content("content")
         .reward(0L)
-        .isSolved(false)
+        .status(PostStatus.OPEN)
         .tags(List.of("tag1"))
         .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
         .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))

@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,7 +52,7 @@ class CreatePostServiceTest {
             .title(null)
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .tags(List.of("java", "spring"))
             .build();
 
@@ -89,7 +90,7 @@ class CreatePostServiceTest {
             .title(null)
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
@@ -118,7 +119,7 @@ class CreatePostServiceTest {
             .title(null)
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
@@ -144,7 +145,7 @@ class CreatePostServiceTest {
             .title(null)
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
@@ -186,7 +187,7 @@ class CreatePostServiceTest {
             .title("질문 제목")
             .content("질문 내용")
             .reward(50L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .tags(List.of("java"))
             .build();
 
@@ -201,6 +202,7 @@ class CreatePostServiceTest {
     assertThat(captured.getType()).isEqualTo(PostType.QUESTION);
     assertThat(captured.getTitle()).isEqualTo("질문 제목");
     assertThat(captured.getReward()).isEqualTo(50L);
+    assertThat(captured.getStatus()).isEqualTo(PostStatus.OPEN);
     assertThat(captured.getIsSolved()).isFalse();
 
     // Verify image sync for QUESTION type

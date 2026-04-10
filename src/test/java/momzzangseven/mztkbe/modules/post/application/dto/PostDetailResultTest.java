@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class PostDetailResultTest {
             .title("title")
             .content("content")
             .reward(50L)
-            .isSolved(null)
+            .status(PostStatus.OPEN)
             .tags(List.of("java"))
             .createdAt(createdAt)
             .updatedAt(updatedAt)
@@ -65,11 +66,12 @@ class PostDetailResultTest {
         Post.builder()
             .id(1L)
             .userId(2L)
-            .type(PostType.FREE)
+            .type(PostType.QUESTION)
             .title("t")
             .content("c")
-            .reward(0L)
-            .isSolved(true)
+            .reward(10L)
+            .acceptedAnswerId(5L)
+            .status(PostStatus.RESOLVED)
             .build();
 
     String nickname = "test nick name";
