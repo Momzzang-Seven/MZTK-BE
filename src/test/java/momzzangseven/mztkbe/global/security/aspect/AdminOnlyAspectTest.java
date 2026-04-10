@@ -3,9 +3,7 @@ package momzzangseven.mztkbe.global.security.aspect;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -13,13 +11,14 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
 import java.util.Map;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditLogSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -29,10 +28,10 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 @ExtendWith(MockitoExtension.class)
+@DisplayName("AdminOnlyAspect 단위 테스트")
 class AdminOnlyAspectTest {
 
   @Mock private RecordAdminAuditPort recordAdminAuditPort;
-  @Mock private AuditLogSerializer auditLogSerializer;
   @Mock private ProceedingJoinPoint joinPoint;
   @Mock private MethodSignature methodSignature;
 
@@ -40,10 +39,7 @@ class AdminOnlyAspectTest {
 
   @BeforeEach
   void setUp() {
-    aspect = new AdminOnlyAspect(recordAdminAuditPort, auditLogSerializer);
-    lenient()
-        .when(auditLogSerializer.normalize(anyMap()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    aspect = new AdminOnlyAspect(recordAdminAuditPort);
     SecurityContextHolder.clearContext();
   }
 
@@ -53,12 +49,13 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName(
+      "ROLE_ADMIN 사용자가 호출하면, around 는 어노테이션의 targetType 을 그대로 전달하는 성공 audit 를 기록하고 "
+          + "민감 인자(privateKey/secretKey)를 마스킹한다")
   void around_withAdminRole_recordsSuccessAuditAndSanitizedArguments() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
@@ -66,7 +63,7 @@ class AdminOnlyAspectTest {
     when(joinPoint.proceed()).thenReturn("OK");
     setAuthentication("ROLE_ADMIN");
 
-    Object result = aspect.around(joinPoint, adminOnly);
+    Object result = aspect.around(joinPoint);
 
     assertThat(result).isEqualTo("OK");
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
@@ -75,10 +72,11 @@ class AdminOnlyAspectTest {
 
     RecordAdminAuditPort.AuditCommand command = captor.getValue();
     assertThat(command.operatorId()).isEqualTo(1L);
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.TREASURY_KEY);
     assertThat(command.success()).isTrue();
     assertThat(command.targetId()).isEqualTo("target-1");
-    assertThat(command.detail()).containsEntry("success", true);
-    assertThat(command.detail()).containsEntry("failureReason", null);
+    assertThat(command.detail()).doesNotContainKeys("operatorId", "success", "targetId");
+    assertThat(command.detail()).doesNotContainKey("failureReason");
     assertThat(command.detail().get("arguments")).isInstanceOf(Map.class);
 
     @SuppressWarnings("unchecked")
@@ -94,12 +92,11 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("SecurityContext 인증 정보가 없는 시스템 호출이면, around 는 실행을 허용하고 audit 를 기록한다")
   void around_withoutAuthentication_allowsExecutionAndRecordsAudit() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
@@ -107,18 +104,19 @@ class AdminOnlyAspectTest {
     when(joinPoint.proceed()).thenReturn("NO_AUTH_OK");
     SecurityContextHolder.clearContext();
 
-    Object result = aspect.around(joinPoint, adminOnly);
+    Object result = aspect.around(joinPoint);
 
     assertThat(result).isEqualTo("NO_AUTH_OK");
     verify(recordAdminAuditPort).record(any(RecordAdminAuditPort.AuditCommand.class));
   }
 
   @Test
+  @DisplayName(
+      "내부 비즈니스 메서드가 예외를 던지면, around 는 예외를 재전파하면서 success=false + failureReason 의 audit 를 기록한다")
   void around_whenProceedThrows_rethrowsAndRecordsFailure() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
 
     RuntimeException boom = new IllegalStateException("boom");
     when(joinPoint.getSignature()).thenReturn(methodSignature);
@@ -128,7 +126,7 @@ class AdminOnlyAspectTest {
     when(joinPoint.proceed()).thenThrow(boom);
     setAuthentication("ROLE_ADMIN");
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly)).isSameAs(boom);
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
 
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
@@ -138,15 +136,15 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName(
+      "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
   void around_whenOperatorExpressionIsNotNumeric_throwsAuthenticationError() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("nonNumericOperator", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly))
+    assertThatThrownBy(() -> aspect.around(joinPoint))
         .isInstanceOf(UserNotAuthenticatedException.class)
         .hasMessageContaining("operatorId must resolve to a number");
 
@@ -154,19 +152,19 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName(
+      "ROLE_USER 등 비-admin 으로 인증된 호출이면, around 는 BusinessException(Unauthorized) 을 던지고 audit 를 기록하지 않는다")
   void around_whenNonAdminAuthentication_throwsBusinessException() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
         .thenReturn(new Object[] {1L, "target-4", "raw-secret", new Payload("dave", "k4", 9)});
     setAuthentication("ROLE_USER");
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly))
+    assertThatThrownBy(() -> aspect.around(joinPoint))
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("Unauthorized access");
 
@@ -174,10 +172,9 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("audit 기록 단계에서 RecordAdminAuditPort 가 예외를 던져도, around 는 비즈니스 로직의 원래 반환값을 그대로 반환한다")
   void around_whenAuditRecordingFails_returnsOriginalResult() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
@@ -187,23 +184,42 @@ class AdminOnlyAspectTest {
         .record(any(RecordAdminAuditPort.AuditCommand.class));
     setAuthentication("ROLE_ADMIN");
 
-    Object result = aspect.around(joinPoint, adminOnly);
+    Object result = aspect.around(joinPoint);
 
     assertThat(result).isEqualTo("OK_WITH_AUDIT_FAILURE");
   }
 
   @Test
-  void around_withBlankTargetExpression_recordsNullTargetId() throws Throwable {
-    Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
+  @DisplayName(
+      "@AdminOnly(targetType=WEB3_TRANSACTION) 메서드 호출이 성공하면, "
+          + "around 는 AuditCommand.targetType 에 WEB3_TRANSACTION 을 전달한다")
+  void around_passesAnnotationTargetTypeToAuditCommand() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("web3Action", Long.class);
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
     when(joinPoint.proceed()).thenReturn("OK");
     setAuthentication("ROLE_ADMIN");
 
-    aspect.around(joinPoint, adminOnly);
+    aspect.around(joinPoint);
+
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    assertThat(captor.getValue().targetType()).isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+  }
+
+  @Test
+  @DisplayName("@AdminOnly 의 targetId SpEL 표현식이 빈 문자열이면, around 는 audit 의 targetId 를 null 로 기록한다")
+  void around_withBlankTargetExpression_recordsNullTargetId() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    when(joinPoint.proceed()).thenReturn("OK");
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
 
     ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
@@ -212,18 +228,17 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("operatorId SpEL 결과가 0 이하 숫자이면, around 는 UserNotAuthenticatedException 을 던진다")
   void around_whenOperatorIdNonPositive_throwsAuthenticationError() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
-    AdminOnly adminOnly = method.getAnnotation(AdminOnly.class);
-
     when(joinPoint.getSignature()).thenReturn(methodSignature);
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
         .thenReturn(new Object[] {0L, "target-5", "raw-secret", new Payload("erin", "k5", 1)});
 
-    assertThatThrownBy(() -> aspect.around(joinPoint, adminOnly))
+    assertThatThrownBy(() -> aspect.around(joinPoint))
         .isInstanceOf(UserNotAuthenticatedException.class);
   }
 
@@ -234,18 +249,34 @@ class AdminOnlyAspectTest {
 
   private static class DummyAdminMethods {
 
-    @AdminOnly(actionType = "DELETE", targetType = "USER", operatorId = "#p0", targetId = "#p1")
+    @AdminOnly(
+        actionType = "DELETE",
+        targetType = AuditTargetType.TREASURY_KEY,
+        operatorId = "#p0",
+        targetId = "#p1")
     String adminAction(Long operatorId, String targetId, String privateKey, Payload payload) {
       return "OK";
     }
 
-    @AdminOnly(actionType = "READ", targetType = "USER", operatorId = "'abc'")
+    @AdminOnly(actionType = "READ", targetType = AuditTargetType.TREASURY_KEY, operatorId = "'abc'")
     String nonNumericOperator(Long operatorId) {
       return "NO";
     }
 
-    @AdminOnly(actionType = "LIST", targetType = "USER", operatorId = "#p0", targetId = "")
+    @AdminOnly(
+        actionType = "LIST",
+        targetType = AuditTargetType.TREASURY_KEY,
+        operatorId = "#p0",
+        targetId = "")
     String blankTarget(Long operatorId) {
+      return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "TRANSACTION_MARK_SUCCEEDED",
+        targetType = AuditTargetType.WEB3_TRANSACTION,
+        operatorId = "#p0")
+    String web3Action(Long operatorId) {
       return "OK";
     }
   }
