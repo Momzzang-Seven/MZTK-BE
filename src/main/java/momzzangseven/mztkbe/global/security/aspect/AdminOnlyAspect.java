@@ -85,15 +85,15 @@ public class AdminOnlyAspect {
     validateAdmin(operatorId);
 
     Object result = null;
-    RuntimeException runtimeException = null;
+    Exception caught = null;
     try {
       result = joinPoint.proceed();
       return result;
-    } catch (RuntimeException e) {
-      runtimeException = e;
+    } catch (Exception e) {
+      caught = e;
       throw e;
     } finally {
-      recordAdminAudit(adminOnly, targetMethod, args, operatorId, result, runtimeException);
+      recordAdminAudit(adminOnly, targetMethod, args, operatorId, result, caught);
     }
   }
 
@@ -108,12 +108,12 @@ public class AdminOnlyAspect {
       Object[] args,
       Long operatorId,
       Object result,
-      RuntimeException runtimeException) {
+      Exception caught) {
     try {
-      StandardEvaluationContext context = evaluationContext(method, args, result, runtimeException);
+      StandardEvaluationContext context = evaluationContext(method, args, result, caught);
       String targetId = evalString(adminOnly.targetId(), context);
-      boolean success = runtimeException == null;
-      String failureReason = success ? null : runtimeException.getClass().getSimpleName();
+      boolean success = caught == null;
+      String failureReason = success ? null : caught.getClass().getSimpleName();
 
       // operatorId, success, actionType, targetType and targetId are persisted as dedicated
       // columns on admin_action_audits — keep them out of detail_json so the row has a single
@@ -159,7 +159,7 @@ public class AdminOnlyAspect {
   }
 
   private StandardEvaluationContext evaluationContext(
-      Method method, Object[] args, Object result, RuntimeException runtimeException) {
+      Method method, Object[] args, Object result, Exception caught) {
     StandardEvaluationContext context = new StandardEvaluationContext();
     String[] parameterNames = PARAM_DISCOVERER.getParameterNames(method);
     if (parameterNames != null) {
@@ -171,7 +171,7 @@ public class AdminOnlyAspect {
       context.setVariable("p" + i, args[i]);
     }
     context.setVariable("result", result);
-    context.setVariable("error", runtimeException);
+    context.setVariable("error", caught);
     return context;
   }
 
