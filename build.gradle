@@ -89,6 +89,9 @@ dependencies {
     testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
+    // Rate limiting
+    implementation 'com.bucket4j:bucket4j-core:8.10.1'
+
     // AWS
     implementation platform('software.amazon.awssdk:bom:2.27.21')
     implementation 'software.amazon.awssdk:s3'
