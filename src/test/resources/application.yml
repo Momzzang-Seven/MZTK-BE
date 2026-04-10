@@ -292,3 +292,11 @@ verification:
 lambda:
   webhook:
     secret: test-lambda-webhook-secret # gitleaks:allow
+
+# Admin account management
+mztk:
+  admin:
+    recovery:
+      anchor: test-recovery-anchor-value-for-unit-tests
+    bootstrap:
+      enabled: false
