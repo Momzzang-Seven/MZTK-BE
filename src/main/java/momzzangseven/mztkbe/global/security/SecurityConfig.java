@@ -33,6 +33,8 @@ public class SecurityConfig {
   private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
   private final RestAccessDeniedHandler restAccessDeniedHandler;
   private final SecurityCorsProperties securityCorsProperties;
+  private final momzzangseven.mztkbe.modules.admin.infrastructure.recovery.RecoveryRateLimitFilter
+      recoveryRateLimitFilter;
 
   /**
    * Role hierarchy: ADMIN_SEED and ADMIN_GENERATED inherit ROLE_ADMIN, which inherits ROLE_TRAINER,
@@ -256,6 +258,7 @@ public class SecurityConfig {
                     .authenticated());
 
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+    http.addFilterBefore(recoveryRateLimitFilter, jwtAuthenticationFilter.getClass());
     return http.build();
   }
 }

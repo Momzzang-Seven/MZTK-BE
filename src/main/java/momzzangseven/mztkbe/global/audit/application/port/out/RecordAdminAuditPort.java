@@ -16,8 +16,8 @@ public interface RecordAdminAuditPort {
       Map<String, Object> detail) {
 
     public AuditCommand {
-      if (operatorId == null || operatorId <= 0) {
-        throw new IllegalArgumentException("operatorId must be positive");
+      if (operatorId != null && operatorId <= 0) {
+        throw new IllegalArgumentException("operatorId must be positive when provided");
       }
       if (actionType == null || actionType.isBlank()) {
         throw new IllegalArgumentException("actionType is required");
