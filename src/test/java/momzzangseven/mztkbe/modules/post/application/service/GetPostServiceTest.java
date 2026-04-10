@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -51,7 +52,8 @@ class GetPostServiceTest {
             .title("question")
             .content("content")
             .reward(100L)
-            .isSolved(true)
+            .acceptedAnswerId(101L)
+            .status(PostStatus.RESOLVED)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -80,7 +82,7 @@ class GetPostServiceTest {
             .title("hello")
             .content("world")
             .reward(0L)
-            .isSolved(null)
+            .status(PostStatus.OPEN)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -115,7 +117,7 @@ class GetPostServiceTest {
             .title("hello")
             .content("world")
             .reward(0L)
-            .isSolved(null)
+            .status(PostStatus.OPEN)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -148,7 +150,7 @@ class GetPostServiceTest {
             .title("hello")
             .content("world")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -180,7 +182,8 @@ class GetPostServiceTest {
             .title("질문 제목")
             .content("질문 내용")
             .reward(50L)
-            .isSolved(true)
+            .acceptedAnswerId(55L)
+            .status(PostStatus.RESOLVED)
             .createdAt(now)
             .updatedAt(now)
             .build();

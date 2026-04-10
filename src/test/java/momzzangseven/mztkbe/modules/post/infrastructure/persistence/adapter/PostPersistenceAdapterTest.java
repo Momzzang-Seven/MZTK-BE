@@ -44,7 +44,7 @@ class PostPersistenceAdapterTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     PostEntity savedEntity =
@@ -55,7 +55,7 @@ class PostPersistenceAdapterTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     when(postJpaRepository.save(any(PostEntity.class))).thenReturn(savedEntity);
@@ -100,7 +100,7 @@ class PostPersistenceAdapterTest {
             .title("question")
             .content("body")
             .reward(50L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
@@ -116,6 +116,30 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("loadPost normalizes inconsistent persisted question state instead of failing")
+  void loadPostNormalizesInconsistentPersistedState() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(11L)
+            .userId(4L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("body")
+            .reward(50L)
+            .status(PostStatus.RESOLVED)
+            .build();
+
+    when(postJpaRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(entity));
+
+    Optional<Post> result = postPersistenceAdapter.loadPost(11L);
+
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(result.orElseThrow().getAcceptedAnswerId()).isNull();
+    assertThat(result.orElseThrow().getIsSolved()).isFalse();
+  }
+
+  @Test
   @DisplayName("loadPostForUpdate delegates to repository lock query")
   void loadPostForUpdateDelegates() {
     PostEntity entity =
@@ -126,7 +150,7 @@ class PostPersistenceAdapterTest {
             .title(null)
             .content("body")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     when(postJpaRepository.findByIdForUpdate(15L)).thenReturn(Optional.of(entity));
@@ -148,7 +172,7 @@ class PostPersistenceAdapterTest {
             .title("t")
             .content("c")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build();

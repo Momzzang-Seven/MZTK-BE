@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.domain.model;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
@@ -47,7 +48,7 @@ public class Post {
     this.content = content;
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
-    this.status = resolveStatus(status, isSolved);
+    this.status = validateAndResolveStatus(type, status, acceptedAnswerId);
     this.isSolved = this.status == PostStatus.RESOLVED;
     this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
@@ -155,15 +156,31 @@ public class Post {
     return this.toBuilder()
         .acceptedAnswerId(answerId)
         .status(PostStatus.RESOLVED)
-        .isSolved(true)
         .updatedAt(LocalDateTime.now())
         .build();
   }
 
-  private static PostStatus resolveStatus(PostStatus status, Boolean isSolved) {
-    if (status != null) {
+  private static PostStatus validateAndResolveStatus(
+      PostType type, PostStatus status, Long acceptedAnswerId) {
+    Objects.requireNonNull(type, "type must not be null");
+    Objects.requireNonNull(status, "status must not be null");
+
+    if (type == PostType.FREE) {
+      if (status != PostStatus.OPEN) {
+        throw new IllegalArgumentException("Free posts must remain OPEN.");
+      }
+      if (acceptedAnswerId != null) {
+        throw new IllegalArgumentException("Free posts cannot have acceptedAnswerId.");
+      }
       return status;
     }
-    return Boolean.TRUE.equals(isSolved) ? PostStatus.RESOLVED : PostStatus.OPEN;
+
+    if (status == PostStatus.OPEN && acceptedAnswerId != null) {
+      throw new IllegalArgumentException("Open question posts cannot have acceptedAnswerId.");
+    }
+    if (status == PostStatus.RESOLVED && acceptedAnswerId == null) {
+      throw new IllegalArgumentException("Resolved question posts require acceptedAnswerId.");
+    }
+    return status;
   }
 }

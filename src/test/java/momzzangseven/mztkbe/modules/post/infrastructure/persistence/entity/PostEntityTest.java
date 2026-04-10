@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,8 +13,8 @@ import org.junit.jupiter.api.Test;
 class PostEntityTest {
 
   @Test
-  @DisplayName("builder defaults solved flag when null")
-  void builderDefaultsNullableFields() {
+  @DisplayName("builder derives solved flag from status")
+  void builderDerivesSolvedFlagFromStatus() {
     PostEntity entity =
         PostEntity.builder()
             .id(1L)
@@ -22,7 +23,8 @@ class PostEntityTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(null)
+            .status(PostStatus.OPEN)
+            .isSolved(true)
             .build();
 
     assertThat(entity.getIsSolved()).isFalse();
@@ -39,7 +41,7 @@ class PostEntityTest {
             .title("question")
             .content("body")
             .reward(30L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .tags(List.of("java"))
             .build();
 
@@ -49,6 +51,7 @@ class PostEntityTest {
     assertThat(entity.getUserId()).isEqualTo(5L);
     assertThat(entity.getType()).isEqualTo(PostType.QUESTION);
     assertThat(entity.getReward()).isEqualTo(30L);
+    assertThat(entity.getStatus()).isEqualTo(PostStatus.OPEN);
     assertThat(entity.getIsSolved()).isFalse();
   }
 
@@ -63,7 +66,7 @@ class PostEntityTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(true)
+            .status(PostStatus.OPEN)
             .build();
 
     Post post = entity.toDomain(List.of("spring"));
@@ -74,7 +77,8 @@ class PostEntityTest {
     assertThat(post.getTitle()).isEqualTo("title");
     assertThat(post.getContent()).isEqualTo("content");
     assertThat(post.getReward()).isZero();
-    assertThat(post.getIsSolved()).isTrue();
+    assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(post.getIsSolved()).isFalse();
     assertThat(post.getTags()).containsExactly("spring");
     assertThat(post.getCreatedAt()).isNull();
     assertThat(post.getUpdatedAt()).isNull();
@@ -91,7 +95,7 @@ class PostEntityTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     Post post = entity.toDomain();
@@ -110,11 +114,76 @@ class PostEntityTest {
             .title("title")
             .content("body")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     Post post = entity.toDomain();
 
     assertThat(post.getTags()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("resolved question without accepted answer is normalized to open on rehydration")
+  void resolvedQuestionEntityIsNormalizedToOpenWhenAcceptedAnswerMissing() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(40L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.RESOLVED)
+            .build();
+
+    Post post = entity.toDomain();
+
+    assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(post.getAcceptedAnswerId()).isNull();
+    assertThat(post.getIsSolved()).isFalse();
+  }
+
+  @Test
+  @DisplayName("question open with accepted answer is normalized to resolved on rehydration")
+  void questionOpenWithAcceptedAnswerNormalizesToResolved() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(41L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.OPEN)
+            .build();
+
+    Post post = entity.toDomain();
+
+    assertThat(post.getStatus()).isEqualTo(PostStatus.RESOLVED);
+    assertThat(post.getAcceptedAnswerId()).isEqualTo(99L);
+    assertThat(post.getIsSolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("free post accepted answer is cleared on rehydration")
+  void freePostAcceptedAnswerIsClearedOnRehydration() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(42L)
+            .userId(1L)
+            .type(PostType.FREE)
+            .title("title")
+            .content("content")
+            .reward(0L)
+            .acceptedAnswerId(88L)
+            .status(PostStatus.RESOLVED)
+            .build();
+
+    Post post = entity.toDomain();
+
+    assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(post.getAcceptedAnswerId()).isNull();
+    assertThat(post.getIsSolved()).isFalse();
   }
 }
