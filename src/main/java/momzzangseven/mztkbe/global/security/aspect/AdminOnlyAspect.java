@@ -24,7 +24,9 @@ import org.springframework.core.annotation.Order;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
@@ -50,6 +52,7 @@ public class AdminOnlyAspect {
       new DefaultParameterNameDiscoverer();
 
   private final RecordAdminAuditPort recordAdminAuditPort;
+  private final RoleHierarchy roleHierarchy;
 
   /**
    * Matches every method annotated with {@link AdminOnly}. Centralising the FQN here means a future
@@ -151,8 +154,9 @@ public class AdminOnlyAspect {
     }
 
     boolean isAdmin =
-        authentication.getAuthorities().stream()
-            .anyMatch(grantedAuthority -> "ROLE_ADMIN".equals(grantedAuthority.getAuthority()));
+        roleHierarchy.getReachableGrantedAuthorities(authentication.getAuthorities()).stream()
+            .map(GrantedAuthority::getAuthority)
+            .anyMatch("ROLE_ADMIN"::equals);
     if (!isAdmin) {
       throw new BusinessException(ErrorCode.UNAUTHORIZED_ACCESS);
     }
