@@ -65,7 +65,7 @@ public enum ErrorCode {
   // ========================================
   // User Errors (USER_xxx)
   // ========================================
-  ILLEGAL_ADMIN_GRANT("USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST),
+  ILLEGAL_ADMIN_GRANT("USER_001", "Illegal ADMIN grant trial", HttpStatus.BAD_REQUEST),
 
   INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
 
