@@ -21,7 +21,7 @@ class MarkQuestionPostSolvedServiceTest {
   @InjectMocks private MarkQuestionPostSolvedService markQuestionPostSolvedService;
 
   @Test
-  @DisplayName("returns repository update count")
+  @DisplayName("returns conditional resolve update count")
   void executeReturnsUpdatedCount() {
     when(postPersistencePort.markQuestionPostSolved(1L)).thenReturn(1);
 
@@ -32,7 +32,7 @@ class MarkQuestionPostSolvedServiceTest {
   }
 
   @Test
-  @DisplayName("returns zero when nothing was updated")
+  @DisplayName("returns zero when bulk resolve update becomes no-op")
   void executeReturnsZeroWhenAlreadySolvedOrNotQuestion() {
     when(postPersistencePort.markQuestionPostSolved(2L)).thenReturn(0);
 

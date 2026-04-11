@@ -195,9 +195,9 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("markQuestionPostSolved enforces QUESTION type in repository call")
+  @DisplayName("markQuestionPostSolved performs status-only conditional resolve update")
   void markQuestionPostSolvedDelegates() {
-    when(postJpaRepository.markSolvedByIdIfType(
+    when(postJpaRepository.markResolvedByIdIfType(
             9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED))
         .thenReturn(1);
 
@@ -205,7 +205,7 @@ class PostPersistenceAdapterTest {
 
     assertThat(updated).isEqualTo(1);
     verify(postJpaRepository)
-        .markSolvedByIdIfType(9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
+        .markResolvedByIdIfType(9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

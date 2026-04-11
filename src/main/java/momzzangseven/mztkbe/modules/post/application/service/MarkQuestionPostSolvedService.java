@@ -15,6 +15,7 @@ public class MarkQuestionPostSolvedService implements MarkQuestionPostSolvedUseC
   @Override
   @Transactional
   public int execute(Long postId) {
+    // Web3 success sync keeps the existing conditional bulk update path for idempotent no-op.
     return postPersistencePort.markQuestionPostSolved(postId);
   }
 }
