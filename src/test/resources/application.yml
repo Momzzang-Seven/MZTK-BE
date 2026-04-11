@@ -1,7 +1,7 @@
 spring:
   # 테스트 환경에서는 별도 프로파일 없이 기본 설정만 사용
   profiles:
-    active: ""
+    active: "test"
   ai:
     model:
       chat: none
