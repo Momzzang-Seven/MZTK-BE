@@ -30,6 +30,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
@@ -65,6 +66,7 @@ class AnswerServiceTest {
   @Mock private LoadAnswerImagesPort loadAnswerImagesPort;
   @Mock private LoadAnswerLikePort loadAnswerLikePort;
   @Mock private UpdateAnswerImagesPort updateAnswerImagesPort;
+  @Mock private AnswerLifecycleExecutionPort answerLifecycleExecutionPort;
   @Mock private ApplicationEventPublisher eventPublisher;
   @Spy private AnswerReadAssembler answerReadAssembler = new AnswerReadAssembler();
 
@@ -79,46 +81,58 @@ class AnswerServiceTest {
     void createAnswer_returnsSavedId_andSyncsImages() {
       CreateAnswerCommand command =
           new CreateAnswerCommand(10L, 20L, "answer content", List.of(1L, 2L));
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
       Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
 
       CreateAnswerResult result = answerService.execute(command);
 
       assertThat(result.answerId()).isEqualTo(99L);
       verify(updateAnswerImagesPort).updateImages(20L, 99L, List.of(1L, 2L));
+      verify(answerLifecycleExecutionPort)
+          .prepareAnswerCreate(10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1);
     }
 
     @Test
     @DisplayName("create with null imageIds skips image sync")
     void createAnswer_skipsSync_whenImageIdsAreNull() {
       CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", null);
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
       Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
 
       answerService.execute(command);
 
       verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+      verify(answerLifecycleExecutionPort)
+          .prepareAnswerCreate(10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1);
     }
 
     @Test
     @DisplayName("create with empty imageIds skips image sync")
     void createAnswer_skipsSync_whenImageIdsAreEmpty() {
       CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
       Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
 
       answerService.execute(command);
 
       verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+      verify(answerLifecycleExecutionPort)
+          .prepareAnswerCreate(10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1);
     }
 
     @Test
@@ -208,12 +222,14 @@ class AnswerServiceTest {
     void updateAnswer_updatesContent_whenImageIdsAreNull() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
 
       answerService.execute(command);
 
@@ -221,6 +237,8 @@ class AnswerServiceTest {
       verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
       assertThat(answerCaptor.getValue().getContent()).isEqualTo("updated");
       verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+      verify(answerLifecycleExecutionPort)
+          .prepareAnswerUpdate(10L, 100L, 20L, 30L, "question content", 50L, "updated", 1);
     }
 
     @Test
@@ -228,7 +246,8 @@ class AnswerServiceTest {
     void updateAnswer_allowsImageOnlyUpdate() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(9L));
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
@@ -237,6 +256,7 @@ class AnswerServiceTest {
 
       verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
       verify(updateAnswerImagesPort).updateImages(20L, 100L, List.of(9L));
+      verifyNoInteractions(answerLifecycleExecutionPort);
     }
 
     @Test
@@ -244,16 +264,20 @@ class AnswerServiceTest {
     void updateAnswer_withEmptyImageIds_callsImageSync() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of());
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
 
       answerService.execute(command);
 
       verify(updateAnswerImagesPort).updateImages(20L, 100L, List.of());
+      verify(answerLifecycleExecutionPort)
+          .prepareAnswerUpdate(10L, 100L, 20L, 30L, "question content", 50L, "updated", 1);
     }
 
     @Test
@@ -261,14 +285,18 @@ class AnswerServiceTest {
     void deleteAnswer_delegatesToPort_andPublishesEvent() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false);
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(countAnswersPort.countAnswers(10L)).willReturn(0L);
 
       answerService.execute(command);
 
       verify(deleteAnswerPort).deleteAnswer(100L);
+      verify(answerLifecycleExecutionPort)
+          .prepareAnswerDelete(10L, 100L, 20L, 30L, "question content", 50L, 0);
       verify(eventPublisher).publishEvent(new AnswerDeletedEvent(100L));
     }
 

@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -39,6 +40,7 @@ class PostProcessServiceTest {
   @Mock private LinkTagPort linkTagPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private CountAnswersPort countAnswersPort;
+  @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   @InjectMocks private PostProcessService postProcessService;
 
@@ -66,6 +68,7 @@ class PostProcessServiceTest {
 
     verify(linkTagPort).updateTags(postId, List.of("java"));
     verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of(1L));
+    verifyNoInteractions(questionLifecycleExecutionPort);
   }
 
   @Test
@@ -83,6 +86,7 @@ class PostProcessServiceTest {
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(linkTagPort, never()).updateTags(postId, null);
     verify(updatePostImagesPort, never()).updateImages(ownerId, postId, post.getType(), null);
+    verifyNoInteractions(questionLifecycleExecutionPort);
   }
 
   @Test
@@ -99,6 +103,7 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of());
+    verifyNoInteractions(questionLifecycleExecutionPort);
   }
 
   @Test
@@ -109,7 +114,8 @@ class PostProcessServiceTest {
     assertThatThrownBy(() -> postProcessService.updatePost(1L, 1L, command))
         .isInstanceOf(PostInvalidInputException.class);
 
-    verifyNoInteractions(postPersistencePort, linkTagPort);
+    verifyNoInteractions(
+        postPersistencePort, linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -125,7 +131,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(linkTagPort);
+    verifyNoInteractions(linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -140,6 +146,7 @@ class PostProcessServiceTest {
     postProcessService.deletePost(ownerId, postId);
 
     verify(postPersistencePort).deletePost(post);
+    verifyNoInteractions(questionLifecycleExecutionPort);
 
     ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
     verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -155,7 +162,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostNotFoundException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(eventPublisher);
+    verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -169,7 +176,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(eventPublisher);
+    verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -187,7 +194,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(linkTagPort);
+    verifyNoInteractions(linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -204,7 +211,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(eventPublisher);
+    verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -213,7 +220,8 @@ class PostProcessServiceTest {
     Long ownerId = 7L;
     Long postId = 72L;
     Post post = questionPost(ownerId, postId);
-    UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, List.of("java"));
+    UpdatePostCommand command =
+        UpdatePostCommand.of("edited title", "수정된 질문 내용", null, List.of("java"));
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
@@ -222,6 +230,7 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(linkTagPort).updateTags(postId, List.of("java"));
+    verify(questionLifecycleExecutionPort).prepareQuestionUpdate(postId, ownerId, "수정된 질문 내용", 50L);
   }
 
   @Test
@@ -237,6 +246,7 @@ class PostProcessServiceTest {
     postProcessService.deletePost(ownerId, postId);
 
     verify(postPersistencePort).deletePost(post);
+    verify(questionLifecycleExecutionPort).prepareQuestionDelete(postId, ownerId, "질문 내용", 50L);
     verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
   }
 

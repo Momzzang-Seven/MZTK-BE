@@ -24,6 +24,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryU
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
@@ -60,6 +61,7 @@ public class AnswerService
   private final LoadAnswerImagesPort loadAnswerImagesPort;
   private final LoadAnswerLikePort loadAnswerLikePort;
   private final UpdateAnswerImagesPort updateAnswerImagesPort;
+  private final AnswerLifecycleExecutionPort answerLifecycleExecutionPort;
   private final AnswerReadAssembler answerReadAssembler;
   private final ApplicationEventPublisher eventPublisher;
 
@@ -92,6 +94,17 @@ public class AnswerService
       updateAnswerImagesPort.updateImages(
           savedAnswer.getUserId(), savedAnswer.getId(), command.imageIds());
     }
+
+    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(savedAnswer.getPostId()));
+    answerLifecycleExecutionPort.prepareAnswerCreate(
+        savedAnswer.getPostId(),
+        savedAnswer.getId(),
+        savedAnswer.getUserId(),
+        post.writerId(),
+        post.content(),
+        post.reward(),
+        savedAnswer.getContent(),
+        activeAnswerCount);
 
     return new CreateAnswerResult(savedAnswer.getId());
   }
@@ -141,7 +154,7 @@ public class AnswerService
         .map(
             answer ->
                 new GetAnswerSummaryUseCase.AnswerSummary(
-                    answer.getId(), answer.getPostId(), answer.getUserId()));
+                    answer.getId(), answer.getPostId(), answer.getUserId(), answer.getContent()));
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */
@@ -162,6 +175,19 @@ public class AnswerService
     if (command.imageIds() != null) {
       updateAnswerImagesPort.updateImages(command.userId(), command.answerId(), command.imageIds());
     }
+
+    if (command.content() != null) {
+      int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+      answerLifecycleExecutionPort.prepareAnswerUpdate(
+          answer.getPostId(),
+          answer.getId(),
+          command.userId(),
+          post.writerId(),
+          post.content(),
+          post.reward(),
+          updatedAnswer.getContent(),
+          activeAnswerCount);
+    }
   }
 
   /** Deletes a single answer requested by its owner. */
@@ -176,6 +202,15 @@ public class AnswerService
 
     answer.validateDeletable(command.userId(), post.isSolved());
     deleteAnswerPort.deleteAnswer(answer.getId());
+    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+    answerLifecycleExecutionPort.prepareAnswerDelete(
+        answer.getPostId(),
+        answer.getId(),
+        command.userId(),
+        post.writerId(),
+        post.content(),
+        post.reward(),
+        activeAnswerCount);
     eventPublisher.publishEvent(new AnswerDeletedEvent(answer.getId()));
   }
 

@@ -12,7 +12,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.MarkAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
-import momzzangseven.mztkbe.modules.post.application.port.out.RequestQuestionRewardOnAcceptPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
@@ -25,7 +25,7 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
   private final PostPersistencePort postPersistencePort;
   private final LoadAcceptedAnswerPort loadAcceptedAnswerPort;
   private final MarkAcceptedAnswerPort markAcceptedAnswerPort;
-  private final RequestQuestionRewardOnAcceptPort requestQuestionRewardOnAcceptPort;
+  private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   @Override
   @Transactional
@@ -47,11 +47,13 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
     Post acceptedPost = post.accept(command.answerId());
     Post savedPost = postPersistencePort.savePost(acceptedPost);
     markAcceptedAnswerPort.markAccepted(answer.answerId());
-    requestQuestionRewardOnAcceptPort.request(
+    questionLifecycleExecutionPort.prepareAnswerAccept(
         savedPost.getId(),
         answer.answerId(),
         command.requesterId(),
         answer.userId(),
+        savedPost.getContent(),
+        answer.content(),
         savedPost.getReward());
     return AcceptAnswerResult.from(savedPost);
   }

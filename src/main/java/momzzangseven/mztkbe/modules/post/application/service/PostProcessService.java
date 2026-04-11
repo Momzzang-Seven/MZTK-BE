@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -26,6 +27,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   private final LinkTagPort linkTagPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final CountAnswersPort countAnswersPort;
+  private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   @Override
   public void updatePost(Long currentUserId, Long postId, UpdatePostCommand command) {
@@ -47,6 +49,11 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     if (command.imageIds() != null) {
       updatePostImagesPort.updateImages(currentUserId, postId, post.getType(), command.imageIds());
     }
+
+    if (PostType.QUESTION.equals(post.getType()) && command.content() != null) {
+      questionLifecycleExecutionPort.prepareQuestionUpdate(
+          postId, currentUserId, updatedPost.getContent(), updatedPost.getReward());
+    }
   }
 
   @Override
@@ -56,6 +63,10 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     post.validateDeletable(countActiveAnswers(post));
 
     postPersistencePort.deletePost(post);
+    if (PostType.QUESTION.equals(post.getType())) {
+      questionLifecycleExecutionPort.prepareQuestionDelete(
+          postId, currentUserId, post.getContent(), post.getReward());
+    }
     eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
   }
 
