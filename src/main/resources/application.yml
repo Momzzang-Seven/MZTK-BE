@@ -247,7 +247,13 @@ web3:
       max-auth-list-length: 1
 
     execution:
-      allowed-target-contracts: []               # prod에서만 채우는 것을 권장
+      allowed-delegate-targets:
+        - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS:}
+      allowed-call-targets:
+        - ${MZTK_TOKEN_CONTRACT_ADDRESS:}
+        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS:}
+        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS:}
+      allowed-target-contracts: []               # deprecated fallback. use split allowlists above
       blocked-function-selectors: []             # prod에서만 채우는 것을 권장
 
     cleanup:
@@ -260,6 +266,9 @@ web3:
     observability:
       log-auth-hash: true
       log-user-op: false
+  escrow:
+    marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+    qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
 
 location:
   verification:
