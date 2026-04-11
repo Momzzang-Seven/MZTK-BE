@@ -21,8 +21,8 @@ import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
-import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
-import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
+import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
@@ -30,6 +30,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
@@ -55,6 +56,7 @@ import org.springframework.context.ApplicationEventPublisher;
 @DisplayName("AnswerService")
 class AnswerServiceTest {
 
+  @Mock private CountAnswersPort countAnswersPort;
   @Mock private SaveAnswerPort saveAnswerPort;
   @Mock private LoadPostPort loadPostPort;
   @Mock private LoadAnswerPort loadAnswerPort;
@@ -117,6 +119,17 @@ class AnswerServiceTest {
       answerService.execute(command);
 
       verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("countAnswers() delegates to persistence port")
+    void countAnswers_delegatesToPersistencePort() {
+      given(countAnswersPort.countAnswers(10L)).willReturn(2L);
+
+      long result = answerService.countAnswers(10L);
+
+      assertThat(result).isEqualTo(2L);
+      verify(countAnswersPort).countAnswers(10L);
     }
 
     @Test
@@ -195,8 +208,10 @@ class AnswerServiceTest {
     void updateAnswer_updatesContent_whenImageIdsAreNull() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -213,8 +228,10 @@ class AnswerServiceTest {
     void updateAnswer_allowsImageOnlyUpdate() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(9L));
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
       answerService.execute(command);
 
@@ -227,8 +244,10 @@ class AnswerServiceTest {
     void updateAnswer_withEmptyImageIds_callsImageSync() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of());
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -242,8 +261,10 @@ class AnswerServiceTest {
     void deleteAnswer_delegatesToPort_andPublishesEvent() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
       answerService.execute(command);
 
@@ -353,6 +374,13 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("countAnswers() throws when postId is null")
+    void countAnswers_throws_whenPostIdIsNull() {
+      assertThatThrownBy(() -> answerService.countAnswers(null))
+          .isInstanceOf(AnswerInvalidInputException.class);
+    }
+
+    @Test
     @DisplayName("execute(Long) throws when postId is null")
     void getAnswers_throws_whenPostIdIsNull() {
       assertThatThrownBy(() -> answerService.execute(null, 1L))
@@ -411,23 +439,27 @@ class AnswerServiceTest {
     void updateAnswer_throws_whenRequesterIsNotOwner() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
       Answer answer = buildAnswer(100L, 10L, 99L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnauthorizedException.class);
     }
 
     @Test
-    @DisplayName("execute(UpdateAnswerCommand) throws when the answer is accepted")
-    void updateAnswer_throws_whenAnswerIsAccepted() {
+    @DisplayName("execute(UpdateAnswerCommand) throws when parent question is solved")
+    void updateAnswer_throws_whenPostIsSolved() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
-      Answer answer = buildAnswer(100L, 10L, 20L, "before", true);
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, true, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
-          .isInstanceOf(CannotUpdateAcceptedAnswerException.class);
+          .isInstanceOf(CannotUpdateAnswerOnSolvedPostException.class);
       verifyNoInteractions(updateAnswerImagesPort);
     }
 
@@ -436,8 +468,10 @@ class AnswerServiceTest {
     void updateAnswer_throws_whenImageSyncFails() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(1L));
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       willThrow(new RuntimeException("sync failed"))
           .given(updateAnswerImagesPort)
           .updateImages(20L, 100L, List.of(1L));
@@ -482,23 +516,27 @@ class AnswerServiceTest {
     void deleteAnswer_throws_whenRequesterIsNotOwner() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 99L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnauthorizedException.class);
     }
 
     @Test
-    @DisplayName("execute(DeleteAnswerCommand) throws when the answer is accepted")
-    void deleteAnswer_throws_whenAccepted() {
+    @DisplayName("execute(DeleteAnswerCommand) throws when parent question is solved")
+    void deleteAnswer_throws_whenPostIsSolved() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
-      Answer answer = buildAnswer(100L, 10L, 20L, "accepted", true);
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, true, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
 
       assertThatThrownBy(() -> answerService.execute(command))
-          .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
+          .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
       verifyNoInteractions(eventPublisher);
     }
