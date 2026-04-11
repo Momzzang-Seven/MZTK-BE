@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.global.security;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.admin.infrastructure.recovery.RecoveryRateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -33,8 +34,7 @@ public class SecurityConfig {
   private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
   private final RestAccessDeniedHandler restAccessDeniedHandler;
   private final SecurityCorsProperties securityCorsProperties;
-  private final momzzangseven.mztkbe.modules.admin.infrastructure.recovery.RecoveryRateLimitFilter
-      recoveryRateLimitFilter;
+  private final RecoveryRateLimitFilter recoveryRateLimitFilter;
 
   /**
    * Role hierarchy: ADMIN_SEED and ADMIN_GENERATED inherit ROLE_ADMIN, which inherits ROLE_TRAINER,

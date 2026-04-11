@@ -296,7 +296,11 @@ lambda:
 # Admin account management
 mztk:
   admin:
+    seed:
+      seed-count: 2
+      delivery-target: mztk/admin/bootstrap-delivery
     recovery:
       anchor: test-recovery-anchor-value-for-unit-tests
+      secret-id: mztk/admin/recovery-anchor
     bootstrap:
       enabled: false

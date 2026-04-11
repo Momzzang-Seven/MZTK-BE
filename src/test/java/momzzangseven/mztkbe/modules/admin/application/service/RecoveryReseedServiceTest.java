@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.global.error.admin.RecoveryRejectedException;
 import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedCommand;
 import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedResult;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.LoadSeedPolicyPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.RecoveryAnchorPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SoftDeleteAdminAccountsPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
@@ -35,6 +36,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("RecoveryReseedService 단위 테스트")
 class RecoveryReseedServiceTest {
 
+  @Mock private LoadSeedPolicyPort loadSeedPolicyPort;
   @Mock private RecoveryAnchorPort recoveryAnchorPort;
   @Mock private SoftDeleteAdminAccountsPort softDeleteAdminAccountsPort;
   @Mock private SeedProvisioner seedProvisioner;
@@ -44,6 +46,7 @@ class RecoveryReseedServiceTest {
   @InjectMocks private RecoveryReseedService service;
 
   private static final String CORRECT_ANCHOR = "correct-anchor";
+  private static final int SEED_COUNT = 2;
   private static final String DELIVERY_TARGET = "mztk/admin/bootstrap-delivery";
 
   private List<GeneratedAdminCredentials> buildCredentials(int count) {
@@ -52,15 +55,21 @@ class RecoveryReseedServiceTest {
         .toList();
   }
 
+  private void givenSeedPolicy() {
+    given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
+    given(loadSeedPolicyPort.getDeliveryTarget()).willReturn(DELIVERY_TARGET);
+  }
+
   private void givenAnchorMatches() {
     given(recoveryAnchorPort.loadAnchor()).willReturn(CORRECT_ANCHOR);
     given(softDeleteAdminAccountsPort.softDeleteAll()).willReturn(3);
   }
 
   private List<GeneratedAdminCredentials> givenFullHappyPath() {
+    givenSeedPolicy();
     givenAnchorMatches();
     List<GeneratedAdminCredentials> credentials = buildCredentials(2);
-    given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
+    given(seedProvisioner.provision(SEED_COUNT, AdminRole.ADMIN_SEED)).willReturn(credentials);
     return credentials;
   }
 
@@ -251,8 +260,9 @@ class RecoveryReseedServiceTest {
     @DisplayName("[M-180] execute propagates exception from seedProvisioner")
     void execute_provisionerThrows_propagates() {
       // given
+      given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
       givenAnchorMatches();
-      given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED))
+      given(seedProvisioner.provision(SEED_COUNT, AdminRole.ADMIN_SEED))
           .willThrow(new AdminCredentialGenerationException("Failed after 5 attempts"));
 
       // when & then
@@ -267,7 +277,10 @@ class RecoveryReseedServiceTest {
     @DisplayName("[M-181] execute propagates exception from bootstrapDeliveryPort")
     void execute_deliveryThrows_propagates() {
       // given
-      givenFullHappyPath();
+      given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
+      givenAnchorMatches();
+      List<GeneratedAdminCredentials> credentials = buildCredentials(2);
+      given(seedProvisioner.provision(SEED_COUNT, AdminRole.ADMIN_SEED)).willReturn(credentials);
       willThrow(new RuntimeException("delivery failed"))
           .given(bootstrapDeliveryPort)
           .deliver(any());

@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
+import momzzangseven.mztkbe.modules.admin.infrastructure.config.AdminSeedProperties;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
@@ -20,8 +21,7 @@ import software.amazon.awssdk.services.secretsmanager.model.PutSecretValueReques
 @RequiredArgsConstructor
 public class AwsBootstrapDeliveryAdapter implements BootstrapDeliveryPort {
 
-  private static final String SECRET_ID = "mztk/admin/bootstrap-delivery";
-
+  private final AdminSeedProperties adminSeedProperties;
   private final SecretsManagerClient secretsManagerClient;
   private final ObjectMapper objectMapper;
 
@@ -32,10 +32,11 @@ public class AwsBootstrapDeliveryAdapter implements BootstrapDeliveryPort {
           credentials.stream()
               .map(c -> Map.of("loginId", c.loginId(), "password", c.plaintext()))
               .toList();
+      String secretId = adminSeedProperties.getDeliveryTarget();
       String json = objectMapper.writeValueAsString(payload);
       secretsManagerClient.putSecretValue(
-          PutSecretValueRequest.builder().secretId(SECRET_ID).secretString(json).build());
-      log.info("Bootstrap credentials delivered to SM secret: {}", SECRET_ID);
+          PutSecretValueRequest.builder().secretId(secretId).secretString(json).build());
+      log.info("Bootstrap credentials delivered to SM secret: {}", secretId);
     } catch (JsonProcessingException e) {
       throw new IllegalStateException("Failed to serialize bootstrap credentials", e);
     }
