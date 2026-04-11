@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.admin.application.port.out;
 
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 
 /** Output port for creating a User record for an admin account in the users table. */
 public interface CreateAdminUserPort {
@@ -13,5 +13,5 @@ public interface CreateAdminUserPort {
    * @param adminRole must be ADMIN_SEED or ADMIN_GENERATED
    * @return the generated user ID
    */
-  Long createAdmin(String email, String nickname, UserRole adminRole);
+  Long createAdmin(String email, String nickname, AdminRole adminRole);
 }

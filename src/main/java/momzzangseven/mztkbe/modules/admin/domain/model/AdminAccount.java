@@ -37,15 +37,9 @@ public class AdminAccount {
    */
   public static AdminAccount create(
       Long userId, String loginId, String passwordHash, Long createdBy) {
-    if (userId == null) {
-      throw new IllegalArgumentException("userId must not be null");
-    }
-    if (loginId == null || loginId.isBlank()) {
-      throw new IllegalArgumentException("loginId must not be blank");
-    }
-    if (passwordHash == null || passwordHash.isBlank()) {
-      throw new IllegalArgumentException("passwordHash must not be blank");
-    }
+    validateUserId(userId);
+    validateLoginId(loginId);
+    validatePasswordHash(passwordHash);
 
     Instant now = Instant.now();
     return AdminAccount.builder()
@@ -57,6 +51,24 @@ public class AdminAccount {
         .createdAt(now)
         .updatedAt(now)
         .build();
+  }
+
+  private static void validatePasswordHash(String passwordHash) {
+    if (passwordHash == null || passwordHash.isBlank()) {
+      throw new IllegalArgumentException("passwordHash must not be blank");
+    }
+  }
+
+  private static void validateLoginId(String loginId) {
+    if (loginId == null || loginId.isBlank()) {
+      throw new IllegalArgumentException("loginId must not be blank");
+    }
+  }
+
+  private static void validateUserId(Long userId) {
+    if (userId == null) {
+      throw new IllegalArgumentException("userId must not be null");
+    }
   }
 
   /** Update the last login timestamp. */

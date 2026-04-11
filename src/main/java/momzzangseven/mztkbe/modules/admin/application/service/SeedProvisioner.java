@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.admin.application.port.out.GenerateCredentia
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SaveAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.domain.model.AdminAccount;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.stereotype.Component;
 
 /**
@@ -39,7 +39,7 @@ class SeedProvisioner {
    * @param role the admin role (ADMIN_SEED or ADMIN_GENERATED)
    * @return list of generated credentials (loginId + plaintext)
    */
-  List<GeneratedAdminCredentials> provision(int count, UserRole role) {
+  List<GeneratedAdminCredentials> provision(int count, AdminRole role) {
     List<GeneratedAdminCredentials> result = new ArrayList<>();
     for (int i = 0; i < count; i++) {
       GeneratedAdminCredentials credentials = generateUniqueCredentials();
@@ -70,15 +70,15 @@ class SeedProvisioner {
         "Failed to generate unique loginId after " + MAX_RETRIES + " attempts");
   }
 
-  private String buildEmail(UserRole role, String loginId, int ordinal) {
-    if (role == UserRole.ADMIN_SEED) {
+  private String buildEmail(AdminRole role, String loginId, int ordinal) {
+    if (role == AdminRole.ADMIN_SEED) {
       return "seed-admin-" + ordinal + "@internal.mztk.local";
     }
     return "admin-" + loginId + "@internal.mztk.local";
   }
 
-  private String buildNickname(UserRole role, String loginId, int ordinal) {
-    if (role == UserRole.ADMIN_SEED) {
+  private String buildNickname(AdminRole role, String loginId, int ordinal) {
+    if (role == AdminRole.ADMIN_SEED) {
       return "SeedAdmin-" + ordinal;
     }
     return "Admin-" + loginId;

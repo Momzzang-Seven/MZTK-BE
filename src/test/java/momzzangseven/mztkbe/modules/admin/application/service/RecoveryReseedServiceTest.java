@@ -20,8 +20,8 @@ import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedResult;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.RecoveryAnchorPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SoftDeleteAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -60,7 +60,7 @@ class RecoveryReseedServiceTest {
   private List<GeneratedAdminCredentials> givenFullHappyPath() {
     givenAnchorMatches();
     List<GeneratedAdminCredentials> credentials = buildCredentials(2);
-    given(seedProvisioner.provision(2, UserRole.ADMIN_SEED)).willReturn(credentials);
+    given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
     return credentials;
   }
 
@@ -84,7 +84,7 @@ class RecoveryReseedServiceTest {
       assertThat(result.newSeedCount()).isEqualTo(2);
       assertThat(result.deliveredVia()).isEqualTo(DELIVERY_TARGET);
       verify(softDeleteAdminAccountsPort).softDeleteAll();
-      verify(seedProvisioner).provision(2, UserRole.ADMIN_SEED);
+      verify(seedProvisioner).provision(2, AdminRole.ADMIN_SEED);
       verify(bootstrapDeliveryPort).deliver(credentials);
 
       ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
@@ -252,7 +252,7 @@ class RecoveryReseedServiceTest {
     void execute_provisionerThrows_propagates() {
       // given
       givenAnchorMatches();
-      given(seedProvisioner.provision(2, UserRole.ADMIN_SEED))
+      given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED))
           .willThrow(new AdminCredentialGenerationException("Failed after 5 attempts"));
 
       // when & then

@@ -10,8 +10,8 @@ import momzzangseven.mztkbe.modules.admin.application.port.out.GenerateCredentia
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SaveAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.domain.model.AdminAccount;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +36,7 @@ public class CreateAdminAccountService implements CreateAdminAccountUseCase {
     String email = "admin-" + credentials.loginId() + "@internal.mztk.local";
     String nickname = "Admin-" + credentials.loginId();
 
-    Long userId = createAdminUserPort.createAdmin(email, nickname, UserRole.ADMIN_GENERATED);
+    Long userId = createAdminUserPort.createAdmin(email, nickname, AdminRole.ADMIN_GENERATED);
 
     String passwordHash = adminPasswordEncoderPort.encode(credentials.plaintext());
 
