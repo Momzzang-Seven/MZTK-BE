@@ -6,5 +6,5 @@ import momzzangseven.mztkbe.modules.admin.application.dto.AdminAccountSummary;
 /** Input port for listing all active admin accounts. */
 public interface ListAdminAccountsUseCase {
 
-  List<AdminAccountSummary> execute();
+  List<AdminAccountSummary> execute(Long operatorUserId);
 }
