@@ -3,10 +3,8 @@ package momzzangseven.mztkbe.modules.admin.api.controller;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.admin.api.dto.CreateAdminAccountResponseDTO;
 import momzzangseven.mztkbe.modules.admin.api.dto.ListAdminAccountsResponseDTO;
 import momzzangseven.mztkbe.modules.admin.api.dto.ResetPeerAdminPasswordResponseDTO;
@@ -39,10 +37,6 @@ public class AdminAccountController {
 
   /** Create a new admin account. */
   @PostMapping
-  @AdminOnly(
-      actionType = "CREATE_ADMIN",
-      targetType = AuditTargetType.ADMIN_ACCOUNT,
-      targetId = "#result.userId")
   public ResponseEntity<ApiResponse<CreateAdminAccountResponseDTO>> createAdminAccount(
       @AuthenticationPrincipal Long operatorUserId) {
     requireUserId(operatorUserId);
@@ -53,20 +47,15 @@ public class AdminAccountController {
 
   /** List all active admin accounts. */
   @GetMapping
-  @AdminOnly(actionType = "LIST_ADMINS", targetType = AuditTargetType.ADMIN_ACCOUNT)
   public ResponseEntity<ApiResponse<ListAdminAccountsResponseDTO>> listAdminAccounts(
       @AuthenticationPrincipal Long operatorUserId) {
     requireUserId(operatorUserId);
-    List<AdminAccountSummary> summaries = listAdminAccountsUseCase.execute();
+    List<AdminAccountSummary> summaries = listAdminAccountsUseCase.execute(operatorUserId);
     return ResponseEntity.ok(ApiResponse.success(ListAdminAccountsResponseDTO.from(summaries)));
   }
 
   /** Reset another admin's password (peer-reset). */
   @PostMapping("/{userId}/password/reset")
-  @AdminOnly(
-      actionType = "PEER_RESET_ADMIN",
-      targetType = AuditTargetType.ADMIN_ACCOUNT,
-      targetId = "#p1")
   public ResponseEntity<ApiResponse<ResetPeerAdminPasswordResponseDTO>> resetPeerPassword(
       @AuthenticationPrincipal Long operatorUserId, @PathVariable Long userId) {
     requireUserId(operatorUserId);

@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.admin.application.service;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.admin.AdminCredentialGenerationException;
+import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.admin.application.dto.CreateAdminAccountResult;
 import momzzangseven.mztkbe.modules.admin.application.port.in.CreateAdminAccountUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.out.AdminPasswordEncoderPort;
@@ -30,6 +32,10 @@ public class CreateAdminAccountService implements CreateAdminAccountUseCase {
 
   @Override
   @Transactional
+  @AdminOnly(
+      actionType = "CREATE_ADMIN",
+      targetType = AuditTargetType.ADMIN_ACCOUNT,
+      targetId = "#result.userId")
   public CreateAdminAccountResult execute(Long operatorUserId) {
     GeneratedAdminCredentials credentials = generateUniqueCredentials();
 

@@ -2,8 +2,10 @@ package momzzangseven.mztkbe.modules.admin.application.service;
 
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.admin.AdminAccountNotFoundException;
 import momzzangseven.mztkbe.global.error.admin.SelfResetForbiddenException;
+import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.admin.application.dto.ResetPeerAdminPasswordCommand;
 import momzzangseven.mztkbe.modules.admin.application.dto.ResetPeerAdminPasswordResult;
 import momzzangseven.mztkbe.modules.admin.application.port.in.ResetPeerAdminPasswordUseCase;
@@ -27,6 +29,11 @@ public class ResetPeerAdminPasswordService implements ResetPeerAdminPasswordUseC
 
   @Override
   @Transactional
+  @AdminOnly(
+      actionType = "PEER_RESET_ADMIN",
+      targetType = AuditTargetType.ADMIN_ACCOUNT,
+      operatorId = "#p0.operatorUserId",
+      targetId = "#p0.targetUserId")
   public ResetPeerAdminPasswordResult execute(ResetPeerAdminPasswordCommand command) {
     if (command.operatorUserId().equals(command.targetUserId())) {
       throw new SelfResetForbiddenException();
