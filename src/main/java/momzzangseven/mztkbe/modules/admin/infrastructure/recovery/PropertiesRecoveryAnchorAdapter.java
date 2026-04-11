@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 /** Local/test implementation that reads the recovery anchor from application properties. */
 @Component
-@Profile({"local", "test", "e2e"})
+@Profile({"dev", "test", "e2e"})
 @RequiredArgsConstructor
 public class PropertiesRecoveryAnchorAdapter implements RecoveryAnchorPort {
 
