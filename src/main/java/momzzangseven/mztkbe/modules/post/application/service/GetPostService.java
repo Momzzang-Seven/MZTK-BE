@@ -39,7 +39,7 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                 new GetPostContextUseCase.PostContext(
                     post.getId(),
                     post.getUserId(),
-                    Boolean.TRUE.equals(post.getIsSolved()),
+                    post.isResolved(),
                     PostType.QUESTION.equals(post.getType())));
   }
 
