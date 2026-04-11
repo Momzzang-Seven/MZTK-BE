@@ -318,3 +318,11 @@ verification:
 lambda:
   webhook:
     secret: ${LAMBDA_WEBHOOK_SECRET}
+
+mztk:
+  admin:
+    seed:
+      seed-count: ${ADMIN_SEED_COUNT:2}
+      delivery-target: ${ADMIN_SEED_DELIVERY_TARGET:mztk/admin/bootstrap-delivery}
+    recovery:
+      secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}

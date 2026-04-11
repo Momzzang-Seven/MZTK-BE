@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.admin.application.dto.SeedBootstrapOutcome;
 import momzzangseven.mztkbe.modules.admin.application.port.in.BootstrapSeedAdminsUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.CountActiveAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.LoadSeedPolicyPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
 import org.springframework.stereotype.Service;
@@ -18,9 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class BootstrapSeedAdminsService implements BootstrapSeedAdminsUseCase {
 
-  private static final int REQUIRED_SEED_COUNT = 2;
-  private static final String DELIVERY_TARGET = "mztk/admin/bootstrap-delivery";
-
+  private final LoadSeedPolicyPort loadSeedPolicyPort;
   private final CountActiveAdminAccountsPort countActiveAdminAccountsPort;
   private final SeedProvisioner seedProvisioner;
   private final BootstrapDeliveryPort bootstrapDeliveryPort;
@@ -28,20 +27,22 @@ public class BootstrapSeedAdminsService implements BootstrapSeedAdminsUseCase {
   @Override
   @Transactional
   public SeedBootstrapOutcome execute() {
+    int requiredSeedCount = loadSeedPolicyPort.getSeedCount();
     long currentCount = countActiveAdminAccountsPort.countActive();
-    if (currentCount >= REQUIRED_SEED_COUNT) {
+    if (currentCount >= requiredSeedCount) {
       log.info("Seed bootstrap skipped: {} active admin(s) already exist", currentCount);
       return new SeedBootstrapOutcome(false, (int) currentCount, null);
     }
 
-    int deficit = (int) (REQUIRED_SEED_COUNT - currentCount);
+    int deficit = (int) (requiredSeedCount - currentCount);
     List<GeneratedAdminCredentials> credentials =
         seedProvisioner.provision(deficit, AdminRole.ADMIN_SEED);
 
     bootstrapDeliveryPort.deliver(credentials);
 
+    String deliveryTarget = loadSeedPolicyPort.getDeliveryTarget();
     log.info(
-        "Seed bootstrap completed: {} admin(s) created, delivered to {}", deficit, DELIVERY_TARGET);
-    return new SeedBootstrapOutcome(true, deficit, DELIVERY_TARGET);
+        "Seed bootstrap completed: {} admin(s) created, delivered to {}", deficit, deliveryTarget);
+    return new SeedBootstrapOutcome(true, deficit, deliveryTarget);
   }
 }

@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedCommand;
 import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedResult;
 import momzzangseven.mztkbe.modules.admin.application.port.in.RecoveryReseedUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.LoadSeedPolicyPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.RecoveryAnchorPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SoftDeleteAdminAccountsPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
@@ -26,9 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class RecoveryReseedService implements RecoveryReseedUseCase {
 
-  private static final int SEED_COUNT = 2;
-  private static final String DELIVERY_TARGET = "mztk/admin/bootstrap-delivery";
-
+  private final LoadSeedPolicyPort loadSeedPolicyPort;
   private final RecoveryAnchorPort recoveryAnchorPort;
   private final SoftDeleteAdminAccountsPort softDeleteAdminAccountsPort;
   private final SeedProvisioner seedProvisioner;
@@ -53,14 +52,16 @@ public class RecoveryReseedService implements RecoveryReseedUseCase {
     int deletedCount = softDeleteAdminAccountsPort.softDeleteAll();
     log.info("Recovery: soft-deleted {} existing admin accounts", deletedCount);
 
+    int seedCount = loadSeedPolicyPort.getSeedCount();
     List<GeneratedAdminCredentials> credentials =
-        seedProvisioner.provision(SEED_COUNT, AdminRole.ADMIN_SEED);
+        seedProvisioner.provision(seedCount, AdminRole.ADMIN_SEED);
+
     bootstrapDeliveryPort.deliver(credentials);
 
     recordAudit("RECOVERY_SUCCESS", command.sourceIp(), true);
-    log.info("Recovery reseed completed: {} new seed admins created", SEED_COUNT);
+    log.info("Recovery reseed completed: {} new seed admins created", seedCount);
 
-    return new RecoveryReseedResult(SEED_COUNT, DELIVERY_TARGET);
+    return new RecoveryReseedResult(seedCount, loadSeedPolicyPort.getDeliveryTarget());
   }
 
   private void recordAudit(String actionType, String sourceIp, boolean success) {

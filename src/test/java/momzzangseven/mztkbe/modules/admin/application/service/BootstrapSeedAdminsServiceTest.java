@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.global.error.admin.AdminCredentialGenerationExceptio
 import momzzangseven.mztkbe.modules.admin.application.dto.SeedBootstrapOutcome;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.CountActiveAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.LoadSeedPolicyPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
 import org.junit.jupiter.api.DisplayName;
@@ -28,13 +29,20 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("BootstrapSeedAdminsService 단위 테스트")
 class BootstrapSeedAdminsServiceTest {
 
+  @Mock private LoadSeedPolicyPort loadSeedPolicyPort;
   @Mock private CountActiveAdminAccountsPort countActiveAdminAccountsPort;
   @Mock private SeedProvisioner seedProvisioner;
   @Mock private BootstrapDeliveryPort bootstrapDeliveryPort;
 
   @InjectMocks private BootstrapSeedAdminsService service;
 
+  private static final int SEED_COUNT = 2;
   private static final String DELIVERY_TARGET = "mztk/admin/bootstrap-delivery";
+
+  private void givenSeedPolicy() {
+    given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
+    given(loadSeedPolicyPort.getDeliveryTarget()).willReturn(DELIVERY_TARGET);
+  }
 
   private List<GeneratedAdminCredentials> buildCredentials(int count) {
     return java.util.stream.IntStream.rangeClosed(1, count)
@@ -50,6 +58,7 @@ class BootstrapSeedAdminsServiceTest {
     @DisplayName("[M-156] execute skips provisioning when 2 or more active admins exist")
     void execute_twoActiveAdmins_skipsProvisioning() {
       // given
+      given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
       given(countActiveAdminAccountsPort.countActive()).willReturn(2L);
 
       // when
@@ -67,6 +76,7 @@ class BootstrapSeedAdminsServiceTest {
     @DisplayName("[M-157] execute skips provisioning when more than 2 active admins exist")
     void execute_fiveActiveAdmins_skipsProvisioning() {
       // given
+      given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
       given(countActiveAdminAccountsPort.countActive()).willReturn(5L);
 
       // when
@@ -84,6 +94,7 @@ class BootstrapSeedAdminsServiceTest {
     @DisplayName("[M-158] execute provisions 2 admins when zero active admins exist")
     void execute_zeroActiveAdmins_provisionsTwo() {
       // given
+      givenSeedPolicy();
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
@@ -103,6 +114,7 @@ class BootstrapSeedAdminsServiceTest {
     @DisplayName("[M-159] execute provisions 1 admin when 1 active admin exists (deficit = 1)")
     void execute_oneActiveAdmin_provisionsOne() {
       // given
+      givenSeedPolicy();
       given(countActiveAdminAccountsPort.countActive()).willReturn(1L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(1);
       given(seedProvisioner.provision(1, AdminRole.ADMIN_SEED)).willReturn(credentials);
@@ -122,6 +134,7 @@ class BootstrapSeedAdminsServiceTest {
     @DisplayName("[M-160] execute delivers credentials via BootstrapDeliveryPort")
     void execute_provisionsAdmins_deliversCredentials() {
       // given
+      givenSeedPolicy();
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
@@ -142,6 +155,7 @@ class BootstrapSeedAdminsServiceTest {
     @DisplayName("[M-161] execute propagates exception from seedProvisioner")
     void execute_provisionerThrows_propagatesException() {
       // given
+      given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED))
           .willThrow(new AdminCredentialGenerationException("Failed after 5 attempts"));
@@ -157,6 +171,7 @@ class BootstrapSeedAdminsServiceTest {
     @DisplayName("[M-162] execute propagates exception from delivery port")
     void execute_deliveryThrows_propagatesException() {
       // given
+      given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
