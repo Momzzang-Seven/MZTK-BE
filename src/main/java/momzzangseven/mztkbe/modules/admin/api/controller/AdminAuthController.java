@@ -3,10 +3,8 @@ package momzzangseven.mztkbe.modules.admin.api.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.admin.api.dto.RotateAdminPasswordRequestDTO;
 import momzzangseven.mztkbe.modules.admin.application.dto.RotateAdminPasswordCommand;
 import momzzangseven.mztkbe.modules.admin.application.port.in.RotateAdminPasswordUseCase;
@@ -28,10 +26,6 @@ public class AdminAuthController {
 
   /** Rotate the authenticated admin's own password. */
   @PostMapping("/password")
-  @AdminOnly(
-      actionType = "ROTATE_OWN_PASSWORD",
-      targetType = AuditTargetType.ADMIN_ACCOUNT,
-      targetId = "#p0")
   public ResponseEntity<ApiResponse<Void>> rotatePassword(
       @AuthenticationPrincipal Long userId,
       @Valid @RequestBody RotateAdminPasswordRequestDTO request) {
