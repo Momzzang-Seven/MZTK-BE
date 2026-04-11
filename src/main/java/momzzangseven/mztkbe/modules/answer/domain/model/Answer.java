@@ -8,9 +8,7 @@ import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
-import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
 import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
-import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
 import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
 
 @Getter
@@ -78,19 +76,12 @@ public class Answer {
     if (parentQuestionSolved) {
       throw new CannotDeleteAnswerOnSolvedPostException();
     }
-    if (this.isAccepted) {
-      throw new CannotDeleteAcceptedAnswerException();
-    }
   }
 
   public Answer update(String content, Long requesterId, boolean parentQuestionSolved) {
     validateOwnership(requesterId);
     if (parentQuestionSolved) {
       throw new CannotUpdateAnswerOnSolvedPostException();
-    }
-
-    if (this.isAccepted) {
-      throw new CannotUpdateAcceptedAnswerException();
     }
 
     var builder = this.toBuilder();
