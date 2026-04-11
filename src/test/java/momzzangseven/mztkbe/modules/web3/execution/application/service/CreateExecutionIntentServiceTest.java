@@ -1,9 +1,12 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +18,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
@@ -25,6 +30,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -57,6 +63,7 @@ class CreateExecutionIntentServiceTest {
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
   @Mock private LoadEip1559TtlPort loadEip1559TtlPort;
   @Mock private BuildExecutionDigestPort buildExecutionDigestPort;
+  @Mock private ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
 
   private CreateExecutionIntentService service;
   private ExecutionModeSelector executionModeSelector;
@@ -74,6 +81,7 @@ class CreateExecutionIntentServiceTest {
             loadSponsorPolicyPort,
             loadEip1559TtlPort,
             buildExecutionDigestPort,
+            validateExecutionDraftPolicyPort,
             executionModeSelector,
             FIXED_CLOCK);
   }
@@ -103,6 +111,7 @@ class CreateExecutionIntentServiceTest {
     assertThat(result.signCount()).isEqualTo(2);
     assertThat(result.signRequest().authorization()).isNotNull();
     assertThat(result.signRequest().submit()).isNotNull();
+    verify(validateExecutionDraftPolicyPort).validate(any(), any());
     verify(buildExecutionDigestPort).buildExecutionDigestHex(any(), any(), any(), any());
     verify(sponsorDailyUsagePersistencePort).update(any());
     verify(executionIntentPersistencePort)
@@ -126,6 +135,27 @@ class CreateExecutionIntentServiceTest {
     assertThat(result.signCount()).isEqualTo(1);
     assertThat(result.signRequest().transaction()).isNotNull();
     assertThat(result.expiresAt()).isEqualTo(FIXED_NOW.plusSeconds(90));
+  }
+
+  @Test
+  void execute_failsFast_whenEip7702DraftViolatesAllowlistPolicy() {
+    when(loadSponsorPolicyPort.loadSponsorPolicy())
+        .thenReturn(
+            new SponsorPolicy(
+                true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
+    when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
+        .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
+    doThrow(new Web3TransferException(ErrorCode.DELEGATE_NOT_ALLOWLISTED, false))
+        .when(validateExecutionDraftPolicyPort)
+        .validate(any(), any());
+
+    assertThatThrownBy(() -> service.execute(new CreateExecutionIntentCommand(transferDraft(true))))
+        .isInstanceOf(Web3TransferException.class)
+        .hasMessageContaining(ErrorCode.DELEGATE_NOT_ALLOWLISTED.getMessage());
+
+    verify(executionIntentPersistencePort, never()).create(any());
   }
 
   @Test
