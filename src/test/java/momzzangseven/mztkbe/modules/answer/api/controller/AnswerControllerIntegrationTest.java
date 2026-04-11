@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePo
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -431,6 +432,9 @@ class AnswerControllerIntegrationTest {
   }
 
   private PostEntity savePost(Long userId, PostType type, boolean isSolved) {
+    PostStatus status = type == PostType.QUESTION && isSolved ? PostStatus.RESOLVED : PostStatus.OPEN;
+    Long acceptedAnswerId = type == PostType.QUESTION && isSolved ? 999L : null;
+
     return postJpaRepository.save(
         PostEntity.builder()
             .userId(userId)
@@ -438,7 +442,8 @@ class AnswerControllerIntegrationTest {
             .title(type == PostType.QUESTION ? "question title" : null)
             .content("post content")
             .reward(type == PostType.QUESTION ? 100L : 0L)
-            .isSolved(isSolved)
+            .acceptedAnswerId(acceptedAnswerId)
+            .status(status)
             .build());
   }
 
