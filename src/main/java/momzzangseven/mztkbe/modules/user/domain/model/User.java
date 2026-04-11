@@ -71,7 +71,7 @@ public class User {
     validateNickname(nickname);
 
     if (adminRole != UserRole.ADMIN_SEED && adminRole != UserRole.ADMIN_GENERATED) {
-      throw new IllegalArgumentException("This role is not allowed.");
+      throw new IllegalArgumentException("This role is not allowed for admin creation");
     }
 
     Instant now = Instant.now();
