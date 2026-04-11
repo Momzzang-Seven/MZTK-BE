@@ -13,6 +13,7 @@ public class QuestionPostStateAdapter implements MarkQuestionPostSolvedPort {
 
   @Override
   public int markSolved(Long postId) {
+    // Delegate to the post use case so the web3 path reuses the existing status transition rules.
     return markQuestionPostSolvedUseCase.execute(postId);
   }
 }
