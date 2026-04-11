@@ -14,11 +14,10 @@ public class AnswerPostAdapter implements LoadPostPort {
 
   @Override
   public Optional<PostContext> loadPost(Long postId) {
-    return getPostContextUseCase
-        .getPostContext(postId)
-        .map(
-            post ->
-                new PostContext(
-                    post.postId(), post.writerId(), post.solved(), post.questionPost()));
+    return getPostContextUseCase.getPostContext(postId).map(this::toPostContext);
+  }
+
+  private PostContext toPostContext(GetPostContextUseCase.PostContext post) {
+    return new PostContext(post.postId(), post.writerId(), post.solved(), post.questionPost());
   }
 }

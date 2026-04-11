@@ -70,7 +70,11 @@ public class AnswerService
 
     Answer answer =
         Answer.create(
-            post.postId(), post.writerId(), post.isSolved(), command.userId(), command.content());
+            post.postId(),
+            post.writerId(),
+            isSolvedContext(post),
+            command.userId(),
+            command.content());
 
     Answer savedAnswer = saveAnswerPort.saveAnswer(answer);
 
@@ -222,8 +226,16 @@ public class AnswerService
   }
 
   private void validateAnswerablePost(LoadPostPort.PostContext post) {
-    if (!post.questionPost()) {
+    if (!isQuestionPost(post)) {
       throw new AnswerUnsupportedPostTypeException();
     }
+  }
+
+  private boolean isSolvedContext(LoadPostPort.PostContext post) {
+    return post.isSolved();
+  }
+
+  private boolean isQuestionPost(LoadPostPort.PostContext post) {
+    return post.questionPost();
   }
 }
