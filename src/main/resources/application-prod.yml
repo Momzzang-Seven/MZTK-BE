@@ -74,3 +74,5 @@ web3:
       allowed-target-contracts: []
       blocked-function-selectors:
         - 0x095ea7b3                # approve (예시)
+  transfer:
+    legacy-question-reward-handler-enabled: false

@@ -37,6 +37,14 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public Optional<ExecutionIntent> findLatestByResource(
+      ExecutionResourceType resourceType, String resourceId) {
+    return repository
+        .findFirstByResourceTypeAndResourceIdOrderByAttemptNoDesc(resourceType, resourceId)
+        .map(this::toDomain);
+  }
+
+  @Override
   public Optional<ExecutionIntent> findLatestByRequesterAndResource(
       Long requesterUserId, ExecutionResourceType resourceType, String resourceId) {
     return repository

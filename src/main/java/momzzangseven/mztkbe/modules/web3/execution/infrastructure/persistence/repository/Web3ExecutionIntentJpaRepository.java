@@ -26,6 +26,9 @@ public interface Web3ExecutionIntentJpaRepository
   Optional<Web3ExecutionIntentEntity> findBySubmittedTxIdForUpdate(
       @Param("submittedTxId") Long submittedTxId);
 
+  Optional<Web3ExecutionIntentEntity> findFirstByResourceTypeAndResourceIdOrderByAttemptNoDesc(
+      ExecutionResourceType resourceType, String resourceId);
+
   Optional<Web3ExecutionIntentEntity>
       findFirstByRequesterUserIdAndResourceTypeAndResourceIdOrderByAttemptNoDesc(
           Long requesterUserId, ExecutionResourceType resourceType, String resourceId);

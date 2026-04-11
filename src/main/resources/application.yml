@@ -269,6 +269,8 @@ web3:
   escrow:
     marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
     qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+  transfer:
+    legacy-question-reward-handler-enabled: false
 
 location:
   verification:

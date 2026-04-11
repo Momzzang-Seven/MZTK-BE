@@ -12,9 +12,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -59,20 +57,22 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
         intent.getSubmittedTxId() == null
             ? Optional.empty()
             : loadExecutionTransactionPort.findById(intent.getSubmittedTxId());
+    ExecutionIntentViewMapper.ExecutionTransactionView transactionView =
+        ExecutionIntentViewMapper.toTransactionView(transaction);
 
     return new GetExecutionIntentResult(
         intent.getResourceType(),
         intent.getResourceId(),
-        toResourceStatus(intent.getStatus()),
+        ExecutionIntentViewMapper.toResourceStatus(intent.getStatus()),
         intent.getPublicId(),
         intent.getStatus(),
         intent.getExpiresAt(),
         intent.getMode(),
         intent.getMode().requiredSignCount(),
         intent.shouldExposeSignRequest() ? buildSignRequest(intent) : null,
-        transaction.map(ExecutionTransactionSummary::transactionId).orElse(null),
-        transaction.map(ExecutionTransactionSummary::status).orElse(null),
-        transaction.map(ExecutionTransactionSummary::txHash).orElse(null));
+        transactionView.transactionId(),
+        transactionView.transactionStatus(),
+        transactionView.txHash());
   }
 
   private SignRequestBundle buildSignRequest(ExecutionIntent intent) {
@@ -103,13 +103,5 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
             Numeric.encodeQuantity(intent.getUnsignedTxSnapshot().maxPriorityFeePerGas()),
             Numeric.encodeQuantity(intent.getUnsignedTxSnapshot().maxFeePerGas()),
             intent.getUnsignedTxSnapshot().expectedNonce()));
-  }
-
-  private ExecutionResourceStatus toResourceStatus(ExecutionIntentStatus status) {
-    return switch (status) {
-      case AWAITING_SIGNATURE, SIGNED, PENDING_ONCHAIN -> ExecutionResourceStatus.PENDING_EXECUTION;
-      case CONFIRMED -> ExecutionResourceStatus.COMPLETED;
-      case FAILED_ONCHAIN, EXPIRED, NONCE_STALE, CANCELED -> ExecutionResourceStatus.FAILED;
-    };
   }
 }

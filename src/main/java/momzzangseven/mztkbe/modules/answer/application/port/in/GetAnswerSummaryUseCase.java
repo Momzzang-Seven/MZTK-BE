@@ -6,5 +6,10 @@ public interface GetAnswerSummaryUseCase {
 
   Optional<AnswerSummary> getAnswerSummary(Long answerId);
 
-  record AnswerSummary(Long answerId, Long postId, Long userId) {}
+  record AnswerSummary(Long answerId, Long postId, Long userId, String content) {
+
+    public AnswerSummary(Long answerId, Long postId, Long userId) {
+      this(answerId, postId, userId, null);
+    }
+  }
 }
