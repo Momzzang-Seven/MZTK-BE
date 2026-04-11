@@ -72,7 +72,7 @@ class ListAdminAccountsServiceTest {
               List.of(buildUser(1L, UserRole.ADMIN_SEED), buildUser(2L, UserRole.ADMIN_GENERATED)));
 
       // when
-      List<AdminAccountSummary> result = service.execute();
+      List<AdminAccountSummary> result = service.execute(1L);
 
       // then
       assertThat(result).hasSize(2);
@@ -96,7 +96,7 @@ class ListAdminAccountsServiceTest {
           .willReturn(List.of(buildUser(10L, UserRole.ADMIN_GENERATED)));
 
       // when
-      List<AdminAccountSummary> result = service.execute();
+      List<AdminAccountSummary> result = service.execute(1L);
 
       // then
       assertThat(result).hasSize(1);
@@ -120,7 +120,7 @@ class ListAdminAccountsServiceTest {
           .willReturn(Collections.emptyList());
 
       // when
-      List<AdminAccountSummary> result = service.execute();
+      List<AdminAccountSummary> result = service.execute(1L);
 
       // then
       assertThat(result).isEmpty();
@@ -136,7 +136,7 @@ class ListAdminAccountsServiceTest {
       given(loadUserPort.loadUsersByIds(List.of(999L))).willReturn(Collections.emptyList());
 
       // when
-      List<AdminAccountSummary> result = service.execute();
+      List<AdminAccountSummary> result = service.execute(1L);
 
       // then
       assertThat(result).hasSize(1);
