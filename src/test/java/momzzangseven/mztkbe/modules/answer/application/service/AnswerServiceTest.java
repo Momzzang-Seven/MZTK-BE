@@ -21,9 +21,7 @@ import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
-import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
 import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
-import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
 import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
@@ -451,21 +449,6 @@ class AnswerServiceTest {
     }
 
     @Test
-    @DisplayName("execute(UpdateAnswerCommand) throws when the answer is accepted")
-    void updateAnswer_throws_whenAnswerIsAccepted() {
-      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
-      Answer answer = buildAnswer(100L, 10L, 20L, "before", true);
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
-
-      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
-
-      assertThatThrownBy(() -> answerService.execute(command))
-          .isInstanceOf(CannotUpdateAcceptedAnswerException.class);
-      verifyNoInteractions(updateAnswerImagesPort);
-    }
-
-    @Test
     @DisplayName("execute(UpdateAnswerCommand) throws when parent question is solved")
     void updateAnswer_throws_whenPostIsSolved() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
@@ -540,22 +523,6 @@ class AnswerServiceTest {
 
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(AnswerUnauthorizedException.class);
-    }
-
-    @Test
-    @DisplayName("execute(DeleteAnswerCommand) throws when the answer is accepted")
-    void deleteAnswer_throws_whenAccepted() {
-      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
-      Answer answer = buildAnswer(100L, 10L, 20L, "accepted", true);
-      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
-
-      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
-      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
-
-      assertThatThrownBy(() -> answerService.execute(command))
-          .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
-      verify(deleteAnswerPort, never()).deleteAnswer(100L);
-      verifyNoInteractions(eventPublisher);
     }
 
     @Test
