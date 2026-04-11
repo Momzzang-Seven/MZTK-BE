@@ -1,13 +1,12 @@
 package momzzangseven.mztkbe.modules.admin.infrastructure.persistence.adapter;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.admin.application.port.out.CountActiveAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.DeleteAdminAccountsPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SaveAdminAccountPort;
-import momzzangseven.mztkbe.modules.admin.application.port.out.SoftDeleteAdminAccountsPort;
 import momzzangseven.mztkbe.modules.admin.domain.model.AdminAccount;
 import momzzangseven.mztkbe.modules.admin.infrastructure.persistence.entity.AdminAccountEntity;
 import momzzangseven.mztkbe.modules.admin.infrastructure.persistence.repository.AdminAccountJpaRepository;
@@ -22,7 +21,7 @@ import org.springframework.stereotype.Component;
 public class AdminAccountPersistenceAdapter
     implements LoadAdminAccountPort,
         SaveAdminAccountPort,
-        SoftDeleteAdminAccountsPort,
+        DeleteAdminAccountsPort,
         CountActiveAdminAccountsPort {
 
   private final AdminAccountJpaRepository repository;
@@ -55,8 +54,10 @@ public class AdminAccountPersistenceAdapter
   }
 
   @Override
-  public int softDeleteAll() {
-    return repository.softDeleteAll(Instant.now());
+  public List<Long> deleteAllAndReturnUserIds() {
+    List<Long> userIds = repository.findAll().stream().map(AdminAccountEntity::getUserId).toList();
+    repository.deleteAllInBulk();
+    return userIds;
   }
 
   @Override

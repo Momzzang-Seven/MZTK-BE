@@ -13,9 +13,10 @@ import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedCommand;
 import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedResult;
 import momzzangseven.mztkbe.modules.admin.application.port.in.RecoveryReseedUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.DeleteAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.DeleteAdminUsersPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadSeedPolicyPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.RecoveryAnchorPort;
-import momzzangseven.mztkbe.modules.admin.application.port.out.SoftDeleteAdminAccountsPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
 import org.springframework.stereotype.Service;
@@ -29,7 +30,8 @@ public class RecoveryReseedService implements RecoveryReseedUseCase {
 
   private final LoadSeedPolicyPort loadSeedPolicyPort;
   private final RecoveryAnchorPort recoveryAnchorPort;
-  private final SoftDeleteAdminAccountsPort softDeleteAdminAccountsPort;
+  private final DeleteAdminAccountsPort deleteAdminAccountsPort;
+  private final DeleteAdminUsersPort deleteAdminUsersPort;
   private final SeedProvisioner seedProvisioner;
   private final BootstrapDeliveryPort bootstrapDeliveryPort;
   private final RecordAdminAuditPort recordAdminAuditPort;
@@ -49,8 +51,10 @@ public class RecoveryReseedService implements RecoveryReseedUseCase {
       throw new RecoveryRejectedException();
     }
 
-    int deletedCount = softDeleteAdminAccountsPort.softDeleteAll();
-    log.info("Recovery: soft-deleted {} existing admin accounts", deletedCount);
+    List<Long> deletedUserIds = deleteAdminAccountsPort.deleteAllAndReturnUserIds();
+    log.info("Recovery: hard-deleted {} existing admin accounts", deletedUserIds.size());
+    deleteAdminUsersPort.deleteUsers(deletedUserIds);
+    log.info("Recovery: hard-deleted {} user records for admin accounts", deletedUserIds.size());
 
     int seedCount = loadSeedPolicyPort.getSeedCount();
     List<GeneratedAdminCredentials> credentials =
