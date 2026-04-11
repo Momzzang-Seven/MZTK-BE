@@ -332,14 +332,6 @@ public enum ErrorCode {
       "ANSWER_004", "Cannot write an answer on a solved post", HttpStatus.BAD_REQUEST // 400
       ),
 
-  CANNOT_UPDATE_ACCEPTED_ANSWER(
-      "ANSWER_005", "Cannot update an accepted answer", HttpStatus.BAD_REQUEST // 400
-      ),
-
-  CANNOT_DELETE_ACCEPTED_ANSWER(
-      "ANSWER_006", "Cannot delete an accepted answer", HttpStatus.BAD_REQUEST // 400
-      ),
-
   ANSWER_POST_MISMATCH(
       "ANSWER_007", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
       ),
@@ -347,6 +339,10 @@ public enum ErrorCode {
   REQUIRE_USER_LOGIN(
       "ANSWER_008", "User login is required", HttpStatus.UNAUTHORIZED // 401
       ),
+  CANNOT_UPDATE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_009", "Cannot update an answer on a solved post", HttpStatus.BAD_REQUEST),
+  CANNOT_DELETE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_010", "Cannot delete an answer on a solved post", HttpStatus.BAD_REQUEST),
   // ========================================
   // Image Errors (IMAGE_xxx)
   // ========================================

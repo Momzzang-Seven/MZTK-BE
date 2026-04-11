@@ -8,8 +8,8 @@ import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
-import momzzangseven.mztkbe.global.error.answer.CannotDeleteAcceptedAnswerException;
-import momzzangseven.mztkbe.global.error.answer.CannotUpdateAcceptedAnswerException;
+import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -37,7 +37,7 @@ class AnswerTest {
     void update_replacesContent() {
       Answer answer = buildAnswer(1L, 10L, 20L, "before", false);
 
-      Answer updated = answer.update("after", 20L);
+      Answer updated = answer.update("after", 20L, false);
 
       assertThat(updated).isNotSameAs(answer);
       assertThat(updated.getContent()).isEqualTo("after");
@@ -48,17 +48,17 @@ class AnswerTest {
     void update_returnsSameInstance_whenNothingChanges() {
       Answer answer = buildAnswer(1L, 10L, 20L, "before", false);
 
-      Answer updated = answer.update(null, 20L);
+      Answer updated = answer.update(null, 20L, false);
 
       assertThat(updated).isSameAs(answer);
     }
 
     @Test
-    @DisplayName("validateDeletable() passes for the owner of a non-accepted answer")
-    void validateDeletable_passes_whenOwnedAndNotAccepted() {
+    @DisplayName("validateDeletable() passes for the owner when the parent question is unsolved")
+    void validateDeletable_passes_whenOwnedAndParentQuestionIsUnsolved() {
       Answer answer = buildAnswer(1L, 10L, 20L, "answer content", false);
 
-      answer.validateDeletable(20L);
+      answer.validateDeletable(20L, false);
 
       assertThat(answer.getUserId()).isEqualTo(20L);
     }
@@ -108,17 +108,8 @@ class AnswerTest {
     void update_throws_whenRequesterIsNotOwner() {
       Answer answer = buildAnswer(1L, 10L, 20L, "before", false);
 
-      assertThatThrownBy(() -> answer.update("after", 99L))
+      assertThatThrownBy(() -> answer.update("after", 99L, false))
           .isInstanceOf(AnswerUnauthorizedException.class);
-    }
-
-    @Test
-    @DisplayName("update() throws when the answer is accepted")
-    void update_throws_whenAnswerIsAccepted() {
-      Answer answer = buildAnswer(1L, 10L, 20L, "before", true);
-
-      assertThatThrownBy(() -> answer.update("after", 20L))
-          .isInstanceOf(CannotUpdateAcceptedAnswerException.class);
     }
 
     @Test
@@ -126,8 +117,26 @@ class AnswerTest {
     void update_throws_whenContentIsBlank() {
       Answer answer = buildAnswer(1L, 10L, 20L, "before", false);
 
-      assertThatThrownBy(() -> answer.update(" ", 20L))
+      assertThatThrownBy(() -> answer.update(" ", 20L, false))
           .isInstanceOf(AnswerInvalidInputException.class);
+    }
+
+    @Test
+    @DisplayName("update() throws when parent question is solved")
+    void update_throws_whenParentQuestionIsSolved() {
+      Answer answer = buildAnswer(1L, 10L, 20L, "before", false);
+
+      assertThatThrownBy(() -> answer.update("after", 20L, true))
+          .isInstanceOf(CannotUpdateAnswerOnSolvedPostException.class);
+    }
+
+    @Test
+    @DisplayName("update() uses parent solved state as the single mutability guard")
+    void update_throws_whenAcceptedAnswerBelongsToSolvedQuestion() {
+      Answer answer = buildAnswer(1L, 10L, 20L, "before", true);
+
+      assertThatThrownBy(() -> answer.update("after", 20L, true))
+          .isInstanceOf(CannotUpdateAnswerOnSolvedPostException.class);
     }
 
     @Test
@@ -135,17 +144,26 @@ class AnswerTest {
     void validateDeletable_throws_whenRequesterIsNotOwner() {
       Answer answer = buildAnswer(1L, 10L, 20L, "answer content", false);
 
-      assertThatThrownBy(() -> answer.validateDeletable(99L))
+      assertThatThrownBy(() -> answer.validateDeletable(99L, false))
           .isInstanceOf(AnswerUnauthorizedException.class);
     }
 
     @Test
-    @DisplayName("validateDeletable() throws when the answer is accepted")
-    void validateDeletable_throws_whenAnswerIsAccepted() {
+    @DisplayName("validateDeletable() throws when parent question is solved")
+    void validateDeletable_throws_whenParentQuestionIsSolved() {
+      Answer answer = buildAnswer(1L, 10L, 20L, "answer content", false);
+
+      assertThatThrownBy(() -> answer.validateDeletable(20L, true))
+          .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
+    }
+
+    @Test
+    @DisplayName("validateDeletable() uses parent solved state as the single mutability guard")
+    void validateDeletable_throws_whenAcceptedAnswerBelongsToSolvedQuestion() {
       Answer answer = buildAnswer(1L, 10L, 20L, "answer content", true);
 
-      assertThatThrownBy(() -> answer.validateDeletable(20L))
-          .isInstanceOf(CannotDeleteAcceptedAnswerException.class);
+      assertThatThrownBy(() -> answer.validateDeletable(20L, true))
+          .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
     }
   }
 

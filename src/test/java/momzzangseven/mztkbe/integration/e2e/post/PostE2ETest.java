@@ -969,7 +969,7 @@ class PostE2ETest {
     }
 
     @Test
-    @DisplayName("accepted answer cannot be deleted through answer API")
+    @DisplayName("answer on a solved question cannot be deleted through answer API")
     void acceptAnswer_blocksAcceptedAnswerDeletion() throws Exception {
       String answererEmail = uniqueEmail();
       signupUser(answererEmail, "Test@1234!", "answerer");
@@ -994,7 +994,7 @@ class PostE2ETest {
               String.class);
 
       assertThat(deleteRes.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-      assertThat(parse(deleteRes).at("/code").asText()).isEqualTo("ANSWER_006");
+      assertThat(parse(deleteRes).at("/code").asText()).isEqualTo("ANSWER_010");
     }
 
     @Test
