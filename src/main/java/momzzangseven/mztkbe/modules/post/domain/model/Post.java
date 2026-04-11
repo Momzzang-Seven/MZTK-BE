@@ -94,16 +94,14 @@ public class Post {
     }
   }
 
-  public void validateDeletable() {
-    if (PostType.QUESTION.equals(this.type) && isResolved()) {
-      throw new PostInvalidInputException("A solved question post cannot be deleted.");
+  public void validateDeletable(long activeAnswerCount) {
+    if (PostType.QUESTION.equals(this.type) && activeAnswerCount > 0) {
+      throw new PostInvalidInputException("An answered question post cannot be deleted.");
     }
   }
 
-  public Post update(String title, String content, List<String> tags) {
-    if (PostType.QUESTION.equals(this.type) && isResolved()) {
-      throw new PostInvalidInputException("A solved question post cannot be edited.");
-    }
+  public Post update(String title, String content, List<String> tags, long activeAnswerCount) {
+    validateEditable(activeAnswerCount);
 
     var builder = this.toBuilder();
     boolean isUpdated = false;
@@ -131,6 +129,12 @@ public class Post {
     }
 
     return this;
+  }
+
+  public void validateEditable(long activeAnswerCount) {
+    if (PostType.QUESTION.equals(this.type) && activeAnswerCount > 0) {
+      throw new PostInvalidInputException("An answered question post cannot be edited.");
+    }
   }
 
   public Post withTags(List<String> tags) {

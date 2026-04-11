@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.global.audit.application.port.out;
 
 import java.util.Map;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 
 public interface RecordAdminAuditPort {
 
@@ -9,8 +10,21 @@ public interface RecordAdminAuditPort {
   record AuditCommand(
       Long operatorId,
       String actionType,
-      String targetType,
+      AuditTargetType targetType,
       String targetId,
       boolean success,
-      Map<String, Object> detail) {}
+      Map<String, Object> detail) {
+
+    public AuditCommand {
+      if (operatorId == null || operatorId <= 0) {
+        throw new IllegalArgumentException("operatorId must be positive");
+      }
+      if (actionType == null || actionType.isBlank()) {
+        throw new IllegalArgumentException("actionType is required");
+      }
+      if (targetType == null) {
+        throw new IllegalArgumentException("targetType is required");
+      }
+    }
+  }
 }
