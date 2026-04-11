@@ -28,6 +28,10 @@ spring:
     init:
       mode: never
 
+web3:
+  reward-token:
+    enabled: true
+
 logging:
   level:
     root: WARN
