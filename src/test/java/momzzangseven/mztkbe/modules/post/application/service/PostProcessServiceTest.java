@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
@@ -37,6 +38,7 @@ class PostProcessServiceTest {
   @Mock private ApplicationEventPublisher eventPublisher;
   @Mock private LinkTagPort linkTagPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
+  @Mock private CountAnswersPort countAnswersPort;
 
   @InjectMocks private PostProcessService postProcessService;
 
@@ -171,14 +173,15 @@ class PostProcessServiceTest {
   }
 
   @Test
-  @DisplayName("Resolved QUESTION posts cannot be updated")
-  void updateSolvedQuestionPostThrows() {
+  @DisplayName("answered QUESTION posts cannot be updated")
+  void updateAnsweredQuestionPostThrows() {
     Long ownerId = 7L;
     Long postId = 70L;
-    Post post = solvedQuestionPost(ownerId, postId);
+    Post post = questionPost(ownerId, postId);
     UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(1L);
 
     assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
         .isInstanceOf(PostInvalidInputException.class);
@@ -188,13 +191,14 @@ class PostProcessServiceTest {
   }
 
   @Test
-  @DisplayName("Resolved QUESTION posts cannot be deleted")
-  void deleteSolvedQuestionPostThrows() {
+  @DisplayName("answered QUESTION posts cannot be deleted")
+  void deleteAnsweredQuestionPostThrows() {
     Long ownerId = 7L;
     Long postId = 71L;
-    Post post = solvedQuestionPost(ownerId, postId);
+    Post post = questionPost(ownerId, postId);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(2L);
 
     assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
         .isInstanceOf(PostInvalidInputException.class);
@@ -203,7 +207,40 @@ class PostProcessServiceTest {
     verifyNoInteractions(eventPublisher);
   }
 
-  private Post solvedQuestionPost(Long ownerId, Long postId) {
+  @Test
+  @DisplayName("unanswered QUESTION post can be updated when answer count is zero")
+  void updateQuestionPostWhenNoAnswersSucceeds() {
+    Long ownerId = 7L;
+    Long postId = 72L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, List.of("java"));
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.updatePost(ownerId, postId, command);
+
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(linkTagPort).updateTags(postId, List.of("java"));
+  }
+
+  @Test
+  @DisplayName("unanswered QUESTION post can be deleted when answer count is zero")
+  void deleteQuestionPostWhenNoAnswersSucceeds() {
+    Long ownerId = 7L;
+    Long postId = 73L;
+    Post post = questionPost(ownerId, postId);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.deletePost(ownerId, postId);
+
+    verify(postPersistencePort).deletePost(post);
+    verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  private Post questionPost(Long ownerId, Long postId) {
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     return Post.builder()
         .id(postId)
@@ -212,7 +249,7 @@ class PostProcessServiceTest {
         .title("질문 제목")
         .content("질문 내용")
         .reward(50L)
-        .isSolved(true)
+        .isSolved(false)
         .createdAt(updatedAt.minusHours(1))
         .updatedAt(updatedAt)
         .build();
