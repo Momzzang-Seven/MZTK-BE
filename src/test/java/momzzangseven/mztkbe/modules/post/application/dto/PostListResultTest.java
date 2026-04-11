@@ -14,8 +14,8 @@ import org.junit.jupiter.api.Test;
 class PostListResultTest {
 
   @Test
-  @DisplayName("fromDomain maps list fields and defaults null solved to false")
-  void fromDomainMapsAndDefaultsSolved() {
+  @DisplayName("fromDomain maps list fields and derives solved from open status")
+  void fromDomainMapsAndDerivesSolvedFromOpenStatus() {
     LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 12, 0);
 
@@ -52,5 +52,25 @@ class PostListResultTest {
     assertThat(result.updatedAt()).isEqualTo(updatedAt);
     assertThat(result.nickname()).isEqualTo(nickname);
     assertThat(result.profileImageUrl()).isEqualTo(profileImageUrl);
+  }
+
+  @Test
+  @DisplayName("fromDomain derives solved true from resolved status")
+  void fromDomainDerivesSolvedTrueFromResolvedStatus() {
+    Post post =
+        Post.builder()
+            .id(101L)
+            .userId(8L)
+            .type(PostType.QUESTION)
+            .title("resolved title")
+            .content("resolved content")
+            .reward(70L)
+            .acceptedAnswerId(11L)
+            .status(PostStatus.RESOLVED)
+            .build();
+
+    PostListResult result = PostListResult.fromDomain(post, 1L, false, "writer", "profile");
+
+    assertThat(result.isSolved()).isTrue();
   }
 }

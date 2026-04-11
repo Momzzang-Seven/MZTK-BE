@@ -34,7 +34,7 @@ public record PostListResult(
         nickname,
         profileImageUrl,
         post.getReward(),
-        post.getIsSolved() != null ? post.getIsSolved() : false,
+        post.isResolved(),
         post.getTags(),
         post.getCreatedAt(),
         post.getUpdatedAt());

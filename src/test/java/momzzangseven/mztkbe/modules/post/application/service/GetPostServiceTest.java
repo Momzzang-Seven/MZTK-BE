@@ -41,7 +41,7 @@ class GetPostServiceTest {
   @InjectMocks private GetPostService getPostService;
 
   @Test
-  @DisplayName("returns minimal post context for external module queries")
+  @DisplayName("returns minimal post context derived from status for external module queries")
   void getPostContextSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     Post post =

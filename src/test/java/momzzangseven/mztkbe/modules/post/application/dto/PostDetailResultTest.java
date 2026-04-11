@@ -14,8 +14,8 @@ import org.junit.jupiter.api.Test;
 class PostDetailResultTest {
 
   @Test
-  @DisplayName("fromDomain maps all fields and defaults null solved to false")
-  void fromDomainMapsAndDefaultsSolved() {
+  @DisplayName("fromDomain maps all fields and derives solved from open status")
+  void fromDomainMapsAndDerivesSolvedFromOpenStatus() {
     LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 12, 0);
 
@@ -60,8 +60,8 @@ class PostDetailResultTest {
   }
 
   @Test
-  @DisplayName("fromDomain keeps solved true")
-  void fromDomainKeepsSolvedTrue() {
+  @DisplayName("fromDomain derives solved true from resolved status")
+  void fromDomainDerivesSolvedTrueFromResolvedStatus() {
     Post post =
         Post.builder()
             .id(1L)

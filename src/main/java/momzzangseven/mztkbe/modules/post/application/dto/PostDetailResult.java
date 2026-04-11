@@ -41,7 +41,7 @@ public record PostDetailResult(
         profileImageUrl,
         imageUrls,
         post.getReward(),
-        post.getIsSolved() != null ? post.getIsSolved() : false,
+        post.isResolved(),
         post.getTags(),
         post.getCreatedAt(),
         post.getUpdatedAt());
