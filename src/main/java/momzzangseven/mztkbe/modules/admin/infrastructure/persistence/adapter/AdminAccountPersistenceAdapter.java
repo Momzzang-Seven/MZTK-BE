@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.admin.infrastructure.persistence.adapter;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -55,7 +56,7 @@ public class AdminAccountPersistenceAdapter
 
   @Override
   public int softDeleteAll() {
-    return repository.softDeleteAll();
+    return repository.softDeleteAll(Instant.now());
   }
 
   @Override
