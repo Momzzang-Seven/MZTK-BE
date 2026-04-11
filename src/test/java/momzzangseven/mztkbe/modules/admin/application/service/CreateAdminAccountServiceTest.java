@@ -18,8 +18,8 @@ import momzzangseven.mztkbe.modules.admin.application.port.out.GenerateCredentia
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SaveAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.domain.model.AdminAccount;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -69,7 +69,7 @@ class CreateAdminAccountServiceTest {
       given(generateCredentialPort.generate())
           .willReturn(new GeneratedAdminCredentials(LOGIN_ID, PLAINTEXT));
       given(loadAdminAccountPort.existsByLoginId(LOGIN_ID)).willReturn(false);
-      given(createAdminUserPort.createAdmin(any(), any(), eq(UserRole.ADMIN_GENERATED)))
+      given(createAdminUserPort.createAdmin(any(), any(), eq(AdminRole.ADMIN_GENERATED)))
           .willReturn(100L);
       given(adminPasswordEncoderPort.encode(PLAINTEXT)).willReturn(PASSWORD_HASH);
       given(saveAdminAccountPort.save(any(AdminAccount.class)))
@@ -87,7 +87,7 @@ class CreateAdminAccountServiceTest {
           .createAdmin(
               eq("admin-12345678@internal.mztk.local"),
               eq("Admin-12345678"),
-              eq(UserRole.ADMIN_GENERATED));
+              eq(AdminRole.ADMIN_GENERATED));
       verify(adminPasswordEncoderPort).encode(PLAINTEXT);
 
       ArgumentCaptor<AdminAccount> captor = ArgumentCaptor.forClass(AdminAccount.class);
@@ -102,7 +102,7 @@ class CreateAdminAccountServiceTest {
       given(generateCredentialPort.generate())
           .willReturn(new GeneratedAdminCredentials(LOGIN_ID, PLAINTEXT));
       given(loadAdminAccountPort.existsByLoginId(LOGIN_ID)).willReturn(false);
-      given(createAdminUserPort.createAdmin(any(), any(), eq(UserRole.ADMIN_GENERATED)))
+      given(createAdminUserPort.createAdmin(any(), any(), eq(AdminRole.ADMIN_GENERATED)))
           .willReturn(100L);
       given(adminPasswordEncoderPort.encode(PLAINTEXT)).willReturn(PASSWORD_HASH);
       given(saveAdminAccountPort.save(any(AdminAccount.class)))
@@ -131,7 +131,7 @@ class CreateAdminAccountServiceTest {
       given(generateCredentialPort.generate()).willReturn(first, second);
       given(loadAdminAccountPort.existsByLoginId("11111111")).willReturn(true);
       given(loadAdminAccountPort.existsByLoginId("22222222")).willReturn(false);
-      given(createAdminUserPort.createAdmin(any(), any(), eq(UserRole.ADMIN_GENERATED)))
+      given(createAdminUserPort.createAdmin(any(), any(), eq(AdminRole.ADMIN_GENERATED)))
           .willReturn(100L);
       given(adminPasswordEncoderPort.encode(PLAINTEXT)).willReturn(PASSWORD_HASH);
       given(saveAdminAccountPort.save(any(AdminAccount.class)))

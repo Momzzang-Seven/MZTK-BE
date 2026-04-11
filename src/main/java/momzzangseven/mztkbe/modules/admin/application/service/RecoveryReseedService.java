@@ -15,8 +15,8 @@ import momzzangseven.mztkbe.modules.admin.application.port.in.RecoveryReseedUseC
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.RecoveryAnchorPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SoftDeleteAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,7 +54,7 @@ public class RecoveryReseedService implements RecoveryReseedUseCase {
     log.info("Recovery: soft-deleted {} existing admin accounts", deletedCount);
 
     List<GeneratedAdminCredentials> credentials =
-        seedProvisioner.provision(SEED_COUNT, UserRole.ADMIN_SEED);
+        seedProvisioner.provision(SEED_COUNT, AdminRole.ADMIN_SEED);
     bootstrapDeliveryPort.deliver(credentials);
 
     recordAudit("RECOVERY_SUCCESS", command.sourceIp(), true);

@@ -14,8 +14,8 @@ import momzzangseven.mztkbe.global.error.admin.AdminCredentialGenerationExceptio
 import momzzangseven.mztkbe.modules.admin.application.dto.SeedBootstrapOutcome;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.CountActiveAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -86,7 +86,7 @@ class BootstrapSeedAdminsServiceTest {
       // given
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
-      given(seedProvisioner.provision(2, UserRole.ADMIN_SEED)).willReturn(credentials);
+      given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
 
       // when
       SeedBootstrapOutcome outcome = service.execute();
@@ -95,7 +95,7 @@ class BootstrapSeedAdminsServiceTest {
       assertThat(outcome.created()).isTrue();
       assertThat(outcome.seedCount()).isEqualTo(2);
       assertThat(outcome.deliveredVia()).isEqualTo(DELIVERY_TARGET);
-      verify(seedProvisioner).provision(2, UserRole.ADMIN_SEED);
+      verify(seedProvisioner).provision(2, AdminRole.ADMIN_SEED);
       verify(bootstrapDeliveryPort).deliver(credentials);
     }
 
@@ -105,7 +105,7 @@ class BootstrapSeedAdminsServiceTest {
       // given
       given(countActiveAdminAccountsPort.countActive()).willReturn(1L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(1);
-      given(seedProvisioner.provision(1, UserRole.ADMIN_SEED)).willReturn(credentials);
+      given(seedProvisioner.provision(1, AdminRole.ADMIN_SEED)).willReturn(credentials);
 
       // when
       SeedBootstrapOutcome outcome = service.execute();
@@ -114,7 +114,7 @@ class BootstrapSeedAdminsServiceTest {
       assertThat(outcome.created()).isTrue();
       assertThat(outcome.seedCount()).isEqualTo(1);
       assertThat(outcome.deliveredVia()).isEqualTo(DELIVERY_TARGET);
-      verify(seedProvisioner).provision(1, UserRole.ADMIN_SEED);
+      verify(seedProvisioner).provision(1, AdminRole.ADMIN_SEED);
       verify(bootstrapDeliveryPort).deliver(credentials);
     }
 
@@ -124,7 +124,7 @@ class BootstrapSeedAdminsServiceTest {
       // given
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
-      given(seedProvisioner.provision(2, UserRole.ADMIN_SEED)).willReturn(credentials);
+      given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
 
       // when
       service.execute();
@@ -143,7 +143,7 @@ class BootstrapSeedAdminsServiceTest {
     void execute_provisionerThrows_propagatesException() {
       // given
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
-      given(seedProvisioner.provision(2, UserRole.ADMIN_SEED))
+      given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED))
           .willThrow(new AdminCredentialGenerationException("Failed after 5 attempts"));
 
       // when & then
@@ -159,7 +159,7 @@ class BootstrapSeedAdminsServiceTest {
       // given
       given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
-      given(seedProvisioner.provision(2, UserRole.ADMIN_SEED)).willReturn(credentials);
+      given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
       org.mockito.BDDMockito.willThrow(new RuntimeException("delivery failed"))
           .given(bootstrapDeliveryPort)
           .deliver(any());

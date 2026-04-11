@@ -2,9 +2,10 @@ package momzzangseven.mztkbe.modules.admin.infrastructure.external.user;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.admin.application.port.out.CreateAdminUserPort;
-import momzzangseven.mztkbe.modules.user.application.port.out.SaveUserPort;
-import momzzangseven.mztkbe.modules.user.domain.model.User;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
+import momzzangseven.mztkbe.modules.user.application.dto.CreateUserCommand;
+import momzzangseven.mztkbe.modules.user.application.dto.UserInfo;
+import momzzangseven.mztkbe.modules.user.application.port.in.CreateUserUseCase;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,12 +16,15 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CreateAdminUserAdapter implements CreateAdminUserPort {
 
-  private final SaveUserPort saveUserPort;
+  private final CreateUserUseCase createUserUseCase;
 
   @Override
-  public Long createAdmin(String email, String nickname, UserRole adminRole) {
-    User adminUser = User.createAdmin(email, nickname, adminRole);
-    User saved = saveUserPort.saveUser(adminUser);
-    return saved.getId();
+  public Long createAdmin(String email, String nickname, AdminRole adminRole) {
+
+    UserInfo userInfo =
+        createUserUseCase.createAdminUser(
+            new CreateUserCommand(email, nickname, null, adminRole.toString()));
+
+    return userInfo.id();
   }
 }

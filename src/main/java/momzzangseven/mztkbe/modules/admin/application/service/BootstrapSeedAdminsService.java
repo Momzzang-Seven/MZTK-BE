@@ -7,8 +7,8 @@ import momzzangseven.mztkbe.modules.admin.application.dto.SeedBootstrapOutcome;
 import momzzangseven.mztkbe.modules.admin.application.port.in.BootstrapSeedAdminsUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.CountActiveAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +36,7 @@ public class BootstrapSeedAdminsService implements BootstrapSeedAdminsUseCase {
 
     int deficit = (int) (REQUIRED_SEED_COUNT - currentCount);
     List<GeneratedAdminCredentials> credentials =
-        seedProvisioner.provision(deficit, UserRole.ADMIN_SEED);
+        seedProvisioner.provision(deficit, AdminRole.ADMIN_SEED);
 
     bootstrapDeliveryPort.deliver(credentials);
 
