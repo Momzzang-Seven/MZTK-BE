@@ -60,7 +60,7 @@ class AuthenticateAdminLocalServiceTest {
 
       given(loadAdminAccountPort.findActiveByLoginId("admin001")).willReturn(Optional.of(account));
       given(adminPasswordEncoderPort.matches("rawPassword", "hashed")).willReturn(true);
-      given(saveAdminAccountPort.save(any(AdminAccount.class)))
+      given(saveAdminAccountPort.saveAndFlush(any(AdminAccount.class)))
           .willAnswer(inv -> inv.getArgument(0));
 
       // when
@@ -69,7 +69,7 @@ class AuthenticateAdminLocalServiceTest {
 
       // then
       assertThat(result.userId()).isEqualTo(1L);
-      verify(saveAdminAccountPort, times(1)).save(any(AdminAccount.class));
+      verify(saveAdminAccountPort, times(1)).saveAndFlush(any(AdminAccount.class));
     }
 
     @Test
@@ -80,14 +80,14 @@ class AuthenticateAdminLocalServiceTest {
 
       given(loadAdminAccountPort.findActiveByLoginId("admin001")).willReturn(Optional.of(account));
       given(adminPasswordEncoderPort.matches("rawPassword", "hashed")).willReturn(true);
-      given(saveAdminAccountPort.save(any(AdminAccount.class)))
+      given(saveAdminAccountPort.saveAndFlush(any(AdminAccount.class)))
           .willAnswer(inv -> inv.getArgument(0));
 
       // when
       service.execute(new AuthenticateAdminLocalCommand("admin001", "rawPassword"));
 
       // then
-      verify(saveAdminAccountPort, times(1)).save(any(AdminAccount.class));
+      verify(saveAdminAccountPort, times(1)).saveAndFlush(any(AdminAccount.class));
     }
   }
 
@@ -108,7 +108,7 @@ class AuthenticateAdminLocalServiceTest {
           .hasMessageContaining("Invalid admin credentials");
 
       verify(adminPasswordEncoderPort, never()).matches(any(), any());
-      verify(saveAdminAccountPort, never()).save(any());
+      verify(saveAdminAccountPort, never()).saveAndFlush(any());
     }
 
     @Test
@@ -126,7 +126,7 @@ class AuthenticateAdminLocalServiceTest {
           .isInstanceOf(InvalidCredentialsException.class)
           .hasMessageContaining("Invalid admin credentials");
 
-      verify(saveAdminAccountPort, never()).save(any());
+      verify(saveAdminAccountPort, never()).saveAndFlush(any());
     }
   }
 }

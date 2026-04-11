@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@Profile({"dev", "test", "e2e"})
+@Profile({"dev", "test", "e2e", "integration"})
 public class LogBootstrapDeliveryAdapter implements BootstrapDeliveryPort {
 
   private final AtomicReference<List<GeneratedAdminCredentials>> lastDelivery =
