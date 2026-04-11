@@ -54,6 +54,13 @@ public class AdminAccountPersistenceAdapter
   }
 
   @Override
+  public AdminAccount saveAndFlush(AdminAccount account) {
+    AdminAccountEntity entity = toEntity(account);
+    AdminAccountEntity saved = repository.saveAndFlush(entity);
+    return toDomain(saved);
+  }
+
+  @Override
   public List<Long> deleteAllAndReturnUserIds() {
     List<Long> userIds = repository.findAll().stream().map(AdminAccountEntity::getUserId).toList();
     repository.deleteAllInBulk();

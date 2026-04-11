@@ -18,9 +18,10 @@ import momzzangseven.mztkbe.global.error.admin.RecoveryRejectedException;
 import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedCommand;
 import momzzangseven.mztkbe.modules.admin.application.dto.RecoveryReseedResult;
 import momzzangseven.mztkbe.modules.admin.application.port.out.BootstrapDeliveryPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.DeleteAdminAccountsPort;
+import momzzangseven.mztkbe.modules.admin.application.port.out.DeleteAdminUsersPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadSeedPolicyPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.RecoveryAnchorPort;
-import momzzangseven.mztkbe.modules.admin.application.port.out.SoftDeleteAdminAccountsPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.AdminRole;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +39,8 @@ class RecoveryReseedServiceTest {
 
   @Mock private LoadSeedPolicyPort loadSeedPolicyPort;
   @Mock private RecoveryAnchorPort recoveryAnchorPort;
-  @Mock private SoftDeleteAdminAccountsPort softDeleteAdminAccountsPort;
+  @Mock private DeleteAdminAccountsPort deleteAdminAccountsPort;
+  @Mock private DeleteAdminUsersPort deleteAdminUsersPort;
   @Mock private SeedProvisioner seedProvisioner;
   @Mock private BootstrapDeliveryPort bootstrapDeliveryPort;
   @Mock private RecordAdminAuditPort recordAdminAuditPort;
@@ -62,7 +64,7 @@ class RecoveryReseedServiceTest {
 
   private void givenAnchorMatches() {
     given(recoveryAnchorPort.loadAnchor()).willReturn(CORRECT_ANCHOR);
-    given(softDeleteAdminAccountsPort.softDeleteAll()).willReturn(3);
+    given(deleteAdminAccountsPort.deleteAllAndReturnUserIds()).willReturn(List.of(1L, 2L, 3L));
   }
 
   private List<GeneratedAdminCredentials> givenFullHappyPath() {
@@ -80,7 +82,7 @@ class RecoveryReseedServiceTest {
     @Test
     @DisplayName(
         "[M-171] execute succeeds when anchor matches"
-            + " — soft-deletes all, provisions 2 seeds, delivers, audits success")
+            + " — hard-deletes all, provisions 2 seeds, delivers, audits success")
     void execute_anchorMatches_fullRecoveryFlow() {
       // given
       List<GeneratedAdminCredentials> credentials = givenFullHappyPath();
@@ -92,7 +94,8 @@ class RecoveryReseedServiceTest {
       // then
       assertThat(result.newSeedCount()).isEqualTo(2);
       assertThat(result.deliveredVia()).isEqualTo(DELIVERY_TARGET);
-      verify(softDeleteAdminAccountsPort).softDeleteAll();
+      verify(deleteAdminAccountsPort).deleteAllAndReturnUserIds();
+      verify(deleteAdminUsersPort).deleteUsers(List.of(1L, 2L, 3L));
       verify(seedProvisioner).provision(2, AdminRole.ADMIN_SEED);
       verify(bootstrapDeliveryPort).deliver(credentials);
 
@@ -179,7 +182,7 @@ class RecoveryReseedServiceTest {
       assertThat(audit.success()).isFalse();
       assertThat(audit.detail()).containsEntry("sourceIp", "10.0.0.1");
 
-      verify(softDeleteAdminAccountsPort, never()).softDeleteAll();
+      verify(deleteAdminAccountsPort, never()).deleteAllAndReturnUserIds();
       verify(seedProvisioner, never()).provision(anyInt(), any());
       verify(bootstrapDeliveryPort, never()).deliver(any());
     }
@@ -197,7 +200,7 @@ class RecoveryReseedServiceTest {
           .hasMessageContaining("Cannot load recovery anchor")
           .hasCauseInstanceOf(RuntimeException.class);
 
-      verify(softDeleteAdminAccountsPort, never()).softDeleteAll();
+      verify(deleteAdminAccountsPort, never()).deleteAllAndReturnUserIds();
       verify(seedProvisioner, never()).provision(anyInt(), any());
       verify(bootstrapDeliveryPort, never()).deliver(any());
       verify(recordAdminAuditPort, never()).record(any());
@@ -236,15 +239,15 @@ class RecoveryReseedServiceTest {
               () -> service.execute(new RecoveryReseedCommand("wrong-anchor", "10.0.0.1")))
           .isInstanceOf(RecoveryRejectedException.class);
 
-      verify(softDeleteAdminAccountsPort, never()).softDeleteAll();
+      verify(deleteAdminAccountsPort, never()).deleteAllAndReturnUserIds();
     }
 
     @Test
-    @DisplayName("[M-179] execute propagates exception from softDeleteAdminAccountsPort")
-    void execute_softDeleteThrows_propagates() {
+    @DisplayName("[M-179] execute propagates exception from deleteAdminAccountsPort")
+    void execute_hardDeleteThrows_propagates() {
       // given
       given(recoveryAnchorPort.loadAnchor()).willReturn(CORRECT_ANCHOR);
-      given(softDeleteAdminAccountsPort.softDeleteAll())
+      given(deleteAdminAccountsPort.deleteAllAndReturnUserIds())
           .willThrow(new RuntimeException("DB error"));
 
       // when & then

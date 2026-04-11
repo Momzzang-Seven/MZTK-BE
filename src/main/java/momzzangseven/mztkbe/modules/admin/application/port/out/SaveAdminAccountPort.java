@@ -6,4 +6,7 @@ import momzzangseven.mztkbe.modules.admin.domain.model.AdminAccount;
 public interface SaveAdminAccountPort {
 
   AdminAccount save(AdminAccount account);
+
+  /** Saves and immediately flushes to the database, forcing any SQL errors to surface now. */
+  AdminAccount saveAndFlush(AdminAccount account);
 }
