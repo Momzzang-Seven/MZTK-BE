@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.admin.application.service;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
+import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.admin.application.dto.AdminAccountSummary;
 import momzzangseven.mztkbe.modules.admin.application.port.in.ListAdminAccountsUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadAdminAccountPort;
@@ -22,7 +24,8 @@ public class ListAdminAccountsService implements ListAdminAccountsUseCase {
 
   @Override
   @Transactional(readOnly = true)
-  public List<AdminAccountSummary> execute() {
+  @AdminOnly(actionType = "LIST_ADMINS", targetType = AuditTargetType.ADMIN_ACCOUNT)
+  public List<AdminAccountSummary> execute(Long operatorUserId) {
     List<AdminAccount> accounts = loadAdminAccountPort.findAllActive();
     List<Long> userIds = accounts.stream().map(AdminAccount::getUserId).toList();
     List<User> users = loadUserPort.loadUsersByIds(userIds);

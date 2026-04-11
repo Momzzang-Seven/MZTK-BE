@@ -1,9 +1,11 @@
 package momzzangseven.mztkbe.modules.admin.application.service;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
 import momzzangseven.mztkbe.global.error.admin.AdminAccountNotFoundException;
 import momzzangseven.mztkbe.global.error.admin.WeakAdminPasswordException;
+import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.admin.application.dto.RotateAdminPasswordCommand;
 import momzzangseven.mztkbe.modules.admin.application.port.in.RotateAdminPasswordUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.out.AdminPasswordEncoderPort;
@@ -26,6 +28,11 @@ public class RotateAdminPasswordService implements RotateAdminPasswordUseCase {
 
   @Override
   @Transactional
+  @AdminOnly(
+      actionType = "ROTATE_OWN_PASSWORD",
+      targetType = AuditTargetType.ADMIN_ACCOUNT,
+      operatorId = "#p0.userId",
+      targetId = "#p0.userId")
   public void execute(RotateAdminPasswordCommand command) {
     command.validate();
 
