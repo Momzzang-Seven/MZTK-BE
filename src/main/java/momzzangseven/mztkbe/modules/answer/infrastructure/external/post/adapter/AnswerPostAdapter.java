@@ -24,6 +24,7 @@ public class AnswerPostAdapter implements LoadPostPort {
                     post.solved(),
                     post.questionPost(),
                     post.content(),
-                    post.reward()));
+                    post.reward(),
+                    post.answerLocked()));
   }
 }

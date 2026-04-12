@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.post.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -65,6 +67,31 @@ class AcceptAnswerServiceTest {
   }
 
   @Test
+  @DisplayName("web3-managed accept keeps post pending until onchain confirmation")
+  void execute_web3ManagedAccept_keepsPendingState() {
+    AcceptAnswerCommand command = new AcceptAnswerCommand(10L, 20L, 1L);
+    Post post = questionPost(10L, 1L, PostStatus.OPEN, null);
+    Post pendingPost = questionPost(10L, 1L, PostStatus.PENDING_ACCEPT, 20L);
+
+    given(questionLifecycleExecutionPort.managesAcceptLifecycle()).willReturn(true);
+    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
+    when(loadAcceptedAnswerPort.loadAcceptedAnswer(20L))
+        .thenReturn(
+            Optional.of(
+                new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
+    when(postPersistencePort.savePost(any(Post.class))).thenReturn(pendingPost);
+
+    AcceptAnswerResult result = acceptAnswerService.execute(command);
+
+    assertThat(result.status()).isEqualTo(PostStatus.PENDING_ACCEPT);
+    assertThat(result.acceptedAnswerId()).isEqualTo(20L);
+    verify(postPersistencePort).savePost(any(Post.class));
+    verifyNoInteractions(markAcceptedAnswerPort);
+    verify(questionLifecycleExecutionPort)
+        .prepareAnswerAccept(10L, 20L, 1L, 2L, "content", "answer content", 100L);
+  }
+
+  @Test
   @DisplayName("rejects acceptance by a non-writer")
   void execute_throwsWhenRequesterIsNotWriter() {
     when(postPersistencePort.loadPostForUpdate(10L))
@@ -109,7 +136,7 @@ class AcceptAnswerServiceTest {
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
         .isInstanceOf(PostAlreadySolvedException.class);
     verifyNoInteractions(markAcceptedAnswerPort);
-    verifyNoInteractions(questionLifecycleExecutionPort);
+    verify(questionLifecycleExecutionPort, never()).prepareAnswerAccept(any(), any(), any(), any(), any(), any(), any());
   }
 
   private Post questionPost(Long id, Long userId, PostStatus status, Long acceptedAnswerId) {

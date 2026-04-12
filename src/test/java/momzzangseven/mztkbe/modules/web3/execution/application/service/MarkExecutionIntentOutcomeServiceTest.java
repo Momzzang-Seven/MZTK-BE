@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
@@ -55,7 +55,8 @@ class MarkExecutionIntentOutcomeServiceTest {
         new MarkExecutionIntentSucceededService(
             executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
     failedOnchainService =
-        new MarkExecutionIntentFailedOnchainService(executionIntentPersistencePort, FIXED_CLOCK);
+        new MarkExecutionIntentFailedOnchainService(
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
   }
 
   @Test
@@ -103,6 +104,13 @@ class MarkExecutionIntentOutcomeServiceTest {
 
   @Test
   void markFailedOnchain_marksPendingIntentFailed() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any()))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
@@ -121,11 +129,16 @@ class MarkExecutionIntentOutcomeServiceTest {
                                 .ExecutionIntentStatus.FAILED_ONCHAIN
                         && "FAILED_ONCHAIN".equals(updated.getLastErrorCode())
                         && "RECEIPT_STATUS_0".equals(updated.getLastErrorReason())));
+    verify(executionActionHandlerPort)
+        .afterExecutionFailedOnchain(
+            argThat(updated -> updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN),
+            any(),
+            org.mockito.ArgumentMatchers.eq("RECEIPT_STATUS_0"));
   }
 
   @Test
-  @DisplayName("핸들러 예외 발생 시에도 CONFIRMED 상태 업데이트가 유지되고 예외가 전파되지 않는다")
-  void markSucceeded_handlerThrows_confirmedStateIsPreserved() {
+  @DisplayName("핸들러 예외가 발생하면 CONFIRMED 상태를 저장하지 않고 예외를 전파한다")
+  void markSucceeded_handlerThrows_doesNotPersistConfirmedState() {
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
     when(executionActionHandlerPort.buildActionPlan(any()))
         .thenReturn(
@@ -140,14 +153,12 @@ class MarkExecutionIntentOutcomeServiceTest {
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
-    when(executionIntentPersistencePort.update(
-            argThat(updated -> updated.getSubmittedTxId().equals(12L))))
-        .thenAnswer(invocation -> invocation.getArgument(0));
 
-    assertThatCode(() -> succeededService.execute(12L)).doesNotThrowAnyException();
+    assertThatThrownBy(() -> succeededService.execute(12L))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("missing qna question projection");
 
-    verify(executionIntentPersistencePort)
-        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.CONFIRMED));
+    verify(executionIntentPersistencePort, never()).update(any());
   }
 
   @Test

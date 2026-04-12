@@ -12,10 +12,21 @@ public interface GetPostContextUseCase {
       boolean solved,
       boolean questionPost,
       String content,
-      Long reward) {
+      Long reward,
+      boolean answerLocked) {
 
     public PostContext(Long postId, Long writerId, boolean solved, boolean questionPost) {
-      this(postId, writerId, solved, questionPost, null, null);
+      this(postId, writerId, solved, questionPost, null, null, solved);
+    }
+
+    public PostContext(
+        Long postId,
+        Long writerId,
+        boolean solved,
+        boolean questionPost,
+        String content,
+        Long reward) {
+      this(postId, writerId, solved, questionPost, content, reward, solved);
     }
   }
 }

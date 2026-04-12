@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -197,7 +198,16 @@ class PostControllerQnaEscrowIntegrationTest {
             post("/posts/" + post.getId() + "/answers/" + answer.getId() + "/accept")
                 .with(userPrincipal(404L)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.acceptedAnswerId").value(answer.getId()))
+        .andExpect(jsonPath("$.data.status").value("PENDING_ACCEPT"));
+
+    PostEntity updatedPost = postJpaRepository.findById(post.getId()).orElseThrow();
+    assertThat(updatedPost.getAcceptedAnswerId()).isEqualTo(answer.getId());
+    assertThat(updatedPost.getStatus().name()).isEqualTo("PENDING_ACCEPT");
+    assertThat(updatedPost.getIsSolved()).isFalse();
+
+    assertThat(answerJpaRepository.findById(answer.getId()).orElseThrow().getIsAccepted()).isFalse();
 
     verify(questionEscrowExecutionUseCase)
         .prepareAnswerAccept(any(PrepareAnswerAcceptCommand.class));

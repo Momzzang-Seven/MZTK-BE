@@ -22,6 +22,11 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   private final QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
 
   @Override
+  public boolean managesAcceptLifecycle() {
+    return true;
+  }
+
+  @Override
   public void precheckQuestionCreate(Long requesterUserId, Long rewardMztk) {
     questionEscrowExecutionUseCase.precheckQuestionCreate(
         new PrecheckQuestionCreateCommand(requesterUserId, rewardMztk));

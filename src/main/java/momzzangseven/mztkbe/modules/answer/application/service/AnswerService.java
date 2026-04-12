@@ -86,7 +86,11 @@ public class AnswerService
 
     Answer answer =
         Answer.create(
-            post.postId(), post.writerId(), post.isSolved(), command.userId(), command.content());
+            post.postId(),
+            post.writerId(),
+            post.answerLocked(),
+            command.userId(),
+            command.content());
 
     Answer savedAnswer = saveAnswerPort.saveAnswer(answer);
 
@@ -167,7 +171,7 @@ public class AnswerService
     validateAnswerBelongsToPost(answer, command.postId());
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
 
-    Answer updatedAnswer = answer.update(command.content(), command.userId(), post.isSolved());
+    Answer updatedAnswer = answer.update(command.content(), command.userId(), post.answerLocked());
     if (updatedAnswer != answer) {
       saveAnswerPort.saveAnswer(updatedAnswer);
     }
@@ -200,7 +204,7 @@ public class AnswerService
     validateAnswerBelongsToPost(answer, command.postId());
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
 
-    answer.validateDeletable(command.userId(), post.isSolved());
+    answer.validateDeletable(command.userId(), post.answerLocked());
     deleteAnswerPort.deleteAnswer(answer.getId());
     int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
     answerLifecycleExecutionPort.prepareAnswerDelete(

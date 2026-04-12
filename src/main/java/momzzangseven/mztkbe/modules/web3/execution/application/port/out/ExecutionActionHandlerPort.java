@@ -19,4 +19,7 @@ public interface ExecutionActionHandlerPort {
       ExecutionTransactionStatus txStatus) {}
 
   default void afterExecutionConfirmed(ExecutionIntent intent, ExecutionActionPlan actionPlan) {}
+
+  default void afterExecutionFailedOnchain(
+      ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {}
 }

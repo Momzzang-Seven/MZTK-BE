@@ -2,6 +2,10 @@ package momzzangseven.mztkbe.modules.post.application.port.out;
 
 public interface QuestionLifecycleExecutionPort {
 
+  default boolean managesAcceptLifecycle() {
+    return false;
+  }
+
   void precheckQuestionCreate(Long requesterUserId, Long rewardMztk);
 
   void prepareQuestionCreate(

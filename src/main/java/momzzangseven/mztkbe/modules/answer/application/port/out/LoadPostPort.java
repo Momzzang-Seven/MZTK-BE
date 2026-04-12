@@ -12,10 +12,21 @@ public interface LoadPostPort {
       boolean isSolved,
       boolean questionPost,
       String content,
-      Long reward) {
+      Long reward,
+      boolean answerLocked) {
 
     public PostContext(Long postId, Long writerId, boolean isSolved, boolean questionPost) {
-      this(postId, writerId, isSolved, questionPost, null, null);
+      this(postId, writerId, isSolved, questionPost, null, null, isSolved);
+    }
+
+    public PostContext(
+        Long postId,
+        Long writerId,
+        boolean isSolved,
+        boolean questionPost,
+        String content,
+        Long reward) {
+      this(postId, writerId, isSolved, questionPost, content, reward, isSolved);
     }
   }
 }
