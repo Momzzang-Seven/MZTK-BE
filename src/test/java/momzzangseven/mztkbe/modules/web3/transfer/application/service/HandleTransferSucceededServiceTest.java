@@ -101,7 +101,8 @@ class HandleTransferSucceededServiceTest {
             11L,
             "0xhash"));
 
-    verify(questionRewardIntentPersistencePort, never()).updateStatusIfCurrentIn(any(), any(), any());
+    verify(questionRewardIntentPersistencePort, never())
+        .updateStatusIfCurrentIn(any(), any(), any());
     verify(markQuestionPostSolvedPort, never()).markSolved(any());
   }
 

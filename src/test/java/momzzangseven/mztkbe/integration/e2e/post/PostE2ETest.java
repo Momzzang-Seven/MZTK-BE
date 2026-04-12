@@ -239,17 +239,27 @@ class PostE2ETest {
         String.class);
   }
 
-  /** isSolved=true 는 web3 transfer 완료 이벤트로만 변경되므로 테스트 전제 조건 설정에 JdbcTemplate 사용. */
-  private void markPostAsSolved(Long postId) {
-    int updated =
-        jdbcTemplate.update(
-            "UPDATE posts SET is_solved = true, status = 'RESOLVED' WHERE id = ?", postId);
-    assertThat(updated).as("Post %d should exist to be marked as solved", postId).isEqualTo(1);
+  private Long resolveQuestionPost(Long postId, String answererToken, String content)
+      throws Exception {
+    Long answerId = createAnswer(postId, answererToken, content);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+            HttpMethod.POST,
+            new HttpEntity<>(authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode())
+        .as("Question post %d should be resolvable via accept API", postId)
+        .isEqualTo(HttpStatus.OK);
+
+    return answerId;
   }
 
   private Map<String, Object> getPostState(Long postId) {
     return jdbcTemplate.queryForMap(
-        "SELECT accepted_answer_id, status, is_solved FROM posts WHERE id = ?", postId);
+        "SELECT accepted_answer_id, status FROM posts WHERE id = ?", postId);
   }
 
   private Map<String, Object> getAnswerState(Long answerId) {
@@ -639,7 +649,7 @@ class PostE2ETest {
       assertThat(row.get("content")).isEqualTo(content);
       assertThat(((Number) row.get("reward")).longValue()).isEqualTo(reward);
       assertThat(row.get("type").toString()).isEqualTo("QUESTION");
-      assertThat((Boolean) row.get("is_solved")).isFalse();
+      assertThat(row.get("status")).isEqualTo("OPEN");
     }
 
     @Test
@@ -821,13 +831,16 @@ class PostE2ETest {
     }
 
     @Test
-    @DisplayName("isSolved=true 인 게시글 수정 시도 → 400 BAD_REQUEST (POST_003)")
+    @DisplayName("status=RESOLVED 인 게시글 수정 시도 → 400 BAD_REQUEST (POST_003)")
     void updateQuestion_whenSolved_returns400_withPost003() throws Exception {
-      // given: 질문 게시글 생성 후 solved 상태로 강제 설정 (JdbcTemplate)
+      // given: 질문 게시글 생성 후 실제 accept 흐름으로 RESOLVED 상태를 만든다.
       Long postId = createQuestionPost("해결됨 수정불가 질문", "질문 내용", 100L);
-      markPostAsSolved(postId);
+      String answererEmail = uniqueEmail();
+      signupUser(answererEmail, "Test@1234!", "답변유저");
+      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+      resolveQuestionPost(postId, answererToken, "채택될 답변");
 
-      // when: 소유자가 수정 시도 (isSolved=true 이므로 도메인에서 거부)
+      // when: 소유자가 수정 시도 (RESOLVED 이므로 도메인에서 거부)
       Map<String, Object> updateBody = Map.of("content", "해결된 게시글 수정 시도");
       ResponseEntity<String> res =
           restTemplate.exchange(
@@ -836,7 +849,7 @@ class PostE2ETest {
               new HttpEntity<>(updateBody, authHeaders()),
               String.class);
 
-      // then: Post.update() 내 도메인 불변식 → PostInvalidInputException → POST_003
+      // then: Post.update() 내 status 기반 도메인 불변식 → PostInvalidInputException → POST_003
       assertThat(res.getStatusCode())
           .as("Updating a solved question post should be rejected")
           .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -907,11 +920,14 @@ class PostE2ETest {
     }
 
     @Test
-    @DisplayName("isSolved=true 인 게시글 삭제 시도 → 400 BAD_REQUEST (POST_003)")
+    @DisplayName("status=RESOLVED 인 게시글 삭제 시도 → 400 BAD_REQUEST (POST_003)")
     void deleteQuestion_whenSolved_returns400_withPost003() throws Exception {
-      // given: 질문 게시글 생성 후 solved 상태로 강제 설정 (JdbcTemplate)
+      // given: 질문 게시글 생성 후 실제 accept 흐름으로 RESOLVED 상태를 만든다.
       Long postId = createQuestionPost("해결됨 삭제불가 질문", "질문 내용", 80L);
-      markPostAsSolved(postId);
+      String answererEmail = uniqueEmail();
+      signupUser(answererEmail, "Test@1234!", "삭제불가답변유저");
+      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+      resolveQuestionPost(postId, answererToken, "채택될 답변");
 
       // when: 소유자가 삭제 시도
       ResponseEntity<String> res =
@@ -921,7 +937,7 @@ class PostE2ETest {
               new HttpEntity<>(authHeaders()),
               String.class);
 
-      // then: Post.validateDeletable() → PostInvalidInputException → POST_003
+      // then: Post.validateDeletable() 내 status 기반 도메인 불변식 → POST_003
       assertThat(res.getStatusCode())
           .as("Deleting a solved question post should be rejected")
           .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -962,7 +978,6 @@ class PostE2ETest {
       Map<String, Object> row = getPostState(postId);
       assertThat(((Number) row.get("accepted_answer_id")).longValue()).isEqualTo(answerId);
       assertThat(row.get("status")).isEqualTo("RESOLVED");
-      assertThat(row.get("is_solved")).isEqualTo(true);
 
       Map<String, Object> answerRow = getAnswerState(answerId);
       assertThat(answerRow.get("is_accepted")).isEqualTo(true);

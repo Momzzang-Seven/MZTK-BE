@@ -457,24 +457,28 @@ class AnswerE2ETest {
     @DisplayName("answering solved question returns 400 and does not insert rows")
     void createAnswer_onSolvedQuestion_returns400AndDoesNotPersist() throws Exception {
       TestUser author = signupAndLogin("solved-author");
-      TestUser answerer = signupAndLogin("solved-answerer");
+      TestUser acceptedAnswerer = signupAndLogin("accepted-answerer");
+      TestUser lateAnswerer = signupAndLogin("late-answerer");
       Long postId =
           createQuestionPost(author.accessToken(), "Solved question", "Closed already", 60L);
-      markPostSolved(postId);
+      Long acceptedAnswerId =
+          createAnswer(postId, acceptedAnswerer.accessToken(), "accepted answer", List.of());
+      acceptAnswer(postId, acceptedAnswerId, author.accessToken());
+      int answerCountBefore = countAnswersByPostId(postId);
 
       ResponseEntity<String> response =
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers",
               HttpMethod.POST,
               new HttpEntity<>(
-                  Map.of("content", "late answer"), authHeaders(answerer.accessToken())),
+                  Map.of("content", "late answer"), authHeaders(lateAnswerer.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
       JsonNode root = parse(response);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
       assertThat(root.at("/code").asText()).isEqualTo("ANSWER_004");
-      assertThat(countAnswersByPostId(postId)).isZero();
+      assertThat(countAnswersByPostId(postId)).isEqualTo(answerCountBefore);
     }
 
     @Test
@@ -662,13 +666,6 @@ class AnswerE2ETest {
     Long answerId = parse(response).at("/data/answerId").asLong();
     createdAnswerIds.add(answerId);
     return answerId;
-  }
-
-  private void markPostSolved(Long postId) {
-    int updated =
-        jdbcTemplate.update(
-            "UPDATE posts SET is_solved = true, status = 'RESOLVED' WHERE id = ?", postId);
-    assertThat(updated).isEqualTo(1);
   }
 
   private void acceptAnswer(Long postId, Long answerId, String accessToken) throws Exception {

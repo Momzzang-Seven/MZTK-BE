@@ -19,15 +19,15 @@ class PostEntityTest {
         PostEntity.builder()
             .id(1L)
             .userId(2L)
-            .type(PostType.FREE)
-            .title("title")
+            .type(PostType.QUESTION)
+            .title("question")
             .content("content")
-            .reward(0L)
-            .status(PostStatus.OPEN)
-            .isSolved(true)
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.RESOLVED)
             .build();
 
-    assertThat(entity.getIsSolved()).isFalse();
+    assertThat(entity.getIsSolved()).isTrue();
   }
 
   @Test
