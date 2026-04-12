@@ -86,11 +86,11 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
 
     ExecutionModeSelector.ExecutionModeSelection preliminarySelection =
         executionModeSelector.select(command);
-    ModeDecision modeDecision = finalizeModeDecision(command, preliminarySelection);
-    if (modeDecision.mode() == ExecutionMode.EIP7702) {
+    if (preliminarySelection.mode() == ExecutionMode.EIP7702) {
       validateExecutionDraftPolicyPort.validate(
           command.draft().delegateTarget(), command.draft().calls());
     }
+    ModeDecision modeDecision = finalizeModeDecision(command, preliminarySelection);
     LocalDateTime expiresAt = selectedExpiresAt(command, modeDecision.mode(), now);
     if (modeDecision.mode() == ExecutionMode.EIP7702) {
       modeDecision =

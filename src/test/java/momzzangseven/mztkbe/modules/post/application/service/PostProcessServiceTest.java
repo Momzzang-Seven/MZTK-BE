@@ -234,6 +234,23 @@ class PostProcessServiceTest {
   }
 
   @Test
+  @DisplayName("QUESTION post update skips on-chain sync when content is unchanged")
+  void updateQuestionPostSkipsOnChainSyncWhenContentUnchanged() {
+    Long ownerId = 7L;
+    Long postId = 74L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", "질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.updatePost(ownerId, postId, command);
+
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(questionLifecycleExecutionPort);
+  }
+
+  @Test
   @DisplayName("unanswered QUESTION post can be deleted when answer count is zero")
   void deleteQuestionPostWhenNoAnswersSucceeds() {
     Long ownerId = 7L;

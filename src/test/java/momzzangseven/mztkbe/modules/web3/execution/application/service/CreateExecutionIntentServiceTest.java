@@ -145,8 +145,6 @@ class CreateExecutionIntentServiceTest {
                 true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
     when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
         .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
-    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
-        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
     doThrow(new Web3TransferException(ErrorCode.DELEGATE_NOT_ALLOWLISTED, false))
         .when(validateExecutionDraftPolicyPort)
         .validate(any(), any());
@@ -155,6 +153,8 @@ class CreateExecutionIntentServiceTest {
         .isInstanceOf(Web3TransferException.class)
         .hasMessageContaining(ErrorCode.DELEGATE_NOT_ALLOWLISTED.getMessage());
 
+    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
+    verify(sponsorDailyUsagePersistencePort, never()).update(any());
     verify(executionIntentPersistencePort, never()).create(any());
   }
 

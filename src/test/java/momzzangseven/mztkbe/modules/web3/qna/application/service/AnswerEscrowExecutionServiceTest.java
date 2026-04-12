@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDeleteCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
@@ -135,6 +136,98 @@ class AnswerEscrowExecutionServiceTest {
     assertThat(request.postId()).isEqualTo(101L);
     assertThat(request.answerId()).isEqualTo(201L);
     assertThat(request.questionHash()).isEqualTo(QnaContentHashFactory.hash("질문 본문"));
+    assertThat(request.contentHash()).isNull();
+  }
+
+  @Test
+  @DisplayName(
+      "prepareAnswerUpdate reuses the stored question hash from the projection instead of re-hashing the command content")
+  void prepareAnswerUpdate_usesQuestionHashFromProjection() {
+    String originalQuestionContent = "원본 질문 본문";
+    String divergedQuestionContent = "클라이언트가 전달한 다른 질문 문자열";
+    String storedQuestionHash = QnaContentHashFactory.hash(originalQuestionContent);
+
+    given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
+        .willReturn(
+            new LoadQnaRewardTokenConfigPort.RewardTokenConfig(
+                "0x1111111111111111111111111111111111111111", 18));
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(
+            Optional.of(
+                QnaQuestionProjection.create(
+                        101L,
+                        7L,
+                        QnaEscrowIdCodec.questionId(101L),
+                        "0x1111111111111111111111111111111111111111",
+                        new BigInteger("50000000000000000000"),
+                        storedQuestionHash)
+                    .syncAnswerCount(1)));
+    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+        .willReturn(Optional.empty());
+    given(buildQnaExecutionDraftPort.build(any()))
+        .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_UPDATE));
+    given(submitQnaExecutionDraftPort.submit(any()))
+        .willReturn(new QnaExecutionIntentResult("intent-u", "EIP7702", 2, null, false));
+
+    service.prepareAnswerUpdate(
+        new PrepareAnswerUpdateCommand(
+            101L, 201L, 22L, 7L, divergedQuestionContent, 50L, "수정된 답변", 1));
+
+    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
+        ArgumentCaptor.forClass(QnaQuestionProjection.class);
+    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
+    QnaQuestionProjection savedQuestion = questionCaptor.getValue();
+    assertThat(savedQuestion.getQuestionHash()).isEqualTo(storedQuestionHash);
+
+    ArgumentCaptor<QnaEscrowExecutionRequest> requestCaptor =
+        ArgumentCaptor.forClass(QnaEscrowExecutionRequest.class);
+    verify(buildQnaExecutionDraftPort).build(requestCaptor.capture());
+    QnaEscrowExecutionRequest request = requestCaptor.getValue();
+    assertThat(request.actionType()).isEqualTo(QnaExecutionActionType.QNA_ANSWER_UPDATE);
+    assertThat(request.questionHash()).isEqualTo(storedQuestionHash);
+    assertThat(request.questionHash())
+        .isNotEqualTo(QnaContentHashFactory.hash(divergedQuestionContent));
+    assertThat(request.contentHash()).isEqualTo(QnaContentHashFactory.hash("수정된 답변"));
+  }
+
+  @Test
+  @DisplayName(
+      "prepareAnswerDelete reuses the stored question hash from the projection instead of re-hashing the command content")
+  void prepareAnswerDelete_usesQuestionHashFromProjection() {
+    String originalQuestionContent = "원본 질문 본문";
+    String divergedQuestionContent = "클라이언트가 전달한 다른 질문 문자열";
+    String storedQuestionHash = QnaContentHashFactory.hash(originalQuestionContent);
+
+    given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
+        .willReturn(
+            new LoadQnaRewardTokenConfigPort.RewardTokenConfig(
+                "0x1111111111111111111111111111111111111111", 18));
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(
+            Optional.of(
+                QnaQuestionProjection.create(
+                        101L,
+                        7L,
+                        QnaEscrowIdCodec.questionId(101L),
+                        "0x1111111111111111111111111111111111111111",
+                        new BigInteger("50000000000000000000"),
+                        storedQuestionHash)
+                    .syncAnswerCount(1)));
+    given(buildQnaExecutionDraftPort.build(any()))
+        .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_DELETE));
+    given(submitQnaExecutionDraftPort.submit(any()))
+        .willReturn(new QnaExecutionIntentResult("intent-d2", "EIP7702", 2, null, false));
+
+    service.prepareAnswerDelete(
+        new PrepareAnswerDeleteCommand(101L, 201L, 22L, 7L, divergedQuestionContent, 50L, 0));
+
+    ArgumentCaptor<QnaEscrowExecutionRequest> requestCaptor =
+        ArgumentCaptor.forClass(QnaEscrowExecutionRequest.class);
+    verify(buildQnaExecutionDraftPort).build(requestCaptor.capture());
+    QnaEscrowExecutionRequest request = requestCaptor.getValue();
+    assertThat(request.questionHash()).isEqualTo(storedQuestionHash);
+    assertThat(request.questionHash())
+        .isNotEqualTo(QnaContentHashFactory.hash(divergedQuestionContent));
     assertThat(request.contentHash()).isNull();
   }
 

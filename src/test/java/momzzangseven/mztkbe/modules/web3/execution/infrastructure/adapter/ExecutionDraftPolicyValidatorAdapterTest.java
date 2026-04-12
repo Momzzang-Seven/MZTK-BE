@@ -110,4 +110,23 @@ class ExecutionDraftPolicyValidatorAdapterTest {
                             TOKEN_CONTRACT, BigInteger.ZERO, "0xa9059cbb" + "0".repeat(128)))))
         .doesNotThrowAnyException();
   }
+
+  @Test
+  @DisplayName("validate falls back to legacy allowlist when split lists contain only blank env placeholders")
+  void validate_usesLegacyFallback_whenSplitListsOnlyContainBlankEntries() {
+    properties.getExecution().setAllowedDelegateTargets(List.of(""));
+    properties.getExecution().setAllowedCallTargets(List.of("", "   "));
+    properties
+        .getExecution()
+        .setAllowedTargetContracts(List.of(BATCH_IMPL, TOKEN_CONTRACT, QNA_CONTRACT));
+
+    assertThatCode(
+            () ->
+                adapter.validate(
+                    BATCH_IMPL,
+                    List.of(
+                        new ExecutionDraftCall(
+                            TOKEN_CONTRACT, BigInteger.ZERO, "0xa9059cbb" + "0".repeat(128)))))
+        .doesNotThrowAnyException();
+  }
 }

@@ -52,19 +52,21 @@ public class ExecutionDraftPolicyValidatorAdapter implements ValidateExecutionDr
   }
 
   private Set<String> resolveAllowedDelegateTargets() {
-    List<String> configured = eip7702Properties.getExecution().getAllowedDelegateTargets();
-    if (configured == null || configured.isEmpty()) {
-      configured = eip7702Properties.getExecution().getAllowedTargetContracts();
+    Set<String> normalized =
+        normalizeAddressSet(eip7702Properties.getExecution().getAllowedDelegateTargets());
+    if (normalized.isEmpty()) {
+      normalized = normalizeAddressSet(eip7702Properties.getExecution().getAllowedTargetContracts());
     }
-    return normalizeAddressSet(configured);
+    return normalized;
   }
 
   private Set<String> resolveAllowedCallTargets() {
-    List<String> configured = eip7702Properties.getExecution().getAllowedCallTargets();
-    if (configured == null || configured.isEmpty()) {
-      configured = eip7702Properties.getExecution().getAllowedTargetContracts();
+    Set<String> normalized =
+        normalizeAddressSet(eip7702Properties.getExecution().getAllowedCallTargets());
+    if (normalized.isEmpty()) {
+      normalized = normalizeAddressSet(eip7702Properties.getExecution().getAllowedTargetContracts());
     }
-    return normalizeAddressSet(configured);
+    return normalized;
   }
 
   private Set<String> resolveBlockedFunctionSelectors() {
@@ -75,6 +77,9 @@ public class ExecutionDraftPolicyValidatorAdapter implements ValidateExecutionDr
   }
 
   private Set<String> normalizeAddressSet(List<String> rawAddresses) {
+    if (rawAddresses == null) {
+      return Set.of();
+    }
     return rawAddresses.stream()
         .filter(address -> address != null && !address.isBlank())
         .map(this::normalizeAddress)
