@@ -11,8 +11,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -24,14 +24,22 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class RecoveryRateLimitFilter extends OncePerRequestFilter {
 
   private static final String RECOVERY_PATH = "/admin/recovery/reseed";
   private static final int TOKENS_PER_MINUTE = 3;
 
   private final ObjectMapper objectMapper;
+  private final boolean trustForwardedFor;
   private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+
+  public RecoveryRateLimitFilter(
+      ObjectMapper objectMapper,
+      @Value("${mztk.admin.recovery.rate-limit.trust-forwarded-for:false}")
+          boolean trustForwardedFor) {
+    this.objectMapper = objectMapper;
+    this.trustForwardedFor = trustForwardedFor;
+  }
 
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -73,8 +81,20 @@ public class RecoveryRateLimitFilter extends OncePerRequestFilter {
    * <p>Since this service does not sit behind a load balancer or reverse proxy, {@code remoteAddr}
    * is always the direct client IP and cannot be spoofed. Trusting {@code X-Forwarded-For} is
    * intentionally avoided to prevent header-injection bypass of rate limiting.
+   *
+   * <p>For E2E testing where all requests originate from {@code 127.0.0.1}, the {@code
+   * mztk.admin.recovery.rate-limit.trust-forwarded-for} property may be enabled to allow per-test
+   * IP isolation via the {@code X-Forwarded-For} header. This flag must remain {@code false} in
+   * production.
    */
   private String extractIp(HttpServletRequest request) {
+    if (trustForwardedFor) {
+      String forwarded = request.getHeader("X-Forwarded-For");
+      if (forwarded != null && !forwarded.isBlank()) {
+        int comma = forwarded.indexOf(',');
+        return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
+      }
+    }
     return request.getRemoteAddr();
   }
 }
