@@ -200,9 +200,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             "0x1234");
 
     adapter.afterExecutionFailedOnchain(
-        intent(payload, ExecutionResourceType.QUESTION, "101", 7L),
-        plan(),
-        "RECEIPT_STATUS_0");
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan(), "RECEIPT_STATUS_0");
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
