@@ -39,9 +39,7 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   @Override
   public Optional<ExecutionIntent> findLatestByResource(
       ExecutionResourceType resourceType, String resourceId) {
-    return repository
-        .findLatestByResource(resourceType, resourceId, PageRequest.of(0, 1))
-        .stream()
+    return repository.findLatestByResource(resourceType, resourceId, PageRequest.of(0, 1)).stream()
         .findFirst()
         .map(this::toDomain);
   }

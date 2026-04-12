@@ -108,7 +108,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
 
   private void applyAnswerSubmit(ExecutionIntent intent, QnaEscrowExecutionPayload payload) {
     QnaQuestionProjection question = requireQuestion(payload.postId());
-    qnaProjectionPersistencePort.saveQuestion(question.syncAnswerCount(question.getAnswerCount() + 1));
+    qnaProjectionPersistencePort.saveQuestion(
+        question.syncAnswerCount(question.getAnswerCount() + 1));
     qnaProjectionPersistencePort.saveAnswer(
         QnaAnswerProjection.create(
             payload.answerId(),
@@ -128,7 +129,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     QnaQuestionProjection question = requireQuestion(payload.postId());
     requireAnswer(payload.answerId());
     qnaProjectionPersistencePort.deleteAnswerByAnswerId(payload.answerId());
-    qnaProjectionPersistencePort.saveQuestion(question.syncAnswerCount(question.getAnswerCount() - 1));
+    qnaProjectionPersistencePort.saveQuestion(
+        question.syncAnswerCount(question.getAnswerCount() - 1));
   }
 
   private void applyAnswerAccept(QnaEscrowExecutionPayload payload) {

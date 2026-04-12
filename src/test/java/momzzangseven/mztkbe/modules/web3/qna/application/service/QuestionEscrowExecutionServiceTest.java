@@ -52,7 +52,8 @@ class QuestionEscrowExecutionServiceTest {
   @InjectMocks private QuestionEscrowExecutionService service;
 
   @Test
-  @DisplayName("prepareQuestionCreate submits create execution intent without persisting projection")
+  @DisplayName(
+      "prepareQuestionCreate submits create execution intent without persisting projection")
   void prepareQuestionCreate_submitsWithoutPersistingProjection() {
     given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
         .willReturn(
@@ -136,8 +137,7 @@ class QuestionEscrowExecutionServiceTest {
         .willReturn(new QnaExecutionIntentResult("intent-2", "EIP7702", 2, null, false));
 
     service.prepareAnswerAccept(
-        new PrepareAnswerAcceptCommand(
-            101L, 201L, 7L, 22L, "로컬 질문 본문", "로컬 답변 본문", 50L));
+        new PrepareAnswerAcceptCommand(101L, 201L, 7L, 22L, "로컬 질문 본문", "로컬 답변 본문", 50L));
 
     ArgumentCaptor<QnaEscrowExecutionRequest> requestCaptor =
         ArgumentCaptor.forClass(QnaEscrowExecutionRequest.class);
@@ -146,8 +146,7 @@ class QuestionEscrowExecutionServiceTest {
     assertThat(request.actionType()).isEqualTo(QnaExecutionActionType.QNA_ANSWER_ACCEPT);
     assertThat(request.questionHash()).isEqualTo(storedQuestionHash);
     assertThat(request.contentHash()).isEqualTo(storedAnswerHash);
-    assertThat(request.questionHash())
-        .isNotEqualTo(QnaContentHashFactory.hash("로컬 질문 본문"));
+    assertThat(request.questionHash()).isNotEqualTo(QnaContentHashFactory.hash("로컬 질문 본문"));
     assertThat(request.contentHash()).isNotEqualTo(QnaContentHashFactory.hash("로컬 답변 본문"));
 
     verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
