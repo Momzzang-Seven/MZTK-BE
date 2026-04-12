@@ -401,7 +401,8 @@ class PostControllerIntegrationTest {
   @Test
   @DisplayName("GET /posts/{id} keeps question.isSolved contract using resolved status")
   void getQuestionPostDetail_keepsIsSolvedContractFromStatus() throws Exception {
-    Long postId = createQuestionPost(501L, "resolved question", "resolved content", 80L, List.of("q"));
+    Long postId =
+        createQuestionPost(501L, "resolved question", "resolved content", 80L, List.of("q"));
     Long answerId =
         answerJpaRepository
             .save(
