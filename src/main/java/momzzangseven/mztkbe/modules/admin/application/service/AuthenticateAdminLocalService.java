@@ -10,7 +10,6 @@ import momzzangseven.mztkbe.modules.admin.application.port.out.AdminPasswordEnco
 import momzzangseven.mztkbe.modules.admin.application.port.out.LoadAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.application.port.out.SaveAdminAccountPort;
 import momzzangseven.mztkbe.modules.admin.domain.model.AdminAccount;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,20 +31,14 @@ public class AuthenticateAdminLocalService implements AuthenticateAdminLocalUseC
   public AuthenticateAdminLocalResult execute(AuthenticateAdminLocalCommand command) {
     AdminAccount account =
         loadAdminAccountPort
-            .findActiveByLoginId(command.loginId())
+            .findActiveByLoginIdForUpdate(command.loginId())
             .orElseThrow(() -> new InvalidCredentialsException("Invalid admin credentials"));
 
     if (!adminPasswordEncoderPort.matches(command.password(), account.getPasswordHash())) {
       throw new InvalidCredentialsException("Invalid admin credentials");
     }
 
-    try {
-      saveAdminAccountPort.saveAndFlush(account.updateLastLogin());
-    } catch (ObjectOptimisticLockingFailureException e) {
-      log.warn(
-          "Admin account deleted during login (concurrent recovery reseed): {}", command.loginId());
-      throw new InvalidCredentialsException("Admin account no longer exists");
-    }
+    saveAdminAccountPort.save(account.updateLastLogin());
 
     return new AuthenticateAdminLocalResult(account.getUserId());
   }

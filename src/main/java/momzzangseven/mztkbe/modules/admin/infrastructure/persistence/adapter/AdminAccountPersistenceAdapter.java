@@ -37,6 +37,11 @@ public class AdminAccountPersistenceAdapter
   }
 
   @Override
+  public Optional<AdminAccount> findActiveByLoginIdForUpdate(String loginId) {
+    return repository.findByLoginIdAndDeletedAtIsNullForUpdate(loginId).map(this::toDomain);
+  }
+
+  @Override
   public boolean existsByLoginId(String loginId) {
     return repository.existsByLoginIdAndDeletedAtIsNull(loginId);
   }

@@ -58,9 +58,10 @@ class AuthenticateAdminLocalServiceTest {
       // given
       AdminAccount account = createAdminAccount(1L, "admin001", "hashed");
 
-      given(loadAdminAccountPort.findActiveByLoginId("admin001")).willReturn(Optional.of(account));
+      given(loadAdminAccountPort.findActiveByLoginIdForUpdate("admin001"))
+          .willReturn(Optional.of(account));
       given(adminPasswordEncoderPort.matches("rawPassword", "hashed")).willReturn(true);
-      given(saveAdminAccountPort.saveAndFlush(any(AdminAccount.class)))
+      given(saveAdminAccountPort.save(any(AdminAccount.class)))
           .willAnswer(inv -> inv.getArgument(0));
 
       // when
@@ -69,7 +70,7 @@ class AuthenticateAdminLocalServiceTest {
 
       // then
       assertThat(result.userId()).isEqualTo(1L);
-      verify(saveAdminAccountPort, times(1)).saveAndFlush(any(AdminAccount.class));
+      verify(saveAdminAccountPort, times(1)).save(any(AdminAccount.class));
     }
 
     @Test
@@ -78,16 +79,17 @@ class AuthenticateAdminLocalServiceTest {
       // given
       AdminAccount account = createAdminAccount(1L, "admin001", "hashed");
 
-      given(loadAdminAccountPort.findActiveByLoginId("admin001")).willReturn(Optional.of(account));
+      given(loadAdminAccountPort.findActiveByLoginIdForUpdate("admin001"))
+          .willReturn(Optional.of(account));
       given(adminPasswordEncoderPort.matches("rawPassword", "hashed")).willReturn(true);
-      given(saveAdminAccountPort.saveAndFlush(any(AdminAccount.class)))
+      given(saveAdminAccountPort.save(any(AdminAccount.class)))
           .willAnswer(inv -> inv.getArgument(0));
 
       // when
       service.execute(new AuthenticateAdminLocalCommand("admin001", "rawPassword"));
 
       // then
-      verify(saveAdminAccountPort, times(1)).saveAndFlush(any(AdminAccount.class));
+      verify(saveAdminAccountPort, times(1)).save(any(AdminAccount.class));
     }
   }
 
@@ -99,7 +101,8 @@ class AuthenticateAdminLocalServiceTest {
     @DisplayName("존재하지 않는 loginId로 인증하면 InvalidCredentialsException을 던진다")
     void execute_AccountNotFound_ThrowsInvalidCredentials() {
       // given
-      given(loadAdminAccountPort.findActiveByLoginId("unknown")).willReturn(Optional.empty());
+      given(loadAdminAccountPort.findActiveByLoginIdForUpdate("unknown"))
+          .willReturn(Optional.empty());
 
       // when & then
       assertThatThrownBy(
@@ -108,7 +111,7 @@ class AuthenticateAdminLocalServiceTest {
           .hasMessageContaining("Invalid admin credentials");
 
       verify(adminPasswordEncoderPort, never()).matches(any(), any());
-      verify(saveAdminAccountPort, never()).saveAndFlush(any());
+      verify(saveAdminAccountPort, never()).save(any());
     }
 
     @Test
@@ -117,7 +120,8 @@ class AuthenticateAdminLocalServiceTest {
       // given
       AdminAccount account = createAdminAccount(1L, "admin001", "hashed");
 
-      given(loadAdminAccountPort.findActiveByLoginId("admin001")).willReturn(Optional.of(account));
+      given(loadAdminAccountPort.findActiveByLoginIdForUpdate("admin001"))
+          .willReturn(Optional.of(account));
       given(adminPasswordEncoderPort.matches("wrongPassword", "hashed")).willReturn(false);
 
       // when & then
@@ -126,7 +130,7 @@ class AuthenticateAdminLocalServiceTest {
           .isInstanceOf(InvalidCredentialsException.class)
           .hasMessageContaining("Invalid admin credentials");
 
-      verify(saveAdminAccountPort, never()).saveAndFlush(any());
+      verify(saveAdminAccountPort, never()).save(any());
     }
   }
 }
