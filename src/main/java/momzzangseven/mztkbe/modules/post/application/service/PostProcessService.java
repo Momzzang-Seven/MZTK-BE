@@ -50,7 +50,9 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
       updatePostImagesPort.updateImages(currentUserId, postId, post.getType(), command.imageIds());
     }
 
-    if (PostType.QUESTION.equals(post.getType()) && command.content() != null) {
+    if (PostType.QUESTION.equals(post.getType())
+        && command.content() != null
+        && !command.content().equals(post.getContent())) {
       questionLifecycleExecutionPort.prepareQuestionUpdate(
           postId, currentUserId, updatedPost.getContent(), updatedPost.getReward());
     }

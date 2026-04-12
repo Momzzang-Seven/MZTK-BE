@@ -80,13 +80,14 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
 
     RewardContext rewardContext = loadRewardContext(command.rewardMztk());
     String answerHash = QnaContentHashFactory.hash(command.answerContent());
-    qnaProjectionPersistencePort.saveQuestion(
+    QnaQuestionProjection question =
         findOrBootstrapQuestion(
                 command.postId(),
                 command.questionWriterUserId(),
                 command.questionContent(),
                 rewardContext)
-            .syncAnswerCount(command.activeAnswerCount()));
+            .syncAnswerCount(command.activeAnswerCount());
+    qnaProjectionPersistencePort.saveQuestion(question);
     qnaProjectionPersistencePort.saveAnswer(
         findOrBootstrapAnswer(
                 command.answerId(),
@@ -107,7 +108,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
             null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
-            QnaContentHashFactory.hash(command.questionContent()),
+            question.getQuestionHash(),
             answerHash));
   }
 
@@ -116,13 +117,14 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
     command.validate();
 
     RewardContext rewardContext = loadRewardContext(command.rewardMztk());
-    qnaProjectionPersistencePort.saveQuestion(
+    QnaQuestionProjection question =
         findOrBootstrapQuestion(
                 command.postId(),
                 command.questionWriterUserId(),
                 command.questionContent(),
                 rewardContext)
-            .syncAnswerCount(command.activeAnswerCount()));
+            .syncAnswerCount(command.activeAnswerCount());
+    qnaProjectionPersistencePort.saveQuestion(question);
     qnaProjectionPersistencePort.deleteAnswerByAnswerId(command.answerId());
 
     return submit(
@@ -137,7 +139,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
             null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
-            QnaContentHashFactory.hash(command.questionContent()),
+            question.getQuestionHash(),
             null));
   }
 
