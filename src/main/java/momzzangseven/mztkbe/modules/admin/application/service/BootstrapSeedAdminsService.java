@@ -28,9 +28,9 @@ public class BootstrapSeedAdminsService implements BootstrapSeedAdminsUseCase {
   @Transactional
   public SeedBootstrapOutcome execute() {
     int requiredSeedCount = loadSeedPolicyPort.getSeedCount();
-    long currentCount = countActiveAdminAccountsPort.countActive();
+    long currentCount = countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name());
     if (currentCount >= requiredSeedCount) {
-      log.info("Seed bootstrap skipped: {} active admin(s) already exist", currentCount);
+      log.info("Seed bootstrap skipped: {} active seed admin(s) already exist", currentCount);
       return new SeedBootstrapOutcome(false, (int) currentCount, null);
     }
 
