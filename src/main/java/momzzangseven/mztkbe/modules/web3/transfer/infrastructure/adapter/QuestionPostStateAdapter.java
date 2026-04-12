@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.post.application.dto.MarkQuestionPostSolvedCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.MarkQuestionPostSolvedUseCase;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.MarkQuestionPostSolvedPort;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,6 @@ public class QuestionPostStateAdapter implements MarkQuestionPostSolvedPort {
 
   @Override
   public int markSolved(Long postId) {
-    return markQuestionPostSolvedUseCase.execute(postId);
+    return markQuestionPostSolvedUseCase.execute(new MarkQuestionPostSolvedCommand(postId));
   }
 }

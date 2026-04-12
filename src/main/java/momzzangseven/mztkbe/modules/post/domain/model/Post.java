@@ -95,8 +95,9 @@ public class Post {
   }
 
   public void validateDeletable(long activeAnswerCount) {
-    if (PostType.QUESTION.equals(this.type) && activeAnswerCount > 0) {
-      throw new PostInvalidInputException("An answered question post cannot be deleted.");
+    if (PostType.QUESTION.equals(this.type)
+        && (activeAnswerCount > 0 || Boolean.TRUE.equals(isSolved))) {
+      throw new PostInvalidInputException("An answered or solved question post cannot be deleted.");
     }
   }
 
@@ -132,8 +133,9 @@ public class Post {
   }
 
   public void validateEditable(long activeAnswerCount) {
-    if (PostType.QUESTION.equals(this.type) && activeAnswerCount > 0) {
-      throw new PostInvalidInputException("An answered question post cannot be edited.");
+    if (PostType.QUESTION.equals(this.type)
+        && (activeAnswerCount > 0 || Boolean.TRUE.equals(isSolved))) {
+      throw new PostInvalidInputException("An answered or solved question post cannot be edited.");
     }
   }
 
