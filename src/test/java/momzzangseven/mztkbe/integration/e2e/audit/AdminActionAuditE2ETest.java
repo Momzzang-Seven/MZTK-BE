@@ -231,8 +231,8 @@ class AdminActionAuditE2ETest {
     jdbcTemplate.update(
         "INSERT INTO web3_transactions ("
             + "idempotency_key, reference_type, reference_id, from_user_id, to_user_id, "
-            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, created_at, updated_at"
-            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, signed_at, broadcasted_at, failure_reason, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         idempotencyKey,
         "LEVEL_UP_REWARD",
         "ref-" + idempotencyKey,
@@ -244,6 +244,9 @@ class AdminActionAuditE2ETest {
         "EIP1559",
         "UNCONFIRMED",
         txHash,
+        now,
+        now,
+        "RECEIPT_TIMEOUT",
         now,
         now);
     Long id =
@@ -265,8 +268,8 @@ class AdminActionAuditE2ETest {
     jdbcTemplate.update(
         "INSERT INTO web3_transactions ("
             + "idempotency_key, reference_type, reference_id, from_user_id, to_user_id, "
-            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, created_at, updated_at"
-            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, signed_at, broadcasted_at, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         idempotencyKey,
         "LEVEL_UP_REWARD",
         "ref-" + idempotencyKey,
@@ -278,6 +281,8 @@ class AdminActionAuditE2ETest {
         "EIP1559",
         "PENDING",
         txHash,
+        now,
+        now,
         now,
         now);
     Long id =
@@ -291,7 +296,7 @@ class AdminActionAuditE2ETest {
 
   private void stubReceiptSuccess(String txHash) {
     given(web3ContractPort.getReceipt(txHash))
-        .willReturn(new Web3ContractPort.ReceiptResult(txHash, true, true, "primary", false, null));
+        .willReturn(new Web3ContractPort.ReceiptResult(txHash, true, true, "main", false, null));
   }
 
   private void stubReceiptSuccessForAny() {
@@ -299,7 +304,7 @@ class AdminActionAuditE2ETest {
         .willAnswer(
             inv ->
                 new Web3ContractPort.ReceiptResult(
-                    inv.getArgument(0, String.class), true, true, "primary", false, null));
+                    inv.getArgument(0, String.class), true, true, "main", false, null));
   }
 
   private ResponseEntity<String> markSucceeded(

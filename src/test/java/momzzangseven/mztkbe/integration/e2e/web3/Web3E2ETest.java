@@ -181,8 +181,8 @@ class Web3E2ETest {
     Map<String, Object> domain = new LinkedHashMap<>();
     domain.put("name", "MomzzangSeven");
     domain.put("version", "1");
-    domain.put("chainId", 1);
-    domain.put("verifyingContract", "0x0000000000000000000000000000000000000001");
+    domain.put("chainId", 1337);
+    domain.put("verifyingContract", "0x0000000000000000000000000000000000000000");
     eip712Json.put("domain", domain);
 
     Map<String, String> msgData = new LinkedHashMap<>();
