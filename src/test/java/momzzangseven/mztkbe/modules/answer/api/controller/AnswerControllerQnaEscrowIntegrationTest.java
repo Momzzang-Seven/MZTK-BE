@@ -16,7 +16,6 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
-import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -45,8 +44,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * AnswerLifecycleExecutionAdapter 가 실제로 와이어링된 상태에서
- * 답변 CRUD 의 QnA escrow 흐름을 검증합니다.
+ * AnswerLifecycleExecutionAdapter 가 실제로 와이어링된 상태에서 답변 CRUD 의 QnA escrow 흐름을 검증합니다.
  *
  * <p>web3.reward-token.enabled=true + web3.eip7702.enabled=true 로 활성화하고,
  * AnswerEscrowExecutionUseCase 를 MockitoBean 으로 대체해 실제 블록체인 호출을 차단합니다.
@@ -157,7 +155,8 @@ class AnswerControllerQnaEscrowIntegrationTest {
   }
 
   @Test
-  @DisplayName("DELETE /questions/{postId}/answers/{answerId} — prepareAnswerDelete 가 실제 어댑터 경로로 호출됨")
+  @DisplayName(
+      "DELETE /questions/{postId}/answers/{answerId} — prepareAnswerDelete 가 실제 어댑터 경로로 호출됨")
   void deleteAnswer_invokesEscrowAdapterPath() throws Exception {
     Long answerId = createAnswer(503L, "삭제될 답변");
 

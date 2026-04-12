@@ -22,11 +22,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -132,8 +132,7 @@ class MarkExecutionIntentOutcomeServiceTest {
             new ExecutionActionPlan(
                 BigInteger.ZERO,
                 ExecutionReferenceType.USER_TO_SERVER,
-                List.of(
-                    new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
     doThrow(new IllegalStateException("missing qna question projection: postId=101"))
         .when(executionActionHandlerPort)
         .afterExecutionConfirmed(any(), any());
@@ -154,9 +153,7 @@ class MarkExecutionIntentOutcomeServiceTest {
   @Test
   @DisplayName("이미 CONFIRMED 상태인 intent 는 재처리하지 않는다")
   void markSucceeded_alreadyConfirmed_doesNothing() {
-    ExecutionIntent confirmedIntent =
-        pendingEip1559Intent()
-            .confirm(FIXED_NOW.plusSeconds(3));
+    ExecutionIntent confirmedIntent = pendingEip1559Intent().confirm(FIXED_NOW.plusSeconds(3));
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(confirmedIntent));
 

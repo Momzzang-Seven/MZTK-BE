@@ -151,7 +151,8 @@ class QnaEscrowE2ETest {
   @AfterEach
   void tearDown() {
     if (createdPostId != null) {
-      jdbcTemplate.update("DELETE FROM web3_execution_intents WHERE resource_id = ?", createdPostId.toString());
+      jdbcTemplate.update(
+          "DELETE FROM web3_execution_intents WHERE resource_id = ?", createdPostId.toString());
       jdbcTemplate.update("DELETE FROM post_tags WHERE post_id = ?", createdPostId);
       jdbcTemplate.update("DELETE FROM posts WHERE id = ?", createdPostId);
     }
@@ -236,7 +237,8 @@ class QnaEscrowE2ETest {
     restTemplate.exchange(
         baseUrl + "/auth/signup",
         HttpMethod.POST,
-        new HttpEntity<>(Map.of("email", email, "password", password, "nickname", nickname), headers),
+        new HttpEntity<>(
+            Map.of("email", email, "password", password, "nickname", nickname), headers),
         String.class);
   }
 
@@ -247,7 +249,8 @@ class QnaEscrowE2ETest {
         restTemplate.exchange(
             baseUrl + "/auth/login",
             HttpMethod.POST,
-            new HttpEntity<>(Map.of("provider", "LOCAL", "email", email, "password", password), headers),
+            new HttpEntity<>(
+                Map.of("provider", "LOCAL", "email", email, "password", password), headers),
             String.class);
     return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
   }

@@ -90,15 +90,13 @@ class ExecutionIntentControllerTest {
                     new SignRequestBundle.AuthorizationSignRequest(
                         11155420L, "0x" + "1".repeat(40), 0L, "0x" + "a".repeat(64)),
                     new SignRequestBundle.SubmitSignRequest(
-                        "0x" + "b".repeat(64),
-                        expiresAt.toEpochSecond(ZoneOffset.UTC))),
+                        "0x" + "b".repeat(64), expiresAt.toEpochSecond(ZoneOffset.UTC))),
                 null,
                 null,
                 null));
 
     mockMvc
-        .perform(
-            get("/users/me/web3/execution-intents/{id}", INTENT_ID).with(userPrincipal(7L)))
+        .perform(get("/users/me/web3/execution-intents/{id}", INTENT_ID).with(userPrincipal(7L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.resource.type").value("QUESTION"))
@@ -135,8 +133,7 @@ class ExecutionIntentControllerTest {
                 "0x" + "c".repeat(64)));
 
     mockMvc
-        .perform(
-            get("/users/me/web3/execution-intents/{id}", INTENT_ID).with(userPrincipal(7L)))
+        .perform(get("/users/me/web3/execution-intents/{id}", INTENT_ID).with(userPrincipal(7L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.executionIntent.status").value("PENDING_ONCHAIN"))
         .andExpect(jsonPath("$.data.transaction.id").value(42))
@@ -161,11 +158,15 @@ class ExecutionIntentControllerTest {
   @Test
   @DisplayName("POST /{id}/execute — EIP7702 서명 제출 성공 시 202 반환")
   void executeExecutionIntent_success_returns202() throws Exception {
-    BDDMockito.given(executeExecutionIntentUseCase.execute(any(ExecuteExecutionIntentCommand.class)))
+    BDDMockito.given(
+            executeExecutionIntentUseCase.execute(any(ExecuteExecutionIntentCommand.class)))
         .willReturn(
             new ExecuteExecutionIntentResult(
-                INTENT_ID, ExecutionIntentStatus.PENDING_ONCHAIN, 42L,
-                ExecutionTransactionStatus.CREATED, null));
+                INTENT_ID,
+                ExecutionIntentStatus.PENDING_ONCHAIN,
+                42L,
+                ExecutionTransactionStatus.CREATED,
+                null));
 
     mockMvc
         .perform(
@@ -209,7 +210,7 @@ class ExecutionIntentControllerTest {
     var token =
         new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
             userId, null, authorities);
-    return org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors
-        .authentication(token);
+    return org.springframework.security.test.web.servlet.request
+        .SecurityMockMvcRequestPostProcessors.authentication(token);
   }
 }
