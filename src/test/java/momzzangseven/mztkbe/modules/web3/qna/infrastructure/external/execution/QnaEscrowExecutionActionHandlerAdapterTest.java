@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
@@ -37,6 +38,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaEscrowExecutionActionHandlerAdapterTest {
 
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
+  @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
 
   private QnaEscrowExecutionActionHandlerAdapter adapter;
   private ObjectMapper objectMapper;
@@ -45,7 +47,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   void setUp() {
     objectMapper = new ObjectMapper();
     adapter =
-        new QnaEscrowExecutionActionHandlerAdapter(objectMapper, qnaProjectionPersistencePort);
+        new QnaEscrowExecutionActionHandlerAdapter(
+            objectMapper, qnaProjectionPersistencePort, qnaAcceptStateSyncPort);
   }
 
   @Test
@@ -164,6 +167,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     adapter.afterExecutionConfirmed(
         intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan());
 
+    verify(qnaAcceptStateSyncPort).confirmAccepted(101L, 201L);
     ArgumentCaptor<QnaAnswerProjection> answerCaptor =
         ArgumentCaptor.forClass(QnaAnswerProjection.class);
     verify(qnaProjectionPersistencePort).saveAnswer(answerCaptor.capture());
@@ -177,6 +181,30 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     assertThat(questionCaptor.getValue().getAcceptedAnswerId())
         .isEqualTo(QnaEscrowIdCodec.answerId(201L));
     assertThat(questionCaptor.getValue().getState()).isEqualTo(QnaQuestionState.PAID_OUT);
+  }
+
+  @Test
+  @DisplayName("afterExecutionFailedOnchain rolls back pending accept state")
+  void afterExecutionFailedOnchain_rollsBackPendingAccept() throws Exception {
+    QnaEscrowExecutionPayload payload =
+        new QnaEscrowExecutionPayload(
+            QnaExecutionActionType.QNA_ANSWER_ACCEPT,
+            101L,
+            201L,
+            "0x" + "1".repeat(40),
+            "0x" + "2".repeat(40),
+            new BigInteger("50000000000000000000"),
+            "0x" + "c".repeat(64),
+            "0x" + "d".repeat(64),
+            "0x" + "3".repeat(40),
+            "0x1234");
+
+    adapter.afterExecutionFailedOnchain(
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        "RECEIPT_STATUS_0");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
 
   private ExecutionIntent intent(

@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
@@ -42,7 +43,8 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                     Boolean.TRUE.equals(post.getIsSolved()),
                     PostType.QUESTION.equals(post.getType()),
                     post.getContent(),
-                    post.getReward()));
+                    post.getReward(),
+                    post.getStatus() != PostStatus.OPEN));
   }
 
   @Override

@@ -371,6 +371,19 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(CreateAnswerCommand) throws when the question is pending accept")
+    void createAnswer_throws_whenPostIsPendingAccept() {
+      CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, true);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(CannotAnswerSolvedPostException.class);
+    }
+
+    @Test
     @DisplayName("execute(CreateAnswerCommand) throws when the user answers his or her own post")
     void createAnswer_throws_whenAnswerOwnPost() {
       CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", List.of());
@@ -492,6 +505,22 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(UpdateAnswerCommand) throws when parent question is pending accept")
+    void updateAnswer_throws_whenPostIsPendingAccept() {
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(1L));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, true);
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(CannotUpdateAnswerOnSolvedPostException.class);
+      verifyNoInteractions(updateAnswerImagesPort);
+    }
+
+    @Test
     @DisplayName("execute(UpdateAnswerCommand) propagates image sync failure")
     void updateAnswer_throws_whenImageSyncFails() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(1L));
@@ -559,6 +588,23 @@ class AnswerServiceTest {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, true, true);
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
+      verify(deleteAnswerPort, never()).deleteAnswer(100L);
+      verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("execute(DeleteAnswerCommand) throws when parent question is pending accept")
+    void deleteAnswer_throws_whenPostIsPendingAccept() {
+      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, true);
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));

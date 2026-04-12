@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionT
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
@@ -41,6 +42,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
 
   private final ObjectMapper objectMapper;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
+  private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
 
   @Override
   public boolean supports(ExecutionActionType actionType) {
@@ -67,6 +69,15 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       case QNA_ANSWER_UPDATE -> applyAnswerUpdate(payload);
       case QNA_ANSWER_DELETE -> applyAnswerDelete(payload);
       case QNA_ANSWER_ACCEPT -> applyAnswerAccept(payload);
+    }
+  }
+
+  @Override
+  public void afterExecutionFailedOnchain(
+      ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {
+    QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
+    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT) {
+      qnaAcceptStateSyncPort.rollbackPendingAccept(payload.postId(), payload.answerId());
     }
   }
 
@@ -134,6 +145,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   }
 
   private void applyAnswerAccept(QnaEscrowExecutionPayload payload) {
+    qnaAcceptStateSyncPort.confirmAccepted(payload.postId(), payload.answerId());
     QnaQuestionProjection question = requireQuestion(payload.postId());
     QnaAnswerProjection answer = requireAnswer(payload.answerId());
     qnaProjectionPersistencePort.saveAnswer(answer.markAccepted());

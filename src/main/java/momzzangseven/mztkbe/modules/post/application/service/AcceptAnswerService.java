@@ -44,9 +44,14 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
     validateQuestionPost(post);
     validatePostWriter(post, command.requesterId());
     validateAnswerBelongsToPost(post, answer);
-    Post acceptedPost = post.accept(command.answerId());
+    Post acceptedPost =
+        questionLifecycleExecutionPort.managesAcceptLifecycle()
+            ? post.beginAccept(command.answerId())
+            : post.accept(command.answerId());
     Post savedPost = postPersistencePort.savePost(acceptedPost);
-    markAcceptedAnswerPort.markAccepted(answer.answerId());
+    if (!questionLifecycleExecutionPort.managesAcceptLifecycle()) {
+      markAcceptedAnswerPort.markAccepted(answer.answerId());
+    }
     questionLifecycleExecutionPort.prepareAnswerAccept(
         savedPost.getId(),
         answer.answerId(),
