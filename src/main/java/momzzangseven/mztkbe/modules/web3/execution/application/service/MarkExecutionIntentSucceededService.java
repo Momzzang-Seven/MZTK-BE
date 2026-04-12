@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -58,8 +60,17 @@ public class MarkExecutionIntentSucceededService implements MarkExecutionIntentS
   }
 
   private void afterExecutionConfirmed(ExecutionIntent intent) {
-    ExecutionActionHandlerPort handler = resolveActionHandler(intent);
-    handler.afterExecutionConfirmed(intent, handler.buildActionPlan(intent));
+    try {
+      ExecutionActionHandlerPort handler = resolveActionHandler(intent);
+      handler.afterExecutionConfirmed(intent, handler.buildActionPlan(intent));
+    } catch (Exception e) {
+      log.error(
+          "afterExecutionConfirmed handler failed for intent publicId={}, actionType={}. "
+              + "CONFIRMED status is preserved; projection sync must be retried.",
+          intent.getPublicId(),
+          intent.getActionType(),
+          e);
+    }
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {

@@ -80,6 +80,7 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
         .answerKey(answerProjection.getAnswerKey())
         .responderUserId(answerProjection.getResponderUserId())
         .contentHash(answerProjection.getContentHash())
+        .accepted(answerProjection.isAccepted())
         .build();
   }
 
@@ -91,6 +92,7 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
         .answerKey(entity.getAnswerKey())
         .responderUserId(entity.getResponderUserId())
         .contentHash(entity.getContentHash())
+        .accepted(entity.isAccepted())
         .build();
   }
 }
