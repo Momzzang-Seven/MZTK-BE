@@ -62,8 +62,7 @@ class AnswerEscrowExecutionServiceTest {
     assertThatThrownBy(
             () ->
                 service.prepareAnswerCreate(
-                    new PrepareAnswerCreateCommand(
-                        101L, 201L, 22L, 7L, "질문 본문", 50L, "답변 본문", 1)))
+                    new PrepareAnswerCreateCommand(101L, 201L, 22L, 7L, "질문 본문", 50L, "답변 본문", 1)))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("question is not registered onchain yet");
   }
@@ -116,8 +115,7 @@ class AnswerEscrowExecutionServiceTest {
     assertThatThrownBy(
             () ->
                 service.prepareAnswerUpdate(
-                    new PrepareAnswerUpdateCommand(
-                        101L, 201L, 22L, 7L, "질문 본문", 50L, "수정된 답변", 1)))
+                    new PrepareAnswerUpdateCommand(101L, 201L, 22L, 7L, "질문 본문", 50L, "수정된 답변", 1)))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("answer is not registered onchain yet");
   }

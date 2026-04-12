@@ -32,16 +32,19 @@ class Web3ExecutionIntentJpaRepositoryTest {
     persistIntent("intent-new", "root-b", 1, 7L, ExecutionResourceType.QUESTION, "101", at(11, 0));
 
     List<Web3ExecutionIntentEntity> result =
-        repository.findLatestByResource(ExecutionResourceType.QUESTION, "101", PageRequest.of(0, 1));
+        repository.findLatestByResource(
+            ExecutionResourceType.QUESTION, "101", PageRequest.of(0, 1));
 
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getPublicId()).isEqualTo("intent-new");
   }
 
   @Test
-  @DisplayName("findLatestByRequesterAndResource also respects requester filter and createdAt ordering")
+  @DisplayName(
+      "findLatestByRequesterAndResource also respects requester filter and createdAt ordering")
   void findLatestByRequesterAndResource_filtersByRequester() {
-    persistIntent("intent-other-user", "root-o", 5, 8L, ExecutionResourceType.ANSWER, "201", at(12, 0));
+    persistIntent(
+        "intent-other-user", "root-o", 5, 8L, ExecutionResourceType.ANSWER, "201", at(12, 0));
     persistIntent("intent-old", "root-a", 4, 7L, ExecutionResourceType.ANSWER, "201", at(10, 0));
     persistIntent("intent-new", "root-b", 1, 7L, ExecutionResourceType.ANSWER, "201", at(11, 0));
 

@@ -44,7 +44,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   @BeforeEach
   void setUp() {
     objectMapper = new ObjectMapper();
-    adapter = new QnaEscrowExecutionActionHandlerAdapter(objectMapper, qnaProjectionPersistencePort);
+    adapter =
+        new QnaEscrowExecutionActionHandlerAdapter(objectMapper, qnaProjectionPersistencePort);
   }
 
   @Test
@@ -63,7 +64,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             "0x" + "3".repeat(40),
             "0x1234");
 
-    adapter.afterExecutionConfirmed(intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan());
+    adapter.afterExecutionConfirmed(
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan());
 
     ArgumentCaptor<QnaQuestionProjection> captor =
         ArgumentCaptor.forClass(QnaQuestionProjection.class);
@@ -92,7 +94,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             "0x" + "3".repeat(40),
             "0x1234");
 
-    adapter.afterExecutionConfirmed(intent(payload, ExecutionResourceType.ANSWER, "201", 22L), plan());
+    adapter.afterExecutionConfirmed(
+        intent(payload, ExecutionResourceType.ANSWER, "201", 22L), plan());
 
     ArgumentCaptor<QnaQuestionProjection> questionCaptor =
         ArgumentCaptor.forClass(QnaQuestionProjection.class);
@@ -127,7 +130,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             "0x" + "3".repeat(40),
             "0x1234");
 
-    adapter.afterExecutionConfirmed(intent(payload, ExecutionResourceType.ANSWER, "201", 22L), plan());
+    adapter.afterExecutionConfirmed(
+        intent(payload, ExecutionResourceType.ANSWER, "201", 22L), plan());
 
     verify(qnaProjectionPersistencePort).deleteAnswerByAnswerId(201L);
     ArgumentCaptor<QnaQuestionProjection> questionCaptor =
@@ -157,7 +161,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             "0x" + "3".repeat(40),
             "0x1234");
 
-    adapter.afterExecutionConfirmed(intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan());
+    adapter.afterExecutionConfirmed(
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan());
 
     ArgumentCaptor<QnaAnswerProjection> answerCaptor =
         ArgumentCaptor.forClass(QnaAnswerProjection.class);

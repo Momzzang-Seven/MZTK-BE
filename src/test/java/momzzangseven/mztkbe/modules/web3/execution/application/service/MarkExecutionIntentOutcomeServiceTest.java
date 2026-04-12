@@ -55,7 +55,8 @@ class MarkExecutionIntentOutcomeServiceTest {
   @Test
   void markSucceeded_confirmsPendingIntent() {
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
-    when(executionActionHandlerPort.buildActionPlan(argThat(intent -> intent.getSubmittedTxId().equals(12L))))
+    when(executionActionHandlerPort.buildActionPlan(
+            argThat(intent -> intent.getSubmittedTxId().equals(12L))))
         .thenReturn(
             new ExecutionActionPlan(
                 BigInteger.ZERO,
