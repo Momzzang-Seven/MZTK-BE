@@ -26,7 +26,7 @@ class RecoveryRateLimitFilterTest {
 
   @BeforeEach
   void setUp() {
-    filter = new RecoveryRateLimitFilter(objectMapper);
+    filter = new RecoveryRateLimitFilter(objectMapper, false);
   }
 
   private MockHttpServletRequest postRecoveryRequest(String remoteAddr) {
