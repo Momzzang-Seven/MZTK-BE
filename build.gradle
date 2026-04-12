@@ -113,6 +113,7 @@ jacoco {
 // 기본 test 태스크에서 @Tag("e2e") 태그가 붙은 테스트는 제외.
 // ./gradlew test 실행 시 e2e테스트는 실행되지 않음.
 tasks.named('test') {
+    maxHeapSize = '1024m'
     useJUnitPlatform {
         excludeTags 'e2e'
     }
@@ -133,6 +134,7 @@ tasks.named('jacocoTestReport') {
 tasks.register('e2eTest', Test) {
     description = 'Runs @Tag("e2e") integration tests against a real PostgreSQL instance.'
     group = 'verification'
+    maxHeapSize = '1024m'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform {
