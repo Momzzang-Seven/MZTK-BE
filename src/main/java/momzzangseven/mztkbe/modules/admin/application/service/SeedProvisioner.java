@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.admin.application.service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -72,7 +73,8 @@ class SeedProvisioner {
 
   private String buildEmail(AdminRole role, String loginId, int ordinal) {
     if (role == AdminRole.ADMIN_SEED) {
-      return "seed-admin-" + ordinal + "@internal.mztk.local";
+      long timestamp = Instant.now().toEpochMilli();
+      return "seed-admin-" + ordinal + "-" + timestamp + "@internal.mztk.local";
     }
     return "admin-" + loginId + "@internal.mztk.local";
   }
