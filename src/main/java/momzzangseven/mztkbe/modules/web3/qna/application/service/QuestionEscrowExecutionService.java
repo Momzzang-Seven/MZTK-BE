@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.qna.application.service;
 
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -52,16 +53,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
 
     RewardContext rewardContext = loadRewardContext(command.rewardMztk());
     String questionHash = QnaContentHashFactory.hash(command.questionContent());
-    String questionId = QnaEscrowIdCodec.questionId(command.postId());
-
-    qnaProjectionPersistencePort.saveQuestion(
-        QnaQuestionProjection.create(
-            command.postId(),
-            command.requesterUserId(),
-            questionId,
-            rewardContext.tokenAddress(),
-            rewardContext.amountWei(),
-            questionHash));
 
     return submit(
         new QnaEscrowExecutionRequest(
@@ -85,14 +76,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
 
     RewardContext rewardContext = loadRewardContext(command.rewardMztk());
     String questionHash = QnaContentHashFactory.hash(command.questionContent());
-    QnaQuestionProjection question =
-        findOrBootstrapQuestion(
-                command.postId(),
-                command.requesterUserId(),
-                command.questionContent(),
-                rewardContext)
-            .updateQuestionHash(questionHash);
-    qnaProjectionPersistencePort.saveQuestion(question);
+    requireQuestionProjection(command.postId());
 
     return submit(
         new QnaEscrowExecutionRequest(
@@ -115,14 +99,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
     command.validate();
 
     RewardContext rewardContext = loadRewardContext(command.rewardMztk());
-    QnaQuestionProjection question =
-        findOrBootstrapQuestion(
-                command.postId(),
-                command.requesterUserId(),
-                command.questionContent(),
-                rewardContext)
-            .markDeleted();
-    qnaProjectionPersistencePort.saveQuestion(question);
+    QnaQuestionProjection question = requireQuestionProjection(command.postId());
 
     return submit(
         new QnaEscrowExecutionRequest(
@@ -145,26 +122,8 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
     command.validate();
 
     RewardContext rewardContext = loadRewardContext(command.rewardMztk());
-    String questionHash = QnaContentHashFactory.hash(command.questionContent());
-    String answerHash = QnaContentHashFactory.hash(command.answerContent());
-    String answerKey = QnaEscrowIdCodec.answerId(command.answerId());
-
-    QnaQuestionProjection question =
-        findOrBootstrapQuestion(
-                command.postId(),
-                command.requesterUserId(),
-                command.questionContent(),
-                rewardContext)
-            .updateQuestionHash(questionHash)
-            .markAccepted(answerKey);
-    qnaProjectionPersistencePort.saveQuestion(question);
-    qnaProjectionPersistencePort.saveAnswer(
-        findOrBootstrapAnswer(
-                command.answerId(),
-                command.postId(),
-                command.answerWriterUserId(),
-                command.answerContent())
-            .updateContentHash(answerHash));
+    QnaQuestionProjection question = requireQuestionProjection(command.postId());
+    QnaAnswerProjection answer = requireAnswerProjection(command.answerId());
 
     return submit(
         new QnaEscrowExecutionRequest(
@@ -178,38 +137,26 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
-            questionHash,
-            answerHash));
+            question.getQuestionHash(),
+            answer.getContentHash()));
   }
 
-  private QnaQuestionProjection findOrBootstrapQuestion(
-      Long postId, Long requesterUserId, String questionContent, RewardContext rewardContext) {
+  private QnaQuestionProjection requireQuestionProjection(Long postId) {
     return qnaProjectionPersistencePort
         .findQuestionByPostIdForUpdate(postId)
-        .orElseGet(
+        .orElseThrow(
             () ->
-                QnaQuestionProjection.create(
-                    postId,
-                    requesterUserId,
-                    QnaEscrowIdCodec.questionId(postId),
-                    rewardContext.tokenAddress(),
-                    rewardContext.amountWei(),
-                    QnaContentHashFactory.hash(questionContent)));
+                new Web3InvalidInputException(
+                    "question is not registered onchain yet: postId=" + postId));
   }
 
-  private QnaAnswerProjection findOrBootstrapAnswer(
-      Long answerId, Long postId, Long responderUserId, String answerContent) {
+  private QnaAnswerProjection requireAnswerProjection(Long answerId) {
     return qnaProjectionPersistencePort
         .findAnswerByAnswerIdForUpdate(answerId)
-        .orElseGet(
+        .orElseThrow(
             () ->
-                QnaAnswerProjection.create(
-                    answerId,
-                    postId,
-                    QnaEscrowIdCodec.questionId(postId),
-                    QnaEscrowIdCodec.answerId(answerId),
-                    responderUserId,
-                    QnaContentHashFactory.hash(answerContent)));
+                new Web3InvalidInputException(
+                    "answer is not registered onchain yet: answerId=" + answerId));
   }
 
   private RewardContext loadRewardContext(Long rewardMztk) {

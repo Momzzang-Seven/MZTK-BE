@@ -40,7 +40,9 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   public Optional<ExecutionIntent> findLatestByResource(
       ExecutionResourceType resourceType, String resourceId) {
     return repository
-        .findFirstByResourceTypeAndResourceIdOrderByAttemptNoDesc(resourceType, resourceId)
+        .findLatestByResource(resourceType, resourceId, PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
         .map(this::toDomain);
   }
 
@@ -48,8 +50,10 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   public Optional<ExecutionIntent> findLatestByRequesterAndResource(
       Long requesterUserId, ExecutionResourceType resourceType, String resourceId) {
     return repository
-        .findFirstByRequesterUserIdAndResourceTypeAndResourceIdOrderByAttemptNoDesc(
-            requesterUserId, resourceType, resourceId)
+        .findLatestByRequesterAndResource(
+            requesterUserId, resourceType, resourceId, PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
         .map(this::toDomain);
   }
 
