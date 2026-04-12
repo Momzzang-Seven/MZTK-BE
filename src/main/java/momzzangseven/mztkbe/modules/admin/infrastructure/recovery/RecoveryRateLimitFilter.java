@@ -67,11 +67,14 @@ public class RecoveryRateLimitFilter extends OncePerRequestFilter {
         .build();
   }
 
+  /**
+   * Extracts the client IP address from the request.
+   *
+   * <p>Since this service does not sit behind a load balancer or reverse proxy, {@code remoteAddr}
+   * is always the direct client IP and cannot be spoofed. Trusting {@code X-Forwarded-For} is
+   * intentionally avoided to prevent header-injection bypass of rate limiting.
+   */
   private String extractIp(HttpServletRequest request) {
-    String forwarded = request.getHeader("X-Forwarded-For");
-    if (forwarded != null && !forwarded.isBlank()) {
-      return forwarded.split(",")[0].trim();
-    }
     return request.getRemoteAddr();
   }
 }
