@@ -48,6 +48,9 @@ public class QnaAnswerProjectionEntity {
   @Column(name = "content_hash", nullable = false, length = 66)
   private String contentHash;
 
+  @Column(name = "accepted", nullable = false)
+  private boolean accepted;
+
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
 

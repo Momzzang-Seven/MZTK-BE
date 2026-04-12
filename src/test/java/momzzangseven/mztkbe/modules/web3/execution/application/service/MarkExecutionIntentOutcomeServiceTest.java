@@ -1,6 +1,10 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,7 +26,9 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -115,6 +121,49 @@ class MarkExecutionIntentOutcomeServiceTest {
                                 .ExecutionIntentStatus.FAILED_ONCHAIN
                         && "FAILED_ONCHAIN".equals(updated.getLastErrorCode())
                         && "RECEIPT_STATUS_0".equals(updated.getLastErrorReason())));
+  }
+
+  @Test
+  @DisplayName("핸들러 예외 발생 시에도 CONFIRMED 상태 업데이트가 유지되고 예외가 전파되지 않는다")
+  void markSucceeded_handlerThrows_confirmedStateIsPreserved() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any()))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(
+                    new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
+    doThrow(new IllegalStateException("missing qna question projection: postId=101"))
+        .when(executionActionHandlerPort)
+        .afterExecutionConfirmed(any(), any());
+
+    ExecutionIntent pendingIntent = pendingEip1559Intent();
+    when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
+        .thenReturn(Optional.of(pendingIntent));
+    when(executionIntentPersistencePort.update(
+            argThat(updated -> updated.getSubmittedTxId().equals(12L))))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    assertThatCode(() -> succeededService.execute(12L)).doesNotThrowAnyException();
+
+    verify(executionIntentPersistencePort)
+        .update(argThat(updated -> updated.getStatus() == ExecutionIntentStatus.CONFIRMED));
+  }
+
+  @Test
+  @DisplayName("이미 CONFIRMED 상태인 intent 는 재처리하지 않는다")
+  void markSucceeded_alreadyConfirmed_doesNothing() {
+    ExecutionIntent confirmedIntent =
+        pendingEip1559Intent()
+            .confirm(FIXED_NOW.plusSeconds(3));
+    when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
+        .thenReturn(Optional.of(confirmedIntent));
+
+    succeededService.execute(12L);
+
+    verify(executionIntentPersistencePort, never()).update(any());
+    verify(executionActionHandlerPort, never()).afterExecutionConfirmed(any(), any());
   }
 
   private ExecutionIntent pendingEip1559Intent() {

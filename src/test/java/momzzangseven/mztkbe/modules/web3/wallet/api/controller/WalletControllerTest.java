@@ -13,6 +13,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.account.application.service.ExternalDisconnectCleanupService;
+import momzzangseven.mztkbe.modules.account.application.service.ExternalDisconnectRetryService;
+import momzzangseven.mztkbe.modules.account.application.service.WithdrawalHardDeleteService;
+import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ExecutionEip7702Properties;
+import momzzangseven.mztkbe.modules.web3.wallet.application.service.WalletHardDeleteService;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.UnlinkWalletCommand;
@@ -20,11 +25,18 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWall
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.UnlinkWalletUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("WalletController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
+@TestPropertySource(
+    properties = {
+      "spring.main.lazy-initialization=true",
+      "web3.eip7702.enabled=false",
+      "web3.reward-token.enabled=false"
+    })
 class WalletControllerTest {
 
   @org.springframework.beans.factory.annotation.Autowired
@@ -52,6 +64,12 @@ class WalletControllerTest {
   private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
+
+  @MockitoBean private ExecutionEip7702Properties executionEip7702Properties;
+  @MockitoBean private ExternalDisconnectRetryService externalDisconnectRetryService;
+  @MockitoBean private ExternalDisconnectCleanupService externalDisconnectCleanupService;
+  @MockitoBean private WithdrawalHardDeleteService withdrawalHardDeleteService;
+  @MockitoBean private WalletHardDeleteService walletHardDeleteService;
 
   @MockitoBean private RegisterWalletUseCase registerWalletUseCase;
   @MockitoBean private UnlinkWalletUseCase unlinkWalletUseCase;

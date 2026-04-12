@@ -136,7 +136,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   private void applyAnswerAccept(QnaEscrowExecutionPayload payload) {
     QnaQuestionProjection question = requireQuestion(payload.postId());
     QnaAnswerProjection answer = requireAnswer(payload.answerId());
-    qnaProjectionPersistencePort.saveAnswer(answer.updateContentHash(payload.contentHash()));
+    qnaProjectionPersistencePort.saveAnswer(answer.markAccepted());
     qnaProjectionPersistencePort.saveQuestion(
         question.updateQuestionHash(payload.questionHash()).markAccepted(answer.getAnswerKey()));
   }

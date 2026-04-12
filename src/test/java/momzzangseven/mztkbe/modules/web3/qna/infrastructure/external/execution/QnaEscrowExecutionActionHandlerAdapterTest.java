@@ -167,7 +167,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     ArgumentCaptor<QnaAnswerProjection> answerCaptor =
         ArgumentCaptor.forClass(QnaAnswerProjection.class);
     verify(qnaProjectionPersistencePort).saveAnswer(answerCaptor.capture());
-    assertThat(answerCaptor.getValue().getContentHash()).isEqualTo("0x" + "d".repeat(64));
+    assertThat(answerCaptor.getValue().isAccepted()).isTrue();
+    assertThat(answerCaptor.getValue().getContentHash()).isEqualTo("0x" + "b".repeat(64));
 
     ArgumentCaptor<QnaQuestionProjection> questionCaptor =
         ArgumentCaptor.forClass(QnaQuestionProjection.class);

@@ -1,0 +1,2 @@
+ALTER TABLE web3_qna_answers
+    ADD COLUMN accepted BOOLEAN NOT NULL DEFAULT FALSE;

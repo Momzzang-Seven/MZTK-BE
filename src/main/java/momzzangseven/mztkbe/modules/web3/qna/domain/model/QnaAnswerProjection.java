@@ -14,6 +14,7 @@ public class QnaAnswerProjection {
   private final String answerKey;
   private final Long responderUserId;
   private final String contentHash;
+  private final boolean accepted;
 
   public static QnaAnswerProjection create(
       Long answerId,
@@ -30,6 +31,7 @@ public class QnaAnswerProjection {
         .answerKey(answerKey)
         .responderUserId(responderUserId)
         .contentHash(contentHash)
+        .accepted(false)
         .build();
   }
 
@@ -38,6 +40,10 @@ public class QnaAnswerProjection {
       throw new Web3InvalidInputException("contentHash is required");
     }
     return toBuilder().contentHash(nextContentHash).build();
+  }
+
+  public QnaAnswerProjection markAccepted() {
+    return toBuilder().accepted(true).build();
   }
 
   private static void validate(
