@@ -11,6 +11,9 @@ public interface LoadAdminAccountPort {
 
   Optional<AdminAccount> findActiveByLoginId(String loginId);
 
+  /** Loads an active admin account by loginId with a pessimistic write lock. */
+  Optional<AdminAccount> findActiveByLoginIdForUpdate(String loginId);
+
   boolean existsByLoginId(String loginId);
 
   List<AdminAccount> findAllActive();
