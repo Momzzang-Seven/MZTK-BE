@@ -61,14 +61,15 @@ class QnaQuestionFundingPrecheckAdapterTest {
     when(getActiveWalletAddressUseCase.execute(7L)).thenReturn(Optional.of(WALLET));
     when(qnaContractCallSupport.isSupportedToken(ESCROW, TOKEN)).thenReturn(true);
     BigInteger expectedAmountWei = BigInteger.valueOf(50L).multiply(BigInteger.TEN.pow(18));
-    when(qnaContractCallSupport.loadAllowance(WALLET, ESCROW, TOKEN))
-        .thenReturn(expectedAmountWei);
+    when(qnaContractCallSupport.loadAllowance(WALLET, ESCROW, TOKEN)).thenReturn(expectedAmountWei);
 
     adapter.precheck(new PrecheckQuestionCreateCommand(7L, 50L));
 
     ArgumentCaptor<String> ownerCaptor = ArgumentCaptor.forClass(String.class);
     verify(qnaContractCallSupport)
-        .loadAllowance(ownerCaptor.capture(), org.mockito.ArgumentMatchers.eq(ESCROW),
+        .loadAllowance(
+            ownerCaptor.capture(),
+            org.mockito.ArgumentMatchers.eq(ESCROW),
             org.mockito.ArgumentMatchers.eq(TOKEN));
     assertThat(ownerCaptor.getValue()).isEqualTo(WALLET);
   }

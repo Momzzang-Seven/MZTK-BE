@@ -55,7 +55,8 @@ public class ExecutionDraftPolicyValidatorAdapter implements ValidateExecutionDr
     Set<String> normalized =
         normalizeAddressSet(eip7702Properties.getExecution().getAllowedDelegateTargets());
     if (normalized.isEmpty()) {
-      normalized = normalizeAddressSet(eip7702Properties.getExecution().getAllowedTargetContracts());
+      normalized =
+          normalizeAddressSet(eip7702Properties.getExecution().getAllowedTargetContracts());
     }
     return normalized;
   }
@@ -64,7 +65,8 @@ public class ExecutionDraftPolicyValidatorAdapter implements ValidateExecutionDr
     Set<String> normalized =
         normalizeAddressSet(eip7702Properties.getExecution().getAllowedCallTargets());
     if (normalized.isEmpty()) {
-      normalized = normalizeAddressSet(eip7702Properties.getExecution().getAllowedTargetContracts());
+      normalized =
+          normalizeAddressSet(eip7702Properties.getExecution().getAllowedTargetContracts());
     }
     return normalized;
   }
