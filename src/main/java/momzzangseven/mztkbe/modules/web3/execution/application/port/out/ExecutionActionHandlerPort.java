@@ -17,4 +17,6 @@ public interface ExecutionActionHandlerPort {
       ExecutionIntent intent,
       ExecutionActionPlan actionPlan,
       ExecutionTransactionStatus txStatus) {}
+
+  default void afterExecutionConfirmed(ExecutionIntent intent, ExecutionActionPlan actionPlan) {}
 }

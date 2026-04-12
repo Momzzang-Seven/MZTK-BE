@@ -10,12 +10,17 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +38,7 @@ class MarkExecutionIntentOutcomeServiceTest {
       LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
+  @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
 
   private MarkExecutionIntentSucceededService succeededService;
   private MarkExecutionIntentFailedOnchainService failedOnchainService;
@@ -40,13 +46,21 @@ class MarkExecutionIntentOutcomeServiceTest {
   @BeforeEach
   void setUp() {
     succeededService =
-        new MarkExecutionIntentSucceededService(executionIntentPersistencePort, FIXED_CLOCK);
+        new MarkExecutionIntentSucceededService(
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
     failedOnchainService =
         new MarkExecutionIntentFailedOnchainService(executionIntentPersistencePort, FIXED_CLOCK);
   }
 
   @Test
   void markSucceeded_confirmsPendingIntent() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(argThat(intent -> intent.getSubmittedTxId().equals(12L))))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
@@ -64,6 +78,20 @@ class MarkExecutionIntentOutcomeServiceTest {
                             == momzzangseven.mztkbe.modules.web3.execution.domain.model
                                 .ExecutionIntentStatus.CONFIRMED
                         && updated.getSubmittedTxId().equals(12L)));
+    verify(executionActionHandlerPort)
+        .afterExecutionConfirmed(
+            argThat(
+                updated ->
+                    updated.getStatus()
+                            == momzzangseven.mztkbe.modules.web3.execution.domain.model
+                                .ExecutionIntentStatus.CONFIRMED
+                        && updated.getSubmittedTxId().equals(12L)),
+            argThat(
+                plan ->
+                    plan.amountWei().compareTo(BigInteger.ZERO) == 0
+                        && plan.referenceType() == ExecutionReferenceType.USER_TO_SERVER
+                        && plan.calls().size() == 1
+                        && "0x1234".equals(plan.calls().get(0).data())));
   }
 
   @Test

@@ -1,16 +1,20 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
@@ -27,7 +31,6 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,8 +52,8 @@ class QuestionEscrowExecutionServiceTest {
   @InjectMocks private QuestionEscrowExecutionService service;
 
   @Test
-  @DisplayName("prepareQuestionCreate saves projection and submits create execution intent")
-  void prepareQuestionCreate_savesProjectionAndSubmitsDraft() {
+  @DisplayName("prepareQuestionCreate submits create execution intent without persisting projection")
+  void prepareQuestionCreate_submitsWithoutPersistingProjection() {
     given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
         .willReturn(
             new LoadQnaRewardTokenConfigPort.RewardTokenConfig(
@@ -63,20 +66,6 @@ class QuestionEscrowExecutionServiceTest {
     QnaExecutionIntentResult result =
         service.prepareQuestionCreate(new PrepareQuestionCreateCommand(101L, 7L, "질문 본문", 50L));
 
-    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
-        ArgumentCaptor.forClass(QnaQuestionProjection.class);
-    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
-    QnaQuestionProjection savedQuestion = questionCaptor.getValue();
-    assertThat(savedQuestion.getPostId()).isEqualTo(101L);
-    assertThat(savedQuestion.getQuestionId()).isEqualTo(QnaEscrowIdCodec.questionId(101L));
-    assertThat(savedQuestion.getTokenAddress())
-        .isEqualTo("0x1111111111111111111111111111111111111111");
-    assertThat(savedQuestion.getRewardAmountWei())
-        .isEqualTo(new BigInteger("50000000000000000000"));
-    assertThat(savedQuestion.getQuestionHash()).isEqualTo(QnaContentHashFactory.hash("질문 본문"));
-    assertThat(savedQuestion.getAcceptedAnswerId()).isEqualTo(QnaEscrowIdCodec.zeroBytes32());
-    assertThat(savedQuestion.getState()).isEqualTo(QnaQuestionState.CREATED);
-
     ArgumentCaptor<QnaEscrowExecutionRequest> requestCaptor =
         ArgumentCaptor.forClass(QnaEscrowExecutionRequest.class);
     verify(buildQnaExecutionDraftPort).build(requestCaptor.capture());
@@ -85,58 +74,84 @@ class QuestionEscrowExecutionServiceTest {
     assertThat(request.resourceId()).isEqualTo("101");
     assertThat(request.actionType()).isEqualTo(QnaExecutionActionType.QNA_QUESTION_CREATE);
     assertThat(request.postId()).isEqualTo(101L);
-    assertThat(request.answerId()).isNull();
     assertThat(request.questionHash()).isEqualTo(QnaContentHashFactory.hash("질문 본문"));
     assertThat(request.contentHash()).isNull();
 
+    verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
+    verify(qnaProjectionPersistencePort, never()).saveAnswer(any());
     assertThat(result.executionIntentId()).isEqualTo("intent-1");
   }
 
   @Test
-  @DisplayName("prepareAnswerAccept bootstraps projections and submits accept execution intent")
-  void prepareAnswerAccept_bootstrapsAndMarksPaidOut() {
+  @DisplayName("prepareQuestionUpdate fails when the question is not registered onchain")
+  void prepareQuestionUpdate_failsWhenProjectionIsMissing() {
     given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
         .willReturn(
             new LoadQnaRewardTokenConfigPort.RewardTokenConfig(
                 "0x1111111111111111111111111111111111111111", 18));
     given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
         .willReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                service.prepareQuestionUpdate(
+                    new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("question is not registered onchain yet");
+  }
+
+  @Test
+  @DisplayName("prepareAnswerAccept uses stored projection hashes and does not mutate projection")
+  void prepareAnswerAccept_usesStoredProjectionHashes() {
+    String storedQuestionHash = QnaContentHashFactory.hash("온체인 질문");
+    String storedAnswerHash = QnaContentHashFactory.hash("온체인 답변");
+
+    given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
+        .willReturn(
+            new LoadQnaRewardTokenConfigPort.RewardTokenConfig(
+                "0x1111111111111111111111111111111111111111", 18));
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(
+            Optional.of(
+                QnaQuestionProjection.create(
+                    101L,
+                    7L,
+                    QnaEscrowIdCodec.questionId(101L),
+                    "0x1111111111111111111111111111111111111111",
+                    new BigInteger("50000000000000000000"),
+                    storedQuestionHash)));
     given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
-        .willReturn(Optional.empty());
+        .willReturn(
+            Optional.of(
+                QnaAnswerProjection.create(
+                    201L,
+                    101L,
+                    QnaEscrowIdCodec.questionId(101L),
+                    QnaEscrowIdCodec.answerId(201L),
+                    22L,
+                    storedAnswerHash)));
     given(buildQnaExecutionDraftPort.build(any()))
         .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_ACCEPT));
     given(submitQnaExecutionDraftPort.submit(any()))
         .willReturn(new QnaExecutionIntentResult("intent-2", "EIP7702", 2, null, false));
 
     service.prepareAnswerAccept(
-        new PrepareAnswerAcceptCommand(101L, 201L, 7L, 22L, "질문 본문", "답변 본문", 50L));
-
-    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
-        ArgumentCaptor.forClass(QnaQuestionProjection.class);
-    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
-    QnaQuestionProjection savedQuestion = questionCaptor.getValue();
-    assertThat(savedQuestion.getAcceptedAnswerId()).isEqualTo(QnaEscrowIdCodec.answerId(201L));
-    assertThat(savedQuestion.getState()).isEqualTo(QnaQuestionState.PAID_OUT);
-    assertThat(savedQuestion.getQuestionHash()).isEqualTo(QnaContentHashFactory.hash("질문 본문"));
-
-    ArgumentCaptor<QnaAnswerProjection> answerCaptor =
-        ArgumentCaptor.forClass(QnaAnswerProjection.class);
-    verify(qnaProjectionPersistencePort).saveAnswer(answerCaptor.capture());
-    QnaAnswerProjection savedAnswer = answerCaptor.getValue();
-    assertThat(savedAnswer.getAnswerId()).isEqualTo(201L);
-    assertThat(savedAnswer.getAnswerKey()).isEqualTo(QnaEscrowIdCodec.answerId(201L));
-    assertThat(savedAnswer.getContentHash()).isEqualTo(QnaContentHashFactory.hash("답변 본문"));
+        new PrepareAnswerAcceptCommand(
+            101L, 201L, 7L, 22L, "로컬 질문 본문", "로컬 답변 본문", 50L));
 
     ArgumentCaptor<QnaEscrowExecutionRequest> requestCaptor =
         ArgumentCaptor.forClass(QnaEscrowExecutionRequest.class);
     verify(buildQnaExecutionDraftPort).build(requestCaptor.capture());
     QnaEscrowExecutionRequest request = requestCaptor.getValue();
     assertThat(request.actionType()).isEqualTo(QnaExecutionActionType.QNA_ANSWER_ACCEPT);
-    assertThat(request.postId()).isEqualTo(101L);
-    assertThat(request.answerId()).isEqualTo(201L);
-    assertThat(request.counterpartyUserId()).isEqualTo(22L);
-    assertThat(request.questionHash()).isEqualTo(QnaContentHashFactory.hash("질문 본문"));
-    assertThat(request.contentHash()).isEqualTo(QnaContentHashFactory.hash("답변 본문"));
+    assertThat(request.questionHash()).isEqualTo(storedQuestionHash);
+    assertThat(request.contentHash()).isEqualTo(storedAnswerHash);
+    assertThat(request.questionHash())
+        .isNotEqualTo(QnaContentHashFactory.hash("로컬 질문 본문"));
+    assertThat(request.contentHash()).isNotEqualTo(QnaContentHashFactory.hash("로컬 답변 본문"));
+
+    verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
+    verify(qnaProjectionPersistencePort, never()).saveAnswer(any());
   }
 
   private QnaExecutionDraft draft(QnaExecutionActionType actionType) {
