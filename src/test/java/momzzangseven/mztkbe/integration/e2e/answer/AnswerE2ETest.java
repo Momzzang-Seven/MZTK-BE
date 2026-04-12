@@ -398,7 +398,6 @@ class AnswerE2ETest {
       assertThat(countImagesById(imageId)).isEqualTo(1);
       assertImageUnlinked(imageId);
     }
-
   }
 
   @Nested
@@ -572,7 +571,8 @@ class AnswerE2ETest {
     }
 
     @Test
-    @DisplayName("question delete is rejected when active answers exist and answer rows are preserved")
+    @DisplayName(
+        "question delete is rejected when active answers exist and answer rows are preserved")
     void deleteQuestionPost_withAnswers_returns400AndPreservesAnswerData() throws Exception {
       TestUser author = signupAndLogin("post-delete-author");
       TestUser answerer = signupAndLogin("post-delete-answerer");
