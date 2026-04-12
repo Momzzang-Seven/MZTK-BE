@@ -207,7 +207,8 @@ class PostControllerQnaEscrowIntegrationTest {
     assertThat(updatedPost.getStatus().name()).isEqualTo("PENDING_ACCEPT");
     assertThat(updatedPost.getIsSolved()).isFalse();
 
-    assertThat(answerJpaRepository.findById(answer.getId()).orElseThrow().getIsAccepted()).isFalse();
+    assertThat(answerJpaRepository.findById(answer.getId()).orElseThrow().getIsAccepted())
+        .isFalse();
 
     verify(questionEscrowExecutionUseCase)
         .prepareAnswerAccept(any(PrepareAnswerAcceptCommand.class));

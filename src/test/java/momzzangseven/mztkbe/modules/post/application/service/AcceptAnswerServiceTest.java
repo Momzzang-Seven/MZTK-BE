@@ -136,7 +136,8 @@ class AcceptAnswerServiceTest {
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
         .isInstanceOf(PostAlreadySolvedException.class);
     verifyNoInteractions(markAcceptedAnswerPort);
-    verify(questionLifecycleExecutionPort, never()).prepareAnswerAccept(any(), any(), any(), any(), any(), any(), any());
+    verify(questionLifecycleExecutionPort, never())
+        .prepareAnswerAccept(any(), any(), any(), any(), any(), any(), any());
   }
 
   private Post questionPost(Long id, Long userId, PostStatus status, Long acceptedAnswerId) {
