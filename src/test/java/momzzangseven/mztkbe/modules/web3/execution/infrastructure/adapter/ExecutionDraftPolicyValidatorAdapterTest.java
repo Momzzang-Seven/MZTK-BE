@@ -112,7 +112,8 @@ class ExecutionDraftPolicyValidatorAdapterTest {
   }
 
   @Test
-  @DisplayName("validate falls back to legacy allowlist when split lists contain only blank env placeholders")
+  @DisplayName(
+      "validate falls back to legacy allowlist when split lists contain only blank env placeholders")
   void validate_usesLegacyFallback_whenSplitListsOnlyContainBlankEntries() {
     properties.getExecution().setAllowedDelegateTargets(List.of(""));
     properties.getExecution().setAllowedCallTargets(List.of("", "   "));
