@@ -103,8 +103,9 @@ class AdminOnlyAspectTest {
   }
 
   @Test
-  @DisplayName("SecurityContext 인증 정보가 없는 시스템 호출이면, around 는 실행을 허용하고 audit 를 기록한다")
-  void around_withoutAuthentication_allowsExecutionAndRecordsAudit() throws Throwable {
+  @DisplayName(
+      "SecurityContext 인증 정보가 없으면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
+  void around_withoutAuthentication_throwsUserNotAuthenticatedException() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
@@ -112,13 +113,12 @@ class AdminOnlyAspectTest {
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
         .thenReturn(new Object[] {1L, "target-2", "raw-secret", new Payload("bob", "k2", 5)});
-    when(joinPoint.proceed()).thenReturn("NO_AUTH_OK");
     SecurityContextHolder.clearContext();
 
-    Object result = aspect.around(joinPoint);
+    assertThatThrownBy(() -> aspect.around(joinPoint))
+        .isInstanceOf(UserNotAuthenticatedException.class);
 
-    assertThat(result).isEqualTo("NO_AUTH_OK");
-    verify(recordAdminAuditPort).record(any(RecordAdminAuditPort.AuditCommand.class));
+    verify(recordAdminAuditPort, never()).record(any(RecordAdminAuditPort.AuditCommand.class));
   }
 
   @Test
