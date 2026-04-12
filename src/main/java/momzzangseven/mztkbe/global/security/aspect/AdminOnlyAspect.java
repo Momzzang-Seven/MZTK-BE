@@ -150,7 +150,7 @@ public class AdminOnlyAspect {
 
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
     if (authentication == null) {
-      return;
+      throw new UserNotAuthenticatedException();
     }
 
     boolean isAdmin =
