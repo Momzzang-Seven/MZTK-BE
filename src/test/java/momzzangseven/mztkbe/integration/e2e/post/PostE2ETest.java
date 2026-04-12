@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +52,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  */
 @Tag("e2e")
 @ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+      "web3.chain-id=1337",
+      "web3.eip712.chain-id=1337",
+      "web3.eip7702.enabled=false",
+      "web3.reward-token.enabled=false"
+    })
 @DisplayName("[E2E] Post CRUD 전체 흐름 테스트")
 class PostE2ETest {
 
@@ -68,6 +76,7 @@ class PostE2ETest {
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   // ============================================================
   // 테스트 상태 (인스턴스별 독립)

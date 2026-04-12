@@ -14,6 +14,7 @@ import java.util.UUID;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteS3ObjectPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +39,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @Tag("e2e")
 @ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+      "web3.chain-id=1337",
+      "web3.eip712.chain-id=1337",
+      "web3.eip7702.enabled=false",
+      "web3.reward-token.enabled=false"
+    })
 @DisplayName("[E2E] Answer business rules")
 class AnswerE2ETest {
 
@@ -52,6 +60,7 @@ class AnswerE2ETest {
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
   @MockitoBean private DeleteS3ObjectPort deleteS3ObjectPort;
+  @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   private final List<Long> createdPostIds = new ArrayList<>();
   private final List<Long> createdAnswerIds = new ArrayList<>();
