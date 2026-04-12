@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.modules.admin.infrastructure.persistence.entity.Admi
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /** Spring Data JPA repository for {@code admin_accounts}. */
 public interface AdminAccountJpaRepository extends JpaRepository<AdminAccountEntity, Long> {
@@ -17,6 +18,14 @@ public interface AdminAccountJpaRepository extends JpaRepository<AdminAccountEnt
   boolean existsByLoginIdAndDeletedAtIsNull(String loginId);
 
   long countByDeletedAtIsNull();
+
+  @Query(
+      value =
+          "SELECT COUNT(*) FROM admin_accounts a"
+              + " JOIN users u ON a.user_id = u.id"
+              + " WHERE a.deleted_at IS NULL AND u.role = :role",
+      nativeQuery = true)
+  long countActiveByRole(@Param("role") String role);
 
   List<AdminAccountEntity> findAllByDeletedAtIsNull();
 

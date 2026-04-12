@@ -59,7 +59,8 @@ class BootstrapSeedAdminsServiceTest {
     void execute_twoActiveAdmins_skipsProvisioning() {
       // given
       given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
-      given(countActiveAdminAccountsPort.countActive()).willReturn(2L);
+      given(countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name()))
+          .willReturn(2L);
 
       // when
       SeedBootstrapOutcome outcome = service.execute();
@@ -77,7 +78,8 @@ class BootstrapSeedAdminsServiceTest {
     void execute_fiveActiveAdmins_skipsProvisioning() {
       // given
       given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
-      given(countActiveAdminAccountsPort.countActive()).willReturn(5L);
+      given(countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name()))
+          .willReturn(5L);
 
       // when
       SeedBootstrapOutcome outcome = service.execute();
@@ -95,7 +97,8 @@ class BootstrapSeedAdminsServiceTest {
     void execute_zeroActiveAdmins_provisionsTwo() {
       // given
       givenSeedPolicy();
-      given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
+      given(countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name()))
+          .willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
 
@@ -115,7 +118,8 @@ class BootstrapSeedAdminsServiceTest {
     void execute_oneActiveAdmin_provisionsOne() {
       // given
       givenSeedPolicy();
-      given(countActiveAdminAccountsPort.countActive()).willReturn(1L);
+      given(countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name()))
+          .willReturn(1L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(1);
       given(seedProvisioner.provision(1, AdminRole.ADMIN_SEED)).willReturn(credentials);
 
@@ -135,7 +139,8 @@ class BootstrapSeedAdminsServiceTest {
     void execute_provisionsAdmins_deliversCredentials() {
       // given
       givenSeedPolicy();
-      given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
+      given(countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name()))
+          .willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
 
@@ -156,7 +161,8 @@ class BootstrapSeedAdminsServiceTest {
     void execute_provisionerThrows_propagatesException() {
       // given
       given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
-      given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
+      given(countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name()))
+          .willReturn(0L);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED))
           .willThrow(new AdminCredentialGenerationException("Failed after 5 attempts"));
 
@@ -172,7 +178,8 @@ class BootstrapSeedAdminsServiceTest {
     void execute_deliveryThrows_propagatesException() {
       // given
       given(loadSeedPolicyPort.getSeedCount()).willReturn(SEED_COUNT);
-      given(countActiveAdminAccountsPort.countActive()).willReturn(0L);
+      given(countActiveAdminAccountsPort.countActiveByRole(AdminRole.ADMIN_SEED.name()))
+          .willReturn(0L);
       List<GeneratedAdminCredentials> credentials = buildCredentials(2);
       given(seedProvisioner.provision(2, AdminRole.ADMIN_SEED)).willReturn(credentials);
       org.mockito.BDDMockito.willThrow(new RuntimeException("delivery failed"))

@@ -72,6 +72,11 @@ public class AdminAccountPersistenceAdapter
     return repository.countByDeletedAtIsNull();
   }
 
+  @Override
+  public long countActiveByRole(String roleName) {
+    return repository.countActiveByRole(roleName);
+  }
+
   private AdminAccountEntity toEntity(AdminAccount domain) {
     return AdminAccountEntity.builder()
         .id(domain.getId())
