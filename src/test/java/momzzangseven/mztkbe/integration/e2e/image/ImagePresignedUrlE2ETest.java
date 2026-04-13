@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.integration.e2e.image;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,8 +16,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -53,10 +50,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @DisplayName("[E2E] 이미지 Presigned URL 발급 전체 흐름 (Local Server + Real PostgreSQL)")
 class ImagePresignedUrlE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private ImageJpaRepository imageJpaRepository;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;

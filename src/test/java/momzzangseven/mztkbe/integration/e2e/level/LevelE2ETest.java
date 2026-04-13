@@ -3,11 +3,8 @@ package momzzangseven.mztkbe.integration.e2e.level;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import java.util.Map;
-import java.util.UUID;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
@@ -15,70 +12,25 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTra
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("[E2E] Level & Attendance 전체 흐름 테스트")
 class LevelE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
-
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
-  private String baseUrl;
   private String accessToken;
 
-  private static String uniqueEmail() {
-    return "e2e-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10) + "@example.com";
-  }
-
-  private HttpHeaders authHeaders() {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
-    return headers;
-  }
-
-  private void signup(String email, String password, String nickname) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
-    restTemplate.exchange(
-        baseUrl + "/auth/signup", HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
-  }
-
-  private String loginAndGetAccessToken(String email, String password) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, Object> body = Map.of("provider", "LOCAL", "email", email, "password", password);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(body, headers),
-            String.class);
-    return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
-  }
-
   @BeforeEach
-  void setUp() throws Exception {
-    baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "레벨E2E유저");
-    accessToken = loginAndGetAccessToken(email, "Test@1234!");
+  void setUp() {
+    accessToken = signupAndLogin("레벨E2E유저").accessToken();
   }
 
   @Test
@@ -86,9 +38,9 @@ class LevelE2ETest extends E2ETestBase {
   void getMyLevel_newUser_returnsLevel1WithZeroXp() throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/level",
+            baseUrl() + "/users/me/level",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -103,9 +55,9 @@ class LevelE2ETest extends E2ETestBase {
   void getLevelPolicies_authenticated_returnsPolicies() throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/levels/policies",
+            baseUrl() + "/levels/policies",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -120,9 +72,9 @@ class LevelE2ETest extends E2ETestBase {
   void getLevelUpHistories_newUser_returnsEmptyList() throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/level-up-histories",
+            baseUrl() + "/users/me/level-up-histories",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -137,9 +89,9 @@ class LevelE2ETest extends E2ETestBase {
   void getXpLedger_newUser_returnsEmptyEntries() throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/xp-ledger",
+            baseUrl() + "/users/me/xp-ledger",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -153,9 +105,9 @@ class LevelE2ETest extends E2ETestBase {
   void levelUp_withNoXp_returnsError() {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/level-ups",
+            baseUrl() + "/users/me/level-ups",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode().is4xxClientError())
@@ -170,7 +122,7 @@ class LevelE2ETest extends E2ETestBase {
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/level",
+            baseUrl() + "/users/me/level",
             HttpMethod.GET,
             new HttpEntity<>(noAuthHeaders),
             String.class);
@@ -183,9 +135,9 @@ class LevelE2ETest extends E2ETestBase {
   void checkIn_firstTime_grantsXpAndReturnsResult() throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/attendance",
+            baseUrl() + "/users/me/attendance",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -200,16 +152,16 @@ class LevelE2ETest extends E2ETestBase {
   @DisplayName("출석 후 XP 원장에 출석 항목 생성 확인")
   void checkIn_afterCheckIn_xpLedgerContainsAttendanceEntry() throws Exception {
     restTemplate.exchange(
-        baseUrl + "/users/me/attendance",
+        baseUrl() + "/users/me/attendance",
         HttpMethod.POST,
-        new HttpEntity<>(authHeaders()),
+        new HttpEntity<>(bearerJsonHeaders(accessToken)),
         String.class);
 
     ResponseEntity<String> ledgerResponse =
         restTemplate.exchange(
-            baseUrl + "/users/me/xp-ledger",
+            baseUrl() + "/users/me/xp-ledger",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(ledgerResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -223,9 +175,9 @@ class LevelE2ETest extends E2ETestBase {
   void getAttendanceStatus_returnsStatus() throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/attendance/status",
+            baseUrl() + "/users/me/attendance/status",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -239,9 +191,9 @@ class LevelE2ETest extends E2ETestBase {
   void getWeeklyAttendance_returnsWeeklyData() throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/users/me/attendance/weekly",
+            baseUrl() + "/users/me/attendance/weekly",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
@@ -259,16 +211,16 @@ class LevelE2ETest extends E2ETestBase {
   @DisplayName("같은 날 중복 체크인 → OK, body/data/success에 false 저장.")
   void checkIn_sameDay_returnsError() throws Exception {
     restTemplate.exchange(
-        baseUrl + "/users/me/attendance",
+        baseUrl() + "/users/me/attendance",
         HttpMethod.POST,
-        new HttpEntity<>(authHeaders()),
+        new HttpEntity<>(bearerJsonHeaders(accessToken)),
         String.class);
 
     ResponseEntity<String> secondResponse =
         restTemplate.exchange(
-            baseUrl + "/users/me/attendance",
+            baseUrl() + "/users/me/attendance",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);

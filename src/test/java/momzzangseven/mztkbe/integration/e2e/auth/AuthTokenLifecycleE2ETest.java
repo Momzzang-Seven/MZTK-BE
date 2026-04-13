@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.integration.e2e.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
@@ -13,9 +12,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTra
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -47,11 +43,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  */
 @DisplayName("Auth 토큰 라이프사이클 E2E 테스트 (Local Server + PostgreSQL)")
 class AuthTokenLifecycleE2ETest extends E2ETestBase {
-
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
