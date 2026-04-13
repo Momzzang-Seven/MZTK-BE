@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -46,7 +47,11 @@ public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntit
   List<Long> findUserIdsByStatusAndDeletedAtBefore(
       @Param("status") AccountStatus status, @Param("cutoff") Instant cutoff, Pageable pageable);
 
-  void deleteByUserId(Long userId);
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("DELETE FROM UserAccountEntity ua WHERE ua.userId = :userId")
+  void deleteByUserId(@Param("userId") Long userId);
 
-  void deleteByUserIdIn(List<Long> userIds);
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("DELETE FROM UserAccountEntity ua WHERE ua.userId IN :userIds")
+  void deleteByUserIdIn(@Param("userIds") List<Long> userIds);
 }

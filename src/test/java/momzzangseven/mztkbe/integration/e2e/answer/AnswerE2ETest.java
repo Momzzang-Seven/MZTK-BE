@@ -14,6 +14,7 @@ import java.util.UUID;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteS3ObjectPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,7 +39,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @Tag("e2e")
 @ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+      "web3.chain-id=1337",
+      "web3.eip712.chain-id=1337",
+      "web3.eip7702.enabled=false",
+      "web3.reward-token.enabled=false"
+    })
 @DisplayName("[E2E] Answer business rules")
 class AnswerE2ETest {
 
@@ -52,6 +60,7 @@ class AnswerE2ETest {
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
   @MockitoBean private DeleteS3ObjectPort deleteS3ObjectPort;
+  @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   private final List<Long> createdPostIds = new ArrayList<>();
   private final List<Long> createdAnswerIds = new ArrayList<>();
@@ -398,34 +407,6 @@ class AnswerE2ETest {
       assertThat(countImagesById(imageId)).isEqualTo(1);
       assertImageUnlinked(imageId);
     }
-
-    @Test
-    @DisplayName("delete question post removes answers and unlinks answer images")
-    void deleteQuestionPost_success_removesAnswersAndUnlinksImages() throws Exception {
-      TestUser author = signupAndLogin("post-delete-author");
-      TestUser answerer = signupAndLogin("post-delete-answerer");
-      TestUser liker = signupAndLogin("post-delete-liker");
-      Long postId = createQuestionPost(author.accessToken(), "Cascade question", "Cascade me", 35L);
-      Long imageId = insertImage(answerer.userId(), "COMPLETED", "answers/post-delete.webp");
-      Long answerId =
-          createAnswer(postId, answerer.accessToken(), "cascade answer", List.of(imageId));
-      likeAnswer(postId, answerId, liker.accessToken());
-
-      ResponseEntity<String> deleteResponse =
-          restTemplate.exchange(
-              baseUrl() + "/posts/" + postId,
-              HttpMethod.DELETE,
-              new HttpEntity<>(authHeaders(author.accessToken())),
-              String.class);
-
-      assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-      assertThat(parse(deleteResponse).at("/status").asText()).isEqualTo("SUCCESS");
-      assertThat(postExistsInDb(postId)).isFalse();
-      assertThat(countAnswersById(answerId)).isZero();
-      assertThat(countLinkedAnswerImages(answerId)).isZero();
-      assertThat(countAnswerLikes(answerId)).isZero();
-      assertImageUnlinked(imageId);
-    }
   }
 
   @Nested
@@ -596,6 +577,37 @@ class AnswerE2ETest {
       assertThat(root.at("/code").asText()).isEqualTo("ANSWER_010");
       assertThat(countAnswersById(answerId)).isEqualTo(1);
       assertThat(countLinkedAnswerImages(answerId)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName(
+        "question delete is rejected when active answers exist and answer rows are preserved")
+    void deleteQuestionPost_withAnswers_returns400AndPreservesAnswerData() throws Exception {
+      TestUser author = signupAndLogin("post-delete-author");
+      TestUser answerer = signupAndLogin("post-delete-answerer");
+      TestUser liker = signupAndLogin("post-delete-liker");
+      Long postId = createQuestionPost(author.accessToken(), "Cascade question", "Cascade me", 35L);
+      Long imageId = insertImage(answerer.userId(), "COMPLETED", "answers/post-delete.webp");
+      Long answerId =
+          createAnswer(postId, answerer.accessToken(), "cascade answer", List.of(imageId));
+      likeAnswer(postId, answerId, liker.accessToken());
+
+      ResponseEntity<String> deleteResponse =
+          restTemplate.exchange(
+              baseUrl() + "/posts/" + postId,
+              HttpMethod.DELETE,
+              new HttpEntity<>(authHeaders(author.accessToken())),
+              String.class);
+
+      assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+      JsonNode root = parse(deleteResponse);
+      assertThat(root.at("/status").asText()).isEqualTo("FAIL");
+      assertThat(root.at("/code").asText()).isEqualTo("POST_003");
+      assertThat(postExistsInDb(postId)).isTrue();
+      assertThat(countAnswersById(answerId)).isEqualTo(1);
+      assertThat(countLinkedAnswerImages(answerId)).isEqualTo(1);
+      assertThat(countAnswerLikes(answerId)).isEqualTo(1);
+      assertImageStillLinkedToAnswer(imageId, answerId);
     }
   }
 
@@ -781,6 +793,15 @@ class AnswerE2ETest {
     assertThat(row.get("reference_type")).isEqualTo("COMMUNITY_ANSWER");
     assertThat(((Number) row.get("reference_id")).longValue()).isEqualTo(answerId);
     assertThat(((Number) row.get("img_order")).intValue()).isEqualTo(expectedOrder);
+  }
+
+  private void assertImageStillLinkedToAnswer(Long imageId, Long answerId) {
+    Map<String, Object> row =
+        jdbcTemplate.queryForMap(
+            "SELECT reference_type, reference_id FROM images WHERE id = ?", imageId);
+
+    assertThat(row.get("reference_type")).isEqualTo("COMMUNITY_ANSWER");
+    assertThat(((Number) row.get("reference_id")).longValue()).isEqualTo(answerId);
   }
 
   private void assertImageUnlinked(Long imageId) {

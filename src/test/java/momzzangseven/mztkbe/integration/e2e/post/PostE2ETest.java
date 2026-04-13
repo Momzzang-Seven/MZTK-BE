@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +52,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  */
 @Tag("e2e")
 @ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+      "web3.chain-id=1337",
+      "web3.eip712.chain-id=1337",
+      "web3.eip7702.enabled=false",
+      "web3.reward-token.enabled=false"
+    })
 @DisplayName("[E2E] Post CRUD 전체 흐름 테스트")
 class PostE2ETest {
 
@@ -68,6 +76,7 @@ class PostE2ETest {
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   // ============================================================
   // 테스트 상태 (인스턴스별 독립)
@@ -239,12 +248,11 @@ class PostE2ETest {
         String.class);
   }
 
-  /** isSolved=true 는 web3 transfer 완료 이벤트로만 변경되므로 테스트 전제 조건 설정에 JdbcTemplate 사용. */
-  private void markPostAsSolved(Long postId) {
-    int updated =
-        jdbcTemplate.update(
-            "UPDATE posts SET is_solved = true, status = 'RESOLVED' WHERE id = ?", postId);
-    assertThat(updated).as("Post %d should exist to be marked as solved", postId).isEqualTo(1);
+  private void addActiveAnswerToQuestion(Long postId) throws Exception {
+    String answererEmail = uniqueEmail();
+    signupUser(answererEmail, "Test@1234!", "answerer");
+    String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+    createAnswer(postId, answererToken, "active answer");
   }
 
   private Map<String, Object> getPostState(Long postId) {
@@ -821,13 +829,13 @@ class PostE2ETest {
     }
 
     @Test
-    @DisplayName("isSolved=true 인 게시글 수정 시도 → 400 BAD_REQUEST (POST_003)")
+    @DisplayName("활성 답변이 있는 게시글 수정 시도 → 400 BAD_REQUEST (POST_003)")
     void updateQuestion_whenSolved_returns400_withPost003() throws Exception {
-      // given: 질문 게시글 생성 후 solved 상태로 강제 설정 (JdbcTemplate)
+      // given: 질문 게시글 생성 후 활성 답변을 하나 만든다.
       Long postId = createQuestionPost("해결됨 수정불가 질문", "질문 내용", 100L);
-      markPostAsSolved(postId);
+      addActiveAnswerToQuestion(postId);
 
-      // when: 소유자가 수정 시도 (isSolved=true 이므로 도메인에서 거부)
+      // when: 소유자가 수정 시도 (answered question 이므로 도메인에서 거부)
       Map<String, Object> updateBody = Map.of("content", "해결된 게시글 수정 시도");
       ResponseEntity<String> res =
           restTemplate.exchange(
@@ -836,9 +844,9 @@ class PostE2ETest {
               new HttpEntity<>(updateBody, authHeaders()),
               String.class);
 
-      // then: Post.update() 내 도메인 불변식 → PostInvalidInputException → POST_003
+      // then: Post.update() answered-question 불변식 → PostInvalidInputException → POST_003
       assertThat(res.getStatusCode())
-          .as("Updating a solved question post should be rejected")
+          .as("Updating an answered question post should be rejected")
           .isEqualTo(HttpStatus.BAD_REQUEST);
       JsonNode root = parse(res);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
@@ -907,11 +915,11 @@ class PostE2ETest {
     }
 
     @Test
-    @DisplayName("isSolved=true 인 게시글 삭제 시도 → 400 BAD_REQUEST (POST_003)")
+    @DisplayName("활성 답변이 있는 게시글 삭제 시도 → 400 BAD_REQUEST (POST_003)")
     void deleteQuestion_whenSolved_returns400_withPost003() throws Exception {
-      // given: 질문 게시글 생성 후 solved 상태로 강제 설정 (JdbcTemplate)
+      // given: 질문 게시글 생성 후 활성 답변을 하나 만든다.
       Long postId = createQuestionPost("해결됨 삭제불가 질문", "질문 내용", 80L);
-      markPostAsSolved(postId);
+      addActiveAnswerToQuestion(postId);
 
       // when: 소유자가 삭제 시도
       ResponseEntity<String> res =
@@ -921,9 +929,9 @@ class PostE2ETest {
               new HttpEntity<>(authHeaders()),
               String.class);
 
-      // then: Post.validateDeletable() → PostInvalidInputException → POST_003
+      // then: Post.validateDeletable() answered-question 불변식 → POST_003
       assertThat(res.getStatusCode())
-          .as("Deleting a solved question post should be rejected")
+          .as("Deleting an answered question post should be rejected")
           .isEqualTo(HttpStatus.BAD_REQUEST);
       JsonNode root = parse(res);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");

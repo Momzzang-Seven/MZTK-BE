@@ -65,9 +65,14 @@ web3:
   eip7702:
     enabled: true                   # prod에서 실제로 스폰서 기능을 쓰면 true
     execution:
-      # prod에서는 반드시 allowlist를 채우는 걸 강하게 권장
-      allowed-target-contracts:
-        - 0x0000000000000000000000000000000000000000
+      allowed-delegate-targets:
+        - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS}
+      allowed-call-targets:
+        - ${MZTK_TOKEN_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+      allowed-target-contracts: []
       blocked-function-selectors:
         - 0x095ea7b3                # approve (예시)
-
+  transfer:
+    legacy-question-reward-handler-enabled: false

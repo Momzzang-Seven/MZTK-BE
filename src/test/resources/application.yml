@@ -168,6 +168,12 @@ web3:
       require-chain-id-match: true
       max-auth-list-length: 1
     execution:
+      allowed-delegate-targets:
+        - "0x0000000000000000000000000000000000000001"
+      allowed-call-targets:
+        - "0x0000000000000000000000000000000000000001"
+        - "0x0000000000000000000000000000000000000002"
+        - "0x0000000000000000000000000000000000000003"
       allowed-target-contracts: []
       blocked-function-selectors: []
     cleanup:
@@ -179,6 +185,11 @@ web3:
     observability:
       log-auth-hash: true
       log-user-op: false
+  escrow:
+    marketplace-contract-address: "0x0000000000000000000000000000000000000002"
+    qna-contract-address: "0x0000000000000000000000000000000000000003"
+  transfer:
+    legacy-question-reward-handler-enabled: false
 
 # 위치 인증 반경 (5m)
 location:

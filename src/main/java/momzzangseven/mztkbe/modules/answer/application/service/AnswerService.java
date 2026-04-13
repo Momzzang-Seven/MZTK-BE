@@ -24,6 +24,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryU
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
@@ -60,6 +61,7 @@ public class AnswerService
   private final LoadAnswerImagesPort loadAnswerImagesPort;
   private final LoadAnswerLikePort loadAnswerLikePort;
   private final UpdateAnswerImagesPort updateAnswerImagesPort;
+  private final AnswerLifecycleExecutionPort answerLifecycleExecutionPort;
   private final AnswerReadAssembler answerReadAssembler;
   private final ApplicationEventPublisher eventPublisher;
 
@@ -84,7 +86,11 @@ public class AnswerService
 
     Answer answer =
         Answer.create(
-            post.postId(), post.writerId(), post.isSolved(), command.userId(), command.content());
+            post.postId(),
+            post.writerId(),
+            post.answerLocked(),
+            command.userId(),
+            command.content());
 
     Answer savedAnswer = saveAnswerPort.saveAnswer(answer);
 
@@ -92,6 +98,17 @@ public class AnswerService
       updateAnswerImagesPort.updateImages(
           savedAnswer.getUserId(), savedAnswer.getId(), command.imageIds());
     }
+
+    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(savedAnswer.getPostId()));
+    answerLifecycleExecutionPort.prepareAnswerCreate(
+        savedAnswer.getPostId(),
+        savedAnswer.getId(),
+        savedAnswer.getUserId(),
+        post.writerId(),
+        post.content(),
+        post.reward(),
+        savedAnswer.getContent(),
+        activeAnswerCount);
 
     return new CreateAnswerResult(savedAnswer.getId());
   }
@@ -141,7 +158,7 @@ public class AnswerService
         .map(
             answer ->
                 new GetAnswerSummaryUseCase.AnswerSummary(
-                    answer.getId(), answer.getPostId(), answer.getUserId()));
+                    answer.getId(), answer.getPostId(), answer.getUserId(), answer.getContent()));
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */
@@ -154,13 +171,26 @@ public class AnswerService
     validateAnswerBelongsToPost(answer, command.postId());
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
 
-    Answer updatedAnswer = answer.update(command.content(), command.userId(), post.isSolved());
+    Answer updatedAnswer = answer.update(command.content(), command.userId(), post.answerLocked());
     if (updatedAnswer != answer) {
       saveAnswerPort.saveAnswer(updatedAnswer);
     }
 
     if (command.imageIds() != null) {
       updateAnswerImagesPort.updateImages(command.userId(), command.answerId(), command.imageIds());
+    }
+
+    if (command.content() != null) {
+      int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+      answerLifecycleExecutionPort.prepareAnswerUpdate(
+          answer.getPostId(),
+          answer.getId(),
+          command.userId(),
+          post.writerId(),
+          post.content(),
+          post.reward(),
+          updatedAnswer.getContent(),
+          activeAnswerCount);
     }
   }
 
@@ -174,8 +204,17 @@ public class AnswerService
     validateAnswerBelongsToPost(answer, command.postId());
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
 
-    answer.validateDeletable(command.userId(), post.isSolved());
+    answer.validateDeletable(command.userId(), post.answerLocked());
     deleteAnswerPort.deleteAnswer(answer.getId());
+    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+    answerLifecycleExecutionPort.prepareAnswerDelete(
+        answer.getPostId(),
+        answer.getId(),
+        command.userId(),
+        post.writerId(),
+        post.content(),
+        post.reward(),
+        activeAnswerCount);
     eventPublisher.publishEvent(new AnswerDeletedEvent(answer.getId()));
   }
 

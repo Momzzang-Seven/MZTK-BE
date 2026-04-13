@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -33,6 +34,7 @@ class CreatePostServiceTest {
   @Mock private PostXpService postXpService;
   @Mock private LinkTagPort linkTagPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
+  @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   @InjectMocks private CreatePostService createPostService;
 
@@ -68,6 +70,7 @@ class CreatePostServiceTest {
     verify(updatePostImagesPort).updateImages(7L, 10L, PostType.FREE, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(10L, List.of("java", "spring"));
     verify(postXpService).grantCreatePostXp(7L, 10L);
+    verifyNoInteractions(questionLifecycleExecutionPort);
 
     assertThat(result.postId()).isEqualTo(10L);
     assertThat(result.isXpGranted()).isTrue();
@@ -99,6 +102,7 @@ class CreatePostServiceTest {
 
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort, never()).linkTagsToPost(any(), any());
+    verifyNoInteractions(questionLifecycleExecutionPort);
     assertThat(result.isXpGranted()).isFalse();
     assertThat(result.grantedXp()).isZero();
     assertThat(result.message()).isEqualTo("게시글 작성 완료");
@@ -128,6 +132,7 @@ class CreatePostServiceTest {
 
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort).linkTagsToPost(13L, List.of("java"));
+    verifyNoInteractions(questionLifecycleExecutionPort);
   }
 
   @Test
@@ -154,6 +159,7 @@ class CreatePostServiceTest {
 
     verify(updatePostImagesPort).updateImages(4L, 12L, PostType.FREE, List.of(1L));
     verify(linkTagPort).linkTagsToPost(12L, List.of("java"));
+    verifyNoInteractions(questionLifecycleExecutionPort);
     assertThat(result.postId()).isEqualTo(12L);
     assertThat(result.isXpGranted()).isFalse();
     assertThat(result.grantedXp()).isZero();
@@ -168,7 +174,12 @@ class CreatePostServiceTest {
     assertThatThrownBy(() -> createPostService.execute(command))
         .isInstanceOf(PostInvalidInputException.class);
 
-    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
+    verifyNoInteractions(
+        postPersistencePort,
+        postXpService,
+        linkTagPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort);
   }
 
   @Test
@@ -206,6 +217,8 @@ class CreatePostServiceTest {
     // Verify image sync for QUESTION type
     verify(updatePostImagesPort).updateImages(3L, 20L, PostType.QUESTION, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(20L, List.of("java"));
+    verify(questionLifecycleExecutionPort).precheckQuestionCreate(3L, 50L);
+    verify(questionLifecycleExecutionPort).prepareQuestionCreate(20L, 3L, "질문 내용", 50L);
     assertThat(result.postId()).isEqualTo(20L);
   }
 
@@ -219,6 +232,29 @@ class CreatePostServiceTest {
         .isInstanceOf(momzzangseven.mztkbe.global.error.post.PostInvalidInputException.class)
         .hasMessageContaining("Questions must have a valid reward");
 
+    verifyNoInteractions(
+        postPersistencePort,
+        postXpService,
+        linkTagPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("question create precheck failure prevents persistence")
+  void executeQuestionPrecheckFailureStopsBeforeSave() {
+    CreatePostCommand command =
+        CreatePostCommand.of(9L, "질문", "질문 내용", PostType.QUESTION, 10L, null, null);
+
+    org.mockito.Mockito.doThrow(new RuntimeException("allowance 부족"))
+        .when(questionLifecycleExecutionPort)
+        .precheckQuestionCreate(9L, 10L);
+
+    assertThatThrownBy(() -> createPostService.execute(command))
+        .isInstanceOf(RuntimeException.class)
+        .hasMessageContaining("allowance 부족");
+
+    verify(questionLifecycleExecutionPort).precheckQuestionCreate(9L, 10L);
     verifyNoInteractions(postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
   }
 }
