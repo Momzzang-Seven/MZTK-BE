@@ -115,7 +115,7 @@ class PostTest {
   void updateReturnsSameInstanceWhenNothingProvided() {
     Post post = basePost();
 
-    Post updated = post.update(null, null, null);
+    Post updated = post.update(null, null, null, 0L);
 
     assertThat(updated).isSameAs(post);
   }
@@ -125,11 +125,11 @@ class PostTest {
   void updateRejectsBlankValues() {
     Post post = basePost();
 
-    assertThatThrownBy(() -> post.update(" ", null, null))
+    assertThatThrownBy(() -> post.update(" ", null, null, 0L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Title cannot be blank.");
 
-    assertThatThrownBy(() -> post.update(null, " ", null))
+    assertThatThrownBy(() -> post.update(null, " ", null, 0L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Content cannot be blank.");
   }
@@ -139,7 +139,7 @@ class PostTest {
   void updateChangesFields() {
     Post post = basePost();
 
-    Post updated = post.update("new", "new-content", List.of("tag2"));
+    Post updated = post.update("new", "new-content", List.of("tag2"), 0L);
 
     assertThat(updated).isNotSameAs(post);
     assertThat(updated.getTitle()).isEqualTo("new");
@@ -149,8 +149,8 @@ class PostTest {
   }
 
   @Test
-  @DisplayName("solved question post cannot be updated")
-  void updateSolvedQuestionThrows() {
+  @DisplayName("answered question post cannot be updated")
+  void updateAnsweredQuestionThrows() {
     Post post =
         Post.builder()
             .id(2L)
@@ -159,22 +159,21 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .status(PostStatus.RESOLVED)
-            .acceptedAnswerId(10L)
+            .status(PostStatus.OPEN)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
 
-    assertThatThrownBy(() -> post.update("edited", null, null))
+    assertThatThrownBy(() -> post.update("edited", null, null, 1L))
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("cannot be edited");
   }
 
   @Test
-  @DisplayName("validateDeletable allows free posts but rejects solved question posts")
+  @DisplayName("validateDeletable allows unanswered questions but rejects answered question posts")
   void validateDeletableBranches() {
     Post freePost = basePost();
-    Post solvedQuestion =
+    Post unansweredQuestion =
         Post.builder()
             .id(3L)
             .userId(1L)
@@ -182,16 +181,37 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .status(PostStatus.RESOLVED)
-            .acceptedAnswerId(11L)
+            .status(PostStatus.OPEN)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
 
-    assertThatCode(freePost::validateDeletable).doesNotThrowAnyException();
-    assertThatThrownBy(solvedQuestion::validateDeletable)
+    assertThatCode(() -> freePost.validateDeletable(0L)).doesNotThrowAnyException();
+    assertThatCode(() -> unansweredQuestion.validateDeletable(0L)).doesNotThrowAnyException();
+    assertThatThrownBy(() -> unansweredQuestion.validateDeletable(1L))
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("cannot be deleted");
+  }
+
+  @Test
+  @DisplayName("answered question with count greater than one is still not editable")
+  void updateAnsweredQuestionThrowsWhenCountIsGreaterThanOne() {
+    Post post =
+        Post.builder()
+            .id(4L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> post.update("edited", null, null, 2L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("cannot be edited");
   }
 
   @Test
@@ -299,6 +319,97 @@ class PostTest {
                     .acceptedAnswerId(99L)
                     .build())
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("beginAccept keeps question pending until confirmation")
+  void beginAccept_marksPending() {
+    Post post =
+        Post.builder()
+            .id(22L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    Post pending = post.beginAccept(99L);
+
+    assertThat(pending.getAcceptedAnswerId()).isEqualTo(99L);
+    assertThat(pending.getStatus()).isEqualTo(PostStatus.PENDING_ACCEPT);
+    assertThat(pending.getIsSolved()).isFalse();
+  }
+
+  @Test
+  @DisplayName("beginAccept is idempotent for the same pending answer")
+  void beginAccept_samePendingAnswer_returnsSameInstance() {
+    Post pending =
+        Post.builder()
+            .id(221L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThat(pending.beginAccept(99L)).isSameAs(pending);
+  }
+
+  @Test
+  @DisplayName("confirmAccepted finalizes a pending accept")
+  void confirmAccepted_resolvesPendingAccept() {
+    Post pending =
+        Post.builder()
+            .id(23L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    Post resolved = pending.confirmAccepted(99L);
+
+    assertThat(resolved.getAcceptedAnswerId()).isEqualTo(99L);
+    assertThat(resolved.getStatus()).isEqualTo(PostStatus.RESOLVED);
+    assertThat(resolved.getIsSolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("cancelPendingAccept reopens the question")
+  void cancelPendingAccept_reopensQuestion() {
+    Post pending =
+        Post.builder()
+            .id(24L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    Post reopened = pending.cancelPendingAccept(99L);
+
+    assertThat(reopened.getAcceptedAnswerId()).isNull();
+    assertThat(reopened.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(reopened.getIsSolved()).isFalse();
   }
 
   @Test

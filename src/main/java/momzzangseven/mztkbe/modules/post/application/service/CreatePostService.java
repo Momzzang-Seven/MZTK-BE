@@ -7,8 +7,10 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,12 +23,16 @@ public class CreatePostService implements CreatePostUseCase {
   private final PostXpService postXpService;
   private final LinkTagPort linkTagPort;
   private final UpdatePostImagesPort updatePostImagesPort;
+  private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   @Override
   @Transactional
   public CreatePostResult execute(CreatePostCommand command) {
 
     command.validate();
+    if (command.type() == PostType.QUESTION) {
+      questionLifecycleExecutionPort.precheckQuestionCreate(command.userId(), command.reward());
+    }
 
     // 1. 게시글 도메인 객체 생성
     Post post =
@@ -49,6 +55,11 @@ public class CreatePostService implements CreatePostUseCase {
 
     if (command.tags() != null && !command.tags().isEmpty()) {
       linkTagPort.linkTagsToPost(savedPost.getId(), command.tags());
+    }
+
+    if (savedPost.getType() == PostType.QUESTION) {
+      questionLifecycleExecutionPort.prepareQuestionCreate(
+          savedPost.getId(), savedPost.getUserId(), savedPost.getContent(), savedPost.getReward());
     }
 
     Long grantedXp = 0L;

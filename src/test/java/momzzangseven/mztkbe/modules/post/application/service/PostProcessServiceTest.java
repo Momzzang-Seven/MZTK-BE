@@ -14,8 +14,10 @@ import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -38,6 +40,8 @@ class PostProcessServiceTest {
   @Mock private ApplicationEventPublisher eventPublisher;
   @Mock private LinkTagPort linkTagPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
+  @Mock private CountAnswersPort countAnswersPort;
+  @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   @InjectMocks private PostProcessService postProcessService;
 
@@ -65,6 +69,7 @@ class PostProcessServiceTest {
 
     verify(linkTagPort).updateTags(postId, List.of("java"));
     verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of(1L));
+    verifyNoInteractions(questionLifecycleExecutionPort);
   }
 
   @Test
@@ -82,6 +87,7 @@ class PostProcessServiceTest {
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(linkTagPort, never()).updateTags(postId, null);
     verify(updatePostImagesPort, never()).updateImages(ownerId, postId, post.getType(), null);
+    verifyNoInteractions(questionLifecycleExecutionPort);
   }
 
   @Test
@@ -98,6 +104,7 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of());
+    verifyNoInteractions(questionLifecycleExecutionPort);
   }
 
   @Test
@@ -108,7 +115,8 @@ class PostProcessServiceTest {
     assertThatThrownBy(() -> postProcessService.updatePost(1L, 1L, command))
         .isInstanceOf(PostInvalidInputException.class);
 
-    verifyNoInteractions(postPersistencePort, linkTagPort);
+    verifyNoInteractions(
+        postPersistencePort, linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -124,7 +132,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(linkTagPort);
+    verifyNoInteractions(linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -139,6 +147,7 @@ class PostProcessServiceTest {
     postProcessService.deletePost(ownerId, postId);
 
     verify(postPersistencePort).deletePost(post);
+    verifyNoInteractions(questionLifecycleExecutionPort);
 
     ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
     verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -154,7 +163,7 @@ class PostProcessServiceTest {
         .isInstanceOf(PostNotFoundException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(eventPublisher);
+    verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -168,43 +177,98 @@ class PostProcessServiceTest {
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(eventPublisher);
+    verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
   @Test
-  @DisplayName("Resolved QUESTION posts cannot be updated")
-  void updateSolvedQuestionPostThrows() {
+  @DisplayName("answered QUESTION posts cannot be updated")
+  void updateAnsweredQuestionPostThrows() {
     Long ownerId = 7L;
     Long postId = 70L;
-    Post post = solvedQuestionPost(ownerId, postId);
+    Post post = questionPost(ownerId, postId);
     UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(1L);
 
     assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(linkTagPort);
+    verifyNoInteractions(linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
-  @DisplayName("Resolved QUESTION posts cannot be deleted")
-  void deleteSolvedQuestionPostThrows() {
+  @DisplayName("answered QUESTION posts cannot be deleted")
+  void deleteAnsweredQuestionPostThrows() {
     Long ownerId = 7L;
     Long postId = 71L;
-    Post post = solvedQuestionPost(ownerId, postId);
+    Post post = questionPost(ownerId, postId);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(2L);
 
     assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(eventPublisher);
+    verifyNoInteractions(eventPublisher, questionLifecycleExecutionPort);
   }
 
-  private Post solvedQuestionPost(Long ownerId, Long postId) {
+  @Test
+  @DisplayName("unanswered QUESTION post can be updated when answer count is zero")
+  void updateQuestionPostWhenNoAnswersSucceeds() {
+    Long ownerId = 7L;
+    Long postId = 72L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command =
+        UpdatePostCommand.of("edited title", "수정된 질문 내용", null, List.of("java"));
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.updatePost(ownerId, postId, command);
+
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(linkTagPort).updateTags(postId, List.of("java"));
+    verify(questionLifecycleExecutionPort).prepareQuestionUpdate(postId, ownerId, "수정된 질문 내용", 50L);
+  }
+
+  @Test
+  @DisplayName("QUESTION post update skips on-chain sync when content is unchanged")
+  void updateQuestionPostSkipsOnChainSyncWhenContentUnchanged() {
+    Long ownerId = 7L;
+    Long postId = 74L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", "질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.updatePost(ownerId, postId, command);
+
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("unanswered QUESTION post can be deleted when answer count is zero")
+  void deleteQuestionPostWhenNoAnswersSucceeds() {
+    Long ownerId = 7L;
+    Long postId = 73L;
+    Post post = questionPost(ownerId, postId);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.deletePost(ownerId, postId);
+
+    verify(postPersistencePort).deletePost(post);
+    verify(questionLifecycleExecutionPort).prepareQuestionDelete(postId, ownerId, "질문 내용", 50L);
+    verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  private Post questionPost(Long ownerId, Long postId) {
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     return Post.builder()
         .id(postId)
@@ -213,8 +277,7 @@ class PostProcessServiceTest {
         .title("질문 제목")
         .content("질문 내용")
         .reward(50L)
-        .acceptedAnswerId(90L)
-        .status(PostStatus.RESOLVED)
+        .status(PostStatus.OPEN)
         .createdAt(updatedAt.minusHours(1))
         .updatedAt(updatedAt)
         .build();

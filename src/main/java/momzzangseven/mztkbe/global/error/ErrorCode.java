@@ -65,7 +65,7 @@ public enum ErrorCode {
   // ========================================
   // User Errors (USER_xxx)
   // ========================================
-  ILLEGAL_ADMIN_GRANT("USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST),
+  ILLEGAL_ADMIN_GRANT("USER_001", "Illegal ADMIN grant trial", HttpStatus.BAD_REQUEST),
 
   INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
 
@@ -332,14 +332,6 @@ public enum ErrorCode {
       "ANSWER_004", "Cannot write an answer on a solved post", HttpStatus.BAD_REQUEST // 400
       ),
 
-  CANNOT_UPDATE_ACCEPTED_ANSWER(
-      "ANSWER_005", "Cannot update an accepted answer", HttpStatus.BAD_REQUEST // 400
-      ),
-
-  CANNOT_DELETE_ACCEPTED_ANSWER(
-      "ANSWER_006", "Cannot delete an accepted answer", HttpStatus.BAD_REQUEST // 400
-      ),
-
   ANSWER_POST_MISMATCH(
       "ANSWER_007", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
       ),
@@ -347,6 +339,10 @@ public enum ErrorCode {
   REQUIRE_USER_LOGIN(
       "ANSWER_008", "User login is required", HttpStatus.UNAUTHORIZED // 401
       ),
+  CANNOT_UPDATE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_009", "Cannot update an answer on a solved post", HttpStatus.BAD_REQUEST),
+  CANNOT_DELETE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_010", "Cannot delete an answer on a solved post", HttpStatus.BAD_REQUEST),
   // ========================================
   // Image Errors (IMAGE_xxx)
   // ========================================
@@ -382,6 +378,24 @@ public enum ErrorCode {
   VERIFICATION_ALREADY_COMPLETED_TODAY(
       "VERIFICATION_006", "Workout already completed today", HttpStatus.CONFLICT),
   VERIFICATION_NOT_FOUND("VERIFICATION_007", "Verification not found", HttpStatus.NOT_FOUND),
+
+  // ========================================
+  // Admin Errors (ADMIN_xxx)
+  // ========================================
+  SELF_RESET_FORBIDDEN(
+      "ADMIN_001", "Cannot reset own password via peer-reset", HttpStatus.FORBIDDEN),
+  ADMIN_NOT_FOUND("ADMIN_002", "Admin account not found", HttpStatus.NOT_FOUND),
+  ADMIN_CREDENTIAL_GEN_FAILED(
+      "ADMIN_003", "Failed to generate admin credentials", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEAK_ADMIN_PASSWORD(
+      "ADMIN_004", "Admin password does not meet policy requirements", HttpStatus.BAD_REQUEST),
+  SEED_ADMIN_DELETE_FORBIDDEN("ADMIN_005", "Cannot delete seed admin account", HttpStatus.CONFLICT),
+  RECOVERY_REJECTED("ADMIN_006", "Recovery anchor mismatch", HttpStatus.FORBIDDEN),
+  RECOVERY_ANCHOR_UNAVAILABLE(
+      "ADMIN_007", "Recovery anchor service unavailable", HttpStatus.SERVICE_UNAVAILABLE),
+  RECOVERY_DELIVERY_FAILED(
+      "ADMIN_008", "Failed to deliver recovery credentials", HttpStatus.INTERNAL_SERVER_ERROR),
+  RATE_LIMITED("ADMIN_009", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
   ;
 
   private final String code;

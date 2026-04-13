@@ -13,7 +13,8 @@ public record LoginCommand(
     String password,
     String authorizationCode,
     String redirectUri,
-    String role) {
+    String role,
+    String loginId) {
 
   /**
    * Validate command based on provider.
@@ -32,6 +33,15 @@ public record LoginCommand(
         }
         if (password == null || password.isBlank()) {
           throw new IllegalArgumentException("Password is required for LOCAL login");
+        }
+        break;
+
+      case LOCAL_ADMIN:
+        if (loginId == null || loginId.isBlank()) {
+          throw new IllegalArgumentException("Login ID is required for LOCAL_ADMIN login");
+        }
+        if (password == null || password.isBlank()) {
+          throw new IllegalArgumentException("Password is required for LOCAL_ADMIN login");
         }
         break;
 

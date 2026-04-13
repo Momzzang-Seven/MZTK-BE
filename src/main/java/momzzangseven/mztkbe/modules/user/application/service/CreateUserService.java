@@ -33,4 +33,18 @@ public class CreateUserService implements CreateUserUseCase {
     log.info("User created: userId={}, email={}", savedUser.getId(), savedUser.getEmail());
     return UserInfo.from(savedUser);
   }
+
+  @Override
+  public UserInfo createAdminUser(CreateUserCommand command) {
+    UserRole role = UserRole.valueOf(command.role());
+
+    User adminUser = User.createAdmin(command.email(), command.nickname(), role);
+    User savedAdminUser = saveUserPort.saveUser(adminUser);
+
+    log.info(
+        "Admin User created: userId={}, email={}",
+        savedAdminUser.getId(),
+        savedAdminUser.getEmail());
+    return UserInfo.from(savedAdminUser);
+  }
 }

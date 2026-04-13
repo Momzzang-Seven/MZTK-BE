@@ -89,8 +89,10 @@ public class Eip7702Properties {
   @Getter
   @Setter
   public static class Execution {
-    @NotNull private List<String> allowedTargetContracts;
-    @NotNull private List<String> blockedFunctionSelectors;
+    @NotNull private List<String> allowedDelegateTargets = List.of();
+    @NotNull private List<String> allowedCallTargets = List.of();
+    @NotNull private List<String> allowedTargetContracts = List.of();
+    @NotNull private List<String> blockedFunctionSelectors = List.of();
   }
 
   @Getter

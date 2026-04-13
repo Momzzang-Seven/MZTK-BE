@@ -7,7 +7,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.UUID;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
@@ -15,6 +17,7 @@ import momzzangseven.mztkbe.modules.image.application.service.ImagePendingCleanu
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -76,6 +79,18 @@ class ImagePendingCleanupE2ETest {
   // Teardown
   // ============================================================
 
+  @BeforeEach
+  void ensureTestUserExists() {
+    jdbcTemplate.update(
+        "INSERT INTO users (id, email, nickname, role, created_at, updated_at) "
+            + "OVERRIDING SYSTEM VALUE "
+            + "VALUES (?, ?, ?, 'USER', NOW(), NOW()) "
+            + "ON CONFLICT (id) DO NOTHING",
+        TEST_USER_ID,
+        "e2e-cleanup-fixture@example.com",
+        "cleanup-fixture");
+  }
+
   @AfterEach
   void cleanup() {
     if (!insertedIds.isEmpty()) {
@@ -125,8 +140,9 @@ class ImagePendingCleanupE2ETest {
           ps.setLong(1, TEST_USER_ID);
           ps.setString(2, status);
           ps.setString(3, uniqueKey);
-          ps.setTimestamp(4, Timestamp.from(createdAt));
-          ps.setTimestamp(5, Timestamp.from(createdAt));
+          Calendar utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+          ps.setTimestamp(4, Timestamp.from(createdAt), utc);
+          ps.setTimestamp(5, Timestamp.from(createdAt), utc);
           return ps;
         },
         keyHolder);

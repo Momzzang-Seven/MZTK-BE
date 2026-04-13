@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import momzzangseven.mztkbe.modules.post.application.dto.MarkQuestionPostSolvedCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.MarkQuestionPostSolvedUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,11 +24,12 @@ class QuestionPostStateAdapterTest {
   @Test
   @DisplayName("delegates markSolved to post use case")
   void markSolved_delegatesToUseCase() {
-    when(markQuestionPostSolvedUseCase.execute(77L)).thenReturn(1);
+    when(markQuestionPostSolvedUseCase.execute(new MarkQuestionPostSolvedCommand(77L)))
+        .thenReturn(1);
 
     int updated = adapter.markSolved(77L);
 
     assertThat(updated).isEqualTo(1);
-    verify(markQuestionPostSolvedUseCase).execute(77L);
+    verify(markQuestionPostSolvedUseCase).execute(new MarkQuestionPostSolvedCommand(77L));
   }
 }

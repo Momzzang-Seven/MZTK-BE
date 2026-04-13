@@ -1,6 +1,10 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -10,14 +14,21 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -33,6 +44,7 @@ class MarkExecutionIntentOutcomeServiceTest {
       LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
+  @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
 
   private MarkExecutionIntentSucceededService succeededService;
   private MarkExecutionIntentFailedOnchainService failedOnchainService;
@@ -40,13 +52,23 @@ class MarkExecutionIntentOutcomeServiceTest {
   @BeforeEach
   void setUp() {
     succeededService =
-        new MarkExecutionIntentSucceededService(executionIntentPersistencePort, FIXED_CLOCK);
+        new MarkExecutionIntentSucceededService(
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
     failedOnchainService =
-        new MarkExecutionIntentFailedOnchainService(executionIntentPersistencePort, FIXED_CLOCK);
+        new MarkExecutionIntentFailedOnchainService(
+            executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
   }
 
   @Test
   void markSucceeded_confirmsPendingIntent() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(
+            argThat(intent -> intent.getSubmittedTxId().equals(12L))))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
@@ -64,10 +86,31 @@ class MarkExecutionIntentOutcomeServiceTest {
                             == momzzangseven.mztkbe.modules.web3.execution.domain.model
                                 .ExecutionIntentStatus.CONFIRMED
                         && updated.getSubmittedTxId().equals(12L)));
+    verify(executionActionHandlerPort)
+        .afterExecutionConfirmed(
+            argThat(
+                updated ->
+                    updated.getStatus()
+                            == momzzangseven.mztkbe.modules.web3.execution.domain.model
+                                .ExecutionIntentStatus.CONFIRMED
+                        && updated.getSubmittedTxId().equals(12L)),
+            argThat(
+                plan ->
+                    plan.amountWei().compareTo(BigInteger.ZERO) == 0
+                        && plan.referenceType() == ExecutionReferenceType.USER_TO_SERVER
+                        && plan.calls().size() == 1
+                        && "0x1234".equals(plan.calls().get(0).data())));
   }
 
   @Test
   void markFailedOnchain_marksPendingIntentFailed() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any()))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
@@ -86,6 +129,49 @@ class MarkExecutionIntentOutcomeServiceTest {
                                 .ExecutionIntentStatus.FAILED_ONCHAIN
                         && "FAILED_ONCHAIN".equals(updated.getLastErrorCode())
                         && "RECEIPT_STATUS_0".equals(updated.getLastErrorReason())));
+    verify(executionActionHandlerPort)
+        .afterExecutionFailedOnchain(
+            argThat(updated -> updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN),
+            any(),
+            org.mockito.ArgumentMatchers.eq("RECEIPT_STATUS_0"));
+  }
+
+  @Test
+  @DisplayName("핸들러 예외가 발생하면 CONFIRMED 상태를 저장하지 않고 예외를 전파한다")
+  void markSucceeded_handlerThrows_doesNotPersistConfirmedState() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any()))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
+    doThrow(new IllegalStateException("missing qna question projection: postId=101"))
+        .when(executionActionHandlerPort)
+        .afterExecutionConfirmed(any(), any());
+
+    ExecutionIntent pendingIntent = pendingEip1559Intent();
+    when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
+        .thenReturn(Optional.of(pendingIntent));
+
+    assertThatThrownBy(() -> succeededService.execute(12L))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("missing qna question projection");
+
+    verify(executionIntentPersistencePort, never()).update(any());
+  }
+
+  @Test
+  @DisplayName("이미 CONFIRMED 상태인 intent 는 재처리하지 않는다")
+  void markSucceeded_alreadyConfirmed_doesNothing() {
+    ExecutionIntent confirmedIntent = pendingEip1559Intent().confirm(FIXED_NOW.plusSeconds(3));
+    when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
+        .thenReturn(Optional.of(confirmedIntent));
+
+    succeededService.execute(12L);
+
+    verify(executionIntentPersistencePort, never()).update(any());
+    verify(executionActionHandlerPort, never()).afterExecutionConfirmed(any(), any());
   }
 
   private ExecutionIntent pendingEip1559Intent() {

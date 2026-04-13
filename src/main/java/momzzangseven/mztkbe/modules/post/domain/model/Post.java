@@ -100,16 +100,15 @@ public class Post {
     }
   }
 
-  public void validateDeletable() {
-    if (PostType.QUESTION.equals(this.type) && isResolved()) {
-      throw new PostInvalidInputException("A solved question post cannot be deleted.");
+  public void validateDeletable(long activeAnswerCount) {
+    if (PostType.QUESTION.equals(this.type)
+        && (activeAnswerCount > 0 || isAcceptancePending() || isResolved())) {
+      throw new PostInvalidInputException("An answered or solved question post cannot be deleted.");
     }
   }
 
-  public Post update(String title, String content, List<String> tags) {
-    if (PostType.QUESTION.equals(this.type) && isResolved()) {
-      throw new PostInvalidInputException("A solved question post cannot be edited.");
-    }
+  public Post update(String title, String content, List<String> tags, long activeAnswerCount) {
+    validateEditable(activeAnswerCount);
 
     var builder = this.toBuilder();
     boolean isUpdated = false;
@@ -139,6 +138,13 @@ public class Post {
     return this;
   }
 
+  public void validateEditable(long activeAnswerCount) {
+    if (PostType.QUESTION.equals(this.type)
+        && (activeAnswerCount > 0 || isAcceptancePending() || isResolved())) {
+      throw new PostInvalidInputException("An answered or solved question post cannot be edited.");
+    }
+  }
+
   public Post withTags(List<String> tags) {
     return this.toBuilder().tags(tags != null ? tags : new ArrayList<>()).build();
   }
@@ -147,16 +153,49 @@ public class Post {
     return this.status == PostStatus.RESOLVED;
   }
 
-  public Post accept(Long answerId) {
-    if (type != PostType.QUESTION) {
-      throw new PostInvalidInputException("Only question posts can accept an answer.");
-    }
-    if (answerId == null || answerId <= 0) {
-      throw new PostInvalidInputException("answerId must be positive.");
-    }
-    if (isResolved()) {
+  public boolean isAcceptancePending() {
+    return this.status == PostStatus.PENDING_ACCEPT;
+  }
+
+  public Post beginAccept(Long answerId) {
+    validateAcceptTarget(answerId);
+    if (isAcceptancePending()) {
+      if (answerId.equals(acceptedAnswerId)) {
+        return this;
+      }
       throw new PostAlreadySolvedException();
     }
+    validateAcceptable();
+
+    return this.toBuilder()
+        .acceptedAnswerId(answerId)
+        .status(PostStatus.PENDING_ACCEPT)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post confirmAccepted(Long answerId) {
+    validatePendingAccept(answerId);
+
+    return this.toBuilder()
+        .status(PostStatus.RESOLVED)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post cancelPendingAccept(Long answerId) {
+    validatePendingAccept(answerId);
+
+    return this.toBuilder()
+        .acceptedAnswerId(null)
+        .status(PostStatus.OPEN)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post accept(Long answerId) {
+    validateAcceptTarget(answerId);
+    validateAcceptable();
 
     return this.toBuilder()
         .acceptedAnswerId(answerId)
@@ -183,9 +222,35 @@ public class Post {
     if (status == PostStatus.OPEN && acceptedAnswerId != null) {
       throw new IllegalArgumentException("Open question posts cannot have acceptedAnswerId.");
     }
-    if (status == PostStatus.RESOLVED && acceptedAnswerId == null) {
-      throw new IllegalArgumentException("Resolved question posts require acceptedAnswerId.");
+    if ((status == PostStatus.PENDING_ACCEPT || status == PostStatus.RESOLVED)
+        && acceptedAnswerId == null) {
+      throw new IllegalArgumentException(status + " question posts require acceptedAnswerId.");
     }
     return status;
+  }
+
+  private void validateAcceptTarget(Long answerId) {
+    if (type != PostType.QUESTION) {
+      throw new PostInvalidInputException("Only question posts can accept an answer.");
+    }
+    if (answerId == null || answerId <= 0) {
+      throw new PostInvalidInputException("answerId must be positive.");
+    }
+  }
+
+  private void validateAcceptable() {
+    if (isResolved()) {
+      throw new PostAlreadySolvedException();
+    }
+  }
+
+  private void validatePendingAccept(Long answerId) {
+    validateAcceptTarget(answerId);
+    if (!isAcceptancePending()) {
+      throw new PostInvalidInputException("Question post is not pending acceptance.");
+    }
+    if (!answerId.equals(acceptedAnswerId)) {
+      throw new PostInvalidInputException("Pending accepted answer does not match.");
+    }
   }
 }
