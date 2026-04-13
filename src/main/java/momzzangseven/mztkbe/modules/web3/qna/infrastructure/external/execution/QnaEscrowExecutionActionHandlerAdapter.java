@@ -87,11 +87,20 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     if (failureReason == null || failureReason.isBlank()) {
       return true;
     }
+    Web3TxFailureReason reason = resolveFailureReason(failureReason);
+    return reason == null || !reason.isRetryable();
+  }
+
+  private Web3TxFailureReason resolveFailureReason(String failureReason) {
     try {
-      Web3TxFailureReason reason = Web3TxFailureReason.valueOf(failureReason);
-      return !reason.isRetryable();
-    } catch (IllegalArgumentException e) {
-      return false;
+      return Web3TxFailureReason.valueOf(failureReason);
+    } catch (IllegalArgumentException ignored) {
+      for (Web3TxFailureReason candidate : Web3TxFailureReason.values()) {
+        if (failureReason.startsWith(candidate.code() + "_")) {
+          return candidate;
+        }
+      }
+      return null;
     }
   }
 

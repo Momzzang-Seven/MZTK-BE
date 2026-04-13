@@ -240,12 +240,23 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
-  @DisplayName("afterExecutionFailedOnchain keeps pending accept for unknown onchain failure")
-  void afterExecutionFailedOnchain_keepsPendingForUnknownFailure() throws Exception {
+  @DisplayName("afterExecutionFailedOnchain rolls back pending accept for unknown onchain failure")
+  void afterExecutionFailedOnchain_rollsBackForUnknownFailure() throws Exception {
     adapter.afterExecutionFailedOnchain(
         intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), "EXPIRED");
 
-    verify(qnaAcceptStateSyncPort, never()).rollbackPendingAccept(101L, 201L);
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionFailedOnchain rolls back pending accept for suffixed failure code")
+  void afterExecutionFailedOnchain_rollsBackForSuffixedFailureCode() throws Exception {
+    adapter.afterExecutionFailedOnchain(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        "RECEIPT_TIMEOUT_30S");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
 
   @Test
