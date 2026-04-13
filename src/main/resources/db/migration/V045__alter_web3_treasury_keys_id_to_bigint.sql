@@ -1,0 +1,2 @@
+ALTER TABLE web3_treasury_keys
+    ALTER COLUMN id SET DATA TYPE BIGINT;
