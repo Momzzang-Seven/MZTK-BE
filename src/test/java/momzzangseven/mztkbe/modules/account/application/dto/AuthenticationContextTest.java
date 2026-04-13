@@ -14,7 +14,7 @@ class AuthenticationContextTest {
   void from_mapsAllFields() {
     LoginCommand command =
         new LoginCommand(
-            AuthProvider.GOOGLE, "user@example.com", "pw", "auth-code", "redirect", "USER");
+            AuthProvider.GOOGLE, "user@example.com", "pw", "auth-code", "redirect", "USER", null);
 
     AuthenticationContext context = AuthenticationContext.from(command);
 
@@ -30,7 +30,7 @@ class AuthenticationContextTest {
   @DisplayName("[M-17] from() maps null role from LoginCommand")
   void from_mapsNullRole() {
     LoginCommand command =
-        new LoginCommand(AuthProvider.KAKAO, null, null, "auth-code", "redirect", null);
+        new LoginCommand(AuthProvider.KAKAO, null, null, "auth-code", "redirect", null, null);
 
     AuthenticationContext context = AuthenticationContext.from(command);
 
@@ -42,11 +42,12 @@ class AuthenticationContextTest {
   void isValidForLocal_checksNonBlankEmailAndPassword() {
     AuthenticationContext valid =
         new AuthenticationContext(
-            AuthProvider.LOCAL, "user@example.com", "password", null, null, null);
+            AuthProvider.LOCAL, "user@example.com", "password", null, null, null, null);
     AuthenticationContext blankEmail =
-        new AuthenticationContext(AuthProvider.LOCAL, " ", "password", null, null, null);
+        new AuthenticationContext(AuthProvider.LOCAL, " ", "password", null, null, null, null);
     AuthenticationContext blankPassword =
-        new AuthenticationContext(AuthProvider.LOCAL, "user@example.com", " ", null, null, null);
+        new AuthenticationContext(
+            AuthProvider.LOCAL, "user@example.com", " ", null, null, null, null);
 
     assertThat(valid.isValidForLocal()).isTrue();
     assertThat(blankEmail.isValidForLocal()).isFalse();
@@ -57,11 +58,72 @@ class AuthenticationContextTest {
   @DisplayName("isValidForSocial returns true only when authorization code is non-blank")
   void isValidForSocial_checksAuthorizationCode() {
     AuthenticationContext valid =
-        new AuthenticationContext(AuthProvider.KAKAO, null, null, "code", null, null);
+        new AuthenticationContext(AuthProvider.KAKAO, null, null, "code", null, null, null);
     AuthenticationContext blank =
-        new AuthenticationContext(AuthProvider.KAKAO, null, null, "   ", null, null);
+        new AuthenticationContext(AuthProvider.KAKAO, null, null, "   ", null, null, null);
 
     assertThat(valid.isValidForSocial()).isTrue();
     assertThat(blank.isValidForSocial()).isFalse();
+  }
+
+  @Test
+  @DisplayName("[M-114] isValidForLocalAdmin returns true when loginId and password are non-blank")
+  void isValidForLocalAdmin_ValidInputs_ReturnsTrue() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.LOCAL_ADMIN, null, "password", null, null, null, "admin001");
+
+    assertThat(context.isValidForLocalAdmin()).isTrue();
+  }
+
+  @Test
+  @DisplayName("[M-115] isValidForLocalAdmin returns false when loginId is null")
+  void isValidForLocalAdmin_NullLoginId_ReturnsFalse() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.LOCAL_ADMIN, null, "password", null, null, null, null);
+
+    assertThat(context.isValidForLocalAdmin()).isFalse();
+  }
+
+  @Test
+  @DisplayName("[M-116] isValidForLocalAdmin returns false when loginId is blank")
+  void isValidForLocalAdmin_BlankLoginId_ReturnsFalse() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.LOCAL_ADMIN, null, "password", null, null, null, "   ");
+
+    assertThat(context.isValidForLocalAdmin()).isFalse();
+  }
+
+  @Test
+  @DisplayName("[M-117] isValidForLocalAdmin returns false when password is null")
+  void isValidForLocalAdmin_NullPassword_ReturnsFalse() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.LOCAL_ADMIN, null, null, null, null, null, "admin001");
+
+    assertThat(context.isValidForLocalAdmin()).isFalse();
+  }
+
+  @Test
+  @DisplayName("[M-118] isValidForLocalAdmin returns false when password is blank")
+  void isValidForLocalAdmin_BlankPassword_ReturnsFalse() {
+    AuthenticationContext context =
+        new AuthenticationContext(
+            AuthProvider.LOCAL_ADMIN, null, "  ", null, null, null, "admin001");
+
+    assertThat(context.isValidForLocalAdmin()).isFalse();
+  }
+
+  @Test
+  @DisplayName("[M-119] from() maps loginId field from LoginCommand")
+  void from_mapsLoginIdField() {
+    LoginCommand command =
+        new LoginCommand(AuthProvider.LOCAL_ADMIN, null, "password", null, null, null, "admin001");
+
+    AuthenticationContext context = AuthenticationContext.from(command);
+
+    assertThat(context.loginId()).isEqualTo("admin001");
   }
 }

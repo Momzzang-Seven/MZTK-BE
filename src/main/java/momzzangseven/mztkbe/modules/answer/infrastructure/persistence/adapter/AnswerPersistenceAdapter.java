@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.adapter;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
@@ -13,7 +14,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort, DeleteAnswerPort {
+public class AnswerPersistenceAdapter
+    implements SaveAnswerPort, LoadAnswerPort, DeleteAnswerPort, CountAnswersPort {
 
   private final AnswerJpaRepository answerJpaRepository;
 
@@ -39,6 +41,11 @@ public class AnswerPersistenceAdapter implements SaveAnswerPort, LoadAnswerPort,
   @Override
   public Optional<Answer> loadAnswerForUpdate(Long answerId) {
     return answerJpaRepository.findByIdForUpdate(answerId).map(this::toDomain);
+  }
+
+  @Override
+  public long countAnswers(Long postId) {
+    return answerJpaRepository.countByPostId(postId);
   }
 
   @Override

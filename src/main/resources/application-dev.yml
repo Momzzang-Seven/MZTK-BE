@@ -53,3 +53,8 @@ web3:
 
   eip7702:
     enabled: true  # dev에서 필요하면 true로
+
+mztk:
+  admin:
+    recovery:
+      anchor: "anchor-only-for-dev"

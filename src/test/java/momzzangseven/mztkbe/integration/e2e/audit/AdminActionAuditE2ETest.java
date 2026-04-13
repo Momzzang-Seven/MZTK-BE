@@ -36,6 +36,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -83,6 +84,7 @@ class AdminActionAuditE2ETest {
   @Autowired private TestRestTemplate restTemplate;
   @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private PasswordEncoder passwordEncoder;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -114,6 +116,11 @@ class AdminActionAuditE2ETest {
       jdbcTemplate.update(
           "DELETE FROM web3_treasury_provision_audits WHERE operator_id IN (" + inClause + ")",
           createdUserIds.toArray());
+    }
+
+    // 1-b. admin_accounts rows for our test admin users
+    for (Long userId : createdUserIds) {
+      jdbcTemplate.update("DELETE FROM admin_accounts WHERE user_id = ?", userId);
     }
 
     // 2. web3_transaction_audits + web3_transactions for seeded rows
@@ -168,7 +175,11 @@ class AdminActionAuditE2ETest {
     return sb.toString();
   }
 
-  /** Signs up a user, promotes them to ADMIN via direct DB update, then logs in. */
+  /**
+   * Signs up a user, promotes them to ADMIN_GENERATED via direct DB update, creates a matching
+   * {@code admin_accounts} row so that the JWT filter's {@code isActiveAdmin} check passes, then
+   * logs in.
+   */
   private AdminUser createAdminAndLogin() throws Exception {
     String email = uniqueEmail();
     signup(email, "Test@1234!", "AuditAdmin");
@@ -176,8 +187,17 @@ class AdminActionAuditE2ETest {
 
     Long userId =
         jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
-    jdbcTemplate.update("UPDATE users SET role = 'ADMIN' WHERE id = ?", userId);
+    jdbcTemplate.update("UPDATE users SET role = 'ADMIN_GENERATED' WHERE id = ?", userId);
     createdUserIds.add(userId);
+
+    String loginId = String.valueOf(10000000 + (int) (Math.random() * 90000000));
+    jdbcTemplate.update(
+        "INSERT INTO admin_accounts (user_id, login_id, password_hash, created_by,"
+            + " last_login_at, password_last_rotated_at, deleted_at, created_at, updated_at)"
+            + " VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NOW(), NOW())",
+        userId,
+        loginId,
+        passwordEncoder.encode("Test@1234!"));
 
     String accessToken = loginAndGetAccessToken(email, "Test@1234!");
     return new AdminUser(userId, accessToken);
@@ -231,8 +251,8 @@ class AdminActionAuditE2ETest {
     jdbcTemplate.update(
         "INSERT INTO web3_transactions ("
             + "idempotency_key, reference_type, reference_id, from_user_id, to_user_id, "
-            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, created_at, updated_at"
-            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, signed_at, broadcasted_at, failure_reason, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         idempotencyKey,
         "LEVEL_UP_REWARD",
         "ref-" + idempotencyKey,
@@ -244,6 +264,9 @@ class AdminActionAuditE2ETest {
         "EIP1559",
         "UNCONFIRMED",
         txHash,
+        now,
+        now,
+        "RECEIPT_TIMEOUT",
         now,
         now);
     Long id =
@@ -265,8 +288,8 @@ class AdminActionAuditE2ETest {
     jdbcTemplate.update(
         "INSERT INTO web3_transactions ("
             + "idempotency_key, reference_type, reference_id, from_user_id, to_user_id, "
-            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, created_at, updated_at"
-            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + "from_address, to_address, amount_wei, tx_type, status, tx_hash, signed_at, broadcasted_at, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         idempotencyKey,
         "LEVEL_UP_REWARD",
         "ref-" + idempotencyKey,
@@ -278,6 +301,8 @@ class AdminActionAuditE2ETest {
         "EIP1559",
         "PENDING",
         txHash,
+        now,
+        now,
         now,
         now);
     Long id =
@@ -291,7 +316,7 @@ class AdminActionAuditE2ETest {
 
   private void stubReceiptSuccess(String txHash) {
     given(web3ContractPort.getReceipt(txHash))
-        .willReturn(new Web3ContractPort.ReceiptResult(txHash, true, true, "primary", false, null));
+        .willReturn(new Web3ContractPort.ReceiptResult(txHash, true, true, "main", false, null));
   }
 
   private void stubReceiptSuccessForAny() {
@@ -299,7 +324,7 @@ class AdminActionAuditE2ETest {
         .willAnswer(
             inv ->
                 new Web3ContractPort.ReceiptResult(
-                    inv.getArgument(0, String.class), true, true, "primary", false, null));
+                    inv.getArgument(0, String.class), true, true, "main", false, null));
   }
 
   private ResponseEntity<String> markSucceeded(
@@ -804,7 +829,7 @@ class AdminActionAuditE2ETest {
                 + "AND is_nullable = 'NO' ORDER BY column_name",
             String.class);
     assertThat(notNullColumns)
-        .contains("id", "operator_id", "action_type", "target_type", "success", "created_at");
+        .contains("id", "action_type", "target_type", "success", "created_at");
     // target_id and detail_json must be nullable
     assertThat(notNullColumns).doesNotContain("target_id");
     assertThat(notNullColumns).doesNotContain("detail_json");

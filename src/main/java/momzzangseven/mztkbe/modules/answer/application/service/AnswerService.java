@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.port.in.CountAnswersUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
@@ -23,6 +24,8 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryU
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
@@ -40,7 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class AnswerService
-    implements CreateAnswerUseCase,
+    implements CountAnswersUseCase,
+        CreateAnswerUseCase,
         GetAnswerUseCase,
         GetAnswerSummaryUseCase,
         UpdateAnswerUseCase,
@@ -49,6 +53,7 @@ public class AnswerService
         MarkAnswerAcceptedUseCase {
 
   private final SaveAnswerPort saveAnswerPort;
+  private final CountAnswersPort countAnswersPort;
   private final LoadPostPort loadPostPort;
   private final LoadAnswerPort loadAnswerPort;
   private final DeleteAnswerPort deleteAnswerPort;
@@ -56,8 +61,19 @@ public class AnswerService
   private final LoadAnswerImagesPort loadAnswerImagesPort;
   private final LoadAnswerLikePort loadAnswerLikePort;
   private final UpdateAnswerImagesPort updateAnswerImagesPort;
+  private final AnswerLifecycleExecutionPort answerLifecycleExecutionPort;
   private final AnswerReadAssembler answerReadAssembler;
   private final ApplicationEventPublisher eventPublisher;
+
+  /** Returns the current persisted active answer count for the given question post. */
+  @Override
+  @Transactional(readOnly = true)
+  public long countAnswers(Long postId) {
+    if (postId == null) {
+      throw new AnswerInvalidInputException("postId is required.");
+    }
+    return countAnswersPort.countAnswers(postId);
+  }
 
   /** Creates a new answer for a question post. */
   @Override
@@ -72,7 +88,7 @@ public class AnswerService
         Answer.create(
             post.postId(),
             post.writerId(),
-            isSolvedContext(post),
+            post.answerLocked(),
             command.userId(),
             command.content());
 
@@ -82,6 +98,17 @@ public class AnswerService
       updateAnswerImagesPort.updateImages(
           savedAnswer.getUserId(), savedAnswer.getId(), command.imageIds());
     }
+
+    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(savedAnswer.getPostId()));
+    answerLifecycleExecutionPort.prepareAnswerCreate(
+        savedAnswer.getPostId(),
+        savedAnswer.getId(),
+        savedAnswer.getUserId(),
+        post.writerId(),
+        post.content(),
+        post.reward(),
+        savedAnswer.getContent(),
+        activeAnswerCount);
 
     return new CreateAnswerResult(savedAnswer.getId());
   }
@@ -131,7 +158,7 @@ public class AnswerService
         .map(
             answer ->
                 new GetAnswerSummaryUseCase.AnswerSummary(
-                    answer.getId(), answer.getPostId(), answer.getUserId()));
+                    answer.getId(), answer.getPostId(), answer.getUserId(), answer.getContent()));
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */
@@ -142,14 +169,28 @@ public class AnswerService
 
     Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
+    LoadPostPort.PostContext post = loadPost(answer.getPostId());
 
-    Answer updatedAnswer = answer.update(command.content(), command.userId());
+    Answer updatedAnswer = answer.update(command.content(), command.userId(), post.answerLocked());
     if (updatedAnswer != answer) {
       saveAnswerPort.saveAnswer(updatedAnswer);
     }
 
     if (command.imageIds() != null) {
       updateAnswerImagesPort.updateImages(command.userId(), command.answerId(), command.imageIds());
+    }
+
+    if (command.content() != null) {
+      int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+      answerLifecycleExecutionPort.prepareAnswerUpdate(
+          answer.getPostId(),
+          answer.getId(),
+          command.userId(),
+          post.writerId(),
+          post.content(),
+          post.reward(),
+          updatedAnswer.getContent(),
+          activeAnswerCount);
     }
   }
 
@@ -161,9 +202,19 @@ public class AnswerService
 
     Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
+    LoadPostPort.PostContext post = loadPost(answer.getPostId());
 
-    answer.validateDeletable(command.userId());
+    answer.validateDeletable(command.userId(), post.answerLocked());
     deleteAnswerPort.deleteAnswer(answer.getId());
+    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+    answerLifecycleExecutionPort.prepareAnswerDelete(
+        answer.getPostId(),
+        answer.getId(),
+        command.userId(),
+        post.writerId(),
+        post.content(),
+        post.reward(),
+        activeAnswerCount);
     eventPublisher.publishEvent(new AnswerDeletedEvent(answer.getId()));
   }
 
@@ -229,10 +280,6 @@ public class AnswerService
     if (!isQuestionPost(post)) {
       throw new AnswerUnsupportedPostTypeException();
     }
-  }
-
-  private boolean isSolvedContext(LoadPostPort.PostContext post) {
-    return post.isSolved();
   }
 
   private boolean isQuestionPost(LoadPostPort.PostContext post) {

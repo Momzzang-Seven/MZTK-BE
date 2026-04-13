@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +52,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  */
 @Tag("e2e")
 @ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+      "web3.chain-id=1337",
+      "web3.eip712.chain-id=1337",
+      "web3.eip7702.enabled=false",
+      "web3.reward-token.enabled=false"
+    })
 @DisplayName("[E2E] Post CRUD 전체 흐름 테스트")
 class PostE2ETest {
 
@@ -68,6 +76,7 @@ class PostE2ETest {
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   // ============================================================
   // 테스트 상태 (인스턴스별 독립)
@@ -851,7 +860,7 @@ class PostE2ETest {
 
       // then: Post.update() 내 status 기반 도메인 불변식 → PostInvalidInputException → POST_003
       assertThat(res.getStatusCode())
-          .as("Updating a solved question post should be rejected")
+          .as("Updating an answered question post should be rejected")
           .isEqualTo(HttpStatus.BAD_REQUEST);
       JsonNode root = parse(res);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
@@ -939,7 +948,7 @@ class PostE2ETest {
 
       // then: Post.validateDeletable() 내 status 기반 도메인 불변식 → POST_003
       assertThat(res.getStatusCode())
-          .as("Deleting a solved question post should be rejected")
+          .as("Deleting an answered question post should be rejected")
           .isEqualTo(HttpStatus.BAD_REQUEST);
       JsonNode root = parse(res);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
@@ -984,7 +993,7 @@ class PostE2ETest {
     }
 
     @Test
-    @DisplayName("accepted answer cannot be deleted through answer API")
+    @DisplayName("answer on a solved question cannot be deleted through answer API")
     void acceptAnswer_blocksAcceptedAnswerDeletion() throws Exception {
       String answererEmail = uniqueEmail();
       signupUser(answererEmail, "Test@1234!", "answerer");
@@ -1009,7 +1018,7 @@ class PostE2ETest {
               String.class);
 
       assertThat(deleteRes.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-      assertThat(parse(deleteRes).at("/code").asText()).isEqualTo("ANSWER_006");
+      assertThat(parse(deleteRes).at("/code").asText()).isEqualTo("ANSWER_010");
     }
 
     @Test

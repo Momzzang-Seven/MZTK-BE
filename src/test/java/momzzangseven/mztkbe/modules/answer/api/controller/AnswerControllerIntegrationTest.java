@@ -397,12 +397,12 @@ class AnswerControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("PUT answer returns 400 when the answer is accepted")
-    void updateAnswer_returns400_whenAnswerIsAccepted() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
+    @DisplayName("PUT answer returns 400 when the parent question is already solved")
+    void updateAnswer_returns400_whenParentQuestionIsSolved() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.RESOLVED, 999L);
       AnswerEntity answer =
           answerJpaRepository.save(
-              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true));
+              buildAnswerEntity(savedPost.getId(), 502L, "regular answer", false));
 
       mockMvc
           .perform(
@@ -411,23 +411,25 @@ class AnswerControllerIntegrationTest {
                   .contentType(APPLICATION_JSON)
                   .content(json(Map.of("content", "updated"))))
           .andExpect(status().isBadRequest())
-          .andExpect(jsonPath("$.status").value("FAIL"));
+          .andExpect(jsonPath("$.status").value("FAIL"))
+          .andExpect(jsonPath("$.code").value("ANSWER_009"));
     }
 
     @Test
-    @DisplayName("DELETE answer returns 400 when the answer is accepted")
-    void deleteAnswer_returns400_whenAnswerIsAccepted() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
+    @DisplayName("DELETE answer returns 400 when the parent question is already solved")
+    void deleteAnswer_returns400_whenParentQuestionIsSolved() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.RESOLVED, 999L);
       AnswerEntity answer =
           answerJpaRepository.save(
-              buildAnswerEntity(savedPost.getId(), 502L, "accepted answer", true));
+              buildAnswerEntity(savedPost.getId(), 502L, "regular answer", false));
 
       mockMvc
           .perform(
               delete("/questions/" + savedPost.getId() + "/answers/" + answer.getId())
                   .with(userPrincipal(502L)))
           .andExpect(status().isBadRequest())
-          .andExpect(jsonPath("$.status").value("FAIL"));
+          .andExpect(jsonPath("$.status").value("FAIL"))
+          .andExpect(jsonPath("$.code").value("ANSWER_010"));
     }
   }
 

@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
+import momzzangseven.mztkbe.modules.admin.application.port.in.CheckAdminAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -46,6 +47,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
   private final JwtTokenProvider jwtTokenProvider;
   private final CheckAccountStatusUseCase checkAccountStatusUseCase;
+  private final CheckAdminAccountStatusUseCase checkAdminAccountStatusUseCase;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -90,7 +92,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     UserRole role = jwtTokenProvider.getRoleFromToken(token);
     boolean isStepUp = jwtTokenProvider.isStepUpAccessToken(token);
 
-    if (!isActiveUser(userId)) {
+    if (!isActiveUser(userId, role)) {
       if (isWithdrawnUser(userId)) {
         writeErrorResponse(response, ErrorCode.USER_WITHDRAWN);
         return;
@@ -112,7 +114,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     return authorization.substring(BEARER_PREFIX.length()).trim();
   }
 
-  private boolean isActiveUser(Long userId) {
+  private boolean isActiveUser(Long userId, UserRole role) {
+    if (role.isAdmin()) {
+      return checkAdminAccountStatusUseCase.isActiveAdmin(userId);
+    }
     return checkAccountStatusUseCase.isActive(userId);
   }
 

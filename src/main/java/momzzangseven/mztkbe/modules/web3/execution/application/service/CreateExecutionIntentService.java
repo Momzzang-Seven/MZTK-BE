@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -55,6 +56,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private final LoadSponsorPolicyPort loadSponsorPolicyPort;
   private final LoadEip1559TtlPort loadEip1559TtlPort;
   private final BuildExecutionDigestPort buildExecutionDigestPort;
+  private final ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
   private final ExecutionModeSelector executionModeSelector;
   private final Clock appClock;
 
@@ -84,6 +86,10 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
 
     ExecutionModeSelector.ExecutionModeSelection preliminarySelection =
         executionModeSelector.select(command);
+    if (preliminarySelection.mode() == ExecutionMode.EIP7702) {
+      validateExecutionDraftPolicyPort.validate(
+          command.draft().delegateTarget(), command.draft().calls());
+    }
     ModeDecision modeDecision = finalizeModeDecision(command, preliminarySelection);
     LocalDateTime expiresAt = selectedExpiresAt(command, modeDecision.mode(), now);
     if (modeDecision.mode() == ExecutionMode.EIP7702) {

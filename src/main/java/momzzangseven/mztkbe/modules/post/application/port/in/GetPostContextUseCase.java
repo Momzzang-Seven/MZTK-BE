@@ -6,6 +6,27 @@ public interface GetPostContextUseCase {
 
   Optional<PostContext> getPostContext(Long postId);
 
-  /** `solved` is a legacy boolean view derived from the post status. */
-  record PostContext(Long postId, Long writerId, boolean solved, boolean questionPost) {}
+  record PostContext(
+      Long postId,
+      Long writerId,
+      boolean solved,
+      boolean questionPost,
+      String content,
+      Long reward,
+      boolean answerLocked) {
+
+    public PostContext(Long postId, Long writerId, boolean solved, boolean questionPost) {
+      this(postId, writerId, solved, questionPost, null, null, solved);
+    }
+
+    public PostContext(
+        Long postId,
+        Long writerId,
+        boolean solved,
+        boolean questionPost,
+        String content,
+        Long reward) {
+      this(postId, writerId, solved, questionPost, content, reward, solved);
+    }
+  }
 }
