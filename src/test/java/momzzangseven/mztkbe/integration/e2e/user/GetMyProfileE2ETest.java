@@ -6,17 +6,16 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
@@ -35,54 +34,22 @@ import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAna
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-/**
- * GET /users/me 프로필 조회 E2E 테스트 (Local Server + Real PostgreSQL).
- *
- * <p>실행 조건:
- *
- * <ul>
- *   <li>로컬 PostgreSQL 서버 실행 필요 (docker compose up -d)
- *   <li>./gradlew e2eTest 명령어로 실행
- * </ul>
- *
- * <p>데이터 격리 전략:
- *
- * <ul>
- *   <li>{@code @BeforeEach}: 테스트마다 UUID 기반 고유 이메일로 신규 유저 생성 (데이터 충돌 방지)
- *   <li>{@code @AfterEach}: 테스트에서 생성한 posts, user_wallets를 명시적으로 삭제
- *   <li>유저 자체는 고유 이메일로 격리되므로 삭제하지 않음
- * </ul>
- */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("[E2E] GET /users/me 프로필 조회 전체 흐름 테스트")
-class GetMyProfileE2ETest {
+class GetMyProfileE2ETest extends E2ETestBase {
 
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private ImageJpaRepository imageJpaRepository;
   @Autowired private XpPolicyJpaRepository xpPolicyJpaRepository;
@@ -98,45 +65,14 @@ class GetMyProfileE2ETest {
   @MockitoBean private ExifMetadataPort exifMetadataPort;
   @MockitoBean private WorkoutImageAiPort workoutImageAiPort;
 
-  private String baseUrl;
   private long userId;
   private String accessToken;
 
-  private final List<Long> createdPostIds = new ArrayList<>();
-  private boolean walletInserted = false;
-
   @BeforeEach
-  void setUp() throws Exception {
-    baseUrl = "http://localhost:" + port;
-    createdPostIds.clear();
-    walletInserted = false;
-
-    String email = uniqueEmail();
-    userId = signup(email, "Test@1234!", "E2Etester");
-    accessToken = loginAndGetToken(email, "Test@1234!");
-  }
-
-  @AfterEach
-  void tearDown() {
-    for (Long postId : createdPostIds) {
-      try {
-        jdbcTemplate.update("DELETE FROM post_tags WHERE post_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM posts WHERE id = ?", postId);
-      } catch (Exception ignored) {
-      }
-    }
-    createdPostIds.clear();
-
-    if (walletInserted) {
-      try {
-        jdbcTemplate.update("DELETE FROM user_wallets WHERE user_id = ?", userId);
-      } catch (Exception ignored) {
-      }
-      walletInserted = false;
-    }
+  void setUp() {
+    TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "E2Etester");
+    userId = user.userId();
+    accessToken = user.accessToken();
   }
 
   // ============================================================
@@ -170,7 +106,7 @@ class GetMyProfileE2ETest {
     HttpHeaders headers = new HttpHeaders();
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+            baseUrl() + "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
     assertThat(res.getStatusCode().value()).isEqualTo(401);
   }
@@ -194,9 +130,9 @@ class GetMyProfileE2ETest {
     // given: 출석 체크
     ResponseEntity<String> attendanceRes =
         restTemplate.exchange(
-            baseUrl + "/users/me/attendance",
+            baseUrl() + "/users/me/attendance",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(attendanceRes.getStatusCode().is2xxSuccessful()).isTrue();
 
@@ -242,10 +178,10 @@ class GetMyProfileE2ETest {
         .thenReturn(AiVerificationDecision.builder().approved(true).exerciseDate(today).build());
 
     // 운동 사진 인증 제출
-    HttpHeaders headers = authHeaders();
+    HttpHeaders headers = bearerJsonHeaders(accessToken);
     ResponseEntity<String> submitRes =
         restTemplate.exchange(
-            baseUrl + "/verification/photo",
+            baseUrl() + "/verification/photo",
             HttpMethod.POST,
             new HttpEntity<>(Map.of("tmpObjectKey", tmpObjectKey), headers),
             String.class);
@@ -269,15 +205,11 @@ class GetMyProfileE2ETest {
     Map<String, Object> postBody = Map.of("content", "E2E 테스트 게시글입니다", "imageIds", List.of());
     ResponseEntity<String> postRes =
         restTemplate.exchange(
-            baseUrl + "/posts/free",
+            baseUrl() + "/posts/free",
             HttpMethod.POST,
-            new HttpEntity<>(postBody, authHeaders()),
+            new HttpEntity<>(postBody, bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(postRes.getStatusCode().is2xxSuccessful()).isTrue();
-    Long postId = objectMapper.readTree(postRes.getBody()).at("/data/postId").asLong();
-    if (postId > 0) {
-      createdPostIds.add(postId);
-    }
 
     // when
     ResponseEntity<String> profileRes = getMyProfile(accessToken);
@@ -294,9 +226,9 @@ class GetMyProfileE2ETest {
     // given: command 경로로 user_progress 행을 생성
     ResponseEntity<String> attendanceRes =
         restTemplate.exchange(
-            baseUrl + "/users/me/attendance",
+            baseUrl() + "/users/me/attendance",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(attendanceRes.getStatusCode().is2xxSuccessful()).isTrue();
 
@@ -313,14 +245,13 @@ class GetMyProfileE2ETest {
             + " wallet_address) VALUES (NOW(), NOW(), 'ACTIVE', NOW(), ?, ?)",
         userId,
         "0xdeadbeef1234567890abcdef1234567890abcdef");
-    walletInserted = true;
 
     // 레벨업 요청
     ResponseEntity<String> levelUpRes =
         restTemplate.exchange(
-            baseUrl + "/users/me/level-ups",
+            baseUrl() + "/users/me/level-ups",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(levelUpRes.getStatusCode().is2xxSuccessful()).isTrue();
 
@@ -345,7 +276,6 @@ class GetMyProfileE2ETest {
             + " wallet_address) VALUES (NOW(), NOW(), 'ACTIVE', NOW(), ?, ?)",
         userId,
         testWalletAddress);
-    walletInserted = true;
 
     // when
     ResponseEntity<String> profileRes = getMyProfile(accessToken);
@@ -386,52 +316,11 @@ class GetMyProfileE2ETest {
   // Helper Methods
   // ============================================================
 
-  private static String uniqueEmail() {
-    return "e2e-profile-"
-        + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
-        + "@example.com";
-  }
-
-  private long signup(String email, String password, String nickname) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    ResponseEntity<String> res =
-        restTemplate.exchange(
-            baseUrl + "/auth/signup",
-            HttpMethod.POST,
-            new HttpEntity<>(
-                Map.of("email", email, "password", password, "nickname", nickname), headers),
-            String.class);
-    assertThat(res.getStatusCode().is2xxSuccessful()).as("회원가입 성공 (2xx)").isTrue();
-    return objectMapper.readTree(res.getBody()).at("/data/userId").asLong();
-  }
-
-  private String loginAndGetToken(String email, String password) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, Object> body = Map.of("provider", "LOCAL", "email", email, "password", password);
-    ResponseEntity<String> res =
-        restTemplate.exchange(
-            baseUrl + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(body, headers),
-            String.class);
-    assertThat(res.getStatusCode().is2xxSuccessful()).as("로그인 성공 (2xx)").isTrue();
-    return objectMapper.readTree(res.getBody()).at("/data/accessToken").asText();
-  }
-
   private ResponseEntity<String> getMyProfile(String token) {
     HttpHeaders headers = new HttpHeaders();
     headers.setBearerAuth(token);
     return restTemplate.exchange(
-        baseUrl + "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
-  }
-
-  private HttpHeaders authHeaders() {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
-    return headers;
+        baseUrl() + "/users/me", HttpMethod.GET, new HttpEntity<>(headers), String.class);
   }
 
   private void ensureWorkoutXpPolicy(LocalDate today) {
