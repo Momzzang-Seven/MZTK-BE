@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.integration.e2e.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -16,8 +15,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -49,10 +46,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @DisplayName("[E2E] 회원가입 role 설정 테스트")
 class SignupRoleE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;

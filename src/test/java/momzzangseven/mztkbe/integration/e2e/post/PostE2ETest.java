@@ -3,25 +3,20 @@ package momzzangseven.mztkbe.integration.e2e.post;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -29,7 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
@@ -42,18 +37,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>./gradlew e2eTest 명령어로 실행
  * </ul>
  *
- * <p>데이터 격리 전략:
- *
- * <ul>
- *   <li>{@code @BeforeEach}: 테스트마다 UUID 기반 고유 이메일로 신규 유저 생성 → 데이터 충돌 방지
- *   <li>{@code @AfterEach}: JdbcTemplate 으로 생성된 post_tags → posts 순서로 삭제 (FK 고려)
- *   <li>유저 데이터는 XP·출석 등 연관 레코드 FK 충돌 가능성이 있으므로 삭제하지 않음 (고유 이메일로 격리)
- * </ul>
+ * <p>데이터 격리 전략: {@link E2ETestBase}의 {@code DatabaseCleaner}가 매 테스트 후 public schema를 truncate 한다.
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+@TestPropertySource(
     properties = {
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
@@ -61,16 +47,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.reward-token.enabled=false"
     })
 @DisplayName("[E2E] Post CRUD 전체 흐름 테스트")
-class PostE2ETest {
+class PostE2ETest extends E2ETestBase {
 
-  // ============================================================
-  // 인프라 주입
-  // ============================================================
-
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -97,44 +75,8 @@ class PostE2ETest {
     createdPostIds.clear();
 
     String email = uniqueEmail();
-    signupUser(email, "Test@1234!", "E2E유저");
+    signup(email, "Test@1234!", "E2E유저");
     accessToken = loginAndGetToken(email, "Test@1234!");
-  }
-
-  /**
-   * 테스트에서 생성한 게시글을 DB에서 직접 삭제한다.
-   *
-   * <p>삭제 순서: post_tags(FK 선행) → posts. RANDOM_PORT 환경에서는 {@code @Transactional} 롤백이 동작하지 않으므로
-   * JdbcTemplate 으로 명시적 클린업한다.
-   */
-  @AfterEach
-  void tearDown() {
-    for (Long postId : createdPostIds) {
-      try {
-        jdbcTemplate.update(
-            "DELETE FROM post_like WHERE target_type = 'POST' AND target_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("UPDATE posts SET accepted_answer_id = NULL WHERE id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM answers WHERE post_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM post_tags WHERE post_id = ?", postId);
-      } catch (Exception ignored) {
-        // post_tags 가 없거나 cascade 로 이미 삭제된 경우 무시
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM posts WHERE id = ?", postId);
-      } catch (Exception ignored) {
-        // 이미 삭제된 게시글(삭제 시나리오 테스트) 무시
-      }
-    }
-    createdPostIds.clear();
   }
 
   // ============================================================
@@ -165,7 +107,8 @@ class PostE2ETest {
     return h;
   }
 
-  private void signupUser(String email, String password, String nickname) {
+  private void signup(String email, String password, String nickname) {
+
     Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
     restTemplate.exchange(
         baseUrl + "/auth/signup",
@@ -250,7 +193,7 @@ class PostE2ETest {
 
   private void addActiveAnswerToQuestion(Long postId) throws Exception {
     String answererEmail = uniqueEmail();
-    signupUser(answererEmail, "Test@1234!", "answerer");
+    signup(answererEmail, "Test@1234!", "answerer");
     String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
     createAnswer(postId, answererToken, "active answer");
   }
@@ -526,7 +469,7 @@ class PostE2ETest {
 
     // given: 다른 유저 생성 및 로그인
     String otherEmail = uniqueEmail();
-    signupUser(otherEmail, "Test@1234!", "타인유저");
+    signup(otherEmail, "Test@1234!", "타인유저");
     String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
 
     // when: 다른 유저로 수정 시도
@@ -555,7 +498,7 @@ class PostE2ETest {
 
     // given: 다른 유저 생성 및 로그인
     String otherEmail = uniqueEmail();
-    signupUser(otherEmail, "Test@1234!", "삭제시도유저");
+    signup(otherEmail, "Test@1234!", "삭제시도유저");
     String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
 
     // when: 다른 유저로 삭제 시도
@@ -807,7 +750,7 @@ class PostE2ETest {
 
       // given: 다른 유저
       String otherEmail = uniqueEmail();
-      signupUser(otherEmail, "Test@1234!", "타인유저");
+      signup(otherEmail, "Test@1234!", "타인유저");
       String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
 
       // when
@@ -894,7 +837,7 @@ class PostE2ETest {
 
       // given: 다른 유저
       String otherEmail = uniqueEmail();
-      signupUser(otherEmail, "Test@1234!", "삭제시도유저");
+      signup(otherEmail, "Test@1234!", "삭제시도유저");
       String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
 
       // when
@@ -947,7 +890,7 @@ class PostE2ETest {
     @DisplayName("accepting an answer updates post state and answer accepted state")
     void acceptAnswer_byWriter_updatesPostState() throws Exception {
       String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
+      signup(answererEmail, "Test@1234!", "answerer");
       String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
 
       Long postId = createQuestionPost("accept title", "accept content", 30L);
@@ -980,7 +923,7 @@ class PostE2ETest {
     @DisplayName("answer on a solved question cannot be deleted through answer API")
     void acceptAnswer_blocksAcceptedAnswerDeletion() throws Exception {
       String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
+      signup(answererEmail, "Test@1234!", "answerer");
       String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
 
       Long postId = createQuestionPost("delete lock title", "delete lock content", 30L);
@@ -1009,11 +952,11 @@ class PostE2ETest {
     @DisplayName("accepting by non writer returns 403")
     void acceptAnswer_byOtherUser_returns403() throws Exception {
       String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
+      signup(answererEmail, "Test@1234!", "answerer");
       String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
 
       String intruderEmail = uniqueEmail();
-      signupUser(intruderEmail, "Test@1234!", "intruder");
+      signup(intruderEmail, "Test@1234!", "intruder");
       String intruderToken = loginAndGetToken(intruderEmail, "Test@1234!");
 
       Long postId = createQuestionPost("auth title", "auth content", 30L);
@@ -1034,7 +977,7 @@ class PostE2ETest {
     @DisplayName("accepting an answer from another post returns 400")
     void acceptAnswer_withForeignAnswer_returns400() throws Exception {
       String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
+      signup(answererEmail, "Test@1234!", "answerer");
       String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
 
       Long targetPostId = createQuestionPost("target title", "target content", 30L);
