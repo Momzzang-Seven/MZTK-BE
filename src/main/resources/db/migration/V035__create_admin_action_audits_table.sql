@@ -1,12 +1,16 @@
--- Replace web3-scoped admin action audit table with a unified admin_action_audits table.
--- Pre-production: web3_admin_action_audits has no data to preserve, so DROP + CREATE
--- is performed in a single migration.
+-- web3 범위의 admin action audit 테이블을 통합 admin_action_audits 로 교체.
+-- V035 원본 (테이블 교체) + V037 (operator_id nullable) 을 단일 파일로 통합.
+--
+-- Pre-production: web3_admin_action_audits 에는 보존해야 할 데이터가 없으므로
+-- DROP + CREATE 를 한 번에 수행한다.
+-- operator_id 는 recovery-path audit 기록 (JWT principal 이 없는 경우) 을 위해
+-- 처음부터 NULL 허용으로 만든다.
 
 DROP TABLE IF EXISTS web3_admin_action_audits;
 
 CREATE TABLE IF NOT EXISTS admin_action_audits (
     id          BIGSERIAL    PRIMARY KEY,
-    operator_id BIGINT       NOT NULL,
+    operator_id BIGINT       NULL,
     action_type VARCHAR(60)  NOT NULL,
     target_type VARCHAR(40)  NOT NULL,
     target_id   VARCHAR(100),
