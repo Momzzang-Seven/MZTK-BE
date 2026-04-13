@@ -77,7 +77,8 @@ class LocalAuthenticationStrategyTest {
   }
 
   private AuthenticationContext localContext() {
-    return new AuthenticationContext(AuthProvider.LOCAL, EMAIL, RAW_PASSWORD, null, null, null);
+    return new AuthenticationContext(
+        AuthProvider.LOCAL, EMAIL, RAW_PASSWORD, null, null, null, null);
   }
 
   // ============================================
@@ -143,7 +144,7 @@ class LocalAuthenticationStrategyTest {
     @DisplayName("이메일이 없으면 InvalidCredentialsException 발생")
     void authenticate_MissingEmail_ThrowsException() {
       AuthenticationContext contextWithoutEmail =
-          new AuthenticationContext(AuthProvider.LOCAL, null, RAW_PASSWORD, null, null, null);
+          new AuthenticationContext(AuthProvider.LOCAL, null, RAW_PASSWORD, null, null, null, null);
 
       assertThatThrownBy(() -> strategy.authenticate(contextWithoutEmail))
           .isInstanceOf(InvalidCredentialsException.class);
@@ -155,7 +156,7 @@ class LocalAuthenticationStrategyTest {
     @DisplayName("비밀번호가 없으면 InvalidCredentialsException 발생")
     void authenticate_MissingPassword_ThrowsException() {
       AuthenticationContext contextWithoutPassword =
-          new AuthenticationContext(AuthProvider.LOCAL, EMAIL, null, null, null, null);
+          new AuthenticationContext(AuthProvider.LOCAL, EMAIL, null, null, null, null, null);
 
       assertThatThrownBy(() -> strategy.authenticate(contextWithoutPassword))
           .isInstanceOf(InvalidCredentialsException.class);

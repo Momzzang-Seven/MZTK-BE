@@ -1,7 +1,7 @@
 spring:
   # 테스트 환경에서는 별도 프로파일 없이 기본 설정만 사용
   profiles:
-    active: ""
+    active: "test"
   ai:
     model:
       chat: none
@@ -292,3 +292,15 @@ verification:
 lambda:
   webhook:
     secret: test-lambda-webhook-secret # gitleaks:allow
+
+# Admin account management
+mztk:
+  admin:
+    seed:
+      seed-count: 2
+      delivery-target: mztk/admin/bootstrap-delivery
+    recovery:
+      anchor: test-recovery-anchor-value-for-unit-tests
+      secret-id: mztk/admin/recovery-anchor
+    bootstrap:
+      enabled: false

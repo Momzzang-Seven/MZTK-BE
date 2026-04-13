@@ -10,4 +10,6 @@ import momzzangseven.mztkbe.modules.user.application.dto.UserInfo;
 public interface CreateUserUseCase {
 
   UserInfo createUser(CreateUserCommand command);
+
+  UserInfo createAdminUser(CreateUserCommand command);
 }
