@@ -46,16 +46,22 @@ public class MarkExecutionIntentFailedOnchainService
     }
     if (intent.getStatus() == ExecutionIntentStatus.PENDING_ONCHAIN
         || intent.getStatus() == ExecutionIntentStatus.SIGNED) {
+      String lastErrorReason = persistedFailureReason(failureReason);
       ExecutionIntent failedIntent =
           intent.failOnchain(
               ExecutionIntentStatus.FAILED_ONCHAIN.name(),
-              failureReason == null ? ExecutionIntentStatus.FAILED_ONCHAIN.name() : failureReason,
+              lastErrorReason,
               LocalDateTime.now(appClock));
-      afterExecutionFailedOnchain(
-          failedIntent,
-          failureReason == null ? ExecutionIntentStatus.FAILED_ONCHAIN.name() : failureReason);
+      afterExecutionFailedOnchain(failedIntent, failureReason);
       executionIntentPersistencePort.update(failedIntent);
     }
+  }
+
+  private String persistedFailureReason(String failureReason) {
+    if (failureReason == null || failureReason.isBlank()) {
+      return ExecutionIntentStatus.FAILED_ONCHAIN.name();
+    }
+    return failureReason;
   }
 
   private void afterExecutionFailedOnchain(ExecutionIntent intent, String failureReason) {
