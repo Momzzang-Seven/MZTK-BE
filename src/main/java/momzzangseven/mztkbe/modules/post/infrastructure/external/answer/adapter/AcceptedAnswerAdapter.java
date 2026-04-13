@@ -19,7 +19,10 @@ public class AcceptedAnswerAdapter implements LoadAcceptedAnswerPort, MarkAccept
   public Optional<AcceptedAnswerInfo> loadAcceptedAnswer(Long answerId) {
     return getAnswerSummaryUseCase
         .getAnswerSummary(answerId)
-        .map(answer -> new AcceptedAnswerInfo(answer.answerId(), answer.postId(), answer.userId()));
+        .map(
+            answer ->
+                new AcceptedAnswerInfo(
+                    answer.answerId(), answer.postId(), answer.userId(), answer.content()));
   }
 
   @Override

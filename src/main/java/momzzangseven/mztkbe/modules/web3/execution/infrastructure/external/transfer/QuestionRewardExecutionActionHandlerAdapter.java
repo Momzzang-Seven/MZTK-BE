@@ -25,8 +25,8 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
+    prefix = "web3.transfer",
+    name = "legacy-question-reward-handler-enabled",
     havingValue = "true")
 public class QuestionRewardExecutionActionHandlerAdapter implements ExecutionActionHandlerPort {
 

@@ -11,50 +11,73 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.error.GlobalExceptionHandler;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.UnlinkWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.UnlinkWalletUseCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import org.springframework.web.filter.OncePerRequestFilter;
 
-@DisplayName("WalletController 컨트롤러 계약 테스트 (MockMvc + H2)")
-@org.springframework.boot.test.context.SpringBootTest
-@org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
+@ExtendWith(MockitoExtension.class)
+@DisplayName("WalletController 컨트롤러 계약 테스트")
 class WalletControllerTest {
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected org.springframework.test.web.servlet.MockMvc mockMvc;
+  private static final String AUTH_ATTR = WalletControllerTest.class.getName() + ".authentication";
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+  @Mock private RegisterWalletUseCase registerWalletUseCase;
+  @Mock private UnlinkWalletUseCase unlinkWalletUseCase;
 
-  @org.springframework.test.context.bean.override.mockito.MockitoBean
-  private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
-          .MarkTransactionSucceededUseCase
-      txMarkTransactionSucceededUseCase;
+  private MockMvc mockMvc;
+  private ObjectMapper objectMapper;
 
-  @org.springframework.test.context.bean.override.mockito.MockitoBean
-  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
-          .TransactionReceiptWorker
-      txTransactionReceiptWorker;
+  @BeforeEach
+  void setUp() {
+    objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-  @org.springframework.test.context.bean.override.mockito.MockitoBean
-  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
-          .TransactionIssuerWorker
-      txTransactionIssuerWorker;
+    LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
+    validator.afterPropertiesSet();
 
-  @org.springframework.test.context.bean.override.mockito.MockitoBean
-  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
-          .SignedRecoveryWorker
-      txSignedRecoveryWorker;
+    WalletController controller = new WalletController(registerWalletUseCase, unlinkWalletUseCase);
 
-  @MockitoBean private RegisterWalletUseCase registerWalletUseCase;
-  @MockitoBean private UnlinkWalletUseCase unlinkWalletUseCase;
+    mockMvc =
+        MockMvcBuilders.standaloneSetup(controller)
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .setValidator(validator)
+            .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
+            .addFilters(new SecurityContextInjectionFilter())
+            .build();
+  }
 
   @Test
   @DisplayName("POST /web3/wallets 성공")
@@ -224,7 +247,19 @@ class WalletControllerTest {
   @Test
   @DisplayName("POST /web3/wallets 인증 없으면 401")
   void registerWallet_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(post("/web3/wallets")).andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            post("/web3/wallets")
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "walletAddress", "0x1111111111111111111111111111111111111111",
+                            "signature",
+                                "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                                    + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "nonce", "nonce-1"))))
+        .andExpect(status().isUnauthorized());
 
     verifyNoInteractions(registerWalletUseCase);
   }
@@ -279,66 +314,46 @@ class WalletControllerTest {
     verifyNoInteractions(unlinkWalletUseCase);
   }
 
-  private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_USER");
+  private RequestPostProcessor userPrincipal(Long userId) {
+    return authentication(userId, "ROLE_USER");
   }
 
-  private org.springframework.test.web.servlet.request.RequestPostProcessor adminPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_ADMIN");
+  private RequestPostProcessor nullUserPrincipal() {
+    return authentication(null, "ROLE_USER");
   }
 
-  private org.springframework.test.web.servlet.request.RequestPostProcessor stepUpPrincipal(
-      Long userId) {
-    return authenticatedPrincipal(userId, "ROLE_USER", "ROLE_STEP_UP");
+  private RequestPostProcessor authentication(Long userId, String... authorities) {
+    return request -> {
+      List<SimpleGrantedAuthority> grantedAuthorities =
+          Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
+      Authentication authentication =
+          new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
+      request.setAttribute(AUTH_ATTR, authentication);
+      return request;
+    };
   }
 
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullUserPrincipal() {
-    return nullPrincipalWithRoles("ROLE_USER");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullAdminPrincipal() {
-    return nullPrincipalWithRoles("ROLE_ADMIN");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullStepUpPrincipal() {
-    return nullPrincipalWithRoles("ROLE_USER", "ROLE_STEP_UP");
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor nullPrincipalWithRoles(
-      String... authorities) {
-    java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority>
-        grantedAuthorities =
-            java.util.Arrays.stream(authorities)
-                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                .toList();
-    org.springframework.security.authentication.UsernamePasswordAuthenticationToken token =
-        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-            null, null, grantedAuthorities);
-    org.springframework.security.core.context.SecurityContext context =
-        org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
-    context.setAuthentication(token);
-    return org.springframework.security.test.web.servlet.request
-        .SecurityMockMvcRequestPostProcessors.securityContext(context);
-  }
-
-  private org.springframework.test.web.servlet.request.RequestPostProcessor authenticatedPrincipal(
-      Long userId, String... authorities) {
-    java.util.Objects.requireNonNull(userId, "userId");
-    java.util.List<org.springframework.security.core.authority.SimpleGrantedAuthority>
-        grantedAuthorities =
-            java.util.Arrays.stream(authorities)
-                .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                .toList();
-    org.springframework.security.authentication.UsernamePasswordAuthenticationToken token =
-        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-            userId, null, grantedAuthorities);
-    return org.springframework.security.test.web.servlet.request
-        .SecurityMockMvcRequestPostProcessors.authentication(token);
-  }
-
-  private String json(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {
+  private String json(Object value) throws JsonProcessingException {
     return objectMapper.writeValueAsString(value);
+  }
+
+  private static final class SecurityContextInjectionFilter extends OncePerRequestFilter {
+
+    @Override
+    protected void doFilterInternal(
+        HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+        throws ServletException, IOException {
+      SecurityContext context = SecurityContextHolder.createEmptyContext();
+      Authentication authentication = (Authentication) request.getAttribute(AUTH_ATTR);
+      if (authentication != null) {
+        context.setAuthentication(authentication);
+      }
+      SecurityContextHolder.setContext(context);
+      try {
+        filterChain.doFilter(request, response);
+      } finally {
+        SecurityContextHolder.clearContext();
+      }
+    }
   }
 }

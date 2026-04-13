@@ -13,6 +13,9 @@ public interface ExecutionIntentPersistencePort {
 
   Optional<ExecutionIntent> findByPublicIdForUpdate(String publicId);
 
+  Optional<ExecutionIntent> findLatestByResource(
+      ExecutionResourceType resourceType, String resourceId);
+
   Optional<ExecutionIntent> findLatestByRequesterAndResource(
       Long requesterUserId, ExecutionResourceType resourceType, String resourceId);
 

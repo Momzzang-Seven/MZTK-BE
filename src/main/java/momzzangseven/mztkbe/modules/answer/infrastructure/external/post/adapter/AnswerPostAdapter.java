@@ -19,6 +19,12 @@ public class AnswerPostAdapter implements LoadPostPort {
         .map(
             post ->
                 new PostContext(
-                    post.postId(), post.writerId(), post.solved(), post.questionPost()));
+                    post.postId(),
+                    post.writerId(),
+                    post.solved(),
+                    post.questionPost(),
+                    post.content(),
+                    post.reward(),
+                    post.answerLocked()));
   }
 }

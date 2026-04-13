@@ -26,9 +26,25 @@ public interface Web3ExecutionIntentJpaRepository
   Optional<Web3ExecutionIntentEntity> findBySubmittedTxIdForUpdate(
       @Param("submittedTxId") Long submittedTxId);
 
-  Optional<Web3ExecutionIntentEntity>
-      findFirstByRequesterUserIdAndResourceTypeAndResourceIdOrderByAttemptNoDesc(
-          Long requesterUserId, ExecutionResourceType resourceType, String resourceId);
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findLatestByResource(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      Pageable pageable);
+
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.requesterUserId = :requesterUserId"
+          + " and e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findLatestByRequesterAndResource(
+      @Param("requesterUserId") Long requesterUserId,
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      Pageable pageable);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select e from Web3ExecutionIntentEntity e where e.publicId = :publicId")
