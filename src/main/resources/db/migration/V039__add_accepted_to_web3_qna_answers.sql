@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS web3_question_reward_intents (
     to_user_id BIGINT NOT NULL,
     amount_wei NUMERIC(78, 0) NOT NULL,
     status VARCHAR(20) NOT NULL,
+    last_execution_intent_error_code VARCHAR(120),
+    last_execution_intent_error_reason TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     CONSTRAINT uk_web3_question_reward_intents_post_id UNIQUE (post_id)
@@ -16,10 +18,3 @@ CREATE TABLE IF NOT EXISTS web3_question_reward_intents (
 
 CREATE INDEX IF NOT EXISTS idx_web3_question_reward_intents_status
     ON web3_question_reward_intents(status);
-
-ALTER TABLE posts
-    DROP CONSTRAINT IF EXISTS chk_posts_status;
-
-ALTER TABLE posts
-    ADD CONSTRAINT chk_posts_status
-        CHECK (status IN ('OPEN', 'PENDING_ACCEPT', 'RESOLVED'));

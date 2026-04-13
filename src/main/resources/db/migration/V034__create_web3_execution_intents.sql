@@ -61,18 +61,3 @@ CREATE INDEX IF NOT EXISTS idx_web3_execution_intents_cleanup
 CREATE INDEX IF NOT EXISTS idx_web3_execution_intents_requester_status
     ON web3_execution_intents(requester_user_id, status, created_at DESC);
 
-ALTER TABLE web3_sponsor_daily_usage
-    RENAME COLUMN estimated_cost_wei TO consumed_cost_wei;
-
-ALTER TABLE web3_sponsor_daily_usage
-    ADD COLUMN reserved_cost_wei NUMERIC(78, 0) NOT NULL DEFAULT 0;
-
-ALTER TABLE web3_sponsor_daily_usage
-    ADD CONSTRAINT ck_web3_sponsor_daily_usage_non_negative
-        CHECK (reserved_cost_wei >= 0 AND consumed_cost_wei >= 0);
-
-ALTER TABLE web3_question_reward_intents
-    ADD COLUMN last_execution_intent_error_code VARCHAR(120);
-
-ALTER TABLE web3_question_reward_intents
-    ADD COLUMN last_execution_intent_error_reason TEXT;
