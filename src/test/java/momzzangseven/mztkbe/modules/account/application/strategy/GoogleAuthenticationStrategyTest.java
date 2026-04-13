@@ -36,7 +36,7 @@ class GoogleAuthenticationStrategyTest {
   void authenticate_returnsExistingUser_whenOutcomeIsExisting() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null, null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -66,7 +66,7 @@ class GoogleAuthenticationStrategyTest {
   void authenticate_returnsNewUser_whenOutcomeIsNew() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null, null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -95,7 +95,7 @@ class GoogleAuthenticationStrategyTest {
   void authenticate_passesTrainerRoleToService_whenContextHasTrainerRole() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", "TRAINER");
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", "TRAINER", null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -131,7 +131,7 @@ class GoogleAuthenticationStrategyTest {
   void authenticate_passesNullRoleToService_whenContextHasNoRole() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null, null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")
@@ -167,7 +167,7 @@ class GoogleAuthenticationStrategyTest {
   void authenticate_throws_whenEmailIsMissing() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.GOOGLE, null, null, "auth-code", "http://localhost", null, null);
     GoogleUserInfo userInfo =
         GoogleUserInfo.builder()
             .providerUserId("google-sub")

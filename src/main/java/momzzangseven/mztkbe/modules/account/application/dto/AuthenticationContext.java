@@ -23,7 +23,8 @@ public record AuthenticationContext(
     String password,
     String authorizationCode,
     String redirectUri,
-    String role) {
+    String role,
+    String loginId) {
 
   /**
    * Create AuthenticationContext from LoginCommand.
@@ -38,7 +39,8 @@ public record AuthenticationContext(
         command.password(),
         command.authorizationCode(),
         command.redirectUri(),
-        command.role());
+        command.role(),
+        command.loginId());
   }
 
   /**
@@ -57,5 +59,14 @@ public record AuthenticationContext(
    */
   public boolean isValidForSocial() {
     return authorizationCode != null && !authorizationCode.isBlank();
+  }
+
+  /**
+   * Validate context for LOCAL_ADMIN authentication.
+   *
+   * @return true if loginId and password are present
+   */
+  public boolean isValidForLocalAdmin() {
+    return loginId != null && !loginId.isBlank() && password != null && !password.isBlank();
   }
 }

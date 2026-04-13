@@ -36,7 +36,7 @@ class KakaoAuthenticationStrategyTest {
   void authenticate_returnsExistingUser_whenOutcomeIsExisting() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null, null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")
@@ -61,7 +61,7 @@ class KakaoAuthenticationStrategyTest {
   void authenticate_returnsNewUser_whenOutcomeIsNew() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null, null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")
@@ -85,7 +85,7 @@ class KakaoAuthenticationStrategyTest {
   void authenticate_passesTrainerRoleToService_whenContextHasTrainerRole() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", "TRAINER");
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", "TRAINER", null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")
@@ -121,7 +121,7 @@ class KakaoAuthenticationStrategyTest {
   void authenticate_passesNullRoleToService_whenContextHasNoRole() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null, null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")
@@ -147,7 +147,7 @@ class KakaoAuthenticationStrategyTest {
   void authenticate_throws_whenEmailIsMissing() {
     AuthenticationContext context =
         new AuthenticationContext(
-            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null);
+            AuthProvider.KAKAO, null, null, "auth-code", "http://localhost", null, null);
     KakaoUserInfo userInfo =
         KakaoUserInfo.builder()
             .providerUserId("kakao-id")
