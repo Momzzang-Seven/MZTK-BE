@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.*;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
@@ -44,8 +45,10 @@ public class PostEntity {
   @Column(nullable = false)
   private PostStatus status;
 
+  // Legacy shadow column kept until DB migration drops `is_solved`.
+  @Getter(AccessLevel.NONE)
   @Column(name = "is_solved", nullable = false)
-  private Boolean isSolved = false;
+  private Boolean legacySolvedShadow = false;
 
   @CreatedDate
   @Column(updatable = false)
@@ -64,8 +67,7 @@ public class PostEntity {
       String content,
       Long reward,
       Long acceptedAnswerId,
-      PostStatus status,
-      Boolean isSolved) {
+      PostStatus status) {
     this.id = id;
     this.userId = userId;
     this.type = type;
@@ -73,8 +75,8 @@ public class PostEntity {
     this.content = content;
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
-    this.status = resolveStatus(status, isSolved);
-    this.isSolved = this.status == PostStatus.RESOLVED;
+    this.status = Objects.requireNonNull(status, "status must not be null");
+    syncLegacySolvedShadow();
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -91,9 +93,6 @@ public class PostEntity {
   }
 
   public Post toDomain(List<String> tags) {
-    NormalizedPostState normalizedState =
-        normalizeForDomain(this.type, this.status, this.acceptedAnswerId, this.isSolved);
-
     return Post.builder()
         .id(this.id)
         .userId(this.userId)
@@ -101,8 +100,8 @@ public class PostEntity {
         .title(this.title)
         .content(this.content)
         .reward(this.reward)
-        .acceptedAnswerId(normalizedState.acceptedAnswerId())
-        .status(normalizedState.status())
+        .acceptedAnswerId(this.acceptedAnswerId)
+        .status(this.status)
         .tags(tags)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)
@@ -113,30 +112,9 @@ public class PostEntity {
     return toDomain(new ArrayList<>());
   }
 
-  private static PostStatus resolveStatus(PostStatus status, Boolean isSolved) {
-    if (status != null) {
-      return status;
-    }
-    return Boolean.TRUE.equals(isSolved) ? PostStatus.RESOLVED : PostStatus.OPEN;
+  @PrePersist
+  @PreUpdate
+  private void syncLegacySolvedShadow() {
+    this.legacySolvedShadow = this.status == PostStatus.RESOLVED;
   }
-
-  private static NormalizedPostState normalizeForDomain(
-      PostType type, PostStatus status, Long acceptedAnswerId, Boolean isSolved) {
-    PostStatus resolvedStatus = resolveStatus(status, isSolved);
-
-    if (type == PostType.FREE) {
-      return new NormalizedPostState(PostStatus.OPEN, null);
-    }
-
-    if (type == PostType.QUESTION) {
-      if (acceptedAnswerId != null) {
-        return new NormalizedPostState(PostStatus.RESOLVED, acceptedAnswerId);
-      }
-      return new NormalizedPostState(PostStatus.OPEN, null);
-    }
-
-    return new NormalizedPostState(resolvedStatus, acceptedAnswerId);
-  }
-
-  private record NormalizedPostState(PostStatus status, Long acceptedAnswerId) {}
 }

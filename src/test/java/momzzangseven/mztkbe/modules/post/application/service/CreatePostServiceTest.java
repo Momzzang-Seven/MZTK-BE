@@ -203,7 +203,7 @@ class CreatePostServiceTest {
     assertThat(captured.getTitle()).isEqualTo("질문 제목");
     assertThat(captured.getReward()).isEqualTo(50L);
     assertThat(captured.getStatus()).isEqualTo(PostStatus.OPEN);
-    assertThat(captured.getIsSolved()).isFalse();
+    assertThat(captured.getAcceptedAnswerId()).isNull();
 
     // Verify image sync for QUESTION type
     verify(updatePostImagesPort).updateImages(3L, 20L, PostType.QUESTION, List.of(1L, 2L));
