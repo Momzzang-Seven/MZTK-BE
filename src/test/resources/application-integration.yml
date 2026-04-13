@@ -28,6 +28,18 @@ spring:
     init:
       mode: never
 
+web3:
+  reward-token:
+    enabled: true
+
+# E2E 테스트는 모두 127.0.0.1에서 출발하므로, 테스트별 IP 격리를 위해 X-Forwarded-For 를
+# 신뢰해 rate limit 버킷 키로 사용한다. 프로덕션에서는 반드시 false 로 유지해야 한다.
+mztk:
+  admin:
+    recovery:
+      rate-limit:
+        trust-forwarded-for: true
+
 logging:
   level:
     root: WARN

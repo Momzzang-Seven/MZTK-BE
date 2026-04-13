@@ -16,8 +16,11 @@ public interface RecordAdminAuditPort {
       Map<String, Object> detail) {
 
     public AuditCommand {
-      if (operatorId == null || operatorId <= 0) {
-        throw new IllegalArgumentException("operatorId must be positive");
+      // null operatorId is accepted when RecordAdminAuditPort is invoked directly, not from
+      // @AdminOnly annotation.
+      // POST /admin/recovery/reseed is called via .PERMITALL(). so the operatorId can be null.
+      if (operatorId != null && operatorId <= 0) {
+        throw new IllegalArgumentException("operatorId must be positive when provided");
       }
       if (actionType == null || actionType.isBlank()) {
         throw new IllegalArgumentException("actionType is required");

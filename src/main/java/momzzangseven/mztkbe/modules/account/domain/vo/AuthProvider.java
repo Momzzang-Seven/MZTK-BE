@@ -22,7 +22,10 @@ public enum AuthProvider {
   KAKAO("KAKAO", "Kakao OAuth Authentication"),
 
   /** Google OAuth authentication for Google users. */
-  GOOGLE("GOOGLE", "Google OAuth Authentication");
+  GOOGLE("GOOGLE", "Google OAuth Authentication"),
+
+  /** Local admin authentication (loginId/password). */
+  LOCAL_ADMIN("LOCAL_ADMIN", "Admin Local Authentication");
 
   /** Provider display name. */
   private final String displayName;
@@ -54,6 +57,6 @@ public enum AuthProvider {
    * @return true if email/password is required (LOCAL only)
    */
   public boolean requiresCredentials() {
-    return this == LOCAL;
+    return this == LOCAL || this == LOCAL_ADMIN;
   }
 }

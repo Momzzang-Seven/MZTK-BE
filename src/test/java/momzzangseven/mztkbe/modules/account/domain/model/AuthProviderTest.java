@@ -33,6 +33,12 @@ class AuthProviderTest {
     void google_IsSocialLogin() {
       assertThat(AuthProvider.GOOGLE.isSocialLogin()).isTrue();
     }
+
+    @Test
+    @DisplayName("[M-106] LOCAL_ADMIN은 소셜 로그인이 아님")
+    void localAdmin_IsNotSocialLogin() {
+      assertThat(AuthProvider.LOCAL_ADMIN.isSocialLogin()).isFalse();
+    }
   }
 
   @Nested
@@ -53,6 +59,12 @@ class AuthProviderTest {
     void social_RequiresOAuth(AuthProvider provider) {
       assertThat(provider.requiresOAuth()).isTrue();
     }
+
+    @Test
+    @DisplayName("[M-107] LOCAL_ADMIN은 OAuth 불필요")
+    void localAdmin_DoesNotRequireOAuth() {
+      assertThat(AuthProvider.LOCAL_ADMIN.requiresOAuth()).isFalse();
+    }
   }
 
   @Nested
@@ -72,6 +84,12 @@ class AuthProviderTest {
     @DisplayName("소셜 provider는 이메일/비밀번호 불필요")
     void social_DoesNotRequireCredentials(AuthProvider provider) {
       assertThat(provider.requiresCredentials()).isFalse();
+    }
+
+    @Test
+    @DisplayName("[M-108] LOCAL_ADMIN은 자격 증명(loginId/password) 필요")
+    void localAdmin_RequiresCredentials() {
+      assertThat(AuthProvider.LOCAL_ADMIN.requiresCredentials()).isTrue();
     }
   }
 

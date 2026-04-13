@@ -8,9 +8,10 @@ import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
 import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("UpdateUserRoleCommand unit test")
+@DisplayName("UpdateUserRoleCommand 단위 테스트")
 class UpdateUserRoleCommandTest {
 
   @Test
@@ -66,5 +67,64 @@ class UpdateUserRoleCommandTest {
     UpdateUserRoleCommand command = new UpdateUserRoleCommand(1L, UserRole.TRAINER);
 
     assertThatCode(command::validate).doesNotThrowAnyException();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Commit 1 — MOM-330: validate() — isAdmin()-based admin guard
+  // ══════════════════════════════════════════════════════════════
+
+  @Nested
+  @DisplayName("validate — isAdmin() 기반 관리자 차단 검증")
+  class ValidateAdminGuard {
+
+    @Test
+    @DisplayName("[M-39] validate rejects ADMIN_SEED")
+    void validate_withAdminSeed_throwsIllegalAdminGrantException() {
+      // given
+      UpdateUserRoleCommand command = new UpdateUserRoleCommand(1L, UserRole.ADMIN_SEED);
+
+      // when / then
+      assertThatThrownBy(command::validate).isInstanceOf(IllegalAdminGrantException.class);
+    }
+
+    @Test
+    @DisplayName("[M-40] validate rejects ADMIN_GENERATED")
+    void validate_withAdminGenerated_throwsIllegalAdminGrantException() {
+      // given
+      UpdateUserRoleCommand command = new UpdateUserRoleCommand(1L, UserRole.ADMIN_GENERATED);
+
+      // when / then
+      assertThatThrownBy(command::validate).isInstanceOf(IllegalAdminGrantException.class);
+    }
+
+    @Test
+    @DisplayName("[M-41] validate still rejects plain ADMIN (existing behavior preserved)")
+    void validate_withAdmin_throwsIllegalAdminGrantException() {
+      // given
+      UpdateUserRoleCommand command = new UpdateUserRoleCommand(1L, UserRole.ADMIN);
+
+      // when / then
+      assertThatThrownBy(command::validate).isInstanceOf(IllegalAdminGrantException.class);
+    }
+
+    @Test
+    @DisplayName("[M-42] validate passes for USER role")
+    void validate_withUser_doesNotThrow() {
+      // given
+      UpdateUserRoleCommand command = new UpdateUserRoleCommand(1L, UserRole.USER);
+
+      // when / then
+      assertThatCode(command::validate).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("[M-43] validate passes for TRAINER role")
+    void validate_withTrainer_doesNotThrow() {
+      // given
+      UpdateUserRoleCommand command = new UpdateUserRoleCommand(1L, UserRole.TRAINER);
+
+      // when / then
+      assertThatCode(command::validate).doesNotThrowAnyException();
+    }
   }
 }

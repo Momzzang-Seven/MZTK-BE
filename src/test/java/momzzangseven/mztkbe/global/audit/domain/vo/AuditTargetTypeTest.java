@@ -9,10 +9,13 @@ import org.junit.jupiter.api.Test;
 class AuditTargetTypeTest {
 
   @Test
-  @DisplayName("AuditTargetType 의 values() 를 호출하면, TREASURY_KEY 와 WEB3_TRANSACTION 두 상수만 존재한다")
+  @DisplayName("AuditTargetType 의 values() 를 호출하면, 모든 상수가 존재한다")
   void enum_containsExpectedValues() {
     assertThat(AuditTargetType.values())
-        .containsExactlyInAnyOrder(AuditTargetType.TREASURY_KEY, AuditTargetType.WEB3_TRANSACTION);
+        .containsExactlyInAnyOrder(
+            AuditTargetType.TREASURY_KEY,
+            AuditTargetType.WEB3_TRANSACTION,
+            AuditTargetType.ADMIN_ACCOUNT);
   }
 
   @Test
@@ -21,5 +24,30 @@ class AuditTargetTypeTest {
     assertThat(AuditTargetType.valueOf("TREASURY_KEY")).isEqualTo(AuditTargetType.TREASURY_KEY);
     assertThat(AuditTargetType.valueOf("WEB3_TRANSACTION"))
         .isEqualTo(AuditTargetType.WEB3_TRANSACTION);
+  }
+
+  @Test
+  @DisplayName("[M-72] ADMIN_ACCOUNT exists in AuditTargetType enum")
+  void valueOf_adminAccount_returnsAdminAccount() {
+    assertThat(AuditTargetType.valueOf("ADMIN_ACCOUNT")).isEqualTo(AuditTargetType.ADMIN_ACCOUNT);
+  }
+
+  @Test
+  @DisplayName("[M-73] AuditTargetType values() includes ADMIN_ACCOUNT alongside existing values")
+  void values_includesAdminAccountAlongsideExistingValues() {
+    AuditTargetType[] values = AuditTargetType.values();
+
+    assertThat(values).hasSize(3);
+    assertThat(values)
+        .containsExactlyInAnyOrder(
+            AuditTargetType.TREASURY_KEY,
+            AuditTargetType.WEB3_TRANSACTION,
+            AuditTargetType.ADMIN_ACCOUNT);
+  }
+
+  @Test
+  @DisplayName("[M-74] AuditTargetType.ADMIN_ACCOUNT name() returns \"ADMIN_ACCOUNT\"")
+  void adminAccount_name_returnsAdminAccount() {
+    assertThat(AuditTargetType.ADMIN_ACCOUNT.name()).isEqualTo("ADMIN_ACCOUNT");
   }
 }

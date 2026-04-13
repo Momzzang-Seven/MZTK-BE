@@ -65,7 +65,7 @@ public enum ErrorCode {
   // ========================================
   // User Errors (USER_xxx)
   // ========================================
-  ILLEGAL_ADMIN_GRANT("USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST),
+  ILLEGAL_ADMIN_GRANT("USER_001", "Illegal ADMIN grant trial", HttpStatus.BAD_REQUEST),
 
   INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
 
@@ -378,6 +378,24 @@ public enum ErrorCode {
   VERIFICATION_ALREADY_COMPLETED_TODAY(
       "VERIFICATION_006", "Workout already completed today", HttpStatus.CONFLICT),
   VERIFICATION_NOT_FOUND("VERIFICATION_007", "Verification not found", HttpStatus.NOT_FOUND),
+
+  // ========================================
+  // Admin Errors (ADMIN_xxx)
+  // ========================================
+  SELF_RESET_FORBIDDEN(
+      "ADMIN_001", "Cannot reset own password via peer-reset", HttpStatus.FORBIDDEN),
+  ADMIN_NOT_FOUND("ADMIN_002", "Admin account not found", HttpStatus.NOT_FOUND),
+  ADMIN_CREDENTIAL_GEN_FAILED(
+      "ADMIN_003", "Failed to generate admin credentials", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEAK_ADMIN_PASSWORD(
+      "ADMIN_004", "Admin password does not meet policy requirements", HttpStatus.BAD_REQUEST),
+  SEED_ADMIN_DELETE_FORBIDDEN("ADMIN_005", "Cannot delete seed admin account", HttpStatus.CONFLICT),
+  RECOVERY_REJECTED("ADMIN_006", "Recovery anchor mismatch", HttpStatus.FORBIDDEN),
+  RECOVERY_ANCHOR_UNAVAILABLE(
+      "ADMIN_007", "Recovery anchor service unavailable", HttpStatus.SERVICE_UNAVAILABLE),
+  RECOVERY_DELIVERY_FAILED(
+      "ADMIN_008", "Failed to deliver recovery credentials", HttpStatus.INTERNAL_SERVER_ERROR),
+  RATE_LIMITED("ADMIN_009", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
   ;
 
   private final String code;
