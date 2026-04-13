@@ -101,18 +101,20 @@ class AdminUserRoleManagementE2ETest extends E2ETestBase {
     return sb.toString();
   }
 
-/**
+  /**
    * Creates an admin account via direct DB manipulation, mirroring the production flow
-   * (CreateAdminAccountService / SeedProvisioner): inserts only into {@code users} and
-   * {@code admin_accounts}, never {@code users_account}. Going through {@code POST /auth/signup}
-   * would create a {@code users_account} row that the production admin lifecycle never produces,
-   * which then breaks recovery reseed's hard-delete (FK violation on {@code users_account_user_id_fkey}).
+   * (CreateAdminAccountService / SeedProvisioner): inserts only into {@code users} and {@code
+   * admin_accounts}, never {@code users_account}. Going through {@code POST /auth/signup} would
+   * create a {@code users_account} row that the production admin lifecycle never produces, which
+   * then breaks recovery reseed's hard-delete (FK violation on {@code users_account_user_id_fkey}).
    *
    * @param role the admin role (ADMIN_SEED or ADMIN_GENERATED)
    */
   private TestAdmin createTestAdmin(String role) {
-    String email = "admin-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
-        + "@internal.mztk.local";
+    String email =
+        "admin-"
+            + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
+            + "@internal.mztk.local";
     createdUserEmails.add(email);
 
     jdbcTemplate.update(
