@@ -24,6 +24,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -37,9 +39,18 @@ class AdminOnlyAspectTest {
 
   private AdminOnlyAspect aspect;
 
+  private static final RoleHierarchy ROLE_HIERARCHY =
+      RoleHierarchyImpl.fromHierarchy(
+          """
+          ROLE_ADMIN_SEED > ROLE_ADMIN
+          ROLE_ADMIN_GENERATED > ROLE_ADMIN
+          ROLE_ADMIN > ROLE_TRAINER
+          ROLE_TRAINER > ROLE_USER
+          """);
+
   @BeforeEach
   void setUp() {
-    aspect = new AdminOnlyAspect(recordAdminAuditPort);
+    aspect = new AdminOnlyAspect(recordAdminAuditPort, ROLE_HIERARCHY);
     SecurityContextHolder.clearContext();
   }
 
@@ -92,8 +103,9 @@ class AdminOnlyAspectTest {
   }
 
   @Test
-  @DisplayName("SecurityContext 인증 정보가 없는 시스템 호출이면, around 는 실행을 허용하고 audit 를 기록한다")
-  void around_withoutAuthentication_allowsExecutionAndRecordsAudit() throws Throwable {
+  @DisplayName(
+      "SecurityContext 인증 정보가 없으면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
+  void around_withoutAuthentication_throwsUserNotAuthenticatedException() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
             "adminAction", Long.class, String.class, String.class, Payload.class);
@@ -101,13 +113,12 @@ class AdminOnlyAspectTest {
     when(methodSignature.getMethod()).thenReturn(method);
     when(joinPoint.getArgs())
         .thenReturn(new Object[] {1L, "target-2", "raw-secret", new Payload("bob", "k2", 5)});
-    when(joinPoint.proceed()).thenReturn("NO_AUTH_OK");
     SecurityContextHolder.clearContext();
 
-    Object result = aspect.around(joinPoint);
+    assertThatThrownBy(() -> aspect.around(joinPoint))
+        .isInstanceOf(UserNotAuthenticatedException.class);
 
-    assertThat(result).isEqualTo("NO_AUTH_OK");
-    verify(recordAdminAuditPort).record(any(RecordAdminAuditPort.AuditCommand.class));
+    verify(recordAdminAuditPort, never()).record(any(RecordAdminAuditPort.AuditCommand.class));
   }
 
   @Test
@@ -240,6 +251,76 @@ class AdminOnlyAspectTest {
 
     assertThatThrownBy(() -> aspect.around(joinPoint))
         .isInstanceOf(UserNotAuthenticatedException.class);
+  }
+
+  @Test
+  @DisplayName(
+      "[M-75] ROLE_ADMIN_SEED 사용자가 호출하면, around 는 RoleHierarchy 를 통해 ROLE_ADMIN 도달을 확인하고 "
+          + "실행을 허용하며 성공 audit 를 기록한다")
+  void around_withAdminSeedRole_allowsExecutionAndRecordsAudit() throws Throwable {
+    // given
+    Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    when(joinPoint.proceed()).thenReturn("SEED_OK");
+    setAuthentication("ROLE_ADMIN_SEED");
+
+    // when
+    Object result = aspect.around(joinPoint);
+
+    // then
+    assertThat(result).isEqualTo("SEED_OK");
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    assertThat(captor.getValue().success()).isTrue();
+    assertThat(captor.getValue().operatorId()).isEqualTo(1L);
+  }
+
+  @Test
+  @DisplayName(
+      "[M-76] ROLE_ADMIN_GENERATED 사용자가 호출하면, around 는 RoleHierarchy 를 통해 ROLE_ADMIN 도달을 확인하고 "
+          + "실행을 허용하며 성공 audit 를 기록한다")
+  void around_withAdminGeneratedRole_allowsExecutionAndRecordsAudit() throws Throwable {
+    // given
+    Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    when(joinPoint.proceed()).thenReturn("GENERATED_OK");
+    setAuthentication("ROLE_ADMIN_GENERATED");
+
+    // when
+    Object result = aspect.around(joinPoint);
+
+    // then
+    assertThat(result).isEqualTo("GENERATED_OK");
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    assertThat(captor.getValue().success()).isTrue();
+    assertThat(captor.getValue().operatorId()).isEqualTo(1L);
+  }
+
+  @Test
+  @DisplayName(
+      "[M-77] ROLE_TRAINER 사용자가 호출하면, around 는 RoleHierarchy 를 통해 ROLE_ADMIN 에 도달 불가를 확인하고 "
+          + "BusinessException 을 던지며 audit 를 기록하지 않는다")
+  void around_withTrainerRole_throwsBusinessExceptionWithoutAudit() throws Throwable {
+    // given
+    Method method = DummyAdminMethods.class.getDeclaredMethod("blankTarget", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    setAuthentication("ROLE_TRAINER");
+
+    // when & then
+    assertThatThrownBy(() -> aspect.around(joinPoint))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("Unauthorized access");
+
+    verify(recordAdminAuditPort, never()).record(any(RecordAdminAuditPort.AuditCommand.class));
   }
 
   private void setAuthentication(String authority) {

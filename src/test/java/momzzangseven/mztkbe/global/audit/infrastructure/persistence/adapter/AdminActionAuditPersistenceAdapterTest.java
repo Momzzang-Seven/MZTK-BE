@@ -119,17 +119,6 @@ class AdminActionAuditPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("operatorId 가 null 이면, AuditCommand 생성자는 IllegalArgumentException 을 던진다")
-  void auditCommand_rejectsNullOperatorId() {
-    assertThatThrownBy(
-            () ->
-                new RecordAdminAuditPort.AuditCommand(
-                    null, "X", AuditTargetType.TREASURY_KEY, null, true, Map.of()))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("operatorId");
-  }
-
-  @Test
   @DisplayName("operatorId 가 0 이하이면, AuditCommand 생성자는 IllegalArgumentException 을 던진다")
   void auditCommand_rejectsNonPositiveOperatorId() {
     assertThatThrownBy(

@@ -2,9 +2,12 @@ package momzzangseven.mztkbe.global.security;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.admin.infrastructure.recovery.RecoveryRateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -31,6 +34,23 @@ public class SecurityConfig {
   private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
   private final RestAccessDeniedHandler restAccessDeniedHandler;
   private final SecurityCorsProperties securityCorsProperties;
+  private final RecoveryRateLimitFilter recoveryRateLimitFilter;
+
+  /**
+   * Role hierarchy: ADMIN_SEED and ADMIN_GENERATED inherit ROLE_ADMIN, which inherits ROLE_TRAINER,
+   * which inherits ROLE_USER. This means hasAuthority("ROLE_ADMIN") automatically matches
+   * ADMIN_SEED and ADMIN_GENERATED.
+   */
+  @Bean
+  public RoleHierarchy roleHierarchy() {
+    return RoleHierarchyImpl.fromHierarchy(
+        """
+        ROLE_ADMIN_SEED > ROLE_ADMIN
+        ROLE_ADMIN_GENERATED > ROLE_ADMIN
+        ROLE_ADMIN > ROLE_TRAINER
+        ROLE_TRAINER > ROLE_USER
+        """);
+  }
 
   /** CORS configuration. CORS는 URL path(/callback 등)가 아니라 Origin(스킴+도메인+포트) 기준으로 허용합니다. */
   @Bean
@@ -193,6 +213,16 @@ public class SecurityConfig {
                     .authenticated()
 
                     // --- Admin Endpoints ---
+                    .requestMatchers(HttpMethod.POST, "/admin/recovery/reseed")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/admin/accounts")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/admin/accounts")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/accounts/*/password/reset")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/auth/password")
+                    .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
@@ -228,6 +258,7 @@ public class SecurityConfig {
                     .authenticated());
 
     http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+    http.addFilterBefore(recoveryRateLimitFilter, jwtAuthenticationFilter.getClass());
     return http.build();
   }
 }

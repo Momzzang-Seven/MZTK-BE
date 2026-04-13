@@ -138,6 +138,8 @@ jobs:
             export SPONSOR_KEY_ENCRYPTION_KEY_B64="${{ secrets.SPONSOR_KEY_ENCRYPTION_KEY_B64 }}"
             export LAMBDA_WEBHOOK_SECRET="${{secrets.LAMBDA_WEBHOOK_SECRET}}"
             export GEMINI_API_KEY="${{secrets.GEMINI_API_KEY}}"
+            export AWS_IAM_ACCESS_KEY="${{ secrets.AWS_IAM_ACCESS_KEY }}"
+            export AWS_IAM_SECRET_KEY="${{ secrets.AWS_IAM_SECRET_KEY }}"
             
             # Docker Hub 로그인 (Private Repository 접근용)
             echo "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
@@ -183,6 +185,9 @@ jobs:
               -e SPONSOR_KEY_ENCRYPTION_KEY_B64="$SPONSOR_KEY_ENCRYPTION_KEY_B64" \
               -e LAMBDA_WEBHOOK_SECRET="$LAMBDA_WEBHOOK_SECRET" \
               -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+              -e AWS_S3_BUCKET="$AWS_S3_BUCKET" \
+              -e AWS_IAM_ACCESS_KEY="$AWS_IAM_ACCESS_KEY" \
+              -e AWS_IAM_SECRET_KEY="$AWS_IAM_SECRET_KEY" \
               ${{ secrets.DOCKER_HUB_USERNAME }}/mztk-be:latest
             
             # 오래된 이미지 정리

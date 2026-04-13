@@ -30,8 +30,12 @@ public class LoginRequestDTO {
    */
   private String role;
 
+  /** Admin login ID (numeric, for LOCAL_ADMIN provider only). */
+  private String loginId;
+
   /** Convert this request to an application-layer command. */
   public LoginCommand toCommand() {
-    return new LoginCommand(provider, email, password, authorizationCode, redirectUri, role);
+    return new LoginCommand(
+        provider, email, password, authorizationCode, redirectUri, role, loginId);
   }
 }
