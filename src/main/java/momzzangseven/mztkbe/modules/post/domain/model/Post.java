@@ -177,10 +177,7 @@ public class Post {
   public Post confirmAccepted(Long answerId) {
     validatePendingAccept(answerId);
 
-    return this.toBuilder()
-        .status(PostStatus.RESOLVED)
-        .updatedAt(LocalDateTime.now())
-        .build();
+    return this.toBuilder().status(PostStatus.RESOLVED).updatedAt(LocalDateTime.now()).build();
   }
 
   public Post cancelPendingAccept(Long answerId) {
