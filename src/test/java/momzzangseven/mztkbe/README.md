@@ -127,6 +127,15 @@ momzzangseven.mztkbe (test root)
 - HTTP 엔드포인트부터 DB 반영까지의 실제 연동 검증
 - **외부 API(카카오, 구글 등)는 `@MockitoBean` 처리**하여 외부 의존성 제거
 - `@Tag("e2e")` 로 CI 파이프라인에서 선택적 실행 가능
+- **모든 E2E 테스트는 `integration/e2e/support/E2ETestBase` 를 상속**합니다.
+  base 가 `DatabaseCleaner` 를 통해 각 테스트 종료 시 테이블 정리를 자동으로
+  수행하므로, 새 E2E 테스트에 `@AfterEach` 로 테이블을 비우는 코드를 직접
+  작성하지 마세요.
+- `integration` 프로파일은 이제 dev DB 가 아닌 **E2E 전용 PostgreSQL**
+  (`DB_URL_E2E`, 권장 이름 `mztk_e2e`) 을 사용하며, Flyway 가
+  `validate-on-migrate=true` / `baseline-on-migrate=false` 로 동작하고
+  Hibernate 는 `ddl-auto=validate` 로 엔티티 일치만 확인합니다.
+  로컬 셋업/재생성 절차는 `docs/MOM-339/README.md` 참고.
 
 ## `integration/play_wright/`
 
@@ -207,7 +216,7 @@ momzzangseven.mztkbe (test root)
 @ActiveProfiles("integration")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("[E2E] 위치 등록 전체 흐름 테스트")
-class RegisterLocationE2ETest {
+class RegisterLocationE2ETest extends E2ETestBase { // ← 반드시 base 상속
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -252,7 +261,16 @@ class RegisterLocationE2ETest {
 ## 주의사항
 
 - **외부 API**(카카오, Google OAuth 등)는 반드시 `@MockitoBean`으로 대체합니다.
-- 테스트 DB는 로컬 PostgreSQL를 사용하며, `application-integration.yml`에 DataSource를 별도 설정합니다.
+- 테스트 DB 는 로컬 PostgreSQL 의 **E2E 전용 데이터베이스**(`DB_URL_E2E`,
+  예: `mztk_e2e`)를 사용합니다. 절대 dev DB(`mztk_dev`)를 재사용하지 마세요 —
+  Hibernate ddl-auto 가 만든 스키마와 Flyway history 가 충돌해 컨텍스트 로딩이
+  실패합니다.
+- `application-integration.yml` 은 Flyway 를 `validate-on-migrate=true` 로
+  활성화하고 Hibernate 를 `ddl-auto=validate` 로 두므로, 마이그레이션과
+  엔티티가 어긋나면 컨텍스트 로딩 단계에서 즉시 실패합니다.
+- E2E 테스트는 반드시 `E2ETestBase` 를 상속하세요. 테이블 정리는
+  `DatabaseCleaner` 가 자동으로 수행하므로 `@AfterEach` 정리 코드를 새로
+  작성하지 않습니다.
 - `RANDOM_PORT + TestRestTemplate` 기반 통합 테스트에서는 테스트 메서드 트랜잭션 롤백에 의존하지 말고, 테스트 데이터 격리(고유 키/픽스처 정리) 전략을 사용합니다.
 - 픽스처 데이터가 필요한 경우 `@Sql`을 사용하고, `src/test/resources/sql/fixtures/`에 SQL 파일을 위치시킵니다.
 
