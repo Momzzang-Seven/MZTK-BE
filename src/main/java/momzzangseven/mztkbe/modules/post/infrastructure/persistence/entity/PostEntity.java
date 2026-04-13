@@ -115,6 +115,7 @@ public class PostEntity {
   @PrePersist
   @PreUpdate
   private void syncLegacySolvedShadow() {
-    this.legacySolvedShadow = this.status == PostStatus.RESOLVED;
+    this.legacySolvedShadow =
+        this.status == PostStatus.RESOLVED || this.status == PostStatus.PENDING_ACCEPT;
   }
 }

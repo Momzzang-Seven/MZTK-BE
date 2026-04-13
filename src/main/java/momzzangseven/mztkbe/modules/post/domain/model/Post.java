@@ -88,10 +88,12 @@ public class Post {
   /**
    * Compatibility getter for legacy consumers.
    *
-   * <p>`status` is the source of truth; this boolean is derived only.
+   * <p>`status` is the source of truth; this boolean is derived only. `PENDING_ACCEPT` is also
+   * treated as solved for user-facing read models because acceptance is already committed in the
+   * application flow while onchain settlement is pending.
    */
   public Boolean getIsSolved() {
-    return isResolved();
+    return isResolved() || isAcceptancePending();
   }
 
   public void validateOwnership(Long currentUserId) {

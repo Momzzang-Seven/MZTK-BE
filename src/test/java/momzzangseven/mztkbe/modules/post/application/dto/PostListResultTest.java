@@ -73,4 +73,24 @@ class PostListResultTest {
 
     assertThat(result.isSolved()).isTrue();
   }
+
+  @Test
+  @DisplayName("fromDomain derives solved true from pending accept status")
+  void fromDomainDerivesSolvedTrueFromPendingAcceptStatus() {
+    Post post =
+        Post.builder()
+            .id(102L)
+            .userId(9L)
+            .type(PostType.QUESTION)
+            .title("pending title")
+            .content("pending content")
+            .reward(70L)
+            .acceptedAnswerId(12L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .build();
+
+    PostListResult result = PostListResult.fromDomain(post, 1L, false, "writer", "profile");
+
+    assertThat(result.isSolved()).isTrue();
+  }
 }

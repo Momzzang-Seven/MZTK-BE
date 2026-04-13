@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -184,8 +186,9 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
-  @DisplayName("afterExecutionFailedOnchain rolls back pending accept state")
-  void afterExecutionFailedOnchain_rollsBackPendingAccept() throws Exception {
+  @DisplayName(
+      "afterExecutionFailedOnchain rolls back pending accept when failure reason is missing")
+  void afterExecutionFailedOnchain_rollsBackWhenFailureReasonIsNull() throws Exception {
     QnaEscrowExecutionPayload payload =
         new QnaEscrowExecutionPayload(
             QnaExecutionActionType.QNA_ANSWER_ACCEPT,
@@ -200,9 +203,73 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             "0x1234");
 
     adapter.afterExecutionFailedOnchain(
-        intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan(), "RECEIPT_STATUS_0");
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan(), null);
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionFailedOnchain rolls back pending accept when failure reason is blank")
+  void afterExecutionFailedOnchain_rollsBackWhenFailureReasonIsBlank() throws Exception {
+    adapter.afterExecutionFailedOnchain(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), " ");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionFailedOnchain rolls back pending accept for non retryable failure")
+  void afterExecutionFailedOnchain_rollsBackForNonRetryableFailure() throws Exception {
+    adapter.afterExecutionFailedOnchain(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        "TREASURY_TOKEN_INSUFFICIENT");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionFailedOnchain keeps pending accept for retryable failure")
+  void afterExecutionFailedOnchain_keepsPendingForRetryableFailure() throws Exception {
+    adapter.afterExecutionFailedOnchain(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        "RPC_UNAVAILABLE");
+
+    verify(qnaAcceptStateSyncPort, never()).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionFailedOnchain keeps pending accept for unknown onchain failure")
+  void afterExecutionFailedOnchain_keepsPendingForUnknownFailure() throws Exception {
+    adapter.afterExecutionFailedOnchain(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), "EXPIRED");
+
+    verify(qnaAcceptStateSyncPort, never()).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionFailedOnchain ignores non accept action")
+  void afterExecutionFailedOnchain_ignoresNonAcceptAction() throws Exception {
+    QnaEscrowExecutionPayload payload =
+        new QnaEscrowExecutionPayload(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            101L,
+            null,
+            "0x" + "1".repeat(40),
+            "0x" + "2".repeat(40),
+            new BigInteger("50000000000000000000"),
+            "0x" + "a".repeat(64),
+            null,
+            "0x" + "3".repeat(40),
+            "0x1234");
+
+    adapter.afterExecutionFailedOnchain(
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        "TREASURY_TOKEN_INSUFFICIENT");
+
+    verifyNoInteractions(qnaAcceptStateSyncPort);
   }
 
   private ExecutionIntent intent(
@@ -239,6 +306,20 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         .build()
         .markPendingOnchain(99L, LocalDateTime.of(2026, 4, 12, 10, 1))
         .confirm(LocalDateTime.of(2026, 4, 12, 10, 2));
+  }
+
+  private QnaEscrowExecutionPayload acceptPayload() {
+    return new QnaEscrowExecutionPayload(
+        QnaExecutionActionType.QNA_ANSWER_ACCEPT,
+        101L,
+        201L,
+        "0x" + "1".repeat(40),
+        "0x" + "2".repeat(40),
+        new BigInteger("50000000000000000000"),
+        "0x" + "c".repeat(64),
+        "0x" + "d".repeat(64),
+        "0x" + "3".repeat(40),
+        "0x1234");
   }
 
   private ExecutionActionPlan plan() {

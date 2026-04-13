@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -76,8 +77,21 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   public void afterExecutionFailedOnchain(
       ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {
     QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
-    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT) {
+    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
+        && shouldRollbackPendingAccept(failureReason)) {
       qnaAcceptStateSyncPort.rollbackPendingAccept(payload.postId(), payload.answerId());
+    }
+  }
+
+  private boolean shouldRollbackPendingAccept(String failureReason) {
+    if (failureReason == null || failureReason.isBlank()) {
+      return true;
+    }
+    try {
+      Web3TxFailureReason reason = Web3TxFailureReason.valueOf(failureReason);
+      return !reason.isRetryable();
+    } catch (IllegalArgumentException e) {
+      return false;
     }
   }
 
