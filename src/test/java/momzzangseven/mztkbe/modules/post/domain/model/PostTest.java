@@ -24,7 +24,7 @@ class PostTest {
     assertThat(post.getReward()).isZero();
     assertThat(post.getTitle()).isNull();
     assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
-    assertThat(post.getIsSolved()).isFalse();
+    assertThat(post.isResolved()).isFalse();
     assertThat(post.getTags()).isEmpty();
     assertThat(post.getCreatedAt()).isNotNull();
     assertThat(post.getUpdatedAt()).isNotNull();
@@ -52,7 +52,7 @@ class PostTest {
     assertThat(post.getReward()).isEqualTo(25L);
     assertThat(post.getType()).isEqualTo(PostType.QUESTION);
     assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
-    assertThat(post.getIsSolved()).isFalse();
+    assertThat(post.isResolved()).isFalse();
   }
 
   @Test
@@ -243,7 +243,7 @@ class PostTest {
 
     assertThat(accepted.getAcceptedAnswerId()).isEqualTo(99L);
     assertThat(accepted.getStatus()).isEqualTo(PostStatus.RESOLVED);
-    assertThat(accepted.getIsSolved()).isTrue();
+    assertThat(accepted.isResolved()).isTrue();
   }
 
   @Test

@@ -302,7 +302,6 @@ class PostControllerIntegrationTest {
     PostEntity savedPost = postJpaRepository.findById(postId).orElseThrow();
     assertThat(savedPost.getAcceptedAnswerId()).isEqualTo(answerId);
     assertThat(savedPost.getStatus()).isEqualTo(PostStatus.RESOLVED);
-    assertThat(savedPost.getIsSolved()).isTrue();
     AnswerEntity savedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
     assertThat(savedAnswer.getIsAccepted()).isTrue();
   }

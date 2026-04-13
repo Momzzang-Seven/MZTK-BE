@@ -21,7 +21,6 @@ public class Post {
   private final Long reward;
   private final Long acceptedAnswerId;
   private final PostStatus status;
-  private final Boolean isSolved;
   private final List<String> tags;
 
   private final LocalDateTime createdAt;
@@ -37,7 +36,6 @@ public class Post {
       Long reward,
       Long acceptedAnswerId,
       PostStatus status,
-      Boolean isSolved,
       List<String> tags,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
@@ -49,7 +47,6 @@ public class Post {
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
     this.status = validateAndResolveStatus(type, status, acceptedAnswerId);
-    this.isSolved = this.status == PostStatus.RESOLVED;
     this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
@@ -82,11 +79,19 @@ public class Post {
         .reward(reward)
         .acceptedAnswerId(null)
         .status(PostStatus.OPEN)
-        .isSolved(false)
         .tags(tags != null ? tags : new ArrayList<>())
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();
+  }
+
+  /**
+   * Compatibility getter for legacy consumers.
+   *
+   * <p>`status` is the source of truth; this boolean is derived only.
+   */
+  public Boolean getIsSolved() {
+    return isResolved();
   }
 
   public void validateOwnership(Long currentUserId) {

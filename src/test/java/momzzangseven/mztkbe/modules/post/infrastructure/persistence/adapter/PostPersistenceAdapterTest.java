@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -116,8 +117,8 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPost normalizes inconsistent persisted question state instead of failing")
-  void loadPostNormalizesInconsistentPersistedState() {
+  @DisplayName("loadPost fails fast for inconsistent persisted question state")
+  void loadPostFailsForInconsistentPersistedState() {
     PostEntity entity =
         PostEntity.builder()
             .id(11L)
@@ -131,12 +132,9 @@ class PostPersistenceAdapterTest {
 
     when(postJpaRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(entity));
 
-    Optional<Post> result = postPersistenceAdapter.loadPost(11L);
-
-    assertThat(result).isPresent();
-    assertThat(result.orElseThrow().getStatus()).isEqualTo(PostStatus.OPEN);
-    assertThat(result.orElseThrow().getAcceptedAnswerId()).isNull();
-    assertThat(result.orElseThrow().getIsSolved()).isFalse();
+    assertThatThrownBy(() -> postPersistenceAdapter.loadPost(11L))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("acceptedAnswerId");
   }
 
   @Test
