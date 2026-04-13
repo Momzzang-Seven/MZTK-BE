@@ -2,26 +2,21 @@ package momzzangseven.mztkbe.integration.e2e.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.global.error.InvalidCredentialsException;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.admin.application.dto.AuthenticateAdminLocalCommand;
 import momzzangseven.mztkbe.modules.admin.application.port.in.AuthenticateAdminLocalUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -34,17 +29,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>Uses {@link TransactionTemplate} and {@link CountDownLatch} to deterministically reproduce the
  * race condition between reseed (DELETE) and login (SELECT FOR UPDATE).
  */
-@Tag("e2e")
-@ActiveProfiles({"integration", "dev"})
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(
     properties = {
-      "mztk.admin.bootstrap.enabled=false",
       "mztk.admin.recovery.anchor=test-e2e-recovery-anchor",
       "mztk.admin.seed.seed-count=2"
     })
 @DisplayName("[E2E] Admin Reseed-Login Concurrency — Pessimistic Lock 검증")
-class AdminReseedLoginConcurrencyE2ETest {
+class AdminReseedLoginConcurrencyE2ETest extends E2ETestBase {
 
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
@@ -53,30 +44,6 @@ class AdminReseedLoginConcurrencyE2ETest {
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
-
-  private final List<String> createdUserEmails = new ArrayList<>();
-  private final List<Long> createdUserIds = new ArrayList<>();
-
-  @AfterEach
-  void tearDown() {
-    for (Long userId : createdUserIds) {
-      jdbcTemplate.update("DELETE FROM admin_accounts WHERE user_id = ?", userId);
-    }
-    for (String email : createdUserEmails) {
-      jdbcTemplate.update(
-          "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM users_account WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
-    }
-    createdUserEmails.clear();
-    createdUserIds.clear();
-  }
 
   /**
    * Verifies that when reseed holds a row-level X-lock (via DELETE) and login attempts SELECT FOR
@@ -112,8 +79,6 @@ class AdminReseedLoginConcurrencyE2ETest {
         email);
     Long userId =
         jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
-    createdUserEmails.add(email);
-    createdUserIds.add(userId);
 
     jdbcTemplate.update(
         "INSERT INTO admin_accounts (user_id, login_id, password_hash, created_by,"
@@ -215,8 +180,6 @@ class AdminReseedLoginConcurrencyE2ETest {
         email);
     Long userId =
         jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
-    createdUserEmails.add(email);
-    createdUserIds.add(userId);
 
     jdbcTemplate.update(
         "INSERT INTO admin_accounts (user_id, login_id, password_hash, created_by,"

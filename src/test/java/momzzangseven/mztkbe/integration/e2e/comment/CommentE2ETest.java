@@ -3,11 +3,11 @@ package momzzangseven.mztkbe.integration.e2e.comment;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
@@ -15,62 +15,26 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-/**
- * Comment CRUD E2E test (Local Server + Real PostgreSQL).
- *
- * <p>Execution prerequisites:
- *
- * <ul>
- *   <li>Local PostgreSQL server must be running (see application-integration.yml)
- *   <li>Run with ./gradlew e2eTest
- * </ul>
- *
- * <p>Scenario coverage:
- *
- * <ul>
- *   <li>free post creation -> comment creation/read/update/delete
- *   <li>reply creation and retrieval
- *   <li>unauthenticated request handling
- *   <li>comment XP ledger persistence on successful creation
- * </ul>
- *
- * <p>External APIs (Kakao, Google) are replaced with mocks.
- */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("[E2E] Comment CRUD full flow")
-class CommentE2ETest {
+class CommentE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
-  private String baseUrl;
   private String accessToken;
 
   private Long postId;
@@ -78,47 +42,13 @@ class CommentE2ETest {
 
   private final List<Long> imageIds = new ArrayList<>();
 
-  private static String uniqueEmail() {
-    return "e2e-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10) + "@example.com";
-  }
-
-  private HttpHeaders authHeaders() {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
-    return headers;
-  }
-
-  private ResponseEntity<String> signup(String email, String password, String nickname) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
-    return restTemplate.exchange(
-        baseUrl + "/auth/signup", HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
-  }
-
-  private String loginAndGetAccessToken(String email, String password) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, Object> body = Map.of("provider", "LOCAL", "email", email, "password", password);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(body, headers),
-            String.class);
-    assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
-    JsonNode root = objectMapper.readTree(response.getBody());
-    return root.at("/data/accessToken").asText();
-  }
-
   private Long createFreePost(String content) throws Exception {
     Map<String, Object> body = Map.of("content", content, "imageIds", imageIds);
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/free",
+            baseUrl() + "/posts/free",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     JsonNode root = objectMapper.readTree(response.getBody());
@@ -132,9 +62,9 @@ class CommentE2ETest {
             : Map.of("content", content);
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/" + targetPostId + "/comments",
+            baseUrl() + "/posts/" + targetPostId + "/comments",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(response.getStatusCode().is2xxSuccessful())
         .as("comment creation should return 2xx: " + response.getBody())
@@ -166,11 +96,7 @@ class CommentE2ETest {
 
   @BeforeEach
   void setUp() throws Exception {
-    baseUrl = "http://localhost:" + port;
-
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "comment-e2e-user");
-    accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    accessToken = signupAndLogin("comment-e2e-user").accessToken();
     postId = createFreePost("post for comment e2e");
   }
 
@@ -181,9 +107,9 @@ class CommentE2ETest {
     Map<String, Object> body = Map.of("content", "first comment");
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId + "/comments",
+            baseUrl() + "/posts/" + postId + "/comments",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
@@ -213,9 +139,9 @@ class CommentE2ETest {
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId + "/comments",
+            baseUrl() + "/posts/" + postId + "/comments",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -242,9 +168,9 @@ class CommentE2ETest {
     Map<String, Object> updateBody = Map.of("content", "comment after update");
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/comments/" + commentId,
+            baseUrl() + "/comments/" + commentId,
             HttpMethod.PUT,
-            new HttpEntity<>(updateBody, authHeaders()),
+            new HttpEntity<>(updateBody, bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -261,9 +187,9 @@ class CommentE2ETest {
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/comments/" + commentId,
+            baseUrl() + "/comments/" + commentId,
             HttpMethod.DELETE,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -280,9 +206,9 @@ class CommentE2ETest {
     Map<String, Object> replyBody = Map.of("content", "reply content", "parentId", commentId);
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId + "/comments",
+            baseUrl() + "/posts/" + postId + "/comments",
             HttpMethod.POST,
-            new HttpEntity<>(replyBody, authHeaders()),
+            new HttpEntity<>(replyBody, bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
@@ -301,9 +227,9 @@ class CommentE2ETest {
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/comments/" + commentId + "/replies",
+            baseUrl() + "/comments/" + commentId + "/replies",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -318,15 +244,13 @@ class CommentE2ETest {
   @Order(8)
   @DisplayName("unauthenticated comment creation returns 401")
   void createComment_withoutAuth_returns401() {
-    HttpHeaders noAuthHeaders = new HttpHeaders();
-    noAuthHeaders.setContentType(MediaType.APPLICATION_JSON);
     Map<String, Object> body = Map.of("content", "unauthenticated comment");
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId + "/comments",
+            baseUrl() + "/posts/" + postId + "/comments",
             HttpMethod.POST,
-            new HttpEntity<>(body, noAuthHeaders),
+            new HttpEntity<>(body, jsonOnlyHeaders()),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
@@ -340,9 +264,9 @@ class CommentE2ETest {
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId + "/comments",
+            baseUrl() + "/posts/" + postId + "/comments",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -360,20 +284,14 @@ class CommentE2ETest {
   void updateComment_byOtherUser_returnsError() throws Exception {
     commentId = createComment(postId, "comment owned by original user", null);
 
-    String otherEmail = uniqueEmail();
-    signup(otherEmail, "Test@1234!", "other-user");
-    String otherToken = loginAndGetAccessToken(otherEmail, "Test@1234!");
-
-    HttpHeaders otherHeaders = new HttpHeaders();
-    otherHeaders.setContentType(MediaType.APPLICATION_JSON);
-    otherHeaders.setBearerAuth(otherToken);
+    String otherToken = signupAndLogin("other-user").accessToken();
 
     Map<String, Object> updateBody = Map.of("content", "intruder update");
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/comments/" + commentId,
+            baseUrl() + "/comments/" + commentId,
             HttpMethod.PUT,
-            new HttpEntity<>(updateBody, otherHeaders),
+            new HttpEntity<>(updateBody, bearerJsonHeaders(otherToken)),
             String.class);
 
     assertThat(response.getStatusCode().is4xxClientError()).isTrue();
@@ -385,9 +303,9 @@ class CommentE2ETest {
   void getRootComments_missingPost_returns404() {
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/999999999/comments",
+            baseUrl() + "/posts/999999999/comments",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);

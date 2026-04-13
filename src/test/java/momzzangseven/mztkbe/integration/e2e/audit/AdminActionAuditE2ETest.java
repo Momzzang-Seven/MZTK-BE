@@ -5,11 +5,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,27 +15,19 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -56,16 +46,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>Authorization failures (non-admin / unauthenticated) never produce an audit row.
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(
     properties = {
       "web3.reward-token.enabled=true",
       "web3.reward-token.treasury.provisioning.enabled=true"
     })
 @DisplayName("[E2E] admin_action_audits 통합 테이블 write path 테스트")
-class AdminActionAuditE2ETest {
+class AdminActionAuditE2ETest extends E2ETestBase {
 
   private static final String ACTION_TX_MARK_SUCCEEDED = "TRANSACTION_MARK_SUCCEEDED";
   private static final String ACTION_TREASURY_KEY_PROVISION = "TREASURY_KEY_PROVISION";
@@ -79,10 +66,6 @@ class AdminActionAuditE2ETest {
   private static final String VALID_TEST_TREASURY_ADDRESS =
       "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
 
@@ -90,105 +73,19 @@ class AdminActionAuditE2ETest {
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private Web3ContractPort web3ContractPort;
 
-  private String baseUrl;
-  private final List<String> createdUserEmails = new ArrayList<>();
-  private final List<Long> createdUserIds = new ArrayList<>();
-  private final List<Long> createdWeb3TransactionIds = new ArrayList<>();
-  private final List<String> insertedTreasuryAliases = new ArrayList<>();
-
-  // ============================================================
-  // Setup / teardown
-  // ============================================================
-
-  @BeforeEach
-  void setUp() {
-    baseUrl = "http://localhost:" + port;
-  }
-
-  @AfterEach
-  void tearDown() {
-    // 1. admin_action_audits rows for our admin operators
-    if (!createdUserIds.isEmpty()) {
-      String inClause = inClausePlaceholders(createdUserIds.size());
-      jdbcTemplate.update(
-          "DELETE FROM admin_action_audits WHERE operator_id IN (" + inClause + ")",
-          createdUserIds.toArray());
-      jdbcTemplate.update(
-          "DELETE FROM web3_treasury_provision_audits WHERE operator_id IN (" + inClause + ")",
-          createdUserIds.toArray());
-    }
-
-    // 1-b. admin_accounts rows for our test admin users
-    for (Long userId : createdUserIds) {
-      jdbcTemplate.update("DELETE FROM admin_accounts WHERE user_id = ?", userId);
-    }
-
-    // 2. web3_transaction_audits + web3_transactions for seeded rows
-    for (Long txId : createdWeb3TransactionIds) {
-      jdbcTemplate.update(
-          "DELETE FROM web3_transaction_audits WHERE web3_transaction_id = ?", txId);
-      jdbcTemplate.update("DELETE FROM web3_transactions WHERE id = ?", txId);
-    }
-    createdWeb3TransactionIds.clear();
-
-    // 3. treasury keys provisioned during the test
-    for (String alias : insertedTreasuryAliases) {
-      jdbcTemplate.update("DELETE FROM web3_treasury_keys WHERE wallet_alias = ?", alias);
-    }
-    insertedTreasuryAliases.clear();
-
-    // 4. delete admin users (and dependent rows)
-    for (String email : createdUserEmails) {
-      jdbcTemplate.update(
-          "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM users_account WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
-    }
-    createdUserEmails.clear();
-    createdUserIds.clear();
-  }
-
   // ============================================================
   // Helpers
   // ============================================================
-
-  private static String uniqueEmail() {
-    return "e2e-audit-"
-        + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
-        + "@example.com";
-  }
-
-  private static String inClausePlaceholders(int n) {
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < n; i++) {
-      if (i > 0) {
-        sb.append(",");
-      }
-      sb.append("?");
-    }
-    return sb.toString();
-  }
 
   /**
    * Signs up a user, promotes them to ADMIN_GENERATED via direct DB update, creates a matching
    * {@code admin_accounts} row so that the JWT filter's {@code isActiveAdmin} check passes, then
    * logs in.
    */
-  private AdminUser createAdminAndLogin() throws Exception {
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "AuditAdmin");
-    createdUserEmails.add(email);
-
-    Long userId =
-        jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
+  private AdminUser createAdminAndLogin() {
+    String email = randomEmail();
+    Long userId = signupUser(email, DEFAULT_TEST_PASSWORD, "AuditAdmin");
     jdbcTemplate.update("UPDATE users SET role = 'ADMIN_GENERATED' WHERE id = ?", userId);
-    createdUserIds.add(userId);
 
     String loginId = String.valueOf(10000000 + (int) (Math.random() * 90000000));
     jdbcTemplate.update(
@@ -197,48 +94,10 @@ class AdminActionAuditE2ETest {
             + " VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NOW(), NOW())",
         userId,
         loginId,
-        passwordEncoder.encode("Test@1234!"));
+        passwordEncoder.encode(DEFAULT_TEST_PASSWORD));
 
-    String accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    String accessToken = loginUser(email, DEFAULT_TEST_PASSWORD);
     return new AdminUser(userId, accessToken);
-  }
-
-  private void signup(String email, String password, String nickname) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/signup",
-            HttpMethod.POST,
-            new HttpEntity<>(body, headers),
-            String.class);
-    assertThat(response.getStatusCode().is2xxSuccessful())
-        .as("signup must succeed: " + response.getBody())
-        .isTrue();
-  }
-
-  private String loginAndGetAccessToken(String email, String password) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, Object> body = Map.of("provider", "LOCAL", "email", email, "password", password);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(body, headers),
-            String.class);
-    assertThat(response.getStatusCode().is2xxSuccessful())
-        .as("login must succeed: " + response.getBody())
-        .isTrue();
-    return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
-  }
-
-  private HttpHeaders bearer(String accessToken) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
-    return headers;
   }
 
   /**
@@ -274,7 +133,6 @@ class AdminActionAuditE2ETest {
             "SELECT id FROM web3_transactions WHERE idempotency_key = ?",
             Long.class,
             idempotencyKey);
-    createdWeb3TransactionIds.add(id);
     return id;
   }
 
@@ -310,7 +168,6 @@ class AdminActionAuditE2ETest {
             "SELECT id FROM web3_transactions WHERE idempotency_key = ?",
             Long.class,
             idempotencyKey);
-    createdWeb3TransactionIds.add(id);
     return id;
   }
 
@@ -336,9 +193,9 @@ class AdminActionAuditE2ETest {
             "reason", reason,
             "evidence", evidence);
     return restTemplate.exchange(
-        baseUrl + "/admin/web3/transactions/" + txId + "/mark-succeeded",
+        baseUrl() + "/admin/web3/transactions/" + txId + "/mark-succeeded",
         HttpMethod.POST,
-        new HttpEntity<>(body, bearer(accessToken)),
+        new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
         String.class);
   }
 
@@ -346,9 +203,9 @@ class AdminActionAuditE2ETest {
       String accessToken, String privateKey, String walletAlias) {
     Map<String, String> body = Map.of("treasuryPrivateKey", privateKey, "walletAlias", walletAlias);
     return restTemplate.exchange(
-        baseUrl + "/admin/web3/treasury-keys/provision",
+        baseUrl() + "/admin/web3/treasury-keys/provision",
         HttpMethod.POST,
-        new HttpEntity<>(body, bearer(accessToken)),
+        new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
         String.class);
   }
 
@@ -544,7 +401,6 @@ class AdminActionAuditE2ETest {
   void provisionTreasuryKey_success_recordsAuditAndMasksPrivateKey() throws Exception {
     AdminUser admin = createAdminAndLogin();
     String walletAlias = "reward-treasury";
-    insertedTreasuryAliases.add(walletAlias);
     // pre-clean any pre-existing alias row from a previous flaky test
     jdbcTemplate.update("DELETE FROM web3_treasury_keys WHERE wallet_alias = ?", walletAlias);
 
@@ -679,13 +535,9 @@ class AdminActionAuditE2ETest {
   @DisplayName("[E-7] ROLE_USER 가 mark-succeeded 호출 → 403 + admin_action_audits 미기록")
   void markTransactionSucceeded_nonAdmin_returnsForbiddenAndRecordsNoAudit() throws Exception {
     // Create a regular USER (no role promotion)
-    String email = uniqueEmail();
-    signup(email, "Test@1234!", "RegularUser");
-    createdUserEmails.add(email);
-    Long userId =
-        jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
-    createdUserIds.add(userId);
-    String accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    TestUser user = signupAndLogin("RegularUser");
+    Long userId = user.userId();
+    String accessToken = user.accessToken();
 
     String txHash = "0x" + repeat('e', 64);
     long txId = seedUnconfirmedTransaction(txHash, userId);
@@ -721,14 +573,11 @@ class AdminActionAuditE2ETest {
             "explorerUrl", "https://x/x",
             "reason", "no auth",
             "evidence", "evidence");
-    HttpHeaders noAuthHeaders = new HttpHeaders();
-    noAuthHeaders.setContentType(MediaType.APPLICATION_JSON);
-
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/admin/web3/transactions/" + txId + "/mark-succeeded",
+            baseUrl() + "/admin/web3/transactions/" + txId + "/mark-succeeded",
             HttpMethod.POST,
-            new HttpEntity<>(body, noAuthHeaders),
+            new HttpEntity<>(body, jsonOnlyHeaders()),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);

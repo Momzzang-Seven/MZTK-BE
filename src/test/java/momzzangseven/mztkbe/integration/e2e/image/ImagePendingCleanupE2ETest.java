@@ -11,22 +11,19 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.application.service.ImagePendingCleanupService;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -51,12 +48,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *
  * <p>batchSize=5 로 고정하여 소수의 테스트 데이터로 while 루프 동작을 검증한다.
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = "image.pending-cleanup.batch-size=5")
 @DisplayName("[E2E] PENDING 이미지 배치 삭제 전체 흐름 (Real PostgreSQL)")
-class ImagePendingCleanupE2ETest {
+class ImagePendingCleanupE2ETest extends E2ETestBase {
 
   @Autowired private ImagePendingCleanupService cleanupService;
   @Autowired private ImageJpaRepository imageJpaRepository;
@@ -66,18 +60,7 @@ class ImagePendingCleanupE2ETest {
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
-  /**
-   * 테스트 전용 userId. 실제 users 테이블에 없어도 images 테이블에 FK 제약이 없으면 삽입 가능. 테스트가 시작될 때마다 해당 userId로 삽입한
-   * 행만 @AfterEach에서 삭제한다.
-   */
   private static final long TEST_USER_ID = 999999L;
-
-  /** 테스트 중 삽입된 행의 ID 추적 — @AfterEach에서 잔여 행 정리에 사용. */
-  private final List<Long> insertedIds = new ArrayList<>();
-
-  // ============================================================
-  // Teardown
-  // ============================================================
 
   @BeforeEach
   void ensureTestUserExists() {
@@ -89,18 +72,6 @@ class ImagePendingCleanupE2ETest {
         TEST_USER_ID,
         "e2e-cleanup-fixture@example.com",
         "cleanup-fixture");
-  }
-
-  @AfterEach
-  void cleanup() {
-    if (!insertedIds.isEmpty()) {
-      List<Object[]> params = new ArrayList<>();
-      for (long id : insertedIds) {
-        params.add(new Object[] {id});
-      }
-      jdbcTemplate.batchUpdate("DELETE FROM images WHERE id = ?", params);
-      insertedIds.clear();
-    }
   }
 
   // ============================================================
@@ -151,9 +122,7 @@ class ImagePendingCleanupE2ETest {
     if (generatedKey == null) {
       throw new IllegalStateException("Failed to retrieve generated key for inserted image row");
     }
-    long id = generatedKey.longValue();
-    insertedIds.add(id);
-    return id;
+    return generatedKey.longValue();
   }
 
   /**
