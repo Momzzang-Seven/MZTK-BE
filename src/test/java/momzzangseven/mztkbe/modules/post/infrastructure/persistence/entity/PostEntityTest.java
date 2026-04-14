@@ -9,7 +9,6 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 @DisplayName("PostEntity unit test")
 class PostEntityTest {
@@ -31,12 +30,11 @@ class PostEntityTest {
 
     assertThat(entity.getStatus()).isEqualTo(PostStatus.RESOLVED);
     assertThat(entity.getAcceptedAnswerId()).isEqualTo(99L);
-    assertThat(legacySolvedShadow(entity)).isTrue();
   }
 
   @Test
-  @DisplayName("builder syncs legacy solved shadow for pending accept status")
-  void builderSyncsLegacySolvedShadowForPendingAccept() {
+  @DisplayName("builder stores pending accept status without legacy shadow field")
+  void builderStoresPendingAcceptStatus() {
     PostEntity entity =
         PostEntity.builder()
             .id(2L)
@@ -49,12 +47,13 @@ class PostEntityTest {
             .status(PostStatus.PENDING_ACCEPT)
             .build();
 
-    assertThat(legacySolvedShadow(entity)).isTrue();
+    assertThat(entity.getStatus()).isEqualTo(PostStatus.PENDING_ACCEPT);
+    assertThat(entity.getAcceptedAnswerId()).isEqualTo(99L);
   }
 
   @Test
-  @DisplayName("builder keeps legacy solved shadow false for open status")
-  void builderKeepsLegacySolvedShadowFalseForOpen() {
+  @DisplayName("builder keeps open status as-is")
+  void builderKeepsOpenStatus() {
     PostEntity entity =
         PostEntity.builder()
             .id(3L)
@@ -66,7 +65,8 @@ class PostEntityTest {
             .status(PostStatus.OPEN)
             .build();
 
-    assertThat(legacySolvedShadow(entity)).isFalse();
+    assertThat(entity.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(entity.getAcceptedAnswerId()).isNull();
   }
 
   @Test
@@ -216,9 +216,5 @@ class PostEntityTest {
             .build();
 
     assertThatThrownBy(entity::toDomain).isInstanceOf(IllegalArgumentException.class);
-  }
-
-  private boolean legacySolvedShadow(PostEntity entity) {
-    return (boolean) ReflectionTestUtils.getField(entity, "legacySolvedShadow");
   }
 }

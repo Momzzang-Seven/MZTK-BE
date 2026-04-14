@@ -21,7 +21,7 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
-      "update PostEntity p set p.status = :resolvedStatus, p.legacySolvedShadow = true"
+      "update PostEntity p set p.status = :resolvedStatus"
           + " where p.id = :postId and p.type = :postType and p.status = :openStatus")
   int markResolvedByIdIfType(
       @Param("postId") Long postId,
