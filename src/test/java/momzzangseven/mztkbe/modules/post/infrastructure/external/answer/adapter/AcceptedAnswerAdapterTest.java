@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AcceptedAnswerAdapterTest {
 
   @Mock private GetAnswerSummaryUseCase getAnswerSummaryUseCase;
+  @Mock private GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
   @Mock private MarkAnswerAcceptedUseCase markAnswerAcceptedUseCase;
 
   @InjectMocks private AcceptedAnswerAdapter acceptedAnswerAdapter;
@@ -32,6 +34,21 @@ class AcceptedAnswerAdapterTest {
 
     Optional<LoadAcceptedAnswerPort.AcceptedAnswerInfo> result =
         acceptedAnswerAdapter.loadAcceptedAnswer(20L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().answerId()).isEqualTo(20L);
+    assertThat(result.get().postId()).isEqualTo(10L);
+    assertThat(result.get().userId()).isEqualTo(2L);
+  }
+
+  @Test
+  @DisplayName("maps locked answer summary to accepted answer info")
+  void loadAcceptedAnswerForUpdate_mapsAnswer() {
+    when(getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(20L))
+        .thenReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(20L, 10L, 2L)));
+
+    Optional<LoadAcceptedAnswerPort.AcceptedAnswerInfo> result =
+        acceptedAnswerAdapter.loadAcceptedAnswerForUpdate(20L);
 
     assertThat(result).isPresent();
     assertThat(result.get().answerId()).isEqualTo(20L);

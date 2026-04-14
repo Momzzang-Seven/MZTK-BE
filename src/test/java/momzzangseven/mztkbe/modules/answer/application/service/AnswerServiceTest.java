@@ -30,6 +30,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
@@ -327,6 +328,22 @@ class AnswerServiceTest {
       verify(saveAnswerPort).saveAnswer(answerCaptor.capture());
       assertThat(answerCaptor.getValue().getIsAccepted()).isTrue();
     }
+
+    @Test
+    @DisplayName("getAnswerSummaryForUpdate returns locked answer summary")
+    void getAnswerSummaryForUpdate_returnsLockedSummary() {
+      Answer answer = buildAnswer(100L, 10L, 20L, "accepted", false);
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+
+      Optional<GetAnswerSummaryUseCase.AnswerSummary> result =
+          answerService.getAnswerSummaryForUpdate(100L);
+
+      assertThat(result).isPresent();
+      assertThat(result.get().answerId()).isEqualTo(100L);
+      assertThat(result.get().postId()).isEqualTo(10L);
+      assertThat(result.get().userId()).isEqualTo(20L);
+      assertThat(result.get().content()).isEqualTo("accepted");
+    }
   }
 
   @Nested
@@ -418,6 +435,13 @@ class AnswerServiceTest {
     @DisplayName("countAnswers() throws when postId is null")
     void countAnswers_throws_whenPostIdIsNull() {
       assertThatThrownBy(() -> answerService.countAnswers(null))
+          .isInstanceOf(AnswerInvalidInputException.class);
+    }
+
+    @Test
+    @DisplayName("getAnswerSummaryForUpdate throws when answerId is null")
+    void getAnswerSummaryForUpdate_throws_whenAnswerIdIsNull() {
+      assertThatThrownBy(() -> answerService.getAnswerSummaryForUpdate(null))
           .isInstanceOf(AnswerInvalidInputException.class);
     }
 
