@@ -1,6 +1,7 @@
 -- web3 QnA projection 테이블 통합:
 --   V038 원본 (web3_qna_questions / web3_qna_answers 생성 + web3_transfer_prepares drop)
 --   + V039 (accepted 컬럼 + web3_question_reward_intents 생성) 통합.
+
 CREATE TABLE IF NOT EXISTS web3_qna_questions (
     post_id            BIGINT PRIMARY KEY,
     question_id        VARCHAR(66) NOT NULL,
