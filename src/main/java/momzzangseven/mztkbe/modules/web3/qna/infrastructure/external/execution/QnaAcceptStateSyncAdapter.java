@@ -35,8 +35,9 @@ public class QnaAcceptStateSyncAdapter implements QnaAcceptStateSyncPort {
 
   @Override
   public void rollbackPendingAccept(Long postId, Long answerId) {
-    requireAnswerForUpdate(answerId, "qna rollback");
+    Answer answer = requireAnswerForUpdate(answerId, "qna rollback");
     Post post = requirePostForUpdate(postId, "qna rollback");
+    validateAnswerBelongsToPost(answer, post);
     postPersistencePort.savePost(post.cancelPendingAccept(answerId));
   }
 

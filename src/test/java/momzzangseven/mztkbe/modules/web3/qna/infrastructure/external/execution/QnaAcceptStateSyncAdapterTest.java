@@ -140,6 +140,21 @@ class QnaAcceptStateSyncAdapterTest {
         .hasMessageContaining("missing answer");
   }
 
+  @Test
+  @DisplayName("rollbackPendingAccept throws when answer belongs to different post")
+  void rollbackPendingAccept_throwsWhenAnswerPostMismatch() {
+    when(loadAnswerPort.loadAnswerForUpdate(201L))
+        .thenReturn(Optional.of(answer(201L, 999L, false)));
+    when(postPersistencePort.loadPostForUpdate(101L))
+        .thenReturn(Optional.of(pendingPost(101L, 201L)));
+
+    assertThatThrownBy(() -> adapter.rollbackPendingAccept(101L, 201L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("does not belong");
+
+    verifyNoInteractions(saveAnswerPort);
+  }
+
   private Post pendingPost(Long postId, Long answerId) {
     return Post.builder()
         .id(postId)
