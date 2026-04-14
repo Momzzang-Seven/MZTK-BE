@@ -1,0 +1,39 @@
+package momzzangseven.mztkbe.modules.post.api.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
+import java.util.List;
+import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+
+public record CreateQuestionPostRequest(
+    @NotBlank(message = "Title must not be blank.")
+        @Size(max = 255, message = "Title must not exceed 255 characters.")
+        String title,
+    @NotBlank(message = "Content must not be blank.") String content,
+    @NotNull(message = "Reward must be provided.")
+        @Positive(message = "Reward must be greater than 0.")
+        Long reward,
+    List<
+            @NotNull(message = "Image ID must not be null.")
+            @Positive(message = "Image ID must be positive.") Long>
+        imageIds,
+    List<@NotBlank(message = "Tag must not be blank.") String> tags) {
+
+  public CreatePostCommand toCommand(Long userId) {
+    return CreatePostCommand.of(
+        userId,
+        this.title,
+        this.content,
+        PostType.QUESTION, // PostType 고정
+        this.reward,
+        this.imageIds,
+        this.tags);
+  }
+
+  public boolean hasTags() {
+    return tags != null && !tags.isEmpty();
+  }
+}

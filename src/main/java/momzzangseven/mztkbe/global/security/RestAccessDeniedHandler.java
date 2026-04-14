@@ -45,7 +45,7 @@ public class RestAccessDeniedHandler implements AccessDeniedHandler {
     String uri = request.getRequestURI();
     String method = request.getMethod();
 
-    if ("POST".equalsIgnoreCase(method) && "/users/me/withdrawal".equals(uri)) {
+    if ("POST".equalsIgnoreCase(method) && "/auth/withdrawal".equals(uri)) {
       return ErrorCode.STEP_UP_REQUIRED;
     }
     return ErrorCode.UNAUTHORIZED_ACCESS;

@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.comment.application.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
@@ -8,6 +9,7 @@ import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -16,6 +18,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -26,15 +29,14 @@ public class CommentService
   private final SaveCommentPort saveCommentPort;
   private final LoadPostPort loadPostPort;
   private final DeleteCommentPort deleteCommentPort;
+  private final GrantCommentXpPort grantCommentXpPort;
 
   // 1. 생성 (Create)
   @Override
   @Transactional
   public CommentResult createComment(CreateCommentCommand command) {
     // 1-1. 게시글 존재 여부 검증 (외부 모듈 포트 사용)
-    if (!loadPostPort.existsPost(command.postId())) {
-      throw new BusinessException(ErrorCode.POST_NOT_FOUND);
-    }
+    validatePostExists(command.postId());
 
     // 1-2. 대댓글인 경우 부모 댓글 검증
     if (command.parentId() != null) {
@@ -45,7 +47,19 @@ public class CommentService
     Comment newComment =
         Comment.create(command.postId(), command.userId(), command.parentId(), command.content());
 
-    return CommentResult.from(saveCommentPort.saveComment(newComment));
+    Comment savedComment = saveCommentPort.saveComment(newComment);
+
+    try {
+      grantCommentXpPort.grantCreateCommentXp(savedComment.getWriterId(), savedComment.getId());
+    } catch (Exception e) {
+      log.warn(
+          "Comment created but XP grant failed for userId={}, commentId={}",
+          savedComment.getWriterId(),
+          savedComment.getId(),
+          e);
+    }
+
+    return CommentResult.from(savedComment);
   }
 
   // 2. 수정 (Update)
@@ -75,7 +89,7 @@ public class CommentService
 
   // 3-2. 삭제 (Delete - 게시글 삭제 이벤트 수신용)
   @Override
-  @Transactional
+  @Transactional(readOnly = false)
   public void deleteCommentsByPostId(Long postId) {
     // 해당 게시글의 모든 댓글 일괄 Soft Delete
     deleteCommentPort.deleteAllByPostId(postId);
@@ -84,6 +98,7 @@ public class CommentService
   // 4. 루트 댓글 조회 (Read)
   @Override
   public Page<CommentResult> getRootComments(GetRootCommentsQuery query) {
+    validatePostExists(query.postId());
     return loadCommentPort
         .loadRootComments(query.postId(), query.pageable())
         .map(CommentResult::from);
@@ -93,9 +108,9 @@ public class CommentService
   @Override
   public Page<CommentResult> getReplies(GetRepliesQuery query) {
     // 부모 댓글이 존재하는지 먼저 확인
-    if (loadCommentPort.loadComment(query.parentId()).isEmpty()) {
-      throw new CommentNotFoundException();
-    }
+    Comment parent =
+        loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
+    validatePostExists(parent.getPostId());
 
     return loadCommentPort.loadReplies(query.parentId(), query.pageable()).map(CommentResult::from);
   }
@@ -115,6 +130,12 @@ public class CommentService
 
     if (parent.isDeleted()) {
       throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
+    }
+  }
+
+  private void validatePostExists(Long postId) {
+    if (!loadPostPort.existsPost(postId)) {
+      throw new BusinessException(ErrorCode.POST_NOT_FOUND);
     }
   }
 }

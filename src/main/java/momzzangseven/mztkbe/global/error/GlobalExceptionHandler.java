@@ -4,14 +4,19 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.token.TokenException;
+import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyCompletedTodayException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -64,6 +69,20 @@ public class GlobalExceptionHandler {
         .body(ApiResponse.error(ex.getMessage(), ex.getCode()));
   }
 
+  @ExceptionHandler(VerificationAlreadyCompletedTodayException.class)
+  public ResponseEntity<ApiResponse<VerificationAlreadyCompletedTodayException.ErrorData>>
+      handleVerificationAlreadyCompletedTodayException(
+          VerificationAlreadyCompletedTodayException ex) {
+    log.warn(
+        "Business exception: {} (code: {}, status: {})",
+        ex.getMessage(),
+        ex.getCode(),
+        ex.getHttpStatus());
+
+    return ResponseEntity.status(ex.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), ex.getCode(), ex.getData()));
+  }
+
   /**
    * Handle token-specific business exceptions coming from authentication flows.
    *
@@ -99,6 +118,24 @@ public class GlobalExceptionHandler {
         .body(ApiResponse.error("Validation failed", errorCode.getCode(), fieldErrors));
   }
 
+  /** Handle missing required request headers (e.g., X-Lambda-Webhook-Secret not present). */
+  @ExceptionHandler(MissingRequestHeaderException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMissingRequestHeaderException(
+      MissingRequestHeaderException ex) {
+    ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /** Handle missing required query parameters. */
+  @ExceptionHandler(MissingServletRequestParameterException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestParameterException(
+      MissingServletRequestParameterException ex) {
+    ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
   /** Handle missing cookies (e.g., refresh token cookie not present). */
   @ExceptionHandler(MissingRequestCookieException.class)
   public ResponseEntity<ApiResponse<Void>> handleMissingRequestCookieException(
@@ -115,6 +152,15 @@ public class GlobalExceptionHandler {
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(ex.getMessage(), errorCode.getCode()));
+  }
+
+  /** Handle request parameter/path variable type mismatches (e.g., invalid enum query values). */
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatchException(
+      MethodArgumentTypeMismatchException ex) {
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error("Invalid request parameter type", errorCode.getCode()));
   }
 
   /** Handle missing endpoint/static resource requests as 404 instead of 500. */
@@ -156,6 +202,21 @@ public class GlobalExceptionHandler {
   // ========================================
   // Generic Exceptions
   // ========================================
+
+  /**
+   * Handle DB unique constraint / FK violations.
+   *
+   * <p>Covers cases such as UUID collision on {@code tmp_object_key}. Returns 409 Conflict so the
+   * client can distinguish this from a generic 500 and retry if appropriate.
+   */
+  @ExceptionHandler(DataIntegrityViolationException.class)
+  public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolationException(
+      DataIntegrityViolationException ex) {
+    log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+    ErrorCode errorCode = ErrorCode.DATA_INTEGRITY_VIOLATION;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
+  }
 
   /** Handle all other uncaught exceptions. This is a catch-all handler for unexpected errors. */
   @ExceptionHandler(Exception.class)

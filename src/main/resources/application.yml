@@ -1,6 +1,9 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE}
+  ai:
+    model:
+      chat: none
 
   datasource:
     url: ${DB_URL}
@@ -32,6 +35,13 @@ spring:
     serialization:
       write-dates-as-timestamps: false
     time-zone: Asia/Seoul
+
+info:
+  app:
+    name: ${APP_NAME:MZTK-BE}
+    version: ${APP_VERSION:0.0.1-SNAPSHOT}
+    description: ${APP_DESCRIPTION:MZTK-BE Backend Service}
+    environment: ${APP_ENVIRONMENT:local}
 
 security:
   cors:
@@ -89,12 +99,18 @@ withdrawal:
     cron: "0 0 3 * * *"
     zone: Asia/Seoul
 
-  comment:
-    hard-delete:
-      retention-days: ${COMMENT_HARD_DELETE_RETENTION_DAYS:30}
-      batch-size: ${COMMENT_HARD_DELETE_BATCH_SIZE:100}
-      cron: ${COMMENT_HARD_DELETE_CRON:0 0 4 * * *}
-      zone: ${COMMENT_HARD_DELETE_ZONE:Asia/Seoul}
+comment:
+  hard-delete:
+    retention-days: ${COMMENT_HARD_DELETE_RETENTION_DAYS:30}
+    batch-size: ${COMMENT_HARD_DELETE_BATCH_SIZE:100}
+    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
+    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
+
+answer:
+  orphan-cleanup:
+    batch-size: ${ANSWER_ORPHAN_CLEANUP_BATCH_SIZE:100}
+    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
+    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
 
 logging:
   level:
@@ -111,10 +127,17 @@ level:
     zone: Asia/Seoul
 
 management:
+  info:
+    env:
+      enabled: true
   endpoints:
     web:
       exposure:
         include: health, info
+  endpoint:
+    health:
+      show-details: when_authorized
+      roles: ROLE_ADMIN
 
 jwt:
   secret: ${JWT_SECRET}
@@ -170,6 +193,7 @@ web3:
 
     # 임계치/워커 튜닝은 yml 상수 유지
     treasury:
+      wallet-alias: reward-treasury
       key-encryption-key-b64: ${TREASURY_KEY_ENCRYPTION_KEY_B64}
       treasury-address: ${TREASURY_WALLET_ADDRESS}
       provisioning:
@@ -204,23 +228,32 @@ web3:
     sponsor:
       enabled: true
       key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
-      wallet-alias: reward-treasury
+      wallet-alias: sponsor-treasury
 
       # 안전장치는 yml 상수 유지(운영 중 급변할 값 아니면)
       max-gas-limit: 500000
       max-max-fee-gwei: 60
       max-priority-fee-gwei: 2
+      max-transfer-amount-eth: 5000
+      per-tx-cap-eth: 0.002
       daily-sponsor-cap-eth: 0.5
       per-day-user-cap-eth: 0.02
 
     authorization:
       ttl-seconds: 300
+      eip1559-ttl-seconds: 90
       nonce-policy: ONCHAIN
       require-chain-id-match: true
       max-auth-list-length: 1
 
     execution:
-      allowed-target-contracts: []               # prod에서만 채우는 것을 권장
+      allowed-delegate-targets:
+        - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS:}
+      allowed-call-targets:
+        - ${MZTK_TOKEN_CONTRACT_ADDRESS:}
+        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS:}
+        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS:}
+      allowed-target-contracts: []               # deprecated fallback. use split allowlists above
       blocked-function-selectors: []             # prod에서만 채우는 것을 권장
 
     cleanup:
@@ -233,7 +266,74 @@ web3:
     observability:
       log-auth-hash: true
       log-user-op: false
+  escrow:
+    marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+    qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+  transfer:
+    legacy-question-reward-handler-enabled: false
 
 location:
   verification:
     radius-meters: 5.0 # Location verification radius; 5m
+
+cloud:
+  aws:
+    region:
+      static: ap-northeast-2
+      auto: false
+    stack:
+      auto: false
+    s3:
+      bucket: ${AWS_S3_BUCKET}
+      url-prefix: https://${AWS_S3_BUCKET}.s3.ap-northeast-2.amazonaws.com/
+      presigned-url:
+        expiry-seconds: 300  # 5m
+    credentials:
+      access-key: ${AWS_IAM_ACCESS_KEY}
+      secret-key: ${AWS_IAM_SECRET_KEY}
+
+image:
+  post-orphan-cleanup:
+    batch-size: ${IMAGE_POST_ORPHAN_CLEANUP_BATCH_SIZE:100}
+    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
+    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
+  answer-orphan-cleanup:
+    batch-size: ${IMAGE_ANSWER_ORPHAN_CLEANUP_BATCH_SIZE:100}
+    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
+    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
+  pending-cleanup:
+    retention-hours: 5
+    batch-size: 100
+    cron: 0 0 0/1 * * *
+    zone: Asia/Seoul
+  unlinked-cleanup:
+    retention-hours: 5
+    batch-size: 100
+    cron: 0 0 3 * * *
+    zone: Asia/Seoul
+
+verification:
+  ai:
+    api-key: ${GEMINI_API_KEY:}
+    model: gemini-2.5-flash-lite
+    timeout-seconds: 12
+    retry-count: 2
+    stub-enabled: false
+  heif:
+    enabled: true
+    decoder-policy: requires-imageio-plugin
+  image:
+    max-original-bytes: 5242880
+    max-pixels: 25000000
+
+lambda:
+  webhook:
+    secret: ${LAMBDA_WEBHOOK_SECRET}
+
+mztk:
+  admin:
+    seed:
+      seed-count: ${ADMIN_SEED_COUNT:2}
+      delivery-target: ${ADMIN_SEED_DELIVERY_TARGET:mztk/admin/bootstrap-delivery}
+    recovery:
+      secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}

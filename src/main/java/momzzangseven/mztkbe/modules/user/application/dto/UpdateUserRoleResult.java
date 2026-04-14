@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.user.application.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.Builder;
 import momzzangseven.mztkbe.modules.user.domain.model.User;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
@@ -14,8 +14,8 @@ public record UpdateUserRoleResult(
     String nickname,
     String profileImageUrl,
     UserRole role,
-    LocalDateTime createdAt,
-    LocalDateTime updatedAt) {
+    Instant createdAt,
+    Instant updatedAt) {
   /**
    * Create UpdateUserRoleResult from User domain model.
    *

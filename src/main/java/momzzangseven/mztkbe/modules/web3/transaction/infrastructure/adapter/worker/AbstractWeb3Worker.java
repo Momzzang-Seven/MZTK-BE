@@ -7,13 +7,13 @@ import java.util.Map;
 import java.util.function.Consumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -22,7 +22,7 @@ abstract class AbstractWeb3Worker {
   protected final LoadTransactionWorkPort loadTransactionWorkPort;
   protected final UpdateTransactionPort updateTransactionPort;
   protected final RecordTransactionAuditPort recordTransactionAuditPort;
-  protected final RewardTokenProperties rewardTokenProperties;
+  protected final TransactionRewardTokenProperties rewardTokenProperties;
   protected final RetryStrategy retryStrategy;
 
   protected void processBatchByStatus(

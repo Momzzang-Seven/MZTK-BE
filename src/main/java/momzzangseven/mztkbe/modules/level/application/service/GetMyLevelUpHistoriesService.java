@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPor
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadLevelRewardTransactionPort;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.vo.RewardStatus;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxPhase;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxPhase;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,7 +65,7 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
 
   private LevelUpHistoryItem mapToItem(
       LevelUpHistory history, LoadLevelRewardTransactionPort.RewardTxView rewardTxView) {
-    Web3TxStatus rewardTxStatus = resolveRewardTxStatus(history, rewardTxView);
+    RewardTxStatus rewardTxStatus = resolveRewardTxStatus(history, rewardTxView);
     RewardStatus rewardStatus = toLegacyStatus(rewardTxStatus);
     String rewardTxHash = rewardTxView != null ? rewardTxView.txHash() : null;
 
@@ -77,29 +77,29 @@ public class GetMyLevelUpHistoriesService implements GetMyLevelUpHistoriesUseCas
         .rewardMztk(history.getRewardMztk())
         .rewardStatus(rewardStatus)
         .rewardTxStatus(rewardTxStatus)
-        .rewardTxPhase(Web3TxPhase.from(rewardTxStatus))
+        .rewardTxPhase(RewardTxPhase.from(rewardTxStatus))
         .rewardTxHash(rewardTxHash)
         .rewardExplorerUrl(buildExplorerUrl(rewardTxHash))
         .createdAt(history.getCreatedAt())
         .build();
   }
 
-  private Web3TxStatus resolveRewardTxStatus(
+  private RewardTxStatus resolveRewardTxStatus(
       LevelUpHistory history, LoadLevelRewardTransactionPort.RewardTxView rewardTxView) {
     if (rewardTxView != null) {
       return rewardTxView.status();
     }
     if (history.getRewardMztk() <= 0) {
-      return Web3TxStatus.SUCCEEDED;
+      return RewardTxStatus.SUCCEEDED;
     }
-    return Web3TxStatus.CREATED;
+    return RewardTxStatus.CREATED;
   }
 
-  private RewardStatus toLegacyStatus(Web3TxStatus status) {
-    if (status == Web3TxStatus.SUCCEEDED) {
+  private RewardStatus toLegacyStatus(RewardTxStatus status) {
+    if (status == RewardTxStatus.SUCCEEDED) {
       return RewardStatus.SUCCESS;
     }
-    if (status == Web3TxStatus.FAILED_ONCHAIN) {
+    if (status == RewardTxStatus.FAILED_ONCHAIN) {
       return RewardStatus.FAILED;
     }
     return RewardStatus.PENDING;

@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpCommand;
 import momzzangseven.mztkbe.modules.level.application.dto.LevelUpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.LevelUpUseCase;
+import momzzangseven.mztkbe.modules.level.application.port.out.EnsureUserProgressPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LevelUpHistoryPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.LoadActiveWalletPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand;
@@ -21,9 +22,9 @@ import momzzangseven.mztkbe.modules.level.domain.model.LevelPolicy;
 import momzzangseven.mztkbe.modules.level.domain.model.LevelUpHistory;
 import momzzangseven.mztkbe.modules.level.domain.model.UserProgress;
 import momzzangseven.mztkbe.modules.level.domain.vo.RewardStatus;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxPhase;
+import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxPhase;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class LevelUpService implements LevelUpUseCase {
 
+  private final EnsureUserProgressPort ensureUserProgressPort;
   private final UserProgressPort userProgressPort;
   private final LevelPolicyResolver levelPolicyResolver;
   private final LevelUpHistoryPort levelUpHistoryPort;
@@ -54,7 +56,7 @@ public class LevelUpService implements LevelUpUseCase {
         loadActiveWalletPort
             .loadActiveWalletAddress(userId)
             .orElseThrow(() -> new WalletNotConnectedException(userId));
-    userProgressPort.loadOrCreateUserProgress(userId);
+    ensureUserProgressPort.loadOrCreateUserProgress(userId);
 
     UserProgress progress = userProgressPort.loadUserProgressWithLock(userId);
     LocalDateTime now = LocalDateTime.now();
@@ -88,7 +90,7 @@ public class LevelUpService implements LevelUpUseCase {
         .rewardMztk(rewardMztk)
         .rewardStatus(rewardStatus)
         .rewardTxStatus(rewardResult.status())
-        .rewardTxPhase(Web3TxPhase.from(rewardResult.status()))
+        .rewardTxPhase(RewardTxPhase.from(rewardResult.status()))
         .rewardTxHash(rewardResult.txHash())
         .rewardExplorerUrl(buildExplorerUrl(rewardResult.txHash()))
         .build();
@@ -115,11 +117,11 @@ public class LevelUpService implements LevelUpUseCase {
     }
   }
 
-  private RewardStatus toLegacyRewardStatus(Web3TxStatus status) {
-    if (status == Web3TxStatus.SUCCEEDED) {
+  private RewardStatus toLegacyRewardStatus(RewardTxStatus status) {
+    if (status == RewardTxStatus.SUCCEEDED) {
       return RewardStatus.SUCCESS;
     }
-    if (status == Web3TxStatus.FAILED_ONCHAIN) {
+    if (status == RewardTxStatus.FAILED_ONCHAIN) {
       return RewardStatus.FAILED;
     }
     return RewardStatus.PENDING;

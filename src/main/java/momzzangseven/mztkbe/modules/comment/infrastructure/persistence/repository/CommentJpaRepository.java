@@ -24,7 +24,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   @Modifying(clearAutomatically = true)
   @Query(
-      "UPDATE CommentEntity c SET c.isDeleted = true, c.updatedAt = CURRENT_TIMESTAMP WHERE c.postId = :postId")
+      value =
+          "UPDATE comments SET is_deleted = true, updated_at = CURRENT_TIMESTAMP "
+              + "WHERE post_id = :postId",
+      nativeQuery = true)
   void deleteAllByPostId(@Param("postId") Long postId);
 
   @Query("SELECT c.id FROM CommentEntity c WHERE c.isDeleted = true AND c.updatedAt < :cutoff")

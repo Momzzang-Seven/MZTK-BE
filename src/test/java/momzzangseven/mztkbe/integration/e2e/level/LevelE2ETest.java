@@ -1,0 +1,233 @@
+package momzzangseven.mztkbe.integration.e2e.level;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
+import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+@DisplayName("[E2E] Level & Attendance 전체 흐름 테스트")
+class LevelE2ETest extends E2ETestBase {
+
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+
+  private String accessToken;
+
+  @BeforeEach
+  void setUp() {
+    accessToken = signupAndLogin("레벨E2E유저").accessToken();
+  }
+
+  @Test
+  @DisplayName("신규 유저 레벨 조회 → level=1, availableXp=0")
+  void getMyLevel_newUser_returnsLevel1WithZeroXp() throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/level",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data/level").asInt()).isEqualTo(1);
+    assertThat(root.at("/data/availableXp").asInt()).isEqualTo(0);
+  }
+
+  @Test
+  @DisplayName("레벨 정책 목록 조회 → policies 배열 반환 (인증 필요)")
+  void getLevelPolicies_authenticated_returnsPolicies() throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/levels/policies",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data/levelPolicies").isArray()).isTrue();
+    assertThat(root.at("/data/xpPolicies").size()).isEqualTo(5);
+  }
+
+  @Test
+  @DisplayName("레벨업 이력 조회 → 신규 유저는 빈 목록 반환")
+  void getLevelUpHistories_newUser_returnsEmptyList() throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/level-up-histories",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data/histories").isArray()).isTrue();
+    assertThat(root.at("/data/histories").size()).isEqualTo(0);
+  }
+
+  @Test
+  @DisplayName("XP 원장 조회 → 신규 유저는 빈 목록 반환")
+  void getXpLedger_newUser_returnsEmptyEntries() throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/xp-ledger",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data/entries").isArray()).isTrue();
+  }
+
+  @Test
+  @DisplayName("XP 없는 신규 유저 레벨업 시도 → 4xx 에러 반환")
+  void levelUp_withNoXp_returnsError() {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/level-ups",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode().is4xxClientError())
+        .as("XP 부족 상태에서 레벨업 시도 시 4xx 에러여야 함")
+        .isTrue();
+  }
+
+  @Test
+  @DisplayName("인증 없이 레벨 조회 시 401 반환")
+  void getMyLevel_withoutAuth_returns401() {
+    HttpHeaders noAuthHeaders = new HttpHeaders();
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/level",
+            HttpMethod.GET,
+            new HttpEntity<>(noAuthHeaders),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  @DisplayName("출석 체크인 → XP 적립 및 응답 구조 검증")
+  void checkIn_firstTime_grantsXpAndReturnsResult() throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/attendance",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data/success").asBoolean()).isTrue();
+    assertThat(root.at("/data/attendedDate").asText()).isNotBlank();
+    assertThat(root.at("/data/grantedXp").asInt()).isGreaterThanOrEqualTo(0);
+  }
+
+  @Test
+  @DisplayName("출석 후 XP 원장에 출석 항목 생성 확인")
+  void checkIn_afterCheckIn_xpLedgerContainsAttendanceEntry() throws Exception {
+    restTemplate.exchange(
+        baseUrl() + "/users/me/attendance",
+        HttpMethod.POST,
+        new HttpEntity<>(bearerJsonHeaders(accessToken)),
+        String.class);
+
+    ResponseEntity<String> ledgerResponse =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/xp-ledger",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(ledgerResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(ledgerResponse.getBody());
+    JsonNode entries = root.at("/data/entries");
+    assertThat(entries.isArray()).isTrue();
+  }
+
+  @Test
+  @DisplayName("출석 상태 조회 → 응답 구조 검증")
+  void getAttendanceStatus_returnsStatus() throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/attendance/status",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data").isMissingNode()).isFalse();
+  }
+
+  @Test
+  @DisplayName("주간 출석 조회 → 응답 구조 검증")
+  void getWeeklyAttendance_returnsWeeklyData() throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/attendance/weekly",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+    LocalDate fromDate = today.minusDays(6);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data").isMissingNode()).isFalse();
+    assertThat(root.at("/data/range").get("from").asText()).isEqualTo(fromDate.toString());
+    assertThat(root.at("/data/range").get("to").asText()).isEqualTo(today.toString());
+  }
+
+  @Test
+  @DisplayName("같은 날 중복 체크인 → OK, body/data/success에 false 저장.")
+  void checkIn_sameDay_returnsError() throws Exception {
+    restTemplate.exchange(
+        baseUrl() + "/users/me/attendance",
+        HttpMethod.POST,
+        new HttpEntity<>(bearerJsonHeaders(accessToken)),
+        String.class);
+
+    ResponseEntity<String> secondResponse =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/attendance",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(secondResponse.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data").isMissingNode()).isFalse();
+    assertThat(root.at("/data/success").asBoolean()).isFalse();
+    assertThat(root.at("/data/message").asText()).isEqualTo("ALREADY_CHECKED_IN");
+  }
+}

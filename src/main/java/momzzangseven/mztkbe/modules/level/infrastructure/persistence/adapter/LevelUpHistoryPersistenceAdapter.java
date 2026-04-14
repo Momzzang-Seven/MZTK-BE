@@ -49,4 +49,10 @@ public class LevelUpHistoryPersistenceAdapter implements LevelUpHistoryPort {
 
     return entities.stream().map(LevelUpHistoryEntity::toDomain).toList();
   }
+
+  @Override
+  @Transactional(readOnly = true)
+  public boolean existsById(Long levelUpHistoryId) {
+    return levelUpHistoryJpaRepository.existsById(levelUpHistoryId);
+  }
 }

@@ -13,8 +13,14 @@ public enum UserRole {
   /** Regular user role with trainer permissions. */
   TRAINER("ROLE_TRAINER", "Trainer", 2),
 
-  /** Administrator role with full permissions. */
-  ADMIN("ROLE_ADMIN", "Administrator", 99);
+  /** Administrator role — logical parent, never directly assigned to users. */
+  ADMIN("ROLE_ADMIN", "Administrator", 90),
+
+  /** Seed administrator created during bootstrap. */
+  ADMIN_SEED("ROLE_ADMIN_SEED", "Seed Administrator", 99),
+
+  /** Administrator created by another admin at runtime. */
+  ADMIN_GENERATED("ROLE_ADMIN_GENERATED", "Generated Administrator", 99);
 
   private final String authority;
   private final String displayName;
@@ -31,12 +37,12 @@ public enum UserRole {
   }
 
   /**
-   * Check if this role is admin.
+   * Check if this role is admin (ADMIN, ADMIN_SEED, or ADMIN_GENERATED).
    *
-   * @return true if this role is ADMIN
+   * @return true if this role has admin-level privileges
    */
   public boolean isAdmin() {
-    return this == ADMIN;
+    return this.level >= ADMIN.level;
   }
 
   /**

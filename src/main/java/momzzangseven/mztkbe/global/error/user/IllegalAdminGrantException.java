@@ -9,4 +9,8 @@ public class IllegalAdminGrantException extends BusinessException {
   public IllegalAdminGrantException() {
     super(ErrorCode.ILLEGAL_ADMIN_GRANT, ErrorCode.ILLEGAL_ADMIN_GRANT.getMessage());
   }
+
+  public IllegalAdminGrantException(String message) {
+    super(ErrorCode.ILLEGAL_ADMIN_GRANT, message);
+  }
 }
