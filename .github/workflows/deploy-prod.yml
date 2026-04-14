@@ -21,6 +21,21 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.4
+        env:
+          POSTGRES_USER: mztk
+          POSTGRES_PASSWORD: mztk
+          POSTGRES_DB: mztk_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     
     steps:
       # ============================================
@@ -67,6 +82,10 @@ jobs:
       # 4. 테스트 실행
       # ============================================
       - name: Run tests
+        env:
+          DB_URL_E2E: jdbc:postgresql://localhost:5432/mztk_ci
+          DB_USERNAME: mztk
+          DB_PASSWORD: mztk
         run: ./gradlew test --no-daemon
 
       # ============================================
