@@ -333,7 +333,9 @@ class PostControllerTest {
   @Test
   @DisplayName("POST /posts/{postId}/web3/recover-create succeeds")
   void recoverQuestionCreate_success() throws Exception {
-    given(recoverQuestionPostEscrowUseCase.recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class)))
+    given(
+            recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+                any(RecoverQuestionPostEscrowCommand.class)))
         .willReturn(new PostMutationResult(1L, null));
 
     mockMvc
@@ -343,7 +345,8 @@ class PostControllerTest {
         .andExpect(jsonPath("$.data.postId").value(1))
         .andExpect(jsonPath("$.data.web3").doesNotExist());
 
-    verify(recoverQuestionPostEscrowUseCase).recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class));
+    verify(recoverQuestionPostEscrowUseCase)
+        .recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class));
   }
 
   @Test

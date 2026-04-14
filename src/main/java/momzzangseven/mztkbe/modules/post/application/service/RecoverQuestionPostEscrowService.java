@@ -27,7 +27,8 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
   public PostMutationResult recoverQuestionCreate(RecoverQuestionPostEscrowCommand command) {
     command.validate();
 
-    Post post = postPersistencePort.loadPost(command.postId()).orElseThrow(PostNotFoundException::new);
+    Post post =
+        postPersistencePort.loadPost(command.postId()).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(command.requesterId());
     if (post.getType() != PostType.QUESTION) {
       throw new momzzangseven.mztkbe.global.error.post.PostInvalidInputException(

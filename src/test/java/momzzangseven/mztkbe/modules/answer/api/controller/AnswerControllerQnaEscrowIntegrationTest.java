@@ -14,11 +14,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerEscrowCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerEscrowUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
-import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerEscrowCommand;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -195,8 +195,7 @@ class AnswerControllerQnaEscrowIntegrationTest {
         .andExpect(jsonPath("$.data.postId").value(1))
         .andExpect(jsonPath("$.data.answerId").value(1));
 
-    verify(recoverAnswerEscrowUseCase)
-        .recoverAnswerCreate(any(RecoverAnswerEscrowCommand.class));
+    verify(recoverAnswerEscrowUseCase).recoverAnswerCreate(any(RecoverAnswerEscrowCommand.class));
   }
 
   // ── 헬퍼 ──────────────────────────────────────────────────────────────────

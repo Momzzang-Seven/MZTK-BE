@@ -37,7 +37,6 @@ public class CreatePostService implements CreatePostUseCase {
         savedPost.getId(), xpResult.isXpGranted(), xpResult.grantedXp(), xpResult.message());
   }
 
-
   private Post savePost(CreatePostCommand command) {
     // 1. 게시글 도메인 객체 생성
     Post post =
