@@ -20,9 +20,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecut
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -205,10 +203,10 @@ class QnaEscrowE2ETest extends E2ETestBase {
   @Order(4)
   @DisplayName("GET /posts/{postId} — 익명 공개 조회로 question web3Execution summary 를 반환한다")
   void getQuestionDetail_anonymous_returnsQuestionWeb3ExecutionSummary() throws Exception {
-    ResponseEntity<String> createResponse =
-        createQuestionPost("공개 조회 질문", "공개 조회 본문", 40L);
+    ResponseEntity<String> createResponse = createQuestionPost("공개 조회 질문", "공개 조회 본문", 40L);
     assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    Long postId = objectMapper.readTree(createResponse.getBody()).path("data").path("postId").asLong();
+    Long postId =
+        objectMapper.readTree(createResponse.getBody()).path("data").path("postId").asLong();
 
     ResponseEntity<String> getResponse =
         restTemplate.exchange(baseUrl() + "/posts/" + postId, HttpMethod.GET, null, String.class);
@@ -219,7 +217,12 @@ class QnaEscrowE2ETest extends E2ETestBase {
     assertThat(data.path("question").path("reward").asLong()).isEqualTo(40L);
     assertThat(data.path("question").path("web3Execution").path("actionType").asText())
         .isEqualTo("QNA_QUESTION_CREATE");
-    assertThat(data.path("question").path("web3Execution").path("executionIntent").path("status").asText())
+    assertThat(
+            data.path("question")
+                .path("web3Execution")
+                .path("executionIntent")
+                .path("status")
+                .asText())
         .isEqualTo("AWAITING_SIGNATURE");
   }
 
@@ -231,8 +234,7 @@ class QnaEscrowE2ETest extends E2ETestBase {
     TestUser answerOwner = signupAndLogin("qna-answer-owner");
     TestUser thirdUser = signupAndLogin("qna-third-user");
     Long postId =
-        insertOnchainReadyQuestion(
-            questionOwner.userId(), "답변 resume 질문", "답변 resume 본문", 25L);
+        insertOnchainReadyQuestion(questionOwner.userId(), "답변 resume 질문", "답변 resume 본문", 25L);
 
     ResponseEntity<String> createAnswerResponse =
         restTemplate.exchange(
@@ -278,7 +280,9 @@ class QnaEscrowE2ETest extends E2ETestBase {
     jdbcTemplate.update(
         conn -> {
           PreparedStatement ps =
-              conn.prepareStatement("INSERT INTO posts (user_id, type, title, content, reward, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", new String[] {"id"});
+              conn.prepareStatement(
+                  "INSERT INTO posts (user_id, type, title, content, reward, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                  new String[] {"id"});
           ps.setLong(1, askerUserId);
           ps.setString(2, "QUESTION");
           ps.setString(3, title);

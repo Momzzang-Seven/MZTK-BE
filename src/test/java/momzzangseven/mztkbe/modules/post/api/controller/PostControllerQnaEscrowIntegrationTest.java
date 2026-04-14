@@ -112,7 +112,9 @@ class PostControllerQnaEscrowIntegrationTest {
         .willReturn(questionIntent("intent-3", "QNA_QUESTION_DELETE"));
     BDDMockito.given(questionEscrowExecutionUseCase.prepareAnswerAccept(any()))
         .willReturn(questionIntent("intent-4", "QNA_ANSWER_ACCEPT"));
-    BDDMockito.given(recoverQuestionPostEscrowUseCase.recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class)))
+    BDDMockito.given(
+            recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+                any(RecoverQuestionPostEscrowCommand.class)))
         .willReturn(
             new momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult(101L, null));
   }
