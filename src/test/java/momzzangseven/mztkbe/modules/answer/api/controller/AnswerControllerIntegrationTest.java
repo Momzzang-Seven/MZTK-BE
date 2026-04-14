@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePo
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -106,7 +107,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("CRUD flow persists and updates answers through HTTP")
     void createGetUpdateAndDeleteAnswer_realFlow_works() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
       Long postId = savedPost.getId();
 
       MvcResult createResult =
@@ -182,7 +183,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("GET answers returns accepted answers first")
     void getAnswers_returnsAcceptedAnswerFirst() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
       Long postId = savedPost.getId();
 
       answerJpaRepository.save(buildAnswerEntity(postId, 502L, "regular", false));
@@ -198,7 +199,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("GET answers preserves null image url slots")
     void getAnswers_preservesNullImageUrlSlots() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
       Long postId = savedPost.getId();
       AnswerEntity answer =
           answerJpaRepository.save(buildAnswerEntity(postId, 502L, "regular", false));
@@ -228,7 +229,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("POST answer returns 401 when unauthenticated")
     void createAnswer_returns401_whenUnauthenticated() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
 
       mockMvc
           .perform(
@@ -241,7 +242,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("POST answer returns 400 when the request body has blank content")
     void createAnswer_returns400_whenBlankContent() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
 
       mockMvc
           .perform(
@@ -256,7 +257,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("POST answer returns 400 when the question is already solved")
     void createAnswer_returns400_whenPostIsSolved() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, true);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.RESOLVED, 999L);
 
       mockMvc
           .perform(
@@ -271,7 +272,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("POST answer returns 400 when the requester answers his or her own post")
     void createAnswer_returns400_whenAnswerOwnPost() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
 
       mockMvc
           .perform(
@@ -286,7 +287,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("POST answer returns 400 when the target post is not a question")
     void createAnswer_returns400_whenPostIsNotQuestion() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.FREE, false);
+      PostEntity savedPost = savePost(501L, PostType.FREE, PostStatus.OPEN, null);
 
       mockMvc
           .perform(
@@ -301,7 +302,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("POST answer returns 500 when image sync fails")
     void createAnswer_rollsBack_whenImageSyncFails() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
       org.mockito.BDDMockito.willThrow(new RuntimeException("sync failed"))
           .given(updateAnswerImagesPort)
           .updateImages(
@@ -331,7 +332,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("GET answers returns 401 when unauthenticated")
     void getAnswers_returns401_whenUnauthenticated() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
 
       mockMvc
           .perform(get("/questions/" + savedPost.getId() + "/answers"))
@@ -341,7 +342,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("GET answers returns 400 when the target post is not a question")
     void getAnswers_returns400_whenPostIsNotQuestion() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.FREE, false);
+      PostEntity savedPost = savePost(501L, PostType.FREE, PostStatus.OPEN, null);
 
       mockMvc
           .perform(get("/questions/" + savedPost.getId() + "/answers").with(userPrincipal(501L)))
@@ -352,7 +353,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("PUT answer returns 403 when the requester is not the owner")
     void updateAnswer_returns403_whenNotOwner() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
       Long answerId = createAnswer(savedPost.getId(), 502L, "answer content", List.of());
 
       mockMvc
@@ -368,7 +369,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("PUT answer returns 400 when duplicate imageIds are provided")
     void updateAnswer_returns400_whenDuplicateImageIds() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
       Long answerId = createAnswer(savedPost.getId(), 502L, "answer content", List.of());
 
       mockMvc
@@ -384,7 +385,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("DELETE answer returns 403 when the requester is not the owner")
     void deleteAnswer_returns403_whenNotOwner() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, false);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
       Long answerId = createAnswer(savedPost.getId(), 502L, "answer content", List.of());
 
       mockMvc
@@ -398,7 +399,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("PUT answer returns 400 when the parent question is already solved")
     void updateAnswer_returns400_whenParentQuestionIsSolved() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, true);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.RESOLVED, 999L);
       AnswerEntity answer =
           answerJpaRepository.save(
               buildAnswerEntity(savedPost.getId(), 502L, "regular answer", false));
@@ -417,7 +418,7 @@ class AnswerControllerIntegrationTest {
     @Test
     @DisplayName("DELETE answer returns 400 when the parent question is already solved")
     void deleteAnswer_returns400_whenParentQuestionIsSolved() throws Exception {
-      PostEntity savedPost = savePost(501L, PostType.QUESTION, true);
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.RESOLVED, 999L);
       AnswerEntity answer =
           answerJpaRepository.save(
               buildAnswerEntity(savedPost.getId(), 502L, "regular answer", false));
@@ -432,7 +433,8 @@ class AnswerControllerIntegrationTest {
     }
   }
 
-  private PostEntity savePost(Long userId, PostType type, boolean isSolved) {
+  private PostEntity savePost(
+      Long userId, PostType type, PostStatus status, Long acceptedAnswerId) {
     return postJpaRepository.save(
         PostEntity.builder()
             .userId(userId)
@@ -440,7 +442,8 @@ class AnswerControllerIntegrationTest {
             .title(type == PostType.QUESTION ? "question title" : null)
             .content("post content")
             .reward(type == PostType.QUESTION ? 100L : 0L)
-            .isSolved(isSolved)
+            .acceptedAnswerId(type == PostType.QUESTION ? acceptedAnswerId : null)
+            .status(status)
             .build());
   }
 

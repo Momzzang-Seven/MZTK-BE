@@ -6,6 +6,8 @@ public interface LoadAcceptedAnswerPort {
 
   Optional<AcceptedAnswerInfo> loadAcceptedAnswer(Long answerId);
 
+  Optional<AcceptedAnswerInfo> loadAcceptedAnswerForUpdate(Long answerId);
+
   record AcceptedAnswerInfo(Long answerId, Long postId, Long userId, String content) {
 
     public AcceptedAnswerInfo(Long answerId, Long postId, Long userId) {

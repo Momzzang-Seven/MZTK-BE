@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.*;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
@@ -44,9 +45,6 @@ public class PostEntity {
   @Column(nullable = false)
   private PostStatus status;
 
-  @Column(name = "is_solved", nullable = false)
-  private Boolean isSolved = false;
-
   @CreatedDate
   @Column(updatable = false)
   private LocalDateTime createdAt;
@@ -64,8 +62,7 @@ public class PostEntity {
       String content,
       Long reward,
       Long acceptedAnswerId,
-      PostStatus status,
-      Boolean isSolved) {
+      PostStatus status) {
     this.id = id;
     this.userId = userId;
     this.type = type;
@@ -73,8 +70,7 @@ public class PostEntity {
     this.content = content;
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
-    this.status = resolveStatus(status, isSolved);
-    this.isSolved = this.status == PostStatus.RESOLVED;
+    this.status = Objects.requireNonNull(status, "status must not be null");
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -87,7 +83,6 @@ public class PostEntity {
         .reward(post.getReward())
         .acceptedAnswerId(post.getAcceptedAnswerId())
         .status(post.getStatus())
-        .isSolved(post.getIsSolved())
         .build();
   }
 
@@ -101,7 +96,6 @@ public class PostEntity {
         .reward(this.reward)
         .acceptedAnswerId(this.acceptedAnswerId)
         .status(this.status)
-        .isSolved(this.isSolved)
         .tags(tags)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)
@@ -110,12 +104,5 @@ public class PostEntity {
 
   public Post toDomain() {
     return toDomain(new ArrayList<>());
-  }
-
-  private static PostStatus resolveStatus(PostStatus status, Boolean isSolved) {
-    if (status != null) {
-      return status;
-    }
-    return Boolean.TRUE.equals(isSolved) ? PostStatus.RESOLVED : PostStatus.OPEN;
   }
 }

@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImages
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -117,7 +118,7 @@ class AnswerControllerQnaEscrowIntegrationTest {
                 .title("escrow 통합 테스트 질문")
                 .content("질문 본문")
                 .reward(50L)
-                .isSolved(false)
+                .status(PostStatus.OPEN)
                 .build());
     questionPostId = post.getId();
   }

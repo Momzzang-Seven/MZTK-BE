@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,7 +45,7 @@ class PostPersistenceAdapterTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     PostEntity savedEntity =
@@ -55,7 +56,7 @@ class PostPersistenceAdapterTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     when(postJpaRepository.save(any(PostEntity.class))).thenReturn(savedEntity);
@@ -100,7 +101,7 @@ class PostPersistenceAdapterTest {
             .title("question")
             .content("body")
             .reward(50L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     // 단위 테스트 환경에서는 Spring 트랜잭션 컨텍스트가 없으므로
@@ -116,6 +117,27 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("loadPost fails fast for inconsistent persisted question state")
+  void loadPostFailsForInconsistentPersistedState() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(11L)
+            .userId(4L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("body")
+            .reward(50L)
+            .status(PostStatus.RESOLVED)
+            .build();
+
+    when(postJpaRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(entity));
+
+    assertThatThrownBy(() -> postPersistenceAdapter.loadPost(11L))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("acceptedAnswerId");
+  }
+
+  @Test
   @DisplayName("loadPostForUpdate delegates to repository lock query")
   void loadPostForUpdateDelegates() {
     PostEntity entity =
@@ -126,7 +148,7 @@ class PostPersistenceAdapterTest {
             .title(null)
             .content("body")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .build();
 
     when(postJpaRepository.findByIdForUpdate(15L)).thenReturn(Optional.of(entity));
@@ -148,7 +170,7 @@ class PostPersistenceAdapterTest {
             .title("t")
             .content("c")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .createdAt(LocalDateTime.now())
             .updatedAt(LocalDateTime.now())
             .build();
@@ -171,9 +193,9 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("markQuestionPostSolved enforces QUESTION type in repository call")
+  @DisplayName("markQuestionPostSolved performs status-only conditional resolve update")
   void markQuestionPostSolvedDelegates() {
-    when(postJpaRepository.markSolvedByIdIfType(
+    when(postJpaRepository.markResolvedByIdIfType(
             9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED))
         .thenReturn(1);
 
@@ -181,7 +203,7 @@ class PostPersistenceAdapterTest {
 
     assertThat(updated).isEqualTo(1);
     verify(postJpaRepository)
-        .markSolvedByIdIfType(9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
+        .markResolvedByIdIfType(9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

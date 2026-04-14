@@ -23,7 +23,8 @@ class PostTest {
 
     assertThat(post.getReward()).isZero();
     assertThat(post.getTitle()).isNull();
-    assertThat(post.getIsSolved()).isFalse();
+    assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(post.isResolved()).isFalse();
     assertThat(post.getTags()).isEmpty();
     assertThat(post.getCreatedAt()).isNotNull();
     assertThat(post.getUpdatedAt()).isNotNull();
@@ -50,7 +51,8 @@ class PostTest {
 
     assertThat(post.getReward()).isEqualTo(25L);
     assertThat(post.getType()).isEqualTo(PostType.QUESTION);
-    assertThat(post.getIsSolved()).isFalse();
+    assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(post.isResolved()).isFalse();
   }
 
   @Test
@@ -157,7 +159,7 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
@@ -179,7 +181,7 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
@@ -202,7 +204,7 @@ class PostTest {
             .title("question")
             .content("content")
             .reward(10L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();
@@ -234,7 +236,7 @@ class PostTest {
             .title("title")
             .content("content")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .tags(null)
             .build();
 
@@ -261,7 +263,62 @@ class PostTest {
 
     assertThat(accepted.getAcceptedAnswerId()).isEqualTo(99L);
     assertThat(accepted.getStatus()).isEqualTo(PostStatus.RESOLVED);
-    assertThat(accepted.getIsSolved()).isTrue();
+    assertThat(accepted.isResolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("resolved question requires accepted answer id")
+  void resolvedQuestionRequiresAcceptedAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Post.builder()
+                    .id(30L)
+                    .userId(1L)
+                    .type(PostType.QUESTION)
+                    .title("question")
+                    .content("content")
+                    .reward(10L)
+                    .status(PostStatus.RESOLVED)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("acceptedAnswerId");
+  }
+
+  @Test
+  @DisplayName("open question cannot have accepted answer id")
+  void openQuestionCannotHaveAcceptedAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Post.builder()
+                    .id(32L)
+                    .userId(1L)
+                    .type(PostType.QUESTION)
+                    .title("question")
+                    .content("content")
+                    .reward(10L)
+                    .acceptedAnswerId(99L)
+                    .status(PostStatus.OPEN)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("acceptedAnswerId");
+  }
+
+  @Test
+  @DisplayName("free post cannot be resolved")
+  void freePostCannotBeResolved() {
+    assertThatThrownBy(
+            () ->
+                Post.builder()
+                    .id(31L)
+                    .userId(1L)
+                    .type(PostType.FREE)
+                    .title("title")
+                    .content("content")
+                    .reward(0L)
+                    .status(PostStatus.RESOLVED)
+                    .acceptedAnswerId(99L)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test
@@ -284,7 +341,7 @@ class PostTest {
 
     assertThat(pending.getAcceptedAnswerId()).isEqualTo(99L);
     assertThat(pending.getStatus()).isEqualTo(PostStatus.PENDING_ACCEPT);
-    assertThat(pending.getIsSolved()).isFalse();
+    assertThat(pending.getIsSolved()).isTrue();
   }
 
   @Test
@@ -329,6 +386,49 @@ class PostTest {
     assertThat(resolved.getAcceptedAnswerId()).isEqualTo(99L);
     assertThat(resolved.getStatus()).isEqualTo(PostStatus.RESOLVED);
     assertThat(resolved.getIsSolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("confirmAccepted rejects non pending post")
+  void confirmAccepted_rejectsWhenNotPending() {
+    Post openPost =
+        Post.builder()
+            .id(230L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> openPost.confirmAccepted(99L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("not pending acceptance");
+  }
+
+  @Test
+  @DisplayName("confirmAccepted rejects mismatched answer id")
+  void confirmAccepted_rejectsWhenAnswerIdDoesNotMatch() {
+    Post pending =
+        Post.builder()
+            .id(231L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> pending.confirmAccepted(100L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("does not match");
   }
 
   @Test
@@ -383,7 +483,7 @@ class PostTest {
         .title("title")
         .content("content")
         .reward(0L)
-        .isSolved(false)
+        .status(PostStatus.OPEN)
         .tags(List.of("tag1"))
         .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
         .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))

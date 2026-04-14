@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,7 @@ class GetPostServiceTest {
   @InjectMocks private GetPostService getPostService;
 
   @Test
-  @DisplayName("returns minimal post context for external module queries")
+  @DisplayName("returns minimal post context derived from status for external module queries")
   void getPostContextSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     Post post =
@@ -51,7 +52,8 @@ class GetPostServiceTest {
             .title("question")
             .content("content")
             .reward(100L)
-            .isSolved(true)
+            .acceptedAnswerId(101L)
+            .status(PostStatus.RESOLVED)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -69,6 +71,33 @@ class GetPostServiceTest {
   }
 
   @Test
+  @DisplayName("returns pending accept post context as solved and answer locked")
+  void getPostContextPendingAcceptMarksSolved() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(41L)
+            .userId(16L)
+            .type(PostType.QUESTION)
+            .title("pending question")
+            .content("content")
+            .reward(100L)
+            .acceptedAnswerId(102L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(41L)).thenReturn(Optional.of(post));
+
+    var result = getPostService.getPostContext(41L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().solved()).isTrue();
+    assertThat(result.get().answerLocked()).isTrue();
+  }
+
+  @Test
   @DisplayName("returns mapped post with tags and images from image module")
   void getPostSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
@@ -80,7 +109,7 @@ class GetPostServiceTest {
             .title("hello")
             .content("world")
             .reward(0L)
-            .isSolved(null)
+            .status(PostStatus.OPEN)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -115,7 +144,7 @@ class GetPostServiceTest {
             .title("hello")
             .content("world")
             .reward(0L)
-            .isSolved(null)
+            .status(PostStatus.OPEN)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -148,7 +177,7 @@ class GetPostServiceTest {
             .title("hello")
             .content("world")
             .reward(0L)
-            .isSolved(false)
+            .status(PostStatus.OPEN)
             .createdAt(now)
             .updatedAt(now)
             .build();
@@ -180,7 +209,8 @@ class GetPostServiceTest {
             .title("질문 제목")
             .content("질문 내용")
             .reward(50L)
-            .isSolved(true)
+            .acceptedAnswerId(55L)
+            .status(PostStatus.RESOLVED)
             .createdAt(now)
             .updatedAt(now)
             .build();

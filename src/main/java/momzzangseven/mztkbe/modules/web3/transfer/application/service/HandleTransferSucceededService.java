@@ -55,8 +55,8 @@ public class HandleTransferSucceededService implements HandleTransferSucceededUs
       return;
     }
 
-    int updatedRows = markQuestionPostSolvedPort.markSolved(postId);
-    if (updatedRows > 0) {
+    int resolvedPostCount = markQuestionPostSolvedPort.markSolved(postId);
+    if (resolvedPostCount > 0) {
       log.info(
           "SUCCEEDED sync completed: txId={}, questionPostId={}, txHash={}",
           command.transactionId(),
@@ -66,7 +66,7 @@ public class HandleTransferSucceededService implements HandleTransferSucceededUs
     }
 
     log.info(
-        "SUCCEEDED sync no-op: txId={}, questionPostId={} (already solved or non-question)",
+        "SUCCEEDED sync no-op: txId={}, questionPostId={} (already resolved or non-question)",
         command.transactionId(),
         postId);
   }

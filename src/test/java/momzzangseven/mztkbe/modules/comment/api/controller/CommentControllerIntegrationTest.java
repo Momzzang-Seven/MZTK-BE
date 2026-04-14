@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.Co
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -92,7 +93,7 @@ class CommentControllerIntegrationTest {
                 .title("comment test title")
                 .content("comment test body")
                 .reward(0L)
-                .isSolved(false)
+                .status(PostStatus.OPEN)
                 .build());
     Long postId = savedPost.getId();
 
@@ -152,7 +153,7 @@ class CommentControllerIntegrationTest {
                 .title("long content post")
                 .content("body")
                 .reward(0L)
-                .isSolved(false)
+                .status(PostStatus.OPEN)
                 .build());
 
     MvcResult createCommentResult =
