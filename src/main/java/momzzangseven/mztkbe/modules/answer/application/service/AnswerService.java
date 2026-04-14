@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCa
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
@@ -47,6 +48,7 @@ public class AnswerService
         CreateAnswerUseCase,
         GetAnswerUseCase,
         GetAnswerSummaryUseCase,
+        GetAnswerSummaryForUpdateUseCase,
         UpdateAnswerUseCase,
         DeleteAnswerUseCase,
         DeleteAnswersByPostUseCase,
@@ -153,12 +155,16 @@ public class AnswerService
     if (answerId == null) {
       throw new AnswerInvalidInputException("answerId is required.");
     }
-    return loadAnswerPort
-        .loadAnswer(answerId)
-        .map(
-            answer ->
-                new GetAnswerSummaryUseCase.AnswerSummary(
-                    answer.getId(), answer.getPostId(), answer.getUserId(), answer.getContent()));
+    return loadAnswerPort.loadAnswer(answerId).map(this::toAnswerSummary);
+  }
+
+  @Override
+  @Transactional
+  public Optional<GetAnswerSummaryUseCase.AnswerSummary> getAnswerSummaryForUpdate(Long answerId) {
+    if (answerId == null) {
+      throw new AnswerInvalidInputException("answerId is required.");
+    }
+    return loadAnswerPort.loadAnswerForUpdate(answerId).map(this::toAnswerSummary);
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */
@@ -284,5 +290,10 @@ public class AnswerService
 
   private boolean isQuestionPost(LoadPostPort.PostContext post) {
     return post.questionPost();
+  }
+
+  private GetAnswerSummaryUseCase.AnswerSummary toAnswerSummary(Answer answer) {
+    return new GetAnswerSummaryUseCase.AnswerSummary(
+        answer.getId(), answer.getPostId(), answer.getUserId(), answer.getContent());
   }
 }
