@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleE
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -276,7 +277,7 @@ class PostProcessServiceTest {
         .title("질문 제목")
         .content("질문 내용")
         .reward(50L)
-        .isSolved(false)
+        .status(PostStatus.OPEN)
         .createdAt(updatedAt.minusHours(1))
         .updatedAt(updatedAt)
         .build();
@@ -291,7 +292,7 @@ class PostProcessServiceTest {
         .title("old title")
         .content("old content")
         .reward(0L)
-        .isSolved(false)
+        .status(PostStatus.OPEN)
         .tags(List.of("old-tag"))
         .createdAt(updatedAt.minusHours(1))
         .updatedAt(updatedAt)

@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -21,6 +22,7 @@ import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
@@ -181,7 +183,7 @@ class PostControllerQnaEscrowIntegrationTest {
                 .title("답변 채택 테스트")
                 .content("채택 질문 본문")
                 .reward(50L)
-                .isSolved(false)
+                .status(PostStatus.OPEN)
                 .build());
     momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity answer =
         answerJpaRepository.save(
@@ -205,13 +207,50 @@ class PostControllerQnaEscrowIntegrationTest {
     PostEntity updatedPost = postJpaRepository.findById(post.getId()).orElseThrow();
     assertThat(updatedPost.getAcceptedAnswerId()).isEqualTo(answer.getId());
     assertThat(updatedPost.getStatus().name()).isEqualTo("PENDING_ACCEPT");
-    assertThat(updatedPost.getIsSolved()).isFalse();
+    assertThat(updatedPost.getStatus()).isEqualTo(PostStatus.PENDING_ACCEPT);
 
     assertThat(answerJpaRepository.findById(answer.getId()).orElseThrow().getIsAccepted())
         .isFalse();
 
     verify(questionEscrowExecutionUseCase)
         .prepareAnswerAccept(any(PrepareAnswerAcceptCommand.class));
+  }
+
+  @Test
+  @DisplayName("GET /posts/{id} shows question.isSolved=true while status is pending accept")
+  void getQuestionDetail_marksPendingAcceptAsSolved() throws Exception {
+    PostEntity post =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(504L)
+                .type(PostType.QUESTION)
+                .title("답변 채택 조회 테스트")
+                .content("채택 질문 본문")
+                .reward(50L)
+                .status(PostStatus.OPEN)
+                .build());
+    momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity answer =
+        answerJpaRepository.save(
+            momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity
+                .builder()
+                .postId(post.getId())
+                .userId(505L)
+                .content("채택될 답변")
+                .isAccepted(false)
+                .build());
+
+    mockMvc
+        .perform(
+            post("/posts/" + post.getId() + "/answers/" + answer.getId() + "/accept")
+                .with(userPrincipal(504L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("PENDING_ACCEPT"));
+
+    mockMvc
+        .perform(get("/posts/" + post.getId()).with(userPrincipal(504L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.type").value("QUESTION"))
+        .andExpect(jsonPath("$.data.question.isSolved").value(true));
   }
 
   // ── 헬퍼 ──────────────────────────────────────────────────────────────────

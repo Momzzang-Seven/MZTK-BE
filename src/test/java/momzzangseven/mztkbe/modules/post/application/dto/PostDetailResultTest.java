@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,8 +14,8 @@ import org.junit.jupiter.api.Test;
 class PostDetailResultTest {
 
   @Test
-  @DisplayName("fromDomain maps all fields and defaults null solved to false")
-  void fromDomainMapsAndDefaultsSolved() {
+  @DisplayName("fromDomain maps all fields and derives solved from open status")
+  void fromDomainMapsAndDerivesSolvedFromOpenStatus() {
     LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 12, 0);
 
@@ -26,7 +27,7 @@ class PostDetailResultTest {
             .title("title")
             .content("content")
             .reward(50L)
-            .isSolved(null)
+            .status(PostStatus.OPEN)
             .tags(List.of("java"))
             .createdAt(createdAt)
             .updatedAt(updatedAt)
@@ -59,17 +60,18 @@ class PostDetailResultTest {
   }
 
   @Test
-  @DisplayName("fromDomain keeps solved true")
-  void fromDomainKeepsSolvedTrue() {
+  @DisplayName("fromDomain derives solved true from resolved status")
+  void fromDomainDerivesSolvedTrueFromResolvedStatus() {
     Post post =
         Post.builder()
             .id(1L)
             .userId(2L)
-            .type(PostType.FREE)
+            .type(PostType.QUESTION)
             .title("t")
             .content("c")
-            .reward(0L)
-            .isSolved(true)
+            .reward(10L)
+            .acceptedAnswerId(5L)
+            .status(PostStatus.RESOLVED)
             .build();
 
     String nickname = "test nick name";
@@ -77,6 +79,27 @@ class PostDetailResultTest {
 
     PostDetailResult result =
         PostDetailResult.fromDomain(post, 0L, false, nickname, profileImageUrl, null);
+
+    assertThat(result.isSolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("fromDomain derives solved true from pending accept status")
+  void fromDomainDerivesSolvedTrueFromPendingAcceptStatus() {
+    Post post =
+        Post.builder()
+            .id(2L)
+            .userId(3L)
+            .type(PostType.QUESTION)
+            .title("pending")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(6L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .build();
+
+    PostDetailResult result =
+        PostDetailResult.fromDomain(post, 0L, false, "writer", "profile", null);
 
     assertThat(result.isSolved()).isTrue();
   }

@@ -91,7 +91,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
 
   @Override
   public int markQuestionPostSolved(Long postId) {
-    return postJpaRepository.markSolvedByIdIfType(
+    return postJpaRepository.markResolvedByIdIfType(
         postId, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
   }
 

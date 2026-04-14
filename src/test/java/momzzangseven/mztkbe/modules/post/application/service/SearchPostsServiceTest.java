@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -114,6 +115,34 @@ class SearchPostsServiceTest {
   }
 
   @Test
+  @DisplayName("maps pending accept question as solved in search results")
+  void searchPostsMapsPendingAcceptAsSolved() {
+    PostSearchCondition condition = PostSearchCondition.of(PostType.QUESTION, null, null, 0, 10);
+    Post post =
+        Post.builder()
+            .id(3L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("title")
+            .content("content")
+            .reward(50L)
+            .acceptedAnswerId(77L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .build();
+
+    when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of(post));
+    when(loadTagPort.findTagsByPostIdsIn(List.of(3L))).thenReturn(Map.of());
+    when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
+    when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
+    when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
+
+    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
+
+    assertThat(results).hasSize(1);
+    assertThat(results.getFirst().isSolved()).isTrue();
+  }
+
+  @Test
   @DisplayName("returns empty when persistence returns no posts")
   void searchPostsReturnsEmptyWhenNoPostFound() {
     PostSearchCondition condition = PostSearchCondition.of(PostType.QUESTION, null, "query", 0, 10);
@@ -134,7 +163,7 @@ class SearchPostsServiceTest {
         .title("title")
         .content("content")
         .reward(0L)
-        .isSolved(false)
+        .status(PostStatus.OPEN)
         .build();
   }
 }

@@ -302,7 +302,6 @@ class PostControllerIntegrationTest {
     PostEntity savedPost = postJpaRepository.findById(postId).orElseThrow();
     assertThat(savedPost.getAcceptedAnswerId()).isEqualTo(answerId);
     assertThat(savedPost.getStatus()).isEqualTo(PostStatus.RESOLVED);
-    assertThat(savedPost.getIsSolved()).isTrue();
     AnswerEntity savedAnswer = answerJpaRepository.findById(answerId).orElseThrow();
     assertThat(savedAnswer.getIsAccepted()).isTrue();
   }
@@ -479,6 +478,36 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.data[0].tags[0]").value("java"))
         .andExpect(jsonPath("$.data[0].question.reward").value(50))
         .andExpect(jsonPath("$.data[0].question.isSolved").value(false));
+  }
+
+  @Test
+  @DisplayName("GET /posts/{id} keeps question.isSolved contract using resolved status")
+  void getQuestionPostDetail_keepsIsSolvedContractFromStatus() throws Exception {
+    Long postId =
+        createQuestionPost(501L, "resolved question", "resolved content", 80L, List.of("q"));
+    Long answerId =
+        answerJpaRepository
+            .save(
+                AnswerEntity.builder()
+                    .postId(postId)
+                    .userId(502L)
+                    .content("accepted")
+                    .isAccepted(false)
+                    .build())
+            .getId();
+
+    mockMvc
+        .perform(
+            post("/posts/" + postId + "/answers/" + answerId + "/accept").with(userPrincipal(501L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("RESOLVED"));
+
+    mockMvc
+        .perform(get("/posts/" + postId).with(userPrincipal(501L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.type").value("QUESTION"))
+        .andExpect(jsonPath("$.data.question.reward").value(80))
+        .andExpect(jsonPath("$.data.question.isSolved").value(true));
   }
 
   private Long createQuestionPost(

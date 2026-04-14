@@ -22,7 +22,7 @@ class AnswerPostAdapterTest {
   @InjectMocks private AnswerPostAdapter answerPostAdapter;
 
   @Test
-  @DisplayName("loadPost() maps post context use case result to PostContext")
+  @DisplayName("loadPost() maps status-derived solved context to answer PostContext")
   void loadPost_mapsPostToPostContext() {
     when(getPostContextUseCase.getPostContext(10L))
         .thenReturn(Optional.of(new GetPostContextUseCase.PostContext(10L, 20L, true, true)));

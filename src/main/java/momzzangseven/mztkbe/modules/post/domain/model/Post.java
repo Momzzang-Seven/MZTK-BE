@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.domain.model;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.post.PostAlreadySolvedException;
@@ -20,7 +21,6 @@ public class Post {
   private final Long reward;
   private final Long acceptedAnswerId;
   private final PostStatus status;
-  private final Boolean isSolved;
   private final List<String> tags;
 
   private final LocalDateTime createdAt;
@@ -36,7 +36,6 @@ public class Post {
       Long reward,
       Long acceptedAnswerId,
       PostStatus status,
-      Boolean isSolved,
       List<String> tags,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
@@ -47,8 +46,7 @@ public class Post {
     this.content = content;
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
-    this.status = resolveStatus(status, isSolved);
-    this.isSolved = this.status == PostStatus.RESOLVED;
+    this.status = validateAndResolveStatus(type, status, acceptedAnswerId);
     this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
@@ -81,11 +79,21 @@ public class Post {
         .reward(reward)
         .acceptedAnswerId(null)
         .status(PostStatus.OPEN)
-        .isSolved(false)
         .tags(tags != null ? tags : new ArrayList<>())
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();
+  }
+
+  /**
+   * Compatibility getter for legacy consumers.
+   *
+   * <p>`status` is the source of truth; this boolean is derived only. `PENDING_ACCEPT` is also
+   * treated as solved for user-facing read models because acceptance is already committed in the
+   * application flow while onchain settlement is pending.
+   */
+  public Boolean getIsSolved() {
+    return isResolved() || isAcceptancePending();
   }
 
   public void validateOwnership(Long currentUserId) {
@@ -96,7 +104,7 @@ public class Post {
 
   public void validateDeletable(long activeAnswerCount) {
     if (PostType.QUESTION.equals(this.type)
-        && (activeAnswerCount > 0 || Boolean.TRUE.equals(isSolved))) {
+        && (activeAnswerCount > 0 || isAcceptancePending() || isResolved())) {
       throw new PostInvalidInputException("An answered or solved question post cannot be deleted.");
     }
   }
@@ -134,7 +142,7 @@ public class Post {
 
   public void validateEditable(long activeAnswerCount) {
     if (PostType.QUESTION.equals(this.type)
-        && (activeAnswerCount > 0 || Boolean.TRUE.equals(isSolved))) {
+        && (activeAnswerCount > 0 || isAcceptancePending() || isResolved())) {
       throw new PostInvalidInputException("An answered or solved question post cannot be edited.");
     }
   }
@@ -164,7 +172,6 @@ public class Post {
     return this.toBuilder()
         .acceptedAnswerId(answerId)
         .status(PostStatus.PENDING_ACCEPT)
-        .isSolved(false)
         .updatedAt(LocalDateTime.now())
         .build();
   }
@@ -172,11 +179,7 @@ public class Post {
   public Post confirmAccepted(Long answerId) {
     validatePendingAccept(answerId);
 
-    return this.toBuilder()
-        .status(PostStatus.RESOLVED)
-        .isSolved(true)
-        .updatedAt(LocalDateTime.now())
-        .build();
+    return this.toBuilder().status(PostStatus.RESOLVED).updatedAt(LocalDateTime.now()).build();
   }
 
   public Post cancelPendingAccept(Long answerId) {
@@ -185,7 +188,6 @@ public class Post {
     return this.toBuilder()
         .acceptedAnswerId(null)
         .status(PostStatus.OPEN)
-        .isSolved(false)
         .updatedAt(LocalDateTime.now())
         .build();
   }
@@ -197,16 +199,33 @@ public class Post {
     return this.toBuilder()
         .acceptedAnswerId(answerId)
         .status(PostStatus.RESOLVED)
-        .isSolved(true)
         .updatedAt(LocalDateTime.now())
         .build();
   }
 
-  private static PostStatus resolveStatus(PostStatus status, Boolean isSolved) {
-    if (status != null) {
+  private static PostStatus validateAndResolveStatus(
+      PostType type, PostStatus status, Long acceptedAnswerId) {
+    Objects.requireNonNull(type, "type must not be null");
+    Objects.requireNonNull(status, "status must not be null");
+
+    if (type == PostType.FREE) {
+      if (status != PostStatus.OPEN) {
+        throw new IllegalArgumentException("Free posts must remain OPEN.");
+      }
+      if (acceptedAnswerId != null) {
+        throw new IllegalArgumentException("Free posts cannot have acceptedAnswerId.");
+      }
       return status;
     }
-    return Boolean.TRUE.equals(isSolved) ? PostStatus.RESOLVED : PostStatus.OPEN;
+
+    if (status == PostStatus.OPEN && acceptedAnswerId != null) {
+      throw new IllegalArgumentException("Open question posts cannot have acceptedAnswerId.");
+    }
+    if ((status == PostStatus.PENDING_ACCEPT || status == PostStatus.RESOLVED)
+        && acceptedAnswerId == null) {
+      throw new IllegalArgumentException(status + " question posts require acceptedAnswerId.");
+    }
+    return status;
   }
 
   private void validateAcceptTarget(Long answerId) {
