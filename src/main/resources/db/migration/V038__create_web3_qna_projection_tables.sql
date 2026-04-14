@@ -1,3 +1,7 @@
+-- web3 QnA projection 테이블 통합:
+--   V038 원본 (web3_qna_questions / web3_qna_answers 생성 + web3_transfer_prepares drop)
+--   + V039 (accepted 컬럼 + web3_question_reward_intents 생성) 통합.
+
 CREATE TABLE IF NOT EXISTS web3_qna_questions (
     post_id            BIGINT PRIMARY KEY,
     question_id        VARCHAR(66) NOT NULL,
@@ -27,6 +31,7 @@ CREATE TABLE IF NOT EXISTS web3_qna_answers (
     answer_key         VARCHAR(66) NOT NULL,
     responder_user_id  BIGINT NOT NULL,
     content_hash       VARCHAR(66) NOT NULL,
+    accepted           BOOLEAN NOT NULL DEFAULT FALSE,
     created_at         TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMP NOT NULL DEFAULT NOW(),
     CONSTRAINT uk_web3_qna_answers_answer_key UNIQUE (answer_key)
@@ -37,3 +42,21 @@ CREATE INDEX IF NOT EXISTS idx_web3_qna_answers_post_id
 
 -- QnA reward execution now uses shared execution intents + escrow projections only.
 DROP TABLE IF EXISTS web3_transfer_prepares;
+
+CREATE TABLE IF NOT EXISTS web3_question_reward_intents (
+    id BIGSERIAL PRIMARY KEY,
+    post_id BIGINT NOT NULL,
+    accepted_comment_id BIGINT NOT NULL,
+    from_user_id BIGINT NOT NULL,
+    to_user_id BIGINT NOT NULL,
+    amount_wei NUMERIC(78, 0) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    last_execution_intent_error_code VARCHAR(120),
+    last_execution_intent_error_reason TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uk_web3_question_reward_intents_post_id UNIQUE (post_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_web3_question_reward_intents_status
+    ON web3_question_reward_intents(status);
