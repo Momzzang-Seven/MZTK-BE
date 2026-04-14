@@ -1,12 +1,17 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.external.web3;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,37 +40,68 @@ class QuestionLifecycleExecutionAdapterTest {
   @Test
   @DisplayName("prepareQuestionCreate delegates to the qna use case with mapped command")
   void prepareQuestionCreate_delegates() {
-    adapter.prepareQuestionCreate(10L, 7L, "질문 내용", 50L);
+    given(questionEscrowExecutionUseCase.prepareQuestionCreate(any()))
+        .willReturn(questionIntent("QNA_QUESTION_CREATE", "intent-create"));
+
+    var result = adapter.prepareQuestionCreate(10L, 7L, "질문 내용", 50L);
 
     verify(questionEscrowExecutionUseCase)
         .prepareQuestionCreate(new PrepareQuestionCreateCommand(10L, 7L, "질문 내용", 50L));
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().actionType()).isEqualTo("QNA_QUESTION_CREATE");
+    assertThat(result.orElseThrow().executionIntent().id()).isEqualTo("intent-create");
   }
 
   @Test
   @DisplayName("prepareQuestionUpdate delegates to the qna use case with mapped command")
   void prepareQuestionUpdate_delegates() {
-    adapter.prepareQuestionUpdate(10L, 7L, "수정된 질문 내용", 50L);
+    given(questionEscrowExecutionUseCase.prepareQuestionUpdate(any()))
+        .willReturn(questionIntent("QNA_QUESTION_UPDATE", "intent-update"));
+
+    var result = adapter.prepareQuestionUpdate(10L, 7L, "수정된 질문 내용", 50L);
 
     verify(questionEscrowExecutionUseCase)
         .prepareQuestionUpdate(new PrepareQuestionUpdateCommand(10L, 7L, "수정된 질문 내용", 50L));
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().resource().type()).isEqualTo("QUESTION");
   }
 
   @Test
   @DisplayName("prepareQuestionDelete delegates to the qna use case with mapped command")
   void prepareQuestionDelete_delegates() {
-    adapter.prepareQuestionDelete(10L, 7L, "삭제될 질문", 50L);
+    given(questionEscrowExecutionUseCase.prepareQuestionDelete(any()))
+        .willReturn(questionIntent("QNA_QUESTION_DELETE", "intent-delete"));
+
+    var result = adapter.prepareQuestionDelete(10L, 7L, "삭제될 질문", 50L);
 
     verify(questionEscrowExecutionUseCase)
         .prepareQuestionDelete(new PrepareQuestionDeleteCommand(10L, 7L, "삭제될 질문", 50L));
+    assertThat(result).isPresent();
   }
 
   @Test
   @DisplayName("prepareAnswerAccept delegates to the qna use case with mapped command")
   void prepareAnswerAccept_delegates() {
-    adapter.prepareAnswerAccept(10L, 20L, 7L, 8L, "질문 내용", "답변 내용", 100L);
+    given(questionEscrowExecutionUseCase.prepareAnswerAccept(any()))
+        .willReturn(questionIntent("QNA_ANSWER_ACCEPT", "intent-accept"));
+
+    var result = adapter.prepareAnswerAccept(10L, 20L, 7L, 8L, "질문 내용", "답변 내용", 100L);
 
     verify(questionEscrowExecutionUseCase)
         .prepareAnswerAccept(
             new PrepareAnswerAcceptCommand(10L, 20L, 7L, 8L, "질문 내용", "답변 내용", 100L));
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().execution().mode()).isEqualTo("EIP7702");
+  }
+
+  private QnaExecutionIntentResult questionIntent(String actionType, String intentId) {
+    return new QnaExecutionIntentResult(
+        new QnaExecutionIntentResult.Resource("QUESTION", "10", "PENDING_EXECUTION"),
+        actionType,
+        new QnaExecutionIntentResult.ExecutionIntent(
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+        new QnaExecutionIntentResult.Execution("EIP7702", 2),
+        null,
+        false);
   }
 }

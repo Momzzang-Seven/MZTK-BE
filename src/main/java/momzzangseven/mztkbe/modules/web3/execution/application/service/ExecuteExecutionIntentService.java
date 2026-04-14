@@ -106,6 +106,12 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             expired.resolveSponsorUsageDateKst(),
             expired.getReservedSponsorCostWei());
       }
+      actionHandlerFor(expired)
+          .afterExecutionTerminated(
+              expired,
+              actionHandlerFor(expired).buildActionPlan(expired),
+              ExecutionIntentStatus.EXPIRED,
+              ErrorCode.EXECUTION_INTENT_EXPIRED.name());
       throw new Web3TransferException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
     }
 
@@ -168,6 +174,29 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         command.authorizationSignature(),
         intent.getAuthorityAddress())) {
       throw new Web3InvalidInputException("authorizationSignature does not match authority");
+    }
+
+    BigInteger currentAuthorityNonce =
+        executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress());
+    if (currentAuthorityNonce.longValueExact() != intent.getAuthorityNonce()) {
+      ExecutionIntent staleIntent =
+          executionIntentPersistencePort.update(
+              intent.markNonceStale(
+                  ErrorCode.AUTH_NONCE_MISMATCH.name(),
+                  ErrorCode.AUTH_NONCE_MISMATCH.getMessage(),
+                  LocalDateTime.now(appClock)));
+      if (staleIntent.getReservedSponsorCostWei().signum() > 0) {
+        releaseSponsorExposure(
+            staleIntent.getRequesterUserId(),
+            staleIntent.resolveSponsorUsageDateKst(),
+            staleIntent.getReservedSponsorCostWei());
+      }
+      actionHandler.afterExecutionTerminated(
+          staleIntent,
+          actionPlan,
+          ExecutionIntentStatus.NONCE_STALE,
+          ErrorCode.AUTH_NONCE_MISMATCH.name());
+      throw new Web3TransferException(ErrorCode.AUTH_NONCE_MISMATCH, false);
     }
 
     BigInteger deadlineEpochSeconds =
@@ -308,11 +337,17 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     BigInteger currentPendingNonce =
         executionEip7702GatewayPort.loadPendingAccountNonce(decoded.signerAddress());
     if (currentPendingNonce.longValueExact() != intent.getUnsignedTxSnapshot().expectedNonce()) {
-      executionIntentPersistencePort.update(
-          intent.markNonceStale(
-              ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
-              ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
-              LocalDateTime.now(appClock)));
+      ExecutionIntent staleIntent =
+          executionIntentPersistencePort.update(
+              intent.markNonceStale(
+                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
+                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
+                  LocalDateTime.now(appClock)));
+      actionHandler.afterExecutionTerminated(
+          staleIntent,
+          actionPlan,
+          ExecutionIntentStatus.NONCE_STALE,
+          ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name());
       throw new Web3TransferException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
     }
 
@@ -457,5 +492,9 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             () ->
                 new IllegalStateException(
                     "no execution action handler for actionType=" + intent.getActionType()));
+  }
+
+  private ExecutionActionHandlerPort actionHandlerFor(ExecutionIntent intent) {
+    return resolveActionHandler(intent);
   }
 }

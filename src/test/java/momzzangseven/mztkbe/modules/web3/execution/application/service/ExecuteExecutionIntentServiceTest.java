@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -174,6 +175,47 @@ class ExecuteExecutionIntentServiceTest {
     verify(executionIntentPersistencePort).update(any());
   }
 
+  @Test
+  void execute_marksNonceStale_whenEip7702AuthorityNonceChanged() throws Exception {
+    ExecutionIntent intent = existingEip7702Intent();
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+        .thenReturn(Optional.of(intent));
+    when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
+        .thenReturn(
+            Optional.of(
+                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
+                    "0x" + "6".repeat(40), "0x" + "7".repeat(64))));
+    when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
+        .thenReturn(
+            new ExecutionEip7702GatewayPort.AuthorizationTuple(
+                BigInteger.valueOf(11155111L),
+                "0x" + "2".repeat(40),
+                BigInteger.valueOf(12L),
+                BigInteger.ZERO,
+                BigInteger.ONE,
+                BigInteger.TWO));
+    when(executionEip7702GatewayPort.hashCalls(any())).thenReturn("0x" + "9".repeat(64));
+    when(executionEip7702GatewayPort.verifyAuthorizationSigner(
+            anyLong(), any(), any(), any(), any()))
+        .thenReturn(true);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getAuthorityNonce() + 1));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null)))
+        .isInstanceOf(Web3TransferException.class)
+        .extracting(ex -> ((Web3TransferException) ex).getCode())
+        .isEqualTo(ErrorCode.AUTH_NONCE_MISMATCH.getCode());
+
+    verify(executionIntentPersistencePort).update(any());
+  }
+
   private ExecutionIntent existingEip1559Intent() throws Exception {
     TransferExecutionPayload payload =
         new TransferExecutionPayload(
@@ -215,6 +257,32 @@ class ExecuteExecutionIntentServiceTest {
             BigInteger.valueOf(2_000_000_000L),
             BigInteger.valueOf(50_000_000_000L)),
         "0x" + "b".repeat(64),
+        BigInteger.ZERO,
+        LocalDate.of(2026, 4, 6),
+        FIXED_NOW);
+  }
+
+  private ExecutionIntent existingEip7702Intent() {
+    return ExecutionIntent.create(
+        "intent-7702",
+        "root-7702",
+        1,
+        ExecutionResourceType.TRANSFER,
+        "transfer:7702",
+        ExecutionActionType.TRANSFER_SEND,
+        7L,
+        8L,
+        ExecutionMode.EIP7702,
+        "0x" + "a".repeat(64),
+        "{\"amountWei\":\"100\"}",
+        "0x" + "1".repeat(40),
+        12L,
+        "0x" + "2".repeat(40),
+        FIXED_NOW.plusMinutes(5),
+        "0x" + "3".repeat(64),
+        "0x" + "4".repeat(64),
+        null,
+        null,
         BigInteger.ZERO,
         LocalDate.of(2026, 4, 6),
         FIXED_NOW);

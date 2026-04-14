@@ -183,11 +183,16 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/posts")
                     .authenticated()
+                    // Public detail read supports optional JWT. Missing/invalid tokens fall back to
+                    // anonymous access in JwtAuthenticationFilter, while withdrawn-user tokens are
+                    // still blocked there before authorization rules run.
                     .requestMatchers(HttpMethod.GET, "/posts/{postId}")
-                    .authenticated()
+                    .permitAll()
                     .requestMatchers(HttpMethod.PATCH, "/posts/{postId}")
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/posts/{postId}")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/posts/{postId}/web3/recover-create")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/posts/{postId}/likes")
                     .authenticated()
@@ -200,6 +205,10 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PUT, "/questions/{postId}/answers/{answerId}")
                     .authenticated()
                     .requestMatchers(HttpMethod.DELETE, "/questions/{postId}/answers/{answerId}")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/questions/{postId}/answers/{answerId}/web3/recover-create")
                     .authenticated()
                     .requestMatchers(
                         HttpMethod.POST, "/questions/{postId}/answers/{answerId}/likes")

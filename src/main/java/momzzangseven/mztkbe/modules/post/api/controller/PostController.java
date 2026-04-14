@@ -2,18 +2,36 @@ package momzzangseven.mztkbe.modules.post.api.controller;
 
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.AcceptAnswerResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateQuestionPostRequest;
+import momzzangseven.mztkbe.modules.post.api.dto.CreateQuestionPostResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostDetailResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostListResponse;
+import momzzangseven.mztkbe.modules.post.api.dto.PostMutationResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
-import momzzangseven.mztkbe.modules.post.application.dto.*;
-import momzzangseven.mztkbe.modules.post.application.port.in.*;
+import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerResult;
+import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
+import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
+import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.RecoverQuestionPostEscrowUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -23,31 +41,40 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Post API controller.
+ *
+ * <p>Question-board creation is handled separately from free-board creation because only question
+ * flows can return Web3 escrow write payloads.
+ */
 @RestController
 @RequestMapping("/posts")
 @RequiredArgsConstructor
 public class PostController {
 
   private final CreatePostUseCase createPostUseCase;
+  private final CreateQuestionPostUseCase createQuestionPostUseCase;
   private final GetPostUseCase getPostUseCase;
   private final UpdatePostUseCase updatePostUseCase;
   private final DeletePostUseCase deletePostUseCase;
+  private final RecoverQuestionPostEscrowUseCase recoverQuestionPostEscrowUseCase;
   private final SearchPostsUseCase searchPostsUseCase;
   private final AcceptAnswerUseCase acceptAnswerUseCase;
 
-  // [Create] 질문게시글 작성
+  /** Creates a question-board post and returns nullable Web3 escrow write material. */
   @PostMapping("/question")
-  public ResponseEntity<ApiResponse<CreatePostResult>> createQuestionPost(
+  public ResponseEntity<ApiResponse<CreateQuestionPostResponse>> createQuestionPost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateQuestionPostRequest request) {
 
     Long validatedUserId = requireUserId(userId);
 
     CreatePostCommand command = request.toCommand(validatedUserId);
-    CreatePostResult response = createPostUseCase.execute(command);
-    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
+    CreateQuestionPostResult response = createQuestionPostUseCase.execute(command);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(ApiResponse.success(CreateQuestionPostResponse.from(response)));
   }
 
-  // [Create] 자유게시글 작성
+  /** Creates a free-board post using the legacy response contract without Web3 fields. */
   @PostMapping("/free")
   public ResponseEntity<ApiResponse<CreatePostResult>> createFreePost(
       @AuthenticationPrincipal Long userId, @RequestBody @Valid CreateFreePostRequest request) {
@@ -59,16 +86,15 @@ public class PostController {
     return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
   }
 
-  // [Read] 게시글 상세 조회
+  /** Returns public post detail; {@code userId} may be {@code null} for anonymous reads. */
   @GetMapping("/{postId}")
   public ResponseEntity<ApiResponse<PostDetailResponse>> getPost(
       @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
-    Long validatedUserId = requireUserId(userId);
-    PostDetailResult result = getPostUseCase.getPost(postId, validatedUserId);
+    PostDetailResult result = getPostUseCase.getPost(postId, userId);
     return ResponseEntity.ok(ApiResponse.success(PostDetailResponse.from(result)));
   }
 
-  // [Read] 게시글 목록 조회
+  /** Returns the authenticated caller's post list view. */
   @GetMapping
   public ResponseEntity<ApiResponse<List<PostListResponse>>> getPosts(
       @AuthenticationPrincipal Long userId,
@@ -87,9 +113,11 @@ public class PostController {
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
-  // [Update] 게시글 수정
+  /**
+   * Updates a post and includes question Web3 payload only when a new escrow intent was created.
+   */
   @PatchMapping("/{postId}")
-  public ResponseEntity<ApiResponse<Map<String, Long>>> updatePost(
+  public ResponseEntity<ApiResponse<PostMutationResponse>> updatePost(
       @AuthenticationPrincipal Long userId,
       @PathVariable Long postId,
       @RequestBody @Valid UpdatePostRequest request) {
@@ -100,21 +128,37 @@ public class PostController {
         UpdatePostCommand.of(
             request.title(), request.content(), request.imageIds(), request.tags());
 
-    updatePostUseCase.updatePost(validatedUserId, postId, command);
-    return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
+    PostMutationResult result = updatePostUseCase.updatePost(validatedUserId, postId, command);
+    return ResponseEntity.ok(ApiResponse.success(PostMutationResponse.from(result)));
   }
 
-  // [Delete] 게시글 삭제
+  /** Deletes a post and includes question Web3 payload only for question-board deletes. */
   @DeleteMapping("/{postId}")
-  public ResponseEntity<ApiResponse<Map<String, Long>>> deletePost(
+  public ResponseEntity<ApiResponse<PostMutationResponse>> deletePost(
       @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
 
     Long validatedUserId = requireUserId(userId);
 
-    deletePostUseCase.deletePost(validatedUserId, postId);
-    return ResponseEntity.ok(ApiResponse.success(Map.of("postId", postId)));
+    PostMutationResult result = deletePostUseCase.deletePost(validatedUserId, postId);
+    return ResponseEntity.ok(ApiResponse.success(PostMutationResponse.from(result)));
   }
 
+  /**
+   * Recreates a question-create escrow intent when the local question exists but on-chain
+   * projection is still missing after the earlier create flow terminated.
+   */
+  @PostMapping("/{postId}/web3/recover-create")
+  public ResponseEntity<ApiResponse<PostMutationResponse>> recoverQuestionCreate(
+      @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
+
+    Long validatedUserId = requireUserId(userId);
+    PostMutationResult result =
+        recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+            new RecoverQuestionPostEscrowCommand(validatedUserId, postId));
+    return ResponseEntity.ok(ApiResponse.success(PostMutationResponse.from(result)));
+  }
+
+  /** Accepts an answer and returns nullable question accept escrow write payload. */
   @PostMapping("/{postId}/answers/{answerId}/accept")
   public ResponseEntity<ApiResponse<AcceptAnswerResponse>> acceptAnswer(
       @AuthenticationPrincipal Long userId,

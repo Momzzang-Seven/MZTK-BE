@@ -5,6 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigInteger;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +18,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
@@ -32,6 +37,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -101,13 +108,13 @@ class QnaEscrowE2ETest extends E2ETestBase {
               momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest req =
                   inv.getArgument(0);
               return new QnaExecutionDraft(
-                  QnaExecutionResourceType.QUESTION,
+                  req.resourceType(),
                   req.resourceId(),
                   QnaExecutionResourceStatus.PENDING_EXECUTION,
-                  QnaExecutionActionType.QNA_QUESTION_CREATE,
+                  req.actionType(),
                   req.requesterUserId(),
                   req.counterpartyUserId(),
-                  "root-" + req.resourceId(),
+                  "root-" + req.resourceType() + "-" + req.resourceId() + "-" + req.actionType(),
                   "0x" + "a".repeat(64),
                   "{}",
                   List.of(
@@ -192,6 +199,119 @@ class QnaEscrowE2ETest extends E2ETestBase {
             baseUrl() + "/users/me/web3/execution-intents/some-id", String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  @Test
+  @Order(4)
+  @DisplayName("GET /posts/{postId} — 익명 공개 조회로 question web3Execution summary 를 반환한다")
+  void getQuestionDetail_anonymous_returnsQuestionWeb3ExecutionSummary() throws Exception {
+    ResponseEntity<String> createResponse =
+        createQuestionPost("공개 조회 질문", "공개 조회 본문", 40L);
+    assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    Long postId = objectMapper.readTree(createResponse.getBody()).path("data").path("postId").asLong();
+
+    ResponseEntity<String> getResponse =
+        restTemplate.exchange(baseUrl() + "/posts/" + postId, HttpMethod.GET, null, String.class);
+
+    assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(getResponse.getBody()).path("data");
+    assertThat(data.path("type").asText()).isEqualTo("QUESTION");
+    assertThat(data.path("question").path("reward").asLong()).isEqualTo(40L);
+    assertThat(data.path("question").path("web3Execution").path("actionType").asText())
+        .isEqualTo("QNA_QUESTION_CREATE");
+    assertThat(data.path("question").path("web3Execution").path("executionIntent").path("status").asText())
+        .isEqualTo("AWAITING_SIGNATURE");
+  }
+
+  @Test
+  @Order(5)
+  @DisplayName("GET /questions/{postId}/answers — owner row 에만 answer web3Execution summary 가 포함된다")
+  void getAnswers_ownerOnly_returnsAnswerWeb3ExecutionSummary() throws Exception {
+    TestUser questionOwner = signupAndLogin("qna-question-owner");
+    TestUser answerOwner = signupAndLogin("qna-answer-owner");
+    TestUser thirdUser = signupAndLogin("qna-third-user");
+    Long postId =
+        insertOnchainReadyQuestion(
+            questionOwner.userId(), "답변 resume 질문", "답변 resume 본문", 25L);
+
+    ResponseEntity<String> createAnswerResponse =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("content", "owner only resume answer", "imageIds", List.of()),
+                bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+    assertThat(createAnswerResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+    ResponseEntity<String> ownerReadResponse =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(answerOwner.accessToken())),
+            String.class);
+
+    assertThat(ownerReadResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode ownerAnswer = objectMapper.readTree(ownerReadResponse.getBody()).path("data").get(0);
+    assertThat(ownerAnswer.path("web3Execution").path("actionType").asText())
+        .isEqualTo("QNA_ANSWER_SUBMIT");
+    assertThat(ownerAnswer.path("web3Execution").path("executionIntent").path("status").asText())
+        .isEqualTo("AWAITING_SIGNATURE");
+
+    ResponseEntity<String> nonOwnerReadResponse =
+        restTemplate.exchange(
+            baseUrl() + "/questions/" + postId + "/answers",
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(thirdUser.accessToken())),
+            String.class);
+
+    assertThat(nonOwnerReadResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode nonOwnerAnswer =
+        objectMapper.readTree(nonOwnerReadResponse.getBody()).path("data").get(0);
+    assertThat(nonOwnerAnswer.path("web3Execution").isNull()).isTrue();
+  }
+
+  private Long insertOnchainReadyQuestion(
+      Long askerUserId, String title, String content, Long rewardAmount) {
+    Instant now = Instant.now();
+    KeyHolder keyHolder = new GeneratedKeyHolder();
+    jdbcTemplate.update(
+        conn -> {
+          PreparedStatement ps =
+              conn.prepareStatement("INSERT INTO posts (user_id, type, title, content, reward, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", new String[] {"id"});
+          ps.setLong(1, askerUserId);
+          ps.setString(2, "QUESTION");
+          ps.setString(3, title);
+          ps.setString(4, content);
+          ps.setLong(5, rewardAmount);
+          ps.setString(6, "OPEN");
+          ps.setTimestamp(7, Timestamp.from(now));
+          ps.setTimestamp(8, Timestamp.from(now));
+          return ps;
+        },
+        keyHolder);
+
+    Number generatedKey = keyHolder.getKey();
+    if (generatedKey == null) {
+      throw new IllegalStateException("Failed to insert question post row");
+    }
+
+    Long postId = generatedKey.longValue();
+    jdbcTemplate.update(
+        "INSERT INTO web3_qna_questions (post_id, question_id, asker_user_id, token_address, reward_amount_wei, question_hash, accepted_answer_id, answer_count, state, created_at, updated_at) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        postId,
+        QnaEscrowIdCodec.questionId(postId),
+        askerUserId,
+        "0x" + "1".repeat(40),
+        BigInteger.valueOf(rewardAmount),
+        QnaContentHashFactory.hash(content),
+        QnaEscrowIdCodec.zeroBytes32(),
+        0,
+        1000,
+        Timestamp.from(now),
+        Timestamp.from(now));
+    return postId;
   }
 
   private ResponseEntity<String> createQuestionPost(String title, String content, Long reward) {

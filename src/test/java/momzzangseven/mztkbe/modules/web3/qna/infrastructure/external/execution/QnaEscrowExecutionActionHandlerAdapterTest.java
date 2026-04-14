@@ -16,11 +16,13 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActi
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
@@ -41,6 +43,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
 
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
+  @Mock private QnaLocalDeleteSyncPort qnaLocalDeleteSyncPort;
 
   private QnaEscrowExecutionActionHandlerAdapter adapter;
   private ObjectMapper objectMapper;
@@ -50,7 +53,10 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     objectMapper = new ObjectMapper();
     adapter =
         new QnaEscrowExecutionActionHandlerAdapter(
-            objectMapper, qnaProjectionPersistencePort, qnaAcceptStateSyncPort);
+            objectMapper,
+            qnaProjectionPersistencePort,
+            qnaAcceptStateSyncPort,
+            qnaLocalDeleteSyncPort);
   }
 
   @Test
@@ -144,6 +150,35 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
     assertThat(questionCaptor.getValue().getAnswerCount()).isEqualTo(0);
     assertThat(questionCaptor.getValue().getState()).isEqualTo(QnaQuestionState.CREATED);
+    verify(qnaLocalDeleteSyncPort).confirmAnswerDeleted(201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionConfirmed marks deleted question and syncs local hard delete")
+  void afterExecutionConfirmed_marksDeletedQuestionAndSyncsLocalDelete() throws Exception {
+    when(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(questionProjection("0x" + "a".repeat(64), 0)));
+    QnaEscrowExecutionPayload payload =
+        new QnaEscrowExecutionPayload(
+            QnaExecutionActionType.QNA_QUESTION_DELETE,
+            101L,
+            null,
+            "0x" + "1".repeat(40),
+            "0x" + "2".repeat(40),
+            new BigInteger("50000000000000000000"),
+            "0x" + "a".repeat(64),
+            null,
+            "0x" + "3".repeat(40),
+            "0x1234");
+
+    adapter.afterExecutionConfirmed(
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan());
+
+    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
+        ArgumentCaptor.forClass(QnaQuestionProjection.class);
+    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
+    assertThat(questionCaptor.getValue().getState()).isEqualTo(QnaQuestionState.DELETED);
+    verify(qnaLocalDeleteSyncPort).confirmQuestionDeleted(101L);
   }
 
   @Test
@@ -281,6 +316,42 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         "TREASURY_TOKEN_INSUFFICIENT");
 
     verifyNoInteractions(qnaAcceptStateSyncPort);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending accept when intent expires")
+  void afterExecutionTerminated_rollsBackPendingAcceptOnExpired() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.EXPIRED,
+        "EXECUTION_INTENT_EXPIRED");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending accept when intent is canceled")
+  void afterExecutionTerminated_rollsBackPendingAcceptOnCanceled() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.CANCELED,
+        "SUPERSEDED_BY_NEW_PAYLOAD");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending accept on nonce stale")
+  void afterExecutionTerminated_rollsBackPendingAcceptOnNonceStale() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.NONCE_STALE,
+        "AUTH_NONCE_MISMATCH");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
 
   private ExecutionIntent intent(

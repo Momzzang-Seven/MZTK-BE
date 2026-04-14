@@ -2,12 +2,12 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -23,17 +23,22 @@ public class CreatePostService implements CreatePostUseCase {
   private final PostXpService postXpService;
   private final LinkTagPort linkTagPort;
   private final UpdatePostImagesPort updatePostImagesPort;
-  private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   @Override
   @Transactional
   public CreatePostResult execute(CreatePostCommand command) {
-
-    command.validate();
-    if (command.type() == PostType.QUESTION) {
-      questionLifecycleExecutionPort.precheckQuestionCreate(command.userId(), command.reward());
+    if (command.type() != PostType.FREE) {
+      throw new PostInvalidInputException("CreatePostService supports free posts only");
     }
+    command.validate();
+    Post savedPost = savePost(command);
+    XpGrantResult xpResult = grantCreateXp(command.userId(), savedPost.getId());
+    return new CreatePostResult(
+        savedPost.getId(), xpResult.isXpGranted(), xpResult.grantedXp(), xpResult.message());
+  }
 
+
+  private Post savePost(CreatePostCommand command) {
     // 1. 게시글 도메인 객체 생성
     Post post =
         Post.create(
@@ -57,26 +62,25 @@ public class CreatePostService implements CreatePostUseCase {
       linkTagPort.linkTagsToPost(savedPost.getId(), command.tags());
     }
 
-    if (savedPost.getType() == PostType.QUESTION) {
-      questionLifecycleExecutionPort.prepareQuestionCreate(
-          savedPost.getId(), savedPost.getUserId(), savedPost.getContent(), savedPost.getReward());
-    }
+    return savedPost;
+  }
 
+  private XpGrantResult grantCreateXp(Long userId, Long postId) {
     Long grantedXp = 0L;
     boolean isXpGranted = false;
 
     try {
-      grantedXp = postXpService.grantCreatePostXp(command.userId(), savedPost.getId());
-
+      grantedXp = postXpService.grantCreatePostXp(userId, postId);
       if (grantedXp > 0) {
         isXpGranted = true;
       }
     } catch (Exception e) {
-      log.warn("Post created but XP grant failed for user: {}", command.userId(), e);
+      log.warn("Post created but XP grant failed for user: {}", userId, e);
     }
 
     String message = isXpGranted ? "게시글 작성 완료! (+" + grantedXp + " XP)" : "게시글 작성 완료";
-
-    return new CreatePostResult(savedPost.getId(), isXpGranted, grantedXp, message);
+    return new XpGrantResult(isXpGranted, grantedXp, message);
   }
+
+  private record XpGrantResult(boolean isXpGranted, Long grantedXp, String message) {}
 }

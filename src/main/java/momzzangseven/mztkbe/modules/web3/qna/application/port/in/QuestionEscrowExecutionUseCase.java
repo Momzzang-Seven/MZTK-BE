@@ -9,9 +9,16 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentR
 
 public interface QuestionEscrowExecutionUseCase {
 
+  boolean hasActiveQuestionIntent(Long postId);
+
   void precheckQuestionCreate(PrecheckQuestionCreateCommand command);
 
   QnaExecutionIntentResult prepareQuestionCreate(PrepareQuestionCreateCommand command);
+
+  QnaExecutionIntentResult recoverQuestionCreate(PrepareQuestionCreateCommand command);
+
+  java.util.Optional<QnaExecutionIntentResult> recoverQuestionUpdate(
+      PrepareQuestionUpdateCommand command);
 
   QnaExecutionIntentResult prepareQuestionUpdate(PrepareQuestionUpdateCommand command);
 

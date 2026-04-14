@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
  */
 public record QnaExecutionResumeViewResult(
     Resource resource,
+    String actionType,
     ExecutionIntent executionIntent,
     Execution execution,
     Transaction transaction) {
@@ -19,6 +20,9 @@ public record QnaExecutionResumeViewResult(
   public QnaExecutionResumeViewResult {
     if (resource == null) {
       throw new Web3InvalidInputException("resource is required");
+    }
+    if (actionType == null || actionType.isBlank()) {
+      throw new Web3InvalidInputException("actionType is required");
     }
     if (executionIntent == null) {
       throw new Web3InvalidInputException("executionIntent is required");

@@ -32,6 +32,7 @@ class AnswerResponseTest {
               5L,
               true,
               List.of("https://cdn.example.com/answer.webp"),
+              null,
               createdAt,
               updatedAt);
 
@@ -63,6 +64,7 @@ class AnswerResponseTest {
               false,
               0L,
               false,
+              null,
               null,
               LocalDateTime.of(2026, 3, 3, 9, 15),
               LocalDateTime.of(2026, 3, 4, 10, 45));

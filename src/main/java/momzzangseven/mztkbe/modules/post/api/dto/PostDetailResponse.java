@@ -22,13 +22,18 @@ public record PostDetailResponse(
 
   public record WriterInfo(Long userId, String nickname, String profileImage) {}
 
-  public record QuestionInfo(Long reward, boolean isSolved) {}
+  public record QuestionInfo(
+      Long reward, boolean isSolved, QuestionWeb3ExecutionResponse web3Execution) {}
 
   public static PostDetailResponse from(PostDetailResult result) {
     QuestionInfo questionInfo = null;
 
     if (PostType.QUESTION.equals(result.type())) {
-      questionInfo = new QuestionInfo(result.reward(), result.isSolved());
+      questionInfo =
+          new QuestionInfo(
+              result.reward(),
+              result.isSolved(),
+              QuestionWeb3ExecutionResponse.from(result.web3Execution()));
     }
 
     return new PostDetailResponse(

@@ -15,6 +15,7 @@ final class QnaExecutionResumeViewMapper {
     return new QnaExecutionResumeViewResult(
         new QnaExecutionResumeViewResult.Resource(
             resourceType, summary.resourceId(), toResourceStatus(summary.resourceStatus())),
+        summary.actionType().name(),
         new QnaExecutionResumeViewResult.ExecutionIntent(
             summary.executionIntentId(),
             summary.executionIntentStatus().name(),
