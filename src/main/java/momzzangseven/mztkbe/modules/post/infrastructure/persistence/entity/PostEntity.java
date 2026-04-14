@@ -45,11 +45,6 @@ public class PostEntity {
   @Column(nullable = false)
   private PostStatus status;
 
-  // Legacy shadow column kept until DB migration drops `is_solved`.
-  @Getter(AccessLevel.NONE)
-  @Column(name = "is_solved", nullable = false)
-  private Boolean legacySolvedShadow = false;
-
   @CreatedDate
   @Column(updatable = false)
   private LocalDateTime createdAt;
@@ -76,7 +71,6 @@ public class PostEntity {
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
     this.status = Objects.requireNonNull(status, "status must not be null");
-    syncLegacySolvedShadow();
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -110,12 +104,5 @@ public class PostEntity {
 
   public Post toDomain() {
     return toDomain(new ArrayList<>());
-  }
-
-  @PrePersist
-  @PreUpdate
-  private void syncLegacySolvedShadow() {
-    this.legacySolvedShadow =
-        this.status == PostStatus.RESOLVED || this.status == PostStatus.PENDING_ACCEPT;
   }
 }
