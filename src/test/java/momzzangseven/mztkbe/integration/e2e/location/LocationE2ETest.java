@@ -6,65 +6,33 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.location.application.dto.AddressInfo;
 import momzzangseven.mztkbe.modules.location.application.dto.CoordinatesInfo;
 import momzzangseven.mztkbe.modules.location.application.port.out.GeocodingPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Location E2E 테스트 (Local Server + Real PostgreSQL).
  *
- * <p>실행 조건:
- *
- * <ul>
- *   <li>로컬 PostgreSQL 서버 실행 필요 (application-integration.yml 참조)
- *   <li>./gradlew e2eTest 명령어로 실행
- * </ul>
- *
- * <p>테스트 시나리오:
- *
- * <ul>
- *   <li>위치 등록 (주소 기반 / 좌표 기반)
- *   <li>내 위치 목록 조회
- *   <li>위치 인증 (동일 좌표 → 성공 / 원거리 좌표 → 인증 실패)
- *   <li>위치 삭제
- *   <li>인증 없이 접근 시 401 반환
- * </ul>
- *
  * <p>외부 Kakao Geocoding API는 {@code @MockitoBean GeocodingPort}로 대체합니다.
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("[E2E] Location 전체 흐름 테스트")
-class LocationE2ETest {
+class LocationE2ETest extends E2ETestBase {
 
   /** 테스트에 사용할 고정 좌표 (서울시청 인근). */
   private static final double TEST_LATITUDE = 37.5665;
@@ -73,12 +41,6 @@ class LocationE2ETest {
   private static final String TEST_ADDRESS = "서울특별시 중구 세종대로 110";
   private static final String TEST_POSTAL_CODE = "04524";
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
-  @Autowired private JdbcTemplate jdbcTemplate;
-
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private GeocodingPort geocodingPort;
@@ -86,7 +48,6 @@ class LocationE2ETest {
 
   private String baseUrl;
   private String accessToken;
-  private String currentUserEmail;
 
   // ============================================================
   // Helper Methods
@@ -153,23 +114,9 @@ class LocationE2ETest {
     given(geocodingPort.reverseGeocode(anyDouble(), anyDouble()))
         .willReturn(AddressInfo.of(TEST_ADDRESS, TEST_POSTAL_CODE));
 
-    currentUserEmail = uniqueEmail();
-    signup(currentUserEmail, "Test@1234!", "위치E2E유저");
-    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
-  }
-
-  @AfterEach
-  void tearDown() {
-    // 1. 현재 테스트 유저의 위치 데이터 삭제 (FK: locations.user_id → users.id)
-    jdbcTemplate.update(
-        "DELETE FROM locations WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        currentUserEmail);
-    // 2. 유저 진행 상태 삭제 (FK: user_progress.user_id → users.id)
-    jdbcTemplate.update(
-        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        currentUserEmail);
-    // 3. 현재 테스트 유저 삭제
-    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
+    String email = uniqueEmail();
+    signup(email, "Test@1234!", "위치E2E유저");
+    accessToken = loginAndGetAccessToken(email, "Test@1234!");
   }
 
   // ============================================================
@@ -177,7 +124,6 @@ class LocationE2ETest {
   // ============================================================
 
   @Test
-  @Order(1)
   @DisplayName("좌표 기반 위치 등록 → locationId 반환 및 DB 저장 확인")
   void registerLocation_withCoordinates_success() throws Exception {
     Map<String, Object> body =
@@ -203,7 +149,6 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(2)
   @DisplayName("주소 기반 위치 등록 → GeocodingPort 호출로 좌표 변환 후 저장")
   void registerLocation_withAddress_geocodedAndSaved() throws Exception {
     Map<String, Object> body =
@@ -227,7 +172,6 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(3)
   @DisplayName("내 위치 목록 조회 → 등록된 위치가 목록에 포함")
   void getMyLocations_afterRegister_includesLocation() throws Exception {
     registerLocationWithCoordinates("조회 테스트 위치");
@@ -247,7 +191,6 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(4)
   @DisplayName("동일 좌표로 위치 인증 → isVerified=true 반환")
   void verifyLocation_sameCoordinates_returnsVerified() throws Exception {
     Long locationId = registerLocationWithCoordinates("인증 테스트 위치");
@@ -273,12 +216,10 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(5)
   @DisplayName("멀리 떨어진 좌표로 위치 인증 → isVerified=false 반환")
   void verifyLocation_farCoordinates_returnsNotVerified() throws Exception {
     Long locationId = registerLocationWithCoordinates("원거리 인증 테스트");
 
-    // 부산 좌표 (서울에서 약 325km)
     Map<String, Object> verifyBody =
         Map.of(
             "locationId", locationId,
@@ -298,7 +239,6 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(6)
   @DisplayName("위치 삭제 → 삭제 후 200 응답 및 locationId 반환")
   void deleteLocation_success_returns200WithLocationId() throws Exception {
     Long locationId = registerLocationWithCoordinates("삭제될 위치");
@@ -317,7 +257,6 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(7)
   @DisplayName("위치 이름 없이 등록 시 400 반환")
   void registerLocation_withoutName_returns400() {
     Map<String, Object> body = Map.of("latitude", TEST_LATITUDE, "longitude", TEST_LONGITUDE);
@@ -333,7 +272,6 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(8)
   @DisplayName("위치 정보 없이 등록 시 (주소도 좌표도 없음) → 에러 반환")
   void registerLocation_withoutCoordinatesOrAddress_returnsError() {
     Map<String, Object> body = Map.of("locationName", "정보 없는 위치");
@@ -349,7 +287,6 @@ class LocationE2ETest {
   }
 
   @Test
-  @Order(9)
   @DisplayName("인증 없이 위치 등록 시 401 반환")
   void registerLocation_withoutAuth_returns401() {
     HttpHeaders noAuthHeaders = new HttpHeaders();

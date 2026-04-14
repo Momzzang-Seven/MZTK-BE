@@ -4,12 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
@@ -20,27 +19,19 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.mockito.BDDMockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -70,8 +61,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>GET /users/me/web3/execution-intents/{id} 로 intent 조회 및 응답 구조 검증
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
 @TestPropertySource(
     properties = {
       "web3.reward-token.enabled=true",
@@ -80,18 +69,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.eip7702.sponsor.per-tx-cap-eth=0.1",
       "web3.eip7702.sponsor.per-day-user-cap-eth=1.0"
     })
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("[E2E] QnA Escrow 전체 흐름 테스트")
-class QnaEscrowE2ETest {
+class QnaEscrowE2ETest extends E2ETestBase {
 
   private static final String FAKE_DELEGATE_TARGET = "0x0000000000000000000000000000000000000001";
   private static final String FAKE_CALL_TARGET = "0x0000000000000000000000000000000000000002";
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -104,19 +88,12 @@ class QnaEscrowE2ETest {
   /** 토큰 승인 잔액 확인 계층을 no-op Mock 으로 대체 */
   @MockitoBean private PrecheckQuestionFundingPort precheckQuestionFundingPort;
 
-  private String baseUrl;
   private String accessToken;
-  private String currentUserEmail;
   private Long createdPostId;
 
-  // ── setup / teardown ───────────────────────────────────────────────────────
-
   @BeforeEach
-  void setUp() throws Exception {
-    baseUrl = "http://localhost:" + port;
-    currentUserEmail = "e2e-qna-" + UUID.randomUUID().toString().substring(0, 8) + "@example.com";
-    signup(currentUserEmail, "Test@1234!", "QnAEscrow유저");
-    accessToken = loginAndGetToken(currentUserEmail, "Test@1234!");
+  void setUp() {
+    accessToken = signupAndLogin("QnAEscrow유저").accessToken();
 
     BDDMockito.given(buildQnaExecutionDraftPort.build(any()))
         .willAnswer(
@@ -147,18 +124,6 @@ class QnaEscrowE2ETest {
 
     BDDMockito.doNothing().when(precheckQuestionFundingPort).precheck(any());
   }
-
-  @AfterEach
-  void tearDown() {
-    if (createdPostId != null) {
-      jdbcTemplate.update(
-          "DELETE FROM web3_execution_intents WHERE resource_id = ?", createdPostId.toString());
-      jdbcTemplate.update("DELETE FROM post_tags WHERE post_id = ?", createdPostId);
-      jdbcTemplate.update("DELETE FROM posts WHERE id = ?", createdPostId);
-    }
-  }
-
-  // ── test cases ─────────────────────────────────────────────────────────────
 
   @Test
   @Order(1)
@@ -200,9 +165,9 @@ class QnaEscrowE2ETest {
 
     ResponseEntity<String> getResponse =
         restTemplate.exchange(
-            baseUrl + "/users/me/web3/execution-intents/" + intentPublicId,
+            baseUrl() + "/users/me/web3/execution-intents/" + intentPublicId,
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -224,51 +189,18 @@ class QnaEscrowE2ETest {
   void getExecutionIntent_withoutAuth_returns401() {
     ResponseEntity<String> response =
         restTemplate.getForEntity(
-            baseUrl + "/users/me/web3/execution-intents/some-id", String.class);
+            baseUrl() + "/users/me/web3/execution-intents/some-id", String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
   }
 
-  // ── helpers ────────────────────────────────────────────────────────────────
-
-  private void signup(String email, String password, String nickname) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    restTemplate.exchange(
-        baseUrl + "/auth/signup",
-        HttpMethod.POST,
-        new HttpEntity<>(
-            Map.of("email", email, "password", password, "nickname", nickname), headers),
-        String.class);
-  }
-
-  private String loginAndGetToken(String email, String password) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(
-                Map.of("provider", "LOCAL", "email", email, "password", password), headers),
-            String.class);
-    return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
-  }
-
   private ResponseEntity<String> createQuestionPost(String title, String content, Long reward) {
     return restTemplate.exchange(
-        baseUrl + "/posts/question",
+        baseUrl() + "/posts/question",
         HttpMethod.POST,
         new HttpEntity<>(
             Map.of("title", title, "content", content, "reward", reward, "tags", List.of()),
-            authHeaders()),
+            bearerJsonHeaders(accessToken)),
         String.class);
-  }
-
-  private HttpHeaders authHeaders() {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
-    return headers;
   }
 }

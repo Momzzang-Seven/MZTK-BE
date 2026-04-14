@@ -3,33 +3,25 @@ package momzzangseven.mztkbe.integration.e2e.image;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
@@ -55,18 +47,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>[E-13] 혼합 리스트 → 트랜잭션 롤백으로 부분 저장 없음
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("[E2E] 이미지 Presigned URL 발급 전체 흐름 (Local Server + Real PostgreSQL)")
-class ImagePresignedUrlE2ETest {
+class ImagePresignedUrlE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private ImageJpaRepository imageJpaRepository;
-  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -74,10 +58,6 @@ class ImagePresignedUrlE2ETest {
 
   private String baseUrl;
   private String accessToken;
-  private String currentUserEmail;
-
-  /** 테스트 중 생성된 tmpObjectKey 추적 — @AfterEach 에서 DB 정리에 사용. */
-  private final List<String> createdKeys = new ArrayList<>();
 
   // ============================================================
   // Helper Methods
@@ -137,30 +117,15 @@ class ImagePresignedUrlE2ETest {
   }
 
   // ============================================================
-  // Setup / Teardown
+  // Setup
   // ============================================================
 
   @BeforeEach
   void setUp() throws Exception {
     baseUrl = "http://localhost:" + port;
-    currentUserEmail = uniqueEmail();
-    signup(currentUserEmail, "Test@1234!", "이미지E2E유저");
-    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
-  }
-
-  @AfterEach
-  void cleanup() {
-    // 1. 테스트 중 생성된 images 행 삭제
-    createdKeys.forEach(
-        key -> imageJpaRepository.findByTmpObjectKey(key).ifPresent(imageJpaRepository::delete));
-    createdKeys.clear();
-
-    // 2. 유저 진행 상태 삭제 (FK: user_progress.user_id → users.id)
-    jdbcTemplate.update(
-        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        currentUserEmail);
-    // 3. 현재 테스트 유저 삭제
-    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
+    String email = uniqueEmail();
+    signup(email, "Test@1234!", "이미지E2E유저");
+    accessToken = loginAndGetAccessToken(email, "Test@1234!");
   }
 
   // ============================================================
@@ -181,7 +146,6 @@ class ImagePresignedUrlE2ETest {
     long imageId = items.get(0).at("/imageId").asLong();
     String tmpObjectKey = items.get(0).at("/tmpObjectKey").asText();
     String presignedUrl = items.get(0).at("/presignedUrl").asText();
-    createdKeys.add(tmpObjectKey);
 
     // 응답: imageId는 양수, tmpObjectKey prefix·확장자, presignedUrl 비어있지 않음
     assertThat(imageId).isPositive();
@@ -214,7 +178,6 @@ class ImagePresignedUrlE2ETest {
 
     long imageId = items.get(0).at("/imageId").asLong();
     String tmpObjectKey = items.get(0).at("/tmpObjectKey").asText();
-    createdKeys.add(tmpObjectKey);
 
     // WORKOUT: private/workout/{uuid}.jpg — tmp/ 서브폴더 없음
     assertThat(imageId).isPositive();
@@ -245,7 +208,6 @@ class ImagePresignedUrlE2ETest {
     long imageId = items.get(0).at("/imageId").asLong();
     String tmpObjectKey = items.get(0).at("/tmpObjectKey").asText();
     String presignedUrl = items.get(0).at("/presignedUrl").asText();
-    createdKeys.add(tmpObjectKey);
 
     // 응답: imageId 양수, USER_PROFILE 전용 경로
     assertThat(imageId).isPositive();
@@ -278,7 +240,6 @@ class ImagePresignedUrlE2ETest {
     long detailImageId = items.get(1).at("/imageId").asLong();
     String thumbKey = items.get(0).at("/tmpObjectKey").asText();
     String detailKey = items.get(1).at("/tmpObjectKey").asText();
-    createdKeys.addAll(List.of(thumbKey, detailKey));
 
     // 응답: imageId 양수, 서로 다른 id, prefix 분기, 확장자 유지, UUID 상이
     assertThat(thumbImageId).isPositive();
@@ -323,7 +284,6 @@ class ImagePresignedUrlE2ETest {
     String key1 = items.get(1).at("/tmpObjectKey").asText(); // MARKET_CLASS_DETAIL, main.jpg
     String key2 = items.get(2).at("/tmpObjectKey").asText(); // MARKET_CLASS_DETAIL, d1.png
     String key3 = items.get(3).at("/tmpObjectKey").asText(); // MARKET_CLASS_DETAIL, d2.heic
-    createdKeys.addAll(List.of(key0, key1, key2, key3));
 
     // 응답: imageId 모두 양수
     assertThat(items).allSatisfy(item -> assertThat(item.at("/imageId").asLong()).isPositive());
@@ -382,7 +342,6 @@ class ImagePresignedUrlE2ETest {
     long detailImageId = items.get(1).at("/imageId").asLong();
     String thumbKey = items.get(0).at("/tmpObjectKey").asText();
     String detailKey = items.get(1).at("/tmpObjectKey").asText();
-    createdKeys.addAll(List.of(thumbKey, detailKey));
 
     // 응답: imageId 양수, 서로 다른 id, prefix 분기, 확장자 유지, UUID 상이
     assertThat(thumbImageId).isPositive();
@@ -427,7 +386,6 @@ class ImagePresignedUrlE2ETest {
     String key1 = items.get(1).at("/tmpObjectKey").asText(); // MARKET_STORE_DETAIL, main.jpg
     String key2 = items.get(2).at("/tmpObjectKey").asText(); // MARKET_STORE_DETAIL, d1.png
     String key3 = items.get(3).at("/tmpObjectKey").asText(); // MARKET_STORE_DETAIL, d2.heic
-    createdKeys.addAll(List.of(key0, key1, key2, key3));
 
     // 응답: imageId 모두 양수
     assertThat(items).allSatisfy(item -> assertThat(item.at("/imageId").asLong()).isPositive());

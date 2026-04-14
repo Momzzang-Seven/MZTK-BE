@@ -3,30 +3,22 @@ package momzzangseven.mztkbe.integration.e2e.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
@@ -46,16 +38,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  * <p>The wallet row is inserted directly via JdbcTemplate to avoid the signature-verification logic
  * in {@code RegisterWalletService}.
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("Login walletAddress E2E test")
-class LoginWalletAddressE2ETest {
+class LoginWalletAddressE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -64,27 +49,10 @@ class LoginWalletAddressE2ETest {
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private String baseUrl;
-  private final List<String> createdUserEmails = new ArrayList<>();
 
   @BeforeEach
   void setUp() {
     baseUrl = "http://localhost:" + port;
-  }
-
-  @AfterEach
-  void tearDown() {
-    for (String email : createdUserEmails) {
-      jdbcTemplate.update(
-          "DELETE FROM user_wallets WHERE user_id = (SELECT id FROM users WHERE email = ?)", email);
-      jdbcTemplate.update(
-          "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
-    }
-    createdUserEmails.clear();
   }
 
   // ============================================================
@@ -103,7 +71,6 @@ class LoginWalletAddressE2ETest {
   }
 
   private ResponseEntity<String> signup(String email, String password, String nickname) {
-    createdUserEmails.add(email);
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);

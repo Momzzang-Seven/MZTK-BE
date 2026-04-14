@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -24,6 +23,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
@@ -46,34 +46,21 @@ import momzzangseven.mztkbe.modules.verification.infrastructure.persistence.enti
 import momzzangseven.mztkbe.modules.verification.infrastructure.persistence.repository.VerificationRequestJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("[E2E] Workout Verification 동시 submit 흐름 테스트")
-class WorkoutVerificationE2ETest {
+class WorkoutVerificationE2ETest extends E2ETestBase {
 
   private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private ImageJpaRepository imageJpaRepository;
   @Autowired private VerificationRequestJpaRepository verificationRequestJpaRepository;
   @Autowired private XpLedgerJpaRepository xpLedgerJpaRepository;
@@ -92,10 +79,9 @@ class WorkoutVerificationE2ETest {
   @Test
   @DisplayName("같은 tmpObjectKey 동시 submit은 단일 verification row와 단일 XP 지급으로 수렴한다")
   void duplicateSubmitConvergesToSingleVerificationAndSingleReward() throws Exception {
-    String baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃E2E유저");
-    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+    TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "워크아웃E2E유저");
+    long userId = user.userId();
+    String accessToken = user.accessToken();
 
     LocalDate today = LocalDate.now(KST);
     ensureWorkoutXpPolicy(today);
@@ -136,9 +122,9 @@ class WorkoutVerificationE2ETest {
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
       Future<ResponseEntity<String>> first =
-          executor.submit(() -> submitPhoto(baseUrl, accessToken, tmpObjectKey, startBarrier));
+          executor.submit(() -> submitPhoto(accessToken, tmpObjectKey, startBarrier));
       Future<ResponseEntity<String>> second =
-          executor.submit(() -> submitPhoto(baseUrl, accessToken, tmpObjectKey, startBarrier));
+          executor.submit(() -> submitPhoto(accessToken, tmpObjectKey, startBarrier));
 
       assertThat(firstAiEntered.await(5, TimeUnit.SECONDS)).isTrue();
       releaseFirstAi.countDown();
@@ -193,10 +179,9 @@ class WorkoutVerificationE2ETest {
   @Test
   @DisplayName("today FAILED 재시도 동시 submit은 row lock 이후 단일 AI 호출과 단일 XP 지급으로 수렴한다")
   void failedTodayRetryConvergesAfterRowLock() throws Exception {
-    String baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃재시도E2E");
-    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+    TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "워크아웃재시도E2E");
+    long userId = user.userId();
+    String accessToken = user.accessToken();
 
     LocalDate today = LocalDate.now(KST);
     ensureWorkoutXpPolicy(today);
@@ -254,9 +239,9 @@ class WorkoutVerificationE2ETest {
     ExecutorService executor = Executors.newFixedThreadPool(2);
     try {
       Future<ResponseEntity<String>> first =
-          executor.submit(() -> submitPhoto(baseUrl, accessToken, tmpObjectKey, startBarrier));
+          executor.submit(() -> submitPhoto(accessToken, tmpObjectKey, startBarrier));
       Future<ResponseEntity<String>> second =
-          executor.submit(() -> submitPhoto(baseUrl, accessToken, tmpObjectKey, startBarrier));
+          executor.submit(() -> submitPhoto(accessToken, tmpObjectKey, startBarrier));
 
       assertThat(firstAiEntered.await(5, TimeUnit.SECONDS)).isTrue();
       releaseFirstAi.countDown();
@@ -307,10 +292,9 @@ class WorkoutVerificationE2ETest {
   @Test
   @DisplayName("기존 verification kind가 다르면 submit은 409(VERIFICATION_005)를 반환한다")
   void submitPhoto_withExistingDifferentKind_returnsConflict() throws Exception {
-    String baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃종류충돌E2E");
-    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+    TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "워크아웃종류충돌E2E");
+    long userId = user.userId();
+    String accessToken = user.accessToken();
 
     String tmpObjectKey = "private/workout/e2e-kind-mismatch-" + UUID.randomUUID() + ".jpg";
     imageJpaRepository.save(
@@ -332,7 +316,7 @@ class WorkoutVerificationE2ETest {
             .updatedAt(Instant.now())
             .build());
 
-    ResponseEntity<String> response = submitPhoto(baseUrl, accessToken, tmpObjectKey);
+    ResponseEntity<String> response = submitPhoto(accessToken, tmpObjectKey);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     assertThat(objectMapper.readTree(response.getBody()).at("/status").asText()).isEqualTo("FAIL");
@@ -348,10 +332,9 @@ class WorkoutVerificationE2ETest {
   @Test
   @DisplayName("어제 생성된 FAILED row는 재시도 없이 기존 FAILED를 그대로 반환한다")
   void submitPhoto_withOldFailedRow_returnsExistingFailedWithoutRetry() throws Exception {
-    String baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃실패재사용E2E");
-    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+    TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "워크아웃실패재사용E2E");
+    long userId = user.userId();
+    String accessToken = user.accessToken();
 
     String tmpObjectKey = "private/workout/e2e-old-failed-" + UUID.randomUUID() + ".jpg";
     Instant createdAt = Instant.now().minusSeconds(60L * 60 * 24 * 2);
@@ -371,7 +354,7 @@ class WorkoutVerificationE2ETest {
         Timestamp.from(createdAt),
         failed.getVerificationId());
 
-    ResponseEntity<String> response = submitPhoto(baseUrl, accessToken, tmpObjectKey);
+    ResponseEntity<String> response = submitPhoto(accessToken, tmpObjectKey);
 
     assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     assertThat(objectMapper.readTree(response.getBody()).at("/data/verificationStatus").asText())
@@ -392,10 +375,9 @@ class WorkoutVerificationE2ETest {
   @Test
   @DisplayName("오늘 workout 보상이 이미 있으면 submit은 409(VERIFICATION_006)으로 선차단된다")
   void submitPhoto_whenTodayRewardExists_returnsConflictPrecheck() throws Exception {
-    String baseUrl = "http://localhost:" + port;
-    String email = uniqueEmail();
-    long userId = signup(baseUrl, email, "Test@1234!", "워크아웃선차단E2E");
-    String accessToken = loginAndGetAccessToken(baseUrl, email, "Test@1234!");
+    TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "워크아웃선차단E2E");
+    long userId = user.userId();
+    String accessToken = user.accessToken();
 
     LocalDate today = LocalDate.now(KST);
     ensureWorkoutXpPolicy(today);
@@ -421,7 +403,7 @@ class WorkoutVerificationE2ETest {
             .createdAt(LocalDateTime.now(KST))
             .build());
 
-    ResponseEntity<String> response = submitPhoto(baseUrl, accessToken, tmpObjectKey);
+    ResponseEntity<String> response = submitPhoto(accessToken, tmpObjectKey);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     assertThat(objectMapper.readTree(response.getBody()).at("/status").asText()).isEqualTo("FAIL");
@@ -429,61 +411,21 @@ class WorkoutVerificationE2ETest {
         .isEqualTo("VERIFICATION_006");
   }
 
-  private static String uniqueEmail() {
-    return "e2e-workout-"
-        + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
-        + "@example.com";
-  }
-
-  private long signup(String baseUrl, String email, String password, String nickname)
-      throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/signup",
-            HttpMethod.POST,
-            new HttpEntity<>(
-                Map.of("email", email, "password", password, "nickname", nickname), headers),
-            String.class);
-    return objectMapper.readTree(response.getBody()).at("/data/userId").asLong();
-  }
-
-  private String loginAndGetAccessToken(String baseUrl, String email, String password)
-      throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, Object> body = Map.of("provider", "LOCAL", "email", email, "password", password);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(body, headers),
-            String.class);
-    return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
-  }
-
   private ResponseEntity<String> submitPhoto(
-      String baseUrl, String accessToken, String tmpObjectKey, CyclicBarrier startBarrier)
-      throws Exception {
+      String accessToken, String tmpObjectKey, CyclicBarrier startBarrier) throws Exception {
     startBarrier.await(5, TimeUnit.SECONDS);
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
+    HttpHeaders headers = bearerJsonHeaders(accessToken);
     return restTemplate.exchange(
-        baseUrl + "/verification/photo",
+        baseUrl() + "/verification/photo",
         HttpMethod.POST,
         new HttpEntity<>(Map.of("tmpObjectKey", tmpObjectKey), headers),
         String.class);
   }
 
-  private ResponseEntity<String> submitPhoto(
-      String baseUrl, String accessToken, String tmpObjectKey) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
+  private ResponseEntity<String> submitPhoto(String accessToken, String tmpObjectKey) {
+    HttpHeaders headers = bearerJsonHeaders(accessToken);
     return restTemplate.exchange(
-        baseUrl + "/verification/photo",
+        baseUrl() + "/verification/photo",
         HttpMethod.POST,
         new HttpEntity<>(Map.of("tmpObjectKey", tmpObjectKey), headers),
         String.class);

@@ -9,6 +9,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.application.dto.LambdaCallbackCommand;
@@ -17,13 +18,10 @@ import momzzangseven.mztkbe.modules.image.domain.vo.LambdaCallbackStatus;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -39,11 +37,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>H2는 PostgreSQL의 SELECT FOR UPDATE 락 동작을 재현하지 못하므로 반드시 실제 DB를 사용해야 합니다.
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest
 @DisplayName("[E2E] Lambda 콜백 동시 요청 경쟁 조건 통합 테스트 (Local DB + SELECT FOR UPDATE)")
-class LambdaCallbackConcurrencyTest {
+class LambdaCallbackConcurrencyTest extends E2ETestBase {
 
   @Autowired private HandleLambdaCallbackUseCase handleLambdaCallbackUseCase;
   @Autowired private ImageJpaRepository imageJpaRepository;
@@ -53,14 +48,11 @@ class LambdaCallbackConcurrencyTest {
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
-  /** 테스트 중 생성된 tmpObjectKey 추적 — @AfterEach에서 DB 정리에 사용. */
-  private final List<String> createdKeys = new CopyOnWriteArrayList<>();
+  private Long userId;
 
-  @AfterEach
-  void cleanup() {
-    createdKeys.forEach(
-        key -> imageJpaRepository.findByTmpObjectKey(key).ifPresent(imageJpaRepository::delete));
-    createdKeys.clear();
+  @BeforeEach
+  void signupTestUser() {
+    userId = signupAndLogin("Cb" + UUID.randomUUID().toString().substring(0, 6)).userId();
   }
 
   // ========== 헬퍼 ==========
@@ -78,7 +70,7 @@ class LambdaCallbackConcurrencyTest {
         status -> {
           ImageEntity entity =
               ImageEntity.builder()
-                  .userId(1L)
+                  .userId(userId)
                   .referenceType("COMMUNITY_FREE")
                   .status("PENDING")
                   .tmpObjectKey(tmpKey)
@@ -87,7 +79,6 @@ class LambdaCallbackConcurrencyTest {
           imageJpaRepository.save(entity);
           return null;
         });
-    createdKeys.add(tmpKey);
   }
 
   private ImageEntity findOrFail(String tmpKey) {

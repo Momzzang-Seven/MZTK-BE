@@ -3,25 +3,17 @@ package momzzangseven.mztkbe.integration.e2e.marketplace;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -29,7 +21,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
@@ -54,17 +45,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>다른 트레이너의 스토어에 접근 불가 (데이터 격리)
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("[E2E] Marketplace Store 전체 흐름 테스트")
-class MarketplaceStoreE2ETest {
+class MarketplaceStoreE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -74,6 +57,19 @@ class MarketplaceStoreE2ETest {
   private String baseUrl;
   private String accessToken;
   private String currentUserEmail;
+
+  // ============================================================
+  // Setup
+  // ============================================================
+
+  @BeforeEach
+  void setUp() throws Exception {
+    baseUrl = "http://localhost:" + port;
+    currentUserEmail = uniqueEmail();
+    signup(currentUserEmail, "Test@1234!", "마켓E2E유저");
+    jdbcTemplate.update("UPDATE users SET role = 'TRAINER' WHERE email = ?", currentUserEmail);
+    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
+  }
 
   // ============================================================
   // Helper Methods
@@ -126,38 +122,10 @@ class MarketplaceStoreE2ETest {
   }
 
   // ============================================================
-  // Setup / Teardown
-  // ============================================================
-
-  @BeforeEach
-  void setUp() throws Exception {
-    baseUrl = "http://localhost:" + port;
-    currentUserEmail = uniqueEmail();
-    signup(currentUserEmail, "Test@1234!", "마켓E2E유저");
-    jdbcTemplate.update("UPDATE users SET role = 'TRAINER' WHERE email = ?", currentUserEmail);
-    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
-  }
-
-  @AfterEach
-  void tearDown() {
-    // 1. 현재 테스트 유저의 스토어 데이터 삭제
-    jdbcTemplate.update(
-        "DELETE FROM trainer_stores WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        currentUserEmail);
-    // 2. 유저 진행 상태 삭제 (FK 정리)
-    jdbcTemplate.update(
-        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        currentUserEmail);
-    // 3. 현재 테스트 유저 삭제
-    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
-  }
-
-  // ============================================================
   // E2E Tests — 스토어 생성 (PUT)
   // ============================================================
 
   @Test
-  @Order(1)
   @DisplayName("[E-1] 스토어 신규 생성 → 200 및 storeId 반환")
   void upsertStore_createNew_returns200WithStoreId() throws Exception {
     Map<String, Object> body = createValidStoreBody();
@@ -176,7 +144,6 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(2)
   @DisplayName("[E-2] 선택 필드(URL) 없이 스토어 생성 → 200 정상 처리")
   void upsertStore_withoutOptionalUrls_returns200() throws Exception {
     Map<String, Object> body = new LinkedHashMap<>();
@@ -204,7 +171,6 @@ class MarketplaceStoreE2ETest {
   // ============================================================
 
   @Test
-  @Order(3)
   @DisplayName("[E-3] 스토어 생성 후 조회 → 모든 필드가 올바르게 반환됨")
   void getStore_afterCreate_returnsAllFields() throws Exception {
     // given: 스토어 생성
@@ -240,9 +206,8 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(4)
   @DisplayName("[E-4] 스토어가 없는 유저가 조회 시 404 반환")
-  void getStore_noStore_returns404() throws Exception {
+  void getStore_noStore_returns404() {
     ResponseEntity<String> response =
         restTemplate.exchange(
             baseUrl + "/marketplace/trainer/store",
@@ -258,7 +223,6 @@ class MarketplaceStoreE2ETest {
   // ============================================================
 
   @Test
-  @Order(5)
   @DisplayName("[E-5] 기존 스토어 업데이트 → 동일 storeId 유지, 필드 변경 확인")
   void upsertStore_updateExisting_retainsSameStoreId() throws Exception {
     // given: 스토어 생성
@@ -307,9 +271,8 @@ class MarketplaceStoreE2ETest {
   // ============================================================
 
   @Test
-  @Order(6)
   @DisplayName("[E-6] storeName 누락 시 400 반환")
-  void upsertStore_missingStoreName_returns400() throws Exception {
+  void upsertStore_missingStoreName_returns400() {
     Map<String, Object> body = createValidStoreBody();
     body.remove("storeName");
 
@@ -324,9 +287,8 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(7)
   @DisplayName("[E-7] detailAddress 누락 시 400 반환")
-  void upsertStore_missingDetailAddress_returns400() throws Exception {
+  void upsertStore_missingDetailAddress_returns400() {
     Map<String, Object> body = createValidStoreBody();
     body.remove("detailAddress");
 
@@ -341,9 +303,8 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(8)
   @DisplayName("[E-8] phoneNumber 누락 시 400 반환")
-  void upsertStore_missingPhoneNumber_returns400() throws Exception {
+  void upsertStore_missingPhoneNumber_returns400() {
     Map<String, Object> body = createValidStoreBody();
     body.remove("phoneNumber");
 
@@ -358,9 +319,8 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(9)
   @DisplayName("[E-9] 잘못된 전화번호 포맷 시 400 반환")
-  void upsertStore_invalidPhoneFormat_returns400() throws Exception {
+  void upsertStore_invalidPhoneFormat_returns400() {
     Map<String, Object> body = createValidStoreBody();
     body.put("phoneNumber", "abc-invalid");
 
@@ -375,9 +335,8 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(10)
   @DisplayName("[E-10] latitude 누락 시 400 반환")
-  void upsertStore_missingLatitude_returns400() throws Exception {
+  void upsertStore_missingLatitude_returns400() {
     Map<String, Object> body = createValidStoreBody();
     body.remove("latitude");
 
@@ -392,9 +351,8 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(11)
   @DisplayName("[E-11] 위도 범위 초과(-91.0) 시 400 반환")
-  void upsertStore_latitudeOutOfRange_returns400() throws Exception {
+  void upsertStore_latitudeOutOfRange_returns400() {
     Map<String, Object> body = createValidStoreBody();
     body.put("latitude", -91.0);
 
@@ -413,7 +371,6 @@ class MarketplaceStoreE2ETest {
   // ============================================================
 
   @Test
-  @Order(12)
   @DisplayName("[E-12] 인증 없이 스토어 생성 시 401 반환")
   void upsertStore_withoutAuth_returns401() {
     HttpHeaders noAuthHeaders = new HttpHeaders();
@@ -430,7 +387,6 @@ class MarketplaceStoreE2ETest {
   }
 
   @Test
-  @Order(13)
   @DisplayName("[E-13] 인증 없이 스토어 조회 시 401 반환")
   void getStore_withoutAuth_returns401() {
     HttpHeaders noAuthHeaders = new HttpHeaders();
@@ -451,7 +407,6 @@ class MarketplaceStoreE2ETest {
   // ============================================================
 
   @Test
-  @Order(14)
   @DisplayName("[E-14] 다른 트레이너의 스토어는 보이지 않는다 (데이터 격리)")
   void getStore_otherTrainerStore_notVisible() throws Exception {
     // given: 현재 유저가 스토어 생성
@@ -480,11 +435,5 @@ class MarketplaceStoreE2ETest {
 
     // then: 다른 유저에게는 스토어가 없으므로 404
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-
-    // cleanup: 다른 유저 데이터 삭제
-    jdbcTemplate.update(
-        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        otherEmail);
-    jdbcTemplate.update("DELETE FROM users WHERE email = ?", otherEmail);
   }
 }
