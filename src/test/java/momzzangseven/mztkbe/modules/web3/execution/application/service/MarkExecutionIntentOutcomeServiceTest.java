@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
@@ -169,8 +168,8 @@ class MarkExecutionIntentOutcomeServiceTest {
   }
 
   @Test
-  @DisplayName("핸들러 예외가 발생하면 CONFIRMED 상태를 저장하지 않고 예외를 전파한다")
-  void markSucceeded_handlerThrows_doesNotPersistConfirmedState() {
+  @DisplayName("핸들러 예외가 발생해도 CONFIRMED 상태는 먼저 저장된다")
+  void markSucceeded_handlerThrows_stillPersistsConfirmedState() {
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
     when(executionActionHandlerPort.buildActionPlan(any()))
         .thenReturn(
@@ -186,11 +185,14 @@ class MarkExecutionIntentOutcomeServiceTest {
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
 
-    assertThatThrownBy(() -> succeededService.execute(12L))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("missing qna question projection");
+    succeededService.execute(12L);
 
-    verify(executionIntentPersistencePort, never()).update(any());
+    verify(executionIntentPersistencePort)
+        .update(
+            argThat(
+                updated ->
+                    updated.getStatus() == ExecutionIntentStatus.CONFIRMED
+                        && updated.getSubmittedTxId().equals(12L)));
   }
 
   @Test
@@ -204,6 +206,36 @@ class MarkExecutionIntentOutcomeServiceTest {
 
     verify(executionIntentPersistencePort, never()).update(any());
     verify(executionActionHandlerPort, never()).afterExecutionConfirmed(any(), any());
+  }
+
+  @Test
+  @DisplayName("failed-onchain handler 예외가 발생해도 FAILED_ONCHAIN 상태는 먼저 저장된다")
+  void markFailedOnchain_handlerThrows_stillPersistsFailedState() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any()))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
+    doThrow(new IllegalStateException("projection sync failed"))
+        .when(executionActionHandlerPort)
+        .afterExecutionFailedOnchain(any(), any(), any());
+    ExecutionIntent pendingIntent = pendingEip1559Intent();
+    when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
+        .thenReturn(Optional.of(pendingIntent));
+    when(executionIntentPersistencePort.update(
+            argThat(updated -> updated.getSubmittedTxId().equals(12L))))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    failedOnchainService.execute(12L, "RECEIPT_STATUS_0");
+
+    verify(executionIntentPersistencePort)
+        .update(
+            argThat(
+                updated ->
+                    updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN
+                        && updated.getSubmittedTxId().equals(12L)));
   }
 
   private ExecutionIntent pendingEip1559Intent() {

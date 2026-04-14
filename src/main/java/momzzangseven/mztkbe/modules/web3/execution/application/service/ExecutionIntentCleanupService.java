@@ -7,10 +7,12 @@ import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionCleanupPolicy;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ public class ExecutionIntentCleanupService {
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
+  private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
 
   /**
    * Runs one cleanup batch using configured retention policy.
@@ -82,11 +85,14 @@ public class ExecutionIntentCleanupService {
         continue;
       }
       releaseReservedSponsorExposure(intent);
-      executionIntentPersistencePort.update(
+      ExecutionIntent expired =
           intent.expire(
               ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
               ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
-              expiredNow));
+              expiredNow);
+      executionIntentPersistencePort.update(expired);
+      notifyTerminated(
+          expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
       updatedCount++;
     }
     return updatedCount;
@@ -103,6 +109,17 @@ public class ExecutionIntentCleanupService {
             usage ->
                 sponsorDailyUsagePersistencePort.update(
                     usage.release(intent.getReservedSponsorCostWei())));
+  }
+
+  private void notifyTerminated(
+      ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
+    executionActionHandlerPorts.stream()
+        .filter(handler -> handler.supports(intent.getActionType()))
+        .findFirst()
+        .ifPresent(
+            handler ->
+                handler.afterExecutionTerminated(
+                    intent, handler.buildActionPlan(intent), terminalStatus, failureReason));
   }
 
   /** Batch counters returned by cleanup run. */

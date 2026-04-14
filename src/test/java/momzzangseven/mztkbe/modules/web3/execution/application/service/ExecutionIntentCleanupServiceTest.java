@@ -40,7 +40,8 @@ class ExecutionIntentCleanupServiceTest {
         new ExecutionIntentCleanupService(
             executionIntentPersistencePort,
             sponsorDailyUsagePersistencePort,
-            loadExecutionCleanupPolicyPort);
+            loadExecutionCleanupPolicyPort,
+            List.of());
   }
 
   @Test

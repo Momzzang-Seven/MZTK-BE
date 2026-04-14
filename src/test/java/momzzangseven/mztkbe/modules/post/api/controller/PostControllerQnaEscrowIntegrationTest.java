@@ -14,12 +14,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
 import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
+import momzzangseven.mztkbe.modules.post.application.port.in.RecoverQuestionPostEscrowUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
@@ -70,6 +73,7 @@ class PostControllerQnaEscrowIntegrationTest {
   @Autowired private AnswerJpaRepository answerJpaRepository;
 
   @MockitoBean private QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
+  @MockitoBean private RecoverQuestionPostEscrowUseCase recoverQuestionPostEscrowUseCase;
   @MockitoBean private GrantXpUseCase grantXpUseCase;
   @MockitoBean private UpdatePostImagesPort updatePostImagesPort;
   @MockitoBean private LoadPostImagesPort loadPostImagesPort;
@@ -101,13 +105,16 @@ class PostControllerQnaEscrowIntegrationTest {
     BDDMockito.given(loadPostImagesPort.loadImages(any(), any()))
         .willReturn(PostImageResult.empty());
     BDDMockito.given(questionEscrowExecutionUseCase.prepareQuestionCreate(any()))
-        .willReturn(new QnaExecutionIntentResult("intent-1", "EIP7702", 2, null, false));
+        .willReturn(questionIntent("intent-1", "QNA_QUESTION_CREATE"));
     BDDMockito.given(questionEscrowExecutionUseCase.prepareQuestionUpdate(any()))
-        .willReturn(new QnaExecutionIntentResult("intent-2", "EIP7702", 2, null, false));
+        .willReturn(questionIntent("intent-2", "QNA_QUESTION_UPDATE"));
     BDDMockito.given(questionEscrowExecutionUseCase.prepareQuestionDelete(any()))
-        .willReturn(new QnaExecutionIntentResult("intent-3", "EIP7702", 2, null, false));
+        .willReturn(questionIntent("intent-3", "QNA_QUESTION_DELETE"));
     BDDMockito.given(questionEscrowExecutionUseCase.prepareAnswerAccept(any()))
-        .willReturn(new QnaExecutionIntentResult("intent-4", "EIP7702", 2, null, false));
+        .willReturn(questionIntent("intent-4", "QNA_ANSWER_ACCEPT"));
+    BDDMockito.given(recoverQuestionPostEscrowUseCase.recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class)))
+        .willReturn(
+            new momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult(101L, null));
   }
 
   @Test
@@ -169,6 +176,21 @@ class PostControllerQnaEscrowIntegrationTest {
 
     verify(questionEscrowExecutionUseCase)
         .prepareQuestionDelete(any(PrepareQuestionDeleteCommand.class));
+  }
+
+  @Test
+  @DisplayName("POST /posts/{id}/web3/recover-create — zombie question 복구 엔드포인트가 노출됨")
+  void recoverQuestionPost_endpointIsExposed() throws Exception {
+    Long postId = createQuestionPost(303L);
+
+    mockMvc
+        .perform(post("/posts/" + postId + "/web3/recover-create").with(userPrincipal(303L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(101));
+
+    verify(recoverQuestionPostEscrowUseCase)
+        .recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class));
   }
 
   @Test
@@ -285,5 +307,16 @@ class PostControllerQnaEscrowIntegrationTest {
 
   private String json(Object value) throws Exception {
     return objectMapper.writeValueAsString(value);
+  }
+
+  private QnaExecutionIntentResult questionIntent(String intentId, String actionType) {
+    return new QnaExecutionIntentResult(
+        new QnaExecutionIntentResult.Resource("QUESTION", "1", "PENDING_EXECUTION"),
+        actionType,
+        new QnaExecutionIntentResult.ExecutionIntent(
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+        new QnaExecutionIntentResult.Execution("EIP7702", 2),
+        null,
+        false);
   }
 }

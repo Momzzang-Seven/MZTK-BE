@@ -16,23 +16,32 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.security.JwtTokenProvider;
+import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
+import momzzangseven.mztkbe.modules.admin.application.port.in.CheckAdminAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerResult;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
+import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostLikeResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
+import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.LikePostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.RecoverQuestionPostEscrowUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.service.GetPostService;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -75,10 +84,16 @@ class PostControllerTest {
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
+  @MockitoBean private JwtTokenProvider jwtTokenProvider;
+  @MockitoBean private CheckAccountStatusUseCase checkAccountStatusUseCase;
+  @MockitoBean private CheckAdminAccountStatusUseCase checkAdminAccountStatusUseCase;
+
   @MockitoBean private CreatePostUseCase createPostUseCase;
+  @MockitoBean private CreateQuestionPostUseCase createQuestionPostUseCase;
   @MockitoBean private GetPostService getPostService;
   @MockitoBean private UpdatePostUseCase updatePostUseCase;
   @MockitoBean private DeletePostUseCase deletePostUseCase;
+  @MockitoBean private RecoverQuestionPostEscrowUseCase recoverQuestionPostEscrowUseCase;
   @MockitoBean private SearchPostsUseCase searchPostsUseCase;
   @MockitoBean private AcceptAnswerUseCase acceptAnswerUseCase;
   @MockitoBean private LikePostUseCase likePostUseCase;
@@ -139,6 +154,7 @@ class PostControllerTest {
                 List.of(),
                 0L,
                 false,
+                null,
                 List.of("tag"),
                 LocalDateTime.now(),
                 LocalDateTime.now()));
@@ -152,6 +168,54 @@ class PostControllerTest {
         .andExpect(jsonPath("$.data.likeCount").value(3))
         .andExpect(jsonPath("$.data.isLiked").value(true))
         .andExpect(jsonPath("$.data.imageUrls").isArray());
+  }
+
+  @Test
+  @DisplayName("GET /posts/{postId} allows anonymous access")
+  void getPost_anonymous_succeeds() throws Exception {
+    given(getPostService.getPost(1L, null)).willReturn(freePostDetail(1L));
+
+    mockMvc
+        .perform(get("/posts/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(1));
+
+    verify(getPostService).getPost(1L, null);
+  }
+
+  @Test
+  @DisplayName("GET /posts/{postId} treats invalid or expired token as anonymous access")
+  void getPost_invalidToken_succeedsAsAnonymous() throws Exception {
+    given(jwtTokenProvider.validateToken("bad-token")).willReturn(false);
+    given(getPostService.getPost(1L, null)).willReturn(freePostDetail(1L));
+
+    mockMvc
+        .perform(get("/posts/1").header("Authorization", "Bearer bad-token"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(1));
+
+    verify(getPostService).getPost(1L, null);
+  }
+
+  @Test
+  @DisplayName("GET /posts/{postId} keeps withdrawn-user token blocked")
+  void getPost_withdrawnToken_returns409() throws Exception {
+    given(jwtTokenProvider.validateToken("withdrawn-token")).willReturn(true);
+    given(jwtTokenProvider.isAccessToken("withdrawn-token")).willReturn(true);
+    given(jwtTokenProvider.getUserIdFromToken("withdrawn-token")).willReturn(44L);
+    given(jwtTokenProvider.getRoleFromToken("withdrawn-token")).willReturn(UserRole.USER);
+    given(jwtTokenProvider.isStepUpAccessToken("withdrawn-token")).willReturn(false);
+    given(checkAccountStatusUseCase.isActive(44L)).willReturn(false);
+    given(checkAccountStatusUseCase.isDeleted(44L)).willReturn(true);
+
+    mockMvc
+        .perform(get("/posts/1").header("Authorization", "Bearer withdrawn-token"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("USER_004"));
+
+    verifyNoInteractions(getPostService);
   }
 
   @Test
@@ -189,8 +253,8 @@ class PostControllerTest {
   @Test
   @DisplayName("POST /posts/question succeeds")
   void createQuestionPost_success() throws Exception {
-    given(createPostUseCase.execute(any(CreatePostCommand.class)))
-        .willReturn(new CreatePostResult(200L, true, 50L, "ok"));
+    given(createQuestionPostUseCase.execute(any(CreatePostCommand.class)))
+        .willReturn(new CreateQuestionPostResult(200L, true, 50L, "ok", null));
 
     mockMvc
         .perform(
@@ -202,7 +266,7 @@ class PostControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(200));
 
-    verify(createPostUseCase).execute(any(CreatePostCommand.class));
+    verify(createQuestionPostUseCase).execute(any(CreatePostCommand.class));
   }
 
   @Test
@@ -223,6 +287,7 @@ class PostControllerTest {
                 List.of(),
                 50L,
                 false,
+                null,
                 List.of(),
                 LocalDateTime.now(),
                 LocalDateTime.now()));
@@ -239,6 +304,9 @@ class PostControllerTest {
   @Test
   @DisplayName("PATCH /posts/{postId} succeeds")
   void updatePost_success() throws Exception {
+    given(updatePostUseCase.updatePost(any(), any(), any()))
+        .willReturn(new PostMutationResult(1L, null));
+
     mockMvc
         .perform(
             patch("/posts/1")
@@ -253,6 +321,8 @@ class PostControllerTest {
   @Test
   @DisplayName("DELETE /posts/{postId} succeeds")
   void deletePost_success() throws Exception {
+    given(deletePostUseCase.deletePost(any(), any())).willReturn(new PostMutationResult(1L, null));
+
     mockMvc
         .perform(delete("/posts/1").with(userPrincipal(1L)))
         .andExpect(status().isOk())
@@ -261,10 +331,26 @@ class PostControllerTest {
   }
 
   @Test
+  @DisplayName("POST /posts/{postId}/web3/recover-create succeeds")
+  void recoverQuestionCreate_success() throws Exception {
+    given(recoverQuestionPostEscrowUseCase.recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class)))
+        .willReturn(new PostMutationResult(1L, null));
+
+    mockMvc
+        .perform(post("/posts/1/web3/recover-create").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(1))
+        .andExpect(jsonPath("$.data.web3").doesNotExist());
+
+    verify(recoverQuestionPostEscrowUseCase).recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class));
+  }
+
+  @Test
   @DisplayName("POST /posts/{postId}/answers/{answerId}/accept succeeds")
   void acceptAnswer_success() throws Exception {
     given(acceptAnswerUseCase.execute(any()))
-        .willReturn(new AcceptAnswerResult(1L, 2L, PostStatus.RESOLVED));
+        .willReturn(new AcceptAnswerResult(1L, 2L, PostStatus.RESOLVED, null));
 
     mockMvc
         .perform(post("/posts/1/answers/2/accept").with(userPrincipal(1L)))
@@ -391,5 +477,25 @@ class PostControllerTest {
 
   private String json(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {
     return objectMapper.writeValueAsString(value);
+  }
+
+  private PostDetailResult freePostDetail(Long postId) {
+    return new PostDetailResult(
+        postId,
+        PostType.FREE,
+        "title",
+        "content",
+        3L,
+        false,
+        1L,
+        "nickname",
+        null,
+        List.of(),
+        0L,
+        false,
+        null,
+        List.of("tag"),
+        LocalDateTime.now(),
+        LocalDateTime.now());
   }
 }

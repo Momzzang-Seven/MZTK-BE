@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.MarkAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -48,19 +49,22 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
         questionLifecycleExecutionPort.managesAcceptLifecycle()
             ? post.beginAccept(command.answerId())
             : post.accept(command.answerId());
+    QuestionExecutionWriteView web3 =
+        questionLifecycleExecutionPort
+            .prepareAnswerAccept(
+                post.getId(),
+                answer.answerId(),
+                command.requesterId(),
+                answer.userId(),
+                post.getContent(),
+                answer.content(),
+                post.getReward())
+            .orElse(null);
     Post savedPost = postPersistencePort.savePost(acceptedPost);
     if (!questionLifecycleExecutionPort.managesAcceptLifecycle()) {
       markAcceptedAnswerPort.markAccepted(answer.answerId());
     }
-    questionLifecycleExecutionPort.prepareAnswerAccept(
-        savedPost.getId(),
-        answer.answerId(),
-        command.requesterId(),
-        answer.userId(),
-        savedPost.getContent(),
-        answer.content(),
-        savedPost.getReward());
-    return AcceptAnswerResult.from(savedPost);
+    return AcceptAnswerResult.from(savedPost, web3);
   }
 
   private void validateQuestionPost(Post post) {

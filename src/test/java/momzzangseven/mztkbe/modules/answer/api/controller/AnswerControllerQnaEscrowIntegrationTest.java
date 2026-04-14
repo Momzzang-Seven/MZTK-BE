@@ -11,11 +11,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerEscrowUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerEscrowCommand;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -63,6 +66,7 @@ class AnswerControllerQnaEscrowIntegrationTest {
   @Autowired private AnswerJpaRepository answerJpaRepository;
 
   @MockitoBean private AnswerEscrowExecutionUseCase answerEscrowExecutionUseCase;
+  @MockitoBean private RecoverAnswerEscrowUseCase recoverAnswerEscrowUseCase;
   @MockitoBean private UpdateAnswerImagesPort updateAnswerImagesPort;
   @MockitoBean private LoadAnswerImagesPort loadAnswerImagesPort;
   @MockitoBean private LoadAnswerLikePort loadAnswerLikePort;
@@ -103,11 +107,16 @@ class AnswerControllerQnaEscrowIntegrationTest {
     BDDMockito.given(loadAnswerLikePort.loadLikedAnswerIds(any(), any()))
         .willReturn(java.util.Set.of());
     BDDMockito.given(answerEscrowExecutionUseCase.prepareAnswerCreate(any()))
-        .willReturn(new QnaExecutionIntentResult("intent-create", "EIP7702", 2, null, false));
+        .willReturn(answerIntent("intent-create", "QNA_ANSWER_SUBMIT"));
     BDDMockito.given(answerEscrowExecutionUseCase.prepareAnswerUpdate(any()))
-        .willReturn(new QnaExecutionIntentResult("intent-update", "EIP7702", 2, null, false));
+        .willReturn(answerIntent("intent-update", "QNA_ANSWER_UPDATE"));
     BDDMockito.given(answerEscrowExecutionUseCase.prepareAnswerDelete(any()))
-        .willReturn(new QnaExecutionIntentResult("intent-delete", "EIP7702", 2, null, false));
+        .willReturn(answerIntent("intent-delete", "QNA_ANSWER_DELETE"));
+    BDDMockito.given(
+            recoverAnswerEscrowUseCase.recoverAnswerCreate(any(RecoverAnswerEscrowCommand.class)))
+        .willReturn(
+            new momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult(
+                1L, 1L, null));
 
     questionWriterUserId = 501L;
     PostEntity post =
@@ -171,6 +180,25 @@ class AnswerControllerQnaEscrowIntegrationTest {
     verify(answerEscrowExecutionUseCase).prepareAnswerDelete(any(PrepareAnswerDeleteCommand.class));
   }
 
+  @Test
+  @DisplayName(
+      "POST /questions/{postId}/answers/{answerId}/web3/recover-create — zombie answer 복구 엔드포인트가 노출됨")
+  void recoverAnswerCreate_endpointIsExposed() throws Exception {
+    Long answerId = createAnswer(502L, "복구 대상 답변");
+
+    mockMvc
+        .perform(
+            post("/questions/" + questionPostId + "/answers/" + answerId + "/web3/recover-create")
+                .with(userPrincipal(502L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(1))
+        .andExpect(jsonPath("$.data.answerId").value(1));
+
+    verify(recoverAnswerEscrowUseCase)
+        .recoverAnswerCreate(any(RecoverAnswerEscrowCommand.class));
+  }
+
   // ── 헬퍼 ──────────────────────────────────────────────────────────────────
 
   private Long createAnswer(Long userId, String content) throws Exception {
@@ -199,5 +227,16 @@ class AnswerControllerQnaEscrowIntegrationTest {
 
   private String json(Object value) throws Exception {
     return objectMapper.writeValueAsString(value);
+  }
+
+  private QnaExecutionIntentResult answerIntent(String intentId, String actionType) {
+    return new QnaExecutionIntentResult(
+        new QnaExecutionIntentResult.Resource("ANSWER", "1", "PENDING_EXECUTION"),
+        actionType,
+        new QnaExecutionIntentResult.ExecutionIntent(
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+        new QnaExecutionIntentResult.Execution("EIP7702", 2),
+        null,
+        false);
   }
 }

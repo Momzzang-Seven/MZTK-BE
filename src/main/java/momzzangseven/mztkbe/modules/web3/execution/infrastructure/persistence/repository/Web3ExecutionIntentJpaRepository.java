@@ -37,6 +37,14 @@ public interface Web3ExecutionIntentJpaRepository
 
   @Query(
       "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId in :resourceIds"
+          + " order by e.resourceId asc, e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findLatestByResources(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceIds") Collection<String> resourceIds);
+
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
           + " where e.requesterUserId = :requesterUserId"
           + " and e.resourceType = :resourceType and e.resourceId = :resourceId"
           + " order by e.createdAt desc, e.id desc")
@@ -57,6 +65,25 @@ public interface Web3ExecutionIntentJpaRepository
           + " order by e.attemptNo desc")
   List<Web3ExecutionIntentEntity> findAllByRootIdempotencyKeyForUpdate(
       @Param("rootIdempotencyKey") String rootIdempotencyKey, Pageable pageable);
+
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.rootIdempotencyKey = :rootIdempotencyKey"
+          + " order by e.attemptNo desc")
+  List<Web3ExecutionIntentEntity> findAllByRootIdempotencyKey(
+      @Param("rootIdempotencyKey") String rootIdempotencyKey, Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " and e.status in :statuses"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findLatestByResourceAndStatusInForUpdate(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      @Param("statuses") Collection<ExecutionIntentStatus> statuses,
+      Pageable pageable);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select e from Web3ExecutionIntentEntity e where e.id in :ids")

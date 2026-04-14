@@ -46,7 +46,8 @@ class AnswerResultTest {
               "https://cdn.example.com/profile.webp",
               3L,
               true,
-              List.of("https://cdn.example.com/answer-1.webp"));
+              List.of("https://cdn.example.com/answer-1.webp"),
+              null);
 
       assertThat(result.answerId()).isEqualTo(100L);
       assertThat(result.userId()).isEqualTo(200L);
@@ -80,7 +81,7 @@ class AnswerResultTest {
                   "getUpdatedAt",
                   LocalDateTime.of(2026, 3, 2, 11, 30)));
 
-      AnswerResult result = AnswerResult.from(answer, "writer", null, 0L, false, null);
+      AnswerResult result = AnswerResult.from(answer, "writer", null, 0L, false, null, null);
 
       assertThat(result.likeCount()).isZero();
       assertThat(result.liked()).isFalse();
