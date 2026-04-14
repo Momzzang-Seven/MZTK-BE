@@ -4,8 +4,10 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.*;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
@@ -28,23 +30,23 @@ public class PostEntity {
   @Column(nullable = false)
   private PostType type;
 
-  @Column(nullable = false, length = 255)
+  @Column(length = 255)
   private String title;
 
   @Column(columnDefinition = "TEXT", nullable = false)
   private String content;
 
-  @ElementCollection
-  @CollectionTable(name = "post_images", joinColumns = @JoinColumn(name = "post_id"))
-  private List<String> imageUrls = new ArrayList<>();
-
   private Long reward;
 
+  @Column(name = "accepted_answer_id")
+  private Long acceptedAnswerId;
+
+  @Enumerated(EnumType.STRING)
   @Column(nullable = false)
-  private Boolean isSolved = false;
+  private PostStatus status;
 
   @CreatedDate
-  @Column(updatable = false, nullable = false)
+  @Column(updatable = false)
   private LocalDateTime createdAt;
 
   @LastModifiedDate
@@ -58,17 +60,17 @@ public class PostEntity {
       PostType type,
       String title,
       String content,
-      List<String> imageUrls,
       Long reward,
-      Boolean isSolved) {
+      Long acceptedAnswerId,
+      PostStatus status) {
     this.id = id;
     this.userId = userId;
     this.type = type;
     this.title = title;
     this.content = content;
-    this.imageUrls = imageUrls == null ? new ArrayList<>() : new ArrayList<>(imageUrls);
     this.reward = reward;
-    this.isSolved = isSolved != null ? isSolved : false;
+    this.acceptedAnswerId = acceptedAnswerId;
+    this.status = Objects.requireNonNull(status, "status must not be null");
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -78,24 +80,29 @@ public class PostEntity {
         .type(post.getType())
         .title(post.getTitle())
         .content(post.getContent())
-        .imageUrls(post.getImageUrls())
         .reward(post.getReward())
-        .isSolved(post.getIsSolved())
+        .acceptedAnswerId(post.getAcceptedAnswerId())
+        .status(post.getStatus())
         .build();
   }
 
-  public Post toDomain() {
+  public Post toDomain(List<String> tags) {
     return Post.builder()
         .id(this.id)
         .userId(this.userId)
         .type(this.type)
         .title(this.title)
         .content(this.content)
-        .imageUrls(this.imageUrls == null ? new ArrayList<>() : new ArrayList<>(this.imageUrls))
         .reward(this.reward)
-        .isSolved(this.isSolved)
+        .acceptedAnswerId(this.acceptedAnswerId)
+        .status(this.status)
+        .tags(tags)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)
         .build();
+  }
+
+  public Post toDomain() {
+    return toDomain(new ArrayList<>());
   }
 }

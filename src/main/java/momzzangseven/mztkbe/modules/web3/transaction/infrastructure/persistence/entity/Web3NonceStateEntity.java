@@ -4,7 +4,6 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
@@ -38,13 +37,5 @@ public class Web3NonceStateEntity {
     if (nextNonce == null) {
       nextNonce = 0L;
     }
-    if (updatedAt == null) {
-      updatedAt = LocalDateTime.now();
-    }
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    updatedAt = LocalDateTime.now();
   }
 }

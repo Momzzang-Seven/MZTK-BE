@@ -7,8 +7,8 @@ import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyResponseDTO;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
-import momzzangseven.mztkbe.modules.web3.token.application.dto.ProvisionTreasuryKeyResult;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,7 +34,7 @@ public class TreasuryKeyController {
       @Valid @RequestBody ProvisionTreasuryKeyRequestDTO request) {
     ProvisionTreasuryKeyCommand command =
         new ProvisionTreasuryKeyCommand(
-            requireOperatorId(operatorId), request.treasuryPrivateKey());
+            requireOperatorId(operatorId), request.treasuryPrivateKey(), request.walletAlias());
     ProvisionTreasuryKeyResult result = provisionTreasuryKeyUseCase.execute(command);
     ProvisionTreasuryKeyResponseDTO response = ProvisionTreasuryKeyResponseDTO.from(result);
     return ResponseEntity.ok(ApiResponse.success(response));

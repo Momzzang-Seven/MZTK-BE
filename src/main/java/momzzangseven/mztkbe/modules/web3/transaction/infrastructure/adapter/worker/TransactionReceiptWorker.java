@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -8,17 +9,18 @@ import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.config.RewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.TransactionOutcomePublisher;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.ReceiptPollAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -26,9 +28,17 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
+/**
+ * Worker that polls on-chain receipts for pending transactions.
+ *
+ * <p>It maps receipt outcomes to transaction status transitions and publishes execution intent
+ * outcome events through {@link TransactionOutcomePublisher}.
+ */
 public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
   private final Web3ContractPort web3ContractPort;
+  private final TransactionOutcomePublisher transactionOutcomePublisher;
+  private final Clock appClock;
 
   private final String workerId = "receipt-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -37,8 +47,10 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
       Web3ContractPort web3ContractPort,
-      RewardTokenProperties rewardTokenProperties,
-      RetryStrategy retryStrategy) {
+      TransactionOutcomePublisher transactionOutcomePublisher,
+      TransactionRewardTokenProperties rewardTokenProperties,
+      RetryStrategy retryStrategy,
+      Clock appClock) {
     super(
         loadTransactionWorkPort,
         updateTransactionPort,
@@ -46,6 +58,8 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
         rewardTokenProperties,
         retryStrategy);
     this.web3ContractPort = web3ContractPort;
+    this.transactionOutcomePublisher = transactionOutcomePublisher;
+    this.appClock = appClock;
   }
 
   @Scheduled(fixedDelay = 1000L)
@@ -53,6 +67,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     processBatch(20);
   }
 
+  /** Processes one bounded polling batch for {@code PENDING} transactions. */
   void processBatch(int limit) {
     int claimTtlSeconds =
         Math.max(claimTtlSeconds(), rewardTokenProperties.getWorker().getReceiptTimeoutSeconds());
@@ -89,12 +104,25 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
 
     if (receipt.found()) {
       if (Boolean.TRUE.equals(receipt.success())) {
-        updateTransactionPort.updateStatus(
-            item.transactionId(), Web3TxStatus.SUCCEEDED, txHash, null);
+        transactionOutcomePublisher.markSucceededAndPublish(
+            item.transactionId(),
+            item.idempotencyKey(),
+            item.referenceType(),
+            item.referenceId(),
+            item.fromUserId(),
+            item.toUserId(),
+            txHash);
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.SUCCEEDED);
       } else {
-        updateTransactionPort.updateStatus(
-            item.transactionId(), Web3TxStatus.FAILED_ONCHAIN, txHash, "RECEIPT_STATUS_0");
+        transactionOutcomePublisher.markFailedOnchainAndPublish(
+            item.transactionId(),
+            item.idempotencyKey(),
+            item.referenceType(),
+            item.referenceId(),
+            item.fromUserId(),
+            item.toUserId(),
+            txHash,
+            "RECEIPT_STATUS_0");
         auditStateChange(item.transactionId(), Web3TxStatus.PENDING, Web3TxStatus.FAILED_ONCHAIN);
       }
       return;
@@ -118,7 +146,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     int nextPollSeconds = Math.max(1, Math.min(pollMinSeconds, pollMaxSeconds));
 
     updateTransactionPort.scheduleRetry(
-        transactionId, null, LocalDateTime.now().plusSeconds(nextPollSeconds));
+        transactionId, null, LocalDateTime.now(appClock).plusSeconds(nextPollSeconds));
   }
 
   private long elapsedSeconds(LoadTransactionWorkPort.TransactionWorkItem item) {
@@ -126,7 +154,7 @@ public class TransactionReceiptWorker extends AbstractWeb3Worker {
     if (baseline == null) {
       return Long.MAX_VALUE;
     }
-    return Math.max(0, Duration.between(baseline, LocalDateTime.now()).getSeconds());
+    return Math.max(0, Duration.between(baseline, LocalDateTime.now(appClock)).getSeconds());
   }
 
   private void timeout(Long transactionId, String txHash, int timeoutSeconds) {

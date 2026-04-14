@@ -1,0 +1,114 @@
+# integration 프로파일 활성화 시 적용 (Local Server + Real PostgreSQL E2E 테스트용)
+#
+# ⚠️ DB_URL_E2E 은 반드시 **E2E 전용 DB** 를 가리켜야 한다 (예: mztk_e2e).
+#    개발용 mztk_dev (ddl-auto 관리) 를 재사용하면 Flyway 가 기존 스키마와 충돌하여
+#    컨텍스트 로딩이 실패한다. 스키마는 Flyway 가 단독으로 소유하고,
+#    Hibernate 는 validate 로 일치 여부만 검사한다.
+spring:
+  datasource:
+    url: ${DB_URL_E2E}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  flyway:
+    enabled: true
+    # 빈 스키마에서 시작하는 것을 원칙으로 한다. 기존에 객체가 남아있다면
+    # baseline-on-migrate 가 V1 스킵을 유발하므로 false 로 둔다.
+    # "prod 처럼 history 가 있는 DB 위에서 incremental 로 잘 붙는가"를 검증하기 위한 목적.
+    baseline-on-migrate: false
+    # 순서대로 적용되는지 실제로 검증한다.
+    out-of-order: false
+    # 체크섬/순서/누락 검증을 실제로 수행한다.
+    validate-on-migrate: true
+    # 테스트 셋업/티어다운에서 clean 호출을 허용 (prod DB 에선 절대 쓰지 않는다).
+    clean-disabled: false
+    locations:
+      - classpath:db/migration
+
+  jpa:
+    defer-datasource-initialization: false
+    hibernate:
+      # Flyway 가 스키마를 소유한다. Hibernate 는 엔티티-스키마 일치만 검증.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+      jakarta.persistence.lock.timeout: 5000
+
+  sql:
+    init:
+      mode: never
+
+logging:
+  level:
+    root: WARN
+    momzzangseven: INFO
+
+# MZTK Web3 default values for E2E tests
+web3:
+  chain-id: 1337
+  rpc:
+    main: http://localhost:8545
+    sub: http://localhost:8545
+  explorer:
+    base-url: https://testnet.explorer.io
+    api-key: test-explorer-api-key
+  eip712:
+    chain-id: 1337
+    verifying-contract: "0x0000000000000000000000000000000000000000"
+  eip7702:
+    enabled: true
+  reward-token:
+    enabled: true
+    token-contract-address: "0x0000000000000000000000000000000000000000"
+    treasury:
+      wallet-alias: reward-treasury
+      key-encryption-key-b64: "dGVzdC1rZXktZW5jcnlwdGlvbi1rZXktcGxhY2Vob2xkZXI=" #gitleaks:allow
+      treasury-address: "0x0000000000000000000000000000000000000000"
+  escrow:
+    marketplace-contract-address: "0x0000000000000000000000000000000000000000"
+    qna-contract-address: "0x0000000000000000000000000000000000000000"
+
+jwt:
+  secret: test-jwt-secret-placeholder-minimum-32-characters-long
+
+kakao:
+  auth:
+    client: test-kakao-client-id
+  api:
+    admin-key: test-kakao-admin-key
+    rest-api-key: test-kakao-rest-api-key
+
+google:
+  oauth:
+    client-id: test-google-client-id
+    client-secret: test-google-client-secret
+
+lambda:
+  webhook:
+    secret: test-webhook-secret
+
+# E2E tests all originate from 127.0.0.1; trust X-Forwarded-For so that tests can use
+# distinct fake IPs to isolate per-IP rate-limit buckets. Never enable in production.
+mztk:
+  admin:
+    recovery:
+      rate-limit:
+        trust-forwarded-for: true
+
+cloud:
+  aws:
+    region:
+      static: ap-northeast-2
+      auto: false
+    stack:
+      auto: false
+    s3:
+      bucket: test-bucket
+      presigned-url:
+        expiry-seconds: 300
+    credentials:
+      access-key: test-access-key
+      secret-key: test-secret-key

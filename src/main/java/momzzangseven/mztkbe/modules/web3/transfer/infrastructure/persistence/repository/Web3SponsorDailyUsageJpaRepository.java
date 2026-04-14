@@ -14,6 +14,9 @@ import org.springframework.data.repository.query.Param;
 public interface Web3SponsorDailyUsageJpaRepository
     extends JpaRepository<Web3SponsorDailyUsageEntity, Long> {
 
+  Optional<Web3SponsorDailyUsageEntity> findByUserIdAndUsageDateKst(
+      Long userId, LocalDate usageDateKst);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "select u from Web3SponsorDailyUsageEntity u"

@@ -3,21 +3,22 @@ package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.event;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.user.domain.event.UsersHardDeletedEvent;
+import momzzangseven.mztkbe.modules.account.domain.event.UsersHardDeletedEvent;
 import momzzangseven.mztkbe.modules.web3.wallet.application.service.WalletHardDeleteService;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Event handler for user hard deletion
+ * Event handler for user hard deletion.
  *
- * <p>Listens to UsersHardDeletedEvent and cascade-deletes USER_DELETED wallets associated with the
- * deleted users.
+ * <p>Listens to {@link UsersHardDeletedEvent} and cascade-deletes USER_DELETED wallets associated
+ * with the deleted users.
  *
- * <p>Uses REQUIRES_NEW propagation to ensure wallet deletion happens in a separate transaction from
- * user deletion.
+ * <p>Uses {@code REQUIRED} propagation to participate in the same transaction as the hard-delete
+ * batch. This ensures wallet deletion occurs before the {@code users} row is removed, satisfying
+ * the FK constraint {@code user_wallets.user_id REFERENCES users(id)}. If wallet deletion fails,
+ * the entire transaction rolls back and the scheduler retries the batch the next day.
  */
 @Slf4j
 @Component
@@ -32,7 +33,7 @@ public class WalletUserHardDeleteEventHandler {
    * @param event event containing user IDs that were hard-deleted
    */
   @EventListener
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @Transactional
   public void handleUsersHardDeleted(UsersHardDeletedEvent event) {
     List<Long> userIds = event.userIds();
 
@@ -54,11 +55,11 @@ public class WalletUserHardDeleteEventHandler {
           userIds.size());
     } catch (Exception e) {
       log.error(
-          "Failed to cascade delete USER_DELETED wallets for users: userCount={}",
+          "CRITICAL: Failed to delete USER_DELETED wallets. User deletion will be rolled back"
+              + " and retried tomorrow. userCount={}",
           userIds.size(),
           e);
-      // Don't throw - let other event listeners continue
-      // The wallet scheduler will eventually clean them up
+      throw e;
     }
   }
 }

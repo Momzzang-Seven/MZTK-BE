@@ -21,7 +21,7 @@ public record UpdateUserRoleCommand(Long userId, UserRole newRole) {
     if (newRole == null) {
       throw new InvalidUserRoleException("Cannot update user role if no role is provided");
     }
-    if (newRole == UserRole.ADMIN) {
+    if (newRole.isAdmin()) {
       throw new IllegalAdminGrantException();
     }
   }

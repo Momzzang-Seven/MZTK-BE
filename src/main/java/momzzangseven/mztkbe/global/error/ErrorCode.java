@@ -65,13 +65,19 @@ public enum ErrorCode {
   // ========================================
   // User Errors (USER_xxx)
   // ========================================
-  ILLEGAL_ADMIN_GRANT("USER_001", "Cannot self-assign ADMIN role", HttpStatus.BAD_REQUEST),
+  ILLEGAL_ADMIN_GRANT("USER_001", "Illegal ADMIN grant trial", HttpStatus.BAD_REQUEST),
 
   INVALID_ROLE("USER_002", "Invalid role value", HttpStatus.BAD_REQUEST),
 
   ILLEGAL_TRAINER_GRANT("USER_003", "Cannot assign TRAINER role", HttpStatus.BAD_REQUEST),
 
   USER_WITHDRAWN("USER_004", "User account is withdrawn", HttpStatus.CONFLICT),
+
+  ACCOUNT_NOT_DELETED(
+      "USER_005",
+      "Account is not in a deleted state and cannot be reactivated",
+      HttpStatus.CONFLICT // 409
+      ),
 
   // ========================================
   // Level Errors (LEVEL_xxx)
@@ -177,6 +183,10 @@ public enum ErrorCode {
   SPONSOR_AMOUNT_LIMIT_EXCEEDED(
       "WEB3_010", "Sponsor amount limit exceeded", HttpStatus.BAD_REQUEST),
   IDEMPOTENCY_CONFLICT("WEB3_011", "Idempotency conflict", HttpStatus.CONFLICT),
+  WEB3_CONFIG_INVALID("WEB3_012", "Invalid web3 configuration", HttpStatus.INTERNAL_SERVER_ERROR),
+  EXECUTION_INTENT_EXPIRED("WEB3_013", "Execution intent expired", HttpStatus.CONFLICT),
+  NONCE_STALE_RECREATE_REQUIRED(
+      "WEB3_014", "Nonce stale; recreate execution intent", HttpStatus.CONFLICT),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
@@ -249,6 +259,10 @@ public enum ErrorCode {
   DATABASE_ERROR(
       "INTERNAL_003", "Database operation failed", HttpStatus.INTERNAL_SERVER_ERROR // 500
       ),
+
+  DATA_INTEGRITY_VIOLATION(
+      "INTERNAL_004", "A data conflict occurred. Please try again.", HttpStatus.CONFLICT // 409
+      ),
   // ========================================
   // Post Errors (POST_xxx)
   // ========================================
@@ -263,6 +277,12 @@ public enum ErrorCode {
   INVALID_POST_INPUT(
       "POST_003", "Invalid post input", HttpStatus.BAD_REQUEST // 400
       ),
+  ONLY_POST_WRITER_CAN_ACCEPT(
+      "POST_004", "Only the post writer can accept an answer", HttpStatus.FORBIDDEN),
+  ANSWER_NOT_BELONG_TO_POST(
+      "POST_005", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST),
+  POST_ALREADY_SOLVED("POST_006", "Post is already solved", HttpStatus.CONFLICT),
+  INVALID_POST_TYPE("POST_007", "Invalid post type for this operation", HttpStatus.BAD_REQUEST),
   // ========================================
   // Comment Errors (COMMENT_xxx)
   // ========================================
@@ -292,7 +312,91 @@ public enum ErrorCode {
       "COMMENT_007",
       "Invalid comment hard-delete configuration",
       HttpStatus.INTERNAL_SERVER_ERROR // 500
-      );
+      ),
+  // ========================================
+  // Answer Errors (ANSWER_xxx)
+  // ========================================
+  ANSWER_NOT_FOUND(
+      "ANSWER_001", "Answer not found", HttpStatus.NOT_FOUND // 404
+      ),
+
+  ANSWER_UNAUTHORIZED(
+      "ANSWER_002", "Unauthorized access to answer", HttpStatus.FORBIDDEN // 403
+      ),
+
+  CANNOT_ANSWER_OWN_POST(
+      "ANSWER_003", "Cannot write an answer on your own post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  CANNOT_ANSWER_SOLVED_POST(
+      "ANSWER_004", "Cannot write an answer on a solved post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  ANSWER_POST_MISMATCH(
+      "ANSWER_007", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST // 400
+      ),
+
+  REQUIRE_USER_LOGIN(
+      "ANSWER_008", "User login is required", HttpStatus.UNAUTHORIZED // 401
+      ),
+  CANNOT_UPDATE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_009", "Cannot update an answer on a solved post", HttpStatus.BAD_REQUEST),
+  CANNOT_DELETE_ANSWER_ON_SOLVED_POST(
+      "ANSWER_010", "Cannot delete an answer on a solved post", HttpStatus.BAD_REQUEST),
+  // ========================================
+  // Image Errors (IMAGE_xxx)
+  // ========================================
+  IMAGE_NOT_FOUND("IMAGE_001", "Image not found", HttpStatus.NOT_FOUND),
+  IMAGE_STATUS_INVALID("IMAGE_002", "Image status transition is not allowed", HttpStatus.CONFLICT),
+  IMAGE_LAMBDA_UNAUTHORIZED("IMAGE_003", "Invalid lambda webhook secret", HttpStatus.UNAUTHORIZED),
+  IMAGE_COUNT_EXCEEDED(
+      "IMAGE_004", "Image count exceeds the allowed limit", HttpStatus.BAD_REQUEST),
+  IMAGE_INVALID_EXTENSION("IMAGE_005", "Unsupported image file extension", HttpStatus.BAD_REQUEST),
+  IMAGE_REF_TYPE_INVALID("IMAGE_006", "Image ref type invalid", HttpStatus.BAD_REQUEST),
+  IMAGE_FILE_NAME_INVALID("IMAGE_007", "Image file name invalid", HttpStatus.BAD_REQUEST),
+  IMAGE_VIRTUAL_REF_TYPE_CANNOT_BUILD_OBJECT_KEY(
+      "IMAGE_008", "Virtual ref type cannot build object key", HttpStatus.INTERNAL_SERVER_ERROR),
+  IMAGE_ILLEGAL_OWNERSHIP("IMAGE_009", "Image does not belong to the user", HttpStatus.FORBIDDEN),
+  // ========================================
+  // Marketplace Errors (MARKETPLACE_xxx)
+  // ========================================
+  MARKETPLACE_STORE_NOT_FOUND(
+      "MARKETPLACE_001", "Marketplace store not found", HttpStatus.NOT_FOUND),
+
+  // ========================================
+  // Verification Errors (VERIFICATION_xxx)
+  // ========================================
+  VERIFICATION_INVALID_TMP_OBJECT_KEY(
+      "VERIFICATION_001", "Invalid tmp object key", HttpStatus.BAD_REQUEST),
+  VERIFICATION_INVALID_IMAGE_EXTENSION(
+      "VERIFICATION_002", "Invalid image extension for verification", HttpStatus.BAD_REQUEST),
+  VERIFICATION_UPLOAD_NOT_FOUND("VERIFICATION_003", "Upload not found", HttpStatus.NOT_FOUND),
+  VERIFICATION_UPLOAD_FORBIDDEN(
+      "VERIFICATION_004", "Upload does not belong to user", HttpStatus.FORBIDDEN),
+  VERIFICATION_KIND_MISMATCH(
+      "VERIFICATION_005", "Verification kind does not match existing request", HttpStatus.CONFLICT),
+  VERIFICATION_ALREADY_COMPLETED_TODAY(
+      "VERIFICATION_006", "Workout already completed today", HttpStatus.CONFLICT),
+  VERIFICATION_NOT_FOUND("VERIFICATION_007", "Verification not found", HttpStatus.NOT_FOUND),
+
+  // ========================================
+  // Admin Errors (ADMIN_xxx)
+  // ========================================
+  SELF_RESET_FORBIDDEN(
+      "ADMIN_001", "Cannot reset own password via peer-reset", HttpStatus.FORBIDDEN),
+  ADMIN_NOT_FOUND("ADMIN_002", "Admin account not found", HttpStatus.NOT_FOUND),
+  ADMIN_CREDENTIAL_GEN_FAILED(
+      "ADMIN_003", "Failed to generate admin credentials", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEAK_ADMIN_PASSWORD(
+      "ADMIN_004", "Admin password does not meet policy requirements", HttpStatus.BAD_REQUEST),
+  SEED_ADMIN_DELETE_FORBIDDEN("ADMIN_005", "Cannot delete seed admin account", HttpStatus.CONFLICT),
+  RECOVERY_REJECTED("ADMIN_006", "Recovery anchor mismatch", HttpStatus.FORBIDDEN),
+  RECOVERY_ANCHOR_UNAVAILABLE(
+      "ADMIN_007", "Recovery anchor service unavailable", HttpStatus.SERVICE_UNAVAILABLE),
+  RECOVERY_DELIVERY_FAILED(
+      "ADMIN_008", "Failed to deliver recovery credentials", HttpStatus.INTERNAL_SERVER_ERROR),
+  RATE_LIMITED("ADMIN_009", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
+  ;
 
   private final String code;
   private final String message;

@@ -1,132 +1,85 @@
 package momzzangseven.mztkbe.modules.user.domain.model;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.user.IllegalAdminGrantException;
 import momzzangseven.mztkbe.global.error.user.InvalidUserRoleException;
-import momzzangseven.mztkbe.modules.auth.domain.model.AuthProvider;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 /** Domain model representing an application user. */
-@Slf4j
 @Getter
 @Builder(toBuilder = true)
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class User {
-  private Long id;
-  private String email;
-
-  /**
-   * BCrypt-encoded password (only for LOCAL auth).
-   *
-   * <p>Format: $2a$10$... (60 characters).
-   */
-  private String password;
-
-  private String nickname;
-  private String profileImageUrl;
-
-  /**
-   * Provider-specific user ID. - KAKAO: Kakao user ID (String) - GOOGLE: Google user ID (String) -
-   * LOCAL: null.
-   */
-  private String providerUserId;
-
-  /**
-   * Encrypted Google OAuth refresh token (only for GOOGLE users).
-   *
-   * <p>Used for revoke/unlink flows (e.g., withdrawal).
-   */
-  private String googleRefreshToken;
-
-  /** Connected Web3 wallet address. */
-  private String walletAddress;
-
-  private AuthProvider authProvider;
-  private UserRole role;
-  private UserStatus status;
-  private LocalDateTime lastLoginAt;
-  private LocalDateTime deletedAt;
-  private LocalDateTime createdAt;
-  private LocalDateTime updatedAt;
+  private final Long id;
+  private final String email;
+  private final String nickname;
+  private final String profileImageUrl;
+  private final UserRole role;
+  private final Instant createdAt;
+  private final Instant updatedAt;
 
   // ============================================
   // Factory Methods (Creator Pattern)
   // ============================================
 
   /**
-   * Create a LOCAL user (email/password authentication).
+   * Create a user with profile data. Used by the account module during signup — authentication
+   * fields are managed separately in {@code users_account}.
    *
    * @param email User's email address
-   * @param encodedPassword BCrypt-encoded password
    * @param nickname User's display name
+   * @param profileImageUrl Profile image URL (nullable)
+   * @param role User's role
    * @return New User instance
    * @throws IllegalArgumentException if validation fails
    */
-  public static User createFromLocal(String email, String encodedPassword, String nickname) {
+  public static User create(String email, String nickname, String profileImageUrl, UserRole role) {
     validateEmail(email);
-    validateEncodedPassword(encodedPassword);
     validateNickname(nickname);
 
-    LocalDateTime now = LocalDateTime.now();
+    // General user cannot grant themselves any admin role.
+    if (role.isAdmin()) {
+      throw new IllegalAdminGrantException();
+    }
 
+    Instant now = Instant.now();
     return User.builder()
         .email(email)
-        .password(encodedPassword)
         .nickname(nickname)
-        .authProvider(AuthProvider.LOCAL)
-        .role(UserRole.USER)
-        .status(UserStatus.ACTIVE)
-        .deletedAt(null)
+        .profileImageUrl(profileImageUrl)
+        .role(role)
         .createdAt(now)
         .updatedAt(now)
         .build();
   }
 
-  /** Create a new user from Kakao OAuth data. */
-  public static User createFromKakao(
-      String kakaoId, String email, String nickname, String profileImageUrl) {
-    // Business Rule: Kakao ID is required
-    if (kakaoId == null) {
-      throw new IllegalArgumentException("Kakao ID is required");
+  /**
+   * Create an admin user. Only ADMIN_SEED or ADMIN_GENERATED roles are accepted. The plain ADMIN
+   * role cannot be directly assigned — it exists only as a logical parent in the role hierarchy.
+   *
+   * @param email synthetic email address
+   * @param nickname admin display name
+   * @param adminRole must be ADMIN_SEED or ADMIN_GENERATED
+   * @return new admin User instance
+   * @throws IllegalArgumentException if adminRole is not ADMIN_SEED or ADMIN_GENERATED
+   */
+  public static User createAdmin(String email, String nickname, UserRole adminRole) {
+    validateEmail(email);
+    validateNickname(nickname);
+
+    if (adminRole != UserRole.ADMIN_SEED && adminRole != UserRole.ADMIN_GENERATED) {
+      throw new IllegalArgumentException("This role is not allowed for admin creation");
     }
 
-    LocalDateTime now = LocalDateTime.now();
-    return User.builder()
-        .providerUserId(kakaoId)
-        .email(email)
-        .nickname(nickname)
-        .profileImageUrl(profileImageUrl)
-        .authProvider(AuthProvider.KAKAO)
-        .role(UserRole.USER)
-        .status(UserStatus.ACTIVE)
-        .deletedAt(null)
-        .lastLoginAt(now)
-        .createdAt(now)
-        .updatedAt(now)
-        .build();
-  }
-
-  /** Create a user from Google OAuth. */
-  public static User createFromGoogle(
-      String googleId, String email, String nickname, String profileImageUrl) {
-    if (googleId == null || googleId.isBlank()) {
-      throw new IllegalArgumentException("Google ID is required");
-    }
-
-    LocalDateTime now = LocalDateTime.now();
-
+    Instant now = Instant.now();
     return User.builder()
         .email(email)
         .nickname(nickname)
-        .profileImageUrl(profileImageUrl)
-        .authProvider(AuthProvider.GOOGLE)
-        .providerUserId(googleId)
-        .role(UserRole.USER)
-        .status(UserStatus.ACTIVE)
-        .deletedAt(null)
-        .lastLoginAt(now)
+        .profileImageUrl(null)
+        .role(adminRole)
         .createdAt(now)
         .updatedAt(now)
         .build();
@@ -137,54 +90,6 @@ public class User {
   // ============================================
 
   /**
-   * Validate password for LOCAL authentication.
-   *
-   * @param rawPassword Plain text password from login request
-   * @param encoder BCrypt password encoder
-   * @return true if password matches, false otherwise
-   * @throws IllegalStateException if called on non-LOCAL user
-   */
-  public boolean validatePassword(String rawPassword, PasswordEncoder encoder) {
-    // Business Rule 1: Only LOCAL users can validate passwords
-    if (!AuthProvider.LOCAL.equals(this.authProvider)) {
-      log.error(
-          "Password validation attempted on non-LOCAL user: authProvider={}", this.authProvider);
-      throw new IllegalStateException(
-          "Password validation is only allowed for LOCAL users. "
-              + "This user uses: "
-              + this.authProvider);
-    }
-
-    // Business Rule 2: Password field must exist
-    if (this.password == null || this.password.isBlank()) {
-      log.warn("User {} has no password set", this.id);
-      return false;
-    }
-
-    // Business Rule 3: Input password must not be empty
-    if (rawPassword == null || rawPassword.isBlank()) {
-      log.debug("Empty password provided for validation");
-      return false;
-    }
-
-    // Validate using BCrypt (constant-time comparison)
-    try {
-      boolean matches = encoder.matches(rawPassword, this.password);
-
-      if (matches) {
-        log.debug("Password validation successful for user: {}", this.id);
-      } else {
-        log.warn("Password validation failed for user: {}", this.id);
-      }
-
-      return matches;
-    } catch (Exception e) {
-      log.error("Error during password validation for user: {}", this.id, e);
-      return false;
-    }
-  }
-
-  /**
    * Update user profile.
    *
    * @param newNickname New nickname
@@ -192,12 +97,12 @@ public class User {
    * @return Updated User instance
    */
   public User updateProfile(String newNickname, String newProfileImageUrl) {
-    validateNickname(nickname);
+    validateNickname(newNickname);
 
     return this.toBuilder()
         .nickname(newNickname)
         .profileImageUrl(newProfileImageUrl)
-        .updatedAt(LocalDateTime.now())
+        .updatedAt(Instant.now())
         .build();
   }
 
@@ -216,69 +121,25 @@ public class User {
       throw new InvalidUserRoleException("New role is same as current role");
     }
 
-    // Business rule: Cannot change to ADMIN (only system can do this)
-    if (newRole == UserRole.ADMIN) {
+    // Business rule: Cannot change to any admin role through this path
+    if (newRole.isAdmin()) {
       throw new IllegalAdminGrantException();
     }
 
-    return this.toBuilder().role(newRole).updatedAt(LocalDateTime.now()).build();
+    return this.toBuilder().role(newRole).updatedAt(Instant.now()).build();
+  }
+
+  /** Check if user is admin (ADMIN, ADMIN_SEED, or ADMIN_GENERATED). */
+  public boolean isAdmin() {
+    return this.role.isAdmin();
   }
 
   /**
-   * Update password (LOCAL users only).
-   *
-   * @param newEncodedPassword New BCrypt-encoded password
-   * @throws IllegalStateException if called on non-LOCAL user
+   * Check if user can change role to TRAINER. Add business rules here (e.g., email verification,
+   * minimum age, etc.)
    */
-  public void updatePassword(String newEncodedPassword) {
-    if (!AuthProvider.LOCAL.equals(this.authProvider)) {
-      throw new IllegalStateException("Password update is only allowed for LOCAL users");
-    }
-    validateEncodedPassword(newEncodedPassword);
-    this.password = newEncodedPassword;
-    this.updatedAt = LocalDateTime.now();
-  }
-
-  /** Update last login timestamp. */
-  public void updateLastLogin() {
-    this.lastLoginAt = LocalDateTime.now();
-    this.updatedAt = LocalDateTime.now();
-    log.debug("Updated last login time for user: {}", this.id);
-  }
-
-  /** Soft-delete (withdraw) this user. */
-  public User withdraw() {
-    LocalDateTime now = LocalDateTime.now();
-    return this.toBuilder().status(UserStatus.DELETED).deletedAt(now).updatedAt(now).build();
-  }
-
-  /** Reactivate a soft-deleted user. */
-  public User reactivate() {
-    LocalDateTime now = LocalDateTime.now();
-    return this.toBuilder()
-        .status(UserStatus.ACTIVE)
-        .deletedAt(null)
-        .lastLoginAt(now)
-        .updatedAt(now)
-        .build();
-  }
-
-  /** Save encrypted Google OAuth refresh token. */
-  public User updateGoogleRefreshToken(String encryptedRefreshToken) {
-    if (!AuthProvider.GOOGLE.equals(this.authProvider)) {
-      throw new IllegalStateException("Google refresh token can only be saved for GOOGLE users");
-    }
-    if (encryptedRefreshToken == null || encryptedRefreshToken.isBlank()) {
-      throw new IllegalArgumentException("encryptedRefreshToken is required");
-    }
-
-    LocalDateTime now = LocalDateTime.now();
-    return this.toBuilder().googleRefreshToken(encryptedRefreshToken).updatedAt(now).build();
-  }
-
-  /** Check if user is admin. */
-  public boolean isAdmin() {
-    return UserRole.ADMIN.equals(this.role);
+  public boolean canBecomeTrainer() {
+    return this.email != null;
   }
 
   // ============================================
@@ -298,22 +159,6 @@ public class User {
     }
   }
 
-  /**
-   * Validate encoded password format.
-   *
-   * <p>BCrypt format: $2a$10$... (60 characters total)
-   */
-  private static void validateEncodedPassword(String encodedPassword) {
-    if (encodedPassword == null || encodedPassword.isBlank()) {
-      throw new IllegalArgumentException("Password is required");
-    }
-
-    // BCrypt format check
-    if (!encodedPassword.matches("^\\$2[ayb]\\$.{56}$")) {
-      throw new IllegalArgumentException("Password must be BCrypt encoded format");
-    }
-  }
-
   /** Validate nickname. */
   private static void validateNickname(String nickname) {
     if (nickname == null || nickname.isBlank()) {
@@ -323,16 +168,5 @@ public class User {
     if (nickname.length() < 2 || nickname.length() > 50) {
       throw new IllegalArgumentException("Nickname must be between 2 and 50 characters");
     }
-  }
-
-  /**
-   * Check if user can change role to TRAINER. Add business rules here (e.g., email verification,
-   * minimum age, etc.)
-   */
-  public boolean canBecomeTrainer() {
-    // Business rules for becoming a trainer
-    // Example: Must have verified email, etc. We can add additional business rule to become a
-    // trainer here.
-    return this.email != null;
   }
 }

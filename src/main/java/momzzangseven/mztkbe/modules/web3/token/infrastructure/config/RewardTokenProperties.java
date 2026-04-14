@@ -1,8 +1,10 @@
 package momzzangseven.mztkbe.modules.web3.token.infrastructure.config;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
@@ -18,29 +20,31 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "web3.reward-token")
 public class RewardTokenProperties {
 
-  private boolean enabled = true;
+  @NotNull private Boolean enabled;
 
   @NotBlank private String tokenContractAddress;
 
+  @NotNull
   @Min(0)
-  private int decimals = 18;
+  private Integer decimals;
 
-  private Treasury treasury = new Treasury();
-  private Prevalidate prevalidate = new Prevalidate();
-  private Gas gas = new Gas();
-  private Worker worker = new Worker();
+  @Valid private Treasury treasury = new Treasury();
+  @Valid private Prevalidate prevalidate = new Prevalidate();
+  @Valid private Gas gas = new Gas();
+  @Valid private Worker worker = new Worker();
 
   @Getter
   @Setter
   public static class Treasury {
-    private String keyEncryptionKeyB64;
-    private String treasuryAddress;
-    private Provisioning provisioning = new Provisioning();
+    @NotBlank private String walletAlias;
+    @NotBlank private String keyEncryptionKeyB64;
+    @NotBlank private String treasuryAddress;
+    @Valid private Provisioning provisioning = new Provisioning();
 
     @Getter
     @Setter
     public static class Provisioning {
-      private boolean enabled;
+      @NotNull private Boolean enabled;
     }
   }
 
@@ -48,42 +52,44 @@ public class RewardTokenProperties {
   @Setter
   public static class Prevalidate {
 
+    @NotNull
     @DecimalMin("0")
-    private BigDecimal ethWarningThreshold = BigDecimal.ZERO;
+    private BigDecimal ethWarningThreshold;
 
+    @NotNull
     @DecimalMin("0")
-    private BigDecimal ethCriticalThreshold = BigDecimal.ZERO;
+    private BigDecimal ethCriticalThreshold;
   }
 
   @Getter
   @Setter
   public static class Worker {
     @Min(1)
-    private int claimTtlSeconds = 120;
+    private int claimTtlSeconds;
 
     @Min(1)
-    private int receiptTimeoutSeconds = 900;
+    private int receiptTimeoutSeconds;
 
     @Min(1)
-    private int receiptPollMinSeconds = 1;
+    private int receiptPollMinSeconds;
 
     @Min(1)
-    private int receiptPollMaxSeconds = 5;
+    private int receiptPollMaxSeconds;
 
     @Min(1)
-    private int retryBackoffSeconds = 60;
+    private int retryBackoffSeconds;
   }
 
   @Getter
   @Setter
   public static class Gas {
     @Min(21_000)
-    private long defaultGasLimit = 120_000L;
+    private long defaultGasLimit;
 
     @Min(1)
-    private long defaultMaxPriorityFeePerGasWei = 1_000_000_000L;
+    private long defaultMaxPriorityFeePerGasWei;
 
     @Min(1)
-    private int maxFeeMultiplier = 2;
+    private int maxFeeMultiplier;
   }
 }

@@ -1,0 +1,359 @@
+package momzzangseven.mztkbe.integration.e2e.user;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import java.util.Map;
+import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
+import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.account.application.service.WithdrawalHardDeleteService;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+/**
+ * User E2E 테스트 (Local Server + Real PostgreSQL).
+ *
+ * <p>테스트 시나리오:
+ *
+ * <ul>
+ *   <li>역할 수정 (USER → TRAINER)
+ *   <li>잘못된 역할 값으로 수정 시 400 반환
+ *   <li>인증 없이 접근 시 401 반환
+ *   <li>Step-Up 인증 후 회원 탈퇴 전체 흐름
+ *   <li>Step-Up 토큰 없이 탈퇴 시도 → 403 반환
+ *   <li>탈퇴(soft delete) 후 연결된 location.deleted_at 설정 확인
+ *   <li>Hard delete 실행 후 soft-deleted location 레코드 완전 삭제 확인
+ * </ul>
+ */
+@DisplayName("[E2E] User 전체 흐름 테스트")
+class UserE2ETest extends E2ETestBase {
+
+  private static final String TEST_PASSWORD = "Test@1234!";
+
+  @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private WithdrawalHardDeleteService withdrawalHardDeleteService;
+
+  @MockitoBean private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+
+  private String baseUrl;
+  private String accessToken;
+
+  // ============================================================
+  // Helper Methods
+  // ============================================================
+
+  private static String uniqueEmail() {
+    return "e2e-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10) + "@example.com";
+  }
+
+  private HttpHeaders authHeaders() {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.setBearerAuth(accessToken);
+    return headers;
+  }
+
+  private HttpHeaders bearerHeaders(String token) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    headers.setBearerAuth(token);
+    return headers;
+  }
+
+  private void signup(String email, String password, String nickname) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
+    restTemplate.exchange(
+        baseUrl + "/auth/signup", HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
+  }
+
+  private String loginAndGetAccessToken(String email, String password) throws Exception {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    Map<String, Object> body = Map.of("provider", "LOCAL", "email", email, "password", password);
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/auth/login",
+            HttpMethod.POST,
+            new HttpEntity<>(body, headers),
+            String.class);
+    return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
+  }
+
+  /**
+   * 회원가입 후 signup 응답에서 userId 를 추출합니다.
+   *
+   * <p>Hard delete 후 cascade 검증에서 특정 userId 기준으로 DB 를 조회할 때 사용합니다.
+   */
+  private Long signupAndGetUserId(String email, String password, String nickname) throws Exception {
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/auth/signup",
+            HttpMethod.POST,
+            new HttpEntity<>(body, headers),
+            String.class);
+    return objectMapper.readTree(response.getBody()).at("/data/userId").asLong();
+  }
+
+  /**
+   * 테스트용 위치를 등록하고 locationId 를 반환합니다.
+   *
+   * <p>location cascade 검증의 사전 조건으로 사용합니다.
+   */
+  private Long registerTestLocation(String token) throws Exception {
+    Map<String, Object> body =
+        Map.of(
+            "locationName", "테스트 위치",
+            "postalCode", "12345",
+            "address", "서울특별시 강남구 테헤란로 1",
+            "detailAddress", "1층",
+            "latitude", 37.5012,
+            "longitude", 127.0396);
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/users/me/locations/register",
+            HttpMethod.POST,
+            new HttpEntity<>(body, bearerHeaders(token)),
+            String.class);
+    assertThat(response.getStatusCode().is2xxSuccessful())
+        .as("위치 등록 성공 (2xx) 이어야 함: " + response.getBody())
+        .isTrue();
+    return objectMapper.readTree(response.getBody()).at("/data/locationId").asLong();
+  }
+
+  /**
+   * Step-Up 인증을 수행하고 Step-Up Access Token을 반환합니다.
+   *
+   * <p>회원 탈퇴와 같은 민감한 작업에 필요한 {@code ROLE_STEP_UP} 토큰을 발급합니다.
+   */
+  private String performStepUpAndGetToken(String password) throws Exception {
+    Map<String, Object> body = Map.of("password", password);
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/auth/stepup",
+            HttpMethod.POST,
+            new HttpEntity<>(body, authHeaders()),
+            String.class);
+    assertThat(response.getStatusCode().is2xxSuccessful())
+        .as("Step-Up 인증 성공 (2xx) 이어야 함: " + response.getBody())
+        .isTrue();
+    return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
+  }
+
+  // ============================================================
+  // Setup
+  // ============================================================
+
+  @BeforeEach
+  void setUp() throws Exception {
+    baseUrl = "http://localhost:" + port;
+    String email = uniqueEmail();
+    signup(email, TEST_PASSWORD, "유저E2E테스터");
+    accessToken = loginAndGetAccessToken(email, TEST_PASSWORD);
+  }
+
+  // ============================================================
+  // E2E Tests — Role Update
+  // ============================================================
+
+  @Test
+  @DisplayName("역할 변경 (USER → TRAINER) → 200 및 변경된 role 반환")
+  void updateRole_userToTrainer_returns200WithNewRole() throws Exception {
+    Map<String, String> body = Map.of("role", "TRAINER");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/users/me/role",
+            HttpMethod.PATCH,
+            new HttpEntity<>(body, authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(root.at("/data/role").asText()).isEqualTo("TRAINER");
+    assertThat(root.at("/data/id").asLong()).isPositive();
+  }
+
+  @Test
+  @DisplayName("현재와 같은 역할로 변경 → 400 검증")
+  void updateRole_withSameRole_returns400() {
+    Map<String, String> body = Map.of("role", "USER");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/users/me/role",
+            HttpMethod.PATCH,
+            new HttpEntity<>(body, authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  @DisplayName("잘못된 역할 값으로 변경 시 400 반환")
+  void updateRole_withInvalidRole_returns400() {
+    Map<String, String> body = Map.of("role", "SUPER_ADMIN");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/users/me/role",
+            HttpMethod.PATCH,
+            new HttpEntity<>(body, authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  @DisplayName("role 없이 요청 시 400 반환")
+  void updateRole_withNullRole_returns400() {
+    Map<String, Object> body = Map.of();
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/users/me/role",
+            HttpMethod.PATCH,
+            new HttpEntity<>(body, authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  @DisplayName("인증 없이 역할 변경 시 401 반환")
+  void updateRole_withoutAuth_returns401() {
+    HttpHeaders noAuthHeaders = new HttpHeaders();
+    noAuthHeaders.setContentType(MediaType.APPLICATION_JSON);
+    Map<String, String> body = Map.of("role", "TRAINER");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/users/me/role",
+            HttpMethod.PATCH,
+            new HttpEntity<>(body, noAuthHeaders),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+  }
+
+  // ============================================================
+  // E2E Tests — Withdrawal
+  // ============================================================
+
+  @Test
+  @DisplayName("일반 Access Token으로 탈퇴 시도 → 403 반환 (ROLE_STEP_UP 필요)")
+  void withdrawal_withNormalToken_returns403() {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/auth/withdrawal",
+            HttpMethod.POST,
+            new HttpEntity<>(authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+  }
+
+  @Test
+  @DisplayName("Step-Up 인증 후 회원 탈퇴 전체 흐름 → 200 반환")
+  void withdrawal_afterStepUp_returns200() throws Exception {
+    String stepUpToken = performStepUpAndGetToken(TEST_PASSWORD);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/auth/withdrawal",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerHeaders(stepUpToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode root = objectMapper.readTree(response.getBody());
+    assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
+  }
+
+  // ============================================================
+  // E2E Tests — Location Cascade (Withdrawal)
+  //
+  // LocationUserSoftDeleteEventHandler: 탈퇴 이벤트 수신 → location.deleted_at 설정
+  // LocationUserHardDeleteEventHandler: hard delete 이벤트 수신 → location 물리 삭제
+  //
+  // WithdrawalHardDeleteService.runBatch()를 Spring Bean 으로 직접 호출하여
+  // 스케줄러(@Scheduled) 없이 hard delete cascade 를 검증합니다.
+  // ============================================================
+
+  @Test
+  @DisplayName("탈퇴(soft delete) 후 연결된 location.deleted_at 이 설정되어야 한다")
+  void withdrawal_softDelete_setsLocationDeletedAt() throws Exception {
+    Long locationId = registerTestLocation(accessToken);
+
+    String stepUpToken = performStepUpAndGetToken(TEST_PASSWORD);
+    ResponseEntity<String> withdrawRes =
+        restTemplate.exchange(
+            baseUrl + "/auth/withdrawal",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerHeaders(stepUpToken)),
+            String.class);
+    assertThat(withdrawRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM locations WHERE id = ? AND deleted_at IS NOT NULL",
+            Integer.class,
+            locationId);
+    assertThat(count).as("탈퇴 후 location.deleted_at 이 설정되어야 한다").isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("Hard delete 실행 후 soft-deleted location 레코드가 완전 삭제되어야 한다")
+  void withdrawal_hardDelete_physicallyCleansUpLocations() throws Exception {
+    String email = uniqueEmail();
+    Long userId = signupAndGetUserId(email, TEST_PASSWORD, "하드삭제위치테스터");
+    accessToken = loginAndGetAccessToken(email, TEST_PASSWORD);
+
+    Long locationId = registerTestLocation(accessToken);
+
+    String stepUpToken = performStepUpAndGetToken(TEST_PASSWORD);
+    ResponseEntity<String> withdrawRes =
+        restTemplate.exchange(
+            baseUrl + "/auth/withdrawal",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerHeaders(stepUpToken)),
+            String.class);
+    assertThat(withdrawRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+    Integer softDeletedCount =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM locations WHERE id = ? AND deleted_at IS NOT NULL",
+            Integer.class,
+            locationId);
+    assertThat(softDeletedCount).as("탈퇴 후 location 이 soft-deleted 상태여야 한다").isEqualTo(1);
+
+    // cutoff = now+999-retentionDays 가 미래가 되어 방금 soft-delete 된 사용자를 즉시 배치 대상에 포함시킵니다.
+    withdrawalHardDeleteService.runBatch(
+        java.time.Instant.now().plus(java.time.Duration.ofDays(999)));
+
+    Integer remaining =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM locations WHERE user_id = ?", Integer.class, userId);
+    assertThat(remaining).as("hard delete 후 user_locations 레코드가 완전히 삭제되어야 한다").isEqualTo(0);
+  }
+}

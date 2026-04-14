@@ -9,7 +9,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.math.BigInteger;
@@ -28,10 +27,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 @Table(
     name = "web3_transactions",
     uniqueConstraints = {
-      @UniqueConstraint(name = "uk_web3_tx_idempotency", columnNames = "idempotency_key"),
-      @UniqueConstraint(
-          name = "uk_web3_tx_reference",
-          columnNames = {"reference_type", "reference_id"})
+      @UniqueConstraint(name = "uk_web3_tx_idempotency", columnNames = "idempotency_key")
     },
     indexes = {
       @Index(name = "idx_web3_tx_status", columnList = "status"),
@@ -129,23 +125,11 @@ public class Web3TransactionEntity {
 
   @PrePersist
   void onCreate() {
-    LocalDateTime now = LocalDateTime.now();
-    if (createdAt == null) {
-      createdAt = now;
-    }
-    if (updatedAt == null) {
-      updatedAt = now;
-    }
     if (status == null) {
       status = Web3TxStatus.CREATED;
     }
     if (txType == null) {
       txType = Web3TxType.EIP1559;
     }
-  }
-
-  @PreUpdate
-  void onUpdate() {
-    updatedAt = LocalDateTime.now();
   }
 }

@@ -6,27 +6,45 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.audit.application.AdminAuditDetailNormalizer;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.AuditLogSerializer;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.core.DefaultParameterNameDiscoverer;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.AnnotationUtils;
+import org.springframework.core.annotation.Order;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+/**
+ * Validates the admin role and records an admin action audit row around any {@code @AdminOnly}
+ * method.
+ *
+ * <p>Pinned to {@link Ordered#HIGHEST_PRECEDENCE} so this aspect always runs outside Spring's
+ * transaction interceptor. That way the audit recording in the {@code finally} block executes after
+ * the surrounding transaction has fully committed (or rolled back), and the audit adapter's {@code
+ * REQUIRES_NEW} propagation is not the only thing keeping audit writes independent of the caller's
+ * transaction.
+ */
 @Aspect
 @Component
 @Slf4j
 @RequiredArgsConstructor
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class AdminOnlyAspect {
 
   private static final ExpressionParser SPEL = new SpelExpressionParser();
@@ -34,29 +52,57 @@ public class AdminOnlyAspect {
       new DefaultParameterNameDiscoverer();
 
   private final RecordAdminAuditPort recordAdminAuditPort;
-  private final AuditLogSerializer auditLogSerializer;
+  private final RoleHierarchy roleHierarchy;
 
-  @Around("@annotation(adminOnly)")
-  public Object around(ProceedingJoinPoint joinPoint, AdminOnly adminOnly) throws Throwable {
+  /**
+   * Matches every method annotated with {@link AdminOnly}. Centralising the FQN here means a future
+   * package move only requires updating this single string.
+   *
+   * <p>We intentionally avoid the {@code @annotation(adminOnly)} parameter-binding form: combined
+   * with {@link Order @Order(HIGHEST_PRECEDENCE)}, Spring AOP can fail to propagate the {@code
+   * JoinPointMatch} attribute through the surrounding interceptor chain, surfacing as {@code
+   * IllegalStateException: Required to bind 2 arguments, but only bound 1 (JoinPointMatch was NOT
+   * bound in invocation)}. Resolving the annotation manually inside the advice side-steps that
+   * binding entirely while preserving the desired aspect ordering.
+   */
+  @Pointcut("execution(@momzzangseven.mztkbe.global.security.aspect.AdminOnly * *(..))")
+  public void adminOnlyMethods() {}
+
+  @Around("adminOnlyMethods()")
+  public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
     MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-    Method method = signature.getMethod();
+    Method targetMethod = resolveTargetMethod(signature, joinPoint.getTarget());
+    AdminOnly adminOnly = AnnotationUtils.findAnnotation(targetMethod, AdminOnly.class);
+    if (adminOnly == null) {
+      // The pointcut guarantees @AdminOnly is present on the target method. Reaching here means
+      // the annotation was renamed/moved and the pointcut FQN above is now stale — fail loudly so
+      // the admin guard is never silently bypassed.
+      throw new IllegalStateException(
+          "@AdminOnly annotation could not be resolved on " + targetMethod);
+    }
+
     Object[] args = joinPoint.getArgs();
-    StandardEvaluationContext context = evaluationContext(method, args, null, null);
+    StandardEvaluationContext context = evaluationContext(targetMethod, args, null, null);
 
     Long operatorId = evalLong(adminOnly.operatorId(), context);
     validateAdmin(operatorId);
 
     Object result = null;
-    RuntimeException runtimeException = null;
+    Exception caught = null;
     try {
       result = joinPoint.proceed();
       return result;
-    } catch (RuntimeException e) {
-      runtimeException = e;
+    } catch (Exception e) {
+      caught = e;
       throw e;
     } finally {
-      recordAdminAudit(adminOnly, method, args, operatorId, result, runtimeException);
+      recordAdminAudit(adminOnly, targetMethod, args, operatorId, result, caught);
     }
+  }
+
+  private static Method resolveTargetMethod(MethodSignature signature, Object target) {
+    Method method = signature.getMethod();
+    return target != null ? AopUtils.getMostSpecificMethod(method, target.getClass()) : method;
   }
 
   private void recordAdminAudit(
@@ -65,20 +111,20 @@ public class AdminOnlyAspect {
       Object[] args,
       Long operatorId,
       Object result,
-      RuntimeException runtimeException) {
+      Exception caught) {
     try {
-      StandardEvaluationContext context = evaluationContext(method, args, result, runtimeException);
+      StandardEvaluationContext context = evaluationContext(method, args, result, caught);
       String targetId = evalString(adminOnly.targetId(), context);
-      boolean success = runtimeException == null;
-      String failureReason = success ? null : runtimeException.getClass().getSimpleName();
+      boolean success = caught == null;
+      String failureReason = success ? null : caught.getClass().getSimpleName();
 
+      // operatorId, success, actionType, targetType and targetId are persisted as dedicated
+      // columns on admin_action_audits — keep them out of detail_json so the row has a single
+      // source of truth for those fields.
       Map<String, Object> rawDetail = new LinkedHashMap<>();
       rawDetail.put("method", method.getDeclaringClass().getSimpleName() + "." + method.getName());
-      rawDetail.put("operatorId", operatorId);
-      rawDetail.put("success", success);
       rawDetail.put("failureReason", failureReason);
       rawDetail.put("arguments", sanitizeArguments(method, args));
-      rawDetail.put("targetId", targetId);
 
       recordAdminAuditPort.record(
           new RecordAdminAuditPort.AuditCommand(
@@ -87,7 +133,7 @@ public class AdminOnlyAspect {
               adminOnly.targetType(),
               targetId,
               success,
-              auditLogSerializer.normalize(rawDetail)));
+              AdminAuditDetailNormalizer.normalize(rawDetail)));
     } catch (Exception auditException) {
       log.warn(
           "Failed to record admin audit via aspect: action={}, operatorId={}",
@@ -104,19 +150,20 @@ public class AdminOnlyAspect {
 
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
     if (authentication == null) {
-      return;
+      throw new UserNotAuthenticatedException();
     }
 
     boolean isAdmin =
-        authentication.getAuthorities().stream()
-            .anyMatch(grantedAuthority -> "ROLE_ADMIN".equals(grantedAuthority.getAuthority()));
+        roleHierarchy.getReachableGrantedAuthorities(authentication.getAuthorities()).stream()
+            .map(GrantedAuthority::getAuthority)
+            .anyMatch("ROLE_ADMIN"::equals);
     if (!isAdmin) {
       throw new BusinessException(ErrorCode.UNAUTHORIZED_ACCESS);
     }
   }
 
   private StandardEvaluationContext evaluationContext(
-      Method method, Object[] args, Object result, RuntimeException runtimeException) {
+      Method method, Object[] args, Object result, Exception caught) {
     StandardEvaluationContext context = new StandardEvaluationContext();
     String[] parameterNames = PARAM_DISCOVERER.getParameterNames(method);
     if (parameterNames != null) {
@@ -128,7 +175,7 @@ public class AdminOnlyAspect {
       context.setVariable("p" + i, args[i]);
     }
     context.setVariable("result", result);
-    context.setVariable("error", runtimeException);
+    context.setVariable("error", caught);
     return context;
   }
 

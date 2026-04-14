@@ -1,0 +1,22 @@
+package momzzangseven.mztkbe.modules.image.infrastructure.config;
+
+import lombok.Getter;
+import lombok.Setter;
+import momzzangseven.mztkbe.modules.image.application.port.out.LoadPendingImageCleanupPolicyPort;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * Configuration properties for the PENDING image record cleanup job.
+ *
+ * <p>Bound from the {@code image.pending-cleanup} prefix in application.yml.
+ */
+@Getter
+@Setter
+@ConfigurationProperties(prefix = "image.pending-cleanup")
+public class ImagePendingCleanupProperties implements LoadPendingImageCleanupPolicyPort {
+  /** Number of hours after which a PENDING image is considered orphaned. Defaults to 5 hours. */
+  private int retentionHours = 5;
+
+  /** Maximum number of records deleted per batch iteration. Defaults to 100. */
+  private int batchSize = 100;
+}

@@ -1,25 +1,32 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
+import java.util.HashSet;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 
-public record UpdatePostCommand(String title, String content, List<String> imageUrls) {
+public record UpdatePostCommand(
+    String title, String content, List<Long> imageIds, List<String> tags) {
 
   public void validate() {
     if (title != null && title.isBlank()) {
-      throw new PostInvalidInputException("수정할 제목은 비워둘 수 없습니다.");
+      throw new PostInvalidInputException("Title cannot be blank.");
     }
 
     if (content != null && content.isBlank()) {
-      throw new PostInvalidInputException("수정할 내용은 비워둘 수 없습니다.");
+      throw new PostInvalidInputException("Content cannot be blank.");
     }
 
-    if (title == null && content == null && imageUrls == null) {
-      throw new PostInvalidInputException("수정할 값이 없습니다.");
+    if (imageIds != null && new HashSet<>(imageIds).size() != imageIds.size()) {
+      throw new PostInvalidInputException("Duplicate image IDs are not allowed");
+    }
+
+    if (title == null && content == null && imageIds == null && tags == null) {
+      throw new PostInvalidInputException("At least one field must be provided for update.");
     }
   }
 
-  public static UpdatePostCommand of(String title, String content, List<String> imageUrls) {
-    return new UpdatePostCommand(title, content, imageUrls);
+  public static UpdatePostCommand of(
+      String title, String content, List<Long> imageIds, List<String> tags) {
+    return new UpdatePostCommand(title, content, imageIds, tags);
   }
 }

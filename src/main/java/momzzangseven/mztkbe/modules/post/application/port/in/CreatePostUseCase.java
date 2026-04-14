@@ -5,5 +5,5 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 
 public interface CreatePostUseCase {
 
-  CreatePostResult createPost(CreatePostCommand command);
+  CreatePostResult execute(CreatePostCommand command);
 }
