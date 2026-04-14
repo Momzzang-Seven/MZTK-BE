@@ -5,8 +5,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import org.junit.jupiter.api.DisplayName;

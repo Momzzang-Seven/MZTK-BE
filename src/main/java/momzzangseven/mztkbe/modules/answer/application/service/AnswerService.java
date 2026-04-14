@@ -20,8 +20,8 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.CountAnswersUseCa
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
