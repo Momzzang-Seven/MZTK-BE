@@ -3,11 +3,10 @@ package momzzangseven.mztkbe.integration.e2e.image;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.application.dto.LambdaCallbackCommand;
@@ -16,23 +15,16 @@ import momzzangseven.mztkbe.modules.image.domain.vo.LambdaCallbackStatus;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
@@ -56,18 +48,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>[TC-POST-005] 소유자 아닌 사용자의 게시글 삭제 시 예외 + 이미지 unlink 없음
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("[E2E] 게시글 이미지 연동 전체 흐름 (Local Server + Real PostgreSQL)")
-class PostImageIntegrationE2ETest {
+class PostImageIntegrationE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private ImageJpaRepository imageJpaRepository;
-  @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private HandleLambdaCallbackUseCase handleLambdaCallbackUseCase;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -76,10 +60,6 @@ class PostImageIntegrationE2ETest {
 
   private String baseUrl;
   private String accessToken;
-  private String currentUserEmail;
-
-  private final List<String> createdTmpKeys = new ArrayList<>();
-  private final List<Long> createdPostIds = new ArrayList<>();
 
   // ===================================================================
   // 헬퍼 메서드
@@ -134,7 +114,6 @@ class PostImageIntegrationE2ETest {
     JsonNode item = objectMapper.readTree(response.getBody()).at("/data/items/0");
     String tmpKey = item.at("/tmpObjectKey").asText();
     long imageId = item.at("/imageId").asLong();
-    createdTmpKeys.add(tmpKey);
     return new IssuedImage(imageId, tmpKey);
   }
 
@@ -155,9 +134,7 @@ class PostImageIntegrationE2ETest {
             new HttpEntity<>(body, authHeaders()),
             String.class);
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    long postId = objectMapper.readTree(response.getBody()).at("/data/postId").asLong();
-    createdPostIds.add(postId);
-    return postId;
+    return objectMapper.readTree(response.getBody()).at("/data/postId").asLong();
   }
 
   /** 게시글의 이미지를 imageIds로 업데이트. */
@@ -196,33 +173,15 @@ class PostImageIntegrationE2ETest {
   }
 
   // ===================================================================
-  // Setup / Teardown
+  // Setup
   // ===================================================================
 
   @BeforeEach
   void setUp() throws Exception {
     baseUrl = "http://localhost:" + port;
-    currentUserEmail = uniqueEmail();
-    signup(currentUserEmail, "Test@1234!", "게시글이미지E2E");
-    accessToken = loginAndGetToken(currentUserEmail, "Test@1234!");
-  }
-
-  @AfterEach
-  void cleanup() {
-    // 이미지 삭제
-    createdTmpKeys.forEach(
-        key -> imageJpaRepository.findByTmpObjectKey(key).ifPresent(imageJpaRepository::delete));
-    createdTmpKeys.clear();
-
-    // 게시글 삭제 (테스트 도중 삭제된 게시글은 없어도 안전하게 처리)
-    createdPostIds.forEach(postId -> jdbcTemplate.update("DELETE FROM posts WHERE id = ?", postId));
-    createdPostIds.clear();
-
-    // 유저 삭제
-    jdbcTemplate.update(
-        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        currentUserEmail);
-    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
+    String email = uniqueEmail();
+    signup(email, "Test@1234!", "게시글이미지E2E");
+    accessToken = loginAndGetToken(email, "Test@1234!");
   }
 
   // ===================================================================
@@ -315,7 +274,6 @@ class PostImageIntegrationE2ETest {
     // 실행: 게시글 삭제 → PostDeletedEvent(AFTER_COMMIT) → UnlinkImagesByReferenceService
     ResponseEntity<String> deleteResp = deletePost(postId);
     assertThat(deleteResp.getStatusCode().is2xxSuccessful()).isTrue();
-    createdPostIds.remove(postId); // 이미 삭제됨
 
     // 검증: AFTER_COMMIT 이벤트 처리 후 이미지 unlink
     // referenceType·status는 재사용 허용을 위해 보존되고, referenceId만 null로 변환된다.
@@ -354,12 +312,6 @@ class PostImageIntegrationE2ETest {
 
     // 검증: 이미지 상태 변경 없음 (여전히 게시글에 연결)
     assertThat(findImageOrFail(img.tmpObjectKey()).getReferenceId()).isEqualTo(postId);
-
-    // 정리: 다른 유저 삭제
-    jdbcTemplate.update(
-        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        otherEmail);
-    jdbcTemplate.update("DELETE FROM users WHERE email = ?", otherEmail);
   }
 
   @Test
@@ -371,7 +323,6 @@ class PostImageIntegrationE2ETest {
     // 실행: 이미지 없는 게시글 삭제
     ResponseEntity<String> response = deletePost(postId);
     assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
-    createdPostIds.remove(postId);
   }
 
   @Test
