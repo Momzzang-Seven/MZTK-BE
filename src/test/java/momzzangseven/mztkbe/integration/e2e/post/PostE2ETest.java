@@ -3,57 +3,34 @@ package momzzangseven.mztkbe.integration.e2e.post;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * Post CRUD E2E 테스트 (Local Server + Real PostgreSQL).
  *
- * <p>실행 조건:
- *
- * <ul>
- *   <li>로컬 PostgreSQL 서버 실행 필요 (docker compose up -d)
- *   <li>./gradlew e2eTest 명령어로 실행
- * </ul>
- *
- * <p>데이터 격리 전략:
- *
- * <ul>
- *   <li>{@code @BeforeEach}: 테스트마다 UUID 기반 고유 이메일로 신규 유저 생성 → 데이터 충돌 방지
- *   <li>{@code @AfterEach}: JdbcTemplate 으로 생성된 post_tags → posts 순서로 삭제 (FK 고려)
- *   <li>유저 데이터는 XP·출석 등 연관 레코드 FK 충돌 가능성이 있으므로 삭제하지 않음 (고유 이메일로 격리)
- * </ul>
+ * <p>데이터 격리는 {@link E2ETestBase}가 제공하는 {@code DatabaseCleaner}가 매 테스트 후 public schema를 truncate 하여
+ * 자동으로 수행한다. 별도의 {@code @AfterEach} 정리 로직을 선언하지 말 것.
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+@TestPropertySource(
     properties = {
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
@@ -61,16 +38,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.reward-token.enabled=false"
     })
 @DisplayName("[E2E] Post CRUD 전체 흐름 테스트")
-class PostE2ETest {
+class PostE2ETest extends E2ETestBase {
 
-  // ============================================================
-  // 인프라 주입
-  // ============================================================
-
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -78,155 +47,53 @@ class PostE2ETest {
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
   @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
-  // ============================================================
-  // 테스트 상태 (인스턴스별 독립)
-  // ============================================================
-
-  private String baseUrl;
   private String accessToken;
-  private final List<Long> createdPostIds = new ArrayList<>();
-  private List<Long> imageIds = new ArrayList<>();
-
-  // ============================================================
-  // Setup / Teardown
-  // ============================================================
+  private final List<Long> imageIds = new ArrayList<>();
 
   @BeforeEach
-  void setUp() throws Exception {
-    baseUrl = "http://localhost:" + port;
-    createdPostIds.clear();
-
-    String email = uniqueEmail();
-    signupUser(email, "Test@1234!", "E2E유저");
-    accessToken = loginAndGetToken(email, "Test@1234!");
-  }
-
-  /**
-   * 테스트에서 생성한 게시글을 DB에서 직접 삭제한다.
-   *
-   * <p>삭제 순서: post_tags(FK 선행) → posts. RANDOM_PORT 환경에서는 {@code @Transactional} 롤백이 동작하지 않으므로
-   * JdbcTemplate 으로 명시적 클린업한다.
-   */
-  @AfterEach
-  void tearDown() {
-    for (Long postId : createdPostIds) {
-      try {
-        jdbcTemplate.update(
-            "DELETE FROM post_like WHERE target_type = 'POST' AND target_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("UPDATE posts SET accepted_answer_id = NULL WHERE id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM answers WHERE post_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM post_tags WHERE post_id = ?", postId);
-      } catch (Exception ignored) {
-        // post_tags 가 없거나 cascade 로 이미 삭제된 경우 무시
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM posts WHERE id = ?", postId);
-      } catch (Exception ignored) {
-        // 이미 삭제된 게시글(삭제 시나리오 테스트) 무시
-      }
-    }
-    createdPostIds.clear();
+  void setUp() {
+    accessToken = signupAndLogin("E2E유저").accessToken();
   }
 
   // ============================================================
   // 공통 Helper
   // ============================================================
 
-  private static String uniqueEmail() {
-    return "e2e-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12) + "@test.com";
-  }
-
-  private HttpHeaders authHeaders() {
-    HttpHeaders h = new HttpHeaders();
-    h.setContentType(MediaType.APPLICATION_JSON);
-    h.setBearerAuth(accessToken);
-    return h;
-  }
-
-  private HttpHeaders headersWithToken(String token) {
-    HttpHeaders h = new HttpHeaders();
-    h.setContentType(MediaType.APPLICATION_JSON);
-    h.setBearerAuth(token);
-    return h;
-  }
-
-  private HttpHeaders noAuthHeaders() {
-    HttpHeaders h = new HttpHeaders();
-    h.setContentType(MediaType.APPLICATION_JSON);
-    return h;
-  }
-
-  private void signupUser(String email, String password, String nickname) {
-    Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
-    restTemplate.exchange(
-        baseUrl + "/auth/signup",
-        HttpMethod.POST,
-        new HttpEntity<>(body, noAuthHeaders()),
-        String.class);
-  }
-
-  private String loginAndGetToken(String email, String password) throws Exception {
-    Map<String, Object> body = Map.of("provider", "LOCAL", "email", email, "password", password);
-    ResponseEntity<String> res =
-        restTemplate.exchange(
-            baseUrl + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(body, noAuthHeaders()),
-            String.class);
-    assertThat(res.getStatusCode().is2xxSuccessful())
-        .as("Login should succeed for email: " + email)
-        .isTrue();
-    return objectMapper.readTree(res.getBody()).at("/data/accessToken").asText();
-  }
-
   private Long createFreePost(String content) throws Exception {
     Map<String, Object> body = Map.of("content", content, "imageIds", imageIds);
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/free",
+            baseUrl() + "/posts/free",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(res.getStatusCode())
         .as("Free post creation should return 201")
         .isEqualTo(HttpStatus.CREATED);
-    Long postId = objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
-    createdPostIds.add(postId);
-    return postId;
+    return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
   }
 
   private Long createQuestionPost(String title, String content, long reward) throws Exception {
     Map<String, Object> body = Map.of("title", title, "content", content, "reward", reward);
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/question",
+            baseUrl() + "/posts/question",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
     assertThat(res.getStatusCode())
         .as("Question post creation should return 201")
         .isEqualTo(HttpStatus.CREATED);
-    Long postId = objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
-    createdPostIds.add(postId);
-    return postId;
+    return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
   }
 
   private Long createAnswer(Long postId, String token, String content) throws Exception {
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/questions/" + postId + "/answers",
+            baseUrl() + "/questions/" + postId + "/answers",
             HttpMethod.POST,
             new HttpEntity<>(
-                Map.of("content", content, "imageIds", List.of()), headersWithToken(token)),
+                Map.of("content", content, "imageIds", List.of()), bearerJsonHeaders(token)),
             String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     return objectMapper.readTree(res.getBody()).at("/data/answerId").asLong();
@@ -234,17 +101,17 @@ class PostE2ETest {
 
   private ResponseEntity<String> likePost(Long postId) {
     return restTemplate.exchange(
-        baseUrl + "/posts/" + postId + "/likes",
+        baseUrl() + "/posts/" + postId + "/likes",
         HttpMethod.POST,
-        new HttpEntity<>(authHeaders()),
+        new HttpEntity<>(bearerJsonHeaders(accessToken)),
         String.class);
   }
 
   private ResponseEntity<String> unlikePost(Long postId) {
     return restTemplate.exchange(
-        baseUrl + "/posts/" + postId + "/likes",
+        baseUrl() + "/posts/" + postId + "/likes",
         HttpMethod.DELETE,
-        new HttpEntity<>(authHeaders()),
+        new HttpEntity<>(bearerJsonHeaders(accessToken)),
         String.class);
   }
 
@@ -254,9 +121,9 @@ class PostE2ETest {
 
     ResponseEntity<String> response =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+            baseUrl() + "/posts/" + postId + "/answers/" + answerId + "/accept",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode())
@@ -313,18 +180,16 @@ class PostE2ETest {
     // when
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/free",
+            baseUrl() + "/posts/free",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
 
     // then
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     JsonNode root = parse(res);
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
-    long postId = root.at("/data/postId").asLong();
-    assertThat(postId).isPositive();
-    createdPostIds.add(postId);
+    assertThat(root.at("/data/postId").asLong()).isPositive();
   }
 
   @Test
@@ -337,9 +202,9 @@ class PostE2ETest {
     Map<String, Object> updateBody = Map.of("content", "수정 후 내용 E2E", "imageIds", imageIds);
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.PATCH,
-            new HttpEntity<>(updateBody, authHeaders()),
+            new HttpEntity<>(updateBody, bearerJsonHeaders(accessToken)),
             String.class);
 
     // then - HTTP 응답
@@ -355,14 +220,14 @@ class PostE2ETest {
 
   @Test
   @DisplayName("자유 게시글 작성 시 duplicate imageIds → 400 BAD_REQUEST")
-  void createFreePost_duplicateImageIds_returns400() throws Exception {
+  void createFreePost_duplicateImageIds_returns400() {
     Map<String, Object> body = Map.of("content", "중복 이미지", "imageIds", List.of(1, 1));
 
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/free",
+            baseUrl() + "/posts/free",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -376,9 +241,9 @@ class PostE2ETest {
 
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.PATCH,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -393,9 +258,9 @@ class PostE2ETest {
     // when
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.DELETE,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     // then - HTTP 응답
@@ -426,9 +291,9 @@ class PostE2ETest {
 
     ResponseEntity<String> getRes =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(getRes.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -473,9 +338,9 @@ class PostE2ETest {
 
     ResponseEntity<String> deleteRes =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.DELETE,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(deleteRes.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -493,9 +358,9 @@ class PostE2ETest {
     // when
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     // then
@@ -516,9 +381,9 @@ class PostE2ETest {
     // when
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts?type=FREE",
+            baseUrl() + "/posts?type=FREE",
             HttpMethod.GET,
-            new HttpEntity<>(authHeaders()),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     // then
@@ -536,17 +401,15 @@ class PostE2ETest {
     Long postId = createFreePost("원본 게시글 (타인 수정 시도)");
 
     // given: 다른 유저 생성 및 로그인
-    String otherEmail = uniqueEmail();
-    signupUser(otherEmail, "Test@1234!", "타인유저");
-    String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
+    String otherToken = signupAndLogin("타인유저").accessToken();
 
     // when: 다른 유저로 수정 시도
     Map<String, Object> updateBody = Map.of("content", "타인이 수정한 내용");
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.PATCH,
-            new HttpEntity<>(updateBody, headersWithToken(otherToken)),
+            new HttpEntity<>(updateBody, bearerJsonHeaders(otherToken)),
             String.class);
 
     // then
@@ -565,16 +428,14 @@ class PostE2ETest {
     Long postId = createFreePost("원본 게시글 (타인 삭제 시도)");
 
     // given: 다른 유저 생성 및 로그인
-    String otherEmail = uniqueEmail();
-    signupUser(otherEmail, "Test@1234!", "삭제시도유저");
-    String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
+    String otherToken = signupAndLogin("삭제시도유저").accessToken();
 
     // when: 다른 유저로 삭제 시도
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/" + postId,
+            baseUrl() + "/posts/" + postId,
             HttpMethod.DELETE,
-            new HttpEntity<>(headersWithToken(otherToken)),
+            new HttpEntity<>(bearerJsonHeaders(otherToken)),
             String.class);
 
     // then
@@ -595,9 +456,9 @@ class PostE2ETest {
     // when
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/free",
+            baseUrl() + "/posts/free",
             HttpMethod.POST,
-            new HttpEntity<>(body, authHeaders()),
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
             String.class);
 
     // then
@@ -614,9 +475,9 @@ class PostE2ETest {
     // when
     ResponseEntity<String> res =
         restTemplate.exchange(
-            baseUrl + "/posts/free",
+            baseUrl() + "/posts/free",
             HttpMethod.POST,
-            new HttpEntity<>(body, noAuthHeaders()),
+            new HttpEntity<>(body, jsonOnlyHeaders()),
             String.class);
 
     // then: Spring Security 필터에서 차단 → RestAuthenticationEntryPoint
@@ -663,16 +524,16 @@ class PostE2ETest {
 
     @Test
     @DisplayName("reward = 0 → 400 BAD_REQUEST")
-    void createQuestion_rewardIsZero_returns400_badRequest() throws Exception {
+    void createQuestion_rewardIsZero_returns400_badRequest() {
       // given: reward=0 은 request validation/API command/domain 어느 경로에서도 허용되지 않음
       Map<String, Object> body = Map.of("title", "질문 제목", "content", "질문 내용", "reward", 0);
 
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/question",
+              baseUrl() + "/posts/question",
               HttpMethod.POST,
-              new HttpEntity<>(body, authHeaders()),
+              new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
               String.class);
 
       // then
@@ -681,16 +542,16 @@ class PostE2ETest {
 
     @Test
     @DisplayName("reward = -5 → 400 (VALIDATION_001 or POST_003)")
-    void createQuestion_rewardIsNegative_returns400() throws Exception {
+    void createQuestion_rewardIsNegative_returns400() {
       // given: @Positive Bean Validation 또는 커맨드 검증에서 차단
       Map<String, Object> body = Map.of("title", "질문 제목", "content", "질문 내용", "reward", -5);
 
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/question",
+              baseUrl() + "/posts/question",
               HttpMethod.POST,
-              new HttpEntity<>(body, authHeaders()),
+              new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
               String.class);
 
       // then
@@ -706,9 +567,9 @@ class PostE2ETest {
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/question",
+              baseUrl() + "/posts/question",
               HttpMethod.POST,
-              new HttpEntity<>(body, authHeaders()),
+              new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
               String.class);
 
       // then
@@ -725,9 +586,9 @@ class PostE2ETest {
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/question",
+              baseUrl() + "/posts/question",
               HttpMethod.POST,
-              new HttpEntity<>(body, authHeaders()),
+              new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
               String.class);
 
       // then
@@ -744,9 +605,9 @@ class PostE2ETest {
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/question",
+              baseUrl() + "/posts/question",
               HttpMethod.POST,
-              new HttpEntity<>(body, authHeaders()),
+              new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
               String.class);
 
       // then
@@ -763,9 +624,9 @@ class PostE2ETest {
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/question",
+              baseUrl() + "/posts/question",
               HttpMethod.POST,
-              new HttpEntity<>(body, noAuthHeaders()),
+              new HttpEntity<>(body, jsonOnlyHeaders()),
               String.class);
 
       // then: RestAuthenticationEntryPoint → USER_NOT_AUTHENTICATED
@@ -792,9 +653,9 @@ class PostE2ETest {
       Map<String, Object> updateBody = Map.of("content", "수정된 질문 내용 (E2E 검증)");
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId,
+              baseUrl() + "/posts/" + postId,
               HttpMethod.PATCH,
-              new HttpEntity<>(updateBody, authHeaders()),
+              new HttpEntity<>(updateBody, bearerJsonHeaders(accessToken)),
               String.class);
 
       // then - HTTP 응답
@@ -817,17 +678,15 @@ class PostE2ETest {
       Long postId = createQuestionPost("타인수정테스트 질문", "질문 내용", 20L);
 
       // given: 다른 유저
-      String otherEmail = uniqueEmail();
-      signupUser(otherEmail, "Test@1234!", "타인유저");
-      String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
+      String otherToken = signupAndLogin("타인유저").accessToken();
 
       // when
       Map<String, Object> updateBody = Map.of("content", "무단 수정 시도");
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId,
+              baseUrl() + "/posts/" + postId,
               HttpMethod.PATCH,
-              new HttpEntity<>(updateBody, headersWithToken(otherToken)),
+              new HttpEntity<>(updateBody, bearerJsonHeaders(otherToken)),
               String.class);
 
       // then
@@ -844,18 +703,16 @@ class PostE2ETest {
     void updateQuestion_whenSolved_returns400_withPost003() throws Exception {
       // given: 질문 게시글 생성 후 실제 accept 흐름으로 RESOLVED 상태를 만든다.
       Long postId = createQuestionPost("해결됨 수정불가 질문", "질문 내용", 100L);
-      String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "답변유저");
-      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+      String answererToken = signupAndLogin("답변유저").accessToken();
       resolveQuestionPost(postId, answererToken, "채택될 답변");
 
       // when: 소유자가 수정 시도 (RESOLVED 이므로 도메인에서 거부)
       Map<String, Object> updateBody = Map.of("content", "해결된 게시글 수정 시도");
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId,
+              baseUrl() + "/posts/" + postId,
               HttpMethod.PATCH,
-              new HttpEntity<>(updateBody, authHeaders()),
+              new HttpEntity<>(updateBody, bearerJsonHeaders(accessToken)),
               String.class);
 
       // then: Post.update() 내 status 기반 도메인 불변식 → PostInvalidInputException → POST_003
@@ -885,9 +742,9 @@ class PostE2ETest {
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId,
+              baseUrl() + "/posts/" + postId,
               HttpMethod.DELETE,
-              new HttpEntity<>(authHeaders()),
+              new HttpEntity<>(bearerJsonHeaders(accessToken)),
               String.class);
 
       // then - HTTP 응답
@@ -907,16 +764,14 @@ class PostE2ETest {
       Long postId = createQuestionPost("타인삭제테스트 질문", "질문 내용", 15L);
 
       // given: 다른 유저
-      String otherEmail = uniqueEmail();
-      signupUser(otherEmail, "Test@1234!", "삭제시도유저");
-      String otherToken = loginAndGetToken(otherEmail, "Test@1234!");
+      String otherToken = signupAndLogin("삭제시도유저").accessToken();
 
       // when
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId,
+              baseUrl() + "/posts/" + postId,
               HttpMethod.DELETE,
-              new HttpEntity<>(headersWithToken(otherToken)),
+              new HttpEntity<>(bearerJsonHeaders(otherToken)),
               String.class);
 
       // then
@@ -933,17 +788,15 @@ class PostE2ETest {
     void deleteQuestion_whenSolved_returns400_withPost003() throws Exception {
       // given: 질문 게시글 생성 후 실제 accept 흐름으로 RESOLVED 상태를 만든다.
       Long postId = createQuestionPost("해결됨 삭제불가 질문", "질문 내용", 80L);
-      String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "삭제불가답변유저");
-      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+      String answererToken = signupAndLogin("삭제불가답변유저").accessToken();
       resolveQuestionPost(postId, answererToken, "채택될 답변");
 
       // when: 소유자가 삭제 시도
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId,
+              baseUrl() + "/posts/" + postId,
               HttpMethod.DELETE,
-              new HttpEntity<>(authHeaders()),
+              new HttpEntity<>(bearerJsonHeaders(accessToken)),
               String.class);
 
       // then: Post.validateDeletable() 내 status 기반 도메인 불변식 → POST_003
@@ -963,18 +816,16 @@ class PostE2ETest {
     @Test
     @DisplayName("accepting an answer updates post state and answer accepted state")
     void acceptAnswer_byWriter_updatesPostState() throws Exception {
-      String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
-      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+      String answererToken = signupAndLogin("answerer").accessToken();
 
       Long postId = createQuestionPost("accept title", "accept content", 30L);
       Long answerId = createAnswer(postId, answererToken, "accepted candidate");
 
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+              baseUrl() + "/posts/" + postId + "/answers/" + answerId + "/accept",
               HttpMethod.POST,
-              new HttpEntity<>(authHeaders()),
+              new HttpEntity<>(bearerJsonHeaders(accessToken)),
               String.class);
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -995,26 +846,24 @@ class PostE2ETest {
     @Test
     @DisplayName("answer on a solved question cannot be deleted through answer API")
     void acceptAnswer_blocksAcceptedAnswerDeletion() throws Exception {
-      String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
-      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+      String answererToken = signupAndLogin("answerer").accessToken();
 
       Long postId = createQuestionPost("delete lock title", "delete lock content", 30L);
       Long answerId = createAnswer(postId, answererToken, "accepted candidate");
 
       ResponseEntity<String> acceptRes =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+              baseUrl() + "/posts/" + postId + "/answers/" + answerId + "/accept",
               HttpMethod.POST,
-              new HttpEntity<>(authHeaders()),
+              new HttpEntity<>(bearerJsonHeaders(accessToken)),
               String.class);
       assertThat(acceptRes.getStatusCode()).isEqualTo(HttpStatus.OK);
 
       ResponseEntity<String> deleteRes =
           restTemplate.exchange(
-              baseUrl + "/questions/" + postId + "/answers/" + answerId,
+              baseUrl() + "/questions/" + postId + "/answers/" + answerId,
               HttpMethod.DELETE,
-              new HttpEntity<>(headersWithToken(answererToken)),
+              new HttpEntity<>(bearerJsonHeaders(answererToken)),
               String.class);
 
       assertThat(deleteRes.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -1024,22 +873,17 @@ class PostE2ETest {
     @Test
     @DisplayName("accepting by non writer returns 403")
     void acceptAnswer_byOtherUser_returns403() throws Exception {
-      String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
-      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
-
-      String intruderEmail = uniqueEmail();
-      signupUser(intruderEmail, "Test@1234!", "intruder");
-      String intruderToken = loginAndGetToken(intruderEmail, "Test@1234!");
+      String answererToken = signupAndLogin("answerer").accessToken();
+      String intruderToken = signupAndLogin("intruder").accessToken();
 
       Long postId = createQuestionPost("auth title", "auth content", 30L);
       Long answerId = createAnswer(postId, answererToken, "candidate");
 
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + postId + "/answers/" + answerId + "/accept",
+              baseUrl() + "/posts/" + postId + "/answers/" + answerId + "/accept",
               HttpMethod.POST,
-              new HttpEntity<>(headersWithToken(intruderToken)),
+              new HttpEntity<>(bearerJsonHeaders(intruderToken)),
               String.class);
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -1049,9 +893,7 @@ class PostE2ETest {
     @Test
     @DisplayName("accepting an answer from another post returns 400")
     void acceptAnswer_withForeignAnswer_returns400() throws Exception {
-      String answererEmail = uniqueEmail();
-      signupUser(answererEmail, "Test@1234!", "answerer");
-      String answererToken = loginAndGetToken(answererEmail, "Test@1234!");
+      String answererToken = signupAndLogin("answerer").accessToken();
 
       Long targetPostId = createQuestionPost("target title", "target content", 30L);
       Long otherPostId = createQuestionPost("other title", "other content", 30L);
@@ -1059,9 +901,9 @@ class PostE2ETest {
 
       ResponseEntity<String> res =
           restTemplate.exchange(
-              baseUrl + "/posts/" + targetPostId + "/answers/" + foreignAnswerId + "/accept",
+              baseUrl() + "/posts/" + targetPostId + "/answers/" + foreignAnswerId + "/accept",
               HttpMethod.POST,
-              new HttpEntity<>(authHeaders()),
+              new HttpEntity<>(bearerJsonHeaders(accessToken)),
               String.class);
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);

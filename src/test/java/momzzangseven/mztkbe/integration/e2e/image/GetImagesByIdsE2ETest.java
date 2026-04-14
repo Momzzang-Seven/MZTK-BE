@@ -3,26 +3,20 @@ package momzzangseven.mztkbe.integration.e2e.image;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -30,51 +24,36 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
- * GetImagesByIds E2E 테스트 (Local Server + Real PostgreSQL).
+ * GetImagesByIds E2E test (Local Server + Real PostgreSQL).
  *
- * <p>실행 조건:
- *
- * <ul>
- *   <li>로컬 PostgreSQL 서버 실행 필요 (application-integration.yml 참조)
- *   <li>./gradlew e2eTest 명령어로 실행
- * </ul>
- *
- * <p>테스트 시나리오 [E-1 ~ E-14]:
+ * <p>Scenarios [E-1 ~ E-17]:
  *
  * <ul>
- *   <li>[E-1] 미인증 요청 → 401
- *   <li>[E-2] ids 파라미터 누락 → 400 VALIDATION_002
- *   <li>[E-3] referenceType 파라미터 누락 → 400 VALIDATION_002
- *   <li>[E-4] referenceId 파라미터 누락 → 400 VALIDATION_002
- *   <li>[E-5] 알 수 없는 referenceType enum 값 → 400 VALIDATION_001
- *   <li>[E-6] internal-only referenceType(MARKET_STORE_THUMB) → 400 IMAGE_006
- *   <li>[E-7] 단일 COMPLETED 이미지 정상 조회 → 200 + 응답 구조 검증
- *   <li>[E-8] 복수 이미지(COMPLETED+PENDING) → 200 + finalObjectKey null 여부
- *   <li>[E-9] 존재하지 않는 ID soft-miss → 200 + images=[]
- *   <li>[E-10] 다른 사용자 이미지 조회 → 403 IMAGE_009
- *   <li>[E-11] 다른 referenceId 이미지 조회 → 403 IMAGE_009
- *   <li>[E-12] ids 개수 초과(11개) → 400 IMAGE_004
- *   <li>[E-13] MARKET_STORE virtual type, concrete subtype 이미지 정상 조회 → 200
- *   <li>[E-14] 읽기 전용 트랜잭션 — updated_at 변경 없음 검증
- *   <li>[E-15] imgOrder 역순 저장 — 응답은 imgOrder 오름차순 정렬 보장
- *   <li>[E-16] MARKET_STORE: 응답 referenceType은 MARKET_STORE (내부 THUMB/DETAIL 노출 없음)
- *   <li>[E-17] MARKET_CLASS: 응답 referenceType은 MARKET_CLASS (내부 THUMB/DETAIL 노출 없음)
+ *   <li>[E-1] Unauthenticated request → 401
+ *   <li>[E-2] Missing ids param → 400 VALIDATION_002
+ *   <li>[E-3] Missing referenceType param → 400 VALIDATION_002
+ *   <li>[E-4] Missing referenceId param → 400 VALIDATION_002
+ *   <li>[E-5] Unknown referenceType enum → 400 VALIDATION_001
+ *   <li>[E-6] Internal-only referenceType (MARKET_STORE_THUMB) → 400 IMAGE_006
+ *   <li>[E-7] Single COMPLETED image → 200 + response shape verification
+ *   <li>[E-8] Multiple images (COMPLETED + PENDING) → 200 + finalObjectKey null check
+ *   <li>[E-9] Non-existent id soft-miss → 200 + images=[]
+ *   <li>[E-10] Image owned by another user → 403 IMAGE_009
+ *   <li>[E-11] Mismatched referenceId → 403 IMAGE_009
+ *   <li>[E-12] ids count exceeds limit (11) → 400 IMAGE_004
+ *   <li>[E-13] MARKET_STORE virtual type w/ concrete subtype images → 200
+ *   <li>[E-14] Read-only transaction — updated_at not modified
+ *   <li>[E-15] imgOrder stored out-of-order — response sorted ascending
+ *   <li>[E-16] MARKET_STORE: response referenceType is MARKET_STORE (no THUMB/DETAIL leak)
+ *   <li>[E-17] MARKET_CLASS: response referenceType is MARKET_CLASS (no THUMB/DETAIL leak)
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("[E2E] GetImagesByIds 전체 흐름 테스트 (Local Server + Real PostgreSQL)")
-class GetImagesByIdsE2ETest {
+class GetImagesByIdsE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private ImageJpaRepository imageJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
 
@@ -84,14 +63,7 @@ class GetImagesByIdsE2ETest {
 
   private String baseUrl;
   private String accessToken;
-  private String currentUserEmail;
   private Long currentUserId;
-
-  /** 테스트 중 생성된 image id 추적 — @AfterEach 에서 DB 정리 */
-  private final List<Long> createdImageIds = new ArrayList<>();
-
-  /** 테스트 중 생성된 추가 사용자 email 추적 — @AfterEach 에서 DB 정리 */
-  private final List<String> additionalUserEmails = new ArrayList<>();
 
   // ============================================================
   // Helper Methods
@@ -101,13 +73,6 @@ class GetImagesByIdsE2ETest {
     return "e2e-gbi-"
         + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
         + "@test.com";
-  }
-
-  private HttpHeaders authHeaders() {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
-    return headers;
   }
 
   private void signup(String email, String password, String nickname) {
@@ -136,7 +101,6 @@ class GetImagesByIdsE2ETest {
     return jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
   }
 
-  /** Test image 를 DB 에 직접 저장한다. createdImageIds 에 등록하여 @AfterEach 에서 정리한다. */
   private Long saveImage(
       Long userId,
       String referenceType,
@@ -155,9 +119,7 @@ class GetImagesByIdsE2ETest {
             .finalObjectKey(finalObjectKey)
             .imgOrder(imgOrder)
             .build();
-    ImageEntity saved = imageJpaRepository.save(image);
-    createdImageIds.add(saved.getId());
-    return saved.getId();
+    return imageJpaRepository.save(image).getId();
   }
 
   private ResponseEntity<String> getImages(
@@ -178,39 +140,16 @@ class GetImagesByIdsE2ETest {
   }
 
   // ============================================================
-  // Setup / Teardown
+  // Setup
   // ============================================================
 
   @BeforeEach
   void setUp() throws Exception {
     baseUrl = "http://localhost:" + port;
-    currentUserEmail = uniqueEmail();
-    signup(currentUserEmail, "Test@1234!", "이미지조회E2E유저");
-    accessToken = loginAndGetAccessToken(currentUserEmail, "Test@1234!");
-    currentUserId = getUserIdByEmail(currentUserEmail);
-  }
-
-  @AfterEach
-  void cleanup() {
-    // 1. 테스트 중 생성된 images 행 삭제
-    createdImageIds.forEach(imageJpaRepository::deleteById);
-    createdImageIds.clear();
-
-    // 2. 추가 사용자 정리
-    additionalUserEmails.forEach(
-        email -> {
-          jdbcTemplate.update(
-              "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-              email);
-          jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
-        });
-    additionalUserEmails.clear();
-
-    // 3. 현재 테스트 유저 정리
-    jdbcTemplate.update(
-        "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-        currentUserEmail);
-    jdbcTemplate.update("DELETE FROM users WHERE email = ?", currentUserEmail);
+    String email = uniqueEmail();
+    signup(email, "Test@1234!", "이미지조회E2E유저");
+    accessToken = loginAndGetAccessToken(email, "Test@1234!");
+    currentUserId = getUserIdByEmail(email);
   }
 
   // ============================================================
@@ -361,13 +300,11 @@ class GetImagesByIdsE2ETest {
     JsonNode images = objectMapper.readTree(response.getBody()).at("/data/images");
     assertThat(images.size()).isEqualTo(2);
 
-    // COMPLETED 이미지 확인
     JsonNode completedImg =
         images.get(0).at("/imageId").asLong() == completedId ? images.get(0) : images.get(1);
     assertThat(completedImg.at("/status").asText()).isEqualTo("COMPLETED");
     assertThat(completedImg.at("/finalObjectKey").asText()).isNotBlank();
 
-    // PENDING 이미지 확인
     JsonNode pendingImg =
         images.get(0).at("/imageId").asLong() == pendingId ? images.get(0) : images.get(1);
     assertThat(pendingImg.at("/status").asText()).isEqualTo("PENDING");
@@ -377,7 +314,6 @@ class GetImagesByIdsE2ETest {
   @Test
   @DisplayName("[E-9] 존재하지 않는 ID soft-miss — 200 + images=[] 빈 배열")
   void getImages_returns200_withEmptyArrayWhenIdNotFound() throws Exception {
-    // given: id=99999999 는 DB에 존재하지 않는다고 가정
     ResponseEntity<String> response =
         getImages(accessToken, List.of(99999999L), "COMMUNITY_FREE", 100L);
 
@@ -389,15 +325,14 @@ class GetImagesByIdsE2ETest {
   @Test
   @DisplayName("[E-10] 다른 사용자의 이미지 조회 시도 → 403 IMAGE_009")
   void getImages_returns403_whenImageBelongsToAnotherUser() throws Exception {
-    // given: 두 번째 사용자 생성 후 그 사용자 소유 이미지 저장
+    // given: another user owns the image
     String otherEmail = uniqueEmail();
     signup(otherEmail, "Test@1234!", "다른유저");
-    additionalUserEmails.add(otherEmail);
     Long otherUserId = getUserIdByEmail(otherEmail);
 
     Long imageId = saveImage(otherUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "key.webp", 1);
 
-    // when: currentUser 로 다른 사용자 이미지 조회
+    // when
     ResponseEntity<String> response =
         getImages(accessToken, List.of(imageId), "COMMUNITY_FREE", 100L);
 
@@ -410,14 +345,11 @@ class GetImagesByIdsE2ETest {
   @Test
   @DisplayName("[E-11] 이미지의 referenceId와 요청 referenceId 불일치 → 403 IMAGE_009")
   void getImages_returns403_whenReferenceIdMismatch() throws Exception {
-    // given: referenceId=100 인 이미지
     Long imageId = saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "key.webp", 1);
 
-    // when: referenceId=999 로 조회
     ResponseEntity<String> response =
         getImages(accessToken, List.of(imageId), "COMMUNITY_FREE", 999L);
 
-    // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     JsonNode body = objectMapper.readTree(response.getBody());
     assertThat(body.at("/code").asText()).isEqualTo("IMAGE_009");
@@ -437,17 +369,14 @@ class GetImagesByIdsE2ETest {
   @Test
   @DisplayName("[E-13] MARKET_STORE virtual type — concrete subtype 이미지 정상 조회 → 200")
   void getImages_returns200_withMarketStoreVirtualType() throws Exception {
-    // given: MARKET_STORE_THUMB + MARKET_STORE_DETAIL 이미지 저장
     Long thumbId =
         saveImage(currentUserId, "MARKET_STORE_THUMB", 200L, "COMPLETED", "store/thumb.webp", 1);
     Long detailId =
         saveImage(currentUserId, "MARKET_STORE_DETAIL", 200L, "COMPLETED", "store/detail.webp", 2);
 
-    // when: virtual type MARKET_STORE 로 조회
     ResponseEntity<String> response =
         getImages(accessToken, List.of(thumbId, detailId), "MARKET_STORE", 200L);
 
-    // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode body = objectMapper.readTree(response.getBody());
     assertThat(body.at("/status").asText()).isEqualTo("SUCCESS");
@@ -457,16 +386,13 @@ class GetImagesByIdsE2ETest {
   @Test
   @DisplayName("[E-15] imgOrder 역순 저장 — 응답은 imgOrder 오름차순 정렬 보장")
   void getImages_returns200_sortedByImgOrderAscending() throws Exception {
-    // given: save with imgOrder 3, 1, 2 intentionally out of order
     Long id3 = saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "public/3.webp", 3);
     Long id1 = saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "public/1.webp", 1);
     Long id2 = saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "public/2.webp", 2);
 
-    // when
     ResponseEntity<String> response =
         getImages(accessToken, List.of(id3, id1, id2), "COMMUNITY_FREE", 100L);
 
-    // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode images = objectMapper.readTree(response.getBody()).at("/data/images");
     assertThat(images.size()).isEqualTo(3);
@@ -479,17 +405,14 @@ class GetImagesByIdsE2ETest {
   @DisplayName(
       "[E-16] MARKET_STORE virtual type — 응답의 referenceType은 MARKET_STORE 반환 (내부 THUMB/DETAIL 노출 없음)")
   void getImages_returns200_withMarketStoreConvertedToRequestFacing() throws Exception {
-    // given
     Long thumbId =
         saveImage(currentUserId, "MARKET_STORE_THUMB", 200L, "COMPLETED", "store/thumb.webp", 1);
     Long detailId =
         saveImage(currentUserId, "MARKET_STORE_DETAIL", 200L, "COMPLETED", "store/detail.webp", 2);
 
-    // when
     ResponseEntity<String> response =
         getImages(accessToken, List.of(thumbId, detailId), "MARKET_STORE", 200L);
 
-    // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode images = objectMapper.readTree(response.getBody()).at("/data/images");
     assertThat(images.size()).isEqualTo(2);
@@ -502,17 +425,14 @@ class GetImagesByIdsE2ETest {
   @DisplayName(
       "[E-17] MARKET_CLASS virtual type — 응답의 referenceType은 MARKET_CLASS 반환 (내부 THUMB/DETAIL 노출 없음)")
   void getImages_returns200_withMarketClassConvertedToRequestFacing() throws Exception {
-    // given
     Long thumbId =
         saveImage(currentUserId, "MARKET_CLASS_THUMB", 300L, "COMPLETED", "class/thumb.webp", 1);
     Long detailId =
         saveImage(currentUserId, "MARKET_CLASS_DETAIL", 300L, "COMPLETED", "class/detail.webp", 2);
 
-    // when
     ResponseEntity<String> response =
         getImages(accessToken, List.of(thumbId, detailId), "MARKET_CLASS", 300L);
 
-    // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode images = objectMapper.readTree(response.getBody()).at("/data/images");
     assertThat(images.size()).isEqualTo(2);
@@ -524,7 +444,6 @@ class GetImagesByIdsE2ETest {
   @Test
   @DisplayName("[E-14] 읽기 전용 트랜잭션 — 이미지 조회 후 updated_at 변경 없음")
   void getImages_readOnlyTransaction_doesNotModifyUpdatedAt() throws Exception {
-    // given
     Long imageId =
         saveImage(currentUserId, "COMMUNITY_FREE", 100L, "COMPLETED", "public/free/test.webp", 1);
 
@@ -532,11 +451,9 @@ class GetImagesByIdsE2ETest {
         jdbcTemplate.queryForObject(
             "SELECT updated_at FROM images WHERE id = ?", Instant.class, imageId);
 
-    // when
     ResponseEntity<String> response =
         getImages(accessToken, List.of(imageId), "COMMUNITY_FREE", 100L);
 
-    // then — 200 성공, updated_at 변경 없음
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
     Instant updatedAtAfter =

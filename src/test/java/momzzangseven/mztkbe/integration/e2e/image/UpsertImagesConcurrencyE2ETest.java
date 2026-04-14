@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.integration.e2e.image;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -10,6 +9,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.application.dto.UnlinkImagesByReferenceCommand;
@@ -20,13 +20,10 @@ import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
 import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -49,11 +46,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>[TC-LOCK-004] 중복 PostDeletedEvent — UnlinkImagesByReferenceService 2회 동시 실행 → 멱등 처리
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest
 @DisplayName("[E2E] UpsertImages 동시성 + DB Lock 검증 (Local DB + SELECT FOR UPDATE)")
-class UpsertImagesConcurrencyE2ETest {
+class UpsertImagesConcurrencyE2ETest extends E2ETestBase {
 
   @Autowired private UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
   @Autowired private UnlinkImagesByReferenceUseCase unlinkImagesByReferenceUseCase;
@@ -64,31 +58,14 @@ class UpsertImagesConcurrencyE2ETest {
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
-  private static final Long USER_ID = 1L;
   private static final Long REF_ID = 88001L;
   private static final ImageReferenceType FREE = ImageReferenceType.COMMUNITY_FREE;
 
-  private final List<Long> createdImageIds = new CopyOnWriteArrayList<>();
+  private Long userId;
 
-  @AfterEach
-  void cleanup() {
-    if (!createdImageIds.isEmpty()) {
-      txTemplate.execute(
-          status -> {
-            imageJpaRepository.deleteByIdIn(new ArrayList<>(createdImageIds));
-            return null;
-          });
-      createdImageIds.clear();
-    }
-    // referenceId=REF_ID 로 남은 이미지 정리 (unlinkByReferenceTypeAndReferenceId 이후 남은 것)
-    txTemplate.execute(
-        status -> {
-          List<ImageEntity> remaining =
-              imageJpaRepository.findAllByReferenceTypeInAndReferenceIdOrderByImgOrder(
-                  List.of(FREE.name()), REF_ID);
-          remaining.forEach(imageJpaRepository::delete);
-          return null;
-        });
+  @BeforeEach
+  void signupTestUser() {
+    userId = signupAndLogin("Up" + UUID.randomUUID().toString().substring(0, 6)).userId();
   }
 
   // ===================================================================
@@ -112,9 +89,7 @@ class UpsertImagesConcurrencyE2ETest {
                   .tmpObjectKey(tmpKey)
                   .imgOrder(1)
                   .build();
-          Long id = imageJpaRepository.save(entity).getId();
-          createdImageIds.add(id);
-          return id;
+          return imageJpaRepository.save(entity).getId();
         });
   }
 
@@ -132,9 +107,7 @@ class UpsertImagesConcurrencyE2ETest {
                   .finalObjectKey(null) // finalObjectKey=null → S3 삭제 스킵
                   .imgOrder(1)
                   .build();
-          Long id = imageJpaRepository.save(entity).getId();
-          createdImageIds.add(id);
-          return id;
+          return imageJpaRepository.save(entity).getId();
         });
   }
 
@@ -145,20 +118,20 @@ class UpsertImagesConcurrencyE2ETest {
   @Test
   @DisplayName("[TC-LOCK-001] 같은 imageId 목록으로 2개 스레드 동시 upsert → 데이터 불일치 없음 (last-write-wins)")
   void concurrentUpsert_sameImageIds_noDataInconsistency() throws InterruptedException {
-    // 준비: 공유 이미지 3개 삽입 (userId=USER_ID, referenceId=null)
+    // 준비: 공유 이미지 3개 삽입 (userId=userId, referenceId=null)
     String key1 = uniqueTmpKey();
     String key2 = uniqueTmpKey();
     String key3 = uniqueTmpKey();
-    Long id1 = insertPendingImage(key1, USER_ID);
-    Long id2 = insertPendingImage(key2, USER_ID);
-    Long id3 = insertPendingImage(key3, USER_ID);
+    Long id1 = insertPendingImage(key1, userId);
+    Long id2 = insertPendingImage(key2, userId);
+    Long id3 = insertPendingImage(key3, userId);
 
     // 스레드 A: imageIds=[id1, id2, id3]
     // 스레드 B: imageIds=[id1, id2, id3] (동일한 목록)
     UpsertImagesByReferenceCommand commandA =
-        new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(id1, id2, id3));
+        new UpsertImagesByReferenceCommand(userId, REF_ID, FREE, List.of(id1, id2, id3));
     UpsertImagesByReferenceCommand commandB =
-        new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(id1, id2, id3));
+        new UpsertImagesByReferenceCommand(userId, REF_ID, FREE, List.of(id1, id2, id3));
 
     CountDownLatch startLatch = new CountDownLatch(1);
     CountDownLatch doneLatch = new CountDownLatch(2);
@@ -202,18 +175,18 @@ class UpsertImagesConcurrencyE2ETest {
     String key2 = uniqueTmpKey();
     String key3 = uniqueTmpKey();
     String key4 = uniqueTmpKey();
-    Long id1 = insertPendingImage(key1, USER_ID);
-    Long id2 = insertPendingImage(key2, USER_ID);
-    Long id3 = insertPendingImage(key3, USER_ID);
-    Long id4 = insertPendingImage(key4, USER_ID);
+    Long id1 = insertPendingImage(key1, userId);
+    Long id2 = insertPendingImage(key2, userId);
+    Long id3 = insertPendingImage(key3, userId);
+    Long id4 = insertPendingImage(key4, userId);
 
     // 스레드 A: imageIds=[id1, id2, id3] (id1, id2 공유)
     // 스레드 B: imageIds=[id1, id2, id4] (id1, id2 공유)
     Long differentRefIdB = REF_ID + 1;
     UpsertImagesByReferenceCommand commandA =
-        new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(id1, id2, id3));
+        new UpsertImagesByReferenceCommand(userId, REF_ID, FREE, List.of(id1, id2, id3));
     UpsertImagesByReferenceCommand commandB =
-        new UpsertImagesByReferenceCommand(USER_ID, differentRefIdB, FREE, List.of(id4));
+        new UpsertImagesByReferenceCommand(userId, differentRefIdB, FREE, List.of(id4));
 
     CountDownLatch startLatch = new CountDownLatch(1);
     CountDownLatch doneLatch = new CountDownLatch(2);
@@ -250,10 +223,10 @@ class UpsertImagesConcurrencyE2ETest {
       "[TC-LOCK-002] 교차 삭제/유지 — T1이 유지하는 이미지를 T2가 삭제하고, T2가 유지하는 이미지를 T1이 삭제 → 데드락 없이 순차 처리")
   void concurrentUpsert_crossingDeleteRetain_noDeadlock() throws InterruptedException {
     // 준비: 4개 이미지를 모두 REF_ID에 연결 (COMPLETED, finalObjectKey=null → S3 삭제 스킵)
-    Long id1 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
-    Long id2 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
-    Long id3 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
-    Long id4 = insertLinkedImage(uniqueTmpKey(), USER_ID, REF_ID);
+    Long id1 = insertLinkedImage(uniqueTmpKey(), userId, REF_ID);
+    Long id2 = insertLinkedImage(uniqueTmpKey(), userId, REF_ID);
+    Long id3 = insertLinkedImage(uniqueTmpKey(), userId, REF_ID);
+    Long id4 = insertLinkedImage(uniqueTmpKey(), userId, REF_ID);
 
     // T1: [id1, id2] 유지 — id3, id4 삭제
     // T2: [id3, id4] 유지 — id1, id2 삭제
@@ -268,9 +241,9 @@ class UpsertImagesConcurrencyE2ETest {
     // Phase 0에서 reference 단위로 전체 행을 먼저 잠그면(id1..id4 일괄 lock) 두 트랜잭션이
     // 동일한 락 집합을 경쟁하여 하나가 순서대로 처리되고 데드락이 발생하지 않는다.
     UpsertImagesByReferenceCommand commandT1 =
-        new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(id1, id2));
+        new UpsertImagesByReferenceCommand(userId, REF_ID, FREE, List.of(id1, id2));
     UpsertImagesByReferenceCommand commandT2 =
-        new UpsertImagesByReferenceCommand(USER_ID, REF_ID, FREE, List.of(id3, id4));
+        new UpsertImagesByReferenceCommand(userId, REF_ID, FREE, List.of(id3, id4));
 
     CountDownLatch startLatch = new CountDownLatch(1);
     CountDownLatch doneLatch = new CountDownLatch(2);
@@ -322,8 +295,8 @@ class UpsertImagesConcurrencyE2ETest {
     Long postId = REF_ID + 100L;
 
     // 준비: 이미지 2개를 postId에 연결
-    insertLinkedImage(key1, USER_ID, postId);
-    insertLinkedImage(key2, USER_ID, postId);
+    insertLinkedImage(key1, userId, postId);
+    insertLinkedImage(key2, userId, postId);
 
     // 같은 referenceId로 2회 동시 Unlink 실행 (중복 PostDeletedEvent 시뮬레이션)
     UnlinkImagesByReferenceCommand command = new UnlinkImagesByReferenceCommand(FREE, postId);
@@ -365,7 +338,7 @@ class UpsertImagesConcurrencyE2ETest {
   void repeatedUnlink_sameReference_allIdempotent() throws InterruptedException {
     String key1 = uniqueTmpKey();
     Long postId = REF_ID + 200L;
-    insertLinkedImage(key1, USER_ID, postId);
+    insertLinkedImage(key1, userId, postId);
 
     UnlinkImagesByReferenceCommand command = new UnlinkImagesByReferenceCommand(FREE, postId);
 

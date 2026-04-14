@@ -3,44 +3,33 @@ package momzzangseven.mztkbe.integration.e2e.answer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.image.application.port.out.DeleteS3ObjectPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(
-    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+@TestPropertySource(
     properties = {
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
@@ -48,12 +37,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.reward-token.enabled=false"
     })
 @DisplayName("[E2E] Answer business rules")
-class AnswerE2ETest {
+class AnswerE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -62,87 +47,6 @@ class AnswerE2ETest {
   @MockitoBean private DeleteS3ObjectPort deleteS3ObjectPort;
   @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
-  private final List<Long> createdPostIds = new ArrayList<>();
-  private final List<Long> createdAnswerIds = new ArrayList<>();
-  private final List<Long> createdImageIds = new ArrayList<>();
-  private final List<String> createdUserEmails = new ArrayList<>();
-
-  private String baseUrl() {
-    return "http://localhost:" + port;
-  }
-
-  @AfterEach
-  void tearDown() {
-    for (Long answerId : createdAnswerIds) {
-      try {
-        jdbcTemplate.update(
-            "DELETE FROM post_like WHERE target_type = 'ANSWER' AND target_id = ?", answerId);
-      } catch (Exception ignored) {
-      }
-    }
-
-    for (Long postId : createdPostIds) {
-      try {
-        jdbcTemplate.update(
-            "DELETE FROM post_like WHERE target_type = 'POST' AND target_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-    }
-
-    for (Long imageId : createdImageIds) {
-      try {
-        jdbcTemplate.update("DELETE FROM images WHERE id = ?", imageId);
-      } catch (Exception ignored) {
-      }
-    }
-    createdImageIds.clear();
-
-    for (Long postId : createdPostIds) {
-      try {
-        jdbcTemplate.update("UPDATE posts SET accepted_answer_id = NULL WHERE id = ?", postId);
-      } catch (Exception ignored) {
-      }
-    }
-
-    for (Long answerId : createdAnswerIds) {
-      try {
-        jdbcTemplate.update("DELETE FROM answers WHERE id = ?", answerId);
-      } catch (Exception ignored) {
-      }
-    }
-    createdAnswerIds.clear();
-
-    for (Long postId : createdPostIds) {
-      try {
-        jdbcTemplate.update("DELETE FROM answers WHERE post_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM post_tags WHERE post_id = ?", postId);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM posts WHERE id = ?", postId);
-      } catch (Exception ignored) {
-      }
-    }
-    createdPostIds.clear();
-
-    for (String email : createdUserEmails) {
-      try {
-        jdbcTemplate.update(
-            "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-            email);
-      } catch (Exception ignored) {
-      }
-      try {
-        jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
-      } catch (Exception ignored) {
-      }
-    }
-    createdUserEmails.clear();
-  }
-
   @Nested
   @DisplayName("Success cases")
   class SuccessCases {
@@ -150,8 +54,8 @@ class AnswerE2ETest {
     @Test
     @DisplayName("create answer persists DB row and links image-module rows")
     void createAnswer_success_persistsAndReturnsPayload() throws Exception {
-      TestUser author = signupAndLogin("question-author");
-      TestUser answerer = signupAndLogin("answer-writer");
+      TestUser author = signupAndLoginAs("question-author");
+      TestUser answerer = signupAndLoginAs("answer-writer");
       Long postId =
           createQuestionPost(author.accessToken(), "Question title", "Question content", 100L);
       Long firstImageId = insertImage(answerer.userId(), "COMPLETED", "answers/a-1.webp");
@@ -167,14 +71,13 @@ class AnswerE2ETest {
                       "This is the accepted candidate",
                       "imageIds",
                       List.of(firstImageId, secondImageId)),
-                  authHeaders(answerer.accessToken())),
+                  bearerJsonHeaders(answerer.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
       JsonNode root = parse(response);
       Long answerId = root.at("/data/answerId").asLong();
-      createdAnswerIds.add(answerId);
 
       assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
       assertThat(answerId).isPositive();
@@ -193,9 +96,9 @@ class AnswerE2ETest {
     @DisplayName(
         "get answers returns accepted answer first with writer fields and rebuilt imageUrls")
     void getAnswers_success_returnsAcceptedFirstAndResponseFields() throws Exception {
-      TestUser author = signupAndLogin("question-owner");
-      TestUser regularAnswerer = signupAndLogin("regular-answerer");
-      TestUser acceptedAnswerer = signupAndLogin("accepted-answerer");
+      TestUser author = signupAndLoginAs("question-owner");
+      TestUser regularAnswerer = signupAndLoginAs("regular-answerer");
+      TestUser acceptedAnswerer = signupAndLoginAs("accepted-answerer");
       Long postId =
           createQuestionPost(author.accessToken(), "Order question", "Need ordering", 50L);
       Long regularImageId =
@@ -216,7 +119,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers",
               HttpMethod.GET,
-              new HttpEntity<>(authHeaders(author.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(author.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -248,9 +151,9 @@ class AnswerE2ETest {
     @Test
     @DisplayName("answer likes affect answer list likeCount and isLiked fields")
     void answerLikes_success_reflectedInAnswerList() throws Exception {
-      TestUser author = signupAndLogin("liked-question-author");
-      TestUser answerer = signupAndLogin("liked-answerer");
-      TestUser liker = signupAndLogin("answer-liker");
+      TestUser author = signupAndLoginAs("liked-question-author");
+      TestUser answerer = signupAndLoginAs("liked-answerer");
+      TestUser liker = signupAndLoginAs("answer-liker");
       Long postId = createQuestionPost(author.accessToken(), "Like question", "Need likes", 70L);
       Long answerId = createAnswer(postId, answerer.accessToken(), "likeable answer", List.of());
 
@@ -258,7 +161,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
               HttpMethod.POST,
-              new HttpEntity<>(authHeaders(liker.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(liker.accessToken())),
               String.class);
 
       assertThat(likeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -273,7 +176,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers",
               HttpMethod.GET,
-              new HttpEntity<>(authHeaders(liker.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(liker.accessToken())),
               String.class);
 
       assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -286,7 +189,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
               HttpMethod.DELETE,
-              new HttpEntity<>(authHeaders(liker.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(liker.accessToken())),
               String.class);
 
       assertThat(unlikeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -299,7 +202,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers",
               HttpMethod.GET,
-              new HttpEntity<>(authHeaders(liker.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(liker.accessToken())),
               String.class);
 
       JsonNode answerAfterUnlike = parse(getAfterUnlikeResponse).at("/data/0");
@@ -312,9 +215,9 @@ class AnswerE2ETest {
     @Test
     @DisplayName("liking an already liked answer stays idempotent with count unchanged")
     void answerLikes_duplicateLike_staysIdempotent() throws Exception {
-      TestUser author = signupAndLogin("dup-like-question-author");
-      TestUser answerer = signupAndLogin("dup-like-answerer");
-      TestUser liker = signupAndLogin("dup-like-answer-liker");
+      TestUser author = signupAndLoginAs("dup-like-question-author");
+      TestUser answerer = signupAndLoginAs("dup-like-answerer");
+      TestUser liker = signupAndLoginAs("dup-like-answer-liker");
       Long postId =
           createQuestionPost(author.accessToken(), "Duplicate answer like", "Question", 80L);
       Long answerId =
@@ -324,13 +227,13 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
               HttpMethod.POST,
-              new HttpEntity<>(authHeaders(liker.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(liker.accessToken())),
               String.class);
       ResponseEntity<String> secondLikeResponse =
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
               HttpMethod.POST,
-              new HttpEntity<>(authHeaders(liker.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(liker.accessToken())),
               String.class);
 
       assertThat(firstLikeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -343,8 +246,8 @@ class AnswerE2ETest {
     @Test
     @DisplayName("update answer changes DB state and re-links image-module rows")
     void updateAnswer_success_updatesDbAndGetResponse() throws Exception {
-      TestUser author = signupAndLogin("update-author");
-      TestUser answerer = signupAndLogin("update-answerer");
+      TestUser author = signupAndLoginAs("update-author");
+      TestUser answerer = signupAndLoginAs("update-answerer");
       Long postId = createQuestionPost(author.accessToken(), "Update question", "Update me", 75L);
       Long oldImageId = insertImage(answerer.userId(), "COMPLETED", "answers/old.webp");
       Long newImageId = insertImage(answerer.userId(), "COMPLETED", "answers/new.webp");
@@ -357,7 +260,7 @@ class AnswerE2ETest {
               HttpMethod.PUT,
               new HttpEntity<>(
                   Map.of("content", "after update", "imageIds", List.of(newImageId)),
-                  authHeaders(answerer.accessToken())),
+                  bearerJsonHeaders(answerer.accessToken())),
               String.class);
 
       assertThat(updateResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -373,7 +276,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers",
               HttpMethod.GET,
-              new HttpEntity<>(authHeaders(author.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(author.accessToken())),
               String.class);
 
       JsonNode firstAnswer = parse(getResponse).at("/data/0");
@@ -386,8 +289,8 @@ class AnswerE2ETest {
     @Test
     @DisplayName("delete answer removes DB row and unlinks image-module rows")
     void deleteAnswer_success_removesRows() throws Exception {
-      TestUser author = signupAndLogin("delete-author");
-      TestUser answerer = signupAndLogin("delete-answerer");
+      TestUser author = signupAndLoginAs("delete-author");
+      TestUser answerer = signupAndLoginAs("delete-answerer");
       Long postId = createQuestionPost(author.accessToken(), "Delete question", "Delete me", 25L);
       Long imageId = insertImage(answerer.userId(), "COMPLETED", "answers/delete.webp");
       Long answerId =
@@ -397,7 +300,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers/" + answerId,
               HttpMethod.DELETE,
-              new HttpEntity<>(authHeaders(answerer.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(answerer.accessToken())),
               String.class);
 
       assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -416,7 +319,7 @@ class AnswerE2ETest {
     @Test
     @DisplayName("answering own question returns 400 and does not insert rows")
     void createAnswer_onOwnQuestion_returns400AndDoesNotPersist() throws Exception {
-      TestUser author = signupAndLogin("self-answer-author");
+      TestUser author = signupAndLoginAs("self-answer-author");
       Long postId = createQuestionPost(author.accessToken(), "Self question", "Own question", 40L);
 
       ResponseEntity<String> response =
@@ -424,7 +327,7 @@ class AnswerE2ETest {
               baseUrl() + "/questions/" + postId + "/answers",
               HttpMethod.POST,
               new HttpEntity<>(
-                  Map.of("content", "I answer myself"), authHeaders(author.accessToken())),
+                  Map.of("content", "I answer myself"), bearerJsonHeaders(author.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -437,9 +340,9 @@ class AnswerE2ETest {
     @Test
     @DisplayName("answering solved question returns 400 and does not insert rows")
     void createAnswer_onSolvedQuestion_returns400AndDoesNotPersist() throws Exception {
-      TestUser author = signupAndLogin("solved-author");
-      TestUser acceptedAnswerer = signupAndLogin("accepted-answerer");
-      TestUser lateAnswerer = signupAndLogin("late-answerer");
+      TestUser author = signupAndLoginAs("solved-author");
+      TestUser acceptedAnswerer = signupAndLoginAs("accepted-answerer");
+      TestUser lateAnswerer = signupAndLoginAs("late-answerer");
       Long postId =
           createQuestionPost(author.accessToken(), "Solved question", "Closed already", 60L);
       Long acceptedAnswerId =
@@ -452,7 +355,7 @@ class AnswerE2ETest {
               baseUrl() + "/questions/" + postId + "/answers",
               HttpMethod.POST,
               new HttpEntity<>(
-                  Map.of("content", "late answer"), authHeaders(lateAnswerer.accessToken())),
+                  Map.of("content", "late answer"), bearerJsonHeaders(lateAnswerer.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -465,9 +368,9 @@ class AnswerE2ETest {
     @Test
     @DisplayName("linking another user's image returns 403 and rolls back answer creation")
     void createAnswer_withOtherUsersImage_returns403AndRollsBack() throws Exception {
-      TestUser author = signupAndLogin("foreign-image-author");
-      TestUser imageOwner = signupAndLogin("foreign-image-owner");
-      TestUser answerer = signupAndLogin("foreign-image-answerer");
+      TestUser author = signupAndLoginAs("foreign-image-author");
+      TestUser imageOwner = signupAndLoginAs("foreign-image-owner");
+      TestUser answerer = signupAndLoginAs("foreign-image-answerer");
       Long postId =
           createQuestionPost(author.accessToken(), "Foreign image question", "Question", 45L);
       Long foreignImageId = insertImage(imageOwner.userId(), "COMPLETED", "answers/foreign.webp");
@@ -478,7 +381,7 @@ class AnswerE2ETest {
               HttpMethod.POST,
               new HttpEntity<>(
                   Map.of("content", "should fail", "imageIds", List.of(foreignImageId)),
-                  authHeaders(answerer.accessToken())),
+                  bearerJsonHeaders(answerer.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -489,9 +392,9 @@ class AnswerE2ETest {
     @Test
     @DisplayName("other user cannot update answer and DB remains unchanged")
     void updateAnswer_byOtherUser_returns403AndKeepsOriginalData() throws Exception {
-      TestUser author = signupAndLogin("unauthorized-update-author");
-      TestUser owner = signupAndLogin("answer-owner");
-      TestUser intruder = signupAndLogin("answer-intruder");
+      TestUser author = signupAndLoginAs("unauthorized-update-author");
+      TestUser owner = signupAndLoginAs("answer-owner");
+      TestUser intruder = signupAndLoginAs("answer-intruder");
       Long postId =
           createQuestionPost(author.accessToken(), "Unauthorized update", "Question", 30L);
       Long answerId = createAnswer(postId, owner.accessToken(), "original content", List.of());
@@ -500,7 +403,8 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers/" + answerId,
               HttpMethod.PUT,
-              new HttpEntity<>(Map.of("content", "hacked"), authHeaders(intruder.accessToken())),
+              new HttpEntity<>(
+                  Map.of("content", "hacked"), bearerJsonHeaders(intruder.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -513,9 +417,9 @@ class AnswerE2ETest {
     @Test
     @DisplayName("update with another user's image returns 403 and rolls back answer update")
     void updateAnswer_withOtherUsersImage_returns403AndRollsBack() throws Exception {
-      TestUser author = signupAndLogin("foreign-update-author");
-      TestUser owner = signupAndLogin("foreign-update-owner");
-      TestUser imageOwner = signupAndLogin("foreign-update-image-owner");
+      TestUser author = signupAndLoginAs("foreign-update-author");
+      TestUser owner = signupAndLoginAs("foreign-update-owner");
+      TestUser imageOwner = signupAndLoginAs("foreign-update-image-owner");
       Long postId = createQuestionPost(author.accessToken(), "Update rollback", "Question", 55L);
       Long answerId = createAnswer(postId, owner.accessToken(), "before update", List.of());
       Long foreignImageId =
@@ -527,7 +431,7 @@ class AnswerE2ETest {
               HttpMethod.PUT,
               new HttpEntity<>(
                   Map.of("content", "after update", "imageIds", List.of(foreignImageId)),
-                  authHeaders(owner.accessToken())),
+                  bearerJsonHeaders(owner.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
@@ -538,8 +442,8 @@ class AnswerE2ETest {
     @Test
     @DisplayName("answers on a solved question cannot be updated or deleted and DB rows remain")
     void acceptedAnswer_blocksUpdateAndDelete() throws Exception {
-      TestUser author = signupAndLogin("accepted-delete-author");
-      TestUser answerer = signupAndLogin("accepted-delete-answerer");
+      TestUser author = signupAndLoginAs("accepted-delete-author");
+      TestUser answerer = signupAndLoginAs("accepted-delete-answerer");
       Long postId = createQuestionPost(author.accessToken(), "Accepted delete", "Question", 90L);
       Long answerId =
           createAnswer(
@@ -558,7 +462,7 @@ class AnswerE2ETest {
               HttpMethod.PUT,
               new HttpEntity<>(
                   Map.of("content", "should not update", "imageIds", List.of(replacementImageId)),
-                  authHeaders(answerer.accessToken())),
+                  bearerJsonHeaders(answerer.accessToken())),
               String.class);
 
       assertThat(updateResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -572,7 +476,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/questions/" + postId + "/answers/" + answerId,
               HttpMethod.DELETE,
-              new HttpEntity<>(authHeaders(answerer.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(answerer.accessToken())),
               String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -587,9 +491,9 @@ class AnswerE2ETest {
     @DisplayName(
         "question delete is rejected when active answers exist and answer rows are preserved")
     void deleteQuestionPost_withAnswers_returns400AndPreservesAnswerData() throws Exception {
-      TestUser author = signupAndLogin("post-delete-author");
-      TestUser answerer = signupAndLogin("post-delete-answerer");
-      TestUser liker = signupAndLogin("post-delete-liker");
+      TestUser author = signupAndLoginAs("post-delete-author");
+      TestUser answerer = signupAndLoginAs("post-delete-answerer");
+      TestUser liker = signupAndLoginAs("post-delete-liker");
       Long postId = createQuestionPost(author.accessToken(), "Cascade question", "Cascade me", 35L);
       Long imageId = insertImage(answerer.userId(), "COMPLETED", "answers/post-delete.webp");
       Long answerId =
@@ -600,7 +504,7 @@ class AnswerE2ETest {
           restTemplate.exchange(
               baseUrl() + "/posts/" + postId,
               HttpMethod.DELETE,
-              new HttpEntity<>(authHeaders(author.accessToken())),
+              new HttpEntity<>(bearerJsonHeaders(author.accessToken())),
               String.class);
 
       assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -615,36 +519,12 @@ class AnswerE2ETest {
     }
   }
 
-  private TestUser signupAndLogin(String nicknamePrefix) throws Exception {
-    String email = uniqueEmail();
-    createdUserEmails.add(email);
+  private TestUser signupAndLoginAs(String nicknamePrefix) {
+    String email = randomEmail();
     String nickname = nicknamePrefix + "-" + UUID.randomUUID().toString().substring(0, 6);
-    String password = "Test@1234!";
-
-    ResponseEntity<String> signupResponse =
-        restTemplate.exchange(
-            baseUrl() + "/auth/signup",
-            HttpMethod.POST,
-            new HttpEntity<>(
-                Map.of("email", email, "password", password, "nickname", nickname), jsonHeaders()),
-            String.class);
-
-    assertThat(signupResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-
-    ResponseEntity<String> loginResponse =
-        restTemplate.exchange(
-            baseUrl() + "/auth/login",
-            HttpMethod.POST,
-            new HttpEntity<>(
-                Map.of("provider", "LOCAL", "email", email, "password", password), jsonHeaders()),
-            String.class);
-
-    assertThat(loginResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-    JsonNode root = parse(loginResponse);
-    return new TestUser(
-        root.at("/data/accessToken").asText(),
-        root.at("/data/userInfo/userId").asLong(),
-        root.at("/data/userInfo/nickname").asText());
+    Long userId = signupUser(email, DEFAULT_TEST_PASSWORD, nickname);
+    String accessToken = loginUser(email, DEFAULT_TEST_PASSWORD);
+    return new TestUser(accessToken, userId, nickname);
   }
 
   private Long createQuestionPost(String accessToken, String title, String content, long reward)
@@ -655,13 +535,11 @@ class AnswerE2ETest {
             HttpMethod.POST,
             new HttpEntity<>(
                 Map.of("title", title, "content", content, "reward", reward),
-                authHeaders(accessToken)),
+                bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    Long postId = parse(response).at("/data/postId").asLong();
-    createdPostIds.add(postId);
-    return postId;
+    return parse(response).at("/data/postId").asLong();
   }
 
   private Long createAnswer(Long postId, String accessToken, String content, List<Long> imageIds)
@@ -671,13 +549,11 @@ class AnswerE2ETest {
             baseUrl() + "/questions/" + postId + "/answers",
             HttpMethod.POST,
             new HttpEntity<>(
-                Map.of("content", content, "imageIds", imageIds), authHeaders(accessToken)),
+                Map.of("content", content, "imageIds", imageIds), bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-    Long answerId = parse(response).at("/data/answerId").asLong();
-    createdAnswerIds.add(answerId);
-    return answerId;
+    return parse(response).at("/data/answerId").asLong();
   }
 
   private void acceptAnswer(Long postId, Long answerId, String accessToken) throws Exception {
@@ -685,7 +561,7 @@ class AnswerE2ETest {
         restTemplate.exchange(
             baseUrl() + "/posts/" + postId + "/answers/" + answerId + "/accept",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders(accessToken)),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -698,7 +574,7 @@ class AnswerE2ETest {
         restTemplate.exchange(
             baseUrl() + "/questions/" + postId + "/answers/" + answerId + "/likes",
             HttpMethod.POST,
-            new HttpEntity<>(authHeaders(accessToken)),
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
             String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -777,9 +653,7 @@ class AnswerE2ETest {
       throw new IllegalStateException("Failed to insert image row");
     }
 
-    Long imageId = generatedKey.longValue();
-    createdImageIds.add(imageId);
-    return imageId;
+    return generatedKey.longValue();
   }
 
   private void assertAnswerImageLinked(Long imageId, Long answerId, int expectedOrder) {
@@ -821,26 +695,8 @@ class AnswerE2ETest {
     return "https://test-bucket.s3.ap-northeast-2.amazonaws.com/" + finalObjectKey;
   }
 
-  private HttpHeaders authHeaders(String accessToken) {
-    HttpHeaders headers = jsonHeaders();
-    headers.setBearerAuth(accessToken);
-    return headers;
-  }
-
-  private HttpHeaders jsonHeaders() {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    return headers;
-  }
-
   private JsonNode parse(ResponseEntity<String> response) throws Exception {
     return objectMapper.readTree(response.getBody());
-  }
-
-  private static String uniqueEmail() {
-    return "answer-e2e-"
-        + UUID.randomUUID().toString().replace("-", "").substring(0, 12)
-        + "@test.com";
   }
 
   private record TestUser(String accessToken, Long userId, String nickname) {}

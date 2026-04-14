@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.integration.e2e.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -15,20 +14,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.admin.domain.vo.GeneratedAdminCredentials;
 import momzzangseven.mztkbe.modules.admin.infrastructure.delivery.LogBootstrapDeliveryAdapter;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -37,7 +32,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -49,25 +43,17 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *
  * <p>Test cases: [E-1] through [E-45].
  */
-@Tag("e2e")
-@ActiveProfiles({"integration", "dev"})
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(
     properties = {
-      "mztk.admin.bootstrap.enabled=false",
       "mztk.admin.recovery.anchor=test-e2e-recovery-anchor",
       "mztk.admin.seed.seed-count=2"
     })
 @DisplayName("[E2E] Admin User Role Management 전체 흐름 테스트")
-class AdminUserRoleManagementE2ETest {
+class AdminUserRoleManagementE2ETest extends E2ETestBase {
 
   private static final String TEST_PASSWORD = "Test@1234!";
   private static final String RECOVERY_ANCHOR = "test-e2e-recovery-anchor";
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
 
@@ -85,42 +71,6 @@ class AdminUserRoleManagementE2ETest {
   @BeforeEach
   void setUp() {
     baseUrl = "http://localhost:" + port;
-  }
-
-  @AfterEach
-  void tearDown() {
-    // Delete admin_action_audits for our test users
-    if (!createdUserIds.isEmpty()) {
-      String inClause = inClausePlaceholders(createdUserIds.size());
-      jdbcTemplate.update(
-          "DELETE FROM admin_action_audits WHERE operator_id IN (" + inClause + ")",
-          createdUserIds.toArray());
-    }
-
-    // Delete admin_accounts for our test users
-    for (Long userId : createdUserIds) {
-      jdbcTemplate.update("DELETE FROM admin_accounts WHERE user_id = ?", userId);
-    }
-
-    // Delete users and dependent rows
-    for (String email : createdUserEmails) {
-      jdbcTemplate.update(
-          "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM users_account WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
-    }
-
-    // Clean up admin_action_audits with null operator (recovery)
-    jdbcTemplate.update(
-        "DELETE FROM admin_action_audits WHERE operator_id IS NULL "
-            + "AND action_type IN ('RECOVERY_SUCCESS', 'RECOVERY_REJECTED')");
-
     createdUserEmails.clear();
     createdUserIds.clear();
   }
@@ -144,36 +94,30 @@ class AdminUserRoleManagementE2ETest {
     return sb.toString();
   }
 
-  private void signup(String email, String password, String nickname) {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl + "/auth/signup",
-            HttpMethod.POST,
-            new HttpEntity<>(body, headers),
-            String.class);
-    assertThat(response.getStatusCode().is2xxSuccessful())
-        .as("signup must succeed: " + response.getBody())
-        .isTrue();
-  }
-
   /**
-   * Creates an admin account via direct DB manipulation. Returns a TestAdmin with credentials.
+   * Creates an admin account via direct DB manipulation, mirroring the production flow
+   * (CreateAdminAccountService / SeedProvisioner): inserts only into {@code users} and {@code
+   * admin_accounts}, never {@code users_account}. Going through {@code POST /auth/signup} would
+   * create a {@code users_account} row that the production admin lifecycle never produces, which
+   * then breaks recovery reseed's hard-delete (FK violation on {@code users_account_user_id_fkey}).
    *
    * @param role the admin role (ADMIN_SEED or ADMIN_GENERATED)
    */
   private TestAdmin createTestAdmin(String role) {
-    String email = uniqueEmail();
-    signup(email, TEST_PASSWORD, "AdminTest");
+    String email =
+        "admin-"
+            + UUID.randomUUID().toString().replace("-", "").substring(0, 10)
+            + "@internal.mztk.local";
     createdUserEmails.add(email);
 
+    jdbcTemplate.update(
+        "INSERT INTO users (email, role, nickname, created_at, updated_at)"
+            + " VALUES (?, ?, 'AdminTest', NOW(), NOW())",
+        email,
+        role);
     Long userId =
         jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
     createdUserIds.add(userId);
-
-    jdbcTemplate.update("UPDATE users SET role = ? WHERE id = ?", role, userId);
 
     String loginId = String.valueOf(10000000 + (int) (Math.random() * 90000000));
     String plaintext = "AdminP@ss" + UUID.randomUUID().toString().substring(0, 8);

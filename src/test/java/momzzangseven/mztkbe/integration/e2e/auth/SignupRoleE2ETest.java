@@ -3,25 +3,18 @@ package momzzangseven.mztkbe.integration.e2e.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -29,7 +22,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
@@ -51,16 +43,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>LOCAL 회원가입 시 role=ADMIN → 에러 반환, DB에 레코드 없음
  * </ul>
  */
-@Tag("e2e")
-@ActiveProfiles("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @DisplayName("[E2E] 회원가입 role 설정 테스트")
-class SignupRoleE2ETest {
+class SignupRoleE2ETest extends E2ETestBase {
 
-  @LocalServerPort private int port;
-
-  @Autowired private TestRestTemplate restTemplate;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -68,28 +53,10 @@ class SignupRoleE2ETest {
   @MockitoBean private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
 
   private String baseUrl;
-  private final List<String> createdUserEmails = new ArrayList<>();
 
   @BeforeEach
   void setUp() {
     baseUrl = "http://localhost:" + port;
-  }
-
-  @AfterEach
-  void tearDown() {
-    for (String email : createdUserEmails) {
-      jdbcTemplate.update(
-          "DELETE FROM refresh_tokens WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM user_progress WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update(
-          "DELETE FROM users_account WHERE user_id = (SELECT id FROM users WHERE email = ?)",
-          email);
-      jdbcTemplate.update("DELETE FROM users WHERE email = ?", email);
-    }
-    createdUserEmails.clear();
   }
 
   // ============================================================
@@ -101,7 +68,6 @@ class SignupRoleE2ETest {
   }
 
   private ResponseEntity<String> signup(String email, String password, String nickname) {
-    createdUserEmails.add(email);
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     Map<String, String> body = Map.of("email", email, "password", password, "nickname", nickname);
@@ -111,7 +77,6 @@ class SignupRoleE2ETest {
 
   private ResponseEntity<String> signupWithRole(
       String email, String password, String nickname, String role) {
-    createdUserEmails.add(email);
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     Map<String, String> body =
@@ -126,7 +91,6 @@ class SignupRoleE2ETest {
    */
   private ResponseEntity<String> signupWithNullRole(
       String email, String password, String nickname) {
-    createdUserEmails.add(email);
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     Map<String, String> body = new HashMap<>();
