@@ -82,4 +82,25 @@ class PostDetailResultTest {
 
     assertThat(result.isSolved()).isTrue();
   }
+
+  @Test
+  @DisplayName("fromDomain derives solved true from pending accept status")
+  void fromDomainDerivesSolvedTrueFromPendingAcceptStatus() {
+    Post post =
+        Post.builder()
+            .id(2L)
+            .userId(3L)
+            .type(PostType.QUESTION)
+            .title("pending")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(6L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .build();
+
+    PostDetailResult result =
+        PostDetailResult.fromDomain(post, 0L, false, "writer", "profile", null);
+
+    assertThat(result.isSolved()).isTrue();
+  }
 }

@@ -341,7 +341,7 @@ class PostTest {
 
     assertThat(pending.getAcceptedAnswerId()).isEqualTo(99L);
     assertThat(pending.getStatus()).isEqualTo(PostStatus.PENDING_ACCEPT);
-    assertThat(pending.getIsSolved()).isFalse();
+    assertThat(pending.getIsSolved()).isTrue();
   }
 
   @Test
@@ -386,6 +386,49 @@ class PostTest {
     assertThat(resolved.getAcceptedAnswerId()).isEqualTo(99L);
     assertThat(resolved.getStatus()).isEqualTo(PostStatus.RESOLVED);
     assertThat(resolved.getIsSolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("confirmAccepted rejects non pending post")
+  void confirmAccepted_rejectsWhenNotPending() {
+    Post openPost =
+        Post.builder()
+            .id(230L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> openPost.confirmAccepted(99L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("not pending acceptance");
+  }
+
+  @Test
+  @DisplayName("confirmAccepted rejects mismatched answer id")
+  void confirmAccepted_rejectsWhenAnswerIdDoesNotMatch() {
+    Post pending =
+        Post.builder()
+            .id(231L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> pending.confirmAccepted(100L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("does not match");
   }
 
   @Test

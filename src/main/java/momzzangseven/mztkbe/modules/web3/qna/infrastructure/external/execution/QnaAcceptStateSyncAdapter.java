@@ -1,8 +1,10 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
+import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
@@ -23,26 +25,38 @@ public class QnaAcceptStateSyncAdapter implements QnaAcceptStateSyncPort {
 
   @Override
   public void confirmAccepted(Long postId, Long answerId) {
-    Post post =
-        postPersistencePort
-            .loadPostForUpdate(postId)
-            .orElseThrow(() -> new IllegalStateException("missing post for qna accept: " + postId));
-    postPersistencePort.savePost(post.confirmAccepted(answerId));
+    Answer answer = requireAnswerForUpdate(answerId, "qna accept");
+    Post post = requirePostForUpdate(postId, "qna accept");
+    validateAnswerBelongsToPost(answer, post);
 
-    saveAnswerPort.saveAnswer(
-        loadAnswerPort
-            .loadAnswerForUpdate(answerId)
-            .orElseThrow(
-                () -> new IllegalStateException("missing answer for qna accept: " + answerId))
-            .accept());
+    postPersistencePort.savePost(post.confirmAccepted(answerId));
+    saveAnswerPort.saveAnswer(answer.accept());
   }
 
   @Override
   public void rollbackPendingAccept(Long postId, Long answerId) {
-    Post post =
-        postPersistencePort
-            .loadPostForUpdate(postId)
-            .orElseThrow(() -> new IllegalStateException("missing post for qna accept: " + postId));
+    requireAnswerForUpdate(answerId, "qna rollback");
+    Post post = requirePostForUpdate(postId, "qna rollback");
     postPersistencePort.savePost(post.cancelPendingAccept(answerId));
+  }
+
+  private Answer requireAnswerForUpdate(Long answerId, String operation) {
+    return loadAnswerPort
+        .loadAnswerForUpdate(answerId)
+        .orElseThrow(
+            () -> new IllegalStateException("missing answer for " + operation + ": " + answerId));
+  }
+
+  private Post requirePostForUpdate(Long postId, String operation) {
+    return postPersistencePort
+        .loadPostForUpdate(postId)
+        .orElseThrow(
+            () -> new IllegalStateException("missing post for " + operation + ": " + postId));
+  }
+
+  private void validateAnswerBelongsToPost(Answer answer, Post post) {
+    if (!answer.getPostId().equals(post.getId())) {
+      throw new PostInvalidInputException("Answer does not belong to this post.");
+    }
   }
 }

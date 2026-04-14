@@ -71,6 +71,33 @@ class GetPostServiceTest {
   }
 
   @Test
+  @DisplayName("returns pending accept post context as solved and answer locked")
+  void getPostContextPendingAcceptMarksSolved() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(41L)
+            .userId(16L)
+            .type(PostType.QUESTION)
+            .title("pending question")
+            .content("content")
+            .reward(100L)
+            .acceptedAnswerId(102L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(41L)).thenReturn(Optional.of(post));
+
+    var result = getPostService.getPostContext(41L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().solved()).isTrue();
+    assertThat(result.get().answerLocked()).isTrue();
+  }
+
+  @Test
   @DisplayName("returns mapped post with tags and images from image module")
   void getPostSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);

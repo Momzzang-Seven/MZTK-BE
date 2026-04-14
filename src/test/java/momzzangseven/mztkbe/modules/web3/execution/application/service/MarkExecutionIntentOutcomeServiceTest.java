@@ -137,6 +137,38 @@ class MarkExecutionIntentOutcomeServiceTest {
   }
 
   @Test
+  void markFailedOnchain_preservesNullReasonForHandler() {
+    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.buildActionPlan(any()))
+        .thenReturn(
+            new ExecutionActionPlan(
+                BigInteger.ZERO,
+                ExecutionReferenceType.USER_TO_SERVER,
+                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
+    ExecutionIntent pendingIntent = pendingEip1559Intent();
+    when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
+        .thenReturn(Optional.of(pendingIntent));
+    when(executionIntentPersistencePort.update(
+            argThat(updated -> updated.getSubmittedTxId().equals(12L))))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    failedOnchainService.execute(12L, null);
+
+    verify(executionIntentPersistencePort)
+        .update(
+            argThat(
+                updated ->
+                    updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN
+                        && "FAILED_ONCHAIN".equals(updated.getLastErrorCode())
+                        && "FAILED_ONCHAIN".equals(updated.getLastErrorReason())));
+    verify(executionActionHandlerPort)
+        .afterExecutionFailedOnchain(
+            argThat(updated -> updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN),
+            any(),
+            org.mockito.ArgumentMatchers.isNull());
+  }
+
+  @Test
   @DisplayName("핸들러 예외가 발생하면 CONFIRMED 상태를 저장하지 않고 예외를 전파한다")
   void markSucceeded_handlerThrows_doesNotPersistConfirmedState() {
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);

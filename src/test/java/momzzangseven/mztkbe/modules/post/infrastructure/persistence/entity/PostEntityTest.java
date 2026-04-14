@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @DisplayName("PostEntity unit test")
 class PostEntityTest {
@@ -30,6 +31,42 @@ class PostEntityTest {
 
     assertThat(entity.getStatus()).isEqualTo(PostStatus.RESOLVED);
     assertThat(entity.getAcceptedAnswerId()).isEqualTo(99L);
+    assertThat(legacySolvedShadow(entity)).isTrue();
+  }
+
+  @Test
+  @DisplayName("builder syncs legacy solved shadow for pending accept status")
+  void builderSyncsLegacySolvedShadowForPendingAccept() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(2L)
+            .userId(2L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .acceptedAnswerId(99L)
+            .status(PostStatus.PENDING_ACCEPT)
+            .build();
+
+    assertThat(legacySolvedShadow(entity)).isTrue();
+  }
+
+  @Test
+  @DisplayName("builder keeps legacy solved shadow false for open status")
+  void builderKeepsLegacySolvedShadowFalseForOpen() {
+    PostEntity entity =
+        PostEntity.builder()
+            .id(3L)
+            .userId(2L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .build();
+
+    assertThat(legacySolvedShadow(entity)).isFalse();
   }
 
   @Test
@@ -179,5 +216,9 @@ class PostEntityTest {
             .build();
 
     assertThatThrownBy(entity::toDomain).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  private boolean legacySolvedShadow(PostEntity entity) {
+    return (boolean) ReflectionTestUtils.getField(entity, "legacySolvedShadow");
   }
 }
