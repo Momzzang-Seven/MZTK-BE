@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.post.infrastructure.external.answer.adapter
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.MarkAcceptedAnswerPort;
