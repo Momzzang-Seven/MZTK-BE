@@ -21,6 +21,7 @@ set -euo pipefail
 
 YML_FILES=(
   src/main/resources/application.yml
+  src/main/resources/application-dev.yml
   src/main/resources/application-prod.yml
 )
 
