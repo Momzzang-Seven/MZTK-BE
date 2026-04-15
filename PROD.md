@@ -37,7 +37,7 @@ MZTK-BE 운영 배포의 전체 흐름을 한 장으로 정리한 문서. 상세
 ### 1.4 GitHub Actions (`.github/workflows/deploy-prod.yml`)
 `main` 브랜치 push (또는 `workflow_dispatch`) 시 자동 배포.
 
-## 2. 자동 배포 흐름 (main merge)
+## 2. 코드 변경 되었을 때 자동 배포 흐름 (main merge)
 
 1. **Trigger**: `main` 에 push (`src/**`, `build.gradle`, `Dockerfile`, workflow 파일 변경 시)
 2. **Test**: GitHub Actions 안에 `postgis/postgis:17-3.4` 서비스 컨테이너(`mztk_ci`)를 띄우고 `./gradlew test` 실행. `MigrationValidationTest` 가 Flyway + Hibernate validate 로 migration/entity 드리프트 차단.
@@ -76,7 +76,7 @@ CHAIN=base     NETWORK=testnet ./scripts/ci/refresh-and-restart.sh
 3. **EC2 .env 최신화**: `refresh-env.sh` 를 EC2 `~/apps/` 로 scp (+ chmod)
 4. **SSH로 컨테이너 reload, run**: `.env` 재생성 → docker pull → stop/rm → run → 헬스체크
 
-## 4. Chain × Network 스위칭 모델
+## 4. Chain × Network 스위칭 방식
 
 - 애플리케이션 이미지는 chain/network 를 **하드코딩하지 않는다**. 동일한 `mztk-be:latest` 가 `.env` 의 `ACTIVE_CHAIN`, `ACTIVE_NETWORK`, `WEB3_CHAIN_ID` 로 동작.
 - Chain network 전환은 `CHAIN` / `NETWORK` 환경변수만 바꿔 `refresh-and-restart.sh` 를 재실행하면 된다.
