@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.answer.application.service;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.RecoverAnswerEscrowCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerEscrowUseCase;
@@ -39,6 +41,8 @@ public class RecoverAnswerEscrowService implements RecoverAnswerEscrowUseCase {
         loadPostPort
             .loadPost(command.postId())
             .orElseThrow(momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException::new);
+    validateAnswerablePost(post);
+    answerLifecycleExecutionPort.precheckAnswerCreate(post.postId(), post.content());
     int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(command.postId()));
 
     return new AnswerMutationResult(
@@ -55,5 +59,14 @@ public class RecoverAnswerEscrowService implements RecoverAnswerEscrowUseCase {
                 answer.getContent(),
                 activeAnswerCount)
             .orElse(null));
+  }
+
+  private void validateAnswerablePost(LoadPostPort.PostContext post) {
+    if (!post.questionPost()) {
+      throw new AnswerUnsupportedPostTypeException();
+    }
+    if (post.answerLocked()) {
+      throw new CannotAnswerSolvedPostException();
+    }
   }
 }
