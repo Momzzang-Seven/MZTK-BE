@@ -256,6 +256,28 @@ class AnswerEscrowExecutionServiceTest {
   }
 
   @Test
+  @DisplayName("recoverAnswerUpdate skips recovery while the latest update intent is still active")
+  void recoverAnswerUpdate_skipsWhenLatestUpdateIntentIsActive() {
+    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+        .willReturn(Optional.of(answerProjection(QnaContentHashFactory.hash("온체인 답변"))));
+    given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
+        .willReturn(
+            Optional.of(
+                new QnaExecutionIntentStateView(
+                    "intent-active",
+                    QnaExecutionActionType.QNA_ANSWER_UPDATE,
+                    ExecutionIntentStatus.PENDING_ONCHAIN)));
+
+    Optional<QnaExecutionIntentResult> result =
+        service.recoverAnswerUpdate(
+            new PrepareAnswerUpdateCommand(101L, 201L, 22L, 7L, "질문 본문", 50L, "수정된 답변", 1));
+
+    assertThat(result).isEmpty();
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+  }
+
+  @Test
   @DisplayName("prepareAnswerDelete uses stored question hash and does not mutate projections")
   void prepareAnswerDelete_usesStoredQuestionHashWithoutMutation() {
     String storedQuestionHash = QnaContentHashFactory.hash("온체인 질문");

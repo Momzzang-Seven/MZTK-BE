@@ -249,7 +249,8 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             QnaExecutionActionType.QNA_QUESTION_UPDATE, requesterUserId, postId, null);
     return loadQnaExecutionIntentStatePort
         .loadLatestByRootIdempotencyKey(rootIdempotencyKey)
-        .filter(it -> it.matchesAction(QnaExecutionActionType.QNA_QUESTION_UPDATE))
+        .filter(
+            it -> it.matchesAction(QnaExecutionActionType.QNA_QUESTION_UPDATE) && it.isTerminal())
         .isPresent();
   }
 
