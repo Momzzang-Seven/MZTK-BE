@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult.AnswerImageSlot;
+import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerEscrowUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
@@ -83,6 +84,8 @@ class AnswerControllerIntegrationTest {
   @MockitoBean private LoadAnswerImagesPort loadAnswerImagesPort;
 
   @MockitoBean private LoadAnswerLikePort loadAnswerLikePort;
+
+  @MockitoBean private RecoverAnswerEscrowUseCase recoverAnswerEscrowUseCase;
 
   @BeforeEach
   void setUp() {

@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionExecutionResumePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
@@ -37,6 +38,7 @@ class GetPostServiceTest {
   @Mock private LoadPostWriterPort loadPostWriterPort;
   @Mock private LoadPostImagesPort loadPostImagesPort;
   @Mock private PostLikePersistencePort postLikePersistencePort;
+  @Mock private LoadQuestionExecutionResumePort loadQuestionExecutionResumePort;
 
   @InjectMocks private GetPostService getPostService;
 
@@ -221,6 +223,7 @@ class GetPostServiceTest {
     when(loadPostImagesPort.loadImages(PostType.QUESTION, 30L))
         .thenReturn(new PostImageResult(List.of()));
     when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(1L);
+    when(loadQuestionExecutionResumePort.loadLatest(30L)).thenReturn(Optional.empty());
 
     PostDetailResult result = getPostService.getPost(30L, 99L);
 
@@ -228,6 +231,7 @@ class GetPostServiceTest {
     assertThat(result.title()).isEqualTo("질문 제목");
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isTrue();
+    assertThat(result.web3Execution()).isNull();
   }
 
   @Test

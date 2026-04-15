@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 @ConditionalOnProperty(
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
@@ -52,8 +54,8 @@ public class MarkExecutionIntentFailedOnchainService
               ExecutionIntentStatus.FAILED_ONCHAIN.name(),
               lastErrorReason,
               LocalDateTime.now(appClock));
-      afterExecutionFailedOnchain(failedIntent, failureReason);
       executionIntentPersistencePort.update(failedIntent);
+      afterExecutionFailedOnchainSafely(failedIntent, failureReason);
     }
   }
 
@@ -64,9 +66,20 @@ public class MarkExecutionIntentFailedOnchainService
     return failureReason;
   }
 
-  private void afterExecutionFailedOnchain(ExecutionIntent intent, String failureReason) {
-    ExecutionActionHandlerPort handler = resolveActionHandler(intent);
-    handler.afterExecutionFailedOnchain(intent, handler.buildActionPlan(intent), failureReason);
+  private void afterExecutionFailedOnchainSafely(ExecutionIntent intent, String failureReason) {
+    try {
+      ExecutionActionHandlerPort handler = resolveActionHandler(intent);
+      var actionPlan = handler.buildActionPlan(intent);
+      handler.afterExecutionFailedOnchain(intent, actionPlan, failureReason);
+      handler.afterExecutionTerminated(
+          intent, actionPlan, ExecutionIntentStatus.FAILED_ONCHAIN, failureReason);
+    } catch (RuntimeException ex) {
+      log.error(
+          "Execution intent failed onchain but failure sync failed: executionIntentId={}, actionType={}",
+          intent.getPublicId(),
+          intent.getActionType(),
+          ex);
+    }
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {

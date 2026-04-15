@@ -1,13 +1,18 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummariesQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -103,5 +108,79 @@ class GetLatestExecutionIntentSummaryServiceTest {
             new GetLatestExecutionIntentSummaryQuery(ExecutionResourceTypeCode.ANSWER, "201"));
 
     assertThat(result).isEmpty();
+  }
+
+  @Test
+  void executeBatch_returnsLatestSummariesWithBatchTransactionLookup() {
+    ExecutionIntent intent101 =
+        ExecutionIntent.create(
+                "intent-answer-101",
+                "root-answer-101",
+                1,
+                ExecutionResourceType.ANSWER,
+                "101",
+                ExecutionActionType.QNA_ANSWER_SUBMIT,
+                7L,
+                22L,
+                ExecutionMode.EIP7702,
+                "0x" + "a".repeat(64),
+                "{\"action\":\"QNA_ANSWER_SUBMIT\"}",
+                "0x" + "1".repeat(40),
+                8L,
+                "0x" + "2".repeat(40),
+                LocalDateTime.of(2026, 4, 11, 12, 0),
+                "0x" + "3".repeat(64),
+                "0x" + "4".repeat(64),
+                null,
+                null,
+                BigInteger.TEN,
+                LocalDate.of(2026, 4, 11),
+                LocalDateTime.of(2026, 4, 11, 11, 0))
+            .markPendingOnchain(301L, LocalDateTime.of(2026, 4, 11, 11, 10));
+    ExecutionIntent intent102 =
+        ExecutionIntent.create(
+            "intent-answer-102",
+            "root-answer-102",
+            1,
+            ExecutionResourceType.ANSWER,
+            "102",
+            ExecutionActionType.QNA_ANSWER_UPDATE,
+            7L,
+            22L,
+            ExecutionMode.EIP7702,
+            "0x" + "b".repeat(64),
+            "{\"action\":\"QNA_ANSWER_UPDATE\"}",
+            "0x" + "5".repeat(40),
+            9L,
+            "0x" + "6".repeat(40),
+            LocalDateTime.of(2026, 4, 11, 12, 5),
+            "0x" + "7".repeat(64),
+            "0x" + "8".repeat(64),
+            null,
+            null,
+            BigInteger.TEN,
+            LocalDate.of(2026, 4, 11),
+            LocalDateTime.of(2026, 4, 11, 11, 5));
+
+    when(executionIntentPersistencePort.findLatestByResources(
+            eq(ExecutionResourceType.ANSWER), anyCollection()))
+        .thenReturn(Map.of("101", intent101, "102", intent102));
+    when(loadExecutionTransactionPort.findByIds(anyCollection()))
+        .thenReturn(
+            Map.of(
+                301L,
+                new ExecutionTransactionSummary(
+                    301L, ExecutionTransactionStatus.PENDING, "0xhash301")));
+
+    Map<String, GetLatestExecutionIntentSummaryResult> result =
+        service.executeBatch(
+            new GetLatestExecutionIntentSummariesQuery(
+                ExecutionResourceTypeCode.ANSWER, List.of("101", "102", "103")));
+
+    assertThat(result).hasSize(2);
+    assertThat(result.get("101").transactionId()).isEqualTo(301L);
+    assertThat(result.get("101").actionType()).isEqualTo(ExecutionActionType.QNA_ANSWER_SUBMIT);
+    assertThat(result.get("102").transactionId()).isNull();
+    assertThat(result.get("102").actionType()).isEqualTo(ExecutionActionType.QNA_ANSWER_UPDATE);
   }
 }

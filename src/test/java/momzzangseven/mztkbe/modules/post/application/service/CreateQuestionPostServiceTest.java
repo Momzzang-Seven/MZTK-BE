@@ -1,0 +1,107 @@
+package momzzangseven.mztkbe.modules.post.application.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Optional;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
+import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("CreateQuestionPostService unit test")
+class CreateQuestionPostServiceTest {
+
+  @Mock private PostPersistencePort postPersistencePort;
+  @Mock private PostXpService postXpService;
+  @Mock private LinkTagPort linkTagPort;
+  @Mock private UpdatePostImagesPort updatePostImagesPort;
+  @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+
+  private CreateQuestionPostService createQuestionPostService;
+
+  @BeforeEach
+  void setUp() {
+    createQuestionPostService =
+        new CreateQuestionPostService(
+            postPersistencePort,
+            postXpService,
+            linkTagPort,
+            updatePostImagesPort,
+            questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName(
+      "creates question post, performs precheck, prepares web3 execution, and preserves XP fields")
+  void executeSuccessWithQuestionPost() {
+    CreatePostCommand command =
+        CreatePostCommand.of(
+            3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, List.of(1L, 2L), List.of("java"));
+
+    Post savedPost =
+        Post.builder()
+            .id(20L)
+            .userId(3L)
+            .type(PostType.QUESTION)
+            .title("질문 제목")
+            .content("질문 내용")
+            .reward(50L)
+            .status(PostStatus.OPEN)
+            .tags(List.of("java"))
+            .build();
+
+    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
+    when(questionLifecycleExecutionPort.prepareQuestionCreate(20L, 3L, "질문 내용", 50L))
+        .thenReturn(Optional.empty());
+    when(postXpService.grantCreatePostXp(3L, 20L)).thenReturn(20L);
+
+    CreateQuestionPostResult result = createQuestionPostService.execute(command);
+
+    verify(questionLifecycleExecutionPort).precheckQuestionCreate(3L, 50L);
+    verify(updatePostImagesPort).updateImages(3L, 20L, PostType.QUESTION, List.of(1L, 2L));
+    verify(linkTagPort).linkTagsToPost(20L, List.of("java"));
+    verify(questionLifecycleExecutionPort).prepareQuestionCreate(20L, 3L, "질문 내용", 50L);
+    assertThat(result.postId()).isEqualTo(20L);
+    assertThat(result.isXpGranted()).isTrue();
+    assertThat(result.grantedXp()).isEqualTo(20L);
+    assertThat(result.message()).contains("+20 XP");
+    assertThat(result.web3()).isNull();
+  }
+
+  @Test
+  @DisplayName(
+      "rejects free command because question-create service is dedicated to question board")
+  void executeRejectsFreeCommand() {
+    CreatePostCommand command = CreatePostCommand.of(1L, null, "본문", PostType.FREE, 0L, null, null);
+
+    assertThatThrownBy(() -> createQuestionPostService.execute(command))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("question posts only");
+
+    verifyNoInteractions(
+        postPersistencePort,
+        postXpService,
+        linkTagPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort);
+  }
+}

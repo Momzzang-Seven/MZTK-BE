@@ -148,10 +148,10 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).deletePost(post);
     verifyNoInteractions(questionLifecycleExecutionPort);
-
     ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
     verify(eventPublisher).publishEvent(eventCaptor.capture());
-    assertThat(eventCaptor.getValue()).isEqualTo(new PostDeletedEvent(postId, PostType.FREE));
+    org.assertj.core.api.Assertions.assertThat(eventCaptor.getValue())
+        .isEqualTo(new PostDeletedEvent(postId, PostType.FREE));
   }
 
   @Test
@@ -235,8 +235,9 @@ class PostProcessServiceTest {
   }
 
   @Test
-  @DisplayName("QUESTION post update skips on-chain sync when content is unchanged")
-  void updateQuestionPostSkipsOnChainSyncWhenContentUnchanged() {
+  @DisplayName(
+      "QUESTION post update attempts recovery when content is unchanged but on-chain sync may be stale")
+  void updateQuestionPostAttemptsRecoveryWhenContentUnchanged() {
     Long ownerId = 7L;
     Long postId = 74L;
     Post post = questionPost(ownerId, postId);
@@ -244,22 +245,68 @@ class PostProcessServiceTest {
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L))
+        .thenReturn(Optional.empty());
 
     postProcessService.updatePost(ownerId, postId, command);
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(questionLifecycleExecutionPort);
+    verify(questionLifecycleExecutionPort).recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L);
   }
 
   @Test
-  @DisplayName("unanswered QUESTION post can be deleted when answer count is zero")
-  void deleteQuestionPostWhenNoAnswersSucceeds() {
+  @DisplayName("QUESTION metadata-only update is blocked while another on-chain intent is active")
+  void updateQuestionMetadataOnlyBlockedWhenActiveIntentExists() {
+    Long ownerId = 7L;
+    Long postId = 76L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.hasActiveQuestionIntent(postId)).thenReturn(true);
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("pending onchain mutation");
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+  }
+
+  @Test
+  @DisplayName("QUESTION post delete defers local removal when escrow delete intent is created")
+  void deleteQuestionPostDefersLocalRemovalWhenEscrowDeleteIsPrepared() {
     Long ownerId = 7L;
     Long postId = 73L;
     Post post = questionPost(ownerId, postId);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.prepareQuestionDelete(postId, ownerId, "질문 내용", 50L))
+        .thenReturn(
+            Optional.of(
+                org.mockito.Mockito.mock(
+                    momzzangseven.mztkbe.modules.post.application.port.out
+                        .QuestionExecutionWriteView.class)));
+
+    postProcessService.deletePost(ownerId, postId);
+
+    verify(postPersistencePort, never()).deletePost(post);
+    verify(questionLifecycleExecutionPort).prepareQuestionDelete(postId, ownerId, "질문 내용", 50L);
+    verifyNoInteractions(eventPublisher);
+  }
+
+  @Test
+  @DisplayName("QUESTION post delete still removes local row when web3 lifecycle is disabled")
+  void deleteQuestionPostDeletesLocallyWhenEscrowDeleteIsNotPrepared() {
+    Long ownerId = 7L;
+    Long postId = 75L;
+    Post post = questionPost(ownerId, postId);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.prepareQuestionDelete(postId, ownerId, "질문 내용", 50L))
+        .thenReturn(Optional.empty());
 
     postProcessService.deletePost(ownerId, postId);
 

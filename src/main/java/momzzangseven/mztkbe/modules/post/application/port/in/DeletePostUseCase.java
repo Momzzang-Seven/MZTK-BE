@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.port.in;
 
+import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
+
 public interface DeletePostUseCase {
-  void deletePost(Long userId, Long postId);
+  PostMutationResult deletePost(Long userId, Long postId);
 }

@@ -1,6 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.port.in;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionAuditCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionBroadcastResult;
@@ -13,6 +16,15 @@ public interface ManageExecutionTransactionUseCase {
   Optional<ExecutionTransactionRecordResult> findById(Long transactionId);
 
   Optional<ExecutionTransactionSummaryResult> findSummaryById(Long transactionId);
+
+  default Map<Long, ExecutionTransactionSummaryResult> findSummariesByIds(
+      Collection<Long> transactionIds) {
+    Map<Long, ExecutionTransactionSummaryResult> results = new LinkedHashMap<>();
+    for (Long transactionId : transactionIds) {
+      findSummaryById(transactionId).ifPresent(summary -> results.put(transactionId, summary));
+    }
+    return results;
+  }
 
   ExecutionTransactionRecordResult createAndFlush(ExecutionTransactionRecordCommand command);
 

@@ -19,6 +19,7 @@ final class ExecutionIntentViewMapper {
         intent.getResourceType(),
         intent.getResourceId(),
         toResourceStatus(intent.getStatus()),
+        intent.getActionType(),
         intent.getPublicId(),
         intent.getStatus(),
         intent.getExpiresAt(),
