@@ -1,4 +1,14 @@
 #!/bin/sh
 echo "Running pre-commit checks..."
 ./gradlew spotlessApply checkstyleMain --no-daemon || exit 1
+
+# application YML이 스테이징에 포함된 경우에만 .env.example 커버리지를 검사
+changed_ymls=$(git diff --cached --name-only | \
+  grep -E '^src/main/resources/application(-dev|-prod)?\.yml$' || true)
+
+if [ -n "$changed_ymls" ]; then
+  echo "application YML changes detected – checking .env.example coverage..."
+  bash scripts/ci/check-env-coverage.sh || exit 1
+fi
+
 echo "✅ Passed"

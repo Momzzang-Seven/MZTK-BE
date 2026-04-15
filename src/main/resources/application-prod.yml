@@ -37,7 +37,8 @@ spring:
 security:
   cors:
     allowed-origins:
-      - https://mztk.vercel.app   # 실제 배포 도메인으로 설정
+      - ${PROD_DOMAIN}  # 실제 배포 도메인
+      - https://mztk.vercel.app
 
 logging:
   level:
@@ -48,22 +49,22 @@ logging:
 
 kakao:
   auth:
-    redirect:${KAKAO_REDIRECT_URI}
+    redirect: ${KAKAO_REDIRECT_URI}
 
 google:
   oauth:
-    redirect-uri:${GOOGLE_REDIRECT_URI}
+    redirect-uri: ${GOOGLE_REDIRECT_URI}
 
 web3:
   challenge:
     eip4361:
-      uri:${PROD_DOMAIN}
+      uri: ${PROD_DOMAIN}
 
   explorer:
-    base-url: https://optimistic.etherscan.io
+    base-url: ${WEB3_EXPLORER_BASE_URL:https://optimistic.etherscan.io}
 
   eip7702:
-    enabled: true                   # prod에서 실제로 스폰서 기능을 쓰면 true
+    enabled: ${WEB3_EIP_7702_ENABLED:true}                   # prod에서 실제로 스폰서 기능을 쓰면 true
     execution:
       allowed-delegate-targets:
         - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS}
@@ -75,4 +76,4 @@ web3:
       blocked-function-selectors:
         - 0x095ea7b3                # approve (예시)
   transfer:
-    legacy-question-reward-handler-enabled: false
+    legacy-question-reward-handler-enabled: ${WEB3_TRANSFER_LEGACY_QUESTION_REWARD_HANDLER_ENABLED:false}
