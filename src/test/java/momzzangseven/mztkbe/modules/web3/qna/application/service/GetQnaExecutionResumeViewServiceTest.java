@@ -4,15 +4,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummariesQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResumeBatchViewQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResumeViewQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionResumeViewResult;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
@@ -48,6 +53,7 @@ class GetQnaExecutionResumeViewServiceTest {
                     ExecutionResourceType.QUESTION,
                     "101",
                     ExecutionResourceStatus.COMPLETED,
+                    ExecutionActionType.QNA_ANSWER_ACCEPT,
                     "intent-101",
                     ExecutionIntentStatus.CONFIRMED,
                     LocalDateTime.of(2026, 4, 11, 12, 30),
@@ -89,5 +95,55 @@ class GetQnaExecutionResumeViewServiceTest {
         service.execute(new GetQnaExecutionResumeViewQuery(QnaExecutionResourceType.ANSWER, 201L));
 
     assertThat(result).isEmpty();
+  }
+
+  @Test
+  void executeBatch_mapsSummariesToQnaResumeViews() {
+    when(getLatestExecutionIntentSummaryUseCase.executeBatch(
+            new GetLatestExecutionIntentSummariesQuery(
+                momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode
+                    .ANSWER,
+                List.of("201", "202"))))
+        .thenReturn(
+            Map.of(
+                "201",
+                    new GetLatestExecutionIntentSummaryResult(
+                        ExecutionResourceType.ANSWER,
+                        "201",
+                        ExecutionResourceStatus.PENDING_EXECUTION,
+                        ExecutionActionType.QNA_ANSWER_SUBMIT,
+                        "intent-201",
+                        ExecutionIntentStatus.AWAITING_SIGNATURE,
+                        LocalDateTime.of(2026, 4, 11, 12, 30),
+                        ExecutionMode.EIP7702,
+                        2,
+                        null,
+                        null,
+                        null),
+                "202",
+                    new GetLatestExecutionIntentSummaryResult(
+                        ExecutionResourceType.ANSWER,
+                        "202",
+                        ExecutionResourceStatus.COMPLETED,
+                        ExecutionActionType.QNA_ANSWER_UPDATE,
+                        "intent-202",
+                        ExecutionIntentStatus.CONFIRMED,
+                        LocalDateTime.of(2026, 4, 11, 12, 40),
+                        ExecutionMode.EIP7702,
+                        2,
+                        702L,
+                        ExecutionTransactionStatus.SUCCEEDED,
+                        "0xhash702")));
+
+    Map<Long, QnaExecutionResumeViewResult> result =
+        service.executeBatch(
+            new GetQnaExecutionResumeBatchViewQuery(
+                QnaExecutionResourceType.ANSWER, List.of(201L, 202L)));
+
+    assertThat(result).hasSize(2);
+    assertThat(result.get(201L).resource().id()).isEqualTo("201");
+    assertThat(result.get(201L).transaction()).isNull();
+    assertThat(result.get(202L).transaction()).isNotNull();
+    assertThat(result.get(202L).transaction().id()).isEqualTo(702L);
   }
 }

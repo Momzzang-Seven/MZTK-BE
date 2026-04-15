@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.answer.application.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 
 public record AnswerResult(
@@ -14,6 +15,7 @@ public record AnswerResult(
     long likeCount,
     boolean liked,
     List<String> imageUrls,
+    AnswerExecutionResumeView web3Execution,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
@@ -23,7 +25,8 @@ public record AnswerResult(
       String profileImageUrl,
       long likeCount,
       boolean liked,
-      List<String> imageUrls) {
+      List<String> imageUrls,
+      AnswerExecutionResumeView web3Execution) {
     return new AnswerResult(
         answer.getId(),
         answer.getUserId(),
@@ -34,6 +37,7 @@ public record AnswerResult(
         likeCount,
         liked,
         imageUrls == null ? List.of() : imageUrls,
+        web3Execution,
         answer.getCreatedAt(),
         answer.getUpdatedAt());
   }

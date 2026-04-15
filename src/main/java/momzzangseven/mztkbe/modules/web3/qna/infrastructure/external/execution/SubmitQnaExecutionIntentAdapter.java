@@ -31,7 +31,7 @@ public class SubmitQnaExecutionIntentAdapter implements SubmitQnaExecutionDraftP
     CreateExecutionIntentResult result =
         createExecutionIntentUseCase.execute(
             new CreateExecutionIntentCommand(toExecutionDraft(draft)));
-    return QnaExecutionIntentResult.from(result);
+    return QnaExecutionIntentResult.from(draft.actionType().name(), result);
   }
 
   private ExecutionDraft toExecutionDraft(QnaExecutionDraft draft) {

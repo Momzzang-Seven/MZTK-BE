@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
@@ -83,6 +84,7 @@ class CreateExecutionIntentServiceTest {
             buildExecutionDigestPort,
             validateExecutionDraftPolicyPort,
             executionModeSelector,
+            List.of(),
             FIXED_CLOCK);
   }
 

@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -45,6 +47,20 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public Map<String, ExecutionIntent> findLatestByResources(
+      ExecutionResourceType resourceType, Collection<String> resourceIds) {
+    if (resourceIds == null || resourceIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, ExecutionIntent> latestByResourceId = new LinkedHashMap<>();
+    for (Web3ExecutionIntentEntity entity :
+        repository.findLatestByResources(resourceType, resourceIds)) {
+      latestByResourceId.putIfAbsent(entity.getResourceId(), toDomain(entity));
+    }
+    return latestByResourceId;
+  }
+
+  @Override
   public Optional<ExecutionIntent> findLatestByRequesterAndResource(
       Long requesterUserId, ExecutionResourceType resourceType, String resourceId) {
     return repository
@@ -60,6 +76,30 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
       String rootIdempotencyKey) {
     return repository
         .findAllByRootIdempotencyKeyForUpdate(rootIdempotencyKey, PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
+        .map(this::toDomain);
+  }
+
+  @Override
+  public Optional<ExecutionIntent> findLatestByRootIdempotencyKey(String rootIdempotencyKey) {
+    return repository.findAllByRootIdempotencyKey(rootIdempotencyKey, PageRequest.of(0, 1)).stream()
+        .findFirst()
+        .map(this::toDomain);
+  }
+
+  @Override
+  public Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
+      ExecutionResourceType resourceType, String resourceId) {
+    return repository
+        .findLatestByResourceAndStatusInForUpdate(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN),
+            PageRequest.of(0, 1))
         .stream()
         .findFirst()
         .map(this::toDomain);

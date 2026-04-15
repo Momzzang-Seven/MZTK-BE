@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCa
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionExecutionResumePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
@@ -20,6 +21,13 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Read service for post detail/context queries.
+ *
+ * <p>The detail path supports optional authentication: anonymous callers still receive public post
+ * data, while authenticated callers additionally get liked-state and, for question posts, the
+ * latest resumable Web3 execution summary.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -30,6 +38,7 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
   private final LoadPostWriterPort loadPostWriterPort;
   private final LoadPostImagesPort loadPostImagesPort;
   private final PostLikePersistencePort postLikePersistencePort;
+  private final LoadQuestionExecutionResumePort loadQuestionExecutionResumePort;
 
   @Override
   public Optional<GetPostContextUseCase.PostContext> getPostContext(Long postId) {
@@ -47,6 +56,7 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                     post.getStatus() != PostStatus.OPEN));
   }
 
+  /** Loads public post detail, enriching optional viewer-specific state when requester is known. */
   @Override
   public PostDetailResult getPost(Long postId, Long requesterUserId) {
     Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
@@ -68,8 +78,12 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
     boolean liked =
         requesterUserId != null
             && postLikePersistencePort.exists(PostLikeTargetType.POST, postId, requesterUserId);
+    var web3Execution =
+        PostType.QUESTION.equals(post.getType())
+            ? loadQuestionExecutionResumePort.loadLatest(postId).orElse(null)
+            : null;
 
     return PostDetailResult.fromDomain(
-        post, likeCount, liked, nickname, profileImageUrl, imageUrls);
+        post, likeCount, liked, nickname, profileImageUrl, imageUrls, web3Execution);
   }
 }

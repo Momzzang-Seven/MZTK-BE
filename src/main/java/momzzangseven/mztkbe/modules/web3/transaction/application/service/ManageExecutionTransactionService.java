@@ -1,6 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionAuditCommand;
@@ -53,6 +56,26 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
                     transaction.getId(),
                     TransactionStatus.valueOf(transaction.getStatus().name()),
                     transaction.getTxHash()));
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Map<Long, ExecutionTransactionSummaryResult> findSummariesByIds(
+      Collection<Long> transactionIds) {
+    if (transactionIds == null || transactionIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<Long, ExecutionTransactionSummaryResult> results = new LinkedHashMap<>();
+    for (TransferTransaction transaction :
+        transferTransactionPersistencePort.findByIds(transactionIds)) {
+      results.put(
+          transaction.getId(),
+          new ExecutionTransactionSummaryResult(
+              transaction.getId(),
+              TransactionStatus.valueOf(transaction.getStatus().name()),
+              transaction.getTxHash()));
+    }
+    return results;
   }
 
   @Override

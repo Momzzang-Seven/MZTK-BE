@@ -14,6 +14,7 @@ public record AnswerResponse(
     long likeCount,
     boolean isLiked,
     List<String> imageUrls,
+    AnswerWeb3ExecutionResponse web3Execution,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
@@ -28,6 +29,7 @@ public record AnswerResponse(
         answer.likeCount(),
         answer.liked(),
         answer.imageUrls() == null ? List.of() : answer.imageUrls(),
+        AnswerWeb3ExecutionResponse.from(answer.web3Execution()),
         answer.createdAt(),
         answer.updatedAt());
   }

@@ -31,9 +31,11 @@ import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerExecutionResumePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
@@ -68,6 +70,7 @@ class AnswerServiceTest {
   @Mock private LoadAnswerLikePort loadAnswerLikePort;
   @Mock private UpdateAnswerImagesPort updateAnswerImagesPort;
   @Mock private AnswerLifecycleExecutionPort answerLifecycleExecutionPort;
+  @Mock private LoadAnswerExecutionResumePort loadAnswerExecutionResumePort;
   @Mock private ApplicationEventPublisher eventPublisher;
   @Spy private AnswerReadAssembler answerReadAssembler = new AnswerReadAssembler();
 
@@ -89,9 +92,14 @@ class AnswerServiceTest {
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
       given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerCreate(
+                  10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
+          .willReturn(Optional.empty());
 
       CreateAnswerResult result = answerService.execute(command);
 
+      assertThat(result.postId()).isEqualTo(10L);
       assertThat(result.answerId()).isEqualTo(99L);
       verify(updateAnswerImagesPort).updateImages(20L, 99L, List.of(1L, 2L));
       verify(answerLifecycleExecutionPort)
@@ -109,6 +117,10 @@ class AnswerServiceTest {
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
       given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerCreate(
+                  10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
+          .willReturn(Optional.empty());
 
       answerService.execute(command);
 
@@ -128,6 +140,10 @@ class AnswerServiceTest {
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
       given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerCreate(
+                  10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
+          .willReturn(Optional.empty());
 
       answerService.execute(command);
 
@@ -219,6 +235,51 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("execute(Long, Long) loads owner web3 resume summaries in batch")
+    void getAnswers_ownerRowsLoadWeb3ResumeInBatch() {
+      Long postId = 10L;
+      List<Answer> answers =
+          List.of(
+              buildAnswer(1L, 10L, 20L, "first", false),
+              buildAnswer(2L, 10L, 21L, "second", false),
+              buildAnswer(3L, 10L, 20L, "third", false));
+      LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
+
+      given(loadPostPort.loadPost(postId)).willReturn(Optional.of(postContext));
+      given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
+      given(loadAnswerWriterPort.loadWritersByIds(List.of(20L, 21L)))
+          .willReturn(
+              Map.of(
+                  20L, new LoadAnswerWriterPort.WriterSummary(20L, "writer-a", "profile-a"),
+                  21L, new LoadAnswerWriterPort.WriterSummary(21L, "writer-b", "profile-b")));
+      given(loadAnswerImagesPort.loadImagesByAnswerIds(List.of(1L, 2L, 3L))).willReturn(Map.of());
+      given(loadAnswerLikePort.countLikeByAnswerIds(List.of(1L, 2L, 3L)))
+          .willReturn(Map.of(1L, 0L, 2L, 0L, 3L, 0L));
+      given(loadAnswerLikePort.loadLikedAnswerIds(List.of(1L, 2L, 3L), 20L))
+          .willReturn(java.util.Set.of());
+      given(loadAnswerExecutionResumePort.loadLatestByAnswerIds(List.of(1L, 3L)))
+          .willReturn(
+              Map.of(
+                  1L,
+                  new AnswerExecutionResumeView(
+                      new AnswerExecutionResumeView.Resource("ANSWER", "1", "PENDING_EXECUTION"),
+                      "QNA_ANSWER_SUBMIT",
+                      new AnswerExecutionResumeView.ExecutionIntent(
+                          "intent-1", "AWAITING_SIGNATURE", LocalDateTime.now()),
+                      new AnswerExecutionResumeView.Execution("EIP7702", 2),
+                      null)));
+
+      List<AnswerResult> result = answerService.execute(postId, 20L);
+
+      assertThat(result).hasSize(3);
+      assertThat(result.get(0).web3Execution()).isNotNull();
+      assertThat(result.get(1).web3Execution()).isNull();
+      assertThat(result.get(2).web3Execution()).isNull();
+      verify(loadAnswerExecutionResumePort).loadLatestByAnswerIds(List.of(1L, 3L));
+      verify(loadAnswerExecutionResumePort, never()).loadLatest(any());
+    }
+
+    @Test
     @DisplayName("update with null imageIds saves content only")
     void updateAnswer_updatesContent_whenImageIdsAreNull() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
@@ -231,6 +292,10 @@ class AnswerServiceTest {
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
       given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerUpdate(
+                  10L, 100L, 20L, 30L, "question content", 50L, "updated", 1))
+          .willReturn(Optional.empty());
 
       answerService.execute(command);
 
@@ -257,7 +322,51 @@ class AnswerServiceTest {
 
       verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
       verify(updateAnswerImagesPort).updateImages(20L, 100L, List.of(9L));
-      verifyNoInteractions(answerLifecycleExecutionPort);
+      verify(answerLifecycleExecutionPort).hasActiveAnswerIntent(100L);
+    }
+
+    @Test
+    @DisplayName(
+        "update with unchanged content attempts escrow recovery before falling back to local-only save")
+    void updateAnswer_withUnchangedContent_attemptsRecovery() {
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "before", null);
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.recoverAnswerUpdate(
+                  10L, 100L, 20L, 30L, "question content", 50L, "before", 1))
+          .willReturn(Optional.empty());
+
+      answerService.execute(command);
+
+      verify(saveAnswerPort).saveAnswer(any(Answer.class));
+      verify(answerLifecycleExecutionPort)
+          .recoverAnswerUpdate(10L, 100L, 20L, 30L, "question content", 50L, "before", 1);
+    }
+
+    @Test
+    @DisplayName("image-only update is blocked while another on-chain answer intent is active")
+    void updateAnswer_imageOnlyBlockedWhenActiveIntentExists() {
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(9L));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(answerLifecycleExecutionPort.hasActiveAnswerIntent(100L)).willReturn(true);
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(AnswerInvalidInputException.class)
+          .hasMessageContaining("pending onchain mutation");
+
+      verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+      verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
     }
 
     @Test
@@ -273,6 +382,10 @@ class AnswerServiceTest {
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
       given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerUpdate(
+                  10L, 100L, 20L, 30L, "question content", 50L, "updated", 1))
+          .willReturn(Optional.empty());
 
       answerService.execute(command);
 
@@ -282,8 +395,8 @@ class AnswerServiceTest {
     }
 
     @Test
-    @DisplayName("delete answer delegates deletion and publishes AnswerDeletedEvent")
-    void deleteAnswer_delegatesToPort_andPublishesEvent() {
+    @DisplayName("delete answer defers local deletion when escrow delete intent is created")
+    void deleteAnswer_defersLocalDeletionWhenEscrowDeleteIsPrepared() {
       DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
       Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false);
       LoadPostPort.PostContext postContext =
@@ -292,13 +405,43 @@ class AnswerServiceTest {
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(countAnswersPort.countAnswers(10L)).willReturn(0L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerDelete(
+                  10L, 100L, 20L, 30L, "question content", 50L, 0))
+          .willReturn(
+              Optional.of(
+                  org.mockito.Mockito.mock(
+                      momzzangseven.mztkbe.modules.answer.application.port.out
+                          .AnswerExecutionWriteView.class)));
 
       answerService.execute(command);
 
-      verify(deleteAnswerPort).deleteAnswer(100L);
+      verify(deleteAnswerPort, never()).deleteAnswer(100L);
       verify(answerLifecycleExecutionPort)
           .prepareAnswerDelete(10L, 100L, 20L, 30L, "question content", 50L, 0);
-      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(100L));
+      verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("delete answer still removes local row when escrow lifecycle is disabled")
+    void deleteAnswer_deletesLocallyWhenEscrowDeleteIsNotPrepared() {
+      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 101L, 20L);
+      Answer answer = buildAnswer(101L, 10L, 20L, "delete me", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+
+      given(loadAnswerPort.loadAnswerForUpdate(101L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(countAnswersPort.countAnswers(10L)).willReturn(0L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerDelete(
+                  10L, 101L, 20L, 30L, "question content", 50L, 0))
+          .willReturn(Optional.empty());
+
+      answerService.execute(command);
+
+      verify(deleteAnswerPort).deleteAnswer(101L);
+      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(101L));
     }
 
     @Test

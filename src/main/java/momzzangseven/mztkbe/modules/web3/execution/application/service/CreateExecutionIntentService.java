@@ -58,6 +58,10 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private final BuildExecutionDigestPort buildExecutionDigestPort;
   private final ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
   private final ExecutionModeSelector executionModeSelector;
+  private final java.util.List<
+          momzzangseven.mztkbe.modules.web3.execution.application.port.out
+              .ExecutionActionHandlerPort>
+      executionActionHandlerPorts;
   private final Clock appClock;
 
   /**
@@ -144,6 +148,10 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
             existing.resolveSponsorUsageDateKst(),
             existing.getReservedSponsorCostWei());
       }
+      notifyTerminated(
+          existing.expire(ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage(), now),
+          ExecutionIntentStatus.EXPIRED,
+          ErrorCode.AUTH_EXPIRED.name());
       return null;
     }
 
@@ -159,6 +167,11 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
               existing.resolveSponsorUsageDateKst(),
               existing.getReservedSponsorCostWei());
         }
+        notifyTerminated(
+            existing.cancel(
+                ErrorCode.IDEMPOTENCY_CONFLICT.name(), "superseded by new payload", now),
+            ExecutionIntentStatus.CANCELED,
+            ErrorCode.IDEMPOTENCY_CONFLICT.name());
         return null;
       }
       if (existing.getStatus().isInFlight()
@@ -249,6 +262,17 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     SponsorDailyUsage usage =
         sponsorDailyUsagePersistencePort.getOrCreateForUpdate(userId, usageDateKst);
     sponsorDailyUsagePersistencePort.update(usage.release(reservedCostWei));
+  }
+
+  private void notifyTerminated(
+      ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
+    executionActionHandlerPorts.stream()
+        .filter(handler -> handler.supports(intent.getActionType()))
+        .findFirst()
+        .ifPresent(
+            handler ->
+                handler.afterExecutionTerminated(
+                    intent, handler.buildActionPlan(intent), terminalStatus, failureReason));
   }
 
   private String hashDraftCalls(CreateExecutionIntentCommand command) {

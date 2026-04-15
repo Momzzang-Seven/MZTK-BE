@@ -54,6 +54,9 @@ class AcceptAnswerServiceTest {
             Optional.of(
                 new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(acceptedPost);
+    when(questionLifecycleExecutionPort.prepareAnswerAccept(
+            10L, 20L, 1L, 2L, "content", "answer content", 100L))
+        .thenReturn(Optional.empty());
 
     AcceptAnswerResult result = acceptAnswerService.execute(command);
 
@@ -80,6 +83,9 @@ class AcceptAnswerServiceTest {
             Optional.of(
                 new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(pendingPost);
+    when(questionLifecycleExecutionPort.prepareAnswerAccept(
+            10L, 20L, 1L, 2L, "content", "answer content", 100L))
+        .thenReturn(Optional.empty());
 
     AcceptAnswerResult result = acceptAnswerService.execute(command);
 
