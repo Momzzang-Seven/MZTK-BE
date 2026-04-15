@@ -120,12 +120,13 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "[3/4] scp refresh-env.sh → EC2"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-scp -i "${EC2_KEY_PATH}" \
+scp -q -i "${EC2_KEY_PATH}" \
     -o StrictHostKeyChecking=no \
     "${REFRESH_ENV_LOCAL}" \
     "${EC2_USER}@${EC2_HOST}:~/apps/refresh-env.sh"
+echo "  ✓ refresh-env.sh uploaded"
 
-ssh -i "${EC2_KEY_PATH}" \
+ssh -T -i "${EC2_KEY_PATH}" \
     -o StrictHostKeyChecking=no \
     "${EC2_USER}@${EC2_HOST}" 'chmod +x ~/apps/refresh-env.sh'
 
@@ -139,7 +140,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 # heredoc 이 unquoted(<< REMOTE) 이어야 로컬 변수(DOCKER_HUB_*)가 확장된다.
 # EC2 측 루프 변수($i)는 \$i 로 이스케이프.
-ssh -i "${EC2_KEY_PATH}" \
+ssh -T -i "${EC2_KEY_PATH}" \
     -o StrictHostKeyChecking=no \
     -o ConnectTimeout=10 \
     "${EC2_USER}@${EC2_HOST}" << REMOTE
