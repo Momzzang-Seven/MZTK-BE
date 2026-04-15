@@ -171,7 +171,7 @@ while IFS='=' read -r key val || [[ -n "${key:-}" ]]; do
     --name "${name}" \
     --value "${val}" \
     --type "${type}" \
-    "${key_id_flag[@]}" \
+    ${key_id_flag[@]+"${key_id_flag[@]}"} \
     --overwrite > /dev/null
 
   aws ssm add-tags-to-resource \
