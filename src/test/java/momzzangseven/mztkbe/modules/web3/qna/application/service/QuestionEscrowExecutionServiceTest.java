@@ -171,6 +171,28 @@ class QuestionEscrowExecutionServiceTest {
 
   @Test
   @DisplayName(
+      "recoverQuestionUpdate skips recovery while the latest update intent is still active")
+  void recoverQuestionUpdate_skipsWhenLatestUpdateIntentIsActive() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
+        .willReturn(
+            Optional.of(
+                new QnaExecutionIntentStateView(
+                    "intent-active",
+                    QnaExecutionActionType.QNA_QUESTION_UPDATE,
+                    ExecutionIntentStatus.AWAITING_SIGNATURE)));
+
+    Optional<QnaExecutionIntentResult> result =
+        service.recoverQuestionUpdate(new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L));
+
+    assertThat(result).isEmpty();
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+  }
+
+  @Test
+  @DisplayName(
       "recoverQuestionCreate recreates create intent only after terminal create and missing projection")
   void recoverQuestionCreate_recreatesWhenLatestCreateIntentIsTerminal() {
     given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
