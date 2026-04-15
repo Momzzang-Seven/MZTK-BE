@@ -44,6 +44,9 @@ jobs:
       - name: Clean project
         run: ./gradlew clean --no-daemon
 
+      - name: Check .env.example coverage
+        run: bash scripts/ci/check-env-coverage.sh
+
       - name: Verify code format (Spotless)
         run: ./gradlew spotlessCheck --no-daemon
         
