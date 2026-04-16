@@ -471,13 +471,29 @@ class PostControllerIntegrationTest {
         .perform(get("/posts?type=QUESTION&tag=java&search=Spring").with(userPrincipal(301L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.length()").value(1))
-        .andExpect(jsonPath("$.data[0].postId").value(expectedPostId))
-        .andExpect(jsonPath("$.data[0].type").value("QUESTION"))
-        .andExpect(jsonPath("$.data[0].title").value("Spring boot tag search"))
-        .andExpect(jsonPath("$.data[0].tags[0]").value("java"))
-        .andExpect(jsonPath("$.data[0].question.reward").value(50))
-        .andExpect(jsonPath("$.data[0].question.isSolved").value(false));
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.posts.length()").value(1))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(expectedPostId))
+        .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"))
+        .andExpect(jsonPath("$.data.posts[0].title").value("Spring boot tag search"))
+        .andExpect(jsonPath("$.data.posts[0].tags[0]").value("java"))
+        .andExpect(jsonPath("$.data.posts[0].question.reward").value(50))
+        .andExpect(jsonPath("$.data.posts[0].question.isSolved").value(false));
+  }
+
+  @Test
+  @DisplayName("GET /posts returns hasNext=true and trims posts to requested size")
+  void getPosts_returnsHasNextAndTrimsToRequestedSize() throws Exception {
+    createQuestionPost(601L, "first question", "content 1", 30L, List.of("java"));
+    createQuestionPost(602L, "second question", "content 2", 30L, List.of("java"));
+
+    mockMvc
+        .perform(get("/posts?type=QUESTION&size=1&page=0").with(userPrincipal(601L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.hasNext").value(true))
+        .andExpect(jsonPath("$.data.posts.length()").value(1))
+        .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"));
   }
 
   @Test

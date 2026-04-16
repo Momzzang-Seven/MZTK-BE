@@ -321,4 +321,31 @@ class PostPersistenceAdapterTest {
       assertThat(result).isNotNull();
     }
   }
+
+  @Nested
+  @DisplayName("fetchLimit() - hasNext probe query size")
+  class FetchLimitBranch {
+
+    private java.lang.reflect.Method fetchLimit;
+
+    @BeforeEach
+    void setUp() throws Exception {
+      fetchLimit =
+          PostPersistenceAdapter.class.getDeclaredMethod(
+              "fetchLimit",
+              momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition.class);
+      fetchLimit.setAccessible(true);
+    }
+
+    @Test
+    @DisplayName("returns requested size plus one probe row")
+    void returnsRequestedSizePlusOne() throws Exception {
+      Object result =
+          fetchLimit.invoke(
+              postPersistenceAdapter,
+              new momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition(
+                  PostType.FREE, null, null, 0, 10));
+      assertThat(result).isEqualTo(11L);
+    }
+  }
 }

@@ -390,8 +390,9 @@ class PostE2ETest extends E2ETestBase {
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode root = parse(res);
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
-    assertThat(root.at("/data").isArray()).isTrue();
-    assertThat(root.at("/data").get(0).get("content").asText()).isEqualTo("목록 조회 E2E 게시글");
+    assertThat(root.at("/data/posts").isArray()).isTrue();
+    assertThat(root.at("/data/hasNext").isBoolean()).isTrue();
+    assertThat(root.at("/data/posts").get(0).get("content").asText()).isEqualTo("목록 조회 E2E 게시글");
   }
 
   @Test
