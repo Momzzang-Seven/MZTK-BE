@@ -26,7 +26,7 @@ class RecoveryRateLimitFilterTest {
 
   @BeforeEach
   void setUp() {
-    filter = new RecoveryRateLimitFilter(objectMapper, false);
+    filter = new RecoveryRateLimitFilter(objectMapper, true);
   }
 
   private MockHttpServletRequest postRecoveryRequest(String remoteAddr) {
@@ -159,27 +159,56 @@ class RecoveryRateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("[M-188] doFilterInternal uses X-Forwarded-For header when present")
-    void doFilterInternal_xForwardedFor_usesFirstIp() throws Exception {
+    @DisplayName("[M-188] doFilterInternal uses rightmost X-Forwarded-For entry (ALB-appended IP)")
+    void doFilterInternal_xForwardedFor_usesLastIp() throws Exception {
       // given
       FilterChain filterChain = mock(FilterChain.class);
+      // The rightmost IP (203.0.113.50) is the one ALB appended — the real client IP.
+      // The leftmost IP (spoofed-ip) is attacker-controlled and must be ignored.
+      String headerValue = "spoofed-ip, 203.0.113.50";
 
-      // when — exhaust bucket via X-Forwarded-For IP
+      // when — exhaust bucket for the real client IP (rightmost)
       for (int i = 0; i < 3; i++) {
         MockHttpServletRequest request = postRecoveryRequest("10.0.0.1");
-        request.addHeader("X-Forwarded-For", "203.0.113.50, 10.0.0.1");
+        request.addHeader("X-Forwarded-For", headerValue);
         MockHttpServletResponse response = new MockHttpServletResponse();
         filter.doFilterInternal(request, response, filterChain);
       }
 
-      // 4th request with same X-Forwarded-For
+      // 4th request — same rightmost IP, different spoofed leftmost
       MockHttpServletRequest request = postRecoveryRequest("10.0.0.1");
-      request.addHeader("X-Forwarded-For", "203.0.113.50, 10.0.0.1");
+      request.addHeader("X-Forwarded-For", "different-spoofed-ip, 203.0.113.50");
       MockHttpServletResponse response = new MockHttpServletResponse();
       filter.doFilterInternal(request, response, filterChain);
 
-      // then
+      // then — rate limited because rightmost IP is the same
       assertThat(response.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+    }
+
+    @Test
+    @DisplayName(
+        "[M-191] doFilterInternal extracts rightmost IP — same rightmost shares bucket,"
+            + " different rightmost gets independent bucket")
+    void doFilterInternal_xForwardedFor_rightmostIpDeterminesBucket() throws Exception {
+      // given
+      FilterChain filterChain = mock(FilterChain.class);
+
+      // when — exhaust bucket for rightmost IP 203.0.113.50 (spoofed left part varies)
+      for (int i = 0; i < 3; i++) {
+        MockHttpServletRequest request = postRecoveryRequest("10.0.0.1");
+        request.addHeader("X-Forwarded-For", "random-" + i + ", 203.0.113.50");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        filter.doFilterInternal(request, response, filterChain);
+      }
+
+      // request with DIFFERENT rightmost IP — should pass (independent bucket)
+      MockHttpServletRequest differentRightmost = postRecoveryRequest("10.0.0.1");
+      differentRightmost.addHeader("X-Forwarded-For", "spoofed, 198.51.100.10");
+      MockHttpServletResponse differentResponse = new MockHttpServletResponse();
+      filter.doFilterInternal(differentRightmost, differentResponse, filterChain);
+
+      // then — different rightmost IP is not rate-limited
+      assertThat(differentResponse.getStatus()).isNotEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
     }
 
     @Test
