@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class CreatePostService implements CreatePostUseCase {
   private final PostPersistencePort postPersistencePort;
   private final PostXpService postXpService;
   private final LinkTagPort linkTagPort;
+  private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
 
   @Override
@@ -31,10 +33,19 @@ public class CreatePostService implements CreatePostUseCase {
       throw new PostInvalidInputException("CreatePostService supports free posts only");
     }
     command.validate();
+    validatePostImagesIfPresent(command);
     Post savedPost = savePost(command);
     XpGrantResult xpResult = grantCreateXp(command.userId(), savedPost.getId());
     return new CreatePostResult(
         savedPost.getId(), xpResult.isXpGranted(), xpResult.grantedXp(), xpResult.message());
+  }
+
+  private void validatePostImagesIfPresent(CreatePostCommand command) {
+    if (command.imageIds() == null || command.imageIds().isEmpty()) {
+      return;
+    }
+    validatePostImagesPort.validateAttachableImages(
+        command.userId(), null, command.type(), command.imageIds());
   }
 
   private Post savePost(CreatePostCommand command) {

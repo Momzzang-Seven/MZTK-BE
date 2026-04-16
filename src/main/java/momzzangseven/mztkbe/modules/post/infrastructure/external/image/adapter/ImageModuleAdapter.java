@@ -5,23 +5,28 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult;
 import momzzangseven.mztkbe.modules.image.application.dto.UpsertImagesByReferenceCommand;
+import momzzangseven.mztkbe.modules.image.application.dto.ValidatePostAttachableImagesCommand;
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByReferenceUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.in.ValidatePostAttachableImagesUseCase;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult.PostImageSlot;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.external.image.config.PostImageStorageProperties;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class ImageModuleAdapter implements UpdatePostImagesPort, LoadPostImagesPort {
+public class ImageModuleAdapter
+    implements UpdatePostImagesPort, LoadPostImagesPort, ValidatePostImagesPort {
 
   private final UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
   private final GetImagesByReferenceUseCase getImagesByReferenceUseCase;
+  private final ValidatePostAttachableImagesUseCase validatePostAttachableImagesUseCase;
   private final PostImageStorageProperties postImageStorageProperties;
 
   @Override
@@ -29,6 +34,14 @@ public class ImageModuleAdapter implements UpdatePostImagesPort, LoadPostImagesP
     ImageReferenceType refType = resolveReferenceType(postType);
     upsertImagesByReferenceUseCase.execute(
         new UpsertImagesByReferenceCommand(userId, postId, refType, imageIds));
+  }
+
+  @Override
+  public void validateAttachableImages(
+      Long userId, Long postId, PostType postType, List<Long> imageIds) {
+    ImageReferenceType refType = resolveReferenceType(postType);
+    validatePostAttachableImagesUseCase.execute(
+        new ValidatePostAttachableImagesCommand(userId, postId, refType, imageIds));
   }
 
   @Override
@@ -66,8 +79,8 @@ public class ImageModuleAdapter implements UpdatePostImagesPort, LoadPostImagesP
 
   private ImageReferenceType resolveReferenceType(PostType postType) {
     return switch (postType) {
-      case PostType.FREE -> ImageReferenceType.COMMUNITY_FREE;
-      case PostType.QUESTION -> ImageReferenceType.COMMUNITY_QUESTION;
+      case FREE -> ImageReferenceType.COMMUNITY_FREE;
+      case QUESTION -> ImageReferenceType.COMMUNITY_QUESTION;
       default ->
           throw new IllegalArgumentException("Unsupported postType for image ref: " + postType);
     };

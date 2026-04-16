@@ -130,6 +130,13 @@ class GetImagesByIdsCommandTest {
     }
 
     @Test
+    @DisplayName("[TC-CMD-010-1] ids에 0 이하 값이 있으면 IllegalArgumentException")
+    void validate_nonPositiveId_throws() {
+      GetImagesByIdsCommand command = new GetImagesByIdsCommand(1L, FREE, 100L, List.of(0L));
+      assertThatThrownBy(command::validate).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("[TC-CMD-011] ids 개수가 최대(10)를 초과하면 ImageMaxCountExceedException")
     void validate_exceedsMaxCount_throws() {
       List<Long> tooMany = List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
