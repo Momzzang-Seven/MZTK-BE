@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionResumeView;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
@@ -18,6 +19,7 @@ public record PostDetailResult(
     List<String> imageUrls,
     Long reward,
     boolean isSolved,
+    QuestionExecutionResumeView web3Execution,
     List<String> tags,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
@@ -28,7 +30,8 @@ public record PostDetailResult(
       boolean liked,
       String nickname,
       String profileImageUrl,
-      List<String> imageUrls) {
+      List<String> imageUrls,
+      QuestionExecutionResumeView web3Execution) {
     return new PostDetailResult(
         post.getId(),
         post.getType(),
@@ -42,6 +45,7 @@ public record PostDetailResult(
         imageUrls,
         post.getReward(),
         post.getIsSolved(),
+        web3Execution,
         post.getTags(),
         post.getCreatedAt(),
         post.getUpdatedAt());

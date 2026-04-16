@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.CreateAnswerResult;
@@ -28,6 +29,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCa
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerExecutionResumePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
@@ -41,6 +43,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Coordinates answer CRUD plus owner-scoped Web3 escrow read/write wiring.
+ *
+ * <p>Write responses expose nullable Web3 payloads only when a mutation produced new on-chain work.
+ * Read responses expose resumable execution summaries only for the caller's own answers.
+ */
 @Service
 @RequiredArgsConstructor
 public class AnswerService
@@ -64,6 +72,7 @@ public class AnswerService
   private final LoadAnswerLikePort loadAnswerLikePort;
   private final UpdateAnswerImagesPort updateAnswerImagesPort;
   private final AnswerLifecycleExecutionPort answerLifecycleExecutionPort;
+  private final LoadAnswerExecutionResumePort loadAnswerExecutionResumePort;
   private final AnswerReadAssembler answerReadAssembler;
   private final ApplicationEventPublisher eventPublisher;
 
@@ -85,6 +94,7 @@ public class AnswerService
 
     LoadPostPort.PostContext post = loadPost(command.postId());
     validateAnswerablePost(post);
+    answerLifecycleExecutionPort.precheckAnswerCreate(post.postId(), post.content());
 
     Answer answer =
         Answer.create(
@@ -102,17 +112,20 @@ public class AnswerService
     }
 
     int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(savedAnswer.getPostId()));
-    answerLifecycleExecutionPort.prepareAnswerCreate(
-        savedAnswer.getPostId(),
-        savedAnswer.getId(),
-        savedAnswer.getUserId(),
-        post.writerId(),
-        post.content(),
-        post.reward(),
-        savedAnswer.getContent(),
-        activeAnswerCount);
+    var web3 =
+        answerLifecycleExecutionPort
+            .prepareAnswerCreate(
+                savedAnswer.getPostId(),
+                savedAnswer.getId(),
+                savedAnswer.getUserId(),
+                post.writerId(),
+                post.content(),
+                post.reward(),
+                savedAnswer.getContent(),
+                activeAnswerCount)
+            .orElse(null);
 
-    return new CreateAnswerResult(savedAnswer.getId());
+    return new CreateAnswerResult(savedAnswer.getPostId(), savedAnswer.getId(), web3);
   }
 
   /** Loads answers for a question post together with writer summary fields used by the API. */
@@ -143,9 +156,31 @@ public class AnswerService
         answers.isEmpty()
             ? Set.of()
             : loadAnswerLikePort.loadLikedAnswerIds(answerIds, currentUserId);
+    List<Long> ownerAnswerIds =
+        currentUserId == null
+            ? List.of()
+            : answers.stream()
+                .filter(answer -> currentUserId.equals(answer.getUserId()))
+                .map(Answer::getId)
+                .toList();
+    // Owner-visible resume rows are hydrated in one batch to avoid one latest-summary lookup per
+    // owned answer.
+    Map<Long, momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView>
+        web3ExecutionsByAnswerId =
+            ownerAnswerIds.isEmpty()
+                ? Map.of()
+                : loadAnswerExecutionResumePort.loadLatestByAnswerIds(ownerAnswerIds);
 
     return answers.stream()
-        .map(answer -> toResult(answer, writers, imagesByAnswerId, likeCounts, likedAnswerIds))
+        .map(
+            answer ->
+                toResult(
+                    answer,
+                    writers,
+                    imagesByAnswerId,
+                    likeCounts,
+                    likedAnswerIds,
+                    web3ExecutionsByAnswerId))
         .toList();
   }
 
@@ -170,14 +205,49 @@ public class AnswerService
   /** Updates mutable answer fields. Omitted fields are preserved. */
   @Override
   @Transactional
-  public void execute(UpdateAnswerCommand command) {
+  public AnswerMutationResult execute(UpdateAnswerCommand command) {
     command.validate();
 
     Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
+    // Only content changes affect the escrow payload hash. Image-only updates stay local and
+    // therefore return web3 = null.
+    boolean contentChanged =
+        command.content() != null && !command.content().equals(answer.getContent());
 
     Answer updatedAnswer = answer.update(command.content(), command.userId(), post.answerLocked());
+    AnswerMutationResult preparedResult = null;
+    if (command.content() != null) {
+      int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+      var web3 =
+          contentChanged
+              ? answerLifecycleExecutionPort.prepareAnswerUpdate(
+                  answer.getPostId(),
+                  answer.getId(),
+                  command.userId(),
+                  post.writerId(),
+                  post.content(),
+                  post.reward(),
+                  updatedAnswer.getContent(),
+                  activeAnswerCount)
+              : answerLifecycleExecutionPort.recoverAnswerUpdate(
+                  answer.getPostId(),
+                  answer.getId(),
+                  command.userId(),
+                  post.writerId(),
+                  post.content(),
+                  post.reward(),
+                  updatedAnswer.getContent(),
+                  activeAnswerCount);
+      preparedResult =
+          new AnswerMutationResult(answer.getPostId(), answer.getId(), web3.orElse(null));
+    }
+    if (preparedResult == null
+        && answerLifecycleExecutionPort.hasActiveAnswerIntent(answer.getId())) {
+      throw new AnswerInvalidInputException(
+          "Answer has pending onchain mutation; wait for completion or recover first.");
+    }
     if (updatedAnswer != answer) {
       saveAnswerPort.saveAnswer(updatedAnswer);
     }
@@ -186,24 +256,15 @@ public class AnswerService
       updateAnswerImagesPort.updateImages(command.userId(), command.answerId(), command.imageIds());
     }
 
-    if (command.content() != null) {
-      int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
-      answerLifecycleExecutionPort.prepareAnswerUpdate(
-          answer.getPostId(),
-          answer.getId(),
-          command.userId(),
-          post.writerId(),
-          post.content(),
-          post.reward(),
-          updatedAnswer.getContent(),
-          activeAnswerCount);
-    }
+    return preparedResult == null
+        ? new AnswerMutationResult(answer.getPostId(), answer.getId(), null)
+        : preparedResult;
   }
 
   /** Deletes a single answer requested by its owner. */
   @Override
   @Transactional
-  public void execute(DeleteAnswerCommand command) {
+  public AnswerMutationResult execute(DeleteAnswerCommand command) {
     command.validate();
 
     Answer answer = loadAnswerForUpdate(command.answerId());
@@ -211,17 +272,22 @@ public class AnswerService
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
 
     answer.validateDeletable(command.userId(), post.answerLocked());
-    deleteAnswerPort.deleteAnswer(answer.getId());
     int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
-    answerLifecycleExecutionPort.prepareAnswerDelete(
-        answer.getPostId(),
-        answer.getId(),
-        command.userId(),
-        post.writerId(),
-        post.content(),
-        post.reward(),
-        activeAnswerCount);
+    var web3 =
+        answerLifecycleExecutionPort.prepareAnswerDelete(
+            answer.getPostId(),
+            answer.getId(),
+            command.userId(),
+            post.writerId(),
+            post.content(),
+            post.reward(),
+            activeAnswerCount);
+    if (web3.isPresent()) {
+      return new AnswerMutationResult(answer.getPostId(), answer.getId(), web3.get());
+    }
+    deleteAnswerPort.deleteAnswer(answer.getId());
     eventPublisher.publishEvent(new AnswerDeletedEvent(answer.getId()));
+    return new AnswerMutationResult(answer.getPostId(), answer.getId(), null);
   }
 
   /** Deletes all answers belonging to a post after an internal post-deleted event. */
@@ -267,13 +333,16 @@ public class AnswerService
       Map<Long, LoadAnswerWriterPort.WriterSummary> writers,
       Map<Long, AnswerImageResult> imagesByAnswerId,
       Map<Long, Long> likeCounts,
-      Set<Long> likedAnswerIds) {
+      Set<Long> likedAnswerIds,
+      Map<Long, momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView>
+          web3ExecutionsByAnswerId) {
     return answerReadAssembler.assemble(
         answer,
         writers.get(answer.getUserId()),
         imagesByAnswerId.get(answer.getId()),
         likeCounts.getOrDefault(answer.getId(), 0L),
-        likedAnswerIds.contains(answer.getId()));
+        likedAnswerIds.contains(answer.getId()),
+        web3ExecutionsByAnswerId.get(answer.getId()));
   }
 
   private void validateAnswerBelongsToPost(Answer answer, Long postId) {

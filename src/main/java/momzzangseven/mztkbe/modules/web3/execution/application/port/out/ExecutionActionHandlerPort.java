@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.port.out;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 
 public interface ExecutionActionHandlerPort {
@@ -22,4 +23,10 @@ public interface ExecutionActionHandlerPort {
 
   default void afterExecutionFailedOnchain(
       ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {}
+
+  default void afterExecutionTerminated(
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionIntentStatus terminalStatus,
+      String failureReason) {}
 }

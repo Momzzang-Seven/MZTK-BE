@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.dto;
 
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
@@ -18,6 +19,7 @@ public record GetLatestExecutionIntentSummaryResult(
     ExecutionResourceType resourceType,
     String resourceId,
     ExecutionResourceStatus resourceStatus,
+    ExecutionActionType actionType,
     String executionIntentId,
     ExecutionIntentStatus executionIntentStatus,
     LocalDateTime expiresAt,
@@ -36,6 +38,9 @@ public record GetLatestExecutionIntentSummaryResult(
     }
     if (resourceStatus == null) {
       throw new Web3InvalidInputException("resourceStatus is required");
+    }
+    if (actionType == null) {
+      throw new Web3InvalidInputException("actionType is required");
     }
     if (executionIntentId == null || executionIntentId.isBlank()) {
       throw new Web3InvalidInputException("executionIntentId is required");

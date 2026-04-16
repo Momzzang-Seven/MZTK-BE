@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.post.infrastructure.external.image.adapter.ImageModuleAdapter;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,20 +79,14 @@ class PostControllerIntegrationTest {
 
   @MockitoBean private GrantXpUseCase grantXpUseCase;
 
-  @MockitoBean
-  private momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort
-      updatePostImagesPort;
-
-  @MockitoBean
-  private momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort
-      loadPostImagesPort;
+  @MockitoBean private ImageModuleAdapter imageModuleAdapter;
 
   @BeforeEach
   void setUp() {
     org.mockito.BDDMockito.given(grantXpUseCase.execute(org.mockito.ArgumentMatchers.any()))
         .willReturn(GrantXpResult.granted(20, 10, 1, LocalDate.of(2026, 3, 12)));
     org.mockito.BDDMockito.given(
-            loadPostImagesPort.loadImages(
+            imageModuleAdapter.loadImages(
                 org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
         .willReturn(PostImageResult.empty());
   }
@@ -115,7 +110,7 @@ class PostControllerIntegrationTest {
     assertThat(saved.getUserId()).isEqualTo(101L);
     assertThat(saved.getTitle()).isNull();
     assertThat(saved.getContent()).isEqualTo("실경로 본문");
-    org.mockito.Mockito.verify(updatePostImagesPort)
+    org.mockito.Mockito.verify(imageModuleAdapter)
         .updateImages(101L, postId, PostType.FREE, List.of(1L));
 
     mockMvc
@@ -139,7 +134,7 @@ class PostControllerIntegrationTest {
             .andReturn();
 
     Long postId = extractPostId(createResult);
-    org.mockito.BDDMockito.given(loadPostImagesPort.loadImages(PostType.FREE, postId))
+    org.mockito.BDDMockito.given(imageModuleAdapter.loadImages(PostType.FREE, postId))
         .willReturn(
             new PostImageResult(
                 List.of(
@@ -181,7 +176,7 @@ class PostControllerIntegrationTest {
     PostEntity updated = postJpaRepository.findById(postId).orElseThrow();
     assertThat(updated.getTitle()).isEqualTo("수정 제목");
     assertThat(updated.getContent()).isEqualTo("수정 본문");
-    org.mockito.Mockito.verifyNoInteractions(updatePostImagesPort);
+    org.mockito.Mockito.verifyNoInteractions(imageModuleAdapter);
 
     mockMvc
         .perform(delete("/posts/" + postId).with(userPrincipal(202L)))
@@ -218,7 +213,7 @@ class PostControllerIntegrationTest {
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("SUCCESS"));
 
-    org.mockito.Mockito.verifyNoInteractions(updatePostImagesPort);
+    org.mockito.Mockito.verifyNoInteractions(imageModuleAdapter);
   }
 
   @Test
@@ -235,7 +230,7 @@ class PostControllerIntegrationTest {
             .andReturn();
     Long postId = extractPostId(createResult);
 
-    org.mockito.Mockito.clearInvocations(updatePostImagesPort);
+    org.mockito.Mockito.clearInvocations(imageModuleAdapter);
 
     mockMvc
         .perform(
@@ -246,7 +241,7 @@ class PostControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"));
 
-    org.mockito.Mockito.verify(updatePostImagesPort)
+    org.mockito.Mockito.verify(imageModuleAdapter)
         .updateImages(206L, postId, PostType.FREE, List.of());
   }
 
@@ -471,13 +466,29 @@ class PostControllerIntegrationTest {
         .perform(get("/posts?type=QUESTION&tag=java&search=Spring").with(userPrincipal(301L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.length()").value(1))
-        .andExpect(jsonPath("$.data[0].postId").value(expectedPostId))
-        .andExpect(jsonPath("$.data[0].type").value("QUESTION"))
-        .andExpect(jsonPath("$.data[0].title").value("Spring boot tag search"))
-        .andExpect(jsonPath("$.data[0].tags[0]").value("java"))
-        .andExpect(jsonPath("$.data[0].question.reward").value(50))
-        .andExpect(jsonPath("$.data[0].question.isSolved").value(false));
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.posts.length()").value(1))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(expectedPostId))
+        .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"))
+        .andExpect(jsonPath("$.data.posts[0].title").value("Spring boot tag search"))
+        .andExpect(jsonPath("$.data.posts[0].tags[0]").value("java"))
+        .andExpect(jsonPath("$.data.posts[0].question.reward").value(50))
+        .andExpect(jsonPath("$.data.posts[0].question.isSolved").value(false));
+  }
+
+  @Test
+  @DisplayName("GET /posts returns hasNext=true and trims posts to requested size")
+  void getPosts_returnsHasNextAndTrimsToRequestedSize() throws Exception {
+    createQuestionPost(601L, "first question", "content 1", 30L, List.of("java"));
+    createQuestionPost(602L, "second question", "content 2", 30L, List.of("java"));
+
+    mockMvc
+        .perform(get("/posts?type=QUESTION&size=1&page=0").with(userPrincipal(601L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.hasNext").value(true))
+        .andExpect(jsonPath("$.data.posts.length()").value(1))
+        .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"));
   }
 
   @Test

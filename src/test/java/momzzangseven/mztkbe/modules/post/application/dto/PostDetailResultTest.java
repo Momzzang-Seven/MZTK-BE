@@ -39,7 +39,7 @@ class PostDetailResultTest {
         List.of("https://cdn.example.com/img1.webp", "https://cdn.example.com/img2.webp");
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 3L, true, nickname, profileImageUrl, imageUrls);
+        PostDetailResult.fromDomain(post, 3L, true, nickname, profileImageUrl, imageUrls, null);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
@@ -78,7 +78,7 @@ class PostDetailResultTest {
     String profileImageUrl = "test/image/url";
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 0L, false, nickname, profileImageUrl, null);
+        PostDetailResult.fromDomain(post, 0L, false, nickname, profileImageUrl, null, null);
 
     assertThat(result.isSolved()).isTrue();
   }
@@ -99,7 +99,7 @@ class PostDetailResultTest {
             .build();
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 0L, false, "writer", "profile", null);
+        PostDetailResult.fromDomain(post, 0L, false, "writer", "profile", null, null);
 
     assertThat(result.isSolved()).isTrue();
   }

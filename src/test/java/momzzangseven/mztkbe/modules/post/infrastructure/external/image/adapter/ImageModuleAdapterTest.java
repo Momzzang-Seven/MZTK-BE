@@ -7,8 +7,10 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult;
 import momzzangseven.mztkbe.modules.image.application.dto.UpsertImagesByReferenceCommand;
+import momzzangseven.mztkbe.modules.image.application.dto.ValidatePostAttachableImagesCommand;
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByReferenceUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.in.ValidatePostAttachableImagesUseCase;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
@@ -28,6 +30,7 @@ class ImageModuleAdapterTest {
 
   @Mock private UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
   @Mock private GetImagesByReferenceUseCase getImagesByReferenceUseCase;
+  @Mock private ValidatePostAttachableImagesUseCase validatePostAttachableImagesUseCase;
   @Mock private PostImageStorageProperties postImageStorageProperties;
 
   @InjectMocks private ImageModuleAdapter imageModuleAdapter;
@@ -58,6 +61,21 @@ class ImageModuleAdapterTest {
     verify(upsertImagesByReferenceUseCase).execute(captor.capture());
 
     assertThat(captor.getValue().referenceType()).isEqualTo(ImageReferenceType.COMMUNITY_QUESTION);
+  }
+
+  @Test
+  @DisplayName("validateAttachableImages maps post type and post id")
+  void validateAttachableImagesMapsReferenceType() {
+    imageModuleAdapter.validateAttachableImages(3L, 12L, PostType.FREE, List.of(7L, 8L));
+
+    ArgumentCaptor<ValidatePostAttachableImagesCommand> captor =
+        ArgumentCaptor.forClass(ValidatePostAttachableImagesCommand.class);
+    verify(validatePostAttachableImagesUseCase).execute(captor.capture());
+
+    assertThat(captor.getValue().userId()).isEqualTo(3L);
+    assertThat(captor.getValue().referenceId()).isEqualTo(12L);
+    assertThat(captor.getValue().referenceType()).isEqualTo(ImageReferenceType.COMMUNITY_FREE);
+    assertThat(captor.getValue().imageIds()).containsExactly(7L, 8L);
   }
 
   @Test
