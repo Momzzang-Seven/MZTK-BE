@@ -25,6 +25,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
@@ -53,6 +54,7 @@ class PostImageIntegrationE2ETest extends E2ETestBase {
 
   @Autowired private ImageJpaRepository imageJpaRepository;
   @Autowired private HandleLambdaCallbackUseCase handleLambdaCallbackUseCase;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -70,9 +72,13 @@ class PostImageIntegrationE2ETest extends E2ETestBase {
   }
 
   private HttpHeaders authHeaders() {
+    return authHeaders(accessToken);
+  }
+
+  private HttpHeaders authHeaders(String token) {
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
-    headers.setBearerAuth(accessToken);
+    headers.setBearerAuth(token);
     return headers;
   }
 
@@ -126,7 +132,14 @@ class PostImageIntegrationE2ETest extends E2ETestBase {
 
   /** 자유 게시글을 생성하고 postId를 반환. */
   private long createFreePost() throws Exception {
+    return createFreePost(List.of());
+  }
+
+  private long createFreePost(List<Long> imageIds) throws Exception {
     Map<String, Object> body = Map.of("content", "E2E 테스트 게시글");
+    if (!imageIds.isEmpty()) {
+      body = Map.of("content", "E2E 테스트 게시글", "imageIds", imageIds);
+    }
     ResponseEntity<String> response =
         restTemplate.exchange(
             baseUrl + "/posts/free",
@@ -135,6 +148,11 @@ class PostImageIntegrationE2ETest extends E2ETestBase {
             String.class);
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     return objectMapper.readTree(response.getBody()).at("/data/postId").asLong();
+  }
+
+  private int countPosts() {
+    Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM posts", Integer.class);
+    return count == null ? 0 : count;
   }
 
   /** 게시글의 이미지를 imageIds로 업데이트. */
@@ -220,6 +238,27 @@ class PostImageIntegrationE2ETest extends E2ETestBase {
   }
 
   @Test
+  @DisplayName("[TC-POST-006] free post 생성 시 PENDING 이미지는 409으로 차단되고 post row가 생성되지 않는다")
+  void createFreePost_withPendingImage_returns409AndDoesNotCreatePost() throws Exception {
+    IssuedImage pending = issuePresignedUrl("COMMUNITY_FREE");
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/posts/free",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("content", "pending image post", "imageIds", List.of(pending.imageId())),
+                authHeaders()),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.at("/code").asText()).isEqualTo("IMAGE_002");
+    assertThat(countPosts()).isZero();
+    assertThat(findImageOrFail(pending.tmpObjectKey()).getReferenceId()).isNull();
+  }
+
+  @Test
   @DisplayName("[TC-POST-002] updatePost(imageIds=null) → 기존 이미지 연결 상태 변경 없음")
   void updatePost_withNullImageIds_doesNotChangeImages() throws Exception {
     // 준비: 이미지 1장 발급 후 게시글에 연결
@@ -256,6 +295,25 @@ class PostImageIntegrationE2ETest extends E2ETestBase {
     // 검증: 두 이미지 모두 unlink (referenceId=null)
     assertThat(findImageOrFail(img1.tmpObjectKey()).getReferenceId()).isNull();
     assertThat(findImageOrFail(img2.tmpObjectKey()).getReferenceId()).isNull();
+  }
+
+  @Test
+  @DisplayName("[TC-POST-007] updatePost(imageIds=[pending])는 409으로 차단되고 기존 연결은 유지된다")
+  void updatePost_withPendingImage_returns409AndKeepsCurrentLinks() throws Exception {
+    IssuedImage linked = issuePresignedUrl("COMMUNITY_FREE");
+    simulateCompleted(linked.tmpObjectKey());
+    IssuedImage pending = issuePresignedUrl("COMMUNITY_FREE");
+
+    long postId = createFreePost();
+    updatePostImages(postId, List.of(linked.imageId()));
+
+    ResponseEntity<String> response = updatePostImages(postId, List.of(pending.imageId()));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.at("/code").asText()).isEqualTo("IMAGE_002");
+    assertThat(findImageOrFail(linked.tmpObjectKey()).getReferenceId()).isEqualTo(postId);
+    assertThat(findImageOrFail(pending.tmpObjectKey()).getReferenceId()).isNull();
   }
 
   @Test

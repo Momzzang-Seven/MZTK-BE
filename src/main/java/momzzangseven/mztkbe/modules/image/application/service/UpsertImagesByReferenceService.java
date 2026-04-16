@@ -74,6 +74,7 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
           finalImages, command.userId(), command.referenceType(), command.referenceId());
       validateCount(command.imageIds().size(), command.referenceType());
       validateMarketOrder(finalImages, command.referenceType(), command.imageIds());
+      validateCompletedForPostAttach(finalImages, command.referenceType());
     }
 
     // ---- Phase 2: DB mutations ----
@@ -212,6 +213,17 @@ public class UpsertImagesByReferenceService implements UpsertImagesByReferenceUs
               + maxCount
               + " for type "
               + referenceType);
+    }
+  }
+
+  private void validateCompletedForPostAttach(
+      List<Image> images, ImageReferenceType referenceType) {
+    if (referenceType != ImageReferenceType.COMMUNITY_FREE
+        && referenceType != ImageReferenceType.COMMUNITY_QUESTION) {
+      return;
+    }
+    for (Image img : images) {
+      img.requireCompletedForPostAttach();
     }
   }
 

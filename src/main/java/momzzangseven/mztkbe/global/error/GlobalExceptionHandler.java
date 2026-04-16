@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.global.error;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -10,11 +11,14 @@ import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -106,8 +110,44 @@ public class GlobalExceptionHandler {
    * <p>Returns 400 with field error details to make development/debugging easier.
    */
   @ExceptionHandler(MethodArgumentNotValidException.class)
-  public ResponseEntity<ApiResponse<Map<String, String>>> handleMethodArgumentNotValidException(
-      MethodArgumentNotValidException ex) {
+  public ResponseEntity<ApiResponse<?>> handleMethodArgumentNotValidException(
+      MethodArgumentNotValidException ex, HttpServletRequest request) {
+    if (isModelAttributeValidation(ex)
+        && hasMissingRequiredFields(ex.getBindingResult().getFieldErrors(), request)) {
+      ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+      return ResponseEntity.status(errorCode.getHttpStatus())
+          .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
+    }
+
+    Map<String, String> fieldErrors = new LinkedHashMap<>();
+    ex.getBindingResult()
+        .getFieldErrors()
+        .forEach(error -> fieldErrors.put(error.getField(), error.getDefaultMessage()));
+
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error("Validation failed", errorCode.getCode(), fieldErrors));
+  }
+
+  /**
+   * Handle validation failures from {@code @ModelAttribute} bound query/path requests.
+   *
+   * <p>Missing required query parameters are mapped to {@code VALIDATION_002}; all other binding or
+   * bean-validation failures are mapped to {@code VALIDATION_001}.
+   */
+  @ExceptionHandler(BindException.class)
+  public ResponseEntity<ApiResponse<?>> handleBindException(
+      BindException ex, HttpServletRequest request) {
+    boolean hasMissingRequiredField =
+        ex.getBindingResult().getFieldErrors().stream()
+            .anyMatch(error -> isMissingRequiredField(error, request));
+
+    if (hasMissingRequiredField) {
+      ErrorCode errorCode = ErrorCode.MISSING_REQUIRED_FIELD;
+      return ResponseEntity.status(errorCode.getHttpStatus())
+          .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
+    }
+
     Map<String, String> fieldErrors = new LinkedHashMap<>();
     ex.getBindingResult()
         .getFieldErrors()
@@ -161,6 +201,41 @@ public class GlobalExceptionHandler {
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error("Invalid request parameter type", errorCode.getCode()));
+  }
+
+  private boolean isMissingRequiredField(FieldError error, HttpServletRequest request) {
+    if (!"NotNull".equals(error.getCode())
+        && !"NotEmpty".equals(error.getCode())
+        && !"NotBlank".equals(error.getCode())) {
+      return false;
+    }
+    return !request.getParameterMap().containsKey(resolveRequestParameterName(error.getField()));
+  }
+
+  private boolean hasMissingRequiredFields(
+      Iterable<FieldError> fieldErrors, HttpServletRequest request) {
+    for (FieldError error : fieldErrors) {
+      if (isMissingRequiredField(error, request)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private String resolveRequestParameterName(String field) {
+    int bracketIndex = field.indexOf('[');
+    if (bracketIndex >= 0) {
+      return field.substring(0, bracketIndex);
+    }
+    int nestedFieldIndex = field.indexOf('.');
+    if (nestedFieldIndex >= 0) {
+      return field.substring(0, nestedFieldIndex);
+    }
+    return field;
+  }
+
+  private boolean isModelAttributeValidation(MethodArgumentNotValidException ex) {
+    return ex.getParameter().hasParameterAnnotation(ModelAttribute.class);
   }
 
   /** Handle missing endpoint/static resource requests as 404 instead of 500. */
