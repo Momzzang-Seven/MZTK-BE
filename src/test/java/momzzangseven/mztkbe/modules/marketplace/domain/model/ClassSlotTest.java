@@ -86,7 +86,8 @@ class ClassSlotTest {
     @Test
     @DisplayName("금요일 23:50 (30분) — 자정 직전 슬롯은 wrap 없음")
     void conflictsWith_FridayLateNoWrap_HandledCorrectly() {
-      // slotA: FRIDAY 23:50, 30min → end=23:50+30min=00:20(sat) WCM end=6*1440+23*60+50+30=10070 < 10080
+      // slotA: FRIDAY 23:50, 30min → end=23:50+30min=00:20(sat) WCM end=6*1440+23*60+50+30=10070 <
+      // 10080
       // 자정을 넘기지 않으므로 단일 구간
       ClassSlot a = ClassSlot.create(1L, List.of(DayOfWeek.FRIDAY), LocalTime.of(23, 50), 5);
       ClassSlot b = ClassSlot.create(1L, List.of(DayOfWeek.SATURDAY), LocalTime.of(0, 10), 5);

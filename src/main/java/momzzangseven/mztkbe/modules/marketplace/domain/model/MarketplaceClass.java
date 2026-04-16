@@ -59,8 +59,10 @@ public class MarketplaceClass {
   private final List<String> features;
   private final String personalItems;
   private final boolean active;
+
   /** Optimistic lock version — null for new (unsaved) instances, populated after first save. */
   private final Long version;
+
   private final LocalDateTime createdAt;
   private final LocalDateTime updatedAt;
 
@@ -240,8 +242,7 @@ public class MarketplaceClass {
       return;
     }
     if (tags.size() > MAX_TAGS) {
-      throw new MarketplaceInvalidTagException(
-          "Tags must not exceed " + MAX_TAGS + " items");
+      throw new MarketplaceInvalidTagException("Tags must not exceed " + MAX_TAGS + " items");
     }
     for (String tag : tags) {
       if (tag != null && tag.length() > MAX_TAG_LENGTH) {

@@ -200,8 +200,7 @@ class MarketplaceClassTest {
     @DisplayName("null 태그 리스트 → 예외 없이 빈 리스트로 처리")
     void create_NullTags_TreatedAsEmptyList() {
       MarketplaceClass mc =
-          MarketplaceClass.create(
-              1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, null, null);
+          MarketplaceClass.create(1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, null, null);
       assertThat(mc.getTags()).isEmpty();
     }
   }

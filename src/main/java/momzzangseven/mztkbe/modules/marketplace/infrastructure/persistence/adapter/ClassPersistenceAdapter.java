@@ -74,16 +74,15 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
         classJpaRepository.findByActiveTrueOrderByCreatedAtDesc(pageable);
 
     // Batch-load tags to avoid N+1 queries
-    List<Long> classIds = entityPage.getContent().stream()
-        .map(MarketplaceClassEntity::getId)
-        .toList();
-    Map<Long, List<String>> tagMap = classIds.isEmpty()
-        ? Map.of()
-        : loadClassTagPort.findTagsByClassIdsIn(classIds);
+    List<Long> classIds =
+        entityPage.getContent().stream().map(MarketplaceClassEntity::getId).toList();
+    Map<Long, List<String>> tagMap =
+        classIds.isEmpty() ? Map.of() : loadClassTagPort.findTagsByClassIdsIn(classIds);
 
-    List<ClassItem> items = entityPage.getContent().stream()
-        .map(entity -> toClassItem(entity, tagMap.getOrDefault(entity.getId(), List.of())))
-        .toList();
+    List<ClassItem> items =
+        entityPage.getContent().stream()
+            .map(entity -> toClassItem(entity, tagMap.getOrDefault(entity.getId(), List.of())))
+            .toList();
 
     return new PageImpl<>(items, pageable, entityPage.getTotalElements());
   }
@@ -126,16 +125,14 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
         classJpaRepository.findByTrainerIdOrderByCreatedAtDesc(trainerId, pageable);
 
     // Batch-load tags to avoid N+1 queries
-    List<Long> ids = entityPage.getContent().stream()
-        .map(MarketplaceClassEntity::getId)
-        .toList();
-    Map<Long, List<String>> tagMap = ids.isEmpty()
-        ? Map.of()
-        : loadClassTagPort.findTagsByClassIdsIn(ids);
+    List<Long> ids = entityPage.getContent().stream().map(MarketplaceClassEntity::getId).toList();
+    Map<Long, List<String>> tagMap =
+        ids.isEmpty() ? Map.of() : loadClassTagPort.findTagsByClassIdsIn(ids);
 
-    List<MarketplaceClass> domains = entityPage.getContent().stream()
-        .map(entity -> entity.toDomainWithTags(tagMap.getOrDefault(entity.getId(), List.of())))
-        .toList();
+    List<MarketplaceClass> domains =
+        entityPage.getContent().stream()
+            .map(entity -> entity.toDomainWithTags(tagMap.getOrDefault(entity.getId(), List.of())))
+            .toList();
 
     return new PageImpl<>(domains, pageable, entityPage.getTotalElements());
   }

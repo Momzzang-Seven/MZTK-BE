@@ -391,8 +391,7 @@ public enum ErrorCode {
       "Capacity cannot be less than the number of active reservations",
       HttpStatus.BAD_REQUEST),
 
-  MARKETPLACE_INVALID_TITLE(
-      "MARKETPLACE_010", "Class title is invalid", HttpStatus.BAD_REQUEST),
+  MARKETPLACE_INVALID_TITLE("MARKETPLACE_010", "Class title is invalid", HttpStatus.BAD_REQUEST),
 
   MARKETPLACE_INVALID_DESCRIPTION(
       "MARKETPLACE_011", "Class description is invalid", HttpStatus.BAD_REQUEST),
