@@ -29,6 +29,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
@@ -238,16 +239,17 @@ class PostControllerTest {
             LocalDateTime.now(),
             LocalDateTime.now());
     given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class), any(Long.class)))
-        .willReturn(List.of(postResult));
+        .willReturn(new SearchPostsResult(List.of(postResult), true));
 
     mockMvc
         .perform(get("/posts?type=FREE&tag=health&search=list").with(userPrincipal(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data[0].postId").value(2))
-        .andExpect(jsonPath("$.data[0].type").value("FREE"))
-        .andExpect(jsonPath("$.data[0].likeCount").value(4))
-        .andExpect(jsonPath("$.data[0].isLiked").value(true));
+        .andExpect(jsonPath("$.data.hasNext").value(true))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(2))
+        .andExpect(jsonPath("$.data.posts[0].type").value("FREE"))
+        .andExpect(jsonPath("$.data.posts[0].likeCount").value(4))
+        .andExpect(jsonPath("$.data.posts[0].isLiked").value(true));
   }
 
   @Test
