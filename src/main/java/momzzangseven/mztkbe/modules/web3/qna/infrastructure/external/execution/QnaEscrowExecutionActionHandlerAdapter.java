@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
@@ -44,6 +45,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   private final ObjectMapper objectMapper;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
+  private final momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort
+      qnaLocalDeleteSyncPort;
 
   @Override
   public boolean supports(ExecutionActionType actionType) {
@@ -76,14 +79,30 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   @Override
   public void afterExecutionFailedOnchain(
       ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {
+    afterExecutionTerminated(
+        intent, actionPlan, ExecutionIntentStatus.FAILED_ONCHAIN, failureReason);
+  }
+
+  @Override
+  public void afterExecutionTerminated(
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionIntentStatus terminalStatus,
+      String failureReason) {
     QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
     if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
-        && shouldRollbackPendingAccept(failureReason)) {
+        && shouldRollbackPendingAccept(terminalStatus, failureReason)) {
       qnaAcceptStateSyncPort.rollbackPendingAccept(payload.postId(), payload.answerId());
     }
   }
 
-  private boolean shouldRollbackPendingAccept(String failureReason) {
+  private boolean shouldRollbackPendingAccept(
+      ExecutionIntentStatus terminalStatus, String failureReason) {
+    if (terminalStatus == ExecutionIntentStatus.EXPIRED
+        || terminalStatus == ExecutionIntentStatus.CANCELED
+        || terminalStatus == ExecutionIntentStatus.NONCE_STALE) {
+      return true;
+    }
     if (failureReason == null || failureReason.isBlank()) {
       return true;
     }
@@ -138,6 +157,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   private void applyQuestionDelete(QnaEscrowExecutionPayload payload) {
     QnaQuestionProjection question = requireQuestion(payload.postId());
     qnaProjectionPersistencePort.saveQuestion(question.markDeleted());
+    qnaLocalDeleteSyncPort.confirmQuestionDeleted(payload.postId());
   }
 
   private void applyAnswerSubmit(ExecutionIntent intent, QnaEscrowExecutionPayload payload) {
@@ -165,6 +185,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     qnaProjectionPersistencePort.deleteAnswerByAnswerId(payload.answerId());
     qnaProjectionPersistencePort.saveQuestion(
         question.syncAnswerCount(question.getAnswerCount() - 1));
+    qnaLocalDeleteSyncPort.confirmAnswerDeleted(payload.answerId());
   }
 
   private void applyAnswerAccept(QnaEscrowExecutionPayload payload) {

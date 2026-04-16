@@ -9,10 +9,11 @@ import org.junit.jupiter.api.Test;
 class CreateAnswerResultTest {
 
   @Test
-  @DisplayName("constructor preserves answerId")
-  void constructor_preservesAnswerId() {
-    CreateAnswerResult result = new CreateAnswerResult(123L);
+  @DisplayName("constructor preserves ids")
+  void constructor_preservesIds() {
+    CreateAnswerResult result = new CreateAnswerResult(88L, 123L, null);
 
+    assertThat(result.postId()).isEqualTo(88L);
     assertThat(result.answerId()).isEqualTo(123L);
   }
 }

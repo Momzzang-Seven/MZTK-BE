@@ -1,5 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.transaction;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
@@ -29,5 +32,24 @@ public class ExecutionTransactionReadAdapter implements LoadExecutionTransaction
                     transaction.transactionId(),
                     ExecutionTransactionStatus.valueOf(transaction.status().name()),
                     transaction.txHash()));
+  }
+
+  @Override
+  public Map<Long, ExecutionTransactionSummary> findByIds(Collection<Long> transactionIds) {
+    if (transactionIds == null || transactionIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<Long, ExecutionTransactionSummary> results = new LinkedHashMap<>();
+    manageExecutionTransactionUseCase
+        .findSummariesByIds(transactionIds)
+        .forEach(
+            (transactionId, transaction) ->
+                results.put(
+                    transactionId,
+                    new ExecutionTransactionSummary(
+                        transaction.transactionId(),
+                        ExecutionTransactionStatus.valueOf(transaction.status().name()),
+                        transaction.txHash())));
+    return results;
   }
 }

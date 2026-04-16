@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.adapter;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
@@ -22,6 +24,14 @@ public class TransferTransactionPersistenceAdapter implements TransferTransactio
   @Override
   public Optional<TransferTransaction> findById(Long transactionId) {
     return repository.findById(transactionId).map(this::toDomain);
+  }
+
+  @Override
+  public List<TransferTransaction> findByIds(Collection<Long> transactionIds) {
+    if (transactionIds == null || transactionIds.isEmpty()) {
+      return List.of();
+    }
+    return repository.findByIdIn(transactionIds).stream().map(this::toDomain).toList();
   }
 
   @Override

@@ -10,12 +10,13 @@ import org.junit.jupiter.api.Test;
 class CreateAnswerResponseTest {
 
   @Test
-  @DisplayName("from(CreateAnswerResult) maps answerId")
-  void from_mapsAnswerId() {
-    CreateAnswerResult result = new CreateAnswerResult(77L);
+  @DisplayName("from(CreateAnswerResult) maps ids")
+  void from_mapsIds() {
+    CreateAnswerResult result = new CreateAnswerResult(11L, 77L, null);
 
     CreateAnswerResponse response = CreateAnswerResponse.from(result);
 
+    assertThat(response.postId()).isEqualTo(11L);
     assertThat(response.answerId()).isEqualTo(77L);
   }
 }

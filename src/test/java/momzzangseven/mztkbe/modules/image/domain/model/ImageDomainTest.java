@@ -102,6 +102,35 @@ class ImageDomainTest {
     }
   }
 
+  @Nested
+  @DisplayName("post attach invariant")
+  class PostAttachInvariant {
+
+    @Test
+    @DisplayName("COMPLETED image passes post attach invariant")
+    void requireCompletedForPostAttach_completed_passes() {
+      Image completed = pendingImage().complete("final.webp");
+
+      completed.requireCompletedForPostAttach();
+    }
+
+    @Test
+    @DisplayName("PENDING image fails post attach invariant")
+    void requireCompletedForPostAttach_pending_throws() {
+      assertThatThrownBy(() -> pendingImage().requireCompletedForPostAttach())
+          .isInstanceOf(ImageStatusInvalidException.class);
+    }
+
+    @Test
+    @DisplayName("FAILED image fails post attach invariant")
+    void requireCompletedForPostAttach_failed_throws() {
+      Image failed = pendingImage().fail("bad conversion");
+
+      assertThatThrownBy(failed::requireCompletedForPostAttach)
+          .isInstanceOf(ImageStatusInvalidException.class);
+    }
+  }
+
   // ========== 불변성 검증 ==========
 
   @Nested

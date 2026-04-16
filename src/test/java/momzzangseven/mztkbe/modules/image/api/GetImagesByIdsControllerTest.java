@@ -142,6 +142,20 @@ class GetImagesByIdsControllerTest {
         .andExpect(status().isBadRequest());
   }
 
+  @Test
+  @DisplayName("[E-5] referenceId가 빈 문자열이면 400 VALIDATION_001 반환")
+  void getImagesByIds_returns400_whenReferenceIdIsBlank() throws Exception {
+    mockMvc
+        .perform(
+            get(URL)
+                .with(authentication(authAs(1L)))
+                .param("ids", "1")
+                .param("referenceType", "COMMUNITY_FREE")
+                .param("referenceId", ""))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+  }
+
   // ─── 예외 매핑 400/403 ─────────────────────────────────────────────────────
 
   @Test

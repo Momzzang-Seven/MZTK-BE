@@ -11,14 +11,7 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
-  sql:
-    init:
-      mode: always
-      data-locations:
-        - classpath:db/seed/level_policies.sql
-        - classpath:db/seed/xp_policies.sql
-        - classpath:db/seed/web3_treasury_keys.sql
-        - classpath:db/seed/user_wallets_status_constraint.sql
+  # sql: init: mode: always 블록은 삭제하고, dev에만 남김. prod에서는 mode: never.
 
   jpa:
     defer-datasource-initialization: true
@@ -159,7 +152,7 @@ web3:
 
   explorer:
     base-url: ${WEB3_EXPLORER_BASE_URL}
-    api-url: https://api.etherscan.io/v2/api     # 편의 기본값(필수 아님)
+    api-url: ${WEB3_EXPLORER_API_URL:https://api.etherscan.io/v2/api}     # 편의 기본값(필수 아님)
     api-key: ${WEB3_EXPLORER_API_KEY}            # prod에서 보통 필요
 
   # 로그인/지갑 연결(서명) - 온체인 결합은 chain-id만
@@ -167,7 +160,7 @@ web3:
     ttl-seconds: 300
     eip4361:
       domain: "MZTK"
-      uri: "https://mztk.com"                    # prod 도메인(필수 아님, prod에서 override 권장)
+      uri: "https://mztk.com"                    # prod 도메인(필수 아님, prod에서 override)
       version: "1"
       chain-id: ${WEB3_CHAIN_ID}
 
@@ -337,3 +330,5 @@ mztk:
       delivery-target: ${ADMIN_SEED_DELIVERY_TARGET:mztk/admin/bootstrap-delivery}
     recovery:
       secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}
+      rate-limit:
+        trust-forwarded-for: false

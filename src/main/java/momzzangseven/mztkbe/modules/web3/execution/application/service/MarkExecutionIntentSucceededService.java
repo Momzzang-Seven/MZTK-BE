@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 @ConditionalOnProperty(
     prefix = "web3",
     name = {"eip7702.enabled", "reward-token.enabled"},
@@ -46,21 +48,29 @@ public class MarkExecutionIntentSucceededService implements MarkExecutionIntentS
     }
     if (intent.getStatus() == ExecutionIntentStatus.PENDING_ONCHAIN) {
       ExecutionIntent confirmed = intent.confirm(now);
-      afterExecutionConfirmed(confirmed);
       executionIntentPersistencePort.update(confirmed);
+      afterExecutionConfirmedSafely(confirmed);
       return;
     }
     if (intent.getStatus() == ExecutionIntentStatus.SIGNED) {
       ExecutionIntent confirmed =
           intent.markPendingOnchain(intent.getSubmittedTxId(), now).confirm(now);
-      afterExecutionConfirmed(confirmed);
       executionIntentPersistencePort.update(confirmed);
+      afterExecutionConfirmedSafely(confirmed);
     }
   }
 
-  private void afterExecutionConfirmed(ExecutionIntent intent) {
-    ExecutionActionHandlerPort handler = resolveActionHandler(intent);
-    handler.afterExecutionConfirmed(intent, handler.buildActionPlan(intent));
+  private void afterExecutionConfirmedSafely(ExecutionIntent intent) {
+    try {
+      ExecutionActionHandlerPort handler = resolveActionHandler(intent);
+      handler.afterExecutionConfirmed(intent, handler.buildActionPlan(intent));
+    } catch (RuntimeException ex) {
+      log.error(
+          "Execution intent confirmed but post-confirm sync failed: executionIntentId={}, actionType={}",
+          intent.getPublicId(),
+          intent.getActionType(),
+          ex);
+    }
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {

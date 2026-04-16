@@ -1,27 +1,29 @@
 package momzzangseven.mztkbe.modules.image.api.controller;
 
 import jakarta.validation.Valid;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.image.api.dto.GetImagesByIdsRequestDTO;
 import momzzangseven.mztkbe.modules.image.api.dto.GetImagesByIdsResponseDTO;
+import momzzangseven.mztkbe.modules.image.api.dto.GetImagesStatusRequestDTO;
+import momzzangseven.mztkbe.modules.image.api.dto.GetImagesStatusResponseDTO;
 import momzzangseven.mztkbe.modules.image.api.dto.IssuePresignedUrlRequestDTO;
 import momzzangseven.mztkbe.modules.image.api.dto.IssuePresignedUrlResponseDTO;
-import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsResult;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesStatusResult;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.IssuePresignedUrlResult;
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByIdsUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesStatusUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.IssuePresignedUrlUseCase;
-import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** REST controller for image-related operations. */
@@ -32,6 +34,7 @@ public class ImageController {
 
   private final IssuePresignedUrlUseCase issuePresignedUrlUseCase;
   private final GetImagesByIdsUseCase getImagesByIdsUseCase;
+  private final GetImagesStatusUseCase getImagesStatusUseCase;
 
   /**
    * Issues S3 pre-signed PUT URLs and registers PENDING image records.
@@ -66,18 +69,25 @@ public class ImageController {
   @GetMapping
   public ResponseEntity<ApiResponse<GetImagesByIdsResponseDTO>> getImagesByIds(
       @AuthenticationPrincipal Long userId,
-      @RequestParam List<Long> ids,
-      @RequestParam ImageReferenceType referenceType,
-      @RequestParam Long referenceId) {
+      @Valid @ModelAttribute GetImagesByIdsRequestDTO request) {
 
     userId = requireUserId(userId);
 
-    GetImagesByIdsCommand command =
-        new GetImagesByIdsCommand(userId, referenceType, referenceId, ids);
-
-    GetImagesByIdsResult result = getImagesByIdsUseCase.execute(command);
+    GetImagesByIdsResult result = getImagesByIdsUseCase.execute(request.toCommand(userId));
 
     return ResponseEntity.ok(ApiResponse.success(GetImagesByIdsResponseDTO.from(result)));
+  }
+
+  @GetMapping("/status")
+  public ResponseEntity<ApiResponse<GetImagesStatusResponseDTO>> getImagesStatus(
+      @AuthenticationPrincipal Long userId,
+      @Valid @ModelAttribute GetImagesStatusRequestDTO request) {
+
+    userId = requireUserId(userId);
+
+    GetImagesStatusResult result = getImagesStatusUseCase.execute(request.toCommand(userId));
+
+    return ResponseEntity.ok(ApiResponse.success(GetImagesStatusResponseDTO.from(result)));
   }
 
   private Long requireUserId(Long userId) {

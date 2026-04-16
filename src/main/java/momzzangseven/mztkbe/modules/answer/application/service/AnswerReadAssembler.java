@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.answer.application.service;
 import java.util.List;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import org.springframework.stereotype.Component;
@@ -15,7 +16,8 @@ public class AnswerReadAssembler {
       LoadAnswerWriterPort.WriterSummary writer,
       AnswerImageResult imageResult,
       long likeCount,
-      boolean liked) {
+      boolean liked,
+      AnswerExecutionResumeView web3Execution) {
     List<String> imageUrls =
         imageResult == null
             ? List.of()
@@ -29,6 +31,7 @@ public class AnswerReadAssembler {
         writer != null ? writer.profileImageUrl() : null,
         likeCount,
         liked,
-        imageUrls);
+        imageUrls,
+        web3Execution);
   }
 }

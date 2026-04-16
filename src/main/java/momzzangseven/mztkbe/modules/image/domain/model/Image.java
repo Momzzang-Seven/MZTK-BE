@@ -76,6 +76,14 @@ public class Image {
     return toBuilder().status(ImageStatus.FAILED).errorReason(errorReason).build();
   }
 
+  /** Ensures the image is fully processed before a post flow links it. */
+  public void requireCompletedForPostAttach() {
+    if (this.status != ImageStatus.COMPLETED) {
+      throw new ImageStatusInvalidException(
+          "Image must be COMPLETED before attaching to a post: " + this.status);
+    }
+  }
+
   /**
    * Updates the reference (owner entity) of this image. Used when linking a newly uploaded image to
    * a post/class, or unlinking during deletion.
