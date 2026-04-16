@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePor
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
   private final PostPersistencePort postPersistencePort;
   private final PostXpService postXpService;
   private final LinkTagPort linkTagPort;
+  private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
@@ -39,6 +41,7 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
   public CreateQuestionPostResult execute(CreatePostCommand command) {
     validateQuestionCommand(command);
     command.validate();
+    validatePostImagesIfPresent(command);
     questionLifecycleExecutionPort.precheckQuestionCreate(command.userId(), command.reward());
 
     Post savedPost = savePost(command);
@@ -61,6 +64,14 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
     if (command.type() != PostType.QUESTION) {
       throw new PostInvalidInputException("CreateQuestionPostService supports question posts only");
     }
+  }
+
+  private void validatePostImagesIfPresent(CreatePostCommand command) {
+    if (command.imageIds() == null || command.imageIds().isEmpty()) {
+      return;
+    }
+    validatePostImagesPort.validateAttachableImages(
+        command.userId(), null, command.type(), command.imageIds());
   }
 
   private Post savePost(CreatePostCommand command) {
