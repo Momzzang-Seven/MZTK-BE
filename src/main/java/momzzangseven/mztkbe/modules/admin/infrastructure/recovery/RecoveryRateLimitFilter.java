@@ -35,7 +35,7 @@ public class RecoveryRateLimitFilter extends OncePerRequestFilter {
 
   public RecoveryRateLimitFilter(
       ObjectMapper objectMapper,
-      @Value("${mztk.admin.recovery.rate-limit.trust-forwarded-for:false}")
+      @Value("${mztk.admin.recovery.rate-limit.trust-forwarded-for:true}")
           boolean trustForwardedFor) {
     this.objectMapper = objectMapper;
     this.trustForwardedFor = trustForwardedFor;
@@ -78,21 +78,20 @@ public class RecoveryRateLimitFilter extends OncePerRequestFilter {
   /**
    * Extracts the client IP address from the request.
    *
-   * <p>Since this service does not sit behind a load balancer or reverse proxy, {@code remoteAddr}
-   * is always the direct client IP and cannot be spoofed. Trusting {@code X-Forwarded-For} is
-   * intentionally avoided to prevent header-injection bypass of rate limiting.
+   * <p>This service sits behind an AWS ALB whose security group is the sole inbound source for EC2
+   * port 8080. The ALB appends the direct client IP as the <strong>last</strong> entry in {@code
+   * X-Forwarded-For}, so the rightmost value is always trustworthy and cannot be spoofed.
    *
-   * <p>For E2E testing where all requests originate from {@code 127.0.0.1}, the {@code
-   * mztk.admin.recovery.rate-limit.trust-forwarded-for} property may be enabled to allow per-test
-   * IP isolation via the {@code X-Forwarded-For} header. This flag must remain {@code false} in
-   * production.
+   * <p>The {@code mztk.admin.recovery.rate-limit.trust-forwarded-for} property defaults to {@code
+   * true}. Set it to {@code false} only in environments where there is no reverse proxy (e.g. local
+   * development without ALB).
    */
   private String extractIp(HttpServletRequest request) {
     if (trustForwardedFor) {
       String forwarded = request.getHeader("X-Forwarded-For");
       if (forwarded != null && !forwarded.isBlank()) {
-        int comma = forwarded.indexOf(',');
-        return (comma > 0 ? forwarded.substring(0, comma) : forwarded).trim();
+        int comma = forwarded.lastIndexOf(',');
+        return (comma >= 0 ? forwarded.substring(comma + 1) : forwarded).trim();
       }
     }
     return request.getRemoteAddr();
