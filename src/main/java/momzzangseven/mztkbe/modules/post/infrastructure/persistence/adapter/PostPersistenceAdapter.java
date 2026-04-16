@@ -83,7 +83,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
                 filterByTagIds(filteredPostIds))
             .orderBy(postEntity.createdAt.desc())
             .offset((long) condition.page() * condition.size())
-            .limit(condition.size())
+            .limit(fetchLimit(condition))
             .fetch();
 
     return entities.stream().map(PostEntity::toDomain).toList();
@@ -124,5 +124,9 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
 
     // 3. 태그 검색 결과가 있음 -> 해당 ID들 중에서 조회
     return postEntity.id.in(postIds);
+  }
+
+  private long fetchLimit(PostSearchCondition condition) {
+    return (long) condition.size() + 1L;
   }
 }
