@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
@@ -39,6 +40,7 @@ class PostProcessServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private ApplicationEventPublisher eventPublisher;
   @Mock private LinkTagPort linkTagPort;
+  @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private CountAnswersPort countAnswersPort;
   @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
@@ -68,6 +70,8 @@ class PostProcessServiceTest {
     assertThat(saved.getUpdatedAt()).isAfter(post.getUpdatedAt());
 
     verify(linkTagPort).updateTags(postId, List.of("java"));
+    verify(validatePostImagesPort)
+        .validateAttachableImages(ownerId, postId, post.getType(), List.of(1L));
     verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of(1L));
     verifyNoInteractions(questionLifecycleExecutionPort);
   }
@@ -84,6 +88,7 @@ class PostProcessServiceTest {
 
     postProcessService.updatePost(ownerId, postId, command);
 
+    verifyNoInteractions(validatePostImagesPort);
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(linkTagPort, never()).updateTags(postId, null);
     verify(updatePostImagesPort, never()).updateImages(ownerId, postId, post.getType(), null);
@@ -102,6 +107,7 @@ class PostProcessServiceTest {
 
     postProcessService.updatePost(ownerId, postId, command);
 
+    verifyNoInteractions(validatePostImagesPort);
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(updatePostImagesPort).updateImages(ownerId, postId, post.getType(), List.of());
     verifyNoInteractions(questionLifecycleExecutionPort);
@@ -116,7 +122,11 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class);
 
     verifyNoInteractions(
-        postPersistencePort, linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
+        postPersistencePort,
+        linkTagPort,
+        validatePostImagesPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort);
   }
 
   @Test
@@ -132,7 +142,8 @@ class PostProcessServiceTest {
         .isInstanceOf(PostUnauthorizedException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
+    verifyNoInteractions(
+        linkTagPort, validatePostImagesPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
@@ -195,7 +206,8 @@ class PostProcessServiceTest {
         .isInstanceOf(PostInvalidInputException.class);
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verifyNoInteractions(linkTagPort, updatePostImagesPort, questionLifecycleExecutionPort);
+    verifyNoInteractions(
+        linkTagPort, validatePostImagesPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test

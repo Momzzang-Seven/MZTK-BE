@@ -76,8 +76,8 @@ class UpsertImagesConcurrencyE2ETest extends E2ETestBase {
     return "public/community/free/tmp/" + UUID.randomUUID() + ".jpg";
   }
 
-  /** PENDING 이미지를 DB에 직접 삽입하고 생성된 ID를 반환. */
-  private Long insertPendingImage(String tmpKey, Long userId) {
+  /** COMPLETED 이미지를 DB에 직접 삽입하고 생성된 ID를 반환. */
+  private Long insertAttachableImage(String tmpKey, Long userId) {
     return txTemplate.execute(
         status -> {
           ImageEntity entity =
@@ -85,8 +85,9 @@ class UpsertImagesConcurrencyE2ETest extends E2ETestBase {
                   .userId(userId)
                   .referenceType(FREE.name())
                   .referenceId(null)
-                  .status("PENDING")
+                  .status("COMPLETED")
                   .tmpObjectKey(tmpKey)
+                  .finalObjectKey("public/community/free/" + UUID.randomUUID() + ".webp")
                   .imgOrder(1)
                   .build();
           return imageJpaRepository.save(entity).getId();
@@ -122,9 +123,9 @@ class UpsertImagesConcurrencyE2ETest extends E2ETestBase {
     String key1 = uniqueTmpKey();
     String key2 = uniqueTmpKey();
     String key3 = uniqueTmpKey();
-    Long id1 = insertPendingImage(key1, userId);
-    Long id2 = insertPendingImage(key2, userId);
-    Long id3 = insertPendingImage(key3, userId);
+    Long id1 = insertAttachableImage(key1, userId);
+    Long id2 = insertAttachableImage(key2, userId);
+    Long id3 = insertAttachableImage(key3, userId);
 
     // 스레드 A: imageIds=[id1, id2, id3]
     // 스레드 B: imageIds=[id1, id2, id3] (동일한 목록)
@@ -175,10 +176,10 @@ class UpsertImagesConcurrencyE2ETest extends E2ETestBase {
     String key2 = uniqueTmpKey();
     String key3 = uniqueTmpKey();
     String key4 = uniqueTmpKey();
-    Long id1 = insertPendingImage(key1, userId);
-    Long id2 = insertPendingImage(key2, userId);
-    Long id3 = insertPendingImage(key3, userId);
-    Long id4 = insertPendingImage(key4, userId);
+    Long id1 = insertAttachableImage(key1, userId);
+    Long id2 = insertAttachableImage(key2, userId);
+    Long id3 = insertAttachableImage(key3, userId);
+    Long id4 = insertAttachableImage(key4, userId);
 
     // 스레드 A: imageIds=[id1, id2, id3] (id1, id2 공유)
     // 스레드 B: imageIds=[id1, id2, id4] (id1, id2 공유)

@@ -29,6 +29,11 @@ public record GetImagesByIdsCommand(
     if (ids == null || ids.isEmpty()) {
       throw new IllegalArgumentException("ids must not be empty");
     }
+    for (Long id : ids) {
+      if (id == null || id <= 0) {
+        throw new IllegalArgumentException("ids must be positive");
+      }
+    }
 
     int maxCount = ImageCountPolicy.of(referenceType).getMaxCount();
     if (ids.size() > maxCount) {
