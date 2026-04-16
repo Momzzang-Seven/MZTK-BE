@@ -77,3 +77,13 @@ web3:
         - 0x095ea7b3                # approve (예시)
   transfer:
     legacy-question-reward-handler-enabled: ${WEB3_TRANSFER_LEGACY_QUESTION_REWARD_HANDLER_ENABLED:false}
+
+mztk:
+  admin:
+    seed:
+      seed-count: ${ADMIN_SEED_COUNT:2}
+      delivery-target: ${ADMIN_SEED_DELIVERY_TARGET:mztk/admin/bootstrap-delivery}
+    recovery:
+      secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}
+      rate-limit:
+        trust-forwarded-for: true

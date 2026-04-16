@@ -330,3 +330,5 @@ mztk:
       delivery-target: ${ADMIN_SEED_DELIVERY_TARGET:mztk/admin/bootstrap-delivery}
     recovery:
       secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}
+      rate-limit:
+        trust-forwarded-for: false
