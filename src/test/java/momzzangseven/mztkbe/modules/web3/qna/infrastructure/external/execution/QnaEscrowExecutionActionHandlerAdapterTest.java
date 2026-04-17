@@ -221,82 +221,98 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName("afterExecutionConfirmed marks admin settled using stored answer key")
+  void afterExecutionConfirmed_marksAdminSettled() throws Exception {
+    when(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(questionProjection("0x" + "a".repeat(64), 1)));
+    when(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+        .thenReturn(Optional.of(answerProjection("0x" + "b".repeat(64))));
+
+    adapter.afterExecutionConfirmed(
+        intent(adminSettlePayload(), ExecutionResourceType.QUESTION, "101", 7L), plan());
+
+    verify(qnaAcceptStateSyncPort).confirmAccepted(101L, 201L);
+    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
+        ArgumentCaptor.forClass(QnaQuestionProjection.class);
+    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
+    assertThat(questionCaptor.getValue().getAcceptedAnswerId())
+        .isEqualTo(QnaEscrowIdCodec.answerId(201L));
+    assertThat(questionCaptor.getValue().getState()).isEqualTo(QnaQuestionState.ADMIN_SETTLED);
+  }
+
+  @Test
   @DisplayName(
-      "afterExecutionFailedOnchain rolls back pending accept when failure reason is missing")
-  void afterExecutionFailedOnchain_rollsBackWhenFailureReasonIsNull() throws Exception {
-    QnaEscrowExecutionPayload payload =
-        new QnaEscrowExecutionPayload(
-            QnaExecutionActionType.QNA_ANSWER_ACCEPT,
-            101L,
-            201L,
-            "0x" + "1".repeat(40),
-            "0x" + "2".repeat(40),
-            new BigInteger("50000000000000000000"),
-            "0x" + "c".repeat(64),
-            "0x" + "d".repeat(64),
-            "0x" + "3".repeat(40),
-            "0x1234");
-
+      "afterExecutionFailedOnchain defers rollback to terminal callback when failure reason is missing")
+  void afterExecutionFailedOnchain_defersRollbackWhenFailureReasonIsNull() throws Exception {
     adapter.afterExecutionFailedOnchain(
-        intent(payload, ExecutionResourceType.QUESTION, "101", 7L), plan(), null);
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), null);
 
-    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+    verifyNoInteractions(qnaAcceptStateSyncPort);
   }
 
   @Test
-  @DisplayName("afterExecutionFailedOnchain rolls back pending accept when failure reason is blank")
-  void afterExecutionFailedOnchain_rollsBackWhenFailureReasonIsBlank() throws Exception {
-    adapter.afterExecutionFailedOnchain(
-        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), " ");
-
-    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
-  }
-
-  @Test
-  @DisplayName("afterExecutionFailedOnchain rolls back pending accept for non retryable failure")
-  void afterExecutionFailedOnchain_rollsBackForNonRetryableFailure() throws Exception {
-    adapter.afterExecutionFailedOnchain(
+  @DisplayName("afterExecutionTerminated rolls back pending accept when failure reason is blank")
+  void afterExecutionTerminated_rollsBackWhenFailureReasonIsBlank() throws Exception {
+    adapter.afterExecutionTerminated(
         intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
         plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        " ");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending accept for non retryable failure")
+  void afterExecutionTerminated_rollsBackForNonRetryableFailure() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
         "TREASURY_TOKEN_INSUFFICIENT");
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
 
   @Test
-  @DisplayName("afterExecutionFailedOnchain keeps pending accept for retryable failure")
-  void afterExecutionFailedOnchain_keepsPendingForRetryableFailure() throws Exception {
-    adapter.afterExecutionFailedOnchain(
+  @DisplayName("afterExecutionTerminated keeps pending accept for retryable failure")
+  void afterExecutionTerminated_keepsPendingForRetryableFailure() throws Exception {
+    adapter.afterExecutionTerminated(
         intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
         plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
         "RPC_UNAVAILABLE");
 
     verify(qnaAcceptStateSyncPort, never()).rollbackPendingAccept(101L, 201L);
   }
 
   @Test
-  @DisplayName("afterExecutionFailedOnchain rolls back pending accept for unknown onchain failure")
-  void afterExecutionFailedOnchain_rollsBackForUnknownFailure() throws Exception {
-    adapter.afterExecutionFailedOnchain(
-        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), "EXPIRED");
+  @DisplayName("afterExecutionTerminated rolls back pending accept for unknown onchain failure")
+  void afterExecutionTerminated_rollsBackForUnknownFailure() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "EXPIRED");
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
 
   @Test
-  @DisplayName("afterExecutionFailedOnchain rolls back pending accept for suffixed failure code")
-  void afterExecutionFailedOnchain_rollsBackForSuffixedFailureCode() throws Exception {
-    adapter.afterExecutionFailedOnchain(
+  @DisplayName("afterExecutionTerminated rolls back pending accept for suffixed failure code")
+  void afterExecutionTerminated_rollsBackForSuffixedFailureCode() throws Exception {
+    adapter.afterExecutionTerminated(
         intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L),
         plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
         "RECEIPT_TIMEOUT_30S");
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
 
   @Test
-  @DisplayName("afterExecutionFailedOnchain ignores non accept action")
-  void afterExecutionFailedOnchain_ignoresNonAcceptAction() throws Exception {
+  @DisplayName("afterExecutionTerminated ignores non accept action")
+  void afterExecutionTerminated_ignoresNonAcceptAction() throws Exception {
     QnaEscrowExecutionPayload payload =
         new QnaEscrowExecutionPayload(
             QnaExecutionActionType.QNA_QUESTION_CREATE,
@@ -310,9 +326,10 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             "0x" + "3".repeat(40),
             "0x1234");
 
-    adapter.afterExecutionFailedOnchain(
+    adapter.afterExecutionTerminated(
         intent(payload, ExecutionResourceType.QUESTION, "101", 7L),
         plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
         "TREASURY_TOKEN_INSUFFICIENT");
 
     verifyNoInteractions(qnaAcceptStateSyncPort);
@@ -350,6 +367,18 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         plan(),
         ExecutionIntentStatus.NONCE_STALE,
         "AUTH_NONCE_MISMATCH");
+
+    verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back admin settle pending accept on expire")
+  void afterExecutionTerminated_rollsBackAdminSettleOnExpired() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(adminSettlePayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.EXPIRED,
+        "EXECUTION_INTENT_EXPIRED");
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
@@ -404,6 +433,20 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         "0x1234");
   }
 
+  private QnaEscrowExecutionPayload adminSettlePayload() {
+    return new QnaEscrowExecutionPayload(
+        QnaExecutionActionType.QNA_ADMIN_SETTLE,
+        101L,
+        201L,
+        "0x" + "1".repeat(40),
+        "0x" + "2".repeat(40),
+        new BigInteger("50000000000000000000"),
+        "0x" + "c".repeat(64),
+        "0x" + "d".repeat(64),
+        "0x" + "3".repeat(40),
+        "0x1234");
+  }
+
   private ExecutionActionPlan plan() {
     return new ExecutionActionPlan(
         BigInteger.ZERO,
@@ -441,6 +484,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
       case QNA_ANSWER_UPDATE -> ExecutionActionType.QNA_ANSWER_UPDATE;
       case QNA_ANSWER_DELETE -> ExecutionActionType.QNA_ANSWER_DELETE;
       case QNA_ANSWER_ACCEPT -> ExecutionActionType.QNA_ANSWER_ACCEPT;
+      case QNA_ADMIN_SETTLE -> ExecutionActionType.QNA_ADMIN_SETTLE;
     };
   }
 }

@@ -20,6 +20,11 @@ public class QnaAcceptStateSyncAdapter implements QnaAcceptStateSyncPort {
   }
 
   @Override
+  public void beginPendingAccept(Long postId, Long answerId) {
+    syncAcceptedAnswerUseCase.beginPendingAccept(postId, answerId);
+  }
+
+  @Override
   public void confirmAccepted(Long postId, Long answerId) {
     syncAcceptedAnswerUseCase.confirmAccepted(postId, answerId);
   }

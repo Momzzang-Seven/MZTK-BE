@@ -12,7 +12,6 @@ public record QnaEscrowExecutionRequest(
     Long counterpartyUserId,
     Long postId,
     Long answerId,
-    String authorityAddress,
     String tokenAddress,
     BigInteger rewardAmountWei,
     String questionHash,

@@ -259,6 +259,21 @@ web3:
     observability:
       log-auth-hash: true
       log-user-op: false
+  execution:
+    internal-issuer:
+      enabled: true
+      batch-size: 20
+      cron: "0/10 * * * * *"
+      zone: "Asia/Seoul"
+      action-types:
+        - QNA_ADMIN_SETTLE
+  qna:
+    auto-accept:
+      enabled: true
+      delay-seconds: 604800
+      batch-size: 50
+      cron: "0 17 * * * *"
+      zone: "Asia/Seoul"
   escrow:
     marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
     qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
