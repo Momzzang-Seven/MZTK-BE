@@ -43,54 +43,22 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
   // ========== ManageClassTagPort ==========
 
   @Override
+  @Transactional
   public void linkTagsToClass(Long classId, List<String> tagNames) {
     if (tagNames == null || tagNames.isEmpty()) {
       return;
     }
-
-    // 1. 정규화 (소문자, 공백 제거, 중복 제거)
-    List<String> distinctNames =
-        tagNames.stream()
-            .filter(Objects::nonNull)
-            .map(String::trim)
-            .map(String::toLowerCase)
-            .filter(name -> !name.isBlank())
-            .distinct()
-            .toList();
-
-    if (distinctNames.isEmpty()) {
-      return;
-    }
-
-    // 2. 이미 존재하는 태그 조회
-    List<Tag> existing = loadTagPort.loadTagsByNames(distinctNames);
-    List<String> existingNames = existing.stream().map(Tag::getName).toList();
-
-    // 3. 새 태그 생성
-    List<Tag> newTags =
-        distinctNames.stream()
-            .filter(name -> !existingNames.contains(name))
-            .map(Tag::create)
-            .toList();
-
-    List<Tag> savedNew = newTags.isEmpty() ? List.of() : saveTagPort.saveTags(newTags);
-
-    // 4. class_tags 삽입
-    List<Long> allTagIds = new ArrayList<>();
-    allTagIds.addAll(existing.stream().map(Tag::getId).toList());
-    allTagIds.addAll(savedNew.stream().map(Tag::getId).toList());
-
-    List<ClassTagEntity> mappings =
-        allTagIds.stream().map(tagId -> new ClassTagEntity(classId, tagId)).toList();
-    classTagJpaRepository.saveAll(mappings);
+    persistTagLinks(classId, tagNames);
   }
 
-  @Transactional
   @Override
+  @Transactional
   public void updateTags(Long classId, List<String> tagNames) {
     classTagJpaRepository.deleteByClassId(classId);
     if (tagNames != null && !tagNames.isEmpty()) {
-      linkTagsToClass(classId, tagNames);
+      // Call persistTagLinks directly (not via linkTagsToClass) to avoid Spring proxy self-invocation.
+      // Self-invocation bypasses the proxy and would lose the outer transaction.
+      persistTagLinks(classId, tagNames);
     }
   }
 
@@ -131,5 +99,63 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
             Collectors.groupingBy(
                 tuple -> tuple.get(classTagEntity.classId),
                 Collectors.mapping(tuple -> tuple.get(tagEntity.name), Collectors.toList())));
+  }
+
+  // ============================================
+  // Private helpers
+  // ============================================
+
+  /**
+   * Core tag-link logic shared by {@link #linkTagsToClass} and {@link #updateTags}.
+   *
+   * <p>Extracted to a private method so that both callers can invoke it without going through the
+   * Spring proxy (which would cause self-invocation to bypass the active transaction).
+   *
+   * <ol>
+   *   <li>Normalise tag names (trim, lowercase, deduplicate, filter blank)
+   *   <li>Load already-persisted tags
+   *   <li>Create missing tags via {@link SaveTagPort}
+   *   <li>Insert rows into {@code class_tags}
+   * </ol>
+   *
+   * @param classId target class ID
+   * @param tagNames raw tag names from the caller
+   */
+  private void persistTagLinks(Long classId, List<String> tagNames) {
+    // 1. 정규화 (소문자, 공백 제거, 중복 제거)
+    List<String> distinctNames =
+        tagNames.stream()
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .map(String::toLowerCase)
+            .filter(name -> !name.isBlank())
+            .distinct()
+            .toList();
+
+    if (distinctNames.isEmpty()) {
+      return;
+    }
+
+    // 2. 이미 존재하는 태그 조회
+    List<Tag> existing = loadTagPort.loadTagsByNames(distinctNames);
+    List<String> existingNames = existing.stream().map(Tag::getName).toList();
+
+    // 3. 새 태그 생성
+    List<Tag> newTags =
+        distinctNames.stream()
+            .filter(name -> !existingNames.contains(name))
+            .map(Tag::create)
+            .toList();
+
+    List<Tag> savedNew = newTags.isEmpty() ? List.of() : saveTagPort.saveTags(newTags);
+
+    // 4. class_tags 삽입
+    List<Long> allTagIds = new ArrayList<>();
+    allTagIds.addAll(existing.stream().map(Tag::getId).toList());
+    allTagIds.addAll(savedNew.stream().map(Tag::getId).toList());
+
+    List<ClassTagEntity> mappings =
+        allTagIds.stream().map(tagId -> new ClassTagEntity(classId, tagId)).toList();
+    classTagJpaRepository.saveAll(mappings);
   }
 }

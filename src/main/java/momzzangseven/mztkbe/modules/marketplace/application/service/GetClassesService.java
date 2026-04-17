@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.application.MarketplacePaginationConstants;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.ClassItem;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetClassesQuery;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetClassesResult;
@@ -27,9 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetClassesService implements GetClassesUseCase {
 
-  private static final int PAGE_SIZE = 20;
   private static final String SORT_DISTANCE = "DISTANCE";
   private static final String SORT_RATING = "RATING";
+
 
   private final LoadClassPort loadClassPort;
   private final LoadClassImagesPort loadClassImagesPort;
@@ -41,7 +42,7 @@ public class GetClassesService implements GetClassesUseCase {
     // Fall back to RATING when location data is missing and DISTANCE is requested
     String effectiveSort = resolveSort(query);
 
-    PageRequest pageable = PageRequest.of(query.page(), PAGE_SIZE);
+    PageRequest pageable = PageRequest.of(query.page(), MarketplacePaginationConstants.DEFAULT_PAGE_SIZE);
     Page<ClassItem> page =
         loadClassPort.findActiveClasses(
             query.lat(),
@@ -82,6 +83,6 @@ public class GetClassesService implements GetClassesUseCase {
         && (query.lat() == null || query.lng() == null)) {
       return SORT_RATING;
     }
-    return query.sort() != null ? query.sort() : SORT_RATING;
+    return (query.sort() != null && !query.sort().isBlank()) ? query.sort() : SORT_RATING;
   }
 }

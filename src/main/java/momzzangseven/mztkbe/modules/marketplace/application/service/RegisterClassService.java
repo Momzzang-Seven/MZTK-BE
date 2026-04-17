@@ -63,8 +63,8 @@ public class RegisterClassService implements RegisterClassUseCase {
       throw new TrainerSuspendedException(command.trainerId());
     }
 
-    // Step 3: Validate slot durations are uniform
-    validateUniformDuration(command.classTimes(), command.durationMinutes());
+    // Step 3: Validate positive duration (defensive guard; domain and Bean Validation also check)
+    validatePositiveDuration(command.durationMinutes());
 
     // Step 4: Create domain object and persist
     MarketplaceClass marketplaceClass =
@@ -112,16 +112,13 @@ public class RegisterClassService implements RegisterClassUseCase {
   }
 
   /**
-   * Assert that all slot startTimes, when combined with durationMinutes, produce the same session
-   * length. Since durationMinutes is the single source of truth for all slots, this method
-   * validates that no incompatible duration overrides exist in the classTimes list.
+   * Defensive guard ensuring durationMinutes is positive.
    *
-   * <p>In the current schema, every ClassTimeCommand shares the same {@code durationMinutes} from
-   * the parent command, so this check is a defensive assertion on business consistency.
+   * <p>Bean Validation ({@code @Min(1)}) and the domain model ({@code validateDuration}) both
+   * enforce this constraint. This guard prevents a future schema change (e.g., per-slot duration)
+   * from silently bypassing the class-level duration check.
    */
-  private void validateUniformDuration(List<ClassTimeCommand> classTimes, int durationMinutes) {
-    // durationMinutes is a single class-level constant applied to all slots.
-    // Validation here guards against future schema changes where per-slot duration might be added.
+  private void validatePositiveDuration(int durationMinutes) {
     if (durationMinutes <= 0) {
       throw new MarketplaceInvalidDurationException(
           "Duration must be positive: " + durationMinutes);
