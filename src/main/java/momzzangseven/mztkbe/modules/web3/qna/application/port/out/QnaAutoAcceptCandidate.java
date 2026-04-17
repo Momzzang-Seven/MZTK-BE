@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.qna.application.dto;
+package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;

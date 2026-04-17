@@ -5,6 +5,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptState
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @ConditionalOnProperty(
@@ -30,6 +32,7 @@ public class QnaAcceptStateSyncAdapter implements QnaAcceptStateSyncPort {
   }
 
   @Override
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void rollbackPendingAccept(Long postId, Long answerId) {
     syncAcceptedAnswerUseCase.rollbackPendingAccept(postId, answerId);
   }

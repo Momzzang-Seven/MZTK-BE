@@ -83,7 +83,8 @@ public class ExecuteInternalExecutionIntentService
                   ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
                   ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
                   now));
-      actionHandler.afterExecutionTerminated(
+      safeAfterExecutionTerminated(
+          actionHandler,
           expired,
           actionPlan,
           ExecutionIntentStatus.EXPIRED,
@@ -149,7 +150,8 @@ public class ExecuteInternalExecutionIntentService
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
                   now));
-      actionHandler.afterExecutionTerminated(
+      safeAfterExecutionTerminated(
+          actionHandler,
           staleIntent,
           actionPlan,
           ExecutionIntentStatus.NONCE_STALE,
@@ -296,8 +298,12 @@ public class ExecuteInternalExecutionIntentService
                     : failureReason,
                 now));
     if (actionHandler != null && actionPlan != null) {
-      actionHandler.afterExecutionTerminated(
-          canceled, actionPlan, ExecutionIntentStatus.CANCELED, INTERNAL_ISSUER_INVALID_INTENT);
+      safeAfterExecutionTerminated(
+          actionHandler,
+          canceled,
+          actionPlan,
+          ExecutionIntentStatus.CANCELED,
+          INTERNAL_ISSUER_INVALID_INTENT);
     }
     log.error(
         "internal execution issuer quarantined invalid intent: executionIntentId={}, actionType={}, reason={}",
@@ -316,5 +322,25 @@ public class ExecuteInternalExecutionIntentService
     detail.put("failureReason", broadcast.failureReason());
     detail.put("internal", true);
     return detail;
+  }
+
+  private void safeAfterExecutionTerminated(
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionIntentStatus terminalStatus,
+      String failureReason) {
+    try {
+      actionHandler.afterExecutionTerminated(
+          intent, actionPlan, terminalStatus, failureReason);
+    } catch (RuntimeException e) {
+      log.error(
+          "internal execution issuer termination hook failed: executionIntentId={}, actionType={}, terminalStatus={}, failureReason={}",
+          intent.getPublicId(),
+          intent.getActionType(),
+          terminalStatus,
+          failureReason,
+          e);
+    }
   }
 }

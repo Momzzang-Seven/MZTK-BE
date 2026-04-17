@@ -34,13 +34,11 @@ class QnaAutoAcceptCandidatePersistenceAdapterTest {
   void claimNextCandidate_mapsRepositoryRowToDto() {
     LocalDateTime cutoff = LocalDateTime.of(2026, 4, 17, 9, 30);
     LocalDateTime answerCreatedAt = LocalDateTime.of(2026, 4, 10, 10, 0);
-    when(
-            qnaAnswerProjectionJpaRepository.claimNextAutoAcceptCandidate(
-                cutoff, QnaQuestionState.ANSWERED.code()))
+    when(qnaAnswerProjectionJpaRepository.claimNextAutoAcceptCandidate(
+            cutoff, QnaQuestionState.ANSWERED.code()))
         .thenReturn(
             Optional.of(
-                new QnaAutoAcceptCandidateRowFixture(
-                    101L, 201L, 7L, 22L, answerCreatedAt)));
+                new QnaAutoAcceptCandidateRowFixture(101L, 201L, 7L, 22L, answerCreatedAt)));
 
     Optional<QnaAutoAcceptCandidate> result = adapter.claimNextCandidate(cutoff);
 
