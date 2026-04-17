@@ -331,8 +331,7 @@ public class ExecuteInternalExecutionIntentService
       ExecutionIntentStatus terminalStatus,
       String failureReason) {
     try {
-      actionHandler.afterExecutionTerminated(
-          intent, actionPlan, terminalStatus, failureReason);
+      actionHandler.afterExecutionTerminated(intent, actionPlan, terminalStatus, failureReason);
     } catch (RuntimeException e) {
       log.error(
           "internal execution issuer termination hook failed: executionIntentId={}, actionType={}, terminalStatus={}, failureReason={}",
