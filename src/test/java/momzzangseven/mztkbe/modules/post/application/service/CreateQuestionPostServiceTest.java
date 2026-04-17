@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -33,6 +35,7 @@ class CreateQuestionPostServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private PostXpService postXpService;
   @Mock private LinkTagPort linkTagPort;
+  @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
@@ -45,6 +48,7 @@ class CreateQuestionPostServiceTest {
             postPersistencePort,
             postXpService,
             linkTagPort,
+            validatePostImagesPort,
             updatePostImagesPort,
             questionLifecycleExecutionPort);
   }
@@ -76,6 +80,12 @@ class CreateQuestionPostServiceTest {
 
     CreateQuestionPostResult result = createQuestionPostService.execute(command);
 
+    InOrder inOrder =
+        org.mockito.Mockito.inOrder(validatePostImagesPort, questionLifecycleExecutionPort);
+    inOrder
+        .verify(validatePostImagesPort)
+        .validateAttachableImages(3L, null, PostType.QUESTION, List.of(1L, 2L));
+    inOrder.verify(questionLifecycleExecutionPort).precheckQuestionCreate(3L, 50L);
     verify(questionLifecycleExecutionPort).precheckQuestionCreate(3L, 50L);
     verify(updatePostImagesPort).updateImages(3L, 20L, PostType.QUESTION, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(20L, List.of("java"));
@@ -101,6 +111,7 @@ class CreateQuestionPostServiceTest {
         postPersistencePort,
         postXpService,
         linkTagPort,
+        validatePostImagesPort,
         updatePostImagesPort,
         questionLifecycleExecutionPort);
   }

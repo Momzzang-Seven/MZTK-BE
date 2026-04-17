@@ -23,10 +23,9 @@ import momzzangseven.mztkbe.modules.level.application.port.in.GrantXpUseCase;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.RecoverQuestionPostEscrowUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
-import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.post.infrastructure.external.image.adapter.ImageModuleAdapter;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
@@ -75,8 +74,7 @@ class PostControllerQnaEscrowIntegrationTest {
   @MockitoBean private QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
   @MockitoBean private RecoverQuestionPostEscrowUseCase recoverQuestionPostEscrowUseCase;
   @MockitoBean private GrantXpUseCase grantXpUseCase;
-  @MockitoBean private UpdatePostImagesPort updatePostImagesPort;
-  @MockitoBean private LoadPostImagesPort loadPostImagesPort;
+  @MockitoBean private ImageModuleAdapter imageModuleAdapter;
 
   @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -102,7 +100,7 @@ class PostControllerQnaEscrowIntegrationTest {
   void setUp() {
     BDDMockito.given(grantXpUseCase.execute(any()))
         .willReturn(GrantXpResult.granted(20, 10, 1, LocalDate.of(2026, 3, 12)));
-    BDDMockito.given(loadPostImagesPort.loadImages(any(), any()))
+    BDDMockito.given(imageModuleAdapter.loadImages(any(), any()))
         .willReturn(PostImageResult.empty());
     BDDMockito.given(questionEscrowExecutionUseCase.prepareQuestionCreate(any()))
         .willReturn(questionIntent("intent-1", "QNA_QUESTION_CREATE"));

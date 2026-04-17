@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.integration.e2e.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
@@ -9,6 +10,8 @@ import java.util.Map;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.image.infrastructure.persistence.entity.ImageEntity;
+import momzzangseven.mztkbe.modules.image.infrastructure.persistence.repository.ImageJpaRepository;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +44,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class PostE2ETest extends E2ETestBase {
 
   @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private ImageJpaRepository imageJpaRepository;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -48,11 +52,14 @@ class PostE2ETest extends E2ETestBase {
   @MockitoBean private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
 
   private String accessToken;
+  private Long currentUserId;
   private final List<Long> imageIds = new ArrayList<>();
 
   @BeforeEach
   void setUp() {
-    accessToken = signupAndLogin("E2E유저").accessToken();
+    TestUser user = signupAndLogin("E2E유저");
+    accessToken = user.accessToken();
+    currentUserId = user.userId();
   }
 
   // ============================================================
@@ -167,6 +174,20 @@ class PostE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody());
   }
 
+  private Long saveImage(Long userId, String referenceType, String status) {
+    ImageEntity image =
+        ImageEntity.builder()
+            .userId(userId)
+            .referenceType(referenceType)
+            .referenceId(null)
+            .status(status)
+            .tmpObjectKey("e2e/post/" + java.util.UUID.randomUUID() + ".jpg")
+            .finalObjectKey("COMPLETED".equals(status) ? "public/e2e.webp" : null)
+            .imgOrder(1)
+            .build();
+    return imageJpaRepository.save(image).getId();
+  }
+
   // ============================================================
   // FREE 게시글 기본 CRUD (기존 + 강화)
   // ============================================================
@@ -190,6 +211,39 @@ class PostE2ETest extends E2ETestBase {
     JsonNode root = parse(res);
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
     assertThat(root.at("/data/postId").asLong()).isPositive();
+  }
+
+  @Test
+  @DisplayName("질문 게시글 작성 시 PENDING imageIds는 409으로 차단되고 precheck가 호출되지 않는다")
+  void createQuestionPost_pendingImage_returns409BeforePrecheck() throws Exception {
+    Long pendingImageId = saveImage(currentUserId, "COMMUNITY_QUESTION", "PENDING");
+    Map<String, Object> body =
+        Map.of(
+            "title",
+            "pending question",
+            "content",
+            "pending body",
+            "reward",
+            50L,
+            "imageIds",
+            List.of(pendingImageId));
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/question",
+            HttpMethod.POST,
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(parse(response).at("/code").asText()).isEqualTo("IMAGE_002");
+    verifyNoInteractions(questionLifecycleExecutionPort);
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM posts WHERE type = 'QUESTION' AND title = ?",
+            Integer.class,
+            "pending question");
+    assertThat(count).isZero();
   }
 
   @Test
@@ -390,8 +444,9 @@ class PostE2ETest extends E2ETestBase {
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode root = parse(res);
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
-    assertThat(root.at("/data").isArray()).isTrue();
-    assertThat(root.at("/data").get(0).get("content").asText()).isEqualTo("목록 조회 E2E 게시글");
+    assertThat(root.at("/data/posts").isArray()).isTrue();
+    assertThat(root.at("/data/hasNext").isBoolean()).isTrue();
+    assertThat(root.at("/data/posts").get(0).get("content").asText()).isEqualTo("목록 조회 E2E 게시글");
   }
 
   @Test

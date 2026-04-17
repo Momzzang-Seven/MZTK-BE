@@ -9,8 +9,8 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
+import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
@@ -43,9 +43,10 @@ class SearchPostsServiceTest {
 
     when(loadTagPort.findPostIdsByTagName("java")).thenReturn(List.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
+    SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
-    assertThat(results).isEmpty();
+    assertThat(results.posts()).isEmpty();
+    assertThat(results.hasNext()).isFalse();
     verify(postPersistencePort, never()).findPostsByCondition(condition, List.of());
   }
 
@@ -61,10 +62,11 @@ class SearchPostsServiceTest {
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
+    SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
-    assertThat(results).hasSize(1);
-    assertThat(results.getFirst().tags()).isEmpty();
+    assertThat(results.posts()).hasSize(1);
+    assertThat(results.posts().getFirst().tags()).isEmpty();
+    assertThat(results.hasNext()).isFalse();
     verify(loadTagPort, never()).findPostIdsByTagName("   ");
   }
 
@@ -84,13 +86,14 @@ class SearchPostsServiceTest {
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of(1L, 2L, 2L, 1L));
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of(2L));
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
+    SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
-    assertThat(results).hasSize(2);
-    assertThat(results.get(0).tags()).containsExactly("java");
-    assertThat(results.get(1).tags()).containsExactly("spring", "kotlin");
-    assertThat(results.get(0).likeCount()).isEqualTo(2L);
-    assertThat(results.get(1).liked()).isTrue();
+    assertThat(results.posts()).hasSize(2);
+    assertThat(results.posts().get(0).tags()).containsExactly("java");
+    assertThat(results.posts().get(1).tags()).containsExactly("spring", "kotlin");
+    assertThat(results.posts().get(0).likeCount()).isEqualTo(2L);
+    assertThat(results.posts().get(1).liked()).isTrue();
+    assertThat(results.hasNext()).isFalse();
   }
 
   @Test
@@ -106,12 +109,13 @@ class SearchPostsServiceTest {
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
+    SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
-    assertThat(results).hasSize(1);
-    assertThat(results.getFirst().nickname()).isEqualTo("writer");
-    assertThat(results.getFirst().profileImageUrl()).isEqualTo("profile.png");
-    assertThat(results.getFirst().tags()).containsExactly("java");
+    assertThat(results.posts()).hasSize(1);
+    assertThat(results.posts().getFirst().nickname()).isEqualTo("writer");
+    assertThat(results.posts().getFirst().profileImageUrl()).isEqualTo("profile.png");
+    assertThat(results.posts().getFirst().tags()).containsExactly("java");
+    assertThat(results.hasNext()).isFalse();
   }
 
   @Test
@@ -136,10 +140,11 @@ class SearchPostsServiceTest {
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
+    SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
-    assertThat(results).hasSize(1);
-    assertThat(results.getFirst().isSolved()).isTrue();
+    assertThat(results.posts()).hasSize(1);
+    assertThat(results.posts().getFirst().isSolved()).isTrue();
+    assertThat(results.hasNext()).isFalse();
   }
 
   @Test
@@ -149,10 +154,36 @@ class SearchPostsServiceTest {
 
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of());
 
-    List<PostListResult> results = searchPostsService.searchPosts(condition, 99L);
+    SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
-    assertThat(results).isEmpty();
+    assertThat(results.posts()).isEmpty();
+    assertThat(results.hasNext()).isFalse();
     verify(loadTagPort, never()).findTagsByPostIdsIn(List.of());
+  }
+
+  @Test
+  @DisplayName("calculates hasNext=true and trims probe row to requested size")
+  void searchPostsCalculatesHasNextAndTrimsToRequestedSize() {
+    PostSearchCondition condition = PostSearchCondition.of(PostType.FREE, null, null, 0, 2);
+    Post first = post(1L);
+    Post second = post(2L);
+    Post probe = post(3L);
+
+    when(postPersistencePort.findPostsByCondition(condition, null))
+        .thenReturn(List.of(first, second, probe));
+    when(loadTagPort.findTagsByPostIdsIn(List.of(1L, 2L)))
+        .thenReturn(Map.of(1L, List.of("java"), 2L, List.of("spring")));
+    when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
+    when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of(1L, 2L, 2L, 1L));
+    when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of(2L));
+
+    SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
+
+    assertThat(results.hasNext()).isTrue();
+    assertThat(results.posts()).hasSize(2);
+    assertThat(results.posts().get(0).postId()).isEqualTo(1L);
+    assertThat(results.posts().get(1).postId()).isEqualTo(2L);
+    verify(loadTagPort).findTagsByPostIdsIn(List.of(1L, 2L));
   }
 
   private Post post(Long id) {
