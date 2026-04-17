@@ -56,6 +56,11 @@ interface ExecutionIntentEnvelope {
     execution: {
       mode: string;
     };
+    transaction?: {
+      id: number;
+      status: string;
+      txHash?: string;
+    };
   };
 }
 
@@ -105,6 +110,14 @@ test.describe("QnA Auto Accept Playwright E2E", () => {
         finalState.executionIntent.status
       );
       expect(finalState.executionIntent.status).not.toBe("AWAITING_SIGNATURE");
+      if (
+        ["PENDING_ONCHAIN", "FAILED_ONCHAIN", "CONFIRMED"].includes(
+          finalState.executionIntent.status
+        )
+      ) {
+        expect(finalState.transaction?.id).toBeTruthy();
+        expect(finalState.transaction?.txHash).toBeTruthy();
+      }
     }
   );
 });
