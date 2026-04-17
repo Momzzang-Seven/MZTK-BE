@@ -100,6 +100,36 @@ class GetPostServiceTest {
   }
 
   @Test
+  @DisplayName("returns locked post context through loadPostForUpdate for mutation flows")
+  void getPostContextForUpdateSuccess() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(42L)
+            .userId(17L)
+            .type(PostType.QUESTION)
+            .title("locked question")
+            .content("locked content")
+            .reward(150L)
+            .status(PostStatus.OPEN)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPostForUpdate(42L)).thenReturn(Optional.of(post));
+
+    var result = getPostService.getPostContextForUpdate(42L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().postId()).isEqualTo(42L);
+    assertThat(result.get().writerId()).isEqualTo(17L);
+    assertThat(result.get().content()).isEqualTo("locked content");
+    assertThat(result.get().reward()).isEqualTo(150L);
+    verify(postPersistencePort).loadPostForUpdate(42L);
+    verify(postPersistencePort, never()).loadPost(42L);
+  }
+
+  @Test
   @DisplayName("returns mapped post with tags and images from image module")
   void getPostSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);

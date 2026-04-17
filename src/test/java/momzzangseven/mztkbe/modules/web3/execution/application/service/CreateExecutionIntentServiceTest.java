@@ -198,6 +198,23 @@ class CreateExecutionIntentServiceTest {
     assertThat(result.existing()).isTrue();
   }
 
+  @Test
+  void execute_createsDirectEip1559Intent_forInternalAdminSettleDraft() {
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 91L));
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(adminSettleDraft()));
+
+    assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
+    assertThat(result.signCount()).isEqualTo(1);
+    assertThat(result.signRequest().transaction()).isNotNull();
+    verify(loadSponsorPolicyPort, never()).loadSponsorPolicy();
+    verify(sponsorDailyUsagePersistencePort, never()).find(any(), any());
+    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
+    verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
+  }
+
   private ExecutionDraft transferDraft(boolean differentPayloadHash) {
     return new ExecutionDraft(
         ExecutionResourceTypeCode.TRANSFER,
@@ -232,6 +249,29 @@ class CreateExecutionIntentServiceTest {
         BigInteger.valueOf(80_000),
         BigInteger.valueOf(2_000_000_000L),
         BigInteger.valueOf(50_000_000_000L));
+  }
+
+  private ExecutionDraft adminSettleDraft() {
+    return new ExecutionDraft(
+        ExecutionResourceTypeCode.QUESTION,
+        "101",
+        ExecutionResourceStatusCode.PENDING_EXECUTION,
+        ExecutionActionTypeCode.QNA_ADMIN_SETTLE,
+        7L,
+        8L,
+        "root-qna-admin-settle-101-202",
+        "0x" + "d".repeat(64),
+        "{\"action\":\"QNA_ADMIN_SETTLE\"}",
+        List.of(
+            new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x" + "2".repeat(8))),
+        false,
+        null,
+        null,
+        null,
+        null,
+        unsignedTxSnapshot(),
+        "0x" + "e".repeat(64),
+        FIXED_NOW.plusSeconds(120));
   }
 
   private ExecutionIntent withId(ExecutionIntent executionIntent, Long id) {

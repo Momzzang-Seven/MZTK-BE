@@ -12,6 +12,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
@@ -102,6 +103,18 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
             PageRequest.of(0, 1))
         .stream()
         .findFirst()
+        .map(this::toDomain);
+  }
+
+  @Override
+  public Optional<ExecutionIntent> claimNextInternalExecutableForUpdate(
+      List<ExecutionActionType> actionTypes) {
+    if (actionTypes == null || actionTypes.isEmpty()) {
+      return Optional.empty();
+    }
+    return repository
+        .claimNextInternalExecutableIdForUpdate(actionTypes.stream().map(Enum::name).toList())
+        .flatMap(repository::findById)
         .map(this::toDomain);
   }
 
