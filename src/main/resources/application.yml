@@ -261,7 +261,7 @@ web3:
       log-user-op: false
   execution:
     internal-issuer:
-      enabled: true
+      enabled: ${WEB3_EXECUTION_INTERNAL_ISSUER_ENABLED}
       batch-size: 20
       cron: "0/10 * * * * *"
       zone: "Asia/Seoul"
@@ -269,7 +269,7 @@ web3:
         - QNA_ADMIN_SETTLE
   qna:
     auto-accept:
-      enabled: true
+      enabled: ${WEB3_QNA_AUTO_ACCEPT_ENABLED}
       delay-seconds: 604800
       batch-size: 50
       cron: "0 17 * * * *"
