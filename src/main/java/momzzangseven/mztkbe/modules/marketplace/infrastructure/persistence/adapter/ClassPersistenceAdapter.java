@@ -98,36 +98,38 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
   public Optional<ClassDetailInfo> findClassDetailById(Long classId) {
     log.debug("Loading class detail by id: {}", classId);
 
-    return classJpaRepository
-        .findClassWithStore(classId)
-        .map(
-            row -> {
-              MarketplaceClassEntity entity = (MarketplaceClassEntity) row[0];
-              TrainerStoreEntity store = (TrainerStoreEntity) row[1]; // null when no store
+    List<Object[]> rows = classJpaRepository.findClassWithStore(classId);
+    if (rows.isEmpty()) {
+      return Optional.empty();
+    }
 
-              List<String> tags = loadClassTagPort.findTagNamesByClassId(classId);
-              List<String> features = entity.toDomain().getFeatures();
+    Object[] row = rows.get(0);
+    MarketplaceClassEntity entity = (MarketplaceClassEntity) row[0];
+    TrainerStoreEntity store = (TrainerStoreEntity) row[1]; // null when no store
 
-              return new ClassDetailInfo(
-                  entity.getId(),
-                  entity.getTrainerId(),
-                  store != null ? store.getId() : null,
-                  store != null ? store.getStoreName() : null,
-                  store != null ? store.getAddress() : null,
-                  store != null ? store.getDetailAddress() : null,
-                  store != null ? store.getLatitude() : null,
-                  store != null ? store.getLongitude() : null,
-                  entity.getTitle(),
-                  entity.getCategory() != null ? entity.getCategory().name() : null,
-                  entity.getDescription(),
-                  entity.getPriceAmount(),
-                  entity.getDurationMinutes(),
-                  tags,
-                  features,
-                  entity.getPersonalItems(),
-                  // classTimes are loaded by GetClassDetailService via LoadClassSlotPort
-                  List.of());
-            });
+    List<String> tags = loadClassTagPort.findTagNamesByClassId(classId);
+    List<String> features = entity.toDomain().getFeatures();
+
+    return Optional.of(
+        new ClassDetailInfo(
+            entity.getId(),
+            entity.getTrainerId(),
+            store != null ? store.getId() : null,
+            store != null ? store.getStoreName() : null,
+            store != null ? store.getAddress() : null,
+            store != null ? store.getDetailAddress() : null,
+            store != null ? store.getLatitude() : null,
+            store != null ? store.getLongitude() : null,
+            entity.getTitle(),
+            entity.getCategory() != null ? entity.getCategory().name() : null,
+            entity.getDescription(),
+            entity.getPriceAmount(),
+            entity.getDurationMinutes(),
+            tags,
+            features,
+            entity.getPersonalItems(),
+            // classTimes are loaded by GetClassDetailService via LoadClassSlotPort
+            List.of()));
   }
 
   @Override
