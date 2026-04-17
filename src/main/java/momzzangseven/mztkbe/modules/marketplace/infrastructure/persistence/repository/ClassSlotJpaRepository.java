@@ -43,4 +43,17 @@ public interface ClassSlotJpaRepository extends JpaRepository<ClassSlotEntity, L
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT s FROM ClassSlotEntity s WHERE s.classId = :classId")
   List<ClassSlotEntity> findByClassIdWithLock(@Param("classId") Long classId);
+
+  /**
+   * Pessimistic-write lock lookup by slot ID.
+   *
+   * <p>Used by the reservation module when a user creates a reservation to prevent concurrent
+   * over-booking of the same slot.
+   *
+   * @param slotId slot ID
+   * @return Optional containing the entity under a write lock
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT s FROM ClassSlotEntity s WHERE s.id = :slotId")
+  java.util.Optional<ClassSlotEntity> findByIdWithLock(@Param("slotId") Long slotId);
 }
