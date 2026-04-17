@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.repository;
 
-import java.util.Optional;
+import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.entity.MarketplaceClassEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -56,5 +56,5 @@ public interface MarketplaceClassJpaRepository extends JpaRepository<Marketplace
       LEFT JOIN TrainerStoreEntity ts ON ts.trainerId = mc.trainerId
       WHERE mc.id = :classId
       """)
-  Optional<Object[]> findClassWithStore(@Param("classId") Long classId);
+  List<Object[]> findClassWithStore(@Param("classId") Long classId);
 }
