@@ -76,6 +76,20 @@ web3:
       allowed-target-contracts: []
       blocked-function-selectors:
         - 0x095ea7b3                # approve (예시)
+  execution:
+    internal-issuer:
+      enabled: ${WEB3_EXECUTION_INTERNAL_ISSUER_ENABLED}
+      batch-size: ${WEB3_EXECUTION_INTERNAL_ISSUER_BATCH_SIZE}
+      cron: ${WEB3_EXECUTION_INTERNAL_ISSUER_CRON}
+      zone: ${WEB3_EXECUTION_INTERNAL_ISSUER_ZONE}
+      action-types: ${WEB3_EXECUTION_INTERNAL_ISSUER_ACTION_TYPES}
+  qna:
+    auto-accept:
+      enabled: ${WEB3_QNA_AUTO_ACCEPT_ENABLED}
+      delay-seconds: ${WEB3_QNA_AUTO_ACCEPT_DELAY_SECONDS}
+      batch-size: ${WEB3_QNA_AUTO_ACCEPT_BATCH_SIZE}
+      cron: ${WEB3_QNA_AUTO_ACCEPT_CRON}
+      zone: ${WEB3_QNA_AUTO_ACCEPT_ZONE}
   transfer:
     legacy-question-reward-handler-enabled: ${WEB3_TRANSFER_LEGACY_QUESTION_REWARD_HANDLER_ENABLED:false}
 
