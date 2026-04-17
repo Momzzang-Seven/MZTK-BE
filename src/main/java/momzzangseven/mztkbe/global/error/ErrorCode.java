@@ -429,7 +429,9 @@ public enum ErrorCode {
       "MARKETPLACE_028", "Phone number format is invalid", HttpStatus.BAD_REQUEST),
 
   MARKETPLACE_INVALID_STORE_URL(
-      "MARKETPLACE_029", "Store URL must use http/https and be well-formed", HttpStatus.BAD_REQUEST),
+      "MARKETPLACE_029",
+      "Store URL must use http/https and be well-formed",
+      HttpStatus.BAD_REQUEST),
 
   MARKETPLACE_RESERVATION_SLOT_FULL(
       "MARKETPLACE_017", "Class slot capacity is full", HttpStatus.CONFLICT),
@@ -443,16 +445,22 @@ public enum ErrorCode {
       HttpStatus.FORBIDDEN),
 
   MARKETPLACE_RESERVATION_PRICE_MISMATCH(
-      "MARKETPLACE_020", "Price signature does not match current class price", HttpStatus.BAD_REQUEST),
+      "MARKETPLACE_020",
+      "Price signature does not match current class price",
+      HttpStatus.BAD_REQUEST),
 
   MARKETPLACE_RESERVATION_INVALID_SLOT_DATE(
-      "MARKETPLACE_021", "Reservation date/time does not match the slot schedule", HttpStatus.BAD_REQUEST),
+      "MARKETPLACE_021",
+      "Reservation date/time does not match the slot schedule",
+      HttpStatus.BAD_REQUEST),
 
   MARKETPLACE_RESERVATION_NOT_FOUND(
       "MARKETPLACE_022", "Reservation not found", HttpStatus.NOT_FOUND),
 
   MARKETPLACE_RESERVATION_EARLY_COMPLETE(
-      "MARKETPLACE_023", "Cannot complete a reservation before the class starts", HttpStatus.BAD_REQUEST),
+      "MARKETPLACE_023",
+      "Cannot complete a reservation before the class starts",
+      HttpStatus.BAD_REQUEST),
 
   // ========================================
   // Verification Errors (VERIFICATION_xxx)

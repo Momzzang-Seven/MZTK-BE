@@ -204,8 +204,7 @@ public class TrainerStore {
 
   private static void validateDetailAddress(String detailAddress) {
     if (detailAddress == null || detailAddress.isBlank()) {
-      throw new MarketplaceInvalidStoreAddressException(
-          "Detail address must not be null or blank");
+      throw new MarketplaceInvalidStoreAddressException("Detail address must not be null or blank");
     }
     if (detailAddress.length() > MAX_DETAIL_ADDRESS_LENGTH) {
       throw new MarketplaceInvalidStoreAddressException(
@@ -215,8 +214,7 @@ public class TrainerStore {
 
   private static void validateCoordinates(Double latitude, Double longitude) {
     if (latitude == null || latitude < -90.0 || latitude > 90.0) {
-      throw new MarketplaceInvalidCoordinatesException(
-          "Latitude must be between -90.0 and 90.0");
+      throw new MarketplaceInvalidCoordinatesException("Latitude must be between -90.0 and 90.0");
     }
     if (longitude == null || longitude < -180.0 || longitude > 180.0) {
       throw new MarketplaceInvalidCoordinatesException(
@@ -231,8 +229,7 @@ public class TrainerStore {
    */
   private static void validatePhoneNumber(String phoneNumber) {
     if (phoneNumber == null || phoneNumber.isBlank()) {
-      throw new MarketplaceInvalidPhoneNumberException(
-          "Phone number must not be null or blank");
+      throw new MarketplaceInvalidPhoneNumberException("Phone number must not be null or blank");
     }
     if (phoneNumber.length() > MAX_PHONE_NUMBER_LENGTH) {
       throw new MarketplaceInvalidPhoneNumberException(
@@ -264,8 +261,7 @@ public class TrainerStore {
       URI uri = new URI(url);
       String scheme = uri.getScheme();
       if (!"https".equals(scheme) && !"http".equals(scheme)) {
-        throw new MarketplaceInvalidStoreUrlException(
-            fieldName + " must use http or https scheme");
+        throw new MarketplaceInvalidStoreUrlException(fieldName + " must use http or https scheme");
       }
       uri.toURL(); // validates well-formedness
     } catch (MarketplaceInvalidStoreUrlException e) {

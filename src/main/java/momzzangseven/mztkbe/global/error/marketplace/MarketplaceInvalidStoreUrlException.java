@@ -3,7 +3,9 @@ package momzzangseven.mztkbe.global.error.marketplace;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 
-/** Exception thrown when a store URL is malformed, exceeds max length, or uses a non-http scheme. */
+/**
+ * Exception thrown when a store URL is malformed, exceeds max length, or uses a non-http scheme.
+ */
 public class MarketplaceInvalidStoreUrlException extends BusinessException {
 
   public MarketplaceInvalidStoreUrlException() {

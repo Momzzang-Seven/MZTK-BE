@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.marketplace.domain.vo.ClassCategory;
  * Command for registering a new marketplace class.
  *
  * <p>Carries all user-supplied fields plus the authenticated trainer's ID. {@link #validate()}
- * performs basic sanity checks using project-standard {@code BusinessException} subclasses;
- * deep domain invariants are enforced by the domain model factory.
+ * performs basic sanity checks using project-standard {@code BusinessException} subclasses; deep
+ * domain invariants are enforced by the domain model factory.
  */
 public record RegisterClassCommand(
     Long trainerId,

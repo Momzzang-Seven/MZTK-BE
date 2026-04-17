@@ -11,4 +11,9 @@ public class MarketplaceUnauthorizedAccessException extends BusinessException {
         ErrorCode.MARKETPLACE_UNAUTHORIZED_ACCESS,
         "Trainer " + trainerId + " does not own class " + classId);
   }
+
+  /** Used when ownership check fails without additional context (e.g. reservation ownership). */
+  public MarketplaceUnauthorizedAccessException() {
+    super(ErrorCode.MARKETPLACE_UNAUTHORIZED_ACCESS);
+  }
 }

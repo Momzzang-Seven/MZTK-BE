@@ -160,27 +160,22 @@ public class ClassSlot {
    * @return true if the intervals overlap on any common day
    */
   public boolean conflictsWith(ClassSlot other, int durationMinutes) {
-    for (DayOfWeek thisDay : this.daysOfWeek) {
-      for (DayOfWeek otherDay : other.getDaysOfWeek()) {
-        if (thisDay != otherDay) {
-          continue;
-        }
+    List<int[]> segmentsA = new java.util.ArrayList<>();
+    for (DayOfWeek day : this.daysOfWeek) {
+      int start = weeklyMinutes(day);
+      segmentsA.addAll(toSegments(start, start + durationMinutes));
+    }
 
-        int startA = weeklyMinutes(thisDay);
-        int startB = other.weeklyMinutes(otherDay);
-        int endA = startA + durationMinutes;
-        int endB = startB + durationMinutes;
+    List<int[]> segmentsB = new java.util.ArrayList<>();
+    for (DayOfWeek day : other.getDaysOfWeek()) {
+      int start = other.weeklyMinutes(day);
+      segmentsB.addAll(toSegments(start, start + durationMinutes));
+    }
 
-        List<int[]> segmentsA = toSegments(startA, endA);
-        List<int[]> segmentsB = toSegments(startB, endB);
-
-        for (int[] segA : segmentsA) {
-          for (int[] segB : segmentsB) {
-            // Half-open interval overlap: [sA, eA) ∩ [sB, eB) is non-empty iff sA < eB && sB < eA
-            if (segA[0] < segB[1] && segB[0] < segA[1]) {
-              return true;
-            }
-          }
+    for (int[] segA : segmentsA) {
+      for (int[] segB : segmentsB) {
+        if (segA[0] < segB[1] && segB[0] < segA[1]) {
+          return true;
         }
       }
     }
