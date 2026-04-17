@@ -38,6 +38,7 @@ security:
   cors:
     allowed-origins:
       - ${PROD_DOMAIN}  # 실제 배포 도메인
+      - ${TEST_DOMAIN}
       - https://mztk.vercel.app
 
 logging:
