@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassTa
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.SaveClassPort;
 import momzzangseven.mztkbe.modules.marketplace.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.entity.MarketplaceClassEntity;
+import momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.entity.TrainerStoreEntity;
 import momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.repository.MarketplaceClassJpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -87,33 +88,45 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
     return new PageImpl<>(items, pageable, entityPage.getTotalElements());
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Uses a single JPQL LEFT JOIN to load the class and its trainer's store in one round-trip,
+   * eliminating the N+1 query pattern that would arise from a separate store lookup.
+   */
   @Override
   public Optional<ClassDetailInfo> findClassDetailById(Long classId) {
     log.debug("Loading class detail by id: {}", classId);
+
     return classJpaRepository
-        .findById(classId)
+        .findClassWithStore(classId)
         .map(
-            entity -> {
+            row -> {
+              MarketplaceClassEntity entity = (MarketplaceClassEntity) row[0];
+              TrainerStoreEntity store = (TrainerStoreEntity) row[1]; // null when no store
+
               List<String> tags = loadClassTagPort.findTagNamesByClassId(classId);
+              List<String> features = entity.toDomain().getFeatures();
+
               return new ClassDetailInfo(
                   entity.getId(),
                   entity.getTrainerId(),
-                  null, // storeId: requires JOIN — to be added with QueryDSL
-                  null,
-                  null,
-                  null,
-                  null,
-                  null,
+                  store != null ? store.getId() : null,
+                  store != null ? store.getStoreName() : null,
+                  store != null ? store.getAddress() : null,
+                  store != null ? store.getDetailAddress() : null,
+                  store != null ? store.getLatitude() : null,
+                  store != null ? store.getLongitude() : null,
                   entity.getTitle(),
                   entity.getCategory() != null ? entity.getCategory().name() : null,
                   entity.getDescription(),
                   entity.getPriceAmount(),
                   entity.getDurationMinutes(),
                   tags,
-                  entity.toDomainWithTags(tags).getFeatures(),
+                  features,
                   entity.getPersonalItems(),
-                  List.of() // slots: loaded separately by GetClassDetailService
-                  );
+                  // classTimes are loaded by GetClassDetailService via LoadClassSlotPort
+                  List.of());
             });
   }
 
