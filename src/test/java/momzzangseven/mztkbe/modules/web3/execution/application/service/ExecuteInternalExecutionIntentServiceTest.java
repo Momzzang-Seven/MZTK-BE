@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -138,6 +139,28 @@ class ExecuteInternalExecutionIntentServiceTest {
   }
 
   @Test
+  void execute_keepsNonceStaleTransitionWhenTerminationHookThrows() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(executionEip7702GatewayPort.loadPendingAccountNonce("0x" + "4".repeat(40)))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce() + 1));
+    doThrow(new IllegalStateException("rollback failed"))
+        .when(executionActionHandlerPort)
+        .afterExecutionTerminated(any(), any(), any(), any());
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.quarantined()).isFalse();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.NONCE_STALE);
+    verify(executionIntentPersistencePort).update(any());
+  }
+
+  @Test
   void execute_marksPendingOnchainWhenBroadcastSucceeds() {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
@@ -214,6 +237,27 @@ class ExecuteInternalExecutionIntentServiceTest {
     verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
     verify(executionEip7702GatewayPort, never()).loadPendingAccountNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_keepsCanceledTransitionWhenTerminationHookThrowsDuringQuarantine() {
+    ExecutionIntent intent = internalIntentWithSigner("0x" + "5".repeat(40));
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    doThrow(new IllegalStateException("rollback failed"))
+        .when(executionActionHandlerPort)
+        .afterExecutionTerminated(any(), any(), any(), any());
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionIntentPersistencePort).update(any());
+    verify(executionEip7702GatewayPort, never()).loadPendingAccountNonce(any());
   }
 
   @Test

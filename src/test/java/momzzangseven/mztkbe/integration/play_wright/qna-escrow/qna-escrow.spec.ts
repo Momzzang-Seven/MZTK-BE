@@ -11,6 +11,7 @@
  *   - 브라우저 UI가 아니라 HTTP/API + ethers.js 기반 API E2E
  *   - 실제 서버 / 실제 DB / 실제 RPC 사용 가능
  *   - funded wallet / token allowance 가 없으면 관련 Suite 는 skip
+ *   - 실환경에서는 sponsor policy 에 따라 EIP-7702 또는 EIP-1559 fallback 이 선택될 수 있음
  */
 
 import { APIRequestContext, expect, test } from "@playwright/test";
@@ -75,6 +76,8 @@ const rewardTokenInterface = new ethers.Interface([
 const EXECUTE_TIMEOUT_MS = 30_000;
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 3_000;
+
+class NonceStaleError extends Error {}
 
 test.afterAll(async () => {
   await db.end();
@@ -165,6 +168,41 @@ interface ExecuteIntentResponseData {
     status: string;
     txHash?: string;
   };
+}
+
+interface PostDetailData {
+  postId: number;
+  content: string;
+  question?: {
+    isSolved: boolean;
+  };
+}
+
+interface AnswerListItem {
+  answerId: number;
+  content: string;
+  isAccepted: boolean;
+}
+
+function expectExecutionMode(
+  execution: { mode: string; signCount: number },
+  signRequest?: SignRequestBundle
+) {
+  expect(["EIP7702", "EIP1559"]).toContain(execution.mode);
+
+  if (execution.mode === "EIP7702") {
+    expect(execution.signCount).toBe(2);
+    expect(signRequest?.authorization?.payloadHashToSign).toBeTruthy();
+    expect(signRequest?.submit?.executionDigest).toBeTruthy();
+    return;
+  }
+
+  expect(execution.signCount).toBe(1);
+  expect(signRequest?.transaction?.toAddress).toBeTruthy();
+  expect(signRequest?.transaction?.data).toBeTruthy();
+  expect(signRequest?.transaction?.gasLimitHex).toBeTruthy();
+  expect(signRequest?.transaction?.maxPriorityFeePerGasHex).toBeTruthy();
+  expect(signRequest?.transaction?.maxFeePerGasHex).toBeTruthy();
 }
 
 function hasQuestionInfra(): boolean {
@@ -386,6 +424,214 @@ async function createAnswer(
   };
 }
 
+async function updateQuestion(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number,
+  content: string
+): Promise<{ postId: number; web3: QuestionWritePayload }> {
+  const res = await request.patch(`${ENV.BACKEND_URL}/posts/${postId}`, {
+    headers: authHeaders(accessToken),
+    data: { content },
+  });
+  expect(res.status(), `question update failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+
+  expect(body.status).toBe("SUCCESS");
+  expect(body.data.postId).toBe(postId);
+  expect(body.data.web3).toBeTruthy();
+
+  return {
+    postId: body.data.postId as number,
+    web3: body.data.web3 as QuestionWritePayload,
+  };
+}
+
+async function deleteQuestion(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number
+): Promise<{ postId: number; web3: QuestionWritePayload }> {
+  const res = await request.delete(`${ENV.BACKEND_URL}/posts/${postId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  expect(res.status(), `question delete failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+
+  expect(body.status).toBe("SUCCESS");
+  expect(body.data.postId).toBe(postId);
+  expect(body.data.web3).toBeTruthy();
+
+  return {
+    postId: body.data.postId as number,
+    web3: body.data.web3 as QuestionWritePayload,
+  };
+}
+
+async function recoverQuestionCreate(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number
+): Promise<{ postId: number; web3: QuestionWritePayload }> {
+  const res = await request.post(
+    `${ENV.BACKEND_URL}/posts/${postId}/web3/recover-create`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  expect(res.status(), `question recover-create failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+  expect(body.status).toBe("SUCCESS");
+  expect(body.data.postId).toBe(postId);
+  expect(body.data.web3).toBeTruthy();
+  return {
+    postId: body.data.postId as number,
+    web3: body.data.web3 as QuestionWritePayload,
+  };
+}
+
+async function updateAnswer(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number,
+  answerId: number,
+  content: string
+): Promise<{ postId: number; answerId: number; web3: AnswerWritePayload }> {
+  const res = await request.put(
+    `${ENV.BACKEND_URL}/questions/${postId}/answers/${answerId}`,
+    {
+      headers: authHeaders(accessToken),
+      data: { content },
+    }
+  );
+  expect(res.status(), `answer update failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+
+  expect(body.status).toBe("SUCCESS");
+  expect(body.data.postId).toBe(postId);
+  expect(body.data.answerId).toBe(answerId);
+  expect(body.data.web3).toBeTruthy();
+
+  return {
+    postId: body.data.postId as number,
+    answerId: body.data.answerId as number,
+    web3: body.data.web3 as AnswerWritePayload,
+  };
+}
+
+async function deleteAnswer(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number,
+  answerId: number
+): Promise<{ postId: number; answerId: number; web3: AnswerWritePayload }> {
+  const res = await request.delete(
+    `${ENV.BACKEND_URL}/questions/${postId}/answers/${answerId}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  expect(res.status(), `answer delete failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+
+  expect(body.status).toBe("SUCCESS");
+  expect(body.data.postId).toBe(postId);
+  expect(body.data.answerId).toBe(answerId);
+  expect(body.data.web3).toBeTruthy();
+
+  return {
+    postId: body.data.postId as number,
+    answerId: body.data.answerId as number,
+    web3: body.data.web3 as AnswerWritePayload,
+  };
+}
+
+async function recoverAnswerCreate(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number,
+  answerId: number
+): Promise<{ postId: number; answerId: number; web3: AnswerWritePayload }> {
+  const res = await request.post(
+    `${ENV.BACKEND_URL}/questions/${postId}/answers/${answerId}/web3/recover-create`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  expect(res.status(), `answer recover-create failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+  expect(body.status).toBe("SUCCESS");
+  expect(body.data.postId).toBe(postId);
+  expect(body.data.answerId).toBe(answerId);
+  expect(body.data.web3).toBeTruthy();
+  return {
+    postId: body.data.postId as number,
+    answerId: body.data.answerId as number,
+    web3: body.data.web3 as AnswerWritePayload,
+  };
+}
+
+async function acceptAnswer(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number,
+  answerId: number
+): Promise<{
+  postId: number;
+  acceptedAnswerId: number;
+  status: string;
+  web3: QuestionWritePayload;
+}> {
+  const res = await request.post(
+    `${ENV.BACKEND_URL}/posts/${postId}/answers/${answerId}/accept`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  expect(res.status(), `answer accept failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+
+  expect(body.status).toBe("SUCCESS");
+  expect(body.data.postId).toBe(postId);
+  expect(body.data.acceptedAnswerId).toBe(answerId);
+  expect(body.data.web3).toBeTruthy();
+
+  return {
+    postId: body.data.postId as number,
+    acceptedAnswerId: body.data.acceptedAnswerId as number,
+    status: body.data.status as string,
+    web3: body.data.web3 as QuestionWritePayload,
+  };
+}
+
+async function getPostDetail(
+  request: APIRequestContext,
+  accessToken: string | null,
+  postId: number
+): Promise<{ status: number; data: PostDetailData | null }> {
+  const res = await request.get(`${ENV.BACKEND_URL}/posts/${postId}`, {
+    headers: accessToken == null ? undefined : { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok()) {
+    return { status: res.status(), data: null };
+  }
+  const body = await res.json();
+  return { status: res.status(), data: body.data as PostDetailData };
+}
+
+async function getAnswers(
+  request: APIRequestContext,
+  accessToken: string,
+  postId: number
+): Promise<{ status: number; data: AnswerListItem[] }> {
+  const res = await request.get(`${ENV.BACKEND_URL}/questions/${postId}/answers`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  expect(res.status(), `get answers failed: ${await res.text()}`).toBe(200);
+  const body = await res.json();
+  return { status: res.status(), data: body.data as AnswerListItem[] };
+}
+
 async function getExecutionIntent(
   request: APIRequestContext,
   accessToken: string,
@@ -409,22 +655,56 @@ async function executeExecutionIntent(
   wallet: ethers.Wallet,
   signRequest: SignRequestBundle
 ): Promise<{ status: number; data: ExecuteIntentResponseData }> {
-  const authorizationSignature = signRawDigest(
-    wallet,
-    signRequest.authorization!.payloadHashToSign
-  );
-  const submitSignature = signRawDigest(wallet, signRequest.submit!.executionDigest);
+  let data:
+    | {
+        authorizationSignature: string;
+        submitSignature: string;
+      }
+    | {
+        signedRawTransaction: string;
+      };
+
+  if (signRequest.authorization != null && signRequest.submit != null) {
+    data = {
+      authorizationSignature: signRawDigest(
+        wallet,
+        signRequest.authorization.payloadHashToSign
+      ),
+      submitSignature: signRawDigest(wallet, signRequest.submit.executionDigest),
+    };
+  } else if (signRequest.transaction != null) {
+    data = {
+      signedRawTransaction: await wallet.signTransaction({
+        type: 2,
+        chainId: signRequest.transaction.chainId,
+        nonce:
+          signRequest.transaction.expectedNonce ?? signRequest.transaction.nonce ?? 0,
+        to: signRequest.transaction.toAddress,
+        value: BigInt(signRequest.transaction.valueHex),
+        data: signRequest.transaction.data,
+        gasLimit: BigInt(signRequest.transaction.gasLimitHex!),
+        maxPriorityFeePerGas: BigInt(signRequest.transaction.maxPriorityFeePerGasHex!),
+        maxFeePerGas: BigInt(signRequest.transaction.maxFeePerGasHex!),
+      }),
+    };
+  } else {
+    throw new Error("unsupported signRequest payload");
+  }
 
   const res = await request.post(
     `${ENV.BACKEND_URL}/users/me/web3/execution-intents/${intentId}/execute`,
     {
       headers: authHeaders(accessToken),
-      data: {
-        authorizationSignature,
-        submitSignature,
-      },
+      data,
     }
   );
+  if (res.status() === 409) {
+    const body = await res.json();
+    if (body.code === "WEB3_014") {
+      throw new NonceStaleError(body.message ?? "Nonce stale");
+    }
+    throw new Error(`execution submit conflict: ${JSON.stringify(body)}`);
+  }
   expect(res.status(), `execution submit failed: ${await res.text()}`).toBe(202);
   const body = await res.json();
   return { status: res.status(), data: body.data as ExecuteIntentResponseData };
@@ -453,6 +733,91 @@ async function waitForIntentStatus(
   throw new Error(
     `execution intent ${intentId} did not reach [${expectedStatuses.join(", ")}] within ${timeoutMs}ms`
   );
+}
+
+async function executeAndAwaitConfirmed(
+  request: APIRequestContext,
+  accessToken: string,
+  wallet: ethers.Wallet,
+  writePayload: QuestionWritePayload | AnswerWritePayload,
+  recoverWritePayload?: () => Promise<QuestionWritePayload | AnswerWritePayload>
+): Promise<ExecutionIntentReadData> {
+  let payload = writePayload;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await executeExecutionIntent(
+        request,
+        accessToken,
+        payload.executionIntent.id,
+        wallet,
+        payload.signRequest!
+      );
+      break;
+    } catch (error) {
+      if (
+        error instanceof NonceStaleError &&
+        recoverWritePayload != null &&
+        attempt === 0
+      ) {
+        payload = await recoverWritePayload();
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const finalState = await waitForIntentStatus(
+    request,
+    accessToken,
+    payload.executionIntent.id,
+    ["CONFIRMED", "FAILED_ONCHAIN", "CANCELED", "NONCE_STALE", "EXPIRED"],
+    CONFIRM_TIMEOUT_MS
+  );
+
+  expect(
+    finalState.executionIntent.status,
+    `intent ${payload.executionIntent.id} did not confirm. txHash=${finalState.transaction?.txHash ?? "n/a"}`
+  ).toBe("CONFIRMED");
+
+  return finalState;
+}
+
+async function createQuestionAndConfirm(
+  request: APIRequestContext,
+  accessToken: string,
+  wallet: ethers.Wallet,
+  reward: number,
+  title: string,
+  content: string
+): Promise<{ postId: number; intent: ExecutionIntentReadData }> {
+  const created = await createQuestion(request, accessToken, title, content, reward);
+  const intent = await executeAndAwaitConfirmed(
+    request,
+    accessToken,
+    wallet,
+    created.web3,
+    async () => (await recoverQuestionCreate(request, accessToken, created.postId)).web3
+  );
+  return { postId: created.postId, intent };
+}
+
+async function createAnswerAndConfirm(
+  request: APIRequestContext,
+  accessToken: string,
+  wallet: ethers.Wallet,
+  postId: number,
+  content: string
+): Promise<{ answerId: number; intent: ExecutionIntentReadData }> {
+  const created = await createAnswer(request, accessToken, postId, content);
+  const intent = await executeAndAwaitConfirmed(
+    request,
+    accessToken,
+    wallet,
+    created.web3,
+    async () =>
+      (await recoverAnswerCreate(request, accessToken, postId, created.answerId)).web3
+  );
+  return { answerId: created.answerId, intent };
 }
 
 test.describe("Suite A — 사전 조건 오류", () => {
@@ -507,13 +872,12 @@ test.describe("Suite B — 질문 작성 응답의 Web3 payload 검증", () => {
       expect(created.web3.resource.type).toBe("QUESTION");
       expect(created.web3.executionIntent.id).toBeTruthy();
       expect(created.web3.executionIntent.status).toBe("AWAITING_SIGNATURE");
-      expect(created.web3.execution.mode).toBe("EIP7702");
-      expect(created.web3.execution.signCount).toBe(2);
-      expect(created.web3.signRequest?.authorization?.payloadHashToSign).toBeTruthy();
-      expect(created.web3.signRequest?.submit?.executionDigest).toBeTruthy();
-      expect(created.web3.signRequest?.transaction?.toAddress?.toLowerCase()).toBe(
-        ENV.WEB3_ESCROW_QNA_CONTRACT_ADDRESS.toLowerCase()
-      );
+      expectExecutionMode(created.web3.execution, created.web3.signRequest);
+      if (created.web3.signRequest?.transaction?.toAddress != null) {
+        expect(created.web3.signRequest.transaction.toAddress.toLowerCase()).toBe(
+          ENV.WEB3_ESCROW_QNA_CONTRACT_ADDRESS.toLowerCase()
+        );
+      }
     }
   );
 });
@@ -550,13 +914,22 @@ test.describe("Suite C — execution intent 조회 검증", () => {
       expect(loaded.data!.resource.id).toBe(String(created.postId));
       expect(loaded.data!.executionIntent.id).toBe(created.web3.executionIntent.id);
       expect(loaded.data!.executionIntent.status).toBe("AWAITING_SIGNATURE");
-      expect(loaded.data!.execution.mode).toBe("EIP7702");
-      expect(loaded.data!.signRequest?.authorization?.payloadHashToSign).toBe(
-        created.web3.signRequest?.authorization?.payloadHashToSign
-      );
-      expect(loaded.data!.signRequest?.submit?.executionDigest).toBe(
-        created.web3.signRequest?.submit?.executionDigest
-      );
+      expectExecutionMode(loaded.data!.execution, loaded.data!.signRequest);
+      if (loaded.data!.execution.mode === "EIP7702") {
+        expect(loaded.data!.signRequest?.authorization?.payloadHashToSign).toBe(
+          created.web3.signRequest?.authorization?.payloadHashToSign
+        );
+        expect(loaded.data!.signRequest?.submit?.executionDigest).toBe(
+          created.web3.signRequest?.submit?.executionDigest
+        );
+      } else {
+        expect(loaded.data!.signRequest?.transaction?.toAddress).toBe(
+          created.web3.signRequest?.transaction?.toAddress
+        );
+        expect(loaded.data!.signRequest?.transaction?.data).toBe(
+          created.web3.signRequest?.transaction?.data
+        );
+      }
     }
   );
 
@@ -597,22 +970,38 @@ test.describe("Suite D — 질문 intent execute 검증", () => {
         reward
       );
 
-      const executeResponse = await executeExecutionIntent(
-        request,
-        accessToken,
-        created.web3.executionIntent.id,
-        wallet,
-        created.web3.signRequest!
-      );
+      let payload = created.web3;
+      let executeResponse: { status: number; data: ExecuteIntentResponseData };
+      try {
+        executeResponse = await executeExecutionIntent(
+          request,
+          accessToken,
+          payload.executionIntent.id,
+          wallet,
+          payload.signRequest!
+        );
+      } catch (error) {
+        if (!(error instanceof NonceStaleError)) {
+          throw error;
+        }
+        payload = (await recoverQuestionCreate(request, accessToken, created.postId)).web3;
+        executeResponse = await executeExecutionIntent(
+          request,
+          accessToken,
+          payload.executionIntent.id,
+          wallet,
+          payload.signRequest!
+        );
+      }
 
-      expect(executeResponse.data.executionIntent.id).toBe(created.web3.executionIntent.id);
+      expect(executeResponse.data.executionIntent.id).toBe(payload.executionIntent.id);
       expect(executeResponse.data.executionIntent.status).toBe("PENDING_ONCHAIN");
       expect(executeResponse.data.transaction?.id).toBeTruthy();
 
       const pending = await waitForIntentStatus(
         request,
         accessToken,
-        created.web3.executionIntent.id,
+        payload.executionIntent.id,
         ["PENDING_ONCHAIN", "CONFIRMED", "FAILED_ONCHAIN"],
         EXECUTE_TIMEOUT_MS
       );
@@ -647,41 +1036,25 @@ test.describe("Suite E — 질문 confirm 이후 답변 intent 생성 검증", (
       );
       await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
 
-      const createdQuestion = await createQuestion(
+      const confirmedQuestion = await createQuestionAndConfirm(
         request,
         asker.accessToken,
-        "답변 create 전 질문 확정 테스트",
-        "Suite E 질문 본문",
-        reward
-      );
-
-      await executeExecutionIntent(
-        request,
-        asker.accessToken,
-        createdQuestion.web3.executionIntent.id,
         askerWallet,
-        createdQuestion.web3.signRequest!
-      );
-
-      const confirmedQuestion = await waitForIntentStatus(
-        request,
-        asker.accessToken,
-        createdQuestion.web3.executionIntent.id,
-        ["CONFIRMED", "FAILED_ONCHAIN"],
-        CONFIRM_TIMEOUT_MS
+        reward,
+        "답변 create 전 질문 확정 테스트",
+        "Suite E 질문 본문"
       );
 
       expect(
-        confirmedQuestion.executionIntent.status,
-        `question intent failed before answer create. txHash=${confirmedQuestion.transaction?.txHash ?? "n/a"}`
+        confirmedQuestion.intent.executionIntent.status,
+        `question intent failed before answer create. txHash=${confirmedQuestion.intent.transaction?.txHash ?? "n/a"}`
       ).toBe("CONFIRMED");
-
       await registerWallet(request, responder.accessToken, ENV.QNA_TEST_RESPONDER_PRIVATE_KEY);
 
       const createdAnswer = await createAnswer(
         request,
         responder.accessToken,
-        createdQuestion.postId,
+        confirmedQuestion.postId,
         "Playwright responder answer"
       );
 
@@ -689,9 +1062,7 @@ test.describe("Suite E — 질문 confirm 이후 답변 intent 생성 검증", (
       expect(createdAnswer.web3.resource.type).toBe("ANSWER");
       expect(createdAnswer.web3.executionIntent.id).toBeTruthy();
       expect(createdAnswer.web3.executionIntent.status).toBe("AWAITING_SIGNATURE");
-      expect(createdAnswer.web3.execution.mode).toBe("EIP7702");
-      expect(createdAnswer.web3.signRequest?.authorization?.payloadHashToSign).toBeTruthy();
-      expect(createdAnswer.web3.signRequest?.submit?.executionDigest).toBeTruthy();
+      expectExecutionMode(createdAnswer.web3.execution, createdAnswer.web3.signRequest);
 
       const loadedAnswerIntent = await getExecutionIntent(
         request,
@@ -703,6 +1074,356 @@ test.describe("Suite E — 질문 confirm 이후 답변 intent 생성 검증", (
       expect(loadedAnswerIntent.data?.resource.type).toBe("ANSWER");
       expect(loadedAnswerIntent.data?.resource.id).toBe(String(createdAnswer.answerId));
       expect(loadedAnswerIntent.data?.executionIntent.status).toBe("AWAITING_SIGNATURE");
+    }
+  );
+});
+
+test.describe("Suite F — 질문 update/delete on-chain lifecycle", () => {
+  test(
+    "TC-QNA-F-01: question update execute → CONFIRMED 후 상세 조회 content 가 유지된다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(!hasQuestionInfra(), "RPC / QnA contract / reward token / funded asker wallet env is required");
+
+      const reward = 10;
+      const { accessToken } = await signUpAndLogin(request, "f01");
+      const askerWallet = await registerWallet(
+        request,
+        accessToken,
+        ENV.QNA_TEST_ASKER_PRIVATE_KEY
+      );
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const confirmedQuestion = await createQuestionAndConfirm(
+        request,
+        accessToken,
+        askerWallet,
+        reward,
+        "질문 update baseline",
+        "question-original-content"
+      );
+
+      const updated = await updateQuestion(
+        request,
+        accessToken,
+        confirmedQuestion.postId,
+        "question-updated-content"
+      );
+
+      expect(updated.web3.actionType).toBe("QNA_QUESTION_UPDATE");
+      await executeAndAwaitConfirmed(
+        request,
+        accessToken,
+        askerWallet,
+        updated.web3,
+        async () =>
+          (await updateQuestion(
+            request,
+            accessToken,
+            confirmedQuestion.postId,
+            "question-updated-content"
+          )).web3
+      );
+
+      const postDetail = await getPostDetail(request, null, confirmedQuestion.postId);
+      expect(postDetail.status).toBe(200);
+      expect(postDetail.data?.content).toBe("question-updated-content");
+      expect(postDetail.data?.question?.isSolved).toBe(false);
+    }
+  );
+
+  test(
+    "TC-QNA-F-02: question delete execute → CONFIRMED 후 상세 조회에서 제거된다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(!hasQuestionInfra(), "RPC / QnA contract / reward token / funded asker wallet env is required");
+
+      const reward = 10;
+      const { accessToken } = await signUpAndLogin(request, "f02");
+      const askerWallet = await registerWallet(
+        request,
+        accessToken,
+        ENV.QNA_TEST_ASKER_PRIVATE_KEY
+      );
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const confirmedQuestion = await createQuestionAndConfirm(
+        request,
+        accessToken,
+        askerWallet,
+        reward,
+        "질문 delete baseline",
+        "question-delete-content"
+      );
+
+      const deleted = await deleteQuestion(request, accessToken, confirmedQuestion.postId);
+      expect(deleted.web3.actionType).toBe("QNA_QUESTION_DELETE");
+      await executeAndAwaitConfirmed(
+        request,
+        accessToken,
+        askerWallet,
+        deleted.web3,
+        async () => (await deleteQuestion(request, accessToken, confirmedQuestion.postId)).web3
+      );
+
+      const postDetail = await getPostDetail(request, null, confirmedQuestion.postId);
+      expect(postDetail.status).toBeGreaterThanOrEqual(400);
+      expect(postDetail.status).toBeLessThan(500);
+    }
+  );
+});
+
+test.describe("Suite G — answer submit/update/delete/accept on-chain lifecycle", () => {
+  test(
+    "TC-QNA-G-01: answer submit execute → CONFIRMED 후 답변 row 가 유지된다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(!hasAnswerInfra(), "RPC / contracts / funded asker+responder wallet env is required");
+
+      const reward = 10;
+      const asker = await signUpAndLogin(request, "g01-asker");
+      const responder = await signUpAndLogin(request, "g01-responder");
+
+      const askerWallet = await registerWallet(
+        request,
+        asker.accessToken,
+        ENV.QNA_TEST_ASKER_PRIVATE_KEY
+      );
+      const responderWallet = await registerWallet(
+        request,
+        responder.accessToken,
+        ENV.QNA_TEST_RESPONDER_PRIVATE_KEY
+      );
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const confirmedQuestion = await createQuestionAndConfirm(
+        request,
+        asker.accessToken,
+        askerWallet,
+        reward,
+        "answer submit baseline",
+        "question-for-answer-submit"
+      );
+
+      const confirmedAnswer = await createAnswerAndConfirm(
+        request,
+        responder.accessToken,
+        responderWallet,
+        confirmedQuestion.postId,
+        "answer-submit-content"
+      );
+
+      const answers = await getAnswers(request, responder.accessToken, confirmedQuestion.postId);
+      const row = answers.data.find(answer => answer.answerId === confirmedAnswer.answerId);
+      expect(row?.content).toBe("answer-submit-content");
+      expect(row?.isAccepted).toBe(false);
+    }
+  );
+
+  test(
+    "TC-QNA-G-02: answer update execute → CONFIRMED 후 답변 content 가 갱신된다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(!hasAnswerInfra(), "RPC / contracts / funded asker+responder wallet env is required");
+
+      const reward = 10;
+      const asker = await signUpAndLogin(request, "g02-asker");
+      const responder = await signUpAndLogin(request, "g02-responder");
+
+      const askerWallet = await registerWallet(
+        request,
+        asker.accessToken,
+        ENV.QNA_TEST_ASKER_PRIVATE_KEY
+      );
+      const responderWallet = await registerWallet(
+        request,
+        responder.accessToken,
+        ENV.QNA_TEST_RESPONDER_PRIVATE_KEY
+      );
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const confirmedQuestion = await createQuestionAndConfirm(
+        request,
+        asker.accessToken,
+        askerWallet,
+        reward,
+        "answer update baseline",
+        "question-for-answer-update"
+      );
+      const confirmedAnswer = await createAnswerAndConfirm(
+        request,
+        responder.accessToken,
+        responderWallet,
+        confirmedQuestion.postId,
+        "answer-before-update"
+      );
+
+      const updated = await updateAnswer(
+        request,
+        responder.accessToken,
+        confirmedQuestion.postId,
+        confirmedAnswer.answerId,
+        "answer-after-update"
+      );
+
+      expect(updated.web3.actionType).toBe("QNA_ANSWER_UPDATE");
+      await executeAndAwaitConfirmed(
+        request,
+        responder.accessToken,
+        responderWallet,
+        updated.web3,
+        async () =>
+          (await updateAnswer(
+            request,
+            responder.accessToken,
+            confirmedQuestion.postId,
+            confirmedAnswer.answerId,
+            "answer-after-update"
+          )).web3
+      );
+
+      const answers = await getAnswers(request, responder.accessToken, confirmedQuestion.postId);
+      const row = answers.data.find(answer => answer.answerId === confirmedAnswer.answerId);
+      expect(row?.content).toBe("answer-after-update");
+      expect(row?.isAccepted).toBe(false);
+    }
+  );
+
+  test(
+    "TC-QNA-G-03: answer delete execute → CONFIRMED 후 답변 목록에서 제거된다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(!hasAnswerInfra(), "RPC / contracts / funded asker+responder wallet env is required");
+
+      const reward = 10;
+      const asker = await signUpAndLogin(request, "g03-asker");
+      const responder = await signUpAndLogin(request, "g03-responder");
+
+      const askerWallet = await registerWallet(
+        request,
+        asker.accessToken,
+        ENV.QNA_TEST_ASKER_PRIVATE_KEY
+      );
+      const responderWallet = await registerWallet(
+        request,
+        responder.accessToken,
+        ENV.QNA_TEST_RESPONDER_PRIVATE_KEY
+      );
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const confirmedQuestion = await createQuestionAndConfirm(
+        request,
+        asker.accessToken,
+        askerWallet,
+        reward,
+        "answer delete baseline",
+        "question-for-answer-delete"
+      );
+      const confirmedAnswer = await createAnswerAndConfirm(
+        request,
+        responder.accessToken,
+        responderWallet,
+        confirmedQuestion.postId,
+        "answer-before-delete"
+      );
+
+      const deleted = await deleteAnswer(
+        request,
+        responder.accessToken,
+        confirmedQuestion.postId,
+        confirmedAnswer.answerId
+      );
+
+      expect(deleted.web3.actionType).toBe("QNA_ANSWER_DELETE");
+      await executeAndAwaitConfirmed(
+        request,
+        responder.accessToken,
+        responderWallet,
+        deleted.web3,
+        async () =>
+          (await deleteAnswer(
+            request,
+            responder.accessToken,
+            confirmedQuestion.postId,
+            confirmedAnswer.answerId
+          )).web3
+      );
+
+      const answers = await getAnswers(request, responder.accessToken, confirmedQuestion.postId);
+      const row = answers.data.find(answer => answer.answerId === confirmedAnswer.answerId);
+      expect(row).toBeUndefined();
+    }
+  );
+
+  test(
+    "TC-QNA-G-04: answer accept execute → CONFIRMED 후 질문 solved / 답변 accepted 상태가 반영된다",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(!hasAnswerInfra(), "RPC / contracts / funded asker+responder wallet env is required");
+
+      const reward = 10;
+      const asker = await signUpAndLogin(request, "g04-asker");
+      const responder = await signUpAndLogin(request, "g04-responder");
+
+      const askerWallet = await registerWallet(
+        request,
+        asker.accessToken,
+        ENV.QNA_TEST_ASKER_PRIVATE_KEY
+      );
+      const responderWallet = await registerWallet(
+        request,
+        responder.accessToken,
+        ENV.QNA_TEST_RESPONDER_PRIVATE_KEY
+      );
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const confirmedQuestion = await createQuestionAndConfirm(
+        request,
+        asker.accessToken,
+        askerWallet,
+        reward,
+        "answer accept baseline",
+        "question-for-answer-accept"
+      );
+      const confirmedAnswer = await createAnswerAndConfirm(
+        request,
+        responder.accessToken,
+        responderWallet,
+        confirmedQuestion.postId,
+        "answer-for-accept"
+      );
+
+      const accepted = await acceptAnswer(
+        request,
+        asker.accessToken,
+        confirmedQuestion.postId,
+        confirmedAnswer.answerId
+      );
+
+      expect(accepted.status).toBe("PENDING_ACCEPT");
+      expect(accepted.web3.actionType).toBe("QNA_ANSWER_ACCEPT");
+      await executeAndAwaitConfirmed(
+        request,
+        asker.accessToken,
+        askerWallet,
+        accepted.web3,
+        async () =>
+          (await acceptAnswer(
+            request,
+            asker.accessToken,
+            confirmedQuestion.postId,
+            confirmedAnswer.answerId
+          )).web3
+      );
+
+      const postDetail = await getPostDetail(request, null, confirmedQuestion.postId);
+      expect(postDetail.status).toBe(200);
+      expect(postDetail.data?.question?.isSolved).toBe(true);
+
+      const answers = await getAnswers(request, responder.accessToken, confirmedQuestion.postId);
+      const row = answers.data.find(answer => answer.answerId === confirmedAnswer.answerId);
+      expect(row?.isAccepted).toBe(true);
+      expect(row?.content).toBe("answer-for-accept");
     }
   );
 });

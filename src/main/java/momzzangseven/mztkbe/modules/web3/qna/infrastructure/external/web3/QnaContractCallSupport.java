@@ -176,24 +176,27 @@ public class QnaContractCallSupport {
   }
 
   private DefaultGasFeeCalculator.FeePlan loadFeePlan(BigInteger estimatedGas) {
-    BigInteger maxPriorityFeePerGas =
-        positiveOrNull(
-            requireSuccess(
-                    callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send()),
-                    "eth_maxPriorityFeePerGas")
-                .getMaxPriorityFeePerGas());
+    BigInteger maxPriorityFeePerGas = null;
+    RpcAttempt<org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> priorityAttempt =
+        callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send());
+    if (priorityAttempt.success()) {
+      maxPriorityFeePerGas = positiveOrNull(priorityAttempt.response().getMaxPriorityFeePerGas());
+    }
 
-    BigInteger baseFee =
-        positiveOrNull(
-            requireSuccess(callWithFallback(web3j -> web3j.ethBaseFee().send()), "eth_baseFee")
-                .getBaseFee());
+    BigInteger baseFee = null;
+    RpcAttempt<org.web3j.protocol.core.methods.response.EthBaseFee> baseFeeAttempt =
+        callWithFallback(web3j -> web3j.ethBaseFee().send());
+    if (baseFeeAttempt.success()) {
+      baseFee = positiveOrNull(baseFeeAttempt.response().getBaseFee());
+    }
 
     BigInteger gasPrice = null;
     if (baseFee == null) {
-      gasPrice =
-          positiveOrNull(
-              requireSuccess(callWithFallback(web3j -> web3j.ethGasPrice().send()), "eth_gasPrice")
-                  .getGasPrice());
+      RpcAttempt<org.web3j.protocol.core.methods.response.EthGasPrice> gasPriceAttempt =
+          callWithFallback(web3j -> web3j.ethGasPrice().send());
+      if (gasPriceAttempt.success()) {
+        gasPrice = positiveOrNull(gasPriceAttempt.response().getGasPrice());
+      }
     }
 
     return defaultGasFeeCalculator.calculate(
