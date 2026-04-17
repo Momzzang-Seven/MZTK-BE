@@ -29,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetTrainerClassesService implements GetTrainerClassesUseCase {
 
-
   private final LoadClassPort loadClassPort;
   private final LoadClassImagesPort loadClassImagesPort;
 
@@ -37,7 +36,8 @@ public class GetTrainerClassesService implements GetTrainerClassesUseCase {
   public GetTrainerClassesResult execute(GetTrainerClassesQuery query) {
     log.debug("Fetching trainer classes: trainerId={}, page={}", query.trainerId(), query.page());
 
-    PageRequest pageable = PageRequest.of(query.page(), MarketplacePaginationConstants.DEFAULT_PAGE_SIZE);
+    PageRequest pageable =
+        PageRequest.of(query.page(), MarketplacePaginationConstants.DEFAULT_PAGE_SIZE);
     Page<MarketplaceClass> page = loadClassPort.findByTrainerId(query.trainerId(), pageable);
 
     List<Long> classIds = page.getContent().stream().map(MarketplaceClass::getId).toList();

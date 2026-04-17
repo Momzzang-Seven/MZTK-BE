@@ -66,7 +66,10 @@ public class RegisterClassService implements RegisterClassUseCase {
     // Step 3: Validate positive duration (defensive guard; domain and Bean Validation also check)
     validatePositiveDuration(command.durationMinutes());
 
-    // Step 4: Create domain object and persist
+    // Step 4: Validate slot conflicts BEFORE persisting (use placeholder classId=1L for temp slots)
+    validateNoConflictsEarly(command.classTimes(), command.durationMinutes());
+
+    // Step 5: Create domain object and persist
     MarketplaceClass marketplaceClass =
         MarketplaceClass.create(
             command.trainerId(),
@@ -82,16 +85,15 @@ public class RegisterClassService implements RegisterClassUseCase {
     MarketplaceClass savedClass = saveClassPort.save(marketplaceClass);
     Long classId = savedClass.getId();
 
-    // Step 5: Persist slots
+    // Step 6: Persist slots (conflict already validated)
     List<ClassSlot> slotsToSave = buildSlots(classId, command.classTimes());
-    validateNoConflicts(slotsToSave, command.durationMinutes());
     saveClassSlotPort.saveAll(slotsToSave);
 
-    // Step 6: Save tags via tag module (upsert global tags + class_tags join table)
+    // Step 7: Save tags via tag module (upsert global tags + class_tags join table)
     List<String> tags = command.tags() != null ? command.tags() : List.of();
     manageClassTagPort.linkTagsToClass(classId, tags);
 
-    // Step 7: Bind images
+    // Step 8: Bind images
     List<Long> imageIds = command.imageIds() != null ? command.imageIds() : List.of();
     if (!imageIds.isEmpty()) {
       updateClassImagesPort.updateImages(command.trainerId(), classId, imageIds);
@@ -125,10 +127,22 @@ public class RegisterClassService implements RegisterClassUseCase {
     }
   }
 
-  private void validateNoConflicts(List<ClassSlot> slots, int durationMinutes) {
-    for (int i = 0; i < slots.size(); i++) {
-      for (int j = i + 1; j < slots.size(); j++) {
-        if (slots.get(i).conflictsWith(slots.get(j), durationMinutes)) {
+  /**
+   * Validates time-slot conflicts using a temporary placeholder classId before any DB write.
+   *
+   * <p>Because {@link ClassSlot#create} requires a positive classId, a sentinel value of {@code 1L}
+   * is used for the pre-save validation pass. The actual classId is assigned after the class row is
+   * persisted in the subsequent step.
+   */
+  private void validateNoConflictsEarly(List<ClassTimeCommand> classTimes, int durationMinutes) {
+    // Use sentinel classId=1L (valid positive value) solely for conflict detection
+    List<ClassSlot> tempSlots =
+        classTimes.stream()
+            .map(ct -> ClassSlot.create(1L, ct.daysOfWeek(), ct.startTime(), ct.capacity()))
+            .toList();
+    for (int i = 0; i < tempSlots.size(); i++) {
+      for (int j = i + 1; j < tempSlots.size(); j++) {
+        if (tempSlots.get(i).conflictsWith(tempSlots.get(j), durationMinutes)) {
           throw new SlotTimeConflictException(
               "Slot " + (i + 1) + " conflicts with slot " + (j + 1));
         }

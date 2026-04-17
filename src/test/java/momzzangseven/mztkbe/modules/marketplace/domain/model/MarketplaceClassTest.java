@@ -127,8 +127,7 @@ class MarketplaceClassTest {
     @DisplayName("duration 경계값 1440분으로 생성 성공")
     void create_MaxDuration_Success() {
       MarketplaceClass mc =
-          MarketplaceClass.create(
-              1L, "제목", ClassCategory.PT, "설명", 10000, 1440, null, null, null);
+          MarketplaceClass.create(1L, "제목", ClassCategory.PT, "설명", 10000, 1440, null, null, null);
       assertThat(mc.getDurationMinutes()).isEqualTo(1440);
     }
   }
@@ -342,8 +341,7 @@ class MarketplaceClassTest {
     @Test
     @DisplayName("feature 11개 → MarketplaceInvalidFeatureException (최대 10개)")
     void create_FeaturesExceedMax_ThrowsException() {
-      List<String> features =
-          List.of("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k");
+      List<String> features = List.of("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k");
       assertThatThrownBy(
               () ->
                   MarketplaceClass.create(

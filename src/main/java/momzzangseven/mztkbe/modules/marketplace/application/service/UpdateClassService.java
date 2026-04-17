@@ -41,7 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Synchronise slots: add new / modify existing / soft-delete removed
  *       <ul>
  *         <li>Soft-delete blocked if slot has active reservations
- *         <li>Capacity reduction blocked if new capacity &lt; active reservation count
+ *         <li>Capacity change blocked if new capacity &lt; active reservation count
  *       </ul>
  *   <li>Update tags and images
  *   <li>Save the mutated class (optimistic lock)
@@ -121,7 +121,7 @@ public class UpdateClassService implements UpdateClassUseCase {
    * Synchronises the incoming classTimes with the existing persisted slots.
    *
    * <ul>
-   *   <li>timeId present → update existing slot (capacity reduction blocked if below active reservations)
+   *   <li>timeId present → update existing slot (blocked if new capacity &lt; active reservations)
    *   <li>timeId absent → create new slot
    *   <li>existing slot not in incoming list → soft-delete (blocked if has active reservations)
    * </ul>
@@ -146,10 +146,14 @@ public class UpdateClassService implements UpdateClassUseCase {
 
     for (ClassTimeCommand ct : incomingTimes) {
       if (ct.timeId() != null && existingById.containsKey(ct.timeId())) {
-        // Update existing slot — check capacity constraint against active reservations
+        // Update existing slot — always compare new capacity against active reservations,
+        // regardless of whether capacity is increasing or decreasing.
+        // This guards against stale-data edge cases where reservations could already exceed
+        // capacity.
         ClassSlot existing = existingById.get(ct.timeId());
-        if (existing.getId() != null && ct.capacity() < existing.getCapacity()) {
-          int activeReservations = loadSlotReservationPort.countActiveReservations(existing.getId());
+        if (existing.getId() != null) {
+          int activeReservations =
+              loadSlotReservationPort.countActiveReservations(existing.getId());
           if (ct.capacity() < activeReservations) {
             throw new CapacityShorterThanReservationsException(activeReservations, ct.capacity());
           }

@@ -109,12 +109,28 @@ class TrainerStoreTest {
     void create_withLatitudeBoundary_succeeds() {
       TrainerStore storeMin =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-              -90.0, VALID_LONGITUDE, VALID_PHONE, null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              -90.0,
+              VALID_LONGITUDE,
+              VALID_PHONE,
+              null,
+              null,
+              null);
       TrainerStore storeMax =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-              90.0, VALID_LONGITUDE, VALID_PHONE, null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              90.0,
+              VALID_LONGITUDE,
+              VALID_PHONE,
+              null,
+              null,
+              null);
 
       assertThat(storeMin.getLatitude()).isEqualTo(-90.0);
       assertThat(storeMax.getLatitude()).isEqualTo(90.0);
@@ -125,12 +141,28 @@ class TrainerStoreTest {
     void create_withLongitudeBoundary_succeeds() {
       TrainerStore storeMin =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-              VALID_LATITUDE, -180.0, VALID_PHONE, null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              VALID_LATITUDE,
+              -180.0,
+              VALID_PHONE,
+              null,
+              null,
+              null);
       TrainerStore storeMax =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-              VALID_LATITUDE, 180.0, VALID_PHONE, null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              VALID_LATITUDE,
+              180.0,
+              VALID_PHONE,
+              null,
+              null,
+              null);
 
       assertThat(storeMin.getLongitude()).isEqualTo(-180.0);
       assertThat(storeMax.getLongitude()).isEqualTo(180.0);
@@ -219,8 +251,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      null, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      null,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidTrainerIdException.class);
     }
 
@@ -230,8 +270,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      0L, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      0L,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidTrainerIdException.class);
     }
 
@@ -241,8 +289,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      -1L, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      -1L,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidTrainerIdException.class);
     }
   }
@@ -263,8 +319,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, storeName, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      storeName,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreNameException.class)
           .hasMessageContaining("Store name must not be null or blank");
     }
@@ -276,8 +340,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, longName, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      longName,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreNameException.class)
           .hasMessageContaining("must not exceed");
     }
@@ -299,8 +371,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, address, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      address,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("Address must not be null or blank");
     }
@@ -312,8 +392,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, longAddress, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      longAddress,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("must not exceed");
     }
@@ -335,8 +423,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, detailAddress,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      detailAddress,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("Detail address must not be null or blank");
     }
@@ -348,8 +444,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, longDetail,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      longDetail,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("must not exceed");
     }
@@ -369,8 +473,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      null, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      null,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Latitude");
     }
@@ -381,8 +493,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, null, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      null,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Longitude");
     }
@@ -393,8 +513,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      90.1, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      90.1,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Latitude must be between");
     }
@@ -405,8 +533,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      -90.1, VALID_LONGITUDE, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      -90.1,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Latitude must be between");
     }
@@ -417,8 +553,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, 180.1, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      180.1,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Longitude must be between");
     }
@@ -429,8 +573,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, -180.1, VALID_PHONE, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      -180.1,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Longitude must be between");
     }
@@ -452,8 +604,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, phoneNumber, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      phoneNumber,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidPhoneNumberException.class)
           .hasMessageContaining("Phone number must not be null or blank");
     }
@@ -464,8 +624,16 @@ class TrainerStoreTest {
     void create_withValidPhoneFormats_succeeds(String phone) {
       TrainerStore store =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-              VALID_LATITUDE, VALID_LONGITUDE, phone, null, null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              VALID_LATITUDE,
+              VALID_LONGITUDE,
+              phone,
+              null,
+              null,
+              null);
       assertThat(store.getPhoneNumber()).isEqualTo(phone);
     }
 
@@ -476,8 +644,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, phone, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      phone,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidPhoneNumberException.class)
           .hasMessageContaining("Phone number must be a valid format");
     }
@@ -489,8 +665,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, longPhone, null, null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      longPhone,
+                      null,
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidPhoneNumberException.class);
     }
   }
@@ -508,8 +692,16 @@ class TrainerStoreTest {
     void create_withValidHttpsUrl_succeeds() {
       TrainerStore store =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-              VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, "https://example.com", null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              VALID_LATITUDE,
+              VALID_LONGITUDE,
+              VALID_PHONE,
+              "https://example.com",
+              null,
+              null);
 
       assertThat(store.getHomepageUrl()).isEqualTo("https://example.com");
     }
@@ -519,8 +711,16 @@ class TrainerStoreTest {
     void create_withValidHttpUrl_succeeds() {
       TrainerStore store =
           TrainerStore.create(
-              VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-              VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE, "http://example.com", null, null);
+              VALID_TRAINER_ID,
+              VALID_STORE_NAME,
+              VALID_ADDRESS,
+              VALID_DETAIL_ADDRESS,
+              VALID_LATITUDE,
+              VALID_LONGITUDE,
+              VALID_PHONE,
+              "http://example.com",
+              null,
+              null);
 
       assertThat(store.getHomepageUrl()).isEqualTo("http://example.com");
     }
@@ -531,9 +731,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE,
-                      "ftp://example.com/files", null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      "ftp://example.com/files",
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreUrlException.class)
           .hasMessageContaining("must use http or https scheme");
     }
@@ -544,9 +751,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE,
-                      "file:///etc/passwd", null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      "file:///etc/passwd",
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreUrlException.class)
           .hasMessageContaining("must use http or https scheme");
     }
@@ -557,9 +771,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE,
-                      "not a url at all", null, null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      "not a url at all",
+                      null,
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreUrlException.class)
           .hasMessageContaining("must be a valid URL");
     }
@@ -570,9 +791,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE,
-                      null, "ftp://bad-instagram-url", null))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      "ftp://bad-instagram-url",
+                      null))
           .isInstanceOf(MarketplaceInvalidStoreUrlException.class);
     }
 
@@ -582,9 +810,16 @@ class TrainerStoreTest {
       assertThatThrownBy(
               () ->
                   TrainerStore.create(
-                      VALID_TRAINER_ID, VALID_STORE_NAME, VALID_ADDRESS, VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE, VALID_LONGITUDE, VALID_PHONE,
-                      null, null, "not-a-url"))
+                      VALID_TRAINER_ID,
+                      VALID_STORE_NAME,
+                      VALID_ADDRESS,
+                      VALID_DETAIL_ADDRESS,
+                      VALID_LATITUDE,
+                      VALID_LONGITUDE,
+                      VALID_PHONE,
+                      null,
+                      null,
+                      "not-a-url"))
           .isInstanceOf(MarketplaceInvalidStoreUrlException.class);
     }
   }

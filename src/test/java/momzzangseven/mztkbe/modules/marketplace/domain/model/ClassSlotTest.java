@@ -84,14 +84,12 @@ class ClassSlotTest {
     }
 
     @Test
-    @DisplayName("금요일 23:50 (30분) — 자정 직전 슬롯은 wrap 없음")
+    @DisplayName("금요일 23:50 (30분) — 자정 직전 슬롯, 인접(00:20) 슬롯과 충돌 없음")
     void conflictsWith_FridayLateNoWrap_HandledCorrectly() {
-      // slotA: FRIDAY 23:50, 30min → end=23:50+30min=00:20(sat) WCM end=6*1440+23*60+50+30=10070 <
-      // 10080
-      // 자정을 넘기지 않으므로 단일 구간
+      // slotA: FRIDAY 23:50, 30min → WCM [7190, 7220)
+      // slotB: SATURDAY 00:20,  30min → WCM [7220, 7250) — 딱 붙어있으나 교집합 없음 (반열린 구간)
       ClassSlot a = ClassSlot.create(1L, List.of(DayOfWeek.FRIDAY), LocalTime.of(23, 50), 5);
-      ClassSlot b = ClassSlot.create(1L, List.of(DayOfWeek.SATURDAY), LocalTime.of(0, 10), 5);
-      // FRIDAY vs SATURDAY 다른 요일 → false
+      ClassSlot b = ClassSlot.create(1L, List.of(DayOfWeek.SATURDAY), LocalTime.of(0, 20), 5);
       assertThat(a.conflictsWith(b, 30)).isFalse();
     }
   }

@@ -31,7 +31,6 @@ public class GetClassesService implements GetClassesUseCase {
   private static final String SORT_DISTANCE = "DISTANCE";
   private static final String SORT_RATING = "RATING";
 
-
   private final LoadClassPort loadClassPort;
   private final LoadClassImagesPort loadClassImagesPort;
 
@@ -42,7 +41,8 @@ public class GetClassesService implements GetClassesUseCase {
     // Fall back to RATING when location data is missing and DISTANCE is requested
     String effectiveSort = resolveSort(query);
 
-    PageRequest pageable = PageRequest.of(query.page(), MarketplacePaginationConstants.DEFAULT_PAGE_SIZE);
+    PageRequest pageable =
+        PageRequest.of(query.page(), MarketplacePaginationConstants.DEFAULT_PAGE_SIZE);
     Page<ClassItem> page =
         loadClassPort.findActiveClasses(
             query.lat(),

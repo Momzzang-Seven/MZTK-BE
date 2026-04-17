@@ -51,7 +51,13 @@ public class GetClassDetailService implements GetClassDetailUseCase {
     List<ClassSlotInfo> classTimes =
         loadClassSlotPort.findByClassId(query.classId()).stream()
             .filter(ClassSlot::isActive)
-            .map(slot -> new ClassSlotInfo(slot.getId(), slot.getDaysOfWeek(), slot.getStartTime(), slot.getCapacity()))
+            .map(
+                slot ->
+                    new ClassSlotInfo(
+                        slot.getId(),
+                        slot.getDaysOfWeek(),
+                        slot.getStartTime(),
+                        slot.getCapacity()))
             .toList();
 
     ClassImages classImages = loadClassImagesPort.loadImages(query.classId());

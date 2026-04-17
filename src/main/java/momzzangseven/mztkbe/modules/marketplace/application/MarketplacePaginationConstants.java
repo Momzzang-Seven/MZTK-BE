@@ -14,9 +14,11 @@ public final class MarketplacePaginationConstants {
    * Default number of items per page for marketplace class listing endpoints.
    *
    * <p>Applies to:
+   *
    * <ul>
    *   <li>{@link momzzangseven.mztkbe.modules.marketplace.application.service.GetClassesService}
-   *   <li>{@link momzzangseven.mztkbe.modules.marketplace.application.service.GetTrainerClassesService}
+   *   <li>{@link
+   *       momzzangseven.mztkbe.modules.marketplace.application.service.GetTrainerClassesService}
    * </ul>
    */
   public static final int DEFAULT_PAGE_SIZE = 20;

@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.marketplace.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -47,7 +46,8 @@ class RegisterClassServiceTest {
   @Mock private SaveClassSlotPort saveClassSlotPort;
   @Mock private UpdateClassImagesPort updateClassImagesPort;
   @Mock private ManageClassTagPort manageClassTagPort;
-  // NOTE: LoadClassSlotPort is NOT used by RegisterClassService — removed to avoid Mockito strict stub warning
+  // NOTE: LoadClassSlotPort is NOT used by RegisterClassService — removed to avoid Mockito strict
+  // stub warning
 
   @InjectMocks private RegisterClassService registerClassService;
 
@@ -165,7 +165,6 @@ class RegisterClassServiceTest {
       // given
       given(loadTrainerStorePort.findByTrainerId(TRAINER_ID)).willReturn(Optional.of(mockStore()));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
-      given(saveClassPort.save(any())).willReturn(savedClass());
 
       // 동일 요일, 겹치는 시간 슬롯 2개 (10:00 + 10:30, duration=60 → 겹침)
       RegisterClassCommand conflictCommand =

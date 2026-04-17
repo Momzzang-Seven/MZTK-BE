@@ -137,41 +137,44 @@ class UpdateClassServiceTest {
       // given
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(existingClass()));
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of(existingSlot()));
-      given(loadSlotReservationPort.hasActiveReservation(SLOT_ID)).willReturn(false);
       given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(0);
       given(saveClassPort.save(any())).willReturn(savedClass());
 
       // 기존 슬롯 수정 (timeId=5L) + 신규 슬롯 1개 (timeId=null)
-      List<ClassTimeCommand> classTimes = List.of(
-          new ClassTimeCommand(SLOT_ID, List.of(DayOfWeek.TUESDAY), LocalTime.of(9, 0), 8),
-          new ClassTimeCommand(null, List.of(DayOfWeek.WEDNESDAY), LocalTime.of(14, 0), 5));
+      List<ClassTimeCommand> classTimes =
+          List.of(
+              new ClassTimeCommand(SLOT_ID, List.of(DayOfWeek.TUESDAY), LocalTime.of(9, 0), 8),
+              new ClassTimeCommand(null, List.of(DayOfWeek.WEDNESDAY), LocalTime.of(14, 0), 5));
 
       // when
       updateClassService.execute(validCommand(classTimes));
 
       // then
+      verify(loadClassSlotPort, times(1)).findByClassIdWithLock(CLASS_ID); // [M-19] 비관락 호출 확인
       verify(saveClassPort, times(1)).save(any());
       verify(saveClassSlotPort, times(1)).saveAll(anyList());
       verify(manageClassTagPort, times(1)).updateTags(CLASS_ID, List.of("다이어트"));
     }
 
     @Test
-    @DisplayName("capacity를 늘릴 때는 예약수 확인 없이 정상 처리")
-    void execute_CapacityIncrease_ProceedsWithoutReservationCheck() {
-      // given — 기존 capacity=3, 새 capacity=10 (증가)
+    @DisplayName("capacity를 늘릴 때도 예약수 확인 후 정상 처리 (예약수 미만이면 허용)")
+    void execute_CapacityIncrease_ProceedsWithReservationCheck() {
+      // given — 기존 capacity=3, 현재 예약=2, 새 capacity=10 (예약수보다 크므로 허용)
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(existingClass()));
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(existingSlotWithCapacity(3)));
+      given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(2);
       given(saveClassPort.save(any())).willReturn(savedClass());
 
-      List<ClassTimeCommand> classTimes = List.of(
-          new ClassTimeCommand(SLOT_ID, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 10));
+      List<ClassTimeCommand> classTimes =
+          List.of(
+              new ClassTimeCommand(SLOT_ID, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 10));
 
       // when
       updateClassService.execute(validCommand(classTimes));
 
-      // then — countActiveReservations는 호출되지 않아야 함 (capacity 증가이므로)
-      verify(loadSlotReservationPort, never()).countActiveReservations(any());
+      // then — countActiveReservations는 capacity와 무관하게 항상 호출
+      verify(loadSlotReservationPort, times(1)).countActiveReservations(SLOT_ID);
       verify(saveClassPort, times(1)).save(any());
     }
   }
@@ -188,28 +191,40 @@ class UpdateClassServiceTest {
     @DisplayName("소유권 불일치 시 MarketplaceUnauthorizedAccessException 발생, save 호출 없음")
     void execute_UnauthorizedTrainer_ThrowsMarketplaceUnauthorizedAccessException() {
       // given — 클래스는 trainerId=99 소유
-      given(loadClassPort.findById(CLASS_ID)).willReturn(
-          Optional.of(
-              MarketplaceClass.builder()
-                  .id(CLASS_ID)
-                  .trainerId(99L)
-                  .title("제목")
-                  .category(ClassCategory.PT)
-                  .description("설명")
-                  .priceAmount(50000)
-                  .durationMinutes(60)
-                  .active(true)
-                  .build()));
+      given(loadClassPort.findById(CLASS_ID))
+          .willReturn(
+              Optional.of(
+                  MarketplaceClass.builder()
+                      .id(CLASS_ID)
+                      .trainerId(99L)
+                      .title("제목")
+                      .category(ClassCategory.PT)
+                      .description("설명")
+                      .priceAmount(50000)
+                      .durationMinutes(60)
+                      .active(true)
+                      .build()));
 
-      List<ClassTimeCommand> classTimes = List.of(
-          new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5));
+      List<ClassTimeCommand> classTimes =
+          List.of(new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5));
 
       // when & then — trainerId=1L로 요청 → 소유권 불일치
       assertThatThrownBy(
-              () -> updateClassService.execute(
-                  new UpdateClassCommand(
-                      1L, CLASS_ID, "제목", ClassCategory.PT, "설명",
-                      50000, 60, null, null, null, null, classTimes)))
+              () ->
+                  updateClassService.execute(
+                      new UpdateClassCommand(
+                          1L,
+                          CLASS_ID,
+                          "제목",
+                          ClassCategory.PT,
+                          "설명",
+                          50000,
+                          60,
+                          null,
+                          null,
+                          null,
+                          null,
+                          classTimes)))
           .isInstanceOf(MarketplaceUnauthorizedAccessException.class);
       verify(saveClassPort, never()).save(any());
     }
@@ -222,9 +237,10 @@ class UpdateClassServiceTest {
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of());
 
       // MONDAY 10:00 + MONDAY 10:30 (60분 → 겹침)
-      List<ClassTimeCommand> conflictingSlots = List.of(
-          new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5),
-          new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 30), 5));
+      List<ClassTimeCommand> conflictingSlots =
+          List.of(
+              new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5),
+              new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 30), 5));
 
       // when & then
       assertThatThrownBy(() -> updateClassService.execute(validCommand(conflictingSlots)))
@@ -238,8 +254,8 @@ class UpdateClassServiceTest {
       // given
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.empty());
 
-      List<ClassTimeCommand> classTimes = List.of(
-          new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5));
+      List<ClassTimeCommand> classTimes =
+          List.of(new ClassTimeCommand(null, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5));
 
       // when & then
       assertThatThrownBy(() -> updateClassService.execute(validCommand(classTimes)))
@@ -256,8 +272,8 @@ class UpdateClassServiceTest {
       given(loadSlotReservationPort.hasActiveReservation(SLOT_ID)).willReturn(true);
 
       // 요청 슬롯 목록에 SLOT_ID 없음 → soft-delete 시도
-      List<ClassTimeCommand> classTimes = List.of(
-          new ClassTimeCommand(null, List.of(DayOfWeek.WEDNESDAY), LocalTime.of(14, 0), 5));
+      List<ClassTimeCommand> classTimes =
+          List.of(new ClassTimeCommand(null, List.of(DayOfWeek.WEDNESDAY), LocalTime.of(14, 0), 5));
 
       // when & then
       assertThatThrownBy(() -> updateClassService.execute(validCommand(classTimes)))
@@ -274,8 +290,8 @@ class UpdateClassServiceTest {
           .willReturn(List.of(existingSlotWithCapacity(10)));
       given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(7);
 
-      List<ClassTimeCommand> classTimes = List.of(
-          new ClassTimeCommand(SLOT_ID, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5));
+      List<ClassTimeCommand> classTimes =
+          List.of(new ClassTimeCommand(SLOT_ID, List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), 5));
 
       // when & then
       assertThatThrownBy(() -> updateClassService.execute(validCommand(classTimes)))

@@ -144,11 +144,25 @@ class GetClassDetailServiceTest {
     @DisplayName("스토어 미등록 트레이너의 클래스 조회 시 store 필드는 null 값 포함")
     void execute_NoStore_ReturnsNullStoreFields() {
       // given — store 정보가 없는 ClassDetailInfo
-      ClassDetailInfo noStoreDetail = new ClassDetailInfo(
-          CLASS_ID, TRAINER_ID,
-          null, null, null, null, null, null,
-          "PT 클래스", "PT", "설명", 50000, 60,
-          List.of(), List.of(), null, List.of());
+      ClassDetailInfo noStoreDetail =
+          new ClassDetailInfo(
+              CLASS_ID,
+              TRAINER_ID,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              "PT 클래스",
+              "PT",
+              "설명",
+              50000,
+              60,
+              List.of(),
+              List.of(),
+              null,
+              List.of());
 
       ClassImages images = new ClassImages(null, List.of());
       given(loadClassPort.findClassDetailById(CLASS_ID)).willReturn(Optional.of(noStoreDetail));
