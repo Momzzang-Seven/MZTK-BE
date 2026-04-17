@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.tag.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.tag.application.port.out.SaveTagPort;
 import momzzangseven.mztkbe.modules.tag.domain.model.Tag;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -43,7 +44,7 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
   // ========== ManageClassTagPort ==========
 
   @Override
-  @Transactional
+  @Transactional(propagation = Propagation.MANDATORY)
   public void linkTagsToClass(Long classId, List<String> tagNames) {
     if (tagNames == null || tagNames.isEmpty()) {
       return;
@@ -52,11 +53,12 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
   }
 
   @Override
-  @Transactional
+  @Transactional(propagation = Propagation.MANDATORY)
   public void updateTags(Long classId, List<String> tagNames) {
     classTagJpaRepository.deleteByClassId(classId);
     if (tagNames != null && !tagNames.isEmpty()) {
-      // Call persistTagLinks directly (not via linkTagsToClass) to avoid Spring proxy self-invocation.
+      // Call persistTagLinks directly (not via linkTagsToClass) to avoid Spring proxy
+      // self-invocation.
       // Self-invocation bypasses the proxy and would lose the outer transaction.
       persistTagLinks(classId, tagNames);
     }
@@ -95,6 +97,7 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
             .fetch();
 
     return results.stream()
+        .filter(tuple -> tuple.get(classTagEntity.classId) != null)
         .collect(
             Collectors.groupingBy(
                 tuple -> tuple.get(classTagEntity.classId),
