@@ -51,6 +51,7 @@ public class ClassSlotEntity {
       joinColumns = @JoinColumn(name = "slot_id"),
       indexes = @Index(name = "idx_class_slot_days_slot_id", columnList = "slot_id"))
   @Column(name = "day_of_week")
+  @org.hibernate.annotations.BatchSize(size = 30)
   private List<DayOfWeek> daysOfWeek;
 
   @Column(name = "start_time", nullable = false)

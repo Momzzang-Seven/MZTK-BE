@@ -411,6 +411,49 @@ public enum ErrorCode {
   MARKETPLACE_INVALID_SLOT(
       "MARKETPLACE_016", "Class slot is invalid (days or start time)", HttpStatus.BAD_REQUEST),
 
+  MARKETPLACE_CONCURRENT_UPDATE(
+      "MARKETPLACE_024",
+      "Class was modified by another request. Please retry.",
+      HttpStatus.CONFLICT),
+
+  MARKETPLACE_INVALID_STORE_NAME(
+      "MARKETPLACE_025", "Store name is invalid (blank or too long)", HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_INVALID_STORE_ADDRESS(
+      "MARKETPLACE_026", "Store address is invalid (blank or too long)", HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_INVALID_COORDINATES(
+      "MARKETPLACE_027", "Coordinates are out of valid range", HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_INVALID_PHONE_NUMBER(
+      "MARKETPLACE_028", "Phone number format is invalid", HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_INVALID_STORE_URL(
+      "MARKETPLACE_029", "Store URL must use http/https and be well-formed", HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_RESERVATION_SLOT_FULL(
+      "MARKETPLACE_017", "Class slot capacity is full", HttpStatus.CONFLICT),
+
+  MARKETPLACE_RESERVATION_INVALID_STATUS(
+      "MARKETPLACE_018", "Invalid reservation status for this operation", HttpStatus.CONFLICT),
+
+  MARKETPLACE_TRAINER_SUSPENDED(
+      "MARKETPLACE_019",
+      "Trainer is suspended and cannot accept or create classes",
+      HttpStatus.FORBIDDEN),
+
+  MARKETPLACE_RESERVATION_PRICE_MISMATCH(
+      "MARKETPLACE_020", "Price signature does not match current class price", HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_RESERVATION_INVALID_SLOT_DATE(
+      "MARKETPLACE_021", "Reservation date/time does not match the slot schedule", HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_RESERVATION_NOT_FOUND(
+      "MARKETPLACE_022", "Reservation not found", HttpStatus.NOT_FOUND),
+
+  MARKETPLACE_RESERVATION_EARLY_COMPLETE(
+      "MARKETPLACE_023", "Cannot complete a reservation before the class starts", HttpStatus.BAD_REQUEST),
+
   // ========================================
   // Verification Errors (VERIFICATION_xxx)
   // ========================================
