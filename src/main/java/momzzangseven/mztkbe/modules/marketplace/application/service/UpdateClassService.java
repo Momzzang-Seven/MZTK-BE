@@ -7,9 +7,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.marketplace.CapacityShorterThanReservationsException;
 import momzzangseven.mztkbe.global.error.marketplace.ClassNotFoundException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidDurationException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
+import momzzangseven.mztkbe.global.error.marketplace.SlotHasActiveReservationException;
 import momzzangseven.mztkbe.global.error.marketplace.SlotTimeConflictException;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.ClassTimeCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.UpdateClassCommand;
@@ -17,6 +19,7 @@ import momzzangseven.mztkbe.modules.marketplace.application.dto.UpdateClassResul
 import momzzangseven.mztkbe.modules.marketplace.application.port.in.UpdateClassUseCase;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassSlotPort;
+import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadSlotReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.ManageClassTagPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.SaveClassPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.SaveClassSlotPort;
@@ -32,15 +35,17 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Flow:
  *
  * <ol>
- *   <li>Load the class and verify ownership
+ *   <li>Validate command and load class
+ *   <li>Verify trainer ownership
  *   <li>Apply domain update (title, price, etc.)
  *   <li>Synchronise slots: add new / modify existing / soft-delete removed
- *   <li>Update images via the image module
- *   <li>Save the mutated class
+ *       <ul>
+ *         <li>Soft-delete blocked if slot has active reservations
+ *         <li>Capacity reduction blocked if new capacity &lt; active reservation count
+ *       </ul>
+ *   <li>Update tags and images
+ *   <li>Save the mutated class (optimistic lock)
  * </ol>
- *
- * <p>Note: Active-reservation checks for capacity and slot-deactivation are delegated as stubs. A
- * future reservation module will provide the necessary port.
  */
 @Slf4j
 @Service
@@ -54,6 +59,7 @@ public class UpdateClassService implements UpdateClassUseCase {
   private final SaveClassSlotPort saveClassSlotPort;
   private final UpdateClassImagesPort updateClassImagesPort;
   private final ManageClassTagPort manageClassTagPort;
+  private final LoadSlotReservationPort loadSlotReservationPort;
 
   @Override
   public UpdateClassResult execute(UpdateClassCommand command) {
@@ -115,9 +121,9 @@ public class UpdateClassService implements UpdateClassUseCase {
    * Synchronises the incoming classTimes with the existing persisted slots.
    *
    * <ul>
-   *   <li>timeId present → update existing slot
+   *   <li>timeId present → update existing slot (capacity reduction blocked if below active reservations)
    *   <li>timeId absent → create new slot
-   *   <li>existing slot not in incoming list → soft-delete (or hard-delete if no reservations)
+   *   <li>existing slot not in incoming list → soft-delete (blocked if has active reservations)
    * </ul>
    */
   private void synchroniseSlots(
@@ -140,9 +146,15 @@ public class UpdateClassService implements UpdateClassUseCase {
 
     for (ClassTimeCommand ct : incomingTimes) {
       if (ct.timeId() != null && existingById.containsKey(ct.timeId())) {
-        // Update existing slot
-        ClassSlot updated =
-            existingById.get(ct.timeId()).update(ct.daysOfWeek(), ct.startTime(), ct.capacity());
+        // Update existing slot — check capacity constraint against active reservations
+        ClassSlot existing = existingById.get(ct.timeId());
+        if (existing.getId() != null && ct.capacity() < existing.getCapacity()) {
+          int activeReservations = loadSlotReservationPort.countActiveReservations(existing.getId());
+          if (ct.capacity() < activeReservations) {
+            throw new CapacityShorterThanReservationsException(activeReservations, ct.capacity());
+          }
+        }
+        ClassSlot updated = existing.update(ct.daysOfWeek(), ct.startTime(), ct.capacity());
         slotsToSave.add(updated);
       } else {
         // Create new slot
@@ -150,16 +162,20 @@ public class UpdateClassService implements UpdateClassUseCase {
       }
     }
 
-    // Validate no conflicts among the resulting active slots
+    // Conflict validation runs only over the ACTIVE result set (new + updated slots).
+    // Soft-delete candidates are intentionally excluded: inactive slots cannot be booked,
+    // so they do not participate in schedule conflicts.
+    // Soft-delete targets are appended AFTER this check to keep them out of the validation scope.
     validateNoConflicts(slotsToSave, durationMinutes);
 
-    // Handle missing slots (deletion candidates)
+    // Handle missing slots (deletion candidates) — check for active reservations before soft-delete
     for (ClassSlot existing : existingSlots) {
       if (existing.getId() != null
           && !incomingTimeIds.contains(existing.getId())
           && existing.isActive()) {
-        // Stub: future reservation module should block deletion if active reservations exist.
-        // For now, perform soft-delete.
+        if (loadSlotReservationPort.hasActiveReservation(existing.getId())) {
+          throw new SlotHasActiveReservationException(existing.getId());
+        }
         slotsToSave.add(existing.softDelete());
       }
     }
