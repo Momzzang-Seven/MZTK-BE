@@ -1,6 +1,10 @@
 package momzzangseven.mztkbe.modules.marketplace.application.dto;
 
 import java.util.List;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidCategoryException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidSlotException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTitleException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTrainerIdException;
 import momzzangseven.mztkbe.modules.marketplace.domain.vo.ClassCategory;
 
 /**
@@ -24,22 +28,22 @@ public record UpdateClassCommand(
     List<Long> imageIds,
     List<ClassTimeCommand> classTimes) {
 
-  /** Validates minimum required data. */
+  /** Validates minimum required data using project-standard BusinessException subclasses. */
   public void validate() {
     if (trainerId == null || trainerId <= 0) {
-      throw new IllegalArgumentException("Trainer ID must be positive");
+      throw new MarketplaceInvalidTrainerIdException();
     }
     if (classId == null || classId <= 0) {
-      throw new IllegalArgumentException("Class ID must be positive");
+      throw new MarketplaceInvalidSlotException("Class ID must be positive");
     }
     if (title == null || title.isBlank()) {
-      throw new IllegalArgumentException("Title must not be blank");
+      throw new MarketplaceInvalidTitleException("Title must not be blank");
     }
     if (category == null) {
-      throw new IllegalArgumentException("Category must not be null");
+      throw new MarketplaceInvalidCategoryException();
     }
     if (classTimes == null || classTimes.isEmpty()) {
-      throw new IllegalArgumentException("At least one class time must be provided");
+      throw new MarketplaceInvalidSlotException("At least one class time must be provided");
     }
   }
 }
