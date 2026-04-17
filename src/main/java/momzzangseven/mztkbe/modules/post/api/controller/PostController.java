@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.post.api.dto.AcceptAnswerResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateFreePostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateQuestionPostRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.CreateQuestionPostResponse;
+import momzzangseven.mztkbe.modules.post.api.dto.GetPostsResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostDetailResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostListResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostMutationResponse;
@@ -19,10 +20,10 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.CreateQuestionPostResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
-import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
@@ -96,7 +97,7 @@ public class PostController {
 
   /** Returns the authenticated caller's post list view. */
   @GetMapping
-  public ResponseEntity<ApiResponse<List<PostListResponse>>> getPosts(
+  public ResponseEntity<ApiResponse<GetPostsResponse>> getPosts(
       @AuthenticationPrincipal Long userId,
       @RequestParam(required = false) PostType type,
       @RequestParam(required = false) String tag,
@@ -107,10 +108,10 @@ public class PostController {
     PostSearchCondition condition =
         PostSearchCondition.of(type, tag, search, pageable.getPageNumber(), pageable.getPageSize());
 
-    List<PostListResult> results = searchPostsUseCase.searchPosts(condition, validatedUserId);
-    List<PostListResponse> response = results.stream().map(PostListResponse::from).toList();
+    SearchPostsResult result = searchPostsUseCase.searchPosts(condition, validatedUserId);
+    List<PostListResponse> response = result.posts().stream().map(PostListResponse::from).toList();
 
-    return ResponseEntity.ok(ApiResponse.success(response));
+    return ResponseEntity.ok(ApiResponse.success(new GetPostsResponse(response, result.hasNext())));
   }
 
   /**

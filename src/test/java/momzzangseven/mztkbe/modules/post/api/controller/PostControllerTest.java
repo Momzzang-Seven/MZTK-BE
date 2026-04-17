@@ -16,6 +16,10 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.error.image.ImageNotBelongsToUserException;
+import momzzangseven.mztkbe.global.error.image.ImageNotFoundException;
+import momzzangseven.mztkbe.global.error.image.ImageStatusInvalidException;
+import momzzangseven.mztkbe.global.error.image.InvalidImageRefTypeException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.in.CheckAdminAccountStatusUseCase;
@@ -29,6 +33,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
@@ -238,16 +243,17 @@ class PostControllerTest {
             LocalDateTime.now(),
             LocalDateTime.now());
     given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class), any(Long.class)))
-        .willReturn(List.of(postResult));
+        .willReturn(new SearchPostsResult(List.of(postResult), true));
 
     mockMvc
         .perform(get("/posts?type=FREE&tag=health&search=list").with(userPrincipal(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data[0].postId").value(2))
-        .andExpect(jsonPath("$.data[0].type").value("FREE"))
-        .andExpect(jsonPath("$.data[0].likeCount").value(4))
-        .andExpect(jsonPath("$.data[0].isLiked").value(true));
+        .andExpect(jsonPath("$.data.hasNext").value(true))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(2))
+        .andExpect(jsonPath("$.data.posts[0].type").value("FREE"))
+        .andExpect(jsonPath("$.data.posts[0].likeCount").value(4))
+        .andExpect(jsonPath("$.data.posts[0].isLiked").value(true));
   }
 
   @Test
@@ -267,6 +273,48 @@ class PostControllerTest {
         .andExpect(jsonPath("$.data.postId").value(200));
 
     verify(createQuestionPostUseCase).execute(any(CreatePostCommand.class));
+  }
+
+  @Test
+  @DisplayName("POST /posts/free maps image status invalid to 409 IMAGE_002")
+  void createFreePost_imageStatusInvalid_returns409() throws Exception {
+    given(createPostUseCase.execute(any(CreatePostCommand.class)))
+        .willThrow(new ImageStatusInvalidException("pending image"));
+
+    mockMvc
+        .perform(
+            post("/posts/free")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "content", "imageIds", List.of(1L)))))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("IMAGE_002"));
+  }
+
+  @Test
+  @DisplayName("POST /posts/question maps missing image to 404 IMAGE_001")
+  void createQuestionPost_imageNotFound_returns404() throws Exception {
+    given(createQuestionPostUseCase.execute(any(CreatePostCommand.class)))
+        .willThrow(new ImageNotFoundException("missing image"));
+
+    mockMvc
+        .perform(
+            post("/posts/question")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "title",
+                            "question",
+                            "content",
+                            "body",
+                            "reward",
+                            50,
+                            "imageIds",
+                            List.of(999L)))))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("IMAGE_001"));
   }
 
   @Test
@@ -316,6 +364,38 @@ class PostControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(1));
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{postId} maps foreign image to 403 IMAGE_009")
+  void updatePost_imageOwnershipInvalid_returns403() throws Exception {
+    given(updatePostUseCase.updatePost(any(), any(), any()))
+        .willThrow(new ImageNotBelongsToUserException("not your image"));
+
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("imageIds", List.of(1L)))))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("IMAGE_009"));
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{postId} maps invalid image reference rule to 400 IMAGE_006")
+  void updatePost_invalidImageReference_returns400() throws Exception {
+    given(updatePostUseCase.updatePost(any(), any(), any()))
+        .willThrow(new InvalidImageRefTypeException("wrong reference"));
+
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("imageIds", List.of(1L)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("IMAGE_006"));
   }
 
   @Test

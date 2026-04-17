@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.CreatePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -33,6 +34,7 @@ class CreatePostServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private PostXpService postXpService;
   @Mock private LinkTagPort linkTagPort;
+  @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
 
   private CreatePostService createPostService;
@@ -41,7 +43,11 @@ class CreatePostServiceTest {
   void setUp() {
     createPostService =
         new CreatePostService(
-            postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
+            postPersistencePort,
+            postXpService,
+            linkTagPort,
+            validatePostImagesPort,
+            updatePostImagesPort);
   }
 
   @Test
@@ -72,6 +78,8 @@ class CreatePostServiceTest {
     verify(postPersistencePort).savePost(postCaptor.capture());
     assertThat(postCaptor.getValue().getReward()).isEqualTo(0L);
 
+    verify(validatePostImagesPort)
+        .validateAttachableImages(7L, null, PostType.FREE, List.of(1L, 2L));
     // Verify image sync is called
     verify(updatePostImagesPort).updateImages(7L, 10L, PostType.FREE, List.of(1L, 2L));
     verify(linkTagPort).linkTagsToPost(10L, List.of("java", "spring"));
@@ -104,6 +112,7 @@ class CreatePostServiceTest {
 
     CreatePostResult result = createPostService.execute(command);
 
+    verifyNoInteractions(validatePostImagesPort);
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort, never()).linkTagsToPost(any(), any());
     assertThat(result.isXpGranted()).isFalse();
@@ -133,6 +142,7 @@ class CreatePostServiceTest {
 
     createPostService.execute(command);
 
+    verifyNoInteractions(validatePostImagesPort);
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
     verify(linkTagPort).linkTagsToPost(13L, List.of("java"));
   }
@@ -159,6 +169,7 @@ class CreatePostServiceTest {
 
     CreatePostResult result = createPostService.execute(command);
 
+    verify(validatePostImagesPort).validateAttachableImages(4L, null, PostType.FREE, List.of(1L));
     verify(updatePostImagesPort).updateImages(4L, 12L, PostType.FREE, List.of(1L));
     verify(linkTagPort).linkTagsToPost(12L, List.of("java"));
     assertThat(result.postId()).isEqualTo(12L);
@@ -175,7 +186,12 @@ class CreatePostServiceTest {
     assertThatThrownBy(() -> createPostService.execute(command))
         .isInstanceOf(PostInvalidInputException.class);
 
-    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
+    verifyNoInteractions(
+        postPersistencePort,
+        postXpService,
+        linkTagPort,
+        validatePostImagesPort,
+        updatePostImagesPort);
   }
 
   @Test
@@ -189,7 +205,12 @@ class CreatePostServiceTest {
         .isInstanceOf(PostInvalidInputException.class)
         .hasMessageContaining("free posts only");
 
-    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
+    verifyNoInteractions(
+        postPersistencePort,
+        postXpService,
+        linkTagPort,
+        validatePostImagesPort,
+        updatePostImagesPort);
   }
 
   @Test
@@ -201,6 +222,11 @@ class CreatePostServiceTest {
     assertThatThrownBy(() -> createPostService.execute(command))
         .isInstanceOf(PostInvalidInputException.class);
 
-    verifyNoInteractions(postPersistencePort, postXpService, linkTagPort, updatePostImagesPort);
+    verifyNoInteractions(
+        postPersistencePort,
+        postXpService,
+        linkTagPort,
+        validatePostImagesPort,
+        updatePostImagesPort);
   }
 }

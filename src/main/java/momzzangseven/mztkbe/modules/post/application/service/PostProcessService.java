@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
@@ -12,6 +13,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -33,6 +35,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   private final PostPersistencePort postPersistencePort;
   private final ApplicationEventPublisher eventPublisher;
   private final LinkTagPort linkTagPort;
+  private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final CountAnswersPort countAnswersPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
@@ -47,6 +50,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
     long activeAnswerCount = countActiveAnswers(post);
+    validatePostImagesIfPresent(currentUserId, postId, post.getType(), command.imageIds());
 
     boolean contentChanged =
         command.content() != null && !command.content().equals(post.getContent());
@@ -114,5 +118,13 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
       return 0L;
     }
     return countAnswersPort.countAnswers(post.getId());
+  }
+
+  private void validatePostImagesIfPresent(
+      Long userId, Long postId, PostType postType, List<Long> imageIds) {
+    if (imageIds == null || imageIds.isEmpty()) {
+      return;
+    }
+    validatePostImagesPort.validateAttachableImages(userId, postId, postType, imageIds);
   }
 }
