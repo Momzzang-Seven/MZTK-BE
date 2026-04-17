@@ -3,8 +3,12 @@ package momzzangseven.mztkbe.modules.marketplace.domain.model;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidCategoryException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidDurationException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidFeatureException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidPriceException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTagException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTitleException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTrainerIdException;
@@ -44,10 +48,8 @@ class MarketplaceClassTest {
     @Test
     @DisplayName("[M-1] 유효한 입력으로 생성하면 active=true 인스턴스 반환")
     void create_ValidInput_ReturnsActiveClass() {
-      // when
       MarketplaceClass result = validClass();
 
-      // then
       assertThat(result.isActive()).isTrue();
       assertThat(result.getId()).isNull();
       assertThat(result.getTags()).containsExactly("다이어트");
@@ -57,26 +59,77 @@ class MarketplaceClassTest {
     @Test
     @DisplayName("[M-7] toggleStatus() — active 클래스를 토글하면 inactive 반환, 원본 불변")
     void toggleStatus_ActiveClass_ReturnsInactiveClass() {
-      // given
       MarketplaceClass active = validClass();
-
-      // when
       MarketplaceClass toggled = active.toggleStatus();
 
-      // then
       assertThat(toggled.isActive()).isFalse();
       assertThat(active.isActive()).isTrue(); // 원본 불변
     }
 
     @Test
+    @DisplayName("[M-7b] toggleStatus() — inactive 클래스를 토글하면 active 반환")
+    void toggleStatus_InactiveClass_ReturnsActiveClass() {
+      MarketplaceClass inactive = validClass().toBuilder().active(false).build();
+      MarketplaceClass toggled = inactive.toggleStatus();
+
+      assertThat(toggled.isActive()).isTrue();
+    }
+
+    @Test
     @DisplayName("[M-8] isOwnedBy — 동일 trainerId 이면 true 반환")
     void isOwnedBy_MatchingId_ReturnsTrue() {
-      // given
       MarketplaceClass mc = validClass();
 
-      // then
       assertThat(mc.isOwnedBy(1L)).isTrue();
       assertThat(mc.isOwnedBy(99L)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isOwnedBy — null trainerId이면 false 반환 (NPE 없음)")
+    void isOwnedBy_NullTrainerId_ReturnsFalse() {
+      MarketplaceClass mc = validClass();
+      assertThat(mc.isOwnedBy(null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("update() — id/trainerId 보존, 새 인스턴스 반환, 원본 불변")
+    void update_PreservesIdentityAndReturnsNewInstance() {
+      MarketplaceClass withId = validClass().toBuilder().id(10L).build();
+
+      MarketplaceClass updated =
+          withId.update(
+              "변경된 제목",
+              ClassCategory.YOGA,
+              "변경된 설명",
+              80000,
+              90,
+              List.of("요가"),
+              List.of("스트레칭"),
+              null);
+
+      assertThat(updated.getId()).isEqualTo(10L);
+      assertThat(updated.getTrainerId()).isEqualTo(1L);
+      assertThat(updated.getTitle()).isEqualTo("변경된 제목");
+      assertThat(updated.isActive()).isTrue();
+      // 원본 불변
+      assertThat(withId.getTitle()).isEqualTo("PT 30분 기초체력");
+    }
+
+    @Test
+    @DisplayName("duration 경계값 1분으로 생성 성공")
+    void create_MinDuration_Success() {
+      MarketplaceClass mc =
+          MarketplaceClass.create(1L, "제목", ClassCategory.PT, "설명", 10000, 1, null, null, null);
+      assertThat(mc.getDurationMinutes()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("duration 경계값 1440분으로 생성 성공")
+    void create_MaxDuration_Success() {
+      MarketplaceClass mc =
+          MarketplaceClass.create(
+              1L, "제목", ClassCategory.PT, "설명", 10000, 1440, null, null, null);
+      assertThat(mc.getDurationMinutes()).isEqualTo(1440);
     }
   }
 
@@ -167,6 +220,45 @@ class MarketplaceClassTest {
   }
 
   // ========================================================
+  // 가격 및 기간 검증
+  // ========================================================
+
+  @Nested
+  @DisplayName("가격 및 기간 검증")
+  class PriceAndDurationValidation {
+
+    @Test
+    @DisplayName("priceAmount=0 → MarketplaceInvalidPriceException")
+    void create_ZeroPrice_ThrowsException() {
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 0, 60, null, null, null))
+          .isInstanceOf(MarketplaceInvalidPriceException.class);
+    }
+
+    @Test
+    @DisplayName("durationMinutes=0 → MarketplaceInvalidDurationException")
+    void create_ZeroDuration_ThrowsException() {
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 10000, 0, null, null, null))
+          .isInstanceOf(MarketplaceInvalidDurationException.class);
+    }
+
+    @Test
+    @DisplayName("durationMinutes=1441 → MarketplaceInvalidDurationException")
+    void create_DurationExceedsMax_ThrowsException() {
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 10000, 1441, null, null, null))
+          .isInstanceOf(MarketplaceInvalidDurationException.class);
+    }
+  }
+
+  // ========================================================
   // 태그 검증
   // ========================================================
 
@@ -202,6 +294,61 @@ class MarketplaceClassTest {
       MarketplaceClass mc =
           MarketplaceClass.create(1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, null, null);
       assertThat(mc.getTags()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("태그 항목이 blank이면 MarketplaceInvalidTagException 발생")
+    void create_BlankTagItem_ThrowsException() {
+      List<String> tags = List.of("정상태그", "");
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 10000, 60, tags, null, null))
+          .isInstanceOf(MarketplaceInvalidTagException.class);
+    }
+  }
+
+  // ========================================================
+  // 피처 검증 (코드리뷰에서 수정·추가된 케이스)
+  // ========================================================
+
+  @Nested
+  @DisplayName("feature 검증")
+  class FeatureValidation {
+
+    @Test
+    @DisplayName("feature 항목이 null이면 MarketplaceInvalidFeatureException 발생")
+    void create_NullFeatureItem_ThrowsException() {
+      List<String> features = new ArrayList<>();
+      features.add(null);
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, features, null))
+          .isInstanceOf(MarketplaceInvalidFeatureException.class);
+    }
+
+    @Test
+    @DisplayName("feature 항목이 blank이면 MarketplaceInvalidFeatureException 발생")
+    void create_BlankFeatureItem_ThrowsException() {
+      List<String> features = List.of("정상피처", "");
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, features, null))
+          .isInstanceOf(MarketplaceInvalidFeatureException.class);
+    }
+
+    @Test
+    @DisplayName("feature 11개 → MarketplaceInvalidFeatureException (최대 10개)")
+    void create_FeaturesExceedMax_ThrowsException() {
+      List<String> features =
+          List.of("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k");
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, features, null))
+          .isInstanceOf(MarketplaceInvalidFeatureException.class);
     }
   }
 }

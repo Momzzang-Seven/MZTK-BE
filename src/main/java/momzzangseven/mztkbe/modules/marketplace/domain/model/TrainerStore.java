@@ -7,6 +7,12 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidCoordinatesException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidPhoneNumberException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidStoreAddressException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidStoreNameException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidStoreUrlException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTrainerIdException;
 
 /**
  * Domain model representing a trainer's store (marketplace).
@@ -19,7 +25,7 @@ import lombok.Getter;
  * business requirements emerge, NOT in the service layer.
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class TrainerStore {
 
@@ -153,9 +159,7 @@ public class TrainerStore {
     validateUrl("Instagram URL", instagramUrl, MAX_URL_LENGTH);
     validateUrl("X Profile URL", xProfileUrl, MAX_URL_LENGTH);
 
-    return TrainerStore.builder()
-        .id(this.id)
-        .trainerId(this.trainerId)
+    return toBuilder()
         .storeName(storeName)
         .address(address)
         .detailAddress(detailAddress)
@@ -165,8 +169,6 @@ public class TrainerStore {
         .homepageUrl(homepageUrl)
         .instagramUrl(instagramUrl)
         .xProfileUrl(xProfileUrl)
-        .createdAt(this.createdAt)
-        .updatedAt(this.updatedAt)
         .build();
   }
 
@@ -176,46 +178,49 @@ public class TrainerStore {
 
   private static void validateTrainerId(Long trainerId) {
     if (trainerId == null || trainerId <= 0) {
-      throw new IllegalArgumentException("Trainer ID must be a positive number");
+      throw new MarketplaceInvalidTrainerIdException();
     }
   }
 
   private static void validateStoreName(String storeName) {
     if (storeName == null || storeName.isBlank()) {
-      throw new IllegalArgumentException("Store name must not be null or blank");
+      throw new MarketplaceInvalidStoreNameException("Store name must not be null or blank");
     }
     if (storeName.length() > MAX_STORE_NAME_LENGTH) {
-      throw new IllegalArgumentException(
+      throw new MarketplaceInvalidStoreNameException(
           "Store name must not exceed " + MAX_STORE_NAME_LENGTH + " characters");
     }
   }
 
   private static void validateAddress(String address) {
     if (address == null || address.isBlank()) {
-      throw new IllegalArgumentException("Address must not be null or blank");
+      throw new MarketplaceInvalidStoreAddressException("Address must not be null or blank");
     }
     if (address.length() > MAX_ADDRESS_LENGTH) {
-      throw new IllegalArgumentException(
+      throw new MarketplaceInvalidStoreAddressException(
           "Address must not exceed " + MAX_ADDRESS_LENGTH + " characters");
     }
   }
 
   private static void validateDetailAddress(String detailAddress) {
     if (detailAddress == null || detailAddress.isBlank()) {
-      throw new IllegalArgumentException("Detail address must not be null or blank");
+      throw new MarketplaceInvalidStoreAddressException(
+          "Detail address must not be null or blank");
     }
     if (detailAddress.length() > MAX_DETAIL_ADDRESS_LENGTH) {
-      throw new IllegalArgumentException(
+      throw new MarketplaceInvalidStoreAddressException(
           "Detail address must not exceed " + MAX_DETAIL_ADDRESS_LENGTH + " characters");
     }
   }
 
   private static void validateCoordinates(Double latitude, Double longitude) {
     if (latitude == null || latitude < -90.0 || latitude > 90.0) {
-      throw new IllegalArgumentException("Latitude must be between -90.0 and 90.0");
+      throw new MarketplaceInvalidCoordinatesException(
+          "Latitude must be between -90.0 and 90.0");
     }
     if (longitude == null || longitude < -180.0 || longitude > 180.0) {
-      throw new IllegalArgumentException("Longitude must be between -180.0 and 180.0");
+      throw new MarketplaceInvalidCoordinatesException(
+          "Longitude must be between -180.0 and 180.0");
     }
   }
 
@@ -226,14 +231,15 @@ public class TrainerStore {
    */
   private static void validatePhoneNumber(String phoneNumber) {
     if (phoneNumber == null || phoneNumber.isBlank()) {
-      throw new IllegalArgumentException("Phone number must not be null or blank");
+      throw new MarketplaceInvalidPhoneNumberException(
+          "Phone number must not be null or blank");
     }
     if (phoneNumber.length() > MAX_PHONE_NUMBER_LENGTH) {
-      throw new IllegalArgumentException(
+      throw new MarketplaceInvalidPhoneNumberException(
           "Phone number must not exceed " + MAX_PHONE_NUMBER_LENGTH + " characters");
     }
     if (!phoneNumber.matches(PHONE_NUMBER_PATTERN)) {
-      throw new IllegalArgumentException(
+      throw new MarketplaceInvalidPhoneNumberException(
           "Phone number must be a valid format (e.g., 010-1234-5678 or +82-10-1234-5678)");
     }
   }
@@ -251,22 +257,25 @@ public class TrainerStore {
       return;
     }
     if (url.length() > maxLength) {
-      throw new IllegalArgumentException(
+      throw new MarketplaceInvalidStoreUrlException(
           fieldName + " must not exceed " + maxLength + " characters");
     }
     try {
       URI uri = new URI(url);
       String scheme = uri.getScheme();
       if (!"https".equals(scheme) && !"http".equals(scheme)) {
-        throw new IllegalArgumentException(fieldName + " must use http or https scheme");
+        throw new MarketplaceInvalidStoreUrlException(
+            fieldName + " must use http or https scheme");
       }
       uri.toURL(); // validates well-formedness
-    } catch (IllegalArgumentException e) {
+    } catch (MarketplaceInvalidStoreUrlException e) {
       throw e; // re-throw our own validation exception
     } catch (URISyntaxException e) {
-      throw new IllegalArgumentException(fieldName + " must be a valid URL: " + e.getMessage(), e);
+      throw new MarketplaceInvalidStoreUrlException(
+          fieldName + " must be a valid URL: " + e.getMessage());
     } catch (Exception e) {
-      throw new IllegalArgumentException(fieldName + " must be a valid URL: " + e.getMessage(), e);
+      throw new MarketplaceInvalidStoreUrlException(
+          fieldName + " must be a valid URL: " + e.getMessage());
     }
   }
 }

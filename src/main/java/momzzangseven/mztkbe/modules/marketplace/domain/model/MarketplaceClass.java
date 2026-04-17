@@ -245,7 +245,10 @@ public class MarketplaceClass {
       throw new MarketplaceInvalidTagException("Tags must not exceed " + MAX_TAGS + " items");
     }
     for (String tag : tags) {
-      if (tag != null && tag.length() > MAX_TAG_LENGTH) {
+      if (tag == null || tag.isBlank()) {
+        throw new MarketplaceInvalidTagException("Each tag must not be null or blank");
+      }
+      if (tag.length() > MAX_TAG_LENGTH) {
         throw new MarketplaceInvalidTagException(
             "Each tag must not exceed " + MAX_TAG_LENGTH + " characters");
       }
@@ -261,7 +264,10 @@ public class MarketplaceClass {
           "Features must not exceed " + MAX_FEATURES + " items");
     }
     for (String feature : features) {
-      if (feature != null && feature.length() > MAX_FEATURE_LENGTH) {
+      if (feature == null || feature.isBlank()) {
+        throw new MarketplaceInvalidFeatureException("Each feature must not be null or blank");
+      }
+      if (feature.length() > MAX_FEATURE_LENGTH) {
         throw new MarketplaceInvalidFeatureException(
             "Each feature must not exceed " + MAX_FEATURE_LENGTH + " characters");
       }
