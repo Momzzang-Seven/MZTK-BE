@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.application.MarketplacePaginationConstants;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetTrainerClassesQuery;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetTrainerClassesResult;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetTrainerClassesResult.TrainerClassItem;
@@ -28,7 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetTrainerClassesService implements GetTrainerClassesUseCase {
 
-  private static final int PAGE_SIZE = 20;
 
   private final LoadClassPort loadClassPort;
   private final LoadClassImagesPort loadClassImagesPort;
@@ -37,7 +37,7 @@ public class GetTrainerClassesService implements GetTrainerClassesUseCase {
   public GetTrainerClassesResult execute(GetTrainerClassesQuery query) {
     log.debug("Fetching trainer classes: trainerId={}, page={}", query.trainerId(), query.page());
 
-    PageRequest pageable = PageRequest.of(query.page(), PAGE_SIZE);
+    PageRequest pageable = PageRequest.of(query.page(), MarketplacePaginationConstants.DEFAULT_PAGE_SIZE);
     Page<MarketplaceClass> page = loadClassPort.findByTrainerId(query.trainerId(), pageable);
 
     List<Long> classIds = page.getContent().stream().map(MarketplaceClass::getId).toList();
@@ -55,7 +55,7 @@ public class GetTrainerClassesService implements GetTrainerClassesUseCase {
                         c.getPriceAmount(),
                         c.getTags(),
                         c.isActive(),
-                        thumbnailKeys.getOrDefault(c.getId(), null)))
+                        thumbnailKeys.get(c.getId())))
             .toList();
 
     return GetTrainerClassesResult.of(

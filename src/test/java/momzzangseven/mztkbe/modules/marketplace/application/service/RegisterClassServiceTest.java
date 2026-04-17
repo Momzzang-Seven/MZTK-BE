@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -19,7 +20,6 @@ import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.ClassTimeCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.RegisterClassCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.RegisterClassResult;
-import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassSlotPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadTrainerStorePort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.ManageClassTagPort;
@@ -47,7 +47,7 @@ class RegisterClassServiceTest {
   @Mock private SaveClassSlotPort saveClassSlotPort;
   @Mock private UpdateClassImagesPort updateClassImagesPort;
   @Mock private ManageClassTagPort manageClassTagPort;
-  @Mock private LoadClassSlotPort loadClassSlotPort;
+  // NOTE: LoadClassSlotPort is NOT used by RegisterClassService — removed to avoid Mockito strict stub warning
 
   @InjectMocks private RegisterClassService registerClassService;
 
@@ -122,7 +122,7 @@ class RegisterClassServiceTest {
       assertThat(result.classId()).isEqualTo(CLASS_ID);
       verify(saveClassPort, times(1)).save(any());
       verify(saveClassSlotPort, times(1)).saveAll(any());
-      verify(manageClassTagPort, times(1)).linkTagsToClass(anyLong(), any());
+      verify(manageClassTagPort, times(1)).linkTagsToClass(eq(CLASS_ID), any());
     }
   }
 
