@@ -176,17 +176,6 @@ public class MarketplaceClassEntity {
   // Serialization helpers
   // ============================================
 
-  /**
-   * Decodes the pipe-delimited {@code features} column back to a list of strings.
-   *
-   * <p>Returns an empty list when {@code features} is null or blank.
-   *
-   * @return decoded feature list (never null)
-   */
-  public List<String> decodeFeatures() {
-    return decode(this.features);
-  }
-
   private static String encode(List<String> list) {
     if (list == null || list.isEmpty()) {
       return null;
