@@ -16,7 +16,7 @@
 
 | TC ID | 시나리오 | 예상 결과 |
 |---|---|---|
-| `TC-QAA-PW-01` | overdue 질문/답변과 `QNA_ADMIN_SETTLE` intent 를 DB에 seed 한 뒤 internal issuer 가 실제 RPC를 통해 intent 를 진행 | `AWAITING_SIGNATURE` 이외 상태(`SIGNED`, `PENDING_ONCHAIN`, `FAILED_ONCHAIN`, `CONFIRMED`)로 전이 |
+| `TC-QAA-PW-01` | overdue 질문/답변과 `QNA_ADMIN_SETTLE` intent 를 DB에 seed 한 뒤 internal issuer 가 실제 RPC를 통해 intent 를 진행 | `AWAITING_SIGNATURE` 이외 상태(`SIGNED`, `PENDING_ONCHAIN`, `FAILED_ONCHAIN`, `CONFIRMED`)로 전이. on-chain 제출 단계까지 진행되면 transaction id / txHash 도 확인 |
 
 ## 전제 조건
 
@@ -56,4 +56,4 @@ npx playwright test qna-auto-accept/qna-auto-accept.spec.ts
 - 이 스크립트는 실제 RPC nonce / fee 를 조회해서 unsigned tx snapshot 을 seed 합니다.
 - 질문/답변의 onchain 존재 여부까지 강제하지는 않습니다.
 - 목적은 internal issuer 가 실제 외부 RPC를 통해 `QNA_ADMIN_SETTLE` intent 를 진행시키는지 확인하는 것입니다.
-- 최종적으로 tx 가 체인에서 revert 되더라도, `AWAITING_SIGNATURE` 에서 빠져나가면 external communication 자체는 성공한 것으로 봅니다.
+- 최종적으로 tx 가 체인에서 revert 되더라도, `AWAITING_SIGNATURE` 에서 빠져나가고 transaction summary 가 생성되면 external communication 자체는 성공한 것으로 봅니다.
