@@ -240,6 +240,7 @@ class PostControllerTest {
             0L,
             false,
             List.of("health"),
+            List.of(),
             LocalDateTime.now(),
             LocalDateTime.now());
     given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class), any(Long.class)))
