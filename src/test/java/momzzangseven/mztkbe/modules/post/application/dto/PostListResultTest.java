@@ -128,15 +128,13 @@ class PostListResultTest {
               "p",
               List.of("https://cdn/a.webp", "https://cdn/b.webp"));
 
-      assertThat(result.imageUrls())
-          .containsExactly("https://cdn/a.webp", "https://cdn/b.webp");
+      assertThat(result.imageUrls()).containsExactly("https://cdn/a.webp", "https://cdn/b.webp");
     }
 
     @Test
     @DisplayName("[M-2] fromDomain coerces null imageUrls to empty list")
     void fromDomain_withNullImageUrls_returnsEmptyList() {
-      PostListResult result =
-          PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", null);
+      PostListResult result = PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", null);
 
       assertThat(result.imageUrls()).isNotNull().isEmpty();
     }

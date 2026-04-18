@@ -298,15 +298,13 @@ class SearchPostsServiceTest {
       Post p1 = post(1L);
       Post p2 = post(2L);
 
-      given(postPersistencePort.findPostsByCondition(condition, null))
-          .willReturn(List.of(p1, p2));
+      given(postPersistencePort.findPostsByCondition(condition, null)).willReturn(List.of(p1, p2));
       given(loadTagPort.findTagsByPostIdsIn(any())).willReturn(Map.of());
       given(loadPostWriterPort.loadWritersByIds(any())).willReturn(Map.of());
       given(postLikePersistencePort.countByTargetIds(any(), any())).willReturn(Map.of());
       given(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).willReturn(Set.of());
       given(loadPostImagesPort.loadImagesByPostIds(any()))
-          .willReturn(
-              Map.of(1L, new PostImageResult(List.of(new PostImageSlot(10L, "u1")))));
+          .willReturn(Map.of(1L, new PostImageResult(List.of(new PostImageSlot(10L, "u1")))));
 
       SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 

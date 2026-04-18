@@ -38,8 +38,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("ImageModuleAdapter unit test")
 class ImageModuleAdapterTest {
 
-  private static final String URL_PREFIX =
-      "https://test-bucket.s3.ap-northeast-2.amazonaws.com/";
+  private static final String URL_PREFIX = "https://test-bucket.s3.ap-northeast-2.amazonaws.com/";
 
   @Mock private UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
   @Mock private GetImagesByReferenceUseCase getImagesByReferenceUseCase;
@@ -209,8 +208,7 @@ class ImageModuleAdapterTest {
                   Map.of(
                       1L,
                       List.of(
-                          new ImageItem(
-                              10L, ImageStatus.COMPLETED, "posts/free/1/main.webp")))));
+                          new ImageItem(10L, ImageStatus.COMPLETED, "posts/free/1/main.webp")))));
 
       Map<Long, PostImageResult> merged =
           imageModuleAdapter.loadImagesByPostIds(Map.of(PostType.FREE, List.of(1L)));
