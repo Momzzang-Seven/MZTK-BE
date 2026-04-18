@@ -86,6 +86,7 @@ src/main/generated/
 ############################
 CLAUDE.md
 ARCHITECTURE.md
+.mcp.json
 
 ############################
 # Seed files with sensitive data
