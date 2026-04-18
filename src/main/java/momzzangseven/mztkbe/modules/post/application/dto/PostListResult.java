@@ -18,11 +18,17 @@ public record PostListResult(
     Long reward,
     boolean isSolved,
     List<String> tags,
+    List<String> imageUrls,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
   public static PostListResult fromDomain(
-      Post post, long likeCount, boolean liked, String nickname, String profileImageUrl) {
+      Post post,
+      long likeCount,
+      boolean liked,
+      String nickname,
+      String profileImageUrl,
+      List<String> imageUrls) {
     return new PostListResult(
         post.getId(),
         post.getType(),
@@ -36,6 +42,7 @@ public record PostListResult(
         post.getReward(),
         post.getIsSolved(),
         post.getTags(),
+        imageUrls == null ? List.of() : imageUrls,
         post.getCreatedAt(),
         post.getUpdatedAt());
   }
