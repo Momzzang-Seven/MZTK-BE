@@ -90,6 +90,22 @@ public interface Web3ExecutionIntentJpaRepository
   List<Web3ExecutionIntentEntity> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
 
   @Query(
+      value =
+          """
+          select e.id
+          from web3_execution_intents e
+          where e.status = 'AWAITING_SIGNATURE'
+            and e.mode = 'EIP1559'
+            and e.action_type in :actionTypes
+          order by e.created_at asc, e.id asc
+          limit 1
+          for update skip locked
+          """,
+      nativeQuery = true)
+  Optional<Long> claimNextInternalExecutableIdForUpdate(
+      @Param("actionTypes") Collection<String> actionTypes);
+
+  @Query(
       "select e.id from Web3ExecutionIntentEntity e"
           + " where e.status = :status and e.expiresAt < :now"
           + " order by e.expiresAt asc")

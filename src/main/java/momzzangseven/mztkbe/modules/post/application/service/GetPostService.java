@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -30,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
 
   private final PostPersistencePort postPersistencePort;
@@ -41,6 +41,7 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
   private final LoadQuestionExecutionResumePort loadQuestionExecutionResumePort;
 
   @Override
+  @Transactional(readOnly = true)
   public Optional<GetPostContextUseCase.PostContext> getPostContext(Long postId) {
     return postPersistencePort
         .loadPost(postId)
@@ -56,8 +57,26 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                     post.getStatus() != PostStatus.OPEN));
   }
 
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Optional<GetPostContextUseCase.PostContext> getPostContextForUpdate(Long postId) {
+    return postPersistencePort
+        .loadPostForUpdate(postId)
+        .map(
+            post ->
+                new GetPostContextUseCase.PostContext(
+                    post.getId(),
+                    post.getUserId(),
+                    post.getIsSolved(),
+                    PostType.QUESTION.equals(post.getType()),
+                    post.getContent(),
+                    post.getReward(),
+                    post.getStatus() != PostStatus.OPEN));
+  }
+
   /** Loads public post detail, enriching optional viewer-specific state when requester is known. */
   @Override
+  @Transactional(readOnly = true)
   public PostDetailResult getPost(Long postId, Long requesterUserId) {
     Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
 

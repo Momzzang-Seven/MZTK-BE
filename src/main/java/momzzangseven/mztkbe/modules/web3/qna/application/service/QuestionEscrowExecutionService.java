@@ -5,6 +5,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
@@ -25,17 +26,8 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-@Service
 @RequiredArgsConstructor
-@Transactional
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
 public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUseCase {
 
   private final PrecheckQuestionFundingPort precheckQuestionFundingPort;
@@ -76,7 +68,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             command.requesterUserId(),
             null,
             command.postId(),
-            null,
             null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
@@ -125,7 +116,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             null,
             command.postId(),
             null,
-            null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
             questionHash,
@@ -148,7 +138,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             command.requesterUserId(),
             null,
             command.postId(),
-            null,
             null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
@@ -180,7 +169,36 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             command.answerWriterUserId(),
             command.postId(),
             command.answerId(),
-            null,
+            rewardContext.tokenAddress(),
+            rewardContext.amountWei(),
+            question.getQuestionHash(),
+            answer.getContentHash()));
+  }
+
+  @Override
+  public QnaExecutionIntentResult prepareAdminSettle(PrepareAdminSettleCommand command) {
+    command.validate();
+
+    QnaQuestionProjection question = requireQuestionProjection(command.postId());
+    QnaAnswerProjection answer = requireAnswerProjection(command.answerId());
+    ensureQuestionMutationConflictFree(command.postId(), QnaExecutionActionType.QNA_ADMIN_SETTLE);
+    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ADMIN_SETTLE);
+    ensureHashesMatch(
+        command.questionContent(),
+        question.getQuestionHash(),
+        command.answerContent(),
+        answer.getContentHash());
+    RewardContext rewardContext = rewardContext(question);
+
+    return submit(
+        new QnaEscrowExecutionRequest(
+            QnaExecutionResourceType.QUESTION,
+            String.valueOf(command.postId()),
+            QnaExecutionActionType.QNA_ADMIN_SETTLE,
+            command.requesterUserId(),
+            command.answerWriterUserId(),
+            command.postId(),
+            command.answerId(),
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
             question.getQuestionHash(),
