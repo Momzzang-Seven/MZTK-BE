@@ -75,7 +75,7 @@ class SearchPostsServiceTest {
 
     assertThat(results.posts()).hasSize(1);
     assertThat(results.posts().getFirst().tags()).isEmpty();
-    assertThat(results.posts().getFirst().imageUrls()).isEmpty();
+    assertThat(results.posts().getFirst().images()).isEmpty();
     assertThat(results.hasNext()).isFalse();
     verify(loadTagPort, never()).findPostIdsByTagName("   ");
   }
@@ -110,8 +110,10 @@ class SearchPostsServiceTest {
     assertThat(results.posts().get(1).tags()).containsExactly("spring", "kotlin");
     assertThat(results.posts().get(0).likeCount()).isEqualTo(2L);
     assertThat(results.posts().get(1).liked()).isTrue();
-    assertThat(results.posts().get(0).imageUrls()).containsExactly("https://cdn/a.webp");
-    assertThat(results.posts().get(1).imageUrls()).containsExactly("https://cdn/b.webp");
+    assertThat(results.posts().get(0).images())
+        .containsExactly(new PostImageSlot(10L, "https://cdn/a.webp"));
+    assertThat(results.posts().get(1).images())
+        .containsExactly(new PostImageSlot(20L, "https://cdn/b.webp"));
     assertThat(results.hasNext()).isFalse();
   }
 
@@ -265,7 +267,7 @@ class SearchPostsServiceTest {
     }
 
     @Test
-    @DisplayName("[M-5] searchPosts maps slots into imageUrls in slot order")
+    @DisplayName("[M-5] searchPosts maps slots into images in slot order")
     void searchPosts_mapsSlotsInSlotOrder() {
       PostSearchCondition condition = PostSearchCondition.of(PostType.FREE, null, null, 0, 10);
       Post p1 = post(1L);
@@ -288,11 +290,15 @@ class SearchPostsServiceTest {
       SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
       assertThat(results.posts()).hasSize(1);
-      assertThat(results.posts().getFirst().imageUrls()).containsExactly("u1", "u2", "u3");
+      assertThat(results.posts().getFirst().images())
+          .containsExactly(
+              new PostImageSlot(10L, "u1"),
+              new PostImageSlot(20L, "u2"),
+              new PostImageSlot(30L, "u3"));
     }
 
     @Test
-    @DisplayName("[M-6] searchPosts sets empty imageUrls when post has no map entry")
+    @DisplayName("[M-6] searchPosts sets empty images when post has no map entry")
     void searchPosts_emptyWhenNoMapEntry() {
       PostSearchCondition condition = PostSearchCondition.of(PostType.FREE, null, null, 0, 10);
       Post p1 = post(1L);
@@ -309,8 +315,8 @@ class SearchPostsServiceTest {
       SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
       assertThat(results.posts()).hasSize(2);
-      assertThat(results.posts().get(0).imageUrls()).containsExactly("u1");
-      assertThat(results.posts().get(1).imageUrls()).isEmpty();
+      assertThat(results.posts().get(0).images()).containsExactly(new PostImageSlot(10L, "u1"));
+      assertThat(results.posts().get(1).images()).isEmpty();
     }
 
     @Test
@@ -347,7 +353,8 @@ class SearchPostsServiceTest {
 
       SearchPostsResult results = searchPostsService.searchPosts(condition, 99L);
 
-      assertThat(results.posts().getFirst().imageUrls()).containsExactly("u1", null);
+      assertThat(results.posts().getFirst().images())
+          .containsExactly(new PostImageSlot(10L, "u1"), new PostImageSlot(20L, null));
     }
   }
 }

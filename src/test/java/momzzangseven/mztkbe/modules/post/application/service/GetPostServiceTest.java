@@ -129,14 +129,14 @@ class GetPostServiceTest {
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.tags()).containsExactly("java", "spring");
     assertThat(result.isSolved()).isFalse();
-    assertThat(result.imageUrls()).isEmpty();
+    assertThat(result.images()).isEmpty();
     assertThat(result.likeCount()).isEqualTo(3L);
     assertThat(result.liked()).isTrue();
   }
 
   @Test
-  @DisplayName("returns imageUrls from image module")
-  void getPostReturnsImageUrls() {
+  @DisplayName("returns images from image module")
+  void getPostReturnsImages() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     Post post =
         Post.builder()
@@ -164,7 +164,9 @@ class GetPostServiceTest {
 
     PostDetailResult result = getPostService.getPost(20L, 99L);
 
-    assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/images/img1.webp");
+    assertThat(result.images())
+        .containsExactly(
+            new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/images/img1.webp"));
   }
 
   @Test
