@@ -16,7 +16,7 @@ public record PostDetailResult(
     Long userId,
     String nickname,
     String profileImageUrl,
-    List<String> imageUrls,
+    List<PostImageResult.PostImageSlot> images,
     Long reward,
     boolean isSolved,
     QuestionExecutionResumeView web3Execution,
@@ -30,7 +30,7 @@ public record PostDetailResult(
       boolean liked,
       String nickname,
       String profileImageUrl,
-      List<String> imageUrls,
+      List<PostImageResult.PostImageSlot> images,
       QuestionExecutionResumeView web3Execution) {
     return new PostDetailResult(
         post.getId(),
@@ -42,7 +42,7 @@ public record PostDetailResult(
         post.getUserId(),
         nickname,
         profileImageUrl,
-        imageUrls,
+        images == null ? List.of() : images,
         post.getReward(),
         post.getIsSolved(),
         web3Execution,
