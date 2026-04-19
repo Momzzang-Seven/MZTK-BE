@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.answer.api.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
+import momzzangseven.mztkbe.global.response.ImageItemResponse;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 
 public record AnswerResponse(
@@ -14,22 +14,16 @@ public record AnswerResponse(
     boolean isAccepted,
     long likeCount,
     boolean isLiked,
-    List<ImageItem> images,
+    List<ImageItemResponse> images,
     AnswerWeb3ExecutionResponse web3Execution,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
-  public record ImageItem(Long imageId, String imageUrl) {
-    public static ImageItem from(AnswerImageResult.AnswerImageSlot slot) {
-      return new ImageItem(slot.imageId(), slot.imageUrl());
-    }
-  }
-
   public static AnswerResponse from(AnswerResult answer) {
-    List<ImageItem> images =
-        answer.images() == null
-            ? List.of()
-            : answer.images().stream().map(ImageItem::from).toList();
+    List<ImageItemResponse> images =
+        answer.images().stream()
+            .map(slot -> new ImageItemResponse(slot.imageId(), slot.imageUrl()))
+            .toList();
 
     return new AnswerResponse(
         answer.answerId(),
