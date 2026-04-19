@@ -22,6 +22,10 @@ public record PostListResult(
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
+  public PostListResult {
+    images = images == null ? List.of() : images;
+  }
+
   public static PostListResult fromDomain(
       Post post,
       long likeCount,
@@ -42,7 +46,7 @@ public record PostListResult(
         post.getReward(),
         post.getIsSolved(),
         post.getTags(),
-        images == null ? List.of() : images,
+        images,
         post.getCreatedAt(),
         post.getUpdatedAt());
   }
