@@ -125,8 +125,8 @@ class GetPostsWithImagesE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-1] FREE 게시글 목록 조회 시 imageUrls 필드가 정상적으로 채워진다")
-  void getPosts_free_populatesImageUrls() throws Exception {
+  @DisplayName("[E-1] FREE 게시글 목록 조회 시 images 필드가 정상적으로 채워진다")
+  void getPosts_free_populatesImages() throws Exception {
     setUpUser();
 
     Long postWithTwo = createFreePost("두 장짜리");
@@ -143,21 +143,24 @@ class GetPostsWithImagesE2ETest extends E2ETestBase {
     JsonNode one = findPost(root, postWithOne);
     JsonNode none = findPost(root, postWithNone);
 
-    assertThat(two.get("imageUrls").isArray()).isTrue();
-    assertThat(two.get("imageUrls").size()).isEqualTo(2);
-    assertThat(two.get("imageUrls").get(0).asText()).startsWith(urlPrefix);
-    assertThat(two.get("imageUrls").get(1).asText()).startsWith(urlPrefix);
+    assertThat(two.get("images").isArray()).isTrue();
+    assertThat(two.get("images").size()).isEqualTo(2);
+    assertThat(two.get("images").get(0).get("imageId").asLong()).isPositive();
+    assertThat(two.get("images").get(0).get("imageUrl").asText()).startsWith(urlPrefix);
+    assertThat(two.get("images").get(1).get("imageId").asLong()).isPositive();
+    assertThat(two.get("images").get(1).get("imageUrl").asText()).startsWith(urlPrefix);
 
-    assertThat(one.get("imageUrls").size()).isEqualTo(1);
-    assertThat(one.get("imageUrls").get(0).asText())
+    assertThat(one.get("images").size()).isEqualTo(1);
+    assertThat(one.get("images").get(0).get("imageId").asLong()).isPositive();
+    assertThat(one.get("images").get(0).get("imageUrl").asText())
         .isEqualTo(urlPrefix + "e2e/free/" + postWithOne + "/only.webp");
 
-    assertThat(none.get("imageUrls").isArray()).isTrue();
-    assertThat(none.get("imageUrls").size()).isZero();
+    assertThat(none.get("images").isArray()).isTrue();
+    assertThat(none.get("images").size()).isZero();
   }
 
   @Test
-  @DisplayName("[E-2] 연결된 이미지가 없으면 imageUrls는 빈 배열로 내려온다")
+  @DisplayName("[E-2] 연결된 이미지가 없으면 images는 빈 배열로 내려온다")
   void getPosts_question_noImages_returnsEmptyArray() throws Exception {
     setUpUser();
 
@@ -166,10 +169,10 @@ class GetPostsWithImagesE2ETest extends E2ETestBase {
     JsonNode root = fetchPosts("?type=QUESTION&page=0&size=10");
     JsonNode post = findPost(root, postId);
 
-    assertThat(post.has("imageUrls")).isTrue();
-    assertThat(post.get("imageUrls").isNull()).isFalse();
-    assertThat(post.get("imageUrls").isArray()).isTrue();
-    assertThat(post.get("imageUrls").size()).isZero();
+    assertThat(post.has("images")).isTrue();
+    assertThat(post.get("images").isNull()).isFalse();
+    assertThat(post.get("images").isArray()).isTrue();
+    assertThat(post.get("images").size()).isZero();
   }
 
   @Test
@@ -190,13 +193,13 @@ class GetPostsWithImagesE2ETest extends E2ETestBase {
     JsonNode freeRoot = fetchPosts("?type=FREE&page=0&size=20");
     JsonNode qRoot = fetchPosts("?type=QUESTION&page=0&size=20");
 
-    assertThat(findPost(freeRoot, free1).get("imageUrls").get(0).asText())
+    assertThat(findPost(freeRoot, free1).get("images").get(0).get("imageUrl").asText())
         .isEqualTo(urlPrefix + "e2e/free/" + free1 + ".webp");
-    assertThat(findPost(freeRoot, free2).get("imageUrls").get(0).asText())
+    assertThat(findPost(freeRoot, free2).get("images").get(0).get("imageUrl").asText())
         .isEqualTo(urlPrefix + "e2e/free/" + free2 + ".webp");
-    assertThat(findPost(qRoot, q1).get("imageUrls").get(0).asText())
+    assertThat(findPost(qRoot, q1).get("images").get(0).get("imageUrl").asText())
         .isEqualTo(urlPrefix + "e2e/q/" + q1 + ".webp");
-    assertThat(findPost(qRoot, q2).get("imageUrls").get(0).asText())
+    assertThat(findPost(qRoot, q2).get("images").get(0).get("imageUrl").asText())
         .isEqualTo(urlPrefix + "e2e/q/" + q2 + ".webp");
   }
 
@@ -213,15 +216,15 @@ class GetPostsWithImagesE2ETest extends E2ETestBase {
     JsonNode root = fetchPosts("?type=FREE&page=0&size=10");
     JsonNode post = findPost(root, postId);
 
-    assertThat(post.get("imageUrls").size()).isEqualTo(3);
-    assertThat(post.get("imageUrls").get(0).asText()).endsWith("A.webp");
-    assertThat(post.get("imageUrls").get(1).asText()).endsWith("B.webp");
-    assertThat(post.get("imageUrls").get(2).asText()).endsWith("C.webp");
+    assertThat(post.get("images").size()).isEqualTo(3);
+    assertThat(post.get("images").get(0).get("imageUrl").asText()).endsWith("A.webp");
+    assertThat(post.get("images").get(1).get("imageUrl").asText()).endsWith("B.webp");
+    assertThat(post.get("images").get(2).get("imageUrl").asText()).endsWith("C.webp");
   }
 
   @Test
-  @DisplayName("[E-5] 대량 게시글 배치 조회 시 모든 imageUrls가 시드와 일치한다")
-  void getPosts_largeBatch_allImageUrlsMatchSeed() throws Exception {
+  @DisplayName("[E-5] 대량 게시글 배치 조회 시 모든 images 슬롯 수가 시드와 일치한다")
+  void getPosts_largeBatch_allImagesMatchSeed() throws Exception {
     setUpUser();
 
     int postCount = 50;
@@ -247,7 +250,7 @@ class GetPostsWithImagesE2ETest extends E2ETestBase {
 
     for (int i = 0; i < postCount; i++) {
       JsonNode post = findPost(root, postIds[i]);
-      assertThat(post.get("imageUrls").size())
+      assertThat(post.get("images").size())
           .as("post %d should have %d images", postIds[i], expectedCounts[i])
           .isEqualTo(expectedCounts[i]);
     }
@@ -264,10 +267,10 @@ class GetPostsWithImagesE2ETest extends E2ETestBase {
 
     JsonNode root = fetchPosts("?type=FREE&page=0&size=10");
     JsonNode post = findPost(root, postId);
-    JsonNode urls = post.get("imageUrls");
+    JsonNode images = post.get("images");
 
-    assertThat(urls.size()).isEqualTo(2);
-    assertThat(urls.get(0).asText()).endsWith("ok.webp");
-    assertThat(urls.get(1).isNull()).isTrue();
+    assertThat(images.size()).isEqualTo(2);
+    assertThat(images.get(0).get("imageUrl").asText()).endsWith("ok.webp");
+    assertThat(images.get(1).get("imageUrl").isNull()).isTrue();
   }
 }

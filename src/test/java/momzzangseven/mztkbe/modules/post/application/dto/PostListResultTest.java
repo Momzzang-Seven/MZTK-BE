@@ -39,7 +39,12 @@ class PostListResultTest {
 
     PostListResult result =
         PostListResult.fromDomain(
-            post, 2L, true, nickname, profileImageUrl, List.of("https://cdn/img1.webp"));
+            post,
+            2L,
+            true,
+            nickname,
+            profileImageUrl,
+            List.of(new PostImageResult.PostImageSlot(1L, "https://cdn/img1.webp")));
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
@@ -55,7 +60,8 @@ class PostListResultTest {
     assertThat(result.updatedAt()).isEqualTo(updatedAt);
     assertThat(result.nickname()).isEqualTo(nickname);
     assertThat(result.profileImageUrl()).isEqualTo(profileImageUrl);
-    assertThat(result.imageUrls()).containsExactly("https://cdn/img1.webp");
+    assertThat(result.images())
+        .containsExactly(new PostImageResult.PostImageSlot(1L, "https://cdn/img1.webp"));
   }
 
   @Test
@@ -101,8 +107,8 @@ class PostListResultTest {
   }
 
   @Nested
-  @DisplayName("imageUrls null/empty handling")
-  class ImageUrlsCoercion {
+  @DisplayName("images null/empty handling")
+  class ImagesCoercion {
 
     private Post basePost(Long id) {
       return Post.builder()
@@ -117,8 +123,8 @@ class PostListResultTest {
     }
 
     @Test
-    @DisplayName("[M-1] fromDomain populates imageUrls when provided, in order")
-    void fromDomain_withImageUrls_populatesInOrder() {
+    @DisplayName("[M-1] fromDomain populates images when provided, in order")
+    void fromDomain_withImages_populatesInOrder() {
       PostListResult result =
           PostListResult.fromDomain(
               basePost(1L),
@@ -126,26 +132,31 @@ class PostListResultTest {
               true,
               "n",
               "p",
-              List.of("https://cdn/a.webp", "https://cdn/b.webp"));
+              List.of(
+                  new PostImageResult.PostImageSlot(1L, "https://cdn/a.webp"),
+                  new PostImageResult.PostImageSlot(2L, "https://cdn/b.webp")));
 
-      assertThat(result.imageUrls()).containsExactly("https://cdn/a.webp", "https://cdn/b.webp");
+      assertThat(result.images())
+          .containsExactly(
+              new PostImageResult.PostImageSlot(1L, "https://cdn/a.webp"),
+              new PostImageResult.PostImageSlot(2L, "https://cdn/b.webp"));
     }
 
     @Test
-    @DisplayName("[M-2] fromDomain coerces null imageUrls to empty list")
-    void fromDomain_withNullImageUrls_returnsEmptyList() {
+    @DisplayName("[M-2] fromDomain coerces null images to empty list")
+    void fromDomain_withNullImages_returnsEmptyList() {
       PostListResult result = PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", null);
 
-      assertThat(result.imageUrls()).isNotNull().isEmpty();
+      assertThat(result.images()).isNotNull().isEmpty();
     }
 
     @Test
-    @DisplayName("[M-3] fromDomain preserves empty imageUrls list")
-    void fromDomain_withEmptyImageUrls_preservesEmpty() {
+    @DisplayName("[M-3] fromDomain preserves empty images list")
+    void fromDomain_withEmptyImages_preservesEmpty() {
       PostListResult result =
           PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", List.of());
 
-      assertThat(result.imageUrls()).isNotNull().isEmpty();
+      assertThat(result.images()).isNotNull().isEmpty();
     }
   }
 }

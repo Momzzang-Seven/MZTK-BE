@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionResumeView;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +29,7 @@ class PostDetailResponseTest {
                 7L,
                 "writer",
                 null,
-                List.of("img"),
+                List.of(new PostImageResult.PostImageSlot(1L, "img")),
                 50L,
                 true,
                 new QuestionExecutionResumeView(
