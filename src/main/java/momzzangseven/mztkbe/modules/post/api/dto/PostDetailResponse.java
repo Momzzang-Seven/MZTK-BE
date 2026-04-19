@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.api.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public record PostDetailResponse(
@@ -17,13 +18,19 @@ public record PostDetailResponse(
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     WriterInfo writer,
-    List<String> imageUrls,
+    List<ImageItem> images,
     QuestionInfo question) {
 
   public record WriterInfo(Long userId, String nickname, String profileImage) {}
 
   public record QuestionInfo(
       Long reward, boolean isSolved, QuestionWeb3ExecutionResponse web3Execution) {}
+
+  public record ImageItem(Long imageId, String imageUrl) {
+    public static ImageItem from(PostImageResult.PostImageSlot slot) {
+      return new ImageItem(slot.imageId(), slot.imageUrl());
+    }
+  }
 
   public static PostDetailResponse from(PostDetailResult result) {
     QuestionInfo questionInfo = null;
@@ -35,6 +42,11 @@ public record PostDetailResponse(
               result.isSolved(),
               QuestionWeb3ExecutionResponse.from(result.web3Execution()));
     }
+
+    List<ImageItem> images =
+        result.images() == null
+            ? List.of()
+            : result.images().stream().map(ImageItem::from).toList();
 
     return new PostDetailResponse(
         result.postId(),
@@ -48,7 +60,7 @@ public record PostDetailResponse(
         result.createdAt(),
         result.updatedAt(),
         new WriterInfo(result.userId(), result.nickname(), result.profileImageUrl()),
-        result.imageUrls(),
+        images,
         questionInfo);
   }
 }

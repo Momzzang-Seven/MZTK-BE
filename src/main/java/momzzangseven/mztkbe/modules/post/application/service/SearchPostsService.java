@@ -89,12 +89,10 @@ public class SearchPostsService implements SearchPostsUseCase {
                   long likeCount = likeCounts.getOrDefault(post.getId(), 0L);
                   boolean liked = likedPostIds.contains(post.getId());
                   PostImageResult images = imagesByPostId.get(post.getId());
-                  List<String> imageUrls =
-                      images == null
-                          ? List.of()
-                          : images.slots().stream().map(slot -> slot.imageUrl()).toList();
+                  List<PostImageResult.PostImageSlot> imageSlots =
+                      images == null ? List.of() : images.slots();
                   return PostListResult.fromDomain(
-                      post.withTags(tags), likeCount, liked, nickname, profileImageUrl, imageUrls);
+                      post.withTags(tags), likeCount, liked, nickname, profileImageUrl, imageSlots);
                 })
             .toList();
     return new SearchPostsResult(results, hasNext);

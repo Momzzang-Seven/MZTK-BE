@@ -18,7 +18,7 @@ public record PostListResult(
     Long reward,
     boolean isSolved,
     List<String> tags,
-    List<String> imageUrls,
+    List<PostImageResult.PostImageSlot> images,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
@@ -28,7 +28,7 @@ public record PostListResult(
       boolean liked,
       String nickname,
       String profileImageUrl,
-      List<String> imageUrls) {
+      List<PostImageResult.PostImageSlot> images) {
     return new PostListResult(
         post.getId(),
         post.getType(),
@@ -42,7 +42,7 @@ public record PostListResult(
         post.getReward(),
         post.getIsSolved(),
         post.getTags(),
-        imageUrls == null ? List.of() : imageUrls,
+        images == null ? List.of() : images,
         post.getCreatedAt(),
         post.getUpdatedAt());
   }
