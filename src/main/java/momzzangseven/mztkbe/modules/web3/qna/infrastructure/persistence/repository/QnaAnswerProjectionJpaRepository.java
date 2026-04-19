@@ -39,7 +39,7 @@ public interface QnaAnswerProjectionJpaRepository
               a.answer_id as answerId,
               q.asker_user_id as askerUserId,
               a.responder_user_id as responderUserId,
-              a.created_at as answerCreatedAt
+              ans.created_at as answerCreatedAt
           from web3_qna_answers a
           join web3_qna_questions q on q.post_id = a.post_id
           join posts p on p.id = a.post_id
@@ -52,7 +52,7 @@ public interface QnaAnswerProjectionJpaRepository
             and ans.content is not null
             and btrim(ans.content) <> ''
             and a.accepted = false
-            and a.created_at <= :cutoff
+            and ans.created_at <= :cutoff
             and not exists (
                 select 1
                 from web3_execution_intents e_question
@@ -67,20 +67,22 @@ public interface QnaAnswerProjectionJpaRepository
                   and e_answer.resource_id = cast(a.answer_id as varchar)
                   and e_answer.status in ('AWAITING_SIGNATURE', 'SIGNED', 'PENDING_ONCHAIN')
             )
-            and a.created_at = (
-                select min(a2.created_at)
+            and ans.created_at = (
+                select min(ans2.created_at)
                 from web3_qna_answers a2
+                join answers ans2 on ans2.id = a2.answer_id and ans2.post_id = a2.post_id
                 where a2.post_id = a.post_id
                   and a2.accepted = false
             )
             and a.answer_id = (
                 select min(a3.answer_id)
                 from web3_qna_answers a3
+                join answers ans3 on ans3.id = a3.answer_id and ans3.post_id = a3.post_id
                 where a3.post_id = a.post_id
                   and a3.accepted = false
-                  and a3.created_at = a.created_at
+                  and ans3.created_at = ans.created_at
             )
-          order by a.created_at asc, a.post_id asc
+          order by ans.created_at asc, a.post_id asc
           limit 1
           for update skip locked
           """,

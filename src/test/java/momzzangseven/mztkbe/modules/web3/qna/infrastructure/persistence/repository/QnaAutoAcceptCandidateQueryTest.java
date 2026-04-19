@@ -44,6 +44,44 @@ class QnaAutoAcceptCandidateQueryTest {
   }
 
   @Test
+  @DisplayName("claimNextAutoAcceptCandidate orders candidates by local answer creation time")
+  void claimNextAutoAcceptCandidate_ordersByLocalAnswerCreatedAt() {
+    saveQuestion(101L, QnaQuestionState.ANSWERED.code());
+    saveLocalQuestion(101L, 7L, "OPEN");
+    saveAnswer(201L, 101L, false, at(10, 5));
+    saveLocalAnswer(201L, 101L, 22L, false, at(9, 0));
+    saveAnswer(202L, 101L, false, at(10, 0));
+    saveLocalAnswer(202L, 101L, 23L, false, at(9, 5));
+
+    var result =
+        qnaAnswerProjectionJpaRepository.claimNextAutoAcceptCandidate(
+            at(10, 30), QnaQuestionState.ANSWERED.code());
+
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().getPostId()).isEqualTo(101L);
+    assertThat(result.orElseThrow().getAnswerId()).isEqualTo(201L);
+    assertThat(result.orElseThrow().getAnswerCreatedAt()).isEqualTo(at(9, 0));
+  }
+
+  @Test
+  @DisplayName("claimNextAutoAcceptCandidate uses local answer creation time for overdue cutoff")
+  void claimNextAutoAcceptCandidate_usesLocalAnswerCreatedAtForCutoff() {
+    saveQuestion(101L, QnaQuestionState.ANSWERED.code());
+    saveLocalQuestion(101L, 7L, "OPEN");
+    saveAnswer(201L, 101L, false, at(10, 0));
+    saveLocalAnswer(201L, 101L, 22L, false, at(9, 0));
+
+    var result =
+        qnaAnswerProjectionJpaRepository.claimNextAutoAcceptCandidate(
+            at(9, 30), QnaQuestionState.ANSWERED.code());
+
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().getPostId()).isEqualTo(101L);
+    assertThat(result.orElseThrow().getAnswerId()).isEqualTo(201L);
+    assertThat(result.orElseThrow().getAnswerCreatedAt()).isEqualTo(at(9, 0));
+  }
+
+  @Test
   @DisplayName("claimNextAutoAcceptCandidate ignores non-answered questions and accepted answers")
   void claimNextAutoAcceptCandidate_ignoresIneligibleRows() {
     saveQuestion(101L, QnaQuestionState.CREATED.code());
