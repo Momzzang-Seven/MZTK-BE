@@ -24,6 +24,10 @@ public record PostDetailResult(
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
+  public PostDetailResult {
+    images = images == null ? List.of() : images;
+  }
+
   public static PostDetailResult fromDomain(
       Post post,
       long likeCount,
@@ -42,7 +46,7 @@ public record PostDetailResult(
         post.getUserId(),
         nickname,
         profileImageUrl,
-        images == null ? List.of() : images,
+        images,
         post.getReward(),
         post.getIsSolved(),
         web3Execution,

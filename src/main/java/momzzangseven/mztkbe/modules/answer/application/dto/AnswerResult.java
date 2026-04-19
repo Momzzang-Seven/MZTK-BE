@@ -19,6 +19,10 @@ public record AnswerResult(
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
+  public AnswerResult {
+    images = images == null ? List.of() : images;
+  }
+
   public static AnswerResult from(
       Answer answer,
       String nickname,
@@ -36,7 +40,7 @@ public record AnswerResult(
         answer.getIsAccepted(),
         likeCount,
         liked,
-        images == null ? List.of() : images,
+        images,
         web3Execution,
         answer.getCreatedAt(),
         answer.getUpdatedAt());

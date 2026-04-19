@@ -237,6 +237,34 @@ class GetPostServiceTest {
   }
 
   @Test
+  @DisplayName("[M-35] handles null imageResult gracefully as empty images list")
+  void getPost_nullImageResult_returnsEmptyImages() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(22L)
+            .userId(8L)
+            .type(PostType.FREE)
+            .title("hello")
+            .content("world")
+            .reward(0L)
+            .status(PostStatus.OPEN)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(22L)).thenReturn(Optional.of(post));
+    when(loadTagPort.findTagNamesByPostId(22L)).thenReturn(List.of());
+    when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
+    when(loadPostImagesPort.loadImages(PostType.FREE, 22L)).thenReturn(null);
+    when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(0L);
+
+    PostDetailResult result = getPostService.getPost(22L, 99L);
+
+    assertThat(result.images()).isNotNull().isEmpty();
+  }
+
+  @Test
   @DisplayName("throws when post does not exist")
   void getPostThrowsWhenNotFound() {
     when(postPersistencePort.loadPost(999L)).thenReturn(Optional.empty());
