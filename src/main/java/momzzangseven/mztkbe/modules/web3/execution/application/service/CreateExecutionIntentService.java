@@ -31,17 +31,8 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceSt
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-@Service
 @RequiredArgsConstructor
-@Transactional
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
 /**
  * Creates a new {@link ExecutionIntent} from a domain-provided draft.
  *

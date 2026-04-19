@@ -6,6 +6,8 @@ public interface GetPostContextUseCase {
 
   Optional<PostContext> getPostContext(Long postId);
 
+  Optional<PostContext> getPostContextForUpdate(Long postId);
+
   record PostContext(
       Long postId,
       Long writerId,

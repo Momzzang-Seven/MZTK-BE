@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
@@ -316,6 +317,50 @@ class QuestionEscrowExecutionServiceTest {
                     new PrepareAnswerAcceptCommand(101L, 201L, 7L, 22L, "로컬 질문 본문", "온체인 답변", 50L)))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("question content differs");
+  }
+
+  @Test
+  @DisplayName("prepareAdminSettle submits admin-settle intent with stored projection hashes")
+  void prepareAdminSettle_usesStoredProjectionHashes() {
+    String storedQuestionHash = QnaContentHashFactory.hash("온체인 질문");
+    String storedAnswerHash = QnaContentHashFactory.hash("온체인 답변");
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(
+            Optional.of(
+                QnaQuestionProjection.create(
+                    101L,
+                    7L,
+                    QnaEscrowIdCodec.questionId(101L),
+                    "0x1111111111111111111111111111111111111111",
+                    new BigInteger("50000000000000000000"),
+                    storedQuestionHash)));
+    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
+        .willReturn(
+            Optional.of(
+                QnaAnswerProjection.create(
+                    201L,
+                    101L,
+                    QnaEscrowIdCodec.questionId(101L),
+                    QnaEscrowIdCodec.answerId(201L),
+                    22L,
+                    storedAnswerHash)));
+    given(buildQnaExecutionDraftPort.build(any()))
+        .willReturn(draft(QnaExecutionActionType.QNA_ADMIN_SETTLE));
+    given(submitQnaExecutionDraftPort.submit(any()))
+        .willReturn(questionIntent("101", "intent-admin-settle", "QNA_ADMIN_SETTLE"));
+
+    service.prepareAdminSettle(
+        new PrepareAdminSettleCommand(101L, 201L, 7L, 22L, "온체인 질문", "온체인 답변"));
+
+    ArgumentCaptor<QnaEscrowExecutionRequest> requestCaptor =
+        ArgumentCaptor.forClass(QnaEscrowExecutionRequest.class);
+    verify(buildQnaExecutionDraftPort).build(requestCaptor.capture());
+    QnaEscrowExecutionRequest request = requestCaptor.getValue();
+    assertThat(request.actionType()).isEqualTo(QnaExecutionActionType.QNA_ADMIN_SETTLE);
+    assertThat(request.requesterUserId()).isEqualTo(7L);
+    assertThat(request.counterpartyUserId()).isEqualTo(22L);
+    assertThat(request.questionHash()).isEqualTo(storedQuestionHash);
+    assertThat(request.contentHash()).isEqualTo(storedAnswerHash);
   }
 
   private QnaExecutionDraft draft(QnaExecutionActionType actionType) {

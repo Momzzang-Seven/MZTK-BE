@@ -94,6 +94,55 @@ public class QnaContractCallSupport {
     return Boolean.TRUE.equals(decodeBool(response.getValue()));
   }
 
+  public void requireAdminCallable(String escrowAddress, String callerAddress) {
+    String normalizedCaller = callerAddress == null ? null : callerAddress.trim();
+    if (normalizedCaller == null || normalizedCaller.isBlank()) {
+      throw new Web3InvalidInputException("callerAddress is required");
+    }
+
+    String ownerData =
+        FunctionEncoder.encode(
+            new Function("owner", List.of(), List.of(TypeReference.create(Address.class))));
+    Transaction ownerRequest =
+        Transaction.createEthCallTransaction(normalizedCaller, escrowAddress, ownerData);
+    EthCall ownerResponse =
+        requireSuccess(
+            callWithFallback(
+                web3j -> web3j.ethCall(ownerRequest, DefaultBlockParameterName.PENDING).send()),
+            "owner");
+    if (ownerResponse.isReverted()) {
+      throw new Web3InvalidInputException(
+          "owner eth_call reverted: " + ownerResponse.getRevertReason());
+    }
+
+    String ownerAddress = decodeAddress(ownerResponse.getValue());
+    if (ownerAddress != null && normalizedCaller.equalsIgnoreCase(ownerAddress)) {
+      return;
+    }
+
+    String isRelayerData =
+        FunctionEncoder.encode(
+            new Function(
+                "isRelayer",
+                List.of(new Address(normalizedCaller)),
+                List.of(TypeReference.create(Bool.class))));
+    Transaction isRelayerRequest =
+        Transaction.createEthCallTransaction(normalizedCaller, escrowAddress, isRelayerData);
+    EthCall isRelayerResponse =
+        requireSuccess(
+            callWithFallback(
+                web3j -> web3j.ethCall(isRelayerRequest, DefaultBlockParameterName.PENDING).send()),
+            "isRelayer");
+    if (isRelayerResponse.isReverted()) {
+      throw new Web3InvalidInputException(
+          "isRelayer eth_call reverted: " + isRelayerResponse.getRevertReason());
+    }
+    if (!Boolean.TRUE.equals(decodeBool(isRelayerResponse.getValue()))) {
+      throw new Web3InvalidInputException(
+          "adminSettle caller is not relayer or owner: " + normalizedCaller);
+    }
+  }
+
   public QnaCallPrevalidationResult prevalidateContractCall(
       String fromAddress, String contractAddress, String callData) {
     Transaction callStaticRequest =
@@ -127,24 +176,27 @@ public class QnaContractCallSupport {
   }
 
   private DefaultGasFeeCalculator.FeePlan loadFeePlan(BigInteger estimatedGas) {
-    BigInteger maxPriorityFeePerGas =
-        positiveOrNull(
-            requireSuccess(
-                    callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send()),
-                    "eth_maxPriorityFeePerGas")
-                .getMaxPriorityFeePerGas());
+    BigInteger maxPriorityFeePerGas = null;
+    RpcAttempt<org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> priorityAttempt =
+        callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send());
+    if (priorityAttempt.success()) {
+      maxPriorityFeePerGas = positiveOrNull(priorityAttempt.response().getMaxPriorityFeePerGas());
+    }
 
-    BigInteger baseFee =
-        positiveOrNull(
-            requireSuccess(callWithFallback(web3j -> web3j.ethBaseFee().send()), "eth_baseFee")
-                .getBaseFee());
+    BigInteger baseFee = null;
+    RpcAttempt<org.web3j.protocol.core.methods.response.EthBaseFee> baseFeeAttempt =
+        callWithFallback(web3j -> web3j.ethBaseFee().send());
+    if (baseFeeAttempt.success()) {
+      baseFee = positiveOrNull(baseFeeAttempt.response().getBaseFee());
+    }
 
     BigInteger gasPrice = null;
     if (baseFee == null) {
-      gasPrice =
-          positiveOrNull(
-              requireSuccess(callWithFallback(web3j -> web3j.ethGasPrice().send()), "eth_gasPrice")
-                  .getGasPrice());
+      RpcAttempt<org.web3j.protocol.core.methods.response.EthGasPrice> gasPriceAttempt =
+          callWithFallback(web3j -> web3j.ethGasPrice().send());
+      if (gasPriceAttempt.success()) {
+        gasPrice = positiveOrNull(gasPriceAttempt.response().getGasPrice());
+      }
     }
 
     return defaultGasFeeCalculator.calculate(
@@ -201,6 +253,18 @@ public class QnaContractCallSupport {
     }
     Object value = decoded.getFirst().getValue();
     return value instanceof Boolean boolValue ? boolValue : null;
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private String decodeAddress(String encoded) {
+    List<Type> decoded =
+        FunctionReturnDecoder.decode(
+            encoded, List.of((TypeReference) TypeReference.create(Address.class)));
+    if (decoded.isEmpty()) {
+      return null;
+    }
+    Object value = decoded.getFirst().getValue();
+    return value instanceof String addressValue ? addressValue : null;
   }
 
   private BigInteger positiveOrNull(BigInteger value) {

@@ -10,6 +10,16 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      # E2E suites create multiple distinct Spring contexts because feature flags and mock beans vary
+      # per class. Leaving Hikari unbounded increases the risk of exhausting PostgreSQL connections
+      # during later context bootstraps, but some request paths also open nested REQUIRES_NEW
+      # transactions for XP grants. Keep a small bounded pool with enough headroom for those nested
+      # transactions.
+      maximum-pool-size: 4
+      minimum-idle: 0
+      idle-timeout: 10000
+      connection-timeout: 5000
 
   flyway:
     enabled: true
