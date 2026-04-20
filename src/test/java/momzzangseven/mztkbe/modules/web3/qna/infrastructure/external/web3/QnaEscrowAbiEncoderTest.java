@@ -117,6 +117,31 @@ class QnaEscrowAbiEncoderTest {
   }
 
   @Test
+  @DisplayName("encodes adminRefund with questionId only")
+  void encodeAdminRefund_matchesContractSignature() {
+    String questionId = "0x" + "0".repeat(63) + "1";
+
+    String encoded =
+        encoder.encode(
+            QnaExecutionActionType.QNA_ADMIN_REFUND,
+            questionId,
+            null,
+            null,
+            BigInteger.ZERO,
+            null,
+            null);
+
+    String expected =
+        FunctionEncoder.encode(
+            new Function(
+                "adminRefund",
+                List.of(new Bytes32(Numeric.hexStringToByteArray(questionId))),
+                Collections.emptyList()));
+
+    assertThat(encoded).isEqualTo(expected);
+  }
+
+  @Test
   @DisplayName("encodes submitAnswer with answer content hash")
   void encodeSubmitAnswer_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";

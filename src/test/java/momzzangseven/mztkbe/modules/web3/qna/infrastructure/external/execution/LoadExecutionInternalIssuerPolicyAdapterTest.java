@@ -26,11 +26,12 @@ class LoadExecutionInternalIssuerPolicyAdapterTest {
   @Test
   void loadPolicy_mapsExecutionPolicyToQnaPolicy() {
     when(getInternalExecutionIssuerPolicyUseCase.getPolicy())
-        .thenReturn(new InternalExecutionIssuerPolicyView(true, true));
+        .thenReturn(new InternalExecutionIssuerPolicyView(true, true, true));
 
     var result = adapter.loadPolicy();
 
     assertThat(result.enabled()).isTrue();
     assertThat(result.qnaAdminSettleEnabled()).isTrue();
+    assertThat(result.qnaAdminRefundEnabled()).isTrue();
   }
 }

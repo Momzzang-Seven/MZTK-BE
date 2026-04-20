@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
@@ -140,5 +141,36 @@ class QnaProjectionPersistenceAdapterTest {
     verify(qnaAnswerProjectionJpaRepository).save(captor.capture());
     assertThat(captor.getValue().getCreatedAt()).isEqualTo(createdAt);
     assertThat(captor.getValue().isAccepted()).isTrue();
+  }
+
+  @Test
+  void findAnswersByPostIdForUpdate_mapsEntitiesToDomainList() {
+    QnaAnswerProjectionEntity first =
+        QnaAnswerProjectionEntity.builder()
+            .answerId(201L)
+            .postId(101L)
+            .questionId(QnaEscrowIdCodec.questionId(101L))
+            .answerKey(QnaEscrowIdCodec.answerId(201L))
+            .responderUserId(22L)
+            .contentHash(QnaContentHashFactory.hash("답변 본문 1"))
+            .accepted(false)
+            .build();
+    QnaAnswerProjectionEntity second =
+        QnaAnswerProjectionEntity.builder()
+            .answerId(202L)
+            .postId(101L)
+            .questionId(QnaEscrowIdCodec.questionId(101L))
+            .answerKey(QnaEscrowIdCodec.answerId(202L))
+            .responderUserId(23L)
+            .contentHash(QnaContentHashFactory.hash("답변 본문 2"))
+            .accepted(false)
+            .build();
+    when(qnaAnswerProjectionJpaRepository.findAllByPostIdForUpdate(101L))
+        .thenReturn(List.of(first, second));
+
+    List<QnaAnswerProjection> result = adapter.findAnswersByPostIdForUpdate(101L);
+
+    assertThat(result).hasSize(2);
+    assertThat(result).extracting(QnaAnswerProjection::getAnswerId).containsExactly(201L, 202L);
   }
 }

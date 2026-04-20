@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTr
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionSummaryResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.ManageExecutionTransactionUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadPendingNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.TransferTransactionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -23,20 +24,17 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Service
 @RequiredArgsConstructor
 @Transactional
-@ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class ManageExecutionTransactionService implements ManageExecutionTransactionUseCase {
 
   private final TransferTransactionPersistencePort transferTransactionPersistencePort;
   private final UpdateTransactionPort updateTransactionPort;
   private final RecordTransactionAuditPort recordTransactionAuditPort;
   private final ReserveNoncePort reserveNoncePort;
+  private final LoadPendingNoncePort loadPendingNoncePort;
   private final Web3ContractPort web3ContractPort;
 
   @Override
@@ -122,6 +120,11 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   @Override
   public long reserveNextNonce(String fromAddress) {
     return reserveNoncePort.reserveNextNonce(fromAddress);
+  }
+
+  @Override
+  public long loadPendingNonce(String fromAddress) {
+    return loadPendingNoncePort.loadPendingNonce(fromAddress);
   }
 
   @Override

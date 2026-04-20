@@ -4,17 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.RunInternalExecutionBatchResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled", "execution.internal-issuer.enabled"},
-    havingValue = "true")
+@ConditionalOnInternalExecutionEnabled
 public class InternalExecutionIntentScheduler {
 
   private final RunInternalExecutionBatchUseCase runInternalExecutionBatchUseCase;

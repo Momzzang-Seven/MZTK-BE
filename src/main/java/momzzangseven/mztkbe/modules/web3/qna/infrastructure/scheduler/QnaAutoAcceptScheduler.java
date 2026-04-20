@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.RunQnaAutoAcceptBatchResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaAutoAcceptBatchUseCase;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -12,10 +13,8 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled", "qna.auto-accept.enabled"},
-    havingValue = "true")
+@ConditionalOnInternalExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.qna.auto-accept", name = "enabled", havingValue = "true")
 public class QnaAutoAcceptScheduler {
 
   private final RunQnaAutoAcceptBatchUseCase runQnaAutoAcceptBatchUseCase;

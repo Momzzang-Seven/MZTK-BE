@@ -6,17 +6,14 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.ExecutionSponsorDailyUsageRecord;
 import momzzangseven.mztkbe.modules.web3.transfer.application.port.in.ManageExecutionSponsorDailyUsageUseCase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component("executionSponsorDailyUsagePersistenceAdapter")
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnUserExecutionEnabled
 public class SponsorDailyUsagePersistenceAdapter implements SponsorDailyUsagePersistencePort {
 
   private final ManageExecutionSponsorDailyUsageUseCase manageExecutionSponsorDailyUsageUseCase;

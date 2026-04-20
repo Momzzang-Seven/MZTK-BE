@@ -265,8 +265,10 @@ web3:
       batch-size: 20
       cron: "0/10 * * * * *"
       zone: "Asia/Seoul"
-      action-types:
-        - QNA_ADMIN_SETTLE
+      eip1559-ttl-seconds: 90
+      signer:
+        key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
+        wallet-alias: sponsor-treasury
   qna:
     auto-accept:
       enabled: ${WEB3_QNA_AUTO_ACCEPT_ENABLED}

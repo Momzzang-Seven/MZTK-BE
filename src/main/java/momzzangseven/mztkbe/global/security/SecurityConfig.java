@@ -237,6 +237,19 @@ public class SecurityConfig {
                     .requestMatchers(
                         HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/admin/web3/qna/questions/{postId}/answers/{answerId}/settlement-review")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/admin/web3/qna/questions/{postId}/answers/{answerId}/settle")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.GET, "/admin/web3/qna/questions/{postId}/refund-review")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/qna/questions/{postId}/refund")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // --- Image Endpoints ---
                     .requestMatchers(HttpMethod.POST, "/images/presigned-urls")

@@ -36,6 +36,9 @@ public interface ExecutionIntentPersistencePort {
 
   Optional<ExecutionIntent> findLatestByRootIdempotencyKey(String rootIdempotencyKey);
 
+  Optional<ExecutionIntent> findLatestActiveByResource(
+      ExecutionResourceType resourceType, String resourceId);
+
   Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId);
 

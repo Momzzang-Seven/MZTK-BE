@@ -17,6 +17,8 @@ public class GetInternalExecutionIssuerPolicyService
     LoadInternalExecutionIssuerPolicyPort.InternalExecutionIssuerPolicy policy =
         loadInternalExecutionIssuerPolicyPort.loadPolicy();
     return new InternalExecutionIssuerPolicyView(
-        policy.enabled(), policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_SETTLE));
+        policy.enabled(),
+        policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_SETTLE),
+        policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_REFUND));
   }
 }

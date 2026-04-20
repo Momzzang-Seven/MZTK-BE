@@ -2,20 +2,18 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.config;
 
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnInternalExecutionEnabled
 public class QnaAutoAcceptConfigurationValidator {
 
   private final QnaAutoAcceptProperties qnaAutoAcceptProperties;
-  private final LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
+  private final LoadInternalExecutionIssuerPolicyPort loadInternalExecutionIssuerPolicyPort;
 
   @PostConstruct
   void validateOnStartup() {
@@ -26,13 +24,13 @@ public class QnaAutoAcceptConfigurationValidator {
     if (!Boolean.TRUE.equals(qnaAutoAcceptProperties.getEnabled())) {
       return;
     }
-    LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy policy =
-        loadExecutionInternalIssuerPolicyPort.loadPolicy();
+    LoadInternalExecutionIssuerPolicyPort.InternalExecutionIssuerPolicy policy =
+        loadInternalExecutionIssuerPolicyPort.loadPolicy();
     if (!policy.enabled()) {
       throw new IllegalStateException(
           "web3.qna.auto-accept.enabled=true requires web3.execution.internal-issuer.enabled=true");
     }
-    if (!policy.qnaAdminSettleEnabled()) {
+    if (!policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_SETTLE)) {
       throw new IllegalStateException(
           "web3.qna.auto-accept.enabled=true requires web3.execution.internal-issuer.action-types to include QNA_ADMIN_SETTLE");
     }

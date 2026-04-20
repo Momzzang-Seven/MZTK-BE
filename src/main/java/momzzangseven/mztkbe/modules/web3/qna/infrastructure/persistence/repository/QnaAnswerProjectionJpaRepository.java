@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.reposit
 
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.entity.QnaAnswerProjectionEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -30,6 +31,16 @@ public interface QnaAnswerProjectionJpaRepository
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select a from QnaAnswerProjectionEntity a where a.answerId = :answerId")
   Optional<QnaAnswerProjectionEntity> findByAnswerIdForUpdate(@Param("answerId") Long answerId);
+
+  Optional<QnaAnswerProjectionEntity> findByAnswerId(Long answerId);
+
+  @Query("select a from QnaAnswerProjectionEntity a where a.postId = :postId order by a.answerId asc")
+  List<QnaAnswerProjectionEntity> findAllByPostId(@Param("postId") Long postId);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select a from QnaAnswerProjectionEntity a where a.postId = :postId order by a.answerId asc")
+  List<QnaAnswerProjectionEntity> findAllByPostIdForUpdate(@Param("postId") Long postId);
 
   @Query(
       value =

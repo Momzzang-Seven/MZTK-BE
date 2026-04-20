@@ -23,6 +23,8 @@ public interface ExecutionTransactionGatewayPort {
 
   long reserveNextNonce(String fromAddress);
 
+  long loadPendingNonce(String fromAddress);
+
   void recordAudit(AuditCommand command);
 
   BroadcastResult broadcast(String rawTx);

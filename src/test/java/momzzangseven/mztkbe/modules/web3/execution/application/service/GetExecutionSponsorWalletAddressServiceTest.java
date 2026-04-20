@@ -6,8 +6,8 @@ import static org.mockito.Mockito.when;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GetExecutionSponsorWalletAddressServiceTest {
 
-  @Mock private LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
+  @Mock private LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
   @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
 
   private GetExecutionSponsorWalletAddressService service;
@@ -27,8 +27,8 @@ class GetExecutionSponsorWalletAddressServiceTest {
   void setUp() {
     service =
         new GetExecutionSponsorWalletAddressService(
-            loadExecutionSponsorWalletConfigPort, loadExecutionSponsorKeyPort);
-    when(loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig())
+            loadInternalExecutionSignerConfigPort, loadExecutionSponsorKeyPort);
+    when(loadInternalExecutionSignerConfigPort.loadSignerConfig())
         .thenReturn(new ExecutionSponsorWalletConfig("alias", "kek"));
   }
 

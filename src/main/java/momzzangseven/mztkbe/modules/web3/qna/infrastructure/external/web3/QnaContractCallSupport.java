@@ -6,9 +6,9 @@ import java.math.BigInteger;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.DefaultGasFeeCalculator;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
@@ -28,10 +28,7 @@ import org.web3j.protocol.http.HttpService;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class QnaContractCallSupport {
 
   private final Web3CoreProperties web3CoreProperties;
@@ -94,30 +91,22 @@ public class QnaContractCallSupport {
     return Boolean.TRUE.equals(decodeBool(response.getValue()));
   }
 
-  public void requireAdminCallable(String escrowAddress, String callerAddress) {
+  public void requireRelayerCallable(String escrowAddress, String callerAddress) {
     String normalizedCaller = callerAddress == null ? null : callerAddress.trim();
     if (normalizedCaller == null || normalizedCaller.isBlank()) {
       throw new Web3InvalidInputException("callerAddress is required");
     }
 
-    String ownerData =
-        FunctionEncoder.encode(
-            new Function("owner", List.of(), List.of(TypeReference.create(Address.class))));
-    Transaction ownerRequest =
-        Transaction.createEthCallTransaction(normalizedCaller, escrowAddress, ownerData);
-    EthCall ownerResponse =
-        requireSuccess(
-            callWithFallback(
-                web3j -> web3j.ethCall(ownerRequest, DefaultBlockParameterName.PENDING).send()),
-            "owner");
-    if (ownerResponse.isReverted()) {
+    if (!isRelayerRegistered(escrowAddress, normalizedCaller)) {
       throw new Web3InvalidInputException(
-          "owner eth_call reverted: " + ownerResponse.getRevertReason());
+          "current server signer is not a registered relayer: " + normalizedCaller);
     }
+  }
 
-    String ownerAddress = decodeAddress(ownerResponse.getValue());
-    if (ownerAddress != null && normalizedCaller.equalsIgnoreCase(ownerAddress)) {
-      return;
+  public boolean isRelayerRegistered(String escrowAddress, String callerAddress) {
+    String normalizedCaller = callerAddress == null ? null : callerAddress.trim();
+    if (normalizedCaller == null || normalizedCaller.isBlank()) {
+      throw new Web3InvalidInputException("callerAddress is required");
     }
 
     String isRelayerData =
@@ -137,10 +126,7 @@ public class QnaContractCallSupport {
       throw new Web3InvalidInputException(
           "isRelayer eth_call reverted: " + isRelayerResponse.getRevertReason());
     }
-    if (!Boolean.TRUE.equals(decodeBool(isRelayerResponse.getValue()))) {
-      throw new Web3InvalidInputException(
-          "adminSettle caller is not relayer or owner: " + normalizedCaller);
-    }
+    return Boolean.TRUE.equals(decodeBool(isRelayerResponse.getValue()));
   }
 
   public QnaCallPrevalidationResult prevalidateContractCall(

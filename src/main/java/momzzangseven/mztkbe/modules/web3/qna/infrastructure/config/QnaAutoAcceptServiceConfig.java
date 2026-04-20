@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.config;
 
 import java.time.Clock;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaAutoAcceptBatchUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ScheduleNextQnaAutoAcceptUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ClaimNextQnaAutoAcceptCandidatePort;
@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecuti
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QnaAutoAcceptBatchService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.ScheduleNextQnaAutoAcceptService;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,10 +20,8 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnInternalExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.qna.auto-accept", name = "enabled", havingValue = "true")
 public class QnaAutoAcceptServiceConfig {
 
   @Bean
@@ -32,7 +31,7 @@ public class QnaAutoAcceptServiceConfig {
       LoadQnaAcceptContextPort loadQnaAcceptContextPort,
       LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort,
       QnaAcceptStateSyncPort qnaAcceptStateSyncPort,
-      QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase,
+      PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase,
       Clock appClock) {
     return new ScheduleNextQnaAutoAcceptService(
         claimNextQnaAutoAcceptCandidatePort,
@@ -40,7 +39,7 @@ public class QnaAutoAcceptServiceConfig {
         loadQnaAcceptContextPort,
         loadQnaExecutionIntentStatePort,
         qnaAcceptStateSyncPort,
-        questionEscrowExecutionUseCase,
+        prepareQnaAdminSettlementUseCase,
         appClock);
   }
 

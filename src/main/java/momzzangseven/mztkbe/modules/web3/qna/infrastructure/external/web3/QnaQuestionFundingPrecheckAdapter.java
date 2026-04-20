@@ -10,16 +10,13 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnUserExecutionEnabled
 public class QnaQuestionFundingPrecheckAdapter implements PrecheckQuestionFundingPort {
 
   private final GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;

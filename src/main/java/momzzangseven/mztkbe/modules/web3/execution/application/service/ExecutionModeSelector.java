@@ -59,7 +59,8 @@ public class ExecutionModeSelector {
         && command.draft().authorityNonce() == null
         && command.draft().delegateTarget() == null
         && command.draft().authorizationPayloadHash() == null
-        && command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_SETTLE;
+        && (command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_SETTLE
+            || command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_REFUND);
   }
 
   private boolean isSponsorEligible(

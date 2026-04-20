@@ -10,11 +10,11 @@ import java.util.Locale;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnRewardTokenOrAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
@@ -44,7 +44,7 @@ import org.web3j.protocol.http.HttpService;
 @Component
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
+@ConditionalOnRewardTokenOrAnyExecutionEnabled
 public class Web3jErc20Adapter implements Web3ContractPort {
 
   private static final BigInteger WEI_PER_ETH = new BigInteger("1000000000000000000");

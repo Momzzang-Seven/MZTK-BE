@@ -23,12 +23,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActi
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -56,10 +55,9 @@ class ExecuteInternalExecutionIntentServiceTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  @Mock private LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
+  @Mock private LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
   @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
   @Mock private ExecutionEip1559SigningPort executionEip1559SigningPort;
-  @Mock private ExecutionEip7702GatewayPort executionEip7702GatewayPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
 
@@ -71,10 +69,9 @@ class ExecuteInternalExecutionIntentServiceTest {
         new ExecuteInternalExecutionIntentService(
             executionIntentPersistencePort,
             executionTransactionGatewayPort,
-            loadExecutionSponsorWalletConfigPort,
+            loadInternalExecutionSignerConfigPort,
             loadExecutionSponsorKeyPort,
             executionEip1559SigningPort,
-            executionEip7702GatewayPort,
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             FIXED_CLOCK);
@@ -90,7 +87,7 @@ class ExecuteInternalExecutionIntentServiceTest {
                 ExecutionReferenceType.USER_TO_USER,
                 List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234"))));
     lenient()
-        .when(loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig())
+        .when(loadInternalExecutionSignerConfigPort.loadSignerConfig())
         .thenReturn(new ExecutionSponsorWalletConfig("alias", "kek"));
     lenient()
         .when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
@@ -125,8 +122,8 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionEip7702GatewayPort.loadPendingAccountNonce("0x" + "4".repeat(40)))
-        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce() + 1));
+    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce() + 1);
 
     ExecuteInternalExecutionIntentResult result =
         service.execute(
@@ -143,8 +140,8 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionEip7702GatewayPort.loadPendingAccountNonce("0x" + "4".repeat(40)))
-        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce() + 1));
+    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce() + 1);
     doThrow(new IllegalStateException("rollback failed"))
         .when(executionActionHandlerPort)
         .afterExecutionTerminated(any(), any(), any(), any());
@@ -165,8 +162,8 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionEip7702GatewayPort.loadPendingAccountNonce("0x" + "4".repeat(40)))
-        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
     when(executionTransactionGatewayPort.createAndFlush(any()))
@@ -195,8 +192,8 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionEip7702GatewayPort.loadPendingAccountNonce("0x" + "4".repeat(40)))
-        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
     when(executionTransactionGatewayPort.createAndFlush(any()))
@@ -235,7 +232,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
-    verify(executionEip7702GatewayPort, never()).loadPendingAccountNonce(any());
+    verify(executionTransactionGatewayPort, never()).loadPendingNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -257,7 +254,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionIntentPersistencePort).update(any());
-    verify(executionEip7702GatewayPort, never()).loadPendingAccountNonce(any());
+    verify(executionTransactionGatewayPort, never()).loadPendingNonce(any());
   }
 
   @Test
@@ -280,7 +277,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
-    verify(executionEip7702GatewayPort, never()).loadPendingAccountNonce(any());
+    verify(executionTransactionGatewayPort, never()).loadPendingNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -289,8 +286,8 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionEip7702GatewayPort.loadPendingAccountNonce("0x" + "4".repeat(40)))
-        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new Web3InvalidInputException("invalid EVM address: broken"));
 

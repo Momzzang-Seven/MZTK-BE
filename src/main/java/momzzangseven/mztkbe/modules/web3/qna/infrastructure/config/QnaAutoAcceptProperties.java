@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAutoAcceptPolicyPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
@@ -16,10 +16,7 @@ import org.springframework.validation.annotation.Validated;
 @Component
 @Validated
 @ConfigurationProperties(prefix = "web3.qna.auto-accept")
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnInternalExecutionEnabled
 public class QnaAutoAcceptProperties implements LoadQnaAutoAcceptPolicyPort {
 
   @NotNull private Boolean enabled = Boolean.FALSE;

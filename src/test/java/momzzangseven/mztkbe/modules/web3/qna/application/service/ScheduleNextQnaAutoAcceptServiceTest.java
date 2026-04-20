@@ -13,7 +13,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ScheduleNextQnaAutoAcceptResult;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ClaimNextQnaAutoAcceptCandidatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAcceptContextPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAutoAcceptPolicyPort;
@@ -39,7 +39,7 @@ class ScheduleNextQnaAutoAcceptServiceTest {
   @Mock private LoadQnaAcceptContextPort loadQnaAcceptContextPort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
-  @Mock private QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
+  @Mock private PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase;
 
   private ScheduleNextQnaAutoAcceptService service;
 
@@ -52,7 +52,7 @@ class ScheduleNextQnaAutoAcceptServiceTest {
             loadQnaAcceptContextPort,
             loadQnaExecutionIntentStatePort,
             qnaAcceptStateSyncPort,
-            questionEscrowExecutionUseCase,
+            prepareQnaAdminSettlementUseCase,
             Clock.fixed(NOW, ZoneId.of("Asia/Seoul")));
     when(loadQnaAutoAcceptPolicyPort.loadPolicy())
         .thenReturn(new LoadQnaAutoAcceptPolicyPort.QnaAutoAcceptPolicy(604_800L, 50));
@@ -78,10 +78,10 @@ class ScheduleNextQnaAutoAcceptServiceTest {
             Optional.of(
                 new QnaAutoAcceptCandidate(
                     101L, 201L, 7L, 22L, java.time.LocalDateTime.of(2026, 4, 10, 10, 0))));
-    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResource(
+    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResourceForUpdate(
             QnaExecutionResourceType.QUESTION, "101"))
         .thenReturn(Optional.empty());
-    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResource(
+    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResourceForUpdate(
             QnaExecutionResourceType.ANSWER, "201"))
         .thenReturn(Optional.empty());
     when(loadQnaAcceptContextPort.loadForUpdate(101L, 201L))
@@ -93,8 +93,8 @@ class ScheduleNextQnaAutoAcceptServiceTest {
 
     assertThat(result.isScheduled()).isTrue();
     verify(qnaAcceptStateSyncPort).beginPendingAccept(101L, 201L);
-    verify(questionEscrowExecutionUseCase)
-        .prepareAdminSettle(new PrepareAdminSettleCommand(101L, 201L, 7L, 22L, "질문", "답변"));
+    verify(prepareQnaAdminSettlementUseCase)
+        .execute(new PrepareAdminSettleCommand(101L, 201L, 7L, 22L, "질문", "답변"));
   }
 
   @Test
@@ -104,7 +104,7 @@ class ScheduleNextQnaAutoAcceptServiceTest {
             Optional.of(
                 new QnaAutoAcceptCandidate(
                     101L, 201L, 7L, 22L, java.time.LocalDateTime.of(2026, 4, 10, 10, 0))));
-    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResource(
+    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResourceForUpdate(
             QnaExecutionResourceType.QUESTION, "101"))
         .thenReturn(
             Optional.of(
@@ -117,7 +117,6 @@ class ScheduleNextQnaAutoAcceptServiceTest {
 
     assertThat(result.isSkipped()).isTrue();
     verify(qnaAcceptStateSyncPort, never()).beginPendingAccept(101L, 201L);
-    verify(questionEscrowExecutionUseCase, never())
-        .prepareAdminSettle(org.mockito.ArgumentMatchers.any());
+    verify(prepareQnaAdminSettlementUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
   }
 }
