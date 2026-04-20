@@ -196,6 +196,12 @@ public class ClassSlot {
     if (daysOfWeek == null || daysOfWeek.isEmpty()) {
       throw new MarketplaceInvalidSlotException("Days of week must not be null or empty");
     }
+    // A slot with duplicate days would double-count intervals in conflict detection and
+    // produce confusing schedule entries (e.g., two Monday sessions in one slot).
+    long distinctCount = daysOfWeek.stream().distinct().count();
+    if (distinctCount < daysOfWeek.size()) {
+      throw new MarketplaceInvalidSlotException("Days of week must not contain duplicate values");
+    }
   }
 
   private static void validateStartTime(LocalTime startTime) {
