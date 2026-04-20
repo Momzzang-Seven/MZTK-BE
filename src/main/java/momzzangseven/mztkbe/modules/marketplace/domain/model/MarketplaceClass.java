@@ -271,6 +271,11 @@ public class MarketplaceClass {
         throw new MarketplaceInvalidFeatureException(
             "Each feature must not exceed " + MAX_FEATURE_LENGTH + " characters");
       }
+      // Features are stored pipe-delimited in a TEXT column; a literal '|' would corrupt parsing.
+      if (feature.contains("|")) {
+        throw new MarketplaceInvalidFeatureException(
+            "Feature must not contain the pipe character '|'");
+      }
     }
   }
 

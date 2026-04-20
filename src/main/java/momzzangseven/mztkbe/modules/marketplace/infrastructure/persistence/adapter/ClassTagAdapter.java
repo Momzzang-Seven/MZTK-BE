@@ -125,7 +125,7 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
    * @param tagNames raw tag names from the caller
    */
   private void persistTagLinks(Long classId, List<String> tagNames) {
-    // 1. 정규화 (소문자, 공백 제거, 중복 제거)
+    // 1. Normalise (lowercase, trim, deduplicate, filter blank)
     List<String> distinctNames =
         tagNames.stream()
             .filter(Objects::nonNull)
@@ -139,11 +139,11 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
       return;
     }
 
-    // 2. 이미 존재하는 태그 조회
+    // 2. Load already-persisted tags
     List<Tag> existing = loadTagPort.loadTagsByNames(distinctNames);
     List<String> existingNames = existing.stream().map(Tag::getName).toList();
 
-    // 3. 새 태그 생성
+    // 3. Create missing tags
     List<Tag> newTags =
         distinctNames.stream()
             .filter(name -> !existingNames.contains(name))
@@ -152,7 +152,7 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
 
     List<Tag> savedNew = newTags.isEmpty() ? List.of() : saveTagPort.saveTags(newTags);
 
-    // 4. class_tags 삽입
+    // 4. Insert rows into class_tags
     List<Long> allTagIds = new ArrayList<>();
     allTagIds.addAll(existing.stream().map(Tag::getId).toList());
     allTagIds.addAll(savedNew.stream().map(Tag::getId).toList());

@@ -35,9 +35,7 @@ public record RegisterClassRequestDTO(
 
   /** Nested DTO for a single class time entry. */
   public record ClassTimeRequestDTO(
-      @NotEmpty List<DayOfWeek> daysOfWeek,
-      @NotNull LocalTime startTime,
-      @NotNull @Min(1) int capacity) {
+      @NotEmpty List<DayOfWeek> daysOfWeek, @NotNull LocalTime startTime, @Min(1) int capacity) {
 
     public ClassTimeCommand toCommand() {
       return new ClassTimeCommand(null, daysOfWeek, startTime, capacity);

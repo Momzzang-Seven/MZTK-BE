@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.application.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import momzzangseven.mztkbe.modules.marketplace.application.dto.GetTrainerClasse
 import momzzangseven.mztkbe.modules.marketplace.application.port.in.GetTrainerClassesUseCase;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassPort;
+import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.domain.model.MarketplaceClass;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Service for retrieving the authenticated trainer's own class list.
  *
  * <p>Returns both active and inactive classes. Thumbnail keys are batch-loaded from the image
- * module.
+ * module. The trainer's current sanction status ({@code isSuspended} / {@code suspendedUntil}) is
+ * loaded via {@link LoadTrainerSanctionPort} and included in the result so the front-end can
+ * display a suspension notice without a separate round-trip.
  */
 @Slf4j
 @Service
@@ -31,10 +35,18 @@ public class GetTrainerClassesService implements GetTrainerClassesUseCase {
 
   private final LoadClassPort loadClassPort;
   private final LoadClassImagesPort loadClassImagesPort;
+  private final LoadTrainerSanctionPort loadTrainerSanctionPort;
 
   @Override
   public GetTrainerClassesResult execute(GetTrainerClassesQuery query) {
     log.debug("Fetching trainer classes: trainerId={}, page={}", query.trainerId(), query.page());
+
+    // Sanction status — queried upfront so the banner is always visible alongside the list
+    boolean isSuspended = loadTrainerSanctionPort.hasActiveSanction(query.trainerId());
+    LocalDateTime suspendedUntil =
+        isSuspended
+            ? loadTrainerSanctionPort.getSuspendedUntil(query.trainerId()).orElse(null)
+            : null;
 
     PageRequest pageable =
         PageRequest.of(query.page(), MarketplacePaginationConstants.DEFAULT_PAGE_SIZE);
@@ -59,6 +71,11 @@ public class GetTrainerClassesService implements GetTrainerClassesUseCase {
             .toList();
 
     return GetTrainerClassesResult.of(
-        items, page.getNumber(), page.getTotalPages(), page.getTotalElements());
+        isSuspended,
+        suspendedUntil,
+        items,
+        page.getNumber(),
+        page.getTotalPages(),
+        page.getTotalElements());
   }
 }

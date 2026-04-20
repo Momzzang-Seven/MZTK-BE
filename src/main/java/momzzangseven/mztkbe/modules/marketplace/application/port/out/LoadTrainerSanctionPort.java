@@ -1,5 +1,8 @@
 package momzzangseven.mztkbe.modules.marketplace.application.port.out;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
+
 /**
  * Output port for checking whether a trainer is currently under an active sanction.
  *
@@ -17,4 +20,14 @@ public interface LoadTrainerSanctionPort {
    * @return true if the trainer is suspended
    */
   boolean hasActiveSanction(Long trainerId);
+
+  /**
+   * Returns the datetime until which the trainer's sanction is active, if any.
+   *
+   * <p>Returns {@link Optional#empty()} when the trainer is not suspended.
+   *
+   * @param trainerId trainer's user ID
+   * @return sanction end time, or empty if not suspended
+   */
+  Optional<LocalDateTime> getSuspendedUntil(Long trainerId);
 }

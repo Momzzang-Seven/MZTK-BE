@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.application.dto;
 
 import java.util.List;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidCategoryException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidClassIdException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidSlotException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTitleException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTrainerIdException;
@@ -34,7 +35,7 @@ public record UpdateClassCommand(
       throw new MarketplaceInvalidTrainerIdException();
     }
     if (classId == null || classId <= 0) {
-      throw new MarketplaceInvalidSlotException("Class ID must be positive");
+      throw new MarketplaceInvalidClassIdException();
     }
     if (title == null || title.isBlank()) {
       throw new MarketplaceInvalidTitleException("Title must not be blank");

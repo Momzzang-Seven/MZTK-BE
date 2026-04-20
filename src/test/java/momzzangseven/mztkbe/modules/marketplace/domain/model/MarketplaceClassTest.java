@@ -348,5 +348,18 @@ class MarketplaceClassTest {
                       1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, features, null))
           .isInstanceOf(MarketplaceInvalidFeatureException.class);
     }
+
+    @Test
+    @DisplayName("[NF-4] feature에 '|' 포함 시 MarketplaceInvalidFeatureException (파이프 구분자 오염 방지)")
+    void create_FeatureContainsPipeCharacter_ThrowsException() {
+      // '|' is used as the DB delimiter for the features TEXT column (pipe-encoded).
+      // Allowing it would silently corrupt the decode step on next read.
+      List<String> features = List.of("정상피처", "pipe|broken");
+      assertThatThrownBy(
+              () ->
+                  MarketplaceClass.create(
+                      1L, "제목", ClassCategory.PT, "설명", 10000, 60, null, features, null))
+          .isInstanceOf(MarketplaceInvalidFeatureException.class);
+    }
   }
 }

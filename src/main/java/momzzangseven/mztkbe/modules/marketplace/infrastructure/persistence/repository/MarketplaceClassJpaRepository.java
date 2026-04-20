@@ -46,8 +46,13 @@ public interface MarketplaceClassJpaRepository extends JpaRepository<Marketplace
    * and {@code [1]} is the {@link TrainerStoreEntity} (may be {@code null} when the trainer has no
    * store registered yet).
    *
+   * <p><b>Note on {@code active = true}</b>: this query is used exclusively by the public class
+   * detail endpoint, which must only expose active classes. Inactive-class detail (e.g., a
+   * trainer's own preview including inactive listings) is not yet implemented. If that requirement
+   * arises, add a separate query or remove this filter.
+   *
    * @param classId class ID
-   * @return Optional containing the joined projection, or empty if the class does not exist
+   * @return list containing the joined projection, or empty list if the class does not exist
    */
   @Query(
       """
@@ -55,6 +60,7 @@ public interface MarketplaceClassJpaRepository extends JpaRepository<Marketplace
       FROM MarketplaceClassEntity mc
       LEFT JOIN TrainerStoreEntity ts ON ts.trainerId = mc.trainerId
       WHERE mc.id = :classId
+        AND mc.active = true
       """)
   List<Object[]> findClassWithStore(@Param("classId") Long classId);
 }
