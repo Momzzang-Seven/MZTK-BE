@@ -126,7 +126,8 @@ public class UpdateClassService implements UpdateClassUseCase {
     // empty payload removes all previously bound images.
     // Only skip when imageIds is null (field was absent from the request).
     if (command.imageIds() != null) {
-      updateClassImagesPort.updateImages(command.trainerId(), command.classId(), command.imageIds());
+      updateClassImagesPort.updateImages(
+          command.trainerId(), command.classId(), command.imageIds());
     }
 
     // Step 9: Save updated class metadata

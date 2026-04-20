@@ -144,10 +144,7 @@ class ClassSlotTest {
       assertThatThrownBy(
               () ->
                   ClassSlot.create(
-                      1L,
-                      List.of(DayOfWeek.MONDAY, DayOfWeek.MONDAY),
-                      LocalTime.of(10, 0),
-                      5))
+                      1L, List.of(DayOfWeek.MONDAY, DayOfWeek.MONDAY), LocalTime.of(10, 0), 5))
           .isInstanceOf(MarketplaceInvalidSlotException.class)
           .hasMessageContaining("duplicate");
     }
