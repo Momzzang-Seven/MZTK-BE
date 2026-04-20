@@ -8,7 +8,7 @@ public record ForceQnaAdminSettlementResponseDTO(
     String actionType,
     QnaExecutionIntentResult.ExecutionIntent executionIntent,
     Execution execution,
-  boolean existing) {
+    boolean existing) {
 
   private static final String AUTHORITY_MODEL = "SERVER_RELAYER_ONLY";
 

@@ -34,15 +34,13 @@ class QnaExecutionServiceConfigTest {
           .withBean(
               LoadQnaExecutionIntentStatePort.class,
               () -> mock(LoadQnaExecutionIntentStatePort.class))
-          .withBean(
-              BuildQnaExecutionDraftPort.class, () -> mock(BuildQnaExecutionDraftPort.class))
+          .withBean(BuildQnaExecutionDraftPort.class, () -> mock(BuildQnaExecutionDraftPort.class))
           .withBean(
               SubmitQnaExecutionDraftPort.class, () -> mock(SubmitQnaExecutionDraftPort.class))
           .withBean(
               GetLatestExecutionIntentSummaryUseCase.class,
               () -> mock(GetLatestExecutionIntentSummaryUseCase.class))
-          .withBean(
-              PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
+          .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
 
   @Test
   @DisplayName("user execution enabled면 question/answer/resume use case beans를 등록한다")

@@ -6,6 +6,7 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.ExecutionAuthority;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalAnswer;
@@ -18,7 +19,6 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -34,8 +34,10 @@ class QnaAdminReviewDeciderTest {
             Optional.of(localAnswer()),
             Optional.of(onchainQuestion(1)),
             Optional.of(onchainAnswer()),
-            Optional.of(activeIntent("intent-question-active", QnaExecutionActionType.QNA_ADMIN_SETTLE)),
-            Optional.of(activeIntent("intent-answer-active", QnaExecutionActionType.QNA_ADMIN_SETTLE)),
+            Optional.of(
+                activeIntent("intent-question-active", QnaExecutionActionType.QNA_ADMIN_SETTLE)),
+            Optional.of(
+                activeIntent("intent-answer-active", QnaExecutionActionType.QNA_ADMIN_SETTLE)),
             authority(),
             enabledPolicy());
 
@@ -47,7 +49,8 @@ class QnaAdminReviewDeciderTest {
     assertThat(review.questionConflictingActiveIntent()).isTrue();
     assertThat(review.answerConflictingActiveIntent()).isTrue();
     assertThat(review.validations())
-        .filteredOn(item -> QnaAdminReviewDecider.ACTIVE_QUESTION_INTENT_PRESENT.equals(item.code()))
+        .filteredOn(
+            item -> QnaAdminReviewDecider.ACTIVE_QUESTION_INTENT_PRESENT.equals(item.code()))
         .singleElement()
         .satisfies(item -> assertThat(item.valid()).isFalse());
     assertThat(review.validations())
@@ -87,7 +90,8 @@ class QnaAdminReviewDeciderTest {
         new RefundContext(
             Optional.of(localQuestion()),
             Optional.of(onchainQuestion(0)),
-            Optional.of(activeIntent("intent-question-active", QnaExecutionActionType.QNA_ADMIN_REFUND)),
+            Optional.of(
+                activeIntent("intent-question-active", QnaExecutionActionType.QNA_ADMIN_REFUND)),
             List.of(),
             authority(),
             enabledPolicy());
@@ -130,7 +134,8 @@ class QnaAdminReviewDeciderTest {
   }
 
   private QnaExecutionIntentStateView activeIntent(String id, QnaExecutionActionType actionType) {
-    return new QnaExecutionIntentStateView(id, actionType, ExecutionIntentStatus.AWAITING_SIGNATURE);
+    return new QnaExecutionIntentStateView(
+        id, actionType, ExecutionIntentStatus.AWAITING_SIGNATURE);
   }
 
   private ExecutionAuthority authority() {
@@ -138,6 +143,7 @@ class QnaAdminReviewDeciderTest {
   }
 
   private LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy enabledPolicy() {
-    return new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(true, true, true);
+    return new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(
+        true, true, true);
   }
 }

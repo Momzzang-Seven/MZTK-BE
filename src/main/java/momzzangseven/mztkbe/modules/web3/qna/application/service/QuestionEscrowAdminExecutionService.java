@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.service;
 
-import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminRefundCommand;

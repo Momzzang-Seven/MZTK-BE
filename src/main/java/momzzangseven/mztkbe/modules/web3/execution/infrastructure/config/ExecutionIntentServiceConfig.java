@@ -13,10 +13,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
@@ -26,7 +27,6 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.CreateExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecutionModeSelector;
@@ -110,8 +110,9 @@ public class ExecutionIntentServiceConfig {
       havingValue = "false",
       matchIfMissing = true)
   LoadSponsorPolicyPort fallbackLoadSponsorPolicyPort() {
-    return () -> new momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy(
-        false, 0L, 0L, 0L, BigDecimal.ZERO, BigDecimal.ZERO);
+    return () ->
+        new momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy(
+            false, 0L, 0L, 0L, BigDecimal.ZERO, BigDecimal.ZERO);
   }
 
   @Bean
@@ -186,9 +187,7 @@ public class ExecutionIntentServiceConfig {
       LoadExecutionTransactionPort loadExecutionTransactionPort,
       LoadExecutionChainIdPort loadExecutionChainIdPort) {
     return new GetExecutionIntentService(
-        executionIntentPersistencePort,
-        loadExecutionTransactionPort,
-        loadExecutionChainIdPort);
+        executionIntentPersistencePort, loadExecutionTransactionPort, loadExecutionChainIdPort);
   }
 
   @Bean

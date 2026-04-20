@@ -21,7 +21,8 @@ class Eip7702ExecutionServiceConfigTest {
           .withUserConfiguration(Eip7702ExecutionServiceConfig.class)
           .withBean(Eip7702AuthorizationPort.class, () -> mock(Eip7702AuthorizationPort.class))
           .withBean(Eip7702ChainPort.class, () -> mock(Eip7702ChainPort.class))
-          .withBean(Eip7702TransactionCodecPort.class, () -> mock(Eip7702TransactionCodecPort.class))
+          .withBean(
+              Eip7702TransactionCodecPort.class, () -> mock(Eip7702TransactionCodecPort.class))
           .withBean(
               VerifyExecutionSignaturePort.class, () -> mock(VerifyExecutionSignaturePort.class));
 
@@ -45,7 +46,8 @@ class Eip7702ExecutionServiceConfigTest {
         .run(
             context -> {
               assertThat(context).doesNotHaveBean(ManageExecutionEip7702UseCase.class);
-              assertThat(context).doesNotHaveBean(PrepareTokenTransferExecutionSupportUseCase.class);
+              assertThat(context)
+                  .doesNotHaveBean(PrepareTokenTransferExecutionSupportUseCase.class);
             });
   }
 }

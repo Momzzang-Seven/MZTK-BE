@@ -8,9 +8,9 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryF
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
@@ -57,7 +57,9 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
   @Transactional(propagation = Propagation.MANDATORY)
   public SettlementContext loadSettlementForUpdate(Long postId, Long answerId) {
     Optional<LocalAnswer> localAnswer =
-        getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(answerId).map(this::toLocalAnswer);
+        getAnswerSummaryForUpdateUseCase
+            .getAnswerSummaryForUpdate(answerId)
+            .map(this::toLocalAnswer);
     Optional<LocalQuestion> localQuestion =
         getPostContextUseCase.getPostContextForUpdate(postId).map(this::toLocalQuestion);
     return new SettlementContext(
@@ -126,9 +128,7 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
         (forUpdate
                 ? qnaProjectionPersistencePort.findAnswersByPostIdForUpdate(postId)
                 : qnaProjectionPersistencePort.findAnswersByPostId(postId))
-            .stream()
-            .map(answer -> answer.getAnswerId())
-            .toList();
+            .stream().map(answer -> answer.getAnswerId()).toList();
     projectionAnswerIds.stream().map(String::valueOf).forEach(answerResourceIds::add);
     return List.copyOf(answerResourceIds);
   }

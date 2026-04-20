@@ -30,11 +30,7 @@ public interface LoadQnaAdminReviewContextPort {
       Long acceptedAnswerId) {}
 
   record LocalAnswer(
-      Long answerId,
-      Long postId,
-      Long writerUserId,
-      String content,
-      boolean accepted) {}
+      Long answerId, Long postId, Long writerUserId, String content, boolean accepted) {}
 
   record SettlementContext(
       Optional<LocalQuestion> localQuestion,

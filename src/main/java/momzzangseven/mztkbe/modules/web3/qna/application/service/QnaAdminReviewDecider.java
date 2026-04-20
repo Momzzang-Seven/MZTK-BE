@@ -14,8 +14,6 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValid
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementReviewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.RefundContext;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.SettlementContext;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 
 final class QnaAdminReviewDecider {
@@ -44,7 +42,8 @@ final class QnaAdminReviewDecider {
 
   private QnaAdminReviewDecider() {}
 
-  static QnaAdminSettlementReviewResult assessSettlement(Long postId, Long answerId, SettlementContext context) {
+  static QnaAdminSettlementReviewResult assessSettlement(
+      Long postId, Long answerId, SettlementContext context) {
     if (postId == null || postId <= 0 || answerId == null || answerId <= 0) {
       throw new Web3InvalidInputException("postId/answerId must be positive");
     }
@@ -53,7 +52,8 @@ final class QnaAdminReviewDecider {
     var localAnswer = context.localAnswer().orElse(null);
     var onchainQuestion = context.onchainQuestion().orElse(null);
     var onchainAnswer = context.onchainAnswer().orElse(null);
-    boolean sameLocalQuestion = localQuestion != null && localAnswer != null && postId.equals(localAnswer.postId());
+    boolean sameLocalQuestion =
+        localQuestion != null && localAnswer != null && postId.equals(localAnswer.postId());
     boolean sameOnchainQuestion =
         onchainQuestion != null
             && onchainAnswer != null
@@ -62,41 +62,124 @@ final class QnaAdminReviewDecider {
         localQuestion != null
             && onchainQuestion != null
             && localQuestion.content() != null
-            && onchainQuestion.getQuestionHash().equals(
-                momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory.hash(localQuestion.content()));
+            && onchainQuestion
+                .getQuestionHash()
+                .equals(
+                    momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory.hash(
+                        localQuestion.content()));
     boolean answerHashMatches =
         localAnswer != null
             && onchainAnswer != null
             && localAnswer.content() != null
-            && onchainAnswer.getContentHash().equals(
-                momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory.hash(localAnswer.content()));
+            && onchainAnswer
+                .getContentHash()
+                .equals(
+                    momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory.hash(
+                        localAnswer.content()));
     boolean questionConflict = context.activeQuestionIntent().isPresent();
     boolean answerConflict = context.activeAnswerIntent().isPresent();
 
     List<QnaAdminReviewValidationItem> validations = new ArrayList<>();
-    validations.add(item(LOCAL_QUESTION_MISSING, localQuestion != null, false, "local question must exist"));
-    validations.add(item(LOCAL_QUESTION_NOT_QUESTION, localQuestion != null && localQuestion.questionPost(), false, "post must be a question"));
-    validations.add(item(LOCAL_QUESTION_NOT_OPEN, localQuestion != null && localQuestion.status() == PostStatus.OPEN, false, "local question must be OPEN"));
-    validations.add(item(LOCAL_ANSWER_MISSING, localAnswer != null, false, "local answer must exist"));
-    validations.add(item(LOCAL_ANSWER_POST_MISMATCH, sameLocalQuestion, false, "local answer must belong to the target question"));
-    validations.add(item(LOCAL_ANSWER_ALREADY_ACCEPTED, localAnswer == null || !localAnswer.accepted(), false, "local answer must not already be accepted"));
-    validations.add(item(ONCHAIN_QUESTION_MISSING, onchainQuestion != null, false, "onchain question projection must exist"));
+    validations.add(
+        item(LOCAL_QUESTION_MISSING, localQuestion != null, false, "local question must exist"));
+    validations.add(
+        item(
+            LOCAL_QUESTION_NOT_QUESTION,
+            localQuestion != null && localQuestion.questionPost(),
+            false,
+            "post must be a question"));
+    validations.add(
+        item(
+            LOCAL_QUESTION_NOT_OPEN,
+            localQuestion != null && localQuestion.status() == PostStatus.OPEN,
+            false,
+            "local question must be OPEN"));
+    validations.add(
+        item(LOCAL_ANSWER_MISSING, localAnswer != null, false, "local answer must exist"));
+    validations.add(
+        item(
+            LOCAL_ANSWER_POST_MISMATCH,
+            sameLocalQuestion,
+            false,
+            "local answer must belong to the target question"));
+    validations.add(
+        item(
+            LOCAL_ANSWER_ALREADY_ACCEPTED,
+            localAnswer == null || !localAnswer.accepted(),
+            false,
+            "local answer must not already be accepted"));
+    validations.add(
+        item(
+            ONCHAIN_QUESTION_MISSING,
+            onchainQuestion != null,
+            false,
+            "onchain question projection must exist"));
     validations.add(
         item(
             ONCHAIN_QUESTION_NOT_REFUNDABLE,
             onchainQuestion != null && isSettlableState(onchainQuestion.getState()),
             false,
             "onchain question state must be CREATED or ANSWERED"));
-    validations.add(item(ONCHAIN_ANSWER_MISSING, onchainAnswer != null, false, "onchain answer projection must exist"));
-    validations.add(item(ONCHAIN_ANSWER_QUESTION_MISMATCH, sameOnchainQuestion, false, "onchain answer must belong to the target question"));
-    validations.add(item(ONCHAIN_ANSWER_ALREADY_ACCEPTED, onchainAnswer == null || !onchainAnswer.isAccepted(), false, "onchain answer must not already be accepted"));
-    validations.add(item(QUESTION_HASH_MISMATCH, questionHashMatches, false, "local question content must match onchain hash"));
-    validations.add(item(ANSWER_HASH_MISMATCH, answerHashMatches, false, "local answer content must match onchain hash"));
-    validations.add(item(ACTIVE_QUESTION_INTENT_PRESENT, context.activeQuestionIntent().isEmpty(), false, "question must not have an active execution intent"));
-    validations.add(item(ACTIVE_ANSWER_INTENT_PRESENT, context.activeAnswerIntent().isEmpty(), false, "answer must not have an active execution intent"));
-    validations.add(item(RELAYER_NOT_REGISTERED, context.authority().relayerRegistered(), false, "current server signer must be a registered relayer"));
-    validations.add(item(INTERNAL_ISSUER_DISABLED, context.policy().enabled(), false, "internal issuer must be enabled"));
-    validations.add(item(INTERNAL_ISSUER_SETTLE_DISABLED, context.policy().qnaAdminSettleEnabled(), false, "internal issuer must include QNA_ADMIN_SETTLE"));
+    validations.add(
+        item(
+            ONCHAIN_ANSWER_MISSING,
+            onchainAnswer != null,
+            false,
+            "onchain answer projection must exist"));
+    validations.add(
+        item(
+            ONCHAIN_ANSWER_QUESTION_MISMATCH,
+            sameOnchainQuestion,
+            false,
+            "onchain answer must belong to the target question"));
+    validations.add(
+        item(
+            ONCHAIN_ANSWER_ALREADY_ACCEPTED,
+            onchainAnswer == null || !onchainAnswer.isAccepted(),
+            false,
+            "onchain answer must not already be accepted"));
+    validations.add(
+        item(
+            QUESTION_HASH_MISMATCH,
+            questionHashMatches,
+            false,
+            "local question content must match onchain hash"));
+    validations.add(
+        item(
+            ANSWER_HASH_MISMATCH,
+            answerHashMatches,
+            false,
+            "local answer content must match onchain hash"));
+    validations.add(
+        item(
+            ACTIVE_QUESTION_INTENT_PRESENT,
+            context.activeQuestionIntent().isEmpty(),
+            false,
+            "question must not have an active execution intent"));
+    validations.add(
+        item(
+            ACTIVE_ANSWER_INTENT_PRESENT,
+            context.activeAnswerIntent().isEmpty(),
+            false,
+            "answer must not have an active execution intent"));
+    validations.add(
+        item(
+            RELAYER_NOT_REGISTERED,
+            context.authority().relayerRegistered(),
+            false,
+            "current server signer must be a registered relayer"));
+    validations.add(
+        item(
+            INTERNAL_ISSUER_DISABLED,
+            context.policy().enabled(),
+            false,
+            "internal issuer must be enabled"));
+    validations.add(
+        item(
+            INTERNAL_ISSUER_SETTLE_DISABLED,
+            context.policy().qnaAdminSettleEnabled(),
+            false,
+            "internal issuer must include QNA_ADMIN_SETTLE"));
 
     String blockingReason = firstBlockingReason(validations);
     return new QnaAdminSettlementReviewResult(
@@ -108,7 +191,9 @@ final class QnaAdminReviewDecider {
         new QnaAdminLocalQuestionView(
             localQuestion != null,
             localQuestion != null && localQuestion.questionPost(),
-            localQuestion == null || localQuestion.status() == null ? null : localQuestion.status().name(),
+            localQuestion == null || localQuestion.status() == null
+                ? null
+                : localQuestion.status().name(),
             localQuestion != null && localQuestion.solved(),
             localQuestion != null && localQuestion.answerLocked(),
             localQuestion == null ? null : localQuestion.writerUserId(),
@@ -124,7 +209,9 @@ final class QnaAdminReviewDecider {
             onchainQuestion == null ? null : onchainQuestion.getState().name(),
             onchainQuestion == null ? 0 : onchainQuestion.getAnswerCount()),
         new QnaAdminOnchainAnswerView(
-            onchainAnswer != null, sameOnchainQuestion, onchainAnswer != null && onchainAnswer.isAccepted()),
+            onchainAnswer != null,
+            sameOnchainQuestion,
+            onchainAnswer != null && onchainAnswer.isAccepted()),
         questionHashMatches,
         answerHashMatches,
         questionConflict,
@@ -143,28 +230,69 @@ final class QnaAdminReviewDecider {
     boolean answerConflict = !context.activeAnswerIntents().isEmpty();
 
     List<QnaAdminReviewValidationItem> validations = new ArrayList<>();
-    validations.add(item(LOCAL_QUESTION_MISSING, localQuestion != null, false, "local question must exist"));
-    validations.add(item(LOCAL_QUESTION_NOT_QUESTION, localQuestion != null && localQuestion.questionPost(), false, "post must be a question"));
-    validations.add(item(LOCAL_QUESTION_NOT_OPEN, localQuestion != null && localQuestion.status() == PostStatus.OPEN, false, "local question must be OPEN"));
-    validations.add(item(ONCHAIN_QUESTION_MISSING, onchainQuestion != null, false, "onchain question projection must exist"));
+    validations.add(
+        item(LOCAL_QUESTION_MISSING, localQuestion != null, false, "local question must exist"));
+    validations.add(
+        item(
+            LOCAL_QUESTION_NOT_QUESTION,
+            localQuestion != null && localQuestion.questionPost(),
+            false,
+            "post must be a question"));
+    validations.add(
+        item(
+            LOCAL_QUESTION_NOT_OPEN,
+            localQuestion != null && localQuestion.status() == PostStatus.OPEN,
+            false,
+            "local question must be OPEN"));
+    validations.add(
+        item(
+            ONCHAIN_QUESTION_MISSING,
+            onchainQuestion != null,
+            false,
+            "onchain question projection must exist"));
     validations.add(
         item(
             ONCHAIN_QUESTION_NOT_REFUNDABLE,
             onchainQuestion != null && isRefundableState(onchainQuestion.getState()),
             false,
             "onchain question state must be CREATED or ANSWERED"));
-    validations.add(item(ACTIVE_QUESTION_INTENT_PRESENT, context.activeQuestionIntent().isEmpty(), false, "question must not have an active execution intent"));
+    validations.add(
+        item(
+            ACTIVE_QUESTION_INTENT_PRESENT,
+            context.activeQuestionIntent().isEmpty(),
+            false,
+            "question must not have an active execution intent"));
     validations.add(
         item(
             ACTIVE_ANSWER_INTENT_PRESENT,
             context.activeAnswerIntents().isEmpty(),
             false,
             "question answers must not have active execution intents"));
-    validations.add(item(RELAYER_NOT_REGISTERED, context.authority().relayerRegistered(), false, "current server signer must be a registered relayer"));
-    validations.add(item(INTERNAL_ISSUER_DISABLED, context.policy().enabled(), false, "internal issuer must be enabled"));
-    validations.add(item(INTERNAL_ISSUER_REFUND_DISABLED, context.policy().qnaAdminRefundEnabled(), false, "internal issuer must include QNA_ADMIN_REFUND"));
+    validations.add(
+        item(
+            RELAYER_NOT_REGISTERED,
+            context.authority().relayerRegistered(),
+            false,
+            "current server signer must be a registered relayer"));
+    validations.add(
+        item(
+            INTERNAL_ISSUER_DISABLED,
+            context.policy().enabled(),
+            false,
+            "internal issuer must be enabled"));
+    validations.add(
+        item(
+            INTERNAL_ISSUER_REFUND_DISABLED,
+            context.policy().qnaAdminRefundEnabled(),
+            false,
+            "internal issuer must include QNA_ADMIN_REFUND"));
     if (onchainQuestion != null && onchainQuestion.getAnswerCount() > 0) {
-      validations.add(new QnaAdminReviewValidationItem(ONCHAIN_QUESTION_HAS_ANSWERS, true, true, "refund will move the question to DELETED_WITH_ANSWERS"));
+      validations.add(
+          new QnaAdminReviewValidationItem(
+              ONCHAIN_QUESTION_HAS_ANSWERS,
+              true,
+              true,
+              "refund will move the question to DELETED_WITH_ANSWERS"));
     }
 
     String blockingReason = firstBlockingReason(validations);
@@ -176,7 +304,9 @@ final class QnaAdminReviewDecider {
         new QnaAdminLocalQuestionView(
             localQuestion != null,
             localQuestion != null && localQuestion.questionPost(),
-            localQuestion == null || localQuestion.status() == null ? null : localQuestion.status().name(),
+            localQuestion == null || localQuestion.status() == null
+                ? null
+                : localQuestion.status().name(),
             localQuestion != null && localQuestion.solved(),
             localQuestion != null && localQuestion.answerLocked(),
             localQuestion == null ? null : localQuestion.writerUserId(),
@@ -212,7 +342,9 @@ final class QnaAdminReviewDecider {
   }
 
   private static QnaAdminExecutionAuthorityView authorityView(
-      momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.ExecutionAuthority authority) {
+      momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort
+              .ExecutionAuthority
+          authority) {
     return new QnaAdminExecutionAuthorityView(
         authority.signerAddress(), authority.relayerRegistered(), false, AUTHORITY_MODEL);
   }

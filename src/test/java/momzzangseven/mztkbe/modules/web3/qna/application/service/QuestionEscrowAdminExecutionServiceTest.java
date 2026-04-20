@@ -74,8 +74,7 @@ class QuestionEscrowAdminExecutionServiceTest {
         .willReturn(Optional.of(answerProjection("답변")));
 
     QnaExecutionIntentResult result =
-        service.prepareAdminSettle(
-            new PrepareAdminSettleCommand(101L, 201L, 7L, 22L, "질문", "답변"));
+        service.prepareAdminSettle(new PrepareAdminSettleCommand(101L, 201L, 7L, 22L, "질문", "답변"));
 
     ArgumentCaptor<QnaEscrowExecutionRequest> requestCaptor =
         ArgumentCaptor.forClass(QnaEscrowExecutionRequest.class);
@@ -93,8 +92,9 @@ class QuestionEscrowAdminExecutionServiceTest {
     given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
         .willReturn(Optional.of(questionProjection("질문")));
     given(loadQnaAnswerIdsPort.loadAnswerIdsByPostId(101L)).willReturn(List.of(201L));
-    given(loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
-            QnaExecutionResourceType.ANSWER, "201"))
+    given(
+            loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
+                QnaExecutionResourceType.ANSWER, "201"))
         .willReturn(true);
 
     assertThatThrownBy(() -> service.prepareAdminRefund(new PrepareAdminRefundCommand(101L, 7L)))
@@ -109,8 +109,9 @@ class QuestionEscrowAdminExecutionServiceTest {
         .willReturn(Optional.of(questionProjection("질문")));
     given(loadQnaAnswerIdsPort.loadAnswerIdsByPostId(101L)).willReturn(List.of(301L));
     given(qnaProjectionPersistencePort.findAnswersByPostIdForUpdate(101L)).willReturn(List.of());
-    given(loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
-            QnaExecutionResourceType.ANSWER, "301"))
+    given(
+            loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
+                QnaExecutionResourceType.ANSWER, "301"))
         .willReturn(true);
 
     assertThatThrownBy(() -> service.prepareAdminRefund(new PrepareAdminRefundCommand(101L, 7L)))

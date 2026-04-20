@@ -1,8 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Arrays;
@@ -38,7 +38,8 @@ class QnaAdminEscrowInternalIssuerDisabledControllerTest {
   @org.springframework.beans.factory.annotation.Autowired protected MockMvc mockMvc;
 
   @MockitoBean
-  private momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAutoAcceptConfigurationValidator
+  private momzzangseven.mztkbe.modules.web3.qna.infrastructure.config
+          .QnaAutoAcceptConfigurationValidator
       qnaAutoAcceptConfigurationValidator;
 
   @MockitoBean
@@ -66,7 +67,8 @@ class QnaAdminEscrowInternalIssuerDisabledControllerTest {
   void settlementReviewEndpoint_disabledByInternalIssuerFlag_returnsBusinessError()
       throws Exception {
     assertInternalIssuerDisabled(
-        get("/admin/web3/qna/questions/101/answers/201/settlement-review").with(adminPrincipal(1L)));
+        get("/admin/web3/qna/questions/101/answers/201/settlement-review")
+            .with(adminPrincipal(1L)));
   }
 
   @Test
@@ -100,7 +102,8 @@ class QnaAdminEscrowInternalIssuerDisabledControllerTest {
         .SecurityMockMvcRequestPostProcessors.securityContext(context);
   }
 
-  private void assertInternalIssuerDisabled(MockHttpServletRequestBuilder request) throws Exception {
+  private void assertInternalIssuerDisabled(MockHttpServletRequestBuilder request)
+      throws Exception {
     mockMvc
         .perform(request)
         .andExpect(status().isInternalServerError())

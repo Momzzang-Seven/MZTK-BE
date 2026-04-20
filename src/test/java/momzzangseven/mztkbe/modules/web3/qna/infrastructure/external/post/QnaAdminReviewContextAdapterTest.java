@@ -92,7 +92,9 @@ class QnaAdminReviewContextAdapterTest {
             "0x3333333333333333333333333333333333333333"))
         .thenReturn(true);
     when(loadExecutionInternalIssuerPolicyPort.loadPolicy())
-        .thenReturn(new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(true, true, true));
+        .thenReturn(
+            new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(
+                true, true, true));
   }
 
   @Test

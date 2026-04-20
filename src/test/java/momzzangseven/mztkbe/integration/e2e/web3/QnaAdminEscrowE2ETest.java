@@ -67,7 +67,10 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
-  @MockitoBean private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
+
+  @MockitoBean
+  private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
+
   @MockitoBean private LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
   @MockitoBean private LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
   @MockitoBean private QnaContractCallSupport qnaContractCallSupport;
@@ -77,7 +80,8 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   void setUp() {
     BDDMockito.given(loadExecutionInternalIssuerPolicyPort.loadPolicy())
         .willReturn(
-            new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(true, true, true));
+            new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(
+                true, true, true));
     BDDMockito.given(loadQnaAdminSignerAddressPort.loadSignerAddress()).willReturn(SIGNER_ADDRESS);
     BDDMockito.given(qnaContractCallSupport.isRelayerRegistered(anyString(), anyString()))
         .willReturn(true);
@@ -92,7 +96,8 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     TestUser asker = signupAndLogin("manual-settle-asker");
     TestUser responder = signupAndLogin("manual-settle-responder");
     SeededSettlementScenario scenario =
-        seedSettlementScenario(asker.userId(), responder.userId(), "manual settle question", "manual settle answer");
+        seedSettlementScenario(
+            asker.userId(), responder.userId(), "manual settle question", "manual settle answer");
 
     ResponseEntity<String> reviewResponse =
         restTemplate.exchange(
@@ -181,8 +186,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(latestIntent.get("action_type")).isEqualTo("QNA_ADMIN_REFUND");
     assertThat(latestIntent.get("status")).isEqualTo("AWAITING_SIGNATURE");
     assertThat(postStatus(postId)).isEqualTo("OPEN");
-    assertThat(countAdminAudit("QNA_ADMIN_REFUND", "post:" + postId, admin.userId()))
-        .isEqualTo(1);
+    assertThat(countAdminAudit("QNA_ADMIN_REFUND", "post:" + postId, admin.userId())).isEqualTo(1);
   }
 
   private AdminUser createAdminAndLogin() {
@@ -204,16 +208,24 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
             baseUrl() + "/auth/login",
             HttpMethod.POST,
             new HttpEntity<>(
-                Map.of("provider", "LOCAL_ADMIN", "loginId", loginId, "password", DEFAULT_TEST_PASSWORD),
+                Map.of(
+                    "provider",
+                    "LOCAL_ADMIN",
+                    "loginId",
+                    loginId,
+                    "password",
+                    DEFAULT_TEST_PASSWORD),
                 jsonOnlyHeaders()),
             String.class);
 
     assertThat(loginResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     try {
-      String accessToken = objectMapper.readTree(loginResponse.getBody()).at("/data/accessToken").asText();
+      String accessToken =
+          objectMapper.readTree(loginResponse.getBody()).at("/data/accessToken").asText();
       return new AdminUser(userId, accessToken);
     } catch (Exception e) {
-      throw new IllegalStateException("failed to parse admin login response: " + loginResponse.getBody(), e);
+      throw new IllegalStateException(
+          "failed to parse admin login response: " + loginResponse.getBody(), e);
     }
   }
 
@@ -222,19 +234,23 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     LocalDateTime createdAt = LocalDateTime.now().minusHours(2);
     Long postId = insertQuestionPost(askerUserId, "admin settle title", questionContent, createdAt);
     Long answerId = insertAnswer(postId, responderUserId, answerContent, createdAt.plusMinutes(5));
-    insertQuestionProjection(postId, askerUserId, questionContent, 1, QnaQuestionState.ANSWERED, createdAt);
-    insertAnswerProjection(postId, answerId, responderUserId, answerContent, createdAt.plusMinutes(5));
+    insertQuestionProjection(
+        postId, askerUserId, questionContent, 1, QnaQuestionState.ANSWERED, createdAt);
+    insertAnswerProjection(
+        postId, answerId, responderUserId, answerContent, createdAt.plusMinutes(5));
     return new SeededSettlementScenario(postId, answerId);
   }
 
   private Long seedRefundScenario(Long askerUserId, String questionContent) {
     LocalDateTime createdAt = LocalDateTime.now().minusHours(1);
     Long postId = insertQuestionPost(askerUserId, "admin refund title", questionContent, createdAt);
-    insertQuestionProjection(postId, askerUserId, questionContent, 0, QnaQuestionState.CREATED, createdAt);
+    insertQuestionProjection(
+        postId, askerUserId, questionContent, 0, QnaQuestionState.CREATED, createdAt);
     return postId;
   }
 
-  private Long insertQuestionPost(Long userId, String title, String content, LocalDateTime createdAt) {
+  private Long insertQuestionPost(
+      Long userId, String title, String content, LocalDateTime createdAt) {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcTemplate.update(
         conn -> {
@@ -324,7 +340,9 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
 
   private QnaExecutionDraft adminDraft(QnaEscrowExecutionRequest request) throws Exception {
     String callData =
-        request.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE ? "0x1234abcd" : "0xabcd1234";
+        request.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE
+            ? "0x1234abcd"
+            : "0xabcd1234";
     QnaEscrowExecutionPayload payload =
         new QnaEscrowExecutionPayload(
             request.actionType(),
@@ -344,7 +362,12 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         request.actionType(),
         request.requesterUserId(),
         request.counterpartyUserId(),
-        "root-admin-" + request.actionType().name() + "-" + request.postId() + "-" + UUID.randomUUID(),
+        "root-admin-"
+            + request.actionType().name()
+            + "-"
+            + request.postId()
+            + "-"
+            + UUID.randomUUID(),
         "0x" + "a".repeat(64),
         objectMapper.writeValueAsString(payload),
         List.of(new QnaExecutionDraftCall(CALL_TARGET, BigInteger.ZERO, callData)),
@@ -375,7 +398,8 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   }
 
   private String postStatus(Long postId) {
-    return jdbcTemplate.queryForObject("select status from posts where id = ?", String.class, postId);
+    return jdbcTemplate.queryForObject(
+        "select status from posts where id = ?", String.class, postId);
   }
 
   private int countAdminAudit(String actionType, String targetId, Long operatorId) {
