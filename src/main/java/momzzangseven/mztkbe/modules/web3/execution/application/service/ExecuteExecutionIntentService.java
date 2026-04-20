@@ -272,10 +272,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         created.transactionId(),
         ExecutionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
-        java.util.Map.of(
-            "success", broadcast.success(),
-            "txHash", broadcast.txHash(),
-            "failureReason", broadcast.failureReason()));
+        broadcastDetail(broadcast));
 
     if (broadcast.success()) {
       String txHash =
@@ -389,10 +386,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         created.transactionId(),
         ExecutionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
-        java.util.Map.of(
-            "success", broadcast.success(),
-            "txHash", broadcast.txHash(),
-            "failureReason", broadcast.failureReason()));
+        broadcastDetail(broadcast));
 
     if (broadcast.success()) {
       String txHash =
@@ -482,6 +476,15 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       log.warn(
           "failed to record transaction audit: txId={}, eventType={}", transactionId, eventType, e);
     }
+  }
+
+  private java.util.Map<String, Object> broadcastDetail(
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
+    java.util.Map<String, Object> detail = new java.util.LinkedHashMap<>();
+    detail.put("success", broadcast.success());
+    detail.put("txHash", broadcast.txHash());
+    detail.put("failureReason", broadcast.failureReason());
+    return detail;
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {

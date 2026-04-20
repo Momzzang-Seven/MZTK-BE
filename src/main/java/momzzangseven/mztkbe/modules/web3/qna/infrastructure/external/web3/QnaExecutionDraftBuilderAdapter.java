@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
@@ -35,6 +36,7 @@ import org.springframework.stereotype.Component;
 public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPort {
 
   private final GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
+  private final LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
   private final Eip7702ChainPort eip7702ChainPort;
   private final Eip7702AuthorizationPort eip7702AuthorizationPort;
   private final Eip7702Properties eip7702Properties;
@@ -48,18 +50,11 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
 
   @Override
   public QnaExecutionDraft build(QnaEscrowExecutionRequest request) {
-    String authorityAddress = resolveActiveWalletAddress(request.requesterUserId());
+    String callTarget = EvmAddress.of(qnaEscrowProperties.getQnaContractAddress()).value();
     String questionId = QnaEscrowIdCodec.questionId(request.postId());
     String answerId =
         request.answerId() == null ? null : QnaEscrowIdCodec.answerId(request.answerId());
-    String delegateTarget =
-        EvmAddress.of(eip7702Properties.getDelegation().getBatchImplAddress()).value();
-
-    BigInteger pendingNonce = eip7702ChainPort.loadPendingAccountNonce(authorityAddress);
-    long authorityNonce = pendingNonce.longValueExact();
-    String authorizationPayloadHash =
-        eip7702AuthorizationPort.buildSigningHashHex(
-            requestChainId(), delegateTarget, BigInteger.valueOf(authorityNonce));
+    DraftContext draftContext = resolveDraftContext(request, callTarget);
 
     String callData =
         qnaEscrowAbiEncoder.encode(
@@ -70,19 +65,19 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             request.rewardAmountWei(),
             request.questionHash(),
             request.contentHash());
-    String callTarget = EvmAddress.of(qnaEscrowProperties.getQnaContractAddress()).value();
     QnaExecutionDraftCall call = new QnaExecutionDraftCall(callTarget, BigInteger.ZERO, callData);
     QnaContractCallSupport.QnaCallPrevalidationResult prevalidation =
-        qnaContractCallSupport.prevalidateContractCall(authorityAddress, callTarget, callData);
+        qnaContractCallSupport.prevalidateContractCall(
+            draftContext.fromAddress(), callTarget, callData);
 
     QnaUnsignedTxSnapshot unsignedTxSnapshot =
         new QnaUnsignedTxSnapshot(
             requestChainId(),
-            authorityAddress,
+            draftContext.fromAddress(),
             callTarget,
             BigInteger.ZERO,
             callData,
-            authorityNonce,
+            draftContext.expectedNonce(),
             prevalidation.gasLimit(),
             prevalidation.maxPriorityFeePerGas(),
             prevalidation.maxFeePerGas());
@@ -92,7 +87,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             request.actionType(),
             request.postId(),
             request.answerId(),
-            authorityAddress,
+            draftContext.fromAddress(),
             request.tokenAddress(),
             amountForAction(request.actionType(), request.rewardAmountWei()),
             request.questionHash(),
@@ -112,15 +107,14 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         qnaPayloadSerializer.hashHex(payload),
         qnaPayloadSerializer.serialize(payload),
         List.of(call),
-        true,
-        authorityAddress,
-        authorityNonce,
-        delegateTarget,
-        authorizationPayloadHash,
+        draftContext.fallbackAllowed(),
+        draftContext.authorityAddress(),
+        draftContext.authorityNonce(),
+        draftContext.delegateTarget(),
+        draftContext.authorizationPayloadHash(),
         unsignedTxSnapshot,
         qnaUnsignedTxFingerprintFactory.compute(unsignedTxSnapshot),
-        LocalDateTime.now(appClock)
-            .plusSeconds(eip7702Properties.getAuthorization().getTtlSeconds()));
+        LocalDateTime.now(appClock).plusSeconds(draftContext.ttlSeconds()));
   }
 
   private long requestChainId() {
@@ -137,8 +131,56 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
   private BigInteger amountForAction(
       QnaExecutionActionType actionType, BigInteger rewardAmountWei) {
     return switch (actionType) {
-      case QNA_QUESTION_CREATE, QNA_QUESTION_DELETE, QNA_ANSWER_ACCEPT -> rewardAmountWei;
+      case QNA_QUESTION_CREATE, QNA_QUESTION_DELETE, QNA_ANSWER_ACCEPT, QNA_ADMIN_SETTLE ->
+          rewardAmountWei;
       default -> BigInteger.ZERO;
     };
   }
+
+  private DraftContext resolveDraftContext(
+      QnaEscrowExecutionRequest request, String contractAddress) {
+    if (request.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE) {
+      String signerAddress =
+          EvmAddress.of(loadQnaAdminSignerAddressPort.loadSignerAddress()).value();
+      qnaContractCallSupport.requireAdminCallable(contractAddress, signerAddress);
+      long expectedNonce = eip7702ChainPort.loadPendingAccountNonce(signerAddress).longValueExact();
+      return new DraftContext(
+          signerAddress,
+          false,
+          null,
+          null,
+          null,
+          expectedNonce,
+          eip7702Properties.getAuthorization().getEip1559TtlSeconds(),
+          null);
+    }
+
+    String authorityAddress = resolveActiveWalletAddress(request.requesterUserId());
+    String delegateTarget =
+        EvmAddress.of(eip7702Properties.getDelegation().getBatchImplAddress()).value();
+    long authorityNonce =
+        eip7702ChainPort.loadPendingAccountNonce(authorityAddress).longValueExact();
+    String authorizationPayloadHash =
+        eip7702AuthorizationPort.buildSigningHashHex(
+            requestChainId(), delegateTarget, BigInteger.valueOf(authorityNonce));
+    return new DraftContext(
+        authorityAddress,
+        true,
+        authorityAddress,
+        authorityNonce,
+        delegateTarget,
+        authorityNonce,
+        eip7702Properties.getAuthorization().getTtlSeconds(),
+        authorizationPayloadHash);
+  }
+
+  private record DraftContext(
+      String fromAddress,
+      boolean fallbackAllowed,
+      String authorityAddress,
+      Long authorityNonce,
+      String delegateTarget,
+      long expectedNonce,
+      int ttlSeconds,
+      String authorizationPayloadHash) {}
 }

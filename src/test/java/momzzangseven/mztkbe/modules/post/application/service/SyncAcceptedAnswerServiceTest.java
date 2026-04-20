@@ -35,6 +35,29 @@ class SyncAcceptedAnswerServiceTest {
   @InjectMocks private SyncAcceptedAnswerService syncAcceptedAnswerService;
 
   @Test
+  @DisplayName("beginPendingAccept loads answer before post and marks post pending")
+  void beginPendingAccept_marksPostPending() {
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(201L))
+        .thenReturn(Optional.of(acceptedAnswer(201L, 101L)));
+    when(postPersistencePort.loadPostForUpdate(101L)).thenReturn(Optional.of(openPost(101L)));
+
+    syncAcceptedAnswerService.beginPendingAccept(101L, 201L);
+
+    var inOrder = inOrder(loadAcceptedAnswerPort, postPersistencePort);
+    inOrder.verify(loadAcceptedAnswerPort).loadAcceptedAnswerForUpdate(201L);
+    inOrder.verify(postPersistencePort).loadPostForUpdate(101L);
+    inOrder
+        .verify(postPersistencePort)
+        .savePost(
+            org.mockito.ArgumentMatchers.argThat(
+                savedPost ->
+                    savedPost.getId().equals(101L)
+                        && savedPost.getStatus() == PostStatus.PENDING_ACCEPT
+                        && savedPost.getAcceptedAnswerId().equals(201L)));
+    verifyNoInteractions(markAcceptedAnswerPort);
+  }
+
+  @Test
   @DisplayName("confirmAccepted loads answer before post and saves both states")
   void confirmAccepted_loadsAnswerBeforePost() {
     LoadAcceptedAnswerPort.AcceptedAnswerInfo answer = acceptedAnswer(201L, 101L);
@@ -159,6 +182,21 @@ class SyncAcceptedAnswerServiceTest {
         .reward(10L)
         .acceptedAnswerId(answerId)
         .status(PostStatus.PENDING_ACCEPT)
+        .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+        .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+        .build();
+  }
+
+  private Post openPost(Long postId) {
+    return Post.builder()
+        .id(postId)
+        .userId(1L)
+        .type(PostType.QUESTION)
+        .title("question")
+        .content("content")
+        .reward(10L)
+        .acceptedAnswerId(null)
+        .status(PostStatus.OPEN)
         .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
         .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
         .build();

@@ -40,7 +40,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
           ExecutionActionType.QNA_ANSWER_SUBMIT,
           ExecutionActionType.QNA_ANSWER_UPDATE,
           ExecutionActionType.QNA_ANSWER_DELETE,
-          ExecutionActionType.QNA_ANSWER_ACCEPT);
+          ExecutionActionType.QNA_ANSWER_ACCEPT,
+          ExecutionActionType.QNA_ADMIN_SETTLE);
 
   private final ObjectMapper objectMapper;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
@@ -73,14 +74,16 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       case QNA_ANSWER_UPDATE -> applyAnswerUpdate(payload);
       case QNA_ANSWER_DELETE -> applyAnswerDelete(payload);
       case QNA_ANSWER_ACCEPT -> applyAnswerAccept(payload);
+      case QNA_ADMIN_SETTLE -> applyAdminSettle(payload);
     }
   }
 
   @Override
   public void afterExecutionFailedOnchain(
       ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {
-    afterExecutionTerminated(
-        intent, actionPlan, ExecutionIntentStatus.FAILED_ONCHAIN, failureReason);
+    // Failed-onchain specific handling is intentionally empty.
+    // MarkExecutionIntentFailedOnchainService invokes afterExecutionTerminated immediately after
+    // this hook, and rollback belongs to that terminal callback.
   }
 
   @Override
@@ -90,7 +93,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       ExecutionIntentStatus terminalStatus,
       String failureReason) {
     QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
-    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
+    if ((payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
+            || payload.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE)
         && shouldRollbackPendingAccept(terminalStatus, failureReason)) {
       qnaAcceptStateSyncPort.rollbackPendingAccept(payload.postId(), payload.answerId());
     }
@@ -125,7 +129,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
 
   private ExecutionReferenceType referenceType(QnaExecutionActionType actionType) {
     return switch (actionType) {
-      case QNA_ANSWER_ACCEPT -> ExecutionReferenceType.USER_TO_USER;
+      case QNA_ANSWER_ACCEPT, QNA_ADMIN_SETTLE -> ExecutionReferenceType.USER_TO_USER;
       default -> ExecutionReferenceType.USER_TO_SERVER;
     };
   }
@@ -195,6 +199,17 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     qnaProjectionPersistencePort.saveAnswer(answer.markAccepted());
     qnaProjectionPersistencePort.saveQuestion(
         question.updateQuestionHash(payload.questionHash()).markAccepted(answer.getAnswerKey()));
+  }
+
+  private void applyAdminSettle(QnaEscrowExecutionPayload payload) {
+    qnaAcceptStateSyncPort.confirmAccepted(payload.postId(), payload.answerId());
+    QnaQuestionProjection question = requireQuestion(payload.postId());
+    QnaAnswerProjection answer = requireAnswer(payload.answerId());
+    qnaProjectionPersistencePort.saveAnswer(answer.markAccepted());
+    qnaProjectionPersistencePort.saveQuestion(
+        question
+            .updateQuestionHash(payload.questionHash())
+            .markAdminSettled(answer.getAnswerKey()));
   }
 
   private QnaQuestionProjection requireQuestion(Long postId) {

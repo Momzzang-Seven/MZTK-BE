@@ -71,6 +71,15 @@ public class QnaEscrowAbiEncoder {
                       bytes32(questionHash),
                       bytes32(contentHash)),
                   Collections.emptyList());
+          case QNA_ADMIN_SETTLE ->
+              new Function(
+                  "adminSettle",
+                  List.of(
+                      bytes32(questionId),
+                      bytes32(answerId),
+                      bytes32(questionHash),
+                      bytes32(contentHash)),
+                  Collections.emptyList());
         };
 
     return FunctionEncoder.encode(function);
