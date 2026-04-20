@@ -20,6 +20,17 @@ public class SyncAcceptedAnswerService implements SyncAcceptedAnswerUseCase {
 
   @Override
   @Transactional
+  public void beginPendingAccept(Long postId, Long answerId) {
+    LoadAcceptedAnswerPort.AcceptedAnswerInfo answer =
+        requireAnswerForUpdate(answerId, "qna auto accept");
+    Post post = requirePostForUpdate(postId, "qna auto accept");
+    validateAnswerBelongsToPost(answer, post);
+
+    postPersistencePort.savePost(post.beginAccept(answerId));
+  }
+
+  @Override
+  @Transactional
   public void confirmAccepted(Long postId, Long answerId) {
     LoadAcceptedAnswerPort.AcceptedAnswerInfo answer =
         requireAnswerForUpdate(answerId, "qna accept");
