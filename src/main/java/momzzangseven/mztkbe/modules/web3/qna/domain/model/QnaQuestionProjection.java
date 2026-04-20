@@ -79,6 +79,10 @@ public class QnaQuestionProjection {
     return toBuilder().state(QnaQuestionState.DELETED).build();
   }
 
+  public QnaQuestionProjection markDeletedWithAnswers() {
+    return toBuilder().state(QnaQuestionState.DELETED_WITH_ANSWERS).build();
+  }
+
   private static void validateCore(
       Long postId,
       Long askerUserId,

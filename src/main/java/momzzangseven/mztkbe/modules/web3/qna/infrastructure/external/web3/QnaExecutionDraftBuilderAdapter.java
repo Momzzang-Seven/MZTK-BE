@@ -15,28 +15,23 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnUserExecutionEnabled
 public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPort {
 
   private final GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
-  private final LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
   private final Eip7702ChainPort eip7702ChainPort;
   private final Eip7702AuthorizationPort eip7702AuthorizationPort;
   private final Eip7702Properties eip7702Properties;
@@ -54,7 +49,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
     String questionId = QnaEscrowIdCodec.questionId(request.postId());
     String answerId =
         request.answerId() == null ? null : QnaEscrowIdCodec.answerId(request.answerId());
-    DraftContext draftContext = resolveDraftContext(request, callTarget);
+    DraftContext draftContext = resolveDraftContext(request);
 
     String callData =
         qnaEscrowAbiEncoder.encode(
@@ -131,28 +126,15 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
   private BigInteger amountForAction(
       QnaExecutionActionType actionType, BigInteger rewardAmountWei) {
     return switch (actionType) {
-      case QNA_QUESTION_CREATE, QNA_QUESTION_DELETE, QNA_ANSWER_ACCEPT, QNA_ADMIN_SETTLE ->
-          rewardAmountWei;
+      case QNA_QUESTION_CREATE, QNA_QUESTION_DELETE, QNA_ANSWER_ACCEPT -> rewardAmountWei;
       default -> BigInteger.ZERO;
     };
   }
 
-  private DraftContext resolveDraftContext(
-      QnaEscrowExecutionRequest request, String contractAddress) {
-    if (request.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE) {
-      String signerAddress =
-          EvmAddress.of(loadQnaAdminSignerAddressPort.loadSignerAddress()).value();
-      qnaContractCallSupport.requireAdminCallable(contractAddress, signerAddress);
-      long expectedNonce = eip7702ChainPort.loadPendingAccountNonce(signerAddress).longValueExact();
-      return new DraftContext(
-          signerAddress,
-          false,
-          null,
-          null,
-          null,
-          expectedNonce,
-          eip7702Properties.getAuthorization().getEip1559TtlSeconds(),
-          null);
+  private DraftContext resolveDraftContext(QnaEscrowExecutionRequest request) {
+    if (request.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE
+        || request.actionType() == QnaExecutionActionType.QNA_ADMIN_REFUND) {
+      throw new IllegalStateException("user draft builder does not support admin settle/refund");
     }
 
     String authorityAddress = resolveActiveWalletAddress(request.requesterUserId());

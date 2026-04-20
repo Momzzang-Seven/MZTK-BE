@@ -20,16 +20,13 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHandlerPort {
 
   private static final EnumSet<ExecutionActionType> SUPPORTED_ACTIONS =
@@ -41,7 +38,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
           ExecutionActionType.QNA_ANSWER_UPDATE,
           ExecutionActionType.QNA_ANSWER_DELETE,
           ExecutionActionType.QNA_ANSWER_ACCEPT,
-          ExecutionActionType.QNA_ADMIN_SETTLE);
+          ExecutionActionType.QNA_ADMIN_SETTLE,
+          ExecutionActionType.QNA_ADMIN_REFUND);
 
   private final ObjectMapper objectMapper;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
@@ -75,6 +73,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       case QNA_ANSWER_DELETE -> applyAnswerDelete(payload);
       case QNA_ANSWER_ACCEPT -> applyAnswerAccept(payload);
       case QNA_ADMIN_SETTLE -> applyAdminSettle(payload);
+      case QNA_ADMIN_REFUND -> applyAdminRefund(payload);
     }
   }
 
@@ -210,6 +209,14 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
         question
             .updateQuestionHash(payload.questionHash())
             .markAdminSettled(answer.getAnswerKey()));
+  }
+
+  private void applyAdminRefund(QnaEscrowExecutionPayload payload) {
+    QnaQuestionProjection question = requireQuestion(payload.postId());
+    QnaQuestionProjection refunded =
+        question.getAnswerCount() > 0 ? question.markDeletedWithAnswers() : question.markDeleted();
+    qnaProjectionPersistencePort.saveQuestion(refunded);
+    qnaLocalDeleteSyncPort.confirmQuestionDeleted(payload.postId());
   }
 
   private QnaQuestionProjection requireQuestion(Long postId) {

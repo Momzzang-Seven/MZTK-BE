@@ -80,6 +80,9 @@ public class QnaEscrowAbiEncoder {
                       bytes32(questionHash),
                       bytes32(contentHash)),
                   Collections.emptyList());
+          case QNA_ADMIN_REFUND ->
+              new Function(
+                  "adminRefund", List.of(bytes32(questionId)), Collections.emptyList());
         };
 
     return FunctionEncoder.encode(function);

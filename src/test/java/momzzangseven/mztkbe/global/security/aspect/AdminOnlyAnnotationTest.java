@@ -3,6 +3,10 @@ package momzzangseven.mztkbe.global.security.aspect;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminRefundUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.token.application.service.ProvisionTreasuryKeyService;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.service.MarkTransactionSucceededService;
@@ -52,5 +56,39 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.operatorId()).isEqualTo("#operatorId");
     assertThat(annotation.targetId())
         .isEqualTo("#result != null ? #result.treasuryAddress() : null");
+  }
+
+  @Test
+  @DisplayName(
+      "QnA admin settlement execute bean method에는 @AdminOnly(targetType=QNA_ESCROW_QUESTION)가 부착된다")
+  void qnaAdminSettlementExecuteUseCase_isAnnotatedWithQnaEscrowQuestionTargetType()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        AdminAuditedExecuteQnaAdminSettlementUseCase.class
+            .getMethod("execute", ExecuteQnaAdminSettlementCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("QNA_ADMIN_SETTLE");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.QNA_ESCROW_QUESTION);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
+    assertThat(annotation.targetId()).isEqualTo("'post:' + #command.postId()");
+  }
+
+  @Test
+  @DisplayName(
+      "QnA admin refund execute bean method에는 @AdminOnly(targetType=QNA_ESCROW_QUESTION)가 부착된다")
+  void qnaAdminRefundExecuteUseCase_isAnnotatedWithQnaEscrowQuestionTargetType()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        AdminAuditedExecuteQnaAdminRefundUseCase.class
+            .getMethod("execute", ExecuteQnaAdminRefundCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("QNA_ADMIN_REFUND");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.QNA_ESCROW_QUESTION);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
+    assertThat(annotation.targetId()).isEqualTo("'post:' + #command.postId()");
   }
 }

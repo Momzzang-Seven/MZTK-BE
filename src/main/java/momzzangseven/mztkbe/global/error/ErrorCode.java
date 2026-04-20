@@ -187,6 +187,10 @@ public enum ErrorCode {
   EXECUTION_INTENT_EXPIRED("WEB3_013", "Execution intent expired", HttpStatus.CONFLICT),
   NONCE_STALE_RECREATE_REQUIRED(
       "WEB3_014", "Nonce stale; recreate execution intent", HttpStatus.CONFLICT),
+  WEB3_INTERNAL_ISSUER_DISABLED(
+      "WEB3_015",
+      "Internal execution issuer is disabled",
+      HttpStatus.INTERNAL_SERVER_ERROR),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)

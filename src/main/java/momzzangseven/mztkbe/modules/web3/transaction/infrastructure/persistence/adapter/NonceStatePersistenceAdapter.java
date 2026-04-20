@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadPendingNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.persistence.entity.Web3NonceStateEntity;
@@ -28,7 +29,7 @@ import org.web3j.protocol.http.HttpService;
  * <p>The adapter keeps a DB-backed nonce cursor and synchronizes it with on-chain pending nonce
  * when local state lags behind.
  */
-public class NonceStatePersistenceAdapter implements ReserveNoncePort {
+public class NonceStatePersistenceAdapter implements ReserveNoncePort, LoadPendingNoncePort {
 
   private final Web3NonceStateJpaRepository repository;
   private final Web3CoreProperties web3CoreProperties;
@@ -92,6 +93,20 @@ public class NonceStatePersistenceAdapter implements ReserveNoncePort {
     repository.save(state);
 
     return reservedNonce;
+  }
+
+  @Override
+  public long loadPendingNonce(String fromAddress) {
+    if (fromAddress == null || fromAddress.isBlank()) {
+      throw new Web3InvalidInputException("fromAddress is required");
+    }
+    String normalizedAddress = fromAddress.toLowerCase();
+    Long onchainPendingNonce = loadPendingNonceOrNull(normalizedAddress);
+    if (onchainPendingNonce == null) {
+      throw new IllegalStateException(
+          "failed to load pending nonce: fromAddress=" + normalizedAddress);
+    }
+    return onchainPendingNonce;
   }
 
   private Long loadPendingNonceOrNull(String fromAddress) {

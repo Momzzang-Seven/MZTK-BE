@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.adapter;
 
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
@@ -20,6 +21,11 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
   private final QnaAnswerProjectionJpaRepository qnaAnswerProjectionJpaRepository;
 
   @Override
+  public Optional<QnaQuestionProjection> findQuestionByPostId(Long postId) {
+    return qnaQuestionProjectionJpaRepository.findByPostId(postId).map(this::toDomain);
+  }
+
+  @Override
   public Optional<QnaQuestionProjection> findQuestionByPostIdForUpdate(Long postId) {
     return qnaQuestionProjectionJpaRepository.findByPostIdForUpdate(postId).map(this::toDomain);
   }
@@ -31,8 +37,25 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
   }
 
   @Override
+  public Optional<QnaAnswerProjection> findAnswerByAnswerId(Long answerId) {
+    return qnaAnswerProjectionJpaRepository.findByAnswerId(answerId).map(this::toDomain);
+  }
+
+  @Override
   public Optional<QnaAnswerProjection> findAnswerByAnswerIdForUpdate(Long answerId) {
     return qnaAnswerProjectionJpaRepository.findByAnswerIdForUpdate(answerId).map(this::toDomain);
+  }
+
+  @Override
+  public List<QnaAnswerProjection> findAnswersByPostId(Long postId) {
+    return qnaAnswerProjectionJpaRepository.findAllByPostId(postId).stream().map(this::toDomain).toList();
+  }
+
+  @Override
+  public List<QnaAnswerProjection> findAnswersByPostIdForUpdate(Long postId) {
+    return qnaAnswerProjectionJpaRepository.findAllByPostIdForUpdate(postId).stream()
+        .map(this::toDomain)
+        .toList();
   }
 
   @Override

@@ -2,12 +2,13 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.config;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.AnswerEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
@@ -15,18 +16,17 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardT
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.service.AnswerEscrowExecutionService;
+import momzzangseven.mztkbe.modules.web3.qna.application.service.GetQnaExecutionResumeViewService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowExecutionService;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnUserExecutionEnabled
 public class QnaExecutionServiceConfig {
 
   @Bean
@@ -51,6 +51,27 @@ public class QnaExecutionServiceConfig {
       QuestionEscrowExecutionService delegate, PlatformTransactionManager transactionManager) {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     return new TransactionalQuestionEscrowExecutionUseCase(delegate, transactionTemplate);
+  }
+
+  @Bean
+  AnswerEscrowExecutionUseCase answerEscrowExecutionUseCase(
+      QnaProjectionPersistencePort qnaProjectionPersistencePort,
+      LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort,
+      BuildQnaExecutionDraftPort buildQnaExecutionDraftPort,
+      SubmitQnaExecutionDraftPort submitQnaExecutionDraftPort) {
+    return new AnswerEscrowExecutionService(
+        qnaProjectionPersistencePort,
+        loadQnaExecutionIntentStatePort,
+        buildQnaExecutionDraftPort,
+        submitQnaExecutionDraftPort);
+  }
+
+  @Bean
+  GetQnaExecutionResumeViewUseCase getQnaExecutionResumeViewUseCase(
+      momzzangseven.mztkbe.modules.web3.execution.application.port.in
+              .GetLatestExecutionIntentSummaryUseCase
+          getLatestExecutionIntentSummaryUseCase) {
+    return new GetQnaExecutionResumeViewService(getLatestExecutionIntentSummaryUseCase);
   }
 
   private record TransactionalQuestionEscrowExecutionUseCase(
@@ -96,11 +117,6 @@ public class QnaExecutionServiceConfig {
     @Override
     public QnaExecutionIntentResult prepareAnswerAccept(PrepareAnswerAcceptCommand command) {
       return transactionTemplate.execute(status -> delegate.prepareAnswerAccept(command));
-    }
-
-    @Override
-    public QnaExecutionIntentResult prepareAdminSettle(PrepareAdminSettleCommand command) {
-      return transactionTemplate.execute(status -> delegate.prepareAdminSettle(command));
     }
   }
 }

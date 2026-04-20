@@ -14,12 +14,11 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActi
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -39,10 +38,9 @@ public class ExecuteInternalExecutionIntentService
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  private final LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
+  private final LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
   private final LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
   private final ExecutionEip1559SigningPort executionEip1559SigningPort;
-  private final ExecutionEip7702GatewayPort executionEip7702GatewayPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final Clock appClock;
@@ -116,7 +114,7 @@ public class ExecuteInternalExecutionIntentService
     }
 
     ExecutionSponsorWalletConfig sponsorWalletConfig =
-        loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig();
+        loadInternalExecutionSignerConfigPort.loadSignerConfig();
     LoadExecutionSponsorKeyPort.ExecutionSponsorKey sponsorKey =
         loadExecutionSponsorKeyPort
             .loadByAlias(
@@ -142,7 +140,7 @@ public class ExecuteInternalExecutionIntentService
     }
 
     BigInteger currentPendingNonce =
-        executionEip7702GatewayPort.loadPendingAccountNonce(expectedSigner);
+        BigInteger.valueOf(executionTransactionGatewayPort.loadPendingNonce(expectedSigner));
     if (currentPendingNonce.longValueExact() != intent.getUnsignedTxSnapshot().expectedNonce()) {
       ExecutionIntent staleIntent =
           executionIntentPersistencePort.update(
