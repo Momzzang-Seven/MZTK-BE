@@ -332,16 +332,3 @@ mztk:
       secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}
       rate-limit:
         trust-forwarded-for: false
-
-marketplace:
-  reservation:
-    # Auto-cancel: runs every 30 minutes. Cancels PENDING reservations that are:
-    # (a) > 72h old (trainer inaction) OR (b) starting within 1h
-    auto-cancel:
-      cron: "0 0/30 * * * *"
-    # Auto-settle: runs every hour. Settles APPROVED reservations where
-    # class end + 24h has passed with no user confirmation
-    auto-settle:
-      cron: "0 0 * * * *"
-    # Timezone for both schedulers
-    zone: "Asia/Seoul"
