@@ -121,9 +121,12 @@ public class UpdateClassService implements UpdateClassUseCase {
     manageClassTagPort.updateTags(command.classId(), tags);
 
     // Step 8: Update images
-    List<Long> imageIds = command.imageIds() != null ? command.imageIds() : List.of();
-    if (!imageIds.isEmpty()) {
-      updateClassImagesPort.updateImages(command.trainerId(), command.classId(), imageIds);
+    // Per UpdateClassImagesPort contract: "empty list removes all images".
+    // We must call updateImages() even when imageIds is empty so that an explicit
+    // empty payload removes all previously bound images.
+    // Only skip when imageIds is null (field was absent from the request).
+    if (command.imageIds() != null) {
+      updateClassImagesPort.updateImages(command.trainerId(), command.classId(), command.imageIds());
     }
 
     // Step 9: Save updated class metadata

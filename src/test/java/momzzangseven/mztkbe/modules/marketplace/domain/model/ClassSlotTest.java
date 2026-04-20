@@ -1,10 +1,12 @@
 package momzzangseven.mztkbe.modules.marketplace.domain.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidSlotException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -120,6 +122,47 @@ class ClassSlotTest {
           ClassSlot.create(
               1L, List.of(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY), LocalTime.of(10, 0), 5);
       assertThat(a.conflictsWith(b, DURATION)).isFalse();
+    }
+  }
+
+  @Nested
+  @DisplayName("daysOfWeek 중복 검증")
+  class DaysOfWeekDuplicateValidation {
+
+    @Test
+    @DisplayName("중복 없는 요일 리스트 → 정상 생성")
+    void create_DistinctDays_NoException() {
+      ClassSlot slot =
+          ClassSlot.create(
+              1L, List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY), LocalTime.of(10, 0), 5);
+      assertThat(slot.getDaysOfWeek()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("같은 요일 두 번 → MarketplaceInvalidSlotException")
+    void create_DuplicateDays_ThrowsException() {
+      assertThatThrownBy(
+              () ->
+                  ClassSlot.create(
+                      1L,
+                      List.of(DayOfWeek.MONDAY, DayOfWeek.MONDAY),
+                      LocalTime.of(10, 0),
+                      5))
+          .isInstanceOf(MarketplaceInvalidSlotException.class)
+          .hasMessageContaining("duplicate");
+    }
+
+    @Test
+    @DisplayName("세 요일 중 하나가 중복 → MarketplaceInvalidSlotException")
+    void create_ThreeDaysOneDuplicate_ThrowsException() {
+      assertThatThrownBy(
+              () ->
+                  ClassSlot.create(
+                      1L,
+                      List.of(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.MONDAY),
+                      LocalTime.of(10, 0),
+                      5))
+          .isInstanceOf(MarketplaceInvalidSlotException.class);
     }
   }
 }
