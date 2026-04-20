@@ -433,6 +433,9 @@ public enum ErrorCode {
       "Store URL must use http/https and be well-formed",
       HttpStatus.BAD_REQUEST),
 
+  MARKETPLACE_INVALID_CLASS_ID(
+      "MARKETPLACE_030", "Class ID must be a positive number", HttpStatus.BAD_REQUEST),
+
   MARKETPLACE_RESERVATION_SLOT_FULL(
       "MARKETPLACE_017", "Class slot capacity is full", HttpStatus.CONFLICT),
 

@@ -8,7 +8,7 @@ public class TrainerSuspendedException extends BusinessException {
 
   public TrainerSuspendedException(Long trainerId) {
     super(
-        ErrorCode.UNAUTHORIZED_ACCESS,
+        ErrorCode.MARKETPLACE_TRAINER_SUSPENDED,
         "Trainer is suspended and cannot perform this action: trainerId=" + trainerId);
   }
 }

@@ -355,7 +355,7 @@ class ClassControllerTest {
     void getTrainerClasses_validRequest_returns200() throws Exception {
       // given
       given(getTrainerClassesUseCase.execute(any()))
-          .willReturn(GetTrainerClassesResult.of(List.of(), 0, 0, 0L));
+          .willReturn(GetTrainerClassesResult.of(false, null, List.of(), 0, 0, 0L));
 
       // when & then
       mockMvc

@@ -38,7 +38,7 @@ public record UpdateClassRequestDTO(
       Long timeId,
       @NotEmpty List<DayOfWeek> daysOfWeek,
       @NotNull LocalTime startTime,
-      @NotNull @Min(1) int capacity) {
+      @Min(1) int capacity) {
 
     public ClassTimeCommand toCommand() {
       return new ClassTimeCommand(timeId, daysOfWeek, startTime, capacity);

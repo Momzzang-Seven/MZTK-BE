@@ -1,18 +1,34 @@
 package momzzangseven.mztkbe.modules.marketplace.api.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetTrainerClassesResult;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.GetTrainerClassesResult.TrainerClassItem;
 
-/** HTTP response DTO for {@code GET /marketplace/trainer/classes}. */
+/**
+ * HTTP response DTO for {@code GET /marketplace/trainer/classes}.
+ *
+ * <p>Includes the trainer's current sanction status so the front-end can present a suspension
+ * banner without an extra API call.
+ */
 public record GetTrainerClassesResponseDTO(
-    List<TrainerClassItemDTO> items, int currentPage, int totalPages, long totalElements) {
+    boolean isSuspended,
+    LocalDateTime suspendedUntil,
+    List<TrainerClassItemDTO> items,
+    int currentPage,
+    int totalPages,
+    long totalElements) {
 
   public static GetTrainerClassesResponseDTO from(GetTrainerClassesResult result) {
     List<TrainerClassItemDTO> items =
         result.items().stream().map(TrainerClassItemDTO::from).toList();
     return new GetTrainerClassesResponseDTO(
-        items, result.currentPage(), result.totalPages(), result.totalElements());
+        result.isSuspended(),
+        result.suspendedUntil(),
+        items,
+        result.currentPage(),
+        result.totalPages(),
+        result.totalElements());
   }
 
   /** Single class item in the trainer's own class list. */

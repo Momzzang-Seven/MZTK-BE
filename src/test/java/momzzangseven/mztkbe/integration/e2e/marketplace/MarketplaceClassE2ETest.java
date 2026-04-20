@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -49,6 +50,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>인증 없이 접근 시 → 401 반환
  * </ul>
  */
+@Tag("e2e")
 @DisplayName("[E2E] Marketplace Class 전체 흐름 테스트")
 class MarketplaceClassE2ETest extends E2ETestBase {
 
@@ -442,7 +444,7 @@ class MarketplaceClassE2ETest extends E2ETestBase {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode root = objectMapper.readTree(response.getBody());
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
-    JsonNode classes = root.at("/data/classes");
+    JsonNode classes = root.at("/data/items");
     assertThat(classes.isArray()).isTrue();
     boolean found = false;
     for (JsonNode c : classes) {
@@ -474,7 +476,7 @@ class MarketplaceClassE2ETest extends E2ETestBase {
 
     // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    JsonNode classes = objectMapper.readTree(response.getBody()).at("/data/classes");
+    JsonNode classes = objectMapper.readTree(response.getBody()).at("/data/items");
     assertThat(classes.size()).isZero();
   }
 
@@ -500,7 +502,7 @@ class MarketplaceClassE2ETest extends E2ETestBase {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     JsonNode root = objectMapper.readTree(response.getBody());
     assertThat(root.at("/status").asText()).isEqualTo("SUCCESS");
-    JsonNode classes = root.at("/data/classes");
+    JsonNode classes = root.at("/data/items");
     assertThat(classes.isArray()).isTrue();
     boolean found = false;
     for (JsonNode c : classes) {
@@ -533,7 +535,7 @@ class MarketplaceClassE2ETest extends E2ETestBase {
 
     // then: inactive 클래스가 목록에 없어야 함
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    JsonNode classes = objectMapper.readTree(response.getBody()).at("/data/classes");
+    JsonNode classes = objectMapper.readTree(response.getBody()).at("/data/items");
     for (JsonNode c : classes) {
       assertThat(c.at("/classId").asLong()).isNotEqualTo(classId);
     }
@@ -755,7 +757,7 @@ class MarketplaceClassE2ETest extends E2ETestBase {
             HttpMethod.GET,
             new HttpEntity<>(new HttpHeaders()),
             String.class);
-    JsonNode classes = objectMapper.readTree(listResp.getBody()).at("/data/classes");
+    JsonNode classes = objectMapper.readTree(listResp.getBody()).at("/data/items");
     for (JsonNode c : classes) {
       assertThat(c.at("/classId").asLong()).isNotEqualTo(classId);
     }

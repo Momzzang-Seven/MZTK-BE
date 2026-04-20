@@ -6,6 +6,14 @@ package momzzangseven.mztkbe.modules.marketplace.application.dto;
  *
  * <p>This is an internal application-layer DTO filled by the persistence adapter and consumed by
  * {@link momzzangseven.mztkbe.modules.marketplace.application.service.GetClassDetailService}.
+ *
+ * <p><b>Note on {@code classTimes}</b>: the persistence adapter always populates this field with
+ * {@code List.of()} (empty). Active class time slots are loaded separately by {@link
+ * momzzangseven.mztkbe.modules.marketplace.application.service.GetClassDetailService} via {@link
+ * momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassSlotPort} and merged into
+ * the final {@link momzzangseven.mztkbe.modules.marketplace.application.dto.GetClassDetailResult}.
+ * This two-step design avoids a JOIN on {@code class_slots} in the same query that already JOINs
+ * {@code trainer_stores}.
  */
 public record ClassDetailInfo(
     Long classId,
