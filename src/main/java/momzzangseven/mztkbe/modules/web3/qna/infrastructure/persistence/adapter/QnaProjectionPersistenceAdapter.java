@@ -48,7 +48,9 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
 
   @Override
   public List<QnaAnswerProjection> findAnswersByPostId(Long postId) {
-    return qnaAnswerProjectionJpaRepository.findAllByPostId(postId).stream().map(this::toDomain).toList();
+    return qnaAnswerProjectionJpaRepository.findAllByPostId(postId).stream()
+        .map(this::toDomain)
+        .toList();
   }
 
   @Override

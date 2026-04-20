@@ -24,8 +24,7 @@ class ExecutionTransactionServiceConfigTest {
               TransferTransactionPersistencePort.class,
               () -> mock(TransferTransactionPersistencePort.class))
           .withBean(UpdateTransactionPort.class, () -> mock(UpdateTransactionPort.class))
-          .withBean(
-              RecordTransactionAuditPort.class, () -> mock(RecordTransactionAuditPort.class))
+          .withBean(RecordTransactionAuditPort.class, () -> mock(RecordTransactionAuditPort.class))
           .withBean(ReserveNoncePort.class, () -> mock(ReserveNoncePort.class))
           .withBean(LoadPendingNoncePort.class, () -> mock(LoadPendingNoncePort.class))
           .withBean(Web3ContractPort.class, () -> mock(Web3ContractPort.class));
@@ -44,6 +43,8 @@ class ExecutionTransactionServiceConfigTest {
     contextRunner
         .withPropertyValues(
             "web3.eip7702.enabled=false", "web3.execution.internal-issuer.enabled=false")
-        .run(context -> assertThat(context).doesNotHaveBean(ManageExecutionTransactionUseCase.class));
+        .run(
+            context ->
+                assertThat(context).doesNotHaveBean(ManageExecutionTransactionUseCase.class));
   }
 }

@@ -26,8 +26,7 @@ public record GetQnaAdminSettlementReviewResponseDTO(
     boolean answerConflictingActiveIntent,
     List<QnaAdminReviewValidationItem> validations) {
 
-  public static GetQnaAdminSettlementReviewResponseDTO from(
-      QnaAdminSettlementReviewResult result) {
+  public static GetQnaAdminSettlementReviewResponseDTO from(QnaAdminSettlementReviewResult result) {
     if (result == null) {
       throw new Web3InvalidInputException("result is required");
     }

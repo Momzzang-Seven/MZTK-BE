@@ -34,7 +34,8 @@ public interface QnaAnswerProjectionJpaRepository
 
   Optional<QnaAnswerProjectionEntity> findByAnswerId(Long answerId);
 
-  @Query("select a from QnaAnswerProjectionEntity a where a.postId = :postId order by a.answerId asc")
+  @Query(
+      "select a from QnaAnswerProjectionEntity a where a.postId = :postId order by a.answerId asc")
   List<QnaAnswerProjectionEntity> findAllByPostId(@Param("postId") Long postId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)

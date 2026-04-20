@@ -257,7 +257,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
-  @DisplayName("afterExecutionConfirmed marks refunded question as deleted_with_answers when answers remain")
+  @DisplayName(
+      "afterExecutionConfirmed marks refunded question as deleted_with_answers when answers remain")
   void afterExecutionConfirmed_marksAdminRefundDeletedWithAnswers() throws Exception {
     when(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
         .thenReturn(Optional.of(questionProjection("0x" + "a".repeat(64), 2)));

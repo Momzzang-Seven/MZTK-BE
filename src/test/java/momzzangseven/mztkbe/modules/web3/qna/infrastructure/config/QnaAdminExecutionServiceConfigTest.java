@@ -44,8 +44,7 @@ class QnaAdminExecutionServiceConfigTest {
               () -> mock(BuildQnaAdminExecutionDraftPort.class))
           .withBean(
               SubmitQnaExecutionDraftPort.class, () -> mock(SubmitQnaExecutionDraftPort.class))
-          .withBean(
-              PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
+          .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
 
   @Test
   @DisplayName("internal issuer enabled면 admin review/execute use case beans를 등록한다")

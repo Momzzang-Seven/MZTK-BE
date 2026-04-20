@@ -29,7 +29,10 @@ public record QnaAdminSettlementReviewResult(
     if (authority == null) {
       throw new Web3InvalidInputException("authority is required");
     }
-    if (localQuestion == null || localAnswer == null || onchainQuestion == null || onchainAnswer == null) {
+    if (localQuestion == null
+        || localAnswer == null
+        || onchainQuestion == null
+        || onchainAnswer == null) {
       throw new Web3InvalidInputException("review views are required");
     }
     if (validations == null) {

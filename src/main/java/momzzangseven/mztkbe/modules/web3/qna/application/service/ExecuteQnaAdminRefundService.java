@@ -10,8 +10,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdmin
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
 
-  @RequiredArgsConstructor
-  public class ExecuteQnaAdminRefundService implements ExecuteQnaAdminRefundUseCase {
+@RequiredArgsConstructor
+public class ExecuteQnaAdminRefundService implements ExecuteQnaAdminRefundUseCase {
 
   private final LoadQnaAdminReviewContextPort loadQnaAdminReviewContextPort;
   private final PrepareQnaAdminRefundUseCase prepareQnaAdminRefundUseCase;
@@ -30,7 +30,9 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminRe
     }
 
     var localQuestion =
-        context.localQuestion().orElseThrow(() -> new Web3InvalidInputException("local question is required"));
+        context
+            .localQuestion()
+            .orElseThrow(() -> new Web3InvalidInputException("local question is required"));
     return prepareQnaAdminRefundUseCase.execute(
         new PrepareAdminRefundCommand(command.postId(), localQuestion.writerUserId()));
   }

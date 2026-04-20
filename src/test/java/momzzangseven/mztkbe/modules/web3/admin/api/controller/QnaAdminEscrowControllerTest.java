@@ -15,10 +15,6 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.CalculateQnaAdminRefundReviewQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.CalculateQnaAdminSettlementReviewQuery;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.CalculateQnaAdminRefundReviewUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.CalculateQnaAdminSettlementReviewUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminRefundUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminExecutionAuthorityView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalAnswerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalQuestionView;
@@ -28,6 +24,10 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRefundRevie
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementReviewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.CalculateQnaAdminRefundReviewUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.CalculateQnaAdminSettlementReviewUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminRefundUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAutoAcceptConfigurationValidator;
 import org.junit.jupiter.api.DisplayName;
@@ -63,7 +63,9 @@ class QnaAdminEscrowControllerTest {
   @MockitoBean private CalculateQnaAdminRefundReviewUseCase calculateQnaAdminRefundReviewUseCase;
   @MockitoBean private ExecuteQnaAdminRefundUseCase executeQnaAdminRefundUseCase;
 
-  @MockitoBean private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
+  @MockitoBean
+  private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
+
   @MockitoBean private QnaAutoAcceptConfigurationValidator qnaAutoAcceptConfigurationValidator;
 
   @MockitoBean
@@ -89,18 +91,23 @@ class QnaAdminEscrowControllerTest {
   @Test
   @DisplayName("GET /admin/web3/qna/questions/{postId}/answers/{answerId}/settlement-review 성공")
   void getSettlementReview_success() throws Exception {
-    given(calculateQnaAdminSettlementReviewUseCase.execute(any(CalculateQnaAdminSettlementReviewQuery.class)))
+    given(
+            calculateQnaAdminSettlementReviewUseCase.execute(
+                any(CalculateQnaAdminSettlementReviewQuery.class)))
         .willReturn(sampleSettlementReview());
 
     mockMvc
-        .perform(get("/admin/web3/qna/questions/101/answers/201/settlement-review").with(adminPrincipal(9L)))
+        .perform(
+            get("/admin/web3/qna/questions/101/answers/201/settlement-review")
+                .with(adminPrincipal(9L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(101))
         .andExpect(jsonPath("$.data.answerId").value(201))
         .andExpect(jsonPath("$.data.processable").value(true))
-        .andExpect(jsonPath("$.data.authority.currentServerSignerAddress")
-            .value("0x1111111111111111111111111111111111111111"))
+        .andExpect(
+            jsonPath("$.data.authority.currentServerSignerAddress")
+                .value("0x1111111111111111111111111111111111111111"))
         .andExpect(jsonPath("$.data.authority.requiresUserSignature").value(false))
         .andExpect(jsonPath("$.data.authority.authorityModel").value("SERVER_RELAYER_ONLY"));
 
@@ -130,7 +137,9 @@ class QnaAdminEscrowControllerTest {
   @Test
   @DisplayName("GET /admin/web3/qna/questions/{postId}/refund-review 성공")
   void getRefundReview_success() throws Exception {
-    given(calculateQnaAdminRefundReviewUseCase.execute(any(CalculateQnaAdminRefundReviewQuery.class)))
+    given(
+            calculateQnaAdminRefundReviewUseCase.execute(
+                any(CalculateQnaAdminRefundReviewQuery.class)))
         .willReturn(sampleRefundReview());
 
     mockMvc
@@ -168,7 +177,9 @@ class QnaAdminEscrowControllerTest {
   @DisplayName("QnA admin endpoint 는 USER 권한이면 403")
   void qnaAdminEndpoint_forbiddenForUser_returns403() throws Exception {
     mockMvc
-        .perform(get("/admin/web3/qna/questions/101/answers/201/settlement-review").with(userPrincipal(1L)))
+        .perform(
+            get("/admin/web3/qna/questions/101/answers/201/settlement-review")
+                .with(userPrincipal(1L)))
         .andExpect(status().isForbidden());
 
     verifyNoInteractions(calculateQnaAdminSettlementReviewUseCase);
@@ -187,11 +198,15 @@ class QnaAdminEscrowControllerTest {
   @Test
   @DisplayName("settlement review usecase 가 invalid input 을 던지면 400")
   void getSettlementReview_invalidInput_returns400() throws Exception {
-    given(calculateQnaAdminSettlementReviewUseCase.execute(any(CalculateQnaAdminSettlementReviewQuery.class)))
+    given(
+            calculateQnaAdminSettlementReviewUseCase.execute(
+                any(CalculateQnaAdminSettlementReviewQuery.class)))
         .willThrow(new Web3InvalidInputException("postId must be positive"));
 
     mockMvc
-        .perform(get("/admin/web3/qna/questions/101/answers/201/settlement-review").with(adminPrincipal(9L)))
+        .perform(
+            get("/admin/web3/qna/questions/101/answers/201/settlement-review")
+                .with(adminPrincipal(9L)))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
   }
@@ -246,10 +261,7 @@ class QnaAdminEscrowControllerTest {
 
   private QnaAdminExecutionAuthorityView authority() {
     return new QnaAdminExecutionAuthorityView(
-        "0x1111111111111111111111111111111111111111",
-        true,
-        false,
-        "SERVER_RELAYER_ONLY");
+        "0x1111111111111111111111111111111111111111", true, false, "SERVER_RELAYER_ONLY");
   }
 
   private QnaExecutionIntentResult sampleExecutionIntent(String actionType) {

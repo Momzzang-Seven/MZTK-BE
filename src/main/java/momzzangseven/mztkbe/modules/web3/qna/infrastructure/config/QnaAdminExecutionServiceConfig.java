@@ -6,9 +6,9 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdmin
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaAdminExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
@@ -75,9 +75,7 @@ public class QnaAdminExecutionServiceConfig {
       QnaAcceptStateSyncPort qnaAcceptStateSyncPort,
       PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase) {
     return new ExecuteQnaAdminSettlementService(
-        loadQnaAdminReviewContextPort,
-        qnaAcceptStateSyncPort,
-        prepareQnaAdminSettlementUseCase);
+        loadQnaAdminReviewContextPort, qnaAcceptStateSyncPort, prepareQnaAdminSettlementUseCase);
   }
 
   @Bean
@@ -90,18 +88,15 @@ public class QnaAdminExecutionServiceConfig {
 
   @Bean
   ExecuteQnaAdminSettlementUseCase executeQnaAdminSettlementUseCase(
-      ExecuteQnaAdminSettlementService delegate,
-      PlatformTransactionManager transactionManager) {
+      ExecuteQnaAdminSettlementService delegate, PlatformTransactionManager transactionManager) {
     return new AdminAuditedExecuteQnaAdminSettlementUseCase(
         delegate, new TransactionTemplate(transactionManager));
   }
 
   @Bean
   ExecuteQnaAdminRefundUseCase executeQnaAdminRefundUseCase(
-      ExecuteQnaAdminRefundService delegate,
-      PlatformTransactionManager transactionManager) {
+      ExecuteQnaAdminRefundService delegate, PlatformTransactionManager transactionManager) {
     return new AdminAuditedExecuteQnaAdminRefundUseCase(
         delegate, new TransactionTemplate(transactionManager));
   }
-
 }

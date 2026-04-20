@@ -27,15 +27,20 @@ public class ExecuteQnaAdminSettlementService implements ExecuteQnaAdminSettleme
 
     var context =
         loadQnaAdminReviewContextPort.loadSettlementForUpdate(command.postId(), command.answerId());
-    var review = QnaAdminReviewDecider.assessSettlement(command.postId(), command.answerId(), context);
+    var review =
+        QnaAdminReviewDecider.assessSettlement(command.postId(), command.answerId(), context);
     if (!review.processable()) {
       throwValidationFailure(review.blockingReason());
     }
 
     var localQuestion =
-        context.localQuestion().orElseThrow(() -> new Web3InvalidInputException("local question is required"));
+        context
+            .localQuestion()
+            .orElseThrow(() -> new Web3InvalidInputException("local question is required"));
     var localAnswer =
-        context.localAnswer().orElseThrow(() -> new Web3InvalidInputException("local answer is required"));
+        context
+            .localAnswer()
+            .orElseThrow(() -> new Web3InvalidInputException("local answer is required"));
 
     qnaAcceptStateSyncPort.beginPendingAccept(command.postId(), command.answerId());
     return prepareQnaAdminSettlementUseCase.execute(

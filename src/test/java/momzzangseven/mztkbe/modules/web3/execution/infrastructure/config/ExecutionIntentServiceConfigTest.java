@@ -35,8 +35,7 @@ class ExecutionIntentServiceConfigTest {
               () -> mock(ExecutionIntentPersistencePort.class))
           .withBean(LoadExecutionChainIdPort.class, () -> mock(LoadExecutionChainIdPort.class))
           .withBean(Clock.class, Clock::systemUTC)
-          .withBean(
-              PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
+          .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
 
   @Test
   @DisplayName("web3.eip7702.enabled=false면 execution intent config가 fallback 포트로 부팅된다")
