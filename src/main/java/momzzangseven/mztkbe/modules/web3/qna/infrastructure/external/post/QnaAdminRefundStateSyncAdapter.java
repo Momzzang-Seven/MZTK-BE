@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
+package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.post;
 
 import momzzangseven.mztkbe.modules.post.application.port.in.SyncQuestionAdminRefundStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
