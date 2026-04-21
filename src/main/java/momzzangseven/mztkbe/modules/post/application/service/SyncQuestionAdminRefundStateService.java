@@ -20,6 +20,13 @@ public class SyncQuestionAdminRefundStateService implements SyncQuestionAdminRef
     postPersistencePort.savePost(post.beginAdminRefund());
   }
 
+  @Override
+  @Transactional
+  public void rollbackPendingRefund(Long postId) {
+    Post post = requirePostForUpdate(postId, "qna admin refund rollback");
+    postPersistencePort.savePost(post.cancelAdminRefund());
+  }
+
   private Post requirePostForUpdate(Long postId, String operation) {
     return postPersistencePort
         .loadPostForUpdate(postId)

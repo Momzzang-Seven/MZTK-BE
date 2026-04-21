@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 
@@ -16,13 +15,32 @@ public interface LoadQnaAdminReviewContextPort {
 
   RefundContext loadRefundForUpdate(Long postId);
 
+  enum LocalQuestionStatus {
+    OPEN,
+    PENDING_ACCEPT,
+    PENDING_ADMIN_REFUND,
+    RESOLVED,
+    UNKNOWN;
+
+    public static LocalQuestionStatus fromExternalName(String name) {
+      if (name == null || name.isBlank()) {
+        return UNKNOWN;
+      }
+      try {
+        return LocalQuestionStatus.valueOf(name);
+      } catch (IllegalArgumentException ignored) {
+        return UNKNOWN;
+      }
+    }
+  }
+
   record ExecutionAuthority(String signerAddress, boolean relayerRegistered) {}
 
   record LocalQuestion(
       Long postId,
       Long writerUserId,
       boolean questionPost,
-      PostStatus status,
+      LocalQuestionStatus status,
       boolean solved,
       boolean answerLocked,
       String content,

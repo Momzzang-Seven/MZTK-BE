@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
@@ -44,6 +45,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   private final ObjectMapper objectMapper;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
+  private final QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
   private final momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort
       qnaLocalDeleteSyncPort;
 
@@ -92,14 +94,20 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       ExecutionIntentStatus terminalStatus,
       String failureReason) {
     QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
-    if ((payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
-            || payload.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE)
-        && shouldRollbackPendingAccept(terminalStatus, failureReason)) {
+    if (!shouldRollbackPendingState(terminalStatus, failureReason)) {
+      return;
+    }
+    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
+        || payload.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE) {
       qnaAcceptStateSyncPort.rollbackPendingAccept(payload.postId(), payload.answerId());
+      return;
+    }
+    if (payload.actionType() == QnaExecutionActionType.QNA_ADMIN_REFUND) {
+      qnaAdminRefundStateSyncPort.rollbackPendingRefund(payload.postId());
     }
   }
 
-  private boolean shouldRollbackPendingAccept(
+  private boolean shouldRollbackPendingState(
       ExecutionIntentStatus terminalStatus, String failureReason) {
     if (terminalStatus == ExecutionIntentStatus.EXPIRED
         || terminalStatus == ExecutionIntentStatus.CANCELED
