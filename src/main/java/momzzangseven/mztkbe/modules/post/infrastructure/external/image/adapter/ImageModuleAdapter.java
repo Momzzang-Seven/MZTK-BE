@@ -1,12 +1,17 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.external.image.adapter;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferenceResult;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferencesCommand;
+import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByReferencesResult;
 import momzzangseven.mztkbe.modules.image.application.dto.UpsertImagesByReferenceCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.ValidatePostAttachableImagesCommand;
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferenceUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByReferencesUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.UpsertImagesByReferenceUseCase;
 import momzzangseven.mztkbe.modules.image.application.port.in.ValidatePostAttachableImagesUseCase;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
@@ -26,6 +31,7 @@ public class ImageModuleAdapter
 
   private final UpsertImagesByReferenceUseCase upsertImagesByReferenceUseCase;
   private final GetImagesByReferenceUseCase getImagesByReferenceUseCase;
+  private final GetImagesByReferencesUseCase getImagesByReferencesUseCase;
   private final ValidatePostAttachableImagesUseCase validatePostAttachableImagesUseCase;
   private final PostImageStorageProperties postImageStorageProperties;
 
@@ -56,6 +62,42 @@ public class ImageModuleAdapter
             .toList();
 
     return new PostImageResult(slots);
+  }
+
+  @Override
+  public Map<Long, PostImageResult> loadImagesByPostIds(Map<PostType, List<Long>> postIdsByType) {
+    if (postIdsByType == null || postIdsByType.isEmpty()) {
+      return Map.of();
+    }
+
+    Map<Long, PostImageResult> merged = new HashMap<>();
+    // For each type and ids in postIdsByType, find related images for each id in ids. If ids is
+    // empty, return and check next PostType.
+    postIdsByType.forEach(
+        (postType, postIds) -> {
+          if (postIds == null || postIds.isEmpty()) {
+            return;
+          }
+          ImageReferenceType refType = resolveReferenceType(postType);
+          GetImagesByReferencesResult result =
+              getImagesByReferencesUseCase.execute(
+                  new GetImagesByReferencesCommand(refType, postIds.stream().distinct().toList()));
+
+          result
+              .itemsByReferenceId()
+              .forEach(
+                  (postId, items) -> {
+                    List<PostImageSlot> slots =
+                        items.stream()
+                            .map(
+                                item ->
+                                    new PostImageSlot(
+                                        item.imageId(), buildImageUrl(item.finalObjectKey())))
+                            .toList();
+                    merged.put(postId, new PostImageResult(slots));
+                  });
+        });
+    return merged;
   }
 
   private String buildImageUrl(String finalObjectKey) {

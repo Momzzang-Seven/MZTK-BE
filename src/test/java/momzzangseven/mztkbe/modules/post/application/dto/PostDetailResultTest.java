@@ -35,19 +35,23 @@ class PostDetailResultTest {
 
     String nickname = "test nick name";
     String profileImageUrl = "test/image/url";
-    List<String> imageUrls =
-        List.of("https://cdn.example.com/img1.webp", "https://cdn.example.com/img2.webp");
+    List<PostImageResult.PostImageSlot> images =
+        List.of(
+            new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/img1.webp"),
+            new PostImageResult.PostImageSlot(2L, "https://cdn.example.com/img2.webp"));
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 3L, true, nickname, profileImageUrl, imageUrls, null);
+        PostDetailResult.fromDomain(post, 3L, true, nickname, profileImageUrl, images, null);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
     assertThat(result.type()).isEqualTo(PostType.QUESTION);
     assertThat(result.title()).isEqualTo("title");
     assertThat(result.content()).isEqualTo("content");
-    assertThat(result.imageUrls())
-        .containsExactly("https://cdn.example.com/img1.webp", "https://cdn.example.com/img2.webp");
+    assertThat(result.images())
+        .containsExactly(
+            new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/img1.webp"),
+            new PostImageResult.PostImageSlot(2L, "https://cdn.example.com/img2.webp"));
     assertThat(result.likeCount()).isEqualTo(3L);
     assertThat(result.liked()).isTrue();
     assertThat(result.reward()).isEqualTo(50L);
@@ -81,6 +85,7 @@ class PostDetailResultTest {
         PostDetailResult.fromDomain(post, 0L, false, nickname, profileImageUrl, null, null);
 
     assertThat(result.isSolved()).isTrue();
+    assertThat(result.images()).isEmpty();
   }
 
   @Test

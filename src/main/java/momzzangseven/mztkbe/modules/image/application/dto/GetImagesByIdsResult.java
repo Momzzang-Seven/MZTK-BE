@@ -13,7 +13,7 @@ import momzzangseven.mztkbe.modules.image.domain.vo.ImageStatus;
 public record GetImagesByIdsResult(List<ImageItem> images) {
 
   /**
-   * A single image entry. {@code finalObjectKey} is {@code null} when {@code status} is PENDING or
+   * A single image entry. {@code imageUrl} is {@code null} when {@code status} is PENDING or
    * FAILED.
    */
   public record ImageItem(
@@ -22,20 +22,20 @@ public record GetImagesByIdsResult(List<ImageItem> images) {
       ImageReferenceType referenceType,
       Long referenceId,
       ImageStatus status,
-      String finalObjectKey,
+      String imageUrl,
       int imgOrder,
       Instant createdAt,
       Instant updatedAt) {
 
-    /** Creates an {@link ImageItem} from a domain {@link Image} object. */
-    public static ImageItem from(Image image) {
+    /** Creates an {@link ImageItem} from a domain {@link Image} object. imageUrl is pre-built. */
+    public static ImageItem from(Image image, String imageUrl) {
       return new ImageItem(
           image.getId(),
           image.getUserId(),
           image.getReferenceType().toRequestFacing(),
           image.getReferenceId(),
           image.getStatus(),
-          image.getFinalObjectKey(),
+          imageUrl,
           image.getImgOrder(),
           image.getCreatedAt(),
           image.getUpdatedAt());

@@ -1,0 +1,12 @@
+package momzzangseven.mztkbe.global.error.marketplace;
+
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+
+/** Exception thrown when a trainer ID is null or not a positive number. */
+public class MarketplaceInvalidTrainerIdException extends BusinessException {
+
+  public MarketplaceInvalidTrainerIdException() {
+    super(ErrorCode.MARKETPLACE_INVALID_TRAINER_ID);
+  }
+}

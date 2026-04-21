@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyComplet
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -289,6 +290,21 @@ public class GlobalExceptionHandler {
       DataIntegrityViolationException ex) {
     log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
     ErrorCode errorCode = ErrorCode.DATA_INTEGRITY_VIOLATION;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
+  }
+
+  /**
+   * Handle optimistic locking conflicts (e.g., concurrent class updates).
+   *
+   * <p>Triggered when JPA {@code @Version} detects a stale entity. Returns 409 with {@code
+   * MARKETPLACE_024} so the client knows to retry with a fresh read.
+   */
+  @ExceptionHandler(OptimisticLockingFailureException.class)
+  public ResponseEntity<ApiResponse<Void>> handleOptimisticLockingFailureException(
+      OptimisticLockingFailureException ex) {
+    log.warn("Optimistic locking conflict: {}", ex.getMessage());
+    ErrorCode errorCode = ErrorCode.MARKETPLACE_CONCURRENT_UPDATE;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
   }
