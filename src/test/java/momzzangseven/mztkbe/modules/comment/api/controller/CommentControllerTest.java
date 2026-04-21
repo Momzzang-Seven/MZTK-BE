@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
@@ -73,7 +74,7 @@ class CommentControllerTest {
     @DisplayName("정상 요청이면 200과 댓글 데이터를 반환한다")
     void createComment_success() throws Exception {
       given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
-          .willReturn(comment(1L, "첫 댓글", false));
+          .willReturn(mutationResult(1L, "첫 댓글", null, false));
 
       mockMvc
           .perform(
@@ -84,7 +85,9 @@ class CommentControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.commentId").value(1))
-          .andExpect(jsonPath("$.data.content").value("첫 댓글"));
+          .andExpect(jsonPath("$.data.content").value("첫 댓글"))
+          .andExpect(jsonPath("$.data.writer").doesNotExist())
+          .andExpect(jsonPath("$.data.replyCount").doesNotExist());
 
       verify(createCommentUseCase).createComment(any(CreateCommentCommand.class));
     }
@@ -130,7 +133,7 @@ class CommentControllerTest {
     void createComment_longContent_returns200() throws Exception {
       String longContent = "a".repeat(5000);
       given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
-          .willReturn(comment(2L, longContent, false));
+          .willReturn(mutationResult(2L, longContent, null, false));
       mockMvc
           .perform(
               post("/posts/10/comments")
@@ -154,7 +157,7 @@ class CommentControllerTest {
     @DisplayName("정상 수정이면 200을 반환한다")
     void updateComment_success() throws Exception {
       given(updateCommentUseCase.updateComment(any(UpdateCommentCommand.class)))
-          .willReturn(comment(7L, "수정된 댓글", false));
+          .willReturn(mutationResult(7L, "수정된 댓글", null, false));
 
       mockMvc
           .perform(
@@ -165,7 +168,9 @@ class CommentControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.commentId").value(7))
-          .andExpect(jsonPath("$.data.content").value("수정된 댓글"));
+          .andExpect(jsonPath("$.data.content").value("수정된 댓글"))
+          .andExpect(jsonPath("$.data.writer").doesNotExist())
+          .andExpect(jsonPath("$.data.replyCount").doesNotExist());
     }
 
     @Test
@@ -185,7 +190,7 @@ class CommentControllerTest {
     void updateComment_longContent_returns200() throws Exception {
       String longContent = "a".repeat(5000);
       given(updateCommentUseCase.updateComment(any(UpdateCommentCommand.class)))
-          .willReturn(comment(7L, longContent, false));
+          .willReturn(mutationResult(7L, longContent, null, false));
 
       mockMvc
           .perform(
@@ -325,6 +330,12 @@ class CommentControllerTest {
     LocalDateTime now = LocalDateTime.now();
     return new CommentResult(
         id, content, 1L, "writer-1", "profile-1", null, 1L, isDeleted, now, now);
+  }
+
+  private CommentMutationResult mutationResult(
+      Long id, String content, Long parentId, boolean isDeleted) {
+    LocalDateTime now = LocalDateTime.now();
+    return new CommentMutationResult(id, content, 1L, parentId, isDeleted, now, now);
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(

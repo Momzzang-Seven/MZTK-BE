@@ -41,7 +41,7 @@ public class CommentService
   // 1. 생성 (Create)
   @Override
   @Transactional
-  public CommentResult createComment(CreateCommentCommand command) {
+  public CommentMutationResult createComment(CreateCommentCommand command) {
     // 1-1. 게시글 존재 여부 검증 (외부 모듈 포트 사용)
     validatePostExists(command.postId());
 
@@ -66,20 +66,20 @@ public class CommentService
           e);
     }
 
-    return CommentResult.from(savedComment);
+    return CommentMutationResult.from(savedComment);
   }
 
   // 2. 수정 (Update)
   @Override
   @Transactional
-  public CommentResult updateComment(UpdateCommentCommand command) {
+  public CommentMutationResult updateComment(UpdateCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
 
     comment.validateWriter(command.userId());
 
     comment.updateContent(command.content());
 
-    return CommentResult.from(saveCommentPort.saveComment(comment));
+    return CommentMutationResult.from(saveCommentPort.saveComment(comment));
   }
 
   // 3-1. 삭제 (Delete - 사용자 요청)
@@ -116,6 +116,7 @@ public class CommentService
     Comment parent =
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
     validatePostExists(parent.getPostId());
+    validateParentIsRootComment(parent);
 
     return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()));
   }
@@ -137,6 +138,10 @@ public class CommentService
       throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
     }
 
+    validateParentIsRootComment(parent);
+  }
+
+  private void validateParentIsRootComment(Comment parent) {
     if (parent.getParentId() != null) {
       throw new BusinessException(ErrorCode.COMMENT_DEPTH_EXCEEDED);
     }
@@ -151,7 +156,7 @@ public class CommentService
   private Page<CommentResult> toResultPage(Page<Comment> comments) {
     List<Comment> content = comments.getContent();
     if (content.isEmpty()) {
-      return comments.map(CommentResult::from);
+      return comments.map(comment -> CommentResult.from(comment, null, 0L));
     }
 
     List<Long> commentIds = content.stream().map(Comment::getId).toList();

@@ -115,6 +115,8 @@ class CommentControllerIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("SUCCESS"))
             .andExpect(jsonPath("$.data.content").value("first comment"))
+            .andExpect(jsonPath("$.data.writer").doesNotExist())
+            .andExpect(jsonPath("$.data.replyCount").doesNotExist())
             .andReturn();
     Long commentId = extractLong(createCommentResult, "/data/commentId");
 
@@ -301,6 +303,30 @@ class CommentControllerIntegrationTest {
                 .with(userPrincipal(writer.getId()))
                 .contentType(APPLICATION_JSON)
                 .content(json(Map.of("content", "nested reply", "parentId", replyId))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("COMMENT_008"));
+  }
+
+  @Test
+  @DisplayName("fetching replies of a reply returns 400")
+  void getReplies_nestedReplyParent_returns400() throws Exception {
+    UserEntity writer = saveUser("nested-fetch-writer", "nested-fetch.webp");
+    PostEntity savedPost =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(writer.getId())
+                .type(PostType.FREE)
+                .title("nested reply fetch policy")
+                .content("body")
+                .reward(0L)
+                .status(PostStatus.OPEN)
+                .build());
+    Long rootId = createComment(savedPost.getId(), writer.getId(), "root", null);
+    Long replyId = createComment(savedPost.getId(), writer.getId(), "reply", rootId);
+
+    mockMvc
+        .perform(get("/comments/" + replyId + "/replies").with(userPrincipal(writer.getId())))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"))
         .andExpect(jsonPath("$.code").value("COMMENT_008"));

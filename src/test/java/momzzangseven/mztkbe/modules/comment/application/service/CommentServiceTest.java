@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
+import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
@@ -73,7 +74,7 @@ class CommentServiceTest {
                   .build();
             });
 
-    CommentResult result = commentService.createComment(command);
+    CommentMutationResult result = commentService.createComment(command);
 
     assertThat(result.id()).isEqualTo(1L);
     assertThat(result.content()).isEqualTo("hello");
@@ -162,7 +163,7 @@ class CommentServiceTest {
                   .build();
             });
 
-    CommentResult result = commentService.createComment(command);
+    CommentMutationResult result = commentService.createComment(command);
 
     assertThat(result.parentId()).isEqualTo(10L);
     assertThat(result.content()).isEqualTo("reply content");
@@ -272,7 +273,7 @@ class CommentServiceTest {
     given(grantCommentXpPort.grantCreateCommentXp(200L, 3L))
         .willThrow(new IllegalStateException("xp system down"));
 
-    CommentResult result = commentService.createComment(command);
+    CommentMutationResult result = commentService.createComment(command);
 
     assertThat(result.id()).isEqualTo(3L);
     assertThat(result.content()).isEqualTo("hello");
@@ -405,6 +406,32 @@ class CommentServiceTest {
     assertThatThrownBy(() -> commentService.getReplies(new GetRepliesQuery(10L, pageable)))
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.POST_NOT_FOUND.getMessage());
+
+    verify(loadCommentPort, never()).loadReplies(any(Long.class), any(Pageable.class));
+  }
+
+  @Test
+  @DisplayName("getReplies() throws when parent comment is already a reply")
+  void getReplies_nestedReplyParent_throwsBusinessException() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment replyParent =
+        Comment.builder()
+            .id(10L)
+            .postId(100L)
+            .writerId(99L)
+            .parentId(5L)
+            .content("reply parent")
+            .isDeleted(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+    Pageable pageable = PageRequest.of(0, 10);
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(replyParent));
+    given(loadPostPort.existsPost(100L)).willReturn(true);
+
+    assertThatThrownBy(() -> commentService.getReplies(new GetRepliesQuery(10L, pageable)))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.COMMENT_DEPTH_EXCEEDED.getMessage());
 
     verify(loadCommentPort, never()).loadReplies(any(Long.class), any(Pageable.class));
   }
