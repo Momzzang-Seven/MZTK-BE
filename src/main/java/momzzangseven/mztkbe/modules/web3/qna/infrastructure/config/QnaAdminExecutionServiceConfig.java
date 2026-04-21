@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminRe
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.CalculateQnaAdminRefundReviewService;
@@ -119,9 +120,12 @@ public class QnaAdminExecutionServiceConfig {
   @ConditionalOnQnaAdminEnabled
   ExecuteQnaAdminRefundService executeQnaAdminRefundService(
       LoadQnaAdminReviewContextPort loadQnaAdminReviewContextPort,
+      QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort,
       PrepareQnaInternalRefundUseCase prepareQnaInternalRefundUseCase) {
     return new ExecuteQnaAdminRefundService(
-        loadQnaAdminReviewContextPort, prepareQnaInternalRefundUseCase);
+        loadQnaAdminReviewContextPort,
+        qnaAdminRefundStateSyncPort,
+        prepareQnaInternalRefundUseCase);
   }
 
   @Bean

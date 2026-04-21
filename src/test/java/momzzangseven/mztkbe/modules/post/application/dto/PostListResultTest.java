@@ -93,4 +93,23 @@ class PostListResultTest {
 
     assertThat(result.isSolved()).isTrue();
   }
+
+  @Test
+  @DisplayName("fromDomain derives solved true from pending admin refund status")
+  void fromDomainDerivesSolvedTrueFromPendingAdminRefundStatus() {
+    Post post =
+        Post.builder()
+            .id(103L)
+            .userId(10L)
+            .type(PostType.QUESTION)
+            .title("refund pending title")
+            .content("refund pending content")
+            .reward(70L)
+            .status(PostStatus.PENDING_ADMIN_REFUND)
+            .build();
+
+    PostListResult result = PostListResult.fromDomain(post, 1L, false, "writer", "profile");
+
+    assertThat(result.isSolved()).isTrue();
+  }
 }

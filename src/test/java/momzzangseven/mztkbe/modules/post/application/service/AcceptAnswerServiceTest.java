@@ -150,6 +150,23 @@ class AcceptAnswerServiceTest {
         .prepareAnswerAccept(any(), any(), any(), any(), any(), any(), any());
   }
 
+  @Test
+  @DisplayName("rejects admin refund pending posts")
+  void execute_throwsWhenPostIsPendingAdminRefund() {
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(20L))
+        .thenReturn(
+            Optional.of(
+                new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
+    when(postPersistencePort.loadPostForUpdate(10L))
+        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.PENDING_ADMIN_REFUND, null)));
+
+    assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
+        .isInstanceOf(PostAlreadySolvedException.class);
+    verifyNoInteractions(markAcceptedAnswerPort);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareAnswerAccept(any(), any(), any(), any(), any(), any(), any());
+  }
+
   private Post questionPost(Long id, Long userId, PostStatus status, Long acceptedAnswerId) {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     return Post.builder()

@@ -60,7 +60,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
 
   private static final Instant NOW = Instant.parse("2026-04-21T00:00:00Z");
   private static final String SIGNER_ADDRESS = "0xd799cd2b5258edc2157bec7e2cd069f31f2678c2";
-  private static final String CALL_TARGET = "0x0000000000000000000000000000000000000002";
+  private static final String CALL_TARGET = "0x0000000000000000000000000000000000000000";
   private static final String TOKEN_ADDRESS = "0x1111111111111111111111111111111111111111";
   private static final BigInteger REWARD_AMOUNT_WEI = new BigInteger("50000000000000000000");
   private static final String PRIVATE_KEY_HEX = "0x" + "9".repeat(64);
@@ -260,7 +260,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     String intentId = refundData.path("executionIntent").path("id").asText();
     assertThat(latestIntent.get("action_type")).isEqualTo("QNA_ADMIN_REFUND");
     assertThat(latestIntent.get("status")).isEqualTo("AWAITING_SIGNATURE");
-    assertThat(postStatus(postId)).isEqualTo("OPEN");
+    assertThat(postStatus(postId)).isEqualTo("PENDING_ADMIN_REFUND");
     assertThat(countAdminAudit("QNA_ADMIN_REFUND", "post:" + postId, admin.userId())).isEqualTo(1);
     assertThat(objectMapper.readTree(unsignedTxSnapshot(intentId)).path("expectedNonce").asLong())
         .isZero();

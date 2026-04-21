@@ -90,10 +90,12 @@ public class Post {
    *
    * <p>`status` is the source of truth; this boolean is derived only. `PENDING_ACCEPT` is also
    * treated as solved for user-facing read models because acceptance is already committed in the
-   * application flow while onchain settlement is pending.
+   * application flow while onchain settlement is pending. `PENDING_ADMIN_REFUND` is also surfaced
+   * as solved because the question is no longer answerable while an admin refund decision is in
+   * progress.
    */
   public Boolean getIsSolved() {
-    return isResolved() || isAcceptancePending();
+    return isResolved() || isAcceptancePending() || isAdminRefundPending();
   }
 
   public void validateOwnership(Long currentUserId) {
@@ -104,7 +106,10 @@ public class Post {
 
   public void validateDeletable(long activeAnswerCount) {
     if (PostType.QUESTION.equals(this.type)
-        && (activeAnswerCount > 0 || isAcceptancePending() || isResolved())) {
+        && (activeAnswerCount > 0
+            || isAcceptancePending()
+            || isAdminRefundPending()
+            || isResolved())) {
       throw new PostInvalidInputException("An answered or solved question post cannot be deleted.");
     }
   }
@@ -142,7 +147,10 @@ public class Post {
 
   public void validateEditable(long activeAnswerCount) {
     if (PostType.QUESTION.equals(this.type)
-        && (activeAnswerCount > 0 || isAcceptancePending() || isResolved())) {
+        && (activeAnswerCount > 0
+            || isAcceptancePending()
+            || isAdminRefundPending()
+            || isResolved())) {
       throw new PostInvalidInputException("An answered or solved question post cannot be edited.");
     }
   }
@@ -157,6 +165,10 @@ public class Post {
 
   public boolean isAcceptancePending() {
     return this.status == PostStatus.PENDING_ACCEPT;
+  }
+
+  public boolean isAdminRefundPending() {
+    return this.status == PostStatus.PENDING_ADMIN_REFUND;
   }
 
   public Post beginAccept(Long answerId) {
@@ -188,6 +200,24 @@ public class Post {
     return this.toBuilder()
         .acceptedAnswerId(null)
         .status(PostStatus.OPEN)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post beginAdminRefund() {
+    if (type != PostType.QUESTION) {
+      throw new PostInvalidInputException("Only question posts can enter admin refund pending.");
+    }
+    if (isAdminRefundPending()) {
+      return this;
+    }
+    if (isAcceptancePending() || isResolved()) {
+      throw new PostAlreadySolvedException();
+    }
+
+    return this.toBuilder()
+        .acceptedAnswerId(null)
+        .status(PostStatus.PENDING_ADMIN_REFUND)
         .updatedAt(LocalDateTime.now())
         .build();
   }
@@ -225,6 +255,10 @@ public class Post {
         && acceptedAnswerId == null) {
       throw new IllegalArgumentException(status + " question posts require acceptedAnswerId.");
     }
+    if (status == PostStatus.PENDING_ADMIN_REFUND && acceptedAnswerId != null) {
+      throw new IllegalArgumentException(
+          "PENDING_ADMIN_REFUND question posts cannot have acceptedAnswerId.");
+    }
     return status;
   }
 
@@ -238,7 +272,7 @@ public class Post {
   }
 
   private void validateAcceptable() {
-    if (isResolved()) {
+    if (isResolved() || isAdminRefundPending()) {
       throw new PostAlreadySolvedException();
     }
   }
