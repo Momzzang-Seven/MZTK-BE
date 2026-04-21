@@ -147,8 +147,7 @@ class ExecuteInternalExecutionIntentServiceTest {
 
     assertThat(result.executed()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
-    verify(executionEip1559SigningPort)
-        .sign(argThat(command -> command.nonce() == 13L));
+    verify(executionEip1559SigningPort).sign(argThat(command -> command.nonce() == 13L));
     verify(executionTransactionGatewayPort)
         .createAndFlush(argThat(command -> command.nonce().equals(13L)));
   }
