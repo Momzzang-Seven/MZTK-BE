@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
@@ -43,6 +44,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
 
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
+  @Mock private QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
   @Mock private QnaLocalDeleteSyncPort qnaLocalDeleteSyncPort;
 
   private QnaEscrowExecutionActionHandlerAdapter adapter;
@@ -56,6 +58,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             objectMapper,
             qnaProjectionPersistencePort,
             qnaAcceptStateSyncPort,
+            qnaAdminRefundStateSyncPort,
             qnaLocalDeleteSyncPort);
   }
 
@@ -281,7 +284,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     adapter.afterExecutionFailedOnchain(
         intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), null);
 
-    verifyNoInteractions(qnaAcceptStateSyncPort);
+    verifyNoInteractions(qnaAcceptStateSyncPort, qnaAdminRefundStateSyncPort);
   }
 
   @Test
@@ -366,7 +369,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         ExecutionIntentStatus.FAILED_ONCHAIN,
         "TREASURY_TOKEN_INSUFFICIENT");
 
-    verifyNoInteractions(qnaAcceptStateSyncPort);
+    verifyNoInteractions(qnaAcceptStateSyncPort, qnaAdminRefundStateSyncPort);
   }
 
   @Test
@@ -415,6 +418,43 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         "EXECUTION_INTENT_EXPIRED");
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending admin refund on expire")
+  void afterExecutionTerminated_rollsBackPendingAdminRefundOnExpired() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.EXPIRED,
+        "EXECUTION_INTENT_EXPIRED");
+
+    verify(qnaAdminRefundStateSyncPort).rollbackPendingRefund(101L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending admin refund for non retryable failure")
+  void afterExecutionTerminated_rollsBackPendingAdminRefundForNonRetryableFailure()
+      throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "TREASURY_TOKEN_INSUFFICIENT");
+
+    verify(qnaAdminRefundStateSyncPort).rollbackPendingRefund(101L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated keeps pending admin refund for retryable failure")
+  void afterExecutionTerminated_keepsPendingAdminRefundForRetryableFailure() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "RPC_UNAVAILABLE");
+
+    verify(qnaAdminRefundStateSyncPort, never()).rollbackPendingRefund(101L);
   }
 
   private ExecutionIntent intent(

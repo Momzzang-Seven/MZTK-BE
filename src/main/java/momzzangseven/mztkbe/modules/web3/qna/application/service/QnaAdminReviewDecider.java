@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.qna.application.service;
 import java.util.ArrayList;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminExecutionAuthorityView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalAnswerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalQuestionView;
@@ -13,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRefundRevie
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementReviewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.RefundContext;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalQuestionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.SettlementContext;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 
@@ -91,7 +91,7 @@ final class QnaAdminReviewDecider {
     validations.add(
         item(
             LOCAL_QUESTION_NOT_OPEN,
-            localQuestion != null && localQuestion.status() == PostStatus.OPEN,
+            localQuestion != null && localQuestion.status() == LocalQuestionStatus.OPEN,
             false,
             "local question must be OPEN"));
     validations.add(
@@ -357,7 +357,8 @@ final class QnaAdminReviewDecider {
     return isSettlableState(state);
   }
 
-  private static boolean isRefundLocallyProcessableStatus(PostStatus status) {
-    return status == PostStatus.OPEN || status == PostStatus.PENDING_ADMIN_REFUND;
+  private static boolean isRefundLocallyProcessableStatus(LocalQuestionStatus status) {
+    return status == LocalQuestionStatus.OPEN
+        || status == LocalQuestionStatus.PENDING_ADMIN_REFUND;
   }
 }

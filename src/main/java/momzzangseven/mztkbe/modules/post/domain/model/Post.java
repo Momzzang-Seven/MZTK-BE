@@ -222,6 +222,16 @@ public class Post {
         .build();
   }
 
+  public Post cancelAdminRefund() {
+    validatePendingAdminRefund();
+
+    return this.toBuilder()
+        .acceptedAnswerId(null)
+        .status(PostStatus.OPEN)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
   public Post accept(Long answerId) {
     validateAcceptTarget(answerId);
     validateAcceptable();
@@ -284,6 +294,15 @@ public class Post {
     }
     if (!answerId.equals(acceptedAnswerId)) {
       throw new PostInvalidInputException("Pending accepted answer does not match.");
+    }
+  }
+
+  private void validatePendingAdminRefund() {
+    if (type != PostType.QUESTION) {
+      throw new PostInvalidInputException("Only question posts can roll back admin refund.");
+    }
+    if (!isAdminRefundPending()) {
+      throw new PostInvalidInputException("Question post is not pending admin refund.");
     }
   }
 }

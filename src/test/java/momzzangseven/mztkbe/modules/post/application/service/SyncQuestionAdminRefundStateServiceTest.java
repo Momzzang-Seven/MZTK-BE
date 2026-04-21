@@ -52,6 +52,23 @@ class SyncQuestionAdminRefundStateServiceTest {
         .hasMessageContaining("missing post");
   }
 
+  @Test
+  @DisplayName("rollbackPendingRefund reopens post")
+  void rollbackPendingRefund_reopensPost() {
+    when(postPersistencePort.loadPostForUpdate(101L))
+        .thenReturn(Optional.of(pendingRefundQuestion(101L)));
+
+    service.rollbackPendingRefund(101L);
+
+    verify(postPersistencePort)
+        .savePost(
+            ArgumentMatchers.argThat(
+                savedPost ->
+                    savedPost.getId().equals(101L)
+                        && savedPost.getStatus() == PostStatus.OPEN
+                        && savedPost.getAcceptedAnswerId() == null));
+  }
+
   private Post openQuestion(Long postId) {
     return Post.builder()
         .id(postId)
@@ -61,6 +78,20 @@ class SyncQuestionAdminRefundStateServiceTest {
         .content("content")
         .reward(10L)
         .status(PostStatus.OPEN)
+        .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+        .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+        .build();
+  }
+
+  private Post pendingRefundQuestion(Long postId) {
+    return Post.builder()
+        .id(postId)
+        .userId(1L)
+        .type(PostType.QUESTION)
+        .title("question")
+        .content("content")
+        .reward(10L)
+        .status(PostStatus.PENDING_ADMIN_REFUND)
         .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
         .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
         .build();

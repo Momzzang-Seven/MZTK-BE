@@ -4,6 +4,8 @@ import momzzangseven.mztkbe.modules.post.application.port.in.SyncQuestionAdminRe
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @ConditionalOnAnyExecutionEnabled
@@ -19,5 +21,11 @@ public class QnaAdminRefundStateSyncAdapter implements QnaAdminRefundStateSyncPo
   @Override
   public void beginPendingRefund(Long postId) {
     syncQuestionAdminRefundStateUseCase.beginPendingRefund(postId);
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void rollbackPendingRefund(Long postId) {
+    syncQuestionAdminRefundStateUseCase.rollbackPendingRefund(postId);
   }
 }

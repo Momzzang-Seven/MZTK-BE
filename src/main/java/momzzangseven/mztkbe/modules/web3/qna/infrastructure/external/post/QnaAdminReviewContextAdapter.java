@@ -138,7 +138,8 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
         postContext.postId(),
         postContext.writerId(),
         postContext.questionPost(),
-        postContext.status(),
+        LoadQnaAdminReviewContextPort.LocalQuestionStatus.fromExternalName(
+            postContext.status() == null ? null : postContext.status().name()),
         postContext.solved(),
         postContext.answerLocked(),
         postContext.content(),

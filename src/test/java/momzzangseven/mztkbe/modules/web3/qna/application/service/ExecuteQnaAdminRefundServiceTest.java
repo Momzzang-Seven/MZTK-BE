@@ -8,7 +8,6 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
@@ -17,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionI
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.ExecutionAuthority;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalQuestion;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalQuestionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.RefundContext;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
@@ -47,7 +47,15 @@ class ExecuteQnaAdminRefundServiceTest {
         new RefundContext(
             Optional.of(
                 new LocalQuestion(
-                    101L, 7L, true, PostStatus.OPEN, false, false, "질문 본문", 50L, null)),
+                    101L,
+                    7L,
+                    true,
+                    LocalQuestionStatus.OPEN,
+                    false,
+                    false,
+                    "질문 본문",
+                    50L,
+                    null)),
             Optional.of(onchainQuestion()),
             Optional.empty(),
             List.of(),

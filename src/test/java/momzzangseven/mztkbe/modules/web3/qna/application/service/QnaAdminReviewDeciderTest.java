@@ -5,12 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.ExecutionAuthority;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalAnswer;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalQuestion;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalQuestionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.RefundContext;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.SettlementContext;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
@@ -109,7 +109,7 @@ class QnaAdminReviewDeciderTest {
   void assessRefund_allowsPendingAdminRefundStatus() {
     RefundContext context =
         new RefundContext(
-            Optional.of(localQuestion(PostStatus.PENDING_ADMIN_REFUND)),
+            Optional.of(localQuestion(LocalQuestionStatus.PENDING_ADMIN_REFUND)),
             Optional.of(onchainQuestion(0)),
             Optional.empty(),
             List.of(),
@@ -123,11 +123,11 @@ class QnaAdminReviewDeciderTest {
   }
 
   private LocalQuestion localQuestion() {
-    return localQuestion(PostStatus.OPEN);
+    return localQuestion(LocalQuestionStatus.OPEN);
   }
 
-  private LocalQuestion localQuestion(PostStatus status) {
-    boolean pendingAdminRefund = status == PostStatus.PENDING_ADMIN_REFUND;
+  private LocalQuestion localQuestion(LocalQuestionStatus status) {
+    boolean pendingAdminRefund = status == LocalQuestionStatus.PENDING_ADMIN_REFUND;
     return new LocalQuestion(
         101L, 7L, true, status, pendingAdminRefund, pendingAdminRefund, "질문 본문", 50L, null);
   }
