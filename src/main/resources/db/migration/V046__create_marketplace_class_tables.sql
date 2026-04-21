@@ -1,4 +1,4 @@
--- V045__create_marketplace_class_tables.sql
+-- V046__create_marketplace_class_tables.sql
 -- Creates tables for the Marketplace Class module:
 --   marketplace_classes — core class metadata
 --   class_slots         — recurring time slots for each class

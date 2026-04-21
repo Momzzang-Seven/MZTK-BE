@@ -1,4 +1,4 @@
--- V046__add_class_slot_days_unique_constraint.sql
+-- V047__add_class_slot_days_unique_constraint.sql
 -- Adds a UNIQUE constraint on (slot_id, day_of_week) in class_slot_days.
 --
 -- Rationale:
