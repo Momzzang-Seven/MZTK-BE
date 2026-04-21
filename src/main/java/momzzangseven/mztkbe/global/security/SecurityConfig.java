@@ -251,10 +251,25 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
 
                     // --- Marketplace Endpoints ---
+                    // Store
                     .requestMatchers(HttpMethod.PUT, "/marketplace/trainer/store")
                     .hasAuthority("ROLE_TRAINER")
                     .requestMatchers(HttpMethod.GET, "/marketplace/trainer/store")
                     .hasAuthority("ROLE_TRAINER")
+                    // Class — trainer-only mutations
+                    .requestMatchers(HttpMethod.POST, "/marketplace/trainer/classes")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.PUT, "/marketplace/trainer/classes/*")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/classes/*/status")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.GET, "/marketplace/trainer/classes")
+                    .hasAuthority("ROLE_TRAINER")
+                    // Class — public reads
+                    .requestMatchers(HttpMethod.GET, "/marketplace/classes")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/classes/*")
+                    .permitAll()
 
                     // --- Internal Endpoints ---
 
