@@ -24,14 +24,17 @@ class CommentResponseTest {
       LocalDateTime createdAt = LocalDateTime.of(2026, 3, 10, 9, 0);
       LocalDateTime updatedAt = LocalDateTime.of(2026, 3, 11, 10, 30);
       CommentResult result =
-          new CommentResult(1L, "original", 200L, null, true, createdAt, updatedAt);
+          new CommentResult(
+              1L, "original", 200L, "writer", "profile.png", null, 2L, true, createdAt, updatedAt);
 
       CommentResponse response = CommentResponse.from(result);
 
       assertThat(response.commentId()).isEqualTo(1L);
       assertThat(response.content()).isEqualTo("삭제된 댓글입니다.");
       assertThat(response.writerId()).isNull();
+      assertThat(response.writer()).isNull();
       assertThat(response.parentId()).isNull();
+      assertThat(response.replyCount()).isEqualTo(2L);
       assertThat(response.isDeleted()).isTrue();
       assertThat(response.createdAt()).isEqualTo(createdAt);
       assertThat(response.updatedAt()).isEqualTo(updatedAt);
@@ -43,14 +46,28 @@ class CommentResponseTest {
       LocalDateTime createdAt = LocalDateTime.of(2026, 3, 12, 11, 15);
       LocalDateTime updatedAt = LocalDateTime.of(2026, 3, 13, 12, 45);
       CommentResult result =
-          new CommentResult(2L, "active comment", 300L, 100L, false, createdAt, updatedAt);
+          new CommentResult(
+              2L,
+              "active comment",
+              300L,
+              "commenter",
+              "profile.webp",
+              100L,
+              0L,
+              false,
+              createdAt,
+              updatedAt);
 
       CommentResponse response = CommentResponse.from(result);
 
       assertThat(response.commentId()).isEqualTo(2L);
       assertThat(response.content()).isEqualTo("active comment");
       assertThat(response.writerId()).isEqualTo(300L);
+      assertThat(response.writer().userId()).isEqualTo(300L);
+      assertThat(response.writer().nickname()).isEqualTo("commenter");
+      assertThat(response.writer().profileImage()).isEqualTo("profile.webp");
       assertThat(response.parentId()).isEqualTo(100L);
+      assertThat(response.replyCount()).isZero();
       assertThat(response.isDeleted()).isFalse();
       assertThat(response.createdAt()).isEqualTo(createdAt);
       assertThat(response.updatedAt()).isEqualTo(updatedAt);

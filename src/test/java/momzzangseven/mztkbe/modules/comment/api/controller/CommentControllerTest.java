@@ -266,7 +266,29 @@ class CommentControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.content[0].commentId").value(11))
           .andExpect(jsonPath("$.data.content[0].isDeleted").value(true))
-          .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."));
+          .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."))
+          .andExpect(jsonPath("$.data.content[0].writer").doesNotExist())
+          .andExpect(jsonPath("$.data.content[0].replyCount").value(1));
+    }
+
+    @Test
+    @DisplayName("루트 댓글 조회 응답은 writer 상세와 replyCount 및 last를 포함한다")
+    void getRootComments_includesWriterReplyCountAndLast() throws Exception {
+      given(getCommentUseCase.getRootComments(any(GetRootCommentsQuery.class)))
+          .willReturn(
+              new PageImpl<>(
+                  java.util.List.of(comment(13L, "댓글", false)), PageRequest.of(0, 1), 2));
+
+      mockMvc
+          .perform(get("/posts/10/comments?page=0&size=1").with(userPrincipal(1L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.content[0].commentId").value(13))
+          .andExpect(jsonPath("$.data.content[0].writer.userId").value(1))
+          .andExpect(jsonPath("$.data.content[0].writer.nickname").value("writer-1"))
+          .andExpect(jsonPath("$.data.content[0].writer.profileImage").value("profile-1"))
+          .andExpect(jsonPath("$.data.content[0].replyCount").value(1))
+          .andExpect(jsonPath("$.data.last").value(false));
     }
 
     @Test
@@ -285,7 +307,11 @@ class CommentControllerTest {
           .perform(get("/comments/5/replies").with(userPrincipal(1L)))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data.content[0].commentId").value(12));
+          .andExpect(jsonPath("$.data.content[0].commentId").value(12))
+          .andExpect(jsonPath("$.data.content[0].writer.userId").value(1))
+          .andExpect(jsonPath("$.data.content[0].writer.nickname").value("writer-1"))
+          .andExpect(jsonPath("$.data.content[0].writer.profileImage").value("profile-1"))
+          .andExpect(jsonPath("$.data.last").value(true));
     }
 
     @Test
@@ -297,7 +323,8 @@ class CommentControllerTest {
 
   private CommentResult comment(Long id, String content, boolean isDeleted) {
     LocalDateTime now = LocalDateTime.now();
-    return new CommentResult(id, content, 1L, null, isDeleted, now, now);
+    return new CommentResult(
+        id, content, 1L, "writer-1", "profile-1", null, 1L, isDeleted, now, now);
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(

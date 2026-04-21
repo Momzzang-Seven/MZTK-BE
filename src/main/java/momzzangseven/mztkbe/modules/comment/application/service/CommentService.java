@@ -1,5 +1,9 @@
 package momzzangseven.mztkbe.modules.comment.application.service;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
@@ -11,6 +15,8 @@ import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort.WriterSummary;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
@@ -30,6 +36,7 @@ public class CommentService
   private final LoadPostPort loadPostPort;
   private final DeleteCommentPort deleteCommentPort;
   private final GrantCommentXpPort grantCommentXpPort;
+  private final LoadCommentWriterPort loadCommentWriterPort;
 
   // 1. 생성 (Create)
   @Override
@@ -99,9 +106,7 @@ public class CommentService
   @Override
   public Page<CommentResult> getRootComments(GetRootCommentsQuery query) {
     validatePostExists(query.postId());
-    return loadCommentPort
-        .loadRootComments(query.postId(), query.pageable())
-        .map(CommentResult::from);
+    return toResultPage(loadCommentPort.loadRootComments(query.postId(), query.pageable()));
   }
 
   // 5. 대댓글 조회 (Read)
@@ -112,7 +117,7 @@ public class CommentService
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
     validatePostExists(parent.getPostId());
 
-    return loadCommentPort.loadReplies(query.parentId(), query.pageable()).map(CommentResult::from);
+    return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()));
   }
 
   // --- Private Helper Methods ---
@@ -131,11 +136,39 @@ public class CommentService
     if (parent.isDeleted()) {
       throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
     }
+
+    if (parent.getParentId() != null) {
+      throw new BusinessException(ErrorCode.COMMENT_DEPTH_EXCEEDED);
+    }
   }
 
   private void validatePostExists(Long postId) {
     if (!loadPostPort.existsPost(postId)) {
       throw new BusinessException(ErrorCode.POST_NOT_FOUND);
     }
+  }
+
+  private Page<CommentResult> toResultPage(Page<Comment> comments) {
+    List<Comment> content = comments.getContent();
+    if (content.isEmpty()) {
+      return comments.map(CommentResult::from);
+    }
+
+    List<Long> commentIds = content.stream().map(Comment::getId).toList();
+    Map<Long, Long> replyCounts = loadCommentPort.countDirectRepliesByParentIds(commentIds);
+
+    Set<Long> writerIds =
+        content.stream()
+            .filter(comment -> !comment.isDeleted())
+            .map(Comment::getWriterId)
+            .collect(Collectors.toSet());
+    Map<Long, WriterSummary> writers = loadCommentWriterPort.loadWritersByIds(writerIds);
+
+    return comments.map(
+        comment ->
+            CommentResult.from(
+                comment,
+                writers.get(comment.getWriterId()),
+                replyCounts.getOrDefault(comment.getId(), 0L)));
   }
 }

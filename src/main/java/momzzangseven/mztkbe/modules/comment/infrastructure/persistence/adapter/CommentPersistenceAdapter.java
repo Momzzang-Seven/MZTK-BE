@@ -2,7 +2,9 @@ package momzzangseven.mztkbe.modules.comment.infrastructure.persistence.adapter;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
@@ -58,6 +60,19 @@ public class CommentPersistenceAdapter
   @Override
   public Page<Comment> loadReplies(Long parentId, Pageable pageable) {
     return commentRepository.findRepliesByParentId(parentId, pageable).map(CommentEntity::toDomain);
+  }
+
+  @Override
+  public Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds) {
+    if (parentIds == null || parentIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countDirectRepliesByParentIds(parentIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.DirectReplyCount::getParentId,
+                CommentJpaRepository.DirectReplyCount::getReplyCount));
   }
 
   @Override

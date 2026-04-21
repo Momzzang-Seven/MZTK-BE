@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
@@ -113,6 +114,28 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("countDirectRepliesByParentIds() maps repository projections")
+  void countDirectRepliesByParentIds_mapsProjection() {
+    CommentJpaRepository.DirectReplyCount first = directReplyCount(10L, 2L);
+    CommentJpaRepository.DirectReplyCount second = directReplyCount(11L, 1L);
+    given(commentRepository.countDirectRepliesByParentIds(List.of(10L, 11L)))
+        .willReturn(List.of(first, second));
+
+    Map<Long, Long> result = adapter.countDirectRepliesByParentIds(List.of(10L, 11L));
+
+    assertThat(result).containsEntry(10L, 2L).containsEntry(11L, 1L);
+  }
+
+  @Test
+  @DisplayName("countDirectRepliesByParentIds() no-ops for null or empty list")
+  void countDirectRepliesByParentIds_nullOrEmpty_returnsEmptyMap() {
+    assertThat(adapter.countDirectRepliesByParentIds(null)).isEmpty();
+    assertThat(adapter.countDirectRepliesByParentIds(List.of())).isEmpty();
+
+    verifyNoInteractions(commentRepository);
+  }
+
+  @Test
   @DisplayName("deleteAllById() no-ops for null or empty list")
   void deleteAllById_nullOrEmpty_noOp() {
     adapter.deleteAllById(null);
@@ -152,5 +175,19 @@ class CommentPersistenceAdapterTest {
     Pageable pageable = pageableCaptor.getValue();
     assertThat(pageable.getPageNumber()).isZero();
     assertThat(pageable.getPageSize()).isEqualTo(2);
+  }
+
+  private CommentJpaRepository.DirectReplyCount directReplyCount(Long parentId, Long replyCount) {
+    return new CommentJpaRepository.DirectReplyCount() {
+      @Override
+      public Long getParentId() {
+        return parentId;
+      }
+
+      @Override
+      public Long getReplyCount() {
+        return replyCount;
+      }
+    };
   }
 }
