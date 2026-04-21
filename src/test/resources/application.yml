@@ -144,7 +144,7 @@ web3:
 
   # EIP-7702 - 테스트에서는 비활성화
   eip7702:
-    enabled: true
+    enabled: false
     delegation:
       contract-address: "0x0000000000000000000000000000000000000001"
       nonce-tracker-address: "0x0000000000000000000000000000000000000001"
@@ -185,6 +185,18 @@ web3:
     observability:
       log-auth-hash: true
       log-user-op: false
+  execution:
+    internal:
+      enabled: false
+      action-policy: QNA_ADMIN
+  qna:
+    admin:
+      enabled: false
+    auto-accept:
+      enabled: false
+  marketplace:
+    admin:
+      enabled: false
   escrow:
     marketplace-contract-address: "0x0000000000000000000000000000000000000002"
     qna-contract-address: "0x0000000000000000000000000000000000000003"

@@ -29,8 +29,7 @@ class TreasuryKeyMaterialServiceConfigTest {
   @DisplayName("모든 execution mode가 비활성화면 treasury key material use case bean을 등록하지 않는다")
   void doesNotRegisterTreasuryKeyMaterialUseCaseWhenAllExecutionModesDisabled() {
     contextRunner
-        .withPropertyValues(
-            "web3.eip7702.enabled=false", "web3.execution.internal-issuer.enabled=false")
+        .withPropertyValues("web3.eip7702.enabled=false", "web3.execution.internal.enabled=false")
         .run(context -> assertThat(context).doesNotHaveBean(LoadTreasuryKeyMaterialUseCase.class));
   }
 }

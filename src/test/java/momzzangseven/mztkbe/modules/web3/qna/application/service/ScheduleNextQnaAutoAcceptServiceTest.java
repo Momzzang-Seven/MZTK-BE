@@ -13,7 +13,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ScheduleNextQnaAutoAcceptResult;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ClaimNextQnaAutoAcceptCandidatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAcceptContextPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAutoAcceptPolicyPort;
@@ -39,7 +39,7 @@ class ScheduleNextQnaAutoAcceptServiceTest {
   @Mock private LoadQnaAcceptContextPort loadQnaAcceptContextPort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
-  @Mock private PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase;
+  @Mock private PrepareQnaInternalSettlementUseCase prepareQnaInternalSettlementUseCase;
 
   private ScheduleNextQnaAutoAcceptService service;
 
@@ -52,7 +52,7 @@ class ScheduleNextQnaAutoAcceptServiceTest {
             loadQnaAcceptContextPort,
             loadQnaExecutionIntentStatePort,
             qnaAcceptStateSyncPort,
-            prepareQnaAdminSettlementUseCase,
+            prepareQnaInternalSettlementUseCase,
             Clock.fixed(NOW, ZoneId.of("Asia/Seoul")));
     when(loadQnaAutoAcceptPolicyPort.loadPolicy())
         .thenReturn(new LoadQnaAutoAcceptPolicyPort.QnaAutoAcceptPolicy(604_800L, 50));
@@ -93,7 +93,7 @@ class ScheduleNextQnaAutoAcceptServiceTest {
 
     assertThat(result.isScheduled()).isTrue();
     verify(qnaAcceptStateSyncPort).beginPendingAccept(101L, 201L);
-    verify(prepareQnaAdminSettlementUseCase)
+    verify(prepareQnaInternalSettlementUseCase)
         .execute(new PrepareAdminSettleCommand(101L, 201L, 7L, 22L, "질문", "답변"));
   }
 
@@ -117,6 +117,7 @@ class ScheduleNextQnaAutoAcceptServiceTest {
 
     assertThat(result.isSkipped()).isTrue();
     verify(qnaAcceptStateSyncPort, never()).beginPendingAccept(101L, 201L);
-    verify(prepareQnaAdminSettlementUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+    verify(prepareQnaInternalSettlementUseCase, never())
+        .execute(org.mockito.ArgumentMatchers.any());
   }
 }

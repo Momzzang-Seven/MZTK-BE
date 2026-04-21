@@ -23,11 +23,11 @@ public class InternalExecutionSignerConfigAdapter implements LoadInternalExecuti
     var signer = internalExecutionIssuerProperties.getSigner();
     if (signer.getWalletAlias() == null || signer.getWalletAlias().isBlank()) {
       throw new Web3InvalidInputException(
-          "web3.execution.internal-issuer.signer.wallet-alias is required");
+          "web3.execution.internal.signer.wallet-alias is required");
     }
     if (signer.getKeyEncryptionKeyB64() == null || signer.getKeyEncryptionKeyB64().isBlank()) {
       throw new Web3InvalidInputException(
-          "web3.execution.internal-issuer.signer.key-encryption-key-b64 is required");
+          "web3.execution.internal.signer.key-encryption-key-b64 is required");
     }
     return new ExecutionSponsorWalletConfig(
         signer.getWalletAlias(), signer.getKeyEncryptionKeyB64());

@@ -5,12 +5,12 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnInternalExecutionEnabled
+@ConditionalOnQnaAdminEnabled
 public class QnaAdminExecutionConfigurationValidator {
 
   private final LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
@@ -28,15 +28,15 @@ public class QnaAdminExecutionConfigurationValidator {
         loadExecutionInternalIssuerPolicyPort.loadPolicy();
     if (!policy.enabled()) {
       throw new IllegalStateException(
-          "QnA admin execution requires web3.execution.internal-issuer.enabled=true");
+          "QnA admin execution requires web3.execution.internal.enabled=true");
     }
     if (!policy.qnaAdminSettleEnabled()) {
       throw new IllegalStateException(
-          "QnA admin execution requires web3.execution.internal-issuer.action-types to include QNA_ADMIN_SETTLE");
+          "QnA admin execution requires web3.execution.internal.action-policy to enable QNA_ADMIN_SETTLE");
     }
     if (!policy.qnaAdminRefundEnabled()) {
       throw new IllegalStateException(
-          "QnA admin execution requires web3.execution.internal-issuer.action-types to include QNA_ADMIN_REFUND");
+          "QnA admin execution requires web3.execution.internal.action-policy to enable QNA_ADMIN_REFUND");
     }
 
     String signerAddress = loadQnaAdminSignerAddressPort.loadSignerAddress();

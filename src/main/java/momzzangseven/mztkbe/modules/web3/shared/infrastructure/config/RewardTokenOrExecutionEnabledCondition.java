@@ -15,9 +15,6 @@ class RewardTokenOrExecutionEnabledCondition extends AnyNestedCondition {
   @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
   static class UserExecutionEnabled {}
 
-  @ConditionalOnProperty(
-      prefix = "web3.execution.internal-issuer",
-      name = "enabled",
-      havingValue = "true")
+  @ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
   static class InternalExecutionEnabled {}
 }

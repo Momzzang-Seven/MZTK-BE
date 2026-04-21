@@ -7,14 +7,14 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefu
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminRefundUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminRefundUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
 
 @RequiredArgsConstructor
 public class ExecuteQnaAdminRefundService implements ExecuteQnaAdminRefundUseCase {
 
   private final LoadQnaAdminReviewContextPort loadQnaAdminReviewContextPort;
-  private final PrepareQnaAdminRefundUseCase prepareQnaAdminRefundUseCase;
+  private final PrepareQnaInternalRefundUseCase prepareQnaInternalRefundUseCase;
 
   @Override
   public QnaExecutionIntentResult execute(ExecuteQnaAdminRefundCommand command) {
@@ -33,7 +33,7 @@ public class ExecuteQnaAdminRefundService implements ExecuteQnaAdminRefundUseCas
         context
             .localQuestion()
             .orElseThrow(() -> new Web3InvalidInputException("local question is required"));
-    return prepareQnaAdminRefundUseCase.execute(
+    return prepareQnaInternalRefundUseCase.execute(
         new PrepareAdminRefundCommand(command.postId(), localQuestion.writerUserId()));
   }
 

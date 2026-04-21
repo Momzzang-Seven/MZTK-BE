@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ScheduleNextQnaAutoAcceptResult;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ScheduleNextQnaAutoAcceptUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ClaimNextQnaAutoAcceptCandidatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAcceptContextPort;
@@ -26,7 +26,7 @@ public class ScheduleNextQnaAutoAcceptService implements ScheduleNextQnaAutoAcce
   private final LoadQnaAcceptContextPort loadQnaAcceptContextPort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
-  private final PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase;
+  private final PrepareQnaInternalSettlementUseCase prepareQnaInternalSettlementUseCase;
   private final Clock appClock;
 
   @Override
@@ -65,7 +65,7 @@ public class ScheduleNextQnaAutoAcceptService implements ScheduleNextQnaAutoAcce
     }
 
     qnaAcceptStateSyncPort.beginPendingAccept(context.postId(), context.answerId());
-    prepareQnaAdminSettlementUseCase.execute(
+    prepareQnaInternalSettlementUseCase.execute(
         new PrepareAdminSettleCommand(
             context.postId(),
             context.answerId(),

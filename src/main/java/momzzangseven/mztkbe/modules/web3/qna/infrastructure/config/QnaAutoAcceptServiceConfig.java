@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.config;
 
 import java.time.Clock;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaAutoAcceptBatchUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ScheduleNextQnaAutoAcceptUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ClaimNextQnaAutoAcceptCandidatePort;
@@ -11,8 +11,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecuti
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QnaAutoAcceptBatchService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.ScheduleNextQnaAutoAcceptService;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAutoAcceptEnabled;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -20,8 +19,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnInternalExecutionEnabled
-@ConditionalOnProperty(prefix = "web3.qna.auto-accept", name = "enabled", havingValue = "true")
+@ConditionalOnQnaAutoAcceptEnabled
 public class QnaAutoAcceptServiceConfig {
 
   @Bean
@@ -31,7 +29,7 @@ public class QnaAutoAcceptServiceConfig {
       LoadQnaAcceptContextPort loadQnaAcceptContextPort,
       LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort,
       QnaAcceptStateSyncPort qnaAcceptStateSyncPort,
-      PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase,
+      PrepareQnaInternalSettlementUseCase prepareQnaInternalSettlementUseCase,
       Clock appClock) {
     return new ScheduleNextQnaAutoAcceptService(
         claimNextQnaAutoAcceptCandidatePort,
@@ -39,7 +37,7 @@ public class QnaAutoAcceptServiceConfig {
         loadQnaAcceptContextPort,
         loadQnaExecutionIntentStatePort,
         qnaAcceptStateSyncPort,
-        prepareQnaAdminSettlementUseCase,
+        prepareQnaInternalSettlementUseCase,
         appClock);
   }
 

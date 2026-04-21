@@ -7,14 +7,15 @@ import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceQnaAdminRefundRespon
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceQnaAdminSettlementResponseDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.GetQnaAdminRefundReviewResponseDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.GetQnaAdminSettlementReviewResponseDTO;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.CalculateQnaAdminRefundReviewQuery;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.CalculateQnaAdminSettlementReviewQuery;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.CalculateQnaAdminRefundReviewUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.CalculateQnaAdminSettlementReviewUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminRefundUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceQnaAdminRefundCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceQnaAdminSettlementCommand;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetQnaAdminRefundReviewQuery;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetQnaAdminSettlementReviewQuery;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceQnaAdminRefundUseCase;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceQnaAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetQnaAdminRefundReviewUseCase;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetQnaAdminSettlementReviewUseCase;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminFeatureEnabled;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,20 +27,21 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/admin/web3/qna/questions")
+@ConditionalOnQnaAdminFeatureEnabled
 public class QnaAdminEscrowController {
 
-  private final CalculateQnaAdminSettlementReviewUseCase calculateQnaAdminSettlementReviewUseCase;
-  private final ExecuteQnaAdminSettlementUseCase executeQnaAdminSettlementUseCase;
-  private final CalculateQnaAdminRefundReviewUseCase calculateQnaAdminRefundReviewUseCase;
-  private final ExecuteQnaAdminRefundUseCase executeQnaAdminRefundUseCase;
+  private final GetQnaAdminSettlementReviewUseCase getQnaAdminSettlementReviewUseCase;
+  private final ForceQnaAdminSettlementUseCase forceQnaAdminSettlementUseCase;
+  private final GetQnaAdminRefundReviewUseCase getQnaAdminRefundReviewUseCase;
+  private final ForceQnaAdminRefundUseCase forceQnaAdminRefundUseCase;
 
   @GetMapping("/{postId}/answers/{answerId}/settlement-review")
   public ResponseEntity<ApiResponse<GetQnaAdminSettlementReviewResponseDTO>> getSettlementReview(
       @PathVariable Long postId, @PathVariable Long answerId) {
     var response =
         GetQnaAdminSettlementReviewResponseDTO.from(
-            calculateQnaAdminSettlementReviewUseCase.execute(
-                new CalculateQnaAdminSettlementReviewQuery(postId, answerId)));
+            getQnaAdminSettlementReviewUseCase.execute(
+                new GetQnaAdminSettlementReviewQuery(postId, answerId)));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
@@ -50,8 +52,8 @@ public class QnaAdminEscrowController {
       @PathVariable Long answerId) {
     var response =
         ForceQnaAdminSettlementResponseDTO.from(
-            executeQnaAdminSettlementUseCase.execute(
-                new ExecuteQnaAdminSettlementCommand(
+            forceQnaAdminSettlementUseCase.execute(
+                new ForceQnaAdminSettlementCommand(
                     requireOperatorId(operatorId), postId, answerId)));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
@@ -61,8 +63,7 @@ public class QnaAdminEscrowController {
       @PathVariable Long postId) {
     var response =
         GetQnaAdminRefundReviewResponseDTO.from(
-            calculateQnaAdminRefundReviewUseCase.execute(
-                new CalculateQnaAdminRefundReviewQuery(postId)));
+            getQnaAdminRefundReviewUseCase.execute(new GetQnaAdminRefundReviewQuery(postId)));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
@@ -71,8 +72,8 @@ public class QnaAdminEscrowController {
       @AuthenticationPrincipal Long operatorId, @PathVariable Long postId) {
     var response =
         ForceQnaAdminRefundResponseDTO.from(
-            executeQnaAdminRefundUseCase.execute(
-                new ExecuteQnaAdminRefundCommand(requireOperatorId(operatorId), postId)));
+            forceQnaAdminRefundUseCase.execute(
+                new ForceQnaAdminRefundCommand(requireOperatorId(operatorId), postId)));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 

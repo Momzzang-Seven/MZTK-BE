@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.admin.api.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceQnaAdminRefundResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 
 public record ForceQnaAdminRefundResponseDTO(
@@ -12,16 +13,17 @@ public record ForceQnaAdminRefundResponseDTO(
 
   private static final String AUTHORITY_MODEL = "SERVER_RELAYER_ONLY";
 
-  public static ForceQnaAdminRefundResponseDTO from(QnaExecutionIntentResult result) {
+  public static ForceQnaAdminRefundResponseDTO from(ForceQnaAdminRefundResult result) {
     if (result == null) {
       throw new Web3InvalidInputException("result is required");
     }
+    QnaExecutionIntentResult executionIntent = result.executionIntent();
     return new ForceQnaAdminRefundResponseDTO(
-        result.resource(),
-        result.actionType(),
-        result.executionIntent(),
-        new Execution(result.execution().mode(), false, AUTHORITY_MODEL),
-        result.existing());
+        executionIntent.resource(),
+        executionIntent.actionType(),
+        executionIntent.executionIntent(),
+        new Execution(executionIntent.execution().mode(), false, AUTHORITY_MODEL),
+        executionIntent.existing());
   }
 
   public record Execution(String mode, boolean requiresUserSignature, String authorityModel) {
