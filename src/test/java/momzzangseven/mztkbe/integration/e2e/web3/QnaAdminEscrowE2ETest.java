@@ -8,25 +8,24 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigInteger;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaAdminExecutionDraftPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
@@ -52,19 +51,25 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.reward-token.enabled=true",
       "web3.eip7702.enabled=false",
       "web3.execution.internal.enabled=true",
-      "web3.qna.admin.enabled=true"
+      "web3.qna.admin.enabled=true",
+      "web3.execution.internal.signer.wallet-alias=test-sponsor",
+      "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA=="
     })
 @Tag("e2e")
 @DisplayName("[E2E] QnA admin manual settle/refund flow")
 class QnaAdminEscrowE2ETest extends E2ETestBase {
 
+  private static final Instant NOW = Instant.parse("2026-04-21T00:00:00Z");
   private static final String SIGNER_ADDRESS = "0xd799cd2b5258edc2157bec7e2cd069f31f2678c2";
   private static final String CALL_TARGET = "0x0000000000000000000000000000000000000002";
   private static final String TOKEN_ADDRESS = "0x1111111111111111111111111111111111111111";
   private static final BigInteger REWARD_AMOUNT_WEI = new BigInteger("50000000000000000000");
+  private static final String PRIVATE_KEY_HEX = "0x" + "9".repeat(64);
 
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private RunInternalExecutionBatchUseCase runInternalExecutionBatchUseCase;
+  @Autowired private MarkExecutionIntentSucceededUseCase markExecutionIntentSucceededUseCase;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -72,27 +77,54 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   @MockitoBean
   private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
 
-  @MockitoBean private LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
-  @MockitoBean private LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
   @MockitoBean private QnaContractCallSupport qnaContractCallSupport;
-  @MockitoBean private BuildQnaAdminExecutionDraftPort buildQnaAdminExecutionDraftPort;
+  @MockitoBean private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
+  @MockitoBean private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
 
   @BeforeEach
   void setUp() {
-    BDDMockito.given(loadExecutionInternalIssuerPolicyPort.loadPolicy())
+    BDDMockito.given(loadExecutionSponsorKeyPort.loadByAlias(any(), any()))
         .willReturn(
-            new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(
-                true, true, true));
-    BDDMockito.given(loadQnaAdminSignerAddressPort.loadSignerAddress()).willReturn(SIGNER_ADDRESS);
+            Optional.of(
+                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
+                    SIGNER_ADDRESS, PRIVATE_KEY_HEX)));
     BDDMockito.given(qnaContractCallSupport.isRelayerRegistered(anyString(), anyString()))
         .willReturn(true);
-    BDDMockito.given(buildQnaAdminExecutionDraftPort.build(any()))
-        .willAnswer(invocation -> adminDraft(invocation.getArgument(0)));
+    BDDMockito.willDoNothing()
+        .given(qnaContractCallSupport)
+        .requireRelayerCallable(anyString(), anyString());
+    BDDMockito.given(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
+        .willReturn(
+            new QnaContractCallSupport.QnaCallPrevalidationResult(
+                BigInteger.valueOf(210_000L),
+                BigInteger.valueOf(2_000_000_000L),
+                BigInteger.valueOf(30_000_000_000L)));
+    BDDMockito.given(executionEip1559SigningPort.sign(any()))
+        .willReturn(
+            new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash-signed"));
+    BDDMockito.given(executionTransactionGatewayPort.reserveNextNonce(anyString())).willReturn(77L);
   }
 
   @Test
-  @DisplayName("admin settlement review/settle가 processable review와 direct EIP-1559 intent를 만든다")
-  void adminSettlementFlow_createsExecutionIntentAndMarksPendingAccept() throws Exception {
+  @DisplayName("admin settlement review/settle가 real draft builder와 internal issuer를 통해 admin settle 완료까지 이어진다")
+  void adminSettlementFlow_executesInternalIssuerAndConfirmsAdminSettle() throws Exception {
+    AtomicReference<ExecutionTransactionGatewayPort.CreateTransactionCommand> createdCommandRef =
+        new AtomicReference<>();
+    BDDMockito.given(executionTransactionGatewayPort.createAndFlush(any()))
+        .willAnswer(
+            invocation -> {
+              var command =
+                  invocation.getArgument(
+                      0, ExecutionTransactionGatewayPort.CreateTransactionCommand.class);
+              createdCommandRef.set(command);
+              return seedTransactionRecord(801L, command);
+            });
+    BDDMockito.given(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(
+                true, "0xhash801", null, "main"));
+
     AdminUser admin = createAdminAndLogin();
     TestUser asker = signupAndLogin("manual-settle-asker");
     TestUser responder = signupAndLogin("manual-settle-responder");
@@ -117,6 +149,9 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(reviewData.path("processable").asBoolean()).isTrue();
     assertThat(reviewData.path("questionConflictingActiveIntent").asBoolean()).isFalse();
     assertThat(reviewData.path("answerConflictingActiveIntent").asBoolean()).isFalse();
+    assertThat(reviewData.path("authority").path("currentServerSignerAddress").asText())
+        .isEqualTo(SIGNER_ADDRESS);
+    assertThat(reviewData.path("authority").path("relayerRegistered").asBoolean()).isTrue();
 
     ResponseEntity<String> settleResponse =
         restTemplate.exchange(
@@ -140,16 +175,55 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(settleData.path("signRequest").isMissingNode()).isTrue();
 
     Map<String, Object> latestIntent = latestExecutionIntent(scenario.postId());
+    String intentId = settleData.path("executionIntent").path("id").asText();
     assertThat(latestIntent.get("action_type")).isEqualTo("QNA_ADMIN_SETTLE");
     assertThat(latestIntent.get("status")).isEqualTo("AWAITING_SIGNATURE");
     assertThat(postStatus(scenario.postId())).isEqualTo("PENDING_ACCEPT");
     assertThat(countAdminAudit("QNA_ADMIN_SETTLE", "post:" + scenario.postId(), admin.userId()))
         .isEqualTo(1);
+    assertThat(objectMapper.readTree(unsignedTxSnapshot(intentId)).path("expectedNonce").asLong())
+        .isZero();
+
+    var internalResult = runInternalExecutionBatchUseCase.runBatch(NOW);
+
+    assertThat(internalResult.executedCount()).isEqualTo(1);
+    assertThat(internalResult.pendingCount()).isEqualTo(1);
+    assertThat(createdCommandRef.get()).isNotNull();
+    assertThat(createdCommandRef.get().fromAddress()).isEqualTo(SIGNER_ADDRESS);
+    assertThat(createdCommandRef.get().toAddress()).isEqualTo(CALL_TARGET);
+    assertThat(createdCommandRef.get().nonce()).isEqualTo(77L);
+    assertThat(transactionNonce(801L)).isEqualTo(77L);
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("PENDING_ONCHAIN");
+
+    markExecutionIntentSucceededUseCase.execute(801L);
+
+    assertThat(postStatus(scenario.postId())).isEqualTo("RESOLVED");
+    assertThat(acceptedAnswerId(scenario.postId())).isEqualTo(scenario.answerId());
+    assertThat(localAnswerAccepted(scenario.answerId())).isTrue();
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("CONFIRMED");
+    assertThat(questionState(scenario.postId())).isEqualTo(QnaQuestionState.ADMIN_SETTLED.code());
+    assertThat(answerProjectionAccepted(scenario.answerId())).isTrue();
   }
 
   @Test
-  @DisplayName("admin refund review/refund가 processable review와 direct EIP-1559 intent를 만든다")
-  void adminRefundFlow_createsExecutionIntent() throws Exception {
+  @DisplayName("admin refund review/refund가 real draft builder와 internal issuer를 통해 admin refund 완료까지 이어진다")
+  void adminRefundFlow_executesInternalIssuerAndConfirmsAdminRefund() throws Exception {
+    AtomicReference<ExecutionTransactionGatewayPort.CreateTransactionCommand> createdCommandRef =
+        new AtomicReference<>();
+    BDDMockito.given(executionTransactionGatewayPort.createAndFlush(any()))
+        .willAnswer(
+            invocation -> {
+              var command =
+                  invocation.getArgument(
+                      0, ExecutionTransactionGatewayPort.CreateTransactionCommand.class);
+              createdCommandRef.set(command);
+              return seedTransactionRecord(802L, command);
+            });
+    BDDMockito.given(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .willReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(
+                true, "0xhash802", null, "main"));
+
     AdminUser admin = createAdminAndLogin();
     TestUser asker = signupAndLogin("manual-refund-asker");
     Long postId = seedRefundScenario(asker.userId(), "manual refund question");
@@ -184,10 +258,30 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(refundData.path("signRequest").isMissingNode()).isTrue();
 
     Map<String, Object> latestIntent = latestExecutionIntent(postId);
+    String intentId = refundData.path("executionIntent").path("id").asText();
     assertThat(latestIntent.get("action_type")).isEqualTo("QNA_ADMIN_REFUND");
     assertThat(latestIntent.get("status")).isEqualTo("AWAITING_SIGNATURE");
     assertThat(postStatus(postId)).isEqualTo("OPEN");
     assertThat(countAdminAudit("QNA_ADMIN_REFUND", "post:" + postId, admin.userId())).isEqualTo(1);
+    assertThat(objectMapper.readTree(unsignedTxSnapshot(intentId)).path("expectedNonce").asLong())
+        .isZero();
+
+    var internalResult = runInternalExecutionBatchUseCase.runBatch(NOW);
+
+    assertThat(internalResult.executedCount()).isEqualTo(1);
+    assertThat(internalResult.pendingCount()).isEqualTo(1);
+    assertThat(createdCommandRef.get()).isNotNull();
+    assertThat(createdCommandRef.get().fromAddress()).isEqualTo(SIGNER_ADDRESS);
+    assertThat(createdCommandRef.get().toAddress()).isEqualTo(CALL_TARGET);
+    assertThat(createdCommandRef.get().nonce()).isEqualTo(77L);
+    assertThat(transactionNonce(802L)).isEqualTo(77L);
+    assertThat(latestExecutionIntentStatus(postId)).isEqualTo("PENDING_ONCHAIN");
+
+    markExecutionIntentSucceededUseCase.execute(802L);
+
+    assertThat(latestExecutionIntentStatus(postId)).isEqualTo("CONFIRMED");
+    assertThat(questionState(postId)).isEqualTo(QnaQuestionState.DELETED.code());
+    assertThat(postExists(postId)).isFalse();
   }
 
   private AdminUser createAdminAndLogin() {
@@ -339,58 +433,6 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         Timestamp.valueOf(createdAt));
   }
 
-  private QnaExecutionDraft adminDraft(QnaEscrowExecutionRequest request) throws Exception {
-    String callData =
-        request.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE
-            ? "0x1234abcd"
-            : "0xabcd1234";
-    QnaEscrowExecutionPayload payload =
-        new QnaEscrowExecutionPayload(
-            request.actionType(),
-            request.postId(),
-            request.answerId(),
-            null,
-            request.tokenAddress(),
-            request.rewardAmountWei(),
-            request.questionHash(),
-            request.contentHash(),
-            CALL_TARGET,
-            callData);
-    return new QnaExecutionDraft(
-        request.resourceType(),
-        request.resourceId(),
-        QnaExecutionResourceStatus.PENDING_EXECUTION,
-        request.actionType(),
-        request.requesterUserId(),
-        request.counterpartyUserId(),
-        "root-admin-"
-            + request.actionType().name()
-            + "-"
-            + request.postId()
-            + "-"
-            + UUID.randomUUID(),
-        "0x" + "a".repeat(64),
-        objectMapper.writeValueAsString(payload),
-        List.of(new QnaExecutionDraftCall(CALL_TARGET, BigInteger.ZERO, callData)),
-        false,
-        null,
-        null,
-        null,
-        null,
-        new QnaUnsignedTxSnapshot(
-            1337L,
-            SIGNER_ADDRESS,
-            CALL_TARGET,
-            BigInteger.ZERO,
-            callData,
-            21L,
-            BigInteger.valueOf(210_000),
-            BigInteger.valueOf(2_000_000_000L),
-            BigInteger.valueOf(30_000_000_000L)),
-        "0x" + "b".repeat(64),
-        LocalDateTime.now().plusMinutes(5));
-  }
-
   private Map<String, Object> latestExecutionIntent(Long postId) {
     return jdbcTemplate.queryForMap(
         "select action_type, status, public_id from web3_execution_intents"
@@ -398,9 +440,61 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         postId.toString());
   }
 
+  private String latestExecutionIntentStatus(Long postId) {
+    return jdbcTemplate.queryForObject(
+        "select status from web3_execution_intents where resource_id = ? order by created_at desc limit 1",
+        String.class,
+        postId.toString());
+  }
+
+  private String unsignedTxSnapshot(String publicId) {
+    return jdbcTemplate.queryForObject(
+        "select unsigned_tx_snapshot from web3_execution_intents where public_id = ?",
+        String.class,
+        publicId);
+  }
+
   private String postStatus(Long postId) {
     return jdbcTemplate.queryForObject(
         "select status from posts where id = ?", String.class, postId);
+  }
+
+  private Long acceptedAnswerId(Long postId) {
+    return jdbcTemplate.queryForObject(
+        "select accepted_answer_id from posts where id = ?", Long.class, postId);
+  }
+
+  private boolean localAnswerAccepted(Long answerId) {
+    Boolean accepted =
+        jdbcTemplate.queryForObject(
+            "select is_accepted from answers where id = ?", Boolean.class, answerId);
+    return Boolean.TRUE.equals(accepted);
+  }
+
+  private int questionState(Long postId) {
+    Integer state =
+        jdbcTemplate.queryForObject(
+            "select state from web3_qna_questions where post_id = ?", Integer.class, postId);
+    return state == null ? -1 : state;
+  }
+
+  private boolean answerProjectionAccepted(Long answerId) {
+    Boolean accepted =
+        jdbcTemplate.queryForObject(
+            "select accepted from web3_qna_answers where answer_id = ?", Boolean.class, answerId);
+    return Boolean.TRUE.equals(accepted);
+  }
+
+  private Long transactionNonce(Long transactionId) {
+    return jdbcTemplate.queryForObject(
+        "select nonce from web3_transactions where id = ?", Long.class, transactionId);
+  }
+
+  private boolean postExists(Long postId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "select count(*) from posts where id = ?", Integer.class, postId);
+    return count != null && count > 0;
   }
 
   private int countAdminAudit(String actionType, String targetId, Long operatorId) {
@@ -412,6 +506,32 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
             targetId,
             operatorId);
     return count == null ? 0 : count;
+  }
+
+  private ExecutionTransactionGatewayPort.TransactionRecord seedTransactionRecord(
+      long transactionId, ExecutionTransactionGatewayPort.CreateTransactionCommand command) {
+    LocalDateTime now = LocalDateTime.now().minusMinutes(1);
+    jdbcTemplate.update(
+        "insert into web3_transactions ("
+            + "id, idempotency_key, reference_type, reference_id, from_user_id, to_user_id, "
+            + "from_address, to_address, amount_wei, nonce, tx_type, status, created_at, updated_at"
+            + ") values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        transactionId,
+        command.idempotencyKey() + "-" + UUID.randomUUID(),
+        command.referenceType().name(),
+        command.referenceId(),
+        command.fromUserId(),
+        command.toUserId(),
+        command.fromAddress(),
+        command.toAddress(),
+        command.amountWei(),
+        command.nonce(),
+        command.txType().name(),
+        command.status().name(),
+        Timestamp.valueOf(now),
+        Timestamp.valueOf(now));
+    return new ExecutionTransactionGatewayPort.TransactionRecord(
+        transactionId, ExecutionTransactionStatus.CREATED, null);
   }
 
   private record AdminUser(Long userId, String accessToken) {}
