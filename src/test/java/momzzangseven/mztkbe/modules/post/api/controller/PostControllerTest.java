@@ -172,7 +172,7 @@ class PostControllerTest {
         .andExpect(jsonPath("$.data.type").value("FREE"))
         .andExpect(jsonPath("$.data.likeCount").value(3))
         .andExpect(jsonPath("$.data.isLiked").value(true))
-        .andExpect(jsonPath("$.data.imageUrls").isArray());
+        .andExpect(jsonPath("$.data.images").isArray());
   }
 
   @Test
@@ -240,6 +240,7 @@ class PostControllerTest {
             0L,
             false,
             List.of("health"),
+            List.of(),
             LocalDateTime.now(),
             LocalDateTime.now());
     given(searchPostsUseCase.searchPosts(any(PostSearchCondition.class), any(Long.class)))

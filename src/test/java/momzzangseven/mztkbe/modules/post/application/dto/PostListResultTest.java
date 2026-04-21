@@ -8,13 +8,14 @@ import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 @DisplayName("PostListResult unit test")
 class PostListResultTest {
 
   @Test
-  @DisplayName("fromDomain maps list fields and derives solved from open status")
+  @DisplayName("[M-1] fromDomain maps list fields and derives solved from open status")
   void fromDomainMapsAndDerivesSolvedFromOpenStatus() {
     LocalDateTime createdAt = LocalDateTime.of(2026, 1, 1, 10, 0);
     LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 12, 0);
@@ -36,7 +37,14 @@ class PostListResultTest {
     String nickname = "test nick name";
     String profileImageUrl = "test/image/url";
 
-    PostListResult result = PostListResult.fromDomain(post, 2L, true, nickname, profileImageUrl);
+    PostListResult result =
+        PostListResult.fromDomain(
+            post,
+            2L,
+            true,
+            nickname,
+            profileImageUrl,
+            List.of(new PostImageResult.PostImageSlot(1L, "https://cdn/img1.webp")));
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
@@ -52,6 +60,8 @@ class PostListResultTest {
     assertThat(result.updatedAt()).isEqualTo(updatedAt);
     assertThat(result.nickname()).isEqualTo(nickname);
     assertThat(result.profileImageUrl()).isEqualTo(profileImageUrl);
+    assertThat(result.images())
+        .containsExactly(new PostImageResult.PostImageSlot(1L, "https://cdn/img1.webp"));
   }
 
   @Test
@@ -69,7 +79,8 @@ class PostListResultTest {
             .status(PostStatus.RESOLVED)
             .build();
 
-    PostListResult result = PostListResult.fromDomain(post, 1L, false, "writer", "profile");
+    PostListResult result =
+        PostListResult.fromDomain(post, 1L, false, "writer", "profile", List.of());
 
     assertThat(result.isSolved()).isTrue();
   }
@@ -89,7 +100,8 @@ class PostListResultTest {
             .status(PostStatus.PENDING_ACCEPT)
             .build();
 
-    PostListResult result = PostListResult.fromDomain(post, 1L, false, "writer", "profile");
+    PostListResult result =
+        PostListResult.fromDomain(post, 1L, false, "writer", "profile", List.of());
 
     assertThat(result.isSolved()).isTrue();
   }
@@ -111,5 +123,58 @@ class PostListResultTest {
     PostListResult result = PostListResult.fromDomain(post, 1L, false, "writer", "profile");
 
     assertThat(result.isSolved()).isTrue();
+
+  @Nested
+  @DisplayName("images null/empty handling")
+  class ImagesCoercion {
+
+    private Post basePost(Long id) {
+      return Post.builder()
+          .id(id)
+          .userId(1L)
+          .type(PostType.FREE)
+          .title("t")
+          .content("c")
+          .reward(0L)
+          .status(PostStatus.OPEN)
+          .build();
+    }
+
+    @Test
+    @DisplayName("[M-1] fromDomain populates images when provided, in order")
+    void fromDomain_withImages_populatesInOrder() {
+      PostListResult result =
+          PostListResult.fromDomain(
+              basePost(1L),
+              2L,
+              true,
+              "n",
+              "p",
+              List.of(
+                  new PostImageResult.PostImageSlot(1L, "https://cdn/a.webp"),
+                  new PostImageResult.PostImageSlot(2L, "https://cdn/b.webp")));
+
+      assertThat(result.images())
+          .containsExactly(
+              new PostImageResult.PostImageSlot(1L, "https://cdn/a.webp"),
+              new PostImageResult.PostImageSlot(2L, "https://cdn/b.webp"));
+    }
+
+    @Test
+    @DisplayName("[M-2] fromDomain coerces null images to empty list")
+    void fromDomain_withNullImages_returnsEmptyList() {
+      PostListResult result = PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", null);
+
+      assertThat(result.images()).isNotNull().isEmpty();
+    }
+
+    @Test
+    @DisplayName("[M-3] fromDomain preserves empty images list")
+    void fromDomain_withEmptyImages_preservesEmpty() {
+      PostListResult result =
+          PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", List.of());
+
+      assertThat(result.images()).isNotNull().isEmpty();
+    }
   }
 }
