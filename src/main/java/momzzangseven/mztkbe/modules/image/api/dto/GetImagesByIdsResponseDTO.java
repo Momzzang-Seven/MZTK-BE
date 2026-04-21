@@ -23,7 +23,7 @@ public record GetImagesByIdsResponseDTO(List<ImageItemDTO> images) {
       ImageReferenceType referenceType,
       Long referenceId,
       ImageStatus status,
-      String finalObjectKey,
+      String imageUrl,
       int imgOrder,
       Instant createdAt,
       Instant updatedAt) {
@@ -36,7 +36,7 @@ public record GetImagesByIdsResponseDTO(List<ImageItemDTO> images) {
           item.referenceType(),
           item.referenceId(),
           item.status(),
-          item.finalObjectKey(),
+          item.imageUrl(),
           item.imgOrder(),
           item.createdAt(),
           item.updatedAt());

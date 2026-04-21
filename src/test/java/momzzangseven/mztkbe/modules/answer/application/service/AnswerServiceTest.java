@@ -201,10 +201,13 @@ class AnswerServiceTest {
       assertThat(result.get(0).nickname()).isEqualTo("writer-a");
       assertThat(result.get(0).likeCount()).isEqualTo(4L);
       assertThat(result.get(0).liked()).isFalse();
-      assertThat(result.get(0).imageUrls()).isEmpty();
+      assertThat(result.get(0).images()).isEmpty();
       assertThat(result.get(1).likeCount()).isEqualTo(1L);
       assertThat(result.get(1).liked()).isTrue();
-      assertThat(result.get(1).imageUrls()).containsExactly("https://cdn.example.com/a.webp", null);
+      assertThat(result.get(1).images())
+          .containsExactly(
+              new AnswerImageSlot(101L, "https://cdn.example.com/a.webp"),
+              new AnswerImageSlot(102L, null));
       verify(loadAnswerImagesPort).loadImagesByAnswerIds(List.of(1L, 2L));
       verify(loadAnswerLikePort).countLikeByAnswerIds(List.of(1L, 2L));
       verify(loadAnswerLikePort).loadLikedAnswerIds(List.of(1L, 2L), 999L);

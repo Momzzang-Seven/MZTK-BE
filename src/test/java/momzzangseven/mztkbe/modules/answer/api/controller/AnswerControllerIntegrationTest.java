@@ -152,7 +152,9 @@ class AnswerControllerIntegrationTest {
           .andExpect(jsonPath("$.data[0].content").value("integration answer"))
           .andExpect(jsonPath("$.data[0].likeCount").value(3))
           .andExpect(jsonPath("$.data[0].isLiked").value(true))
-          .andExpect(jsonPath("$.data[0].imageUrls[0]").value("https://example.com/answer-1.png"));
+          .andExpect(jsonPath("$.data[0].images[0].imageId").value(1))
+          .andExpect(
+              jsonPath("$.data[0].images[0].imageUrl").value("https://example.com/answer-1.png"));
 
       mockMvc
           .perform(
@@ -220,8 +222,12 @@ class AnswerControllerIntegrationTest {
       mockMvc
           .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
           .andExpect(status().isOk())
-          .andExpect(jsonPath("$.data[0].imageUrls[0]").value("https://cdn.example.com/a.webp"))
-          .andExpect(jsonPath("$.data[0].imageUrls[1]").value(org.hamcrest.Matchers.nullValue()));
+          .andExpect(jsonPath("$.data[0].images[0].imageId").value(1))
+          .andExpect(
+              jsonPath("$.data[0].images[0].imageUrl").value("https://cdn.example.com/a.webp"))
+          .andExpect(jsonPath("$.data[0].images[1].imageId").value(2))
+          .andExpect(
+              jsonPath("$.data[0].images[1].imageUrl").value(org.hamcrest.Matchers.nullValue()));
     }
   }
 

@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.image.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,6 +12,7 @@ import momzzangseven.mztkbe.global.error.image.ImageNotBelongsToUserException;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsResult;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsResult.ImageItem;
+import momzzangseven.mztkbe.modules.image.application.port.out.ImageStoragePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import momzzangseven.mztkbe.modules.image.domain.vo.ImageReferenceType;
@@ -29,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GetImagesByIdsServiceTest {
 
   @Mock private LoadImagePort loadImagePort;
+  @Mock private ImageStoragePort imageStoragePort;
   @InjectMocks private GetImagesByIdsService service;
 
   private static final long USER_ID = 1L;
@@ -92,10 +95,12 @@ class GetImagesByIdsServiceTest {
   class SuccessCases {
 
     @Test
-    @DisplayName("[TC-SVC-001] COMPLETED 이미지 조회 - finalObjectKey 포함 반환")
-    void execute_completedImages_returnsFinalKey() {
+    @DisplayName("[TC-SVC-001] COMPLETED 이미지 조회 - imageUrl 포함 반환")
+    void execute_completedImages_returnsImageUrl() {
       given(loadImagePort.findImagesByIdIn(List.of(1L, 2L)))
           .willReturn(List.of(completedImage(1, 1), completedImage(2, 2)));
+      given(imageStoragePort.buildImageUrl(any()))
+          .willAnswer(inv -> "https://test/" + inv.getArgument(0));
 
       GetImagesByIdsResult result =
           service.execute(new GetImagesByIdsCommand(USER_ID, FREE, REF_ID, List.of(1L, 2L)));
@@ -103,22 +108,28 @@ class GetImagesByIdsServiceTest {
       assertThat(result.images()).hasSize(2);
       assertThat(result.images().get(0).imageId()).isEqualTo(1L);
       assertThat(result.images().get(0).status()).isEqualTo(ImageStatus.COMPLETED);
-      assertThat(result.images().get(0).finalObjectKey()).isNotNull();
+      assertThat(result.images().get(0).imageUrl()).isNotNull();
     }
 
     @Test
-    @DisplayName("[TC-SVC-002] PENDING/FAILED 이미지는 finalObjectKey=null로 반환")
-    void execute_pendingAndFailed_nullFinalKey() {
+    @DisplayName("[TC-SVC-002] PENDING/FAILED 이미지는 imageUrl=null로 반환")
+    void execute_pendingAndFailed_nullImageUrl() {
       given(loadImagePort.findImagesByIdIn(List.of(1L, 2L, 3L)))
           .willReturn(List.of(pendingImage(1, 1), failedImage(2, 2), completedImage(3, 3)));
+      given(imageStoragePort.buildImageUrl(any()))
+          .willAnswer(
+              inv -> {
+                String key = inv.getArgument(0);
+                return (key == null || key.isBlank()) ? null : "https://test/" + key;
+              });
 
       GetImagesByIdsResult result =
           service.execute(new GetImagesByIdsCommand(USER_ID, FREE, REF_ID, List.of(1L, 2L, 3L)));
 
       assertThat(result.images()).hasSize(3);
-      assertThat(result.images().get(0).finalObjectKey()).isNull();
-      assertThat(result.images().get(1).finalObjectKey()).isNull();
-      assertThat(result.images().get(2).finalObjectKey()).isNotNull();
+      assertThat(result.images().get(0).imageUrl()).isNull();
+      assertThat(result.images().get(1).imageUrl()).isNull();
+      assertThat(result.images().get(2).imageUrl()).isNotNull();
     }
 
     @Test
