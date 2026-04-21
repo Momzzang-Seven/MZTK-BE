@@ -13,7 +13,6 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCa
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaAdminExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerPendingNoncePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
@@ -30,7 +29,6 @@ import org.springframework.stereotype.Component;
 public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecutionDraftPort {
 
   private final LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
-  private final LoadQnaAdminSignerPendingNoncePort loadQnaAdminSignerPendingNoncePort;
   private final LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   private final Web3CoreProperties web3CoreProperties;
   private final QnaEscrowProperties qnaEscrowProperties;
@@ -53,7 +51,6 @@ public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecut
         request.answerId() == null ? null : QnaEscrowIdCodec.answerId(request.answerId());
     String signerAddress = EvmAddress.of(loadQnaAdminSignerAddressPort.loadSignerAddress()).value();
     qnaContractCallSupport.requireRelayerCallable(callTarget, signerAddress);
-    long expectedNonce = loadQnaAdminSignerPendingNoncePort.loadPendingNonce(signerAddress);
 
     String callData =
         qnaEscrowAbiEncoder.encode(
@@ -75,7 +72,8 @@ public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecut
             callTarget,
             BigInteger.ZERO,
             callData,
-            expectedNonce,
+            // The internal issuer allocates the real nonce right before signing.
+            0L,
             prevalidation.gasLimit(),
             prevalidation.maxPriorityFeePerGas(),
             prevalidation.maxFeePerGas());

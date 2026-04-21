@@ -16,7 +16,6 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInte
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerPendingNoncePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
@@ -31,7 +30,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaAdminExecutionDraftBuilderAdapterTest {
 
   @Mock private LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
-  @Mock private LoadQnaAdminSignerPendingNoncePort loadQnaAdminSignerPendingNoncePort;
   @Mock private LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
 
@@ -52,7 +50,6 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
     adapter =
         new QnaAdminExecutionDraftBuilderAdapter(
             loadQnaAdminSignerAddressPort,
-            loadQnaAdminSignerPendingNoncePort,
             loadInternalExecutionEip1559TtlPort,
             web3CoreProperties,
             qnaEscrowProperties,
@@ -67,7 +64,6 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
   void build_adminSettleUsesServerSignerWithoutUserAuthority() {
     when(loadQnaAdminSignerAddressPort.loadSignerAddress())
         .thenReturn("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    when(loadQnaAdminSignerPendingNoncePort.loadPendingNonce(anyString())).thenReturn(21L);
     when(loadInternalExecutionEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
     when(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
         .thenReturn(
@@ -102,7 +98,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
     assertThat(draft.authorizationPayloadHash()).isNull();
     assertThat(draft.unsignedTxSnapshot().fromAddress())
         .isEqualTo("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    assertThat(draft.unsignedTxSnapshot().nonce()).isEqualTo(21L);
+    assertThat(draft.unsignedTxSnapshot().nonce()).isZero();
   }
 
   @Test

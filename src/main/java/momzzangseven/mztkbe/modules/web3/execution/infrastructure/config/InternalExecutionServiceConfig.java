@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteIn
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionSponsorWalletAddressUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetInternalExecutionIssuerPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -50,6 +51,7 @@ public class InternalExecutionServiceConfig {
       LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort,
       LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort,
       ExecutionEip1559SigningPort executionEip1559SigningPort,
+      Eip1559TransactionCodecPort eip1559TransactionCodecPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       Clock appClock) {
@@ -59,6 +61,7 @@ public class InternalExecutionServiceConfig {
         loadInternalExecutionSignerConfigPort,
         loadExecutionSponsorKeyPort,
         executionEip1559SigningPort,
+        eip1559TransactionCodecPort,
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         appClock);
