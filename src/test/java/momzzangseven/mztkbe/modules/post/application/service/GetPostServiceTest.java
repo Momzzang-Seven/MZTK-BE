@@ -159,14 +159,14 @@ class GetPostServiceTest {
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.tags()).containsExactly("java", "spring");
     assertThat(result.isSolved()).isFalse();
-    assertThat(result.imageUrls()).isEmpty();
+    assertThat(result.images()).isEmpty();
     assertThat(result.likeCount()).isEqualTo(3L);
     assertThat(result.liked()).isTrue();
   }
 
   @Test
-  @DisplayName("returns imageUrls from image module")
-  void getPostReturnsImageUrls() {
+  @DisplayName("returns images from image module")
+  void getPostReturnsImages() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     Post post =
         Post.builder()
@@ -194,7 +194,9 @@ class GetPostServiceTest {
 
     PostDetailResult result = getPostService.getPost(20L, 99L);
 
-    assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/images/img1.webp");
+    assertThat(result.images())
+        .containsExactly(
+            new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/images/img1.webp"));
   }
 
   @Test
@@ -262,6 +264,34 @@ class GetPostServiceTest {
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isTrue();
     assertThat(result.web3Execution()).isNull();
+  }
+
+  @Test
+  @DisplayName("[M-35] handles null imageResult gracefully as empty images list")
+  void getPost_nullImageResult_returnsEmptyImages() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(22L)
+            .userId(8L)
+            .type(PostType.FREE)
+            .title("hello")
+            .content("world")
+            .reward(0L)
+            .status(PostStatus.OPEN)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(22L)).thenReturn(Optional.of(post));
+    when(loadTagPort.findTagNamesByPostId(22L)).thenReturn(List.of());
+    when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
+    when(loadPostImagesPort.loadImages(PostType.FREE, 22L)).thenReturn(null);
+    when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(0L);
+
+    PostDetailResult result = getPostService.getPost(22L, 99L);
+
+    assertThat(result.images()).isNotNull().isEmpty();
   }
 
   @Test

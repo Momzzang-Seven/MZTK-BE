@@ -121,8 +121,8 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("GET /posts/{id} 상세 조회는 imageUrls를 응답에 포함")
-  void getPost_detailIncludesImageUrls() throws Exception {
+  @DisplayName("GET /posts/{id} 상세 조회는 images를 응답에 포함")
+  void getPost_detailIncludesImages() throws Exception {
     MvcResult createResult =
         mockMvc
             .perform(
@@ -145,8 +145,12 @@ class PostControllerIntegrationTest {
     mockMvc
         .perform(get("/posts/" + postId).with(userPrincipal(111L)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.imageUrls[0]").value("https://cdn.example.com/images/a.webp"))
-        .andExpect(jsonPath("$.data.imageUrls[1]").value("https://cdn.example.com/images/b.webp"));
+        .andExpect(jsonPath("$.data.images[0].imageId").value(1))
+        .andExpect(
+            jsonPath("$.data.images[0].imageUrl").value("https://cdn.example.com/images/a.webp"))
+        .andExpect(jsonPath("$.data.images[1].imageId").value(2))
+        .andExpect(
+            jsonPath("$.data.images[1].imageUrl").value("https://cdn.example.com/images/b.webp"));
   }
 
   @Test

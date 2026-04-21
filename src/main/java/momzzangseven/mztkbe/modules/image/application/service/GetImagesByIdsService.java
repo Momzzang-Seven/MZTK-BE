@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsCommand;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsResult;
 import momzzangseven.mztkbe.modules.image.application.dto.GetImagesByIdsResult.ImageItem;
 import momzzangseven.mztkbe.modules.image.application.port.in.GetImagesByIdsUseCase;
+import momzzangseven.mztkbe.modules.image.application.port.out.ImageStoragePort;
 import momzzangseven.mztkbe.modules.image.application.port.out.LoadImagePort;
 import momzzangseven.mztkbe.modules.image.domain.model.Image;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GetImagesByIdsService implements GetImagesByIdsUseCase {
 
   private final LoadImagePort loadImagePort;
+  private final ImageStoragePort imageStoragePort;
 
   @Override
   public GetImagesByIdsResult execute(GetImagesByIdsCommand command) {
@@ -46,7 +48,10 @@ public class GetImagesByIdsService implements GetImagesByIdsUseCase {
     List<ImageItem> items =
         images.stream()
             .sorted(Comparator.comparingInt(Image::getImgOrder))
-            .map(ImageItem::from)
+            .map(
+                image ->
+                    ImageItem.from(
+                        image, imageStoragePort.buildImageUrl(image.getFinalObjectKey())))
             .toList();
     return new GetImagesByIdsResult(items);
   }

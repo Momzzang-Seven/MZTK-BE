@@ -16,7 +16,7 @@ public record PostDetailResult(
     Long userId,
     String nickname,
     String profileImageUrl,
-    List<String> imageUrls,
+    List<PostImageResult.PostImageSlot> images,
     Long reward,
     boolean isSolved,
     QuestionExecutionResumeView web3Execution,
@@ -24,13 +24,17 @@ public record PostDetailResult(
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
 
+  public PostDetailResult {
+    images = images == null ? List.of() : images;
+  }
+
   public static PostDetailResult fromDomain(
       Post post,
       long likeCount,
       boolean liked,
       String nickname,
       String profileImageUrl,
-      List<String> imageUrls,
+      List<PostImageResult.PostImageSlot> images,
       QuestionExecutionResumeView web3Execution) {
     return new PostDetailResult(
         post.getId(),
@@ -42,7 +46,7 @@ public record PostDetailResult(
         post.getUserId(),
         nickname,
         profileImageUrl,
-        imageUrls,
+        images,
         post.getReward(),
         post.getIsSolved(),
         web3Execution,
