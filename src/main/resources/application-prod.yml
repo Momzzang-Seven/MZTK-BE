@@ -34,6 +34,10 @@ spring:
     clean-disabled: true  # Prod에서 clean 금지
     baseline-version: 0
 
+info:
+  app:
+    environment: prod
+
 security:
   cors:
     allowed-origins:
@@ -61,11 +65,8 @@ web3:
     eip4361:
       uri: ${PROD_DOMAIN}
 
-  explorer:
-    base-url: ${WEB3_EXPLORER_BASE_URL:https://optimistic.etherscan.io}
-
   eip7702:
-    enabled: ${WEB3_EIP_7702_ENABLED:true}                   # prod에서 실제로 스폰서 기능을 쓰면 true
+    enabled: ${WEB3_EIP_7702_ENABLED}
     execution:
       allowed-delegate-targets:
         - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS}
@@ -76,29 +77,8 @@ web3:
       allowed-target-contracts: []
       blocked-function-selectors:
         - 0x095ea7b3                # approve (예시)
-  execution:
-    internal-issuer:
-      enabled: ${WEB3_EXECUTION_INTERNAL_ISSUER_ENABLED}
-      batch-size: ${WEB3_EXECUTION_INTERNAL_ISSUER_BATCH_SIZE}
-      cron: ${WEB3_EXECUTION_INTERNAL_ISSUER_CRON}
-      zone: ${WEB3_EXECUTION_INTERNAL_ISSUER_ZONE}
-      action-types: ${WEB3_EXECUTION_INTERNAL_ISSUER_ACTION_TYPES}
-  qna:
-    auto-accept:
-      enabled: ${WEB3_QNA_AUTO_ACCEPT_ENABLED}
-      delay-seconds: ${WEB3_QNA_AUTO_ACCEPT_DELAY_SECONDS}
-      batch-size: ${WEB3_QNA_AUTO_ACCEPT_BATCH_SIZE}
-      cron: ${WEB3_QNA_AUTO_ACCEPT_CRON}
-      zone: ${WEB3_QNA_AUTO_ACCEPT_ZONE}
-  transfer:
-    legacy-question-reward-handler-enabled: ${WEB3_TRANSFER_LEGACY_QUESTION_REWARD_HANDLER_ENABLED:false}
-
 mztk:
   admin:
-    seed:
-      seed-count: ${ADMIN_SEED_COUNT:2}
-      delivery-target: ${ADMIN_SEED_DELIVERY_TARGET:mztk/admin/bootstrap-delivery}
     recovery:
-      secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}
       rate-limit:
         trust-forwarded-for: true

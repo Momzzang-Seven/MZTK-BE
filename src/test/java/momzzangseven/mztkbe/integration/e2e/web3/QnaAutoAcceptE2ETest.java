@@ -58,7 +58,7 @@ import org.springframework.transaction.support.TransactionTemplate;
     properties = {
       "web3.reward-token.enabled=true",
       "web3.eip7702.enabled=true",
-      "web3.execution.internal-issuer.enabled=true",
+      "web3.execution.internal.enabled=true",
       "web3.qna.auto-accept.enabled=true"
     })
 @Tag("e2e")

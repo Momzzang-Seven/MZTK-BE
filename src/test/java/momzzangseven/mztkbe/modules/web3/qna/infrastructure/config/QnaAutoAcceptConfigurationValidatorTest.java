@@ -45,11 +45,11 @@ class QnaAutoAcceptConfigurationValidatorTest {
 
     assertThatThrownBy(validator::validateConfiguration)
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("internal-issuer.enabled=true");
+        .hasMessageContaining("execution.internal.enabled=true");
   }
 
   @Test
-  @DisplayName("auto-accept가 켜져 있으면 internal issuer action-types에 QNA_ADMIN_SETTLE이 포함되어야 한다")
+  @DisplayName("auto-accept가 켜져 있으면 internal action-policy가 QNA_ADMIN_SETTLE을 포함해야 한다")
   void validateConfiguration_rejectsMissingAdminSettleActionType() {
     QnaAutoAcceptProperties qnaAutoAcceptProperties = new QnaAutoAcceptProperties();
     qnaAutoAcceptProperties.setEnabled(true);

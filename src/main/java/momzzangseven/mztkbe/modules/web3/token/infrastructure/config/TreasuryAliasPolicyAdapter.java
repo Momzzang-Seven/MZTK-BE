@@ -16,7 +16,7 @@ public class TreasuryAliasPolicyAdapter implements LoadTreasuryAliasPolicyPort {
   public TreasuryAliasPolicyAdapter(
       RewardTokenProperties rewardTokenProperties,
       @Value("${web3.eip7702.sponsor.wallet-alias:}") String sponsorWalletAlias,
-      @Value("${web3.execution.internal-issuer.signer.wallet-alias:}")
+      @Value("${web3.execution.internal.signer.wallet-alias:}")
           String internalIssuerSignerWalletAlias) {
     this.rewardTokenProperties = rewardTokenProperties;
     this.sponsorWalletAlias = sponsorWalletAlias;

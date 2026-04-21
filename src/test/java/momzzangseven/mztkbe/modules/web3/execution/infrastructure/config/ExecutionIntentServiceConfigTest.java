@@ -44,7 +44,7 @@ class ExecutionIntentServiceConfigTest {
         .withPropertyValues(
             "web3.reward-token.enabled=true",
             "web3.eip7702.enabled=false",
-            "web3.execution.internal-issuer.enabled=true")
+            "web3.execution.internal.enabled=true")
         .run(
             context -> {
               assertThat(context).hasNotFailed();

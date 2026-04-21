@@ -4,12 +4,12 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAutoAcceptEnabled;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnInternalExecutionEnabled
+@ConditionalOnQnaAutoAcceptEnabled
 public class QnaAutoAcceptConfigurationValidator {
 
   private final QnaAutoAcceptProperties qnaAutoAcceptProperties;
@@ -28,11 +28,11 @@ public class QnaAutoAcceptConfigurationValidator {
         loadInternalExecutionIssuerPolicyPort.loadPolicy();
     if (!policy.enabled()) {
       throw new IllegalStateException(
-          "web3.qna.auto-accept.enabled=true requires web3.execution.internal-issuer.enabled=true");
+          "web3.qna.auto-accept.enabled=true requires web3.execution.internal.enabled=true");
     }
     if (!policy.actionTypes().contains(ExecutionActionType.QNA_ADMIN_SETTLE)) {
       throw new IllegalStateException(
-          "web3.qna.auto-accept.enabled=true requires web3.execution.internal-issuer.action-types to include QNA_ADMIN_SETTLE");
+          "web3.qna.auto-accept.enabled=true requires web3.execution.internal.action-policy to enable QNA_ADMIN_SETTLE");
     }
   }
 }

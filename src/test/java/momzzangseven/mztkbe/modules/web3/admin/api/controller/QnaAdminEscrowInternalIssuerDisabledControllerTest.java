@@ -24,7 +24,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
     properties = {
       "web3.reward-token.enabled=true",
       "web3.eip7702.enabled=false",
-      "web3.execution.internal-issuer.enabled=false"
+      "web3.execution.internal.enabled=false",
+      "web3.qna.admin.enabled=true"
     })
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -33,7 +34,7 @@ class QnaAdminEscrowInternalIssuerDisabledControllerTest {
 
   private static final String INTERNAL_ISSUER_DISABLED_CODE = "WEB3_015";
   private static final String INTERNAL_ISSUER_DISABLED_MESSAGE =
-      "QnA admin execution requires web3.execution.internal-issuer.enabled=true";
+      "QnA admin execution requires web3.execution.internal.enabled=true and web3.qna.admin.enabled=true";
 
   @org.springframework.beans.factory.annotation.Autowired protected MockMvc mockMvc;
 

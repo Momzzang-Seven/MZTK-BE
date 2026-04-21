@@ -6,6 +6,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdmin
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalRefundUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaAdminExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
@@ -21,6 +23,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.service.PrepareQnaAdmin
 import momzzangseven.mztkbe.modules.web3.qna.application.service.PrepareQnaAdminSettlementService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowAdminExecutionService;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminOrAutoAcceptEnabled;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -31,18 +35,21 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class QnaAdminExecutionServiceConfig {
 
   @Bean
+  @ConditionalOnQnaAdminEnabled
   CalculateQnaAdminSettlementReviewUseCase calculateQnaAdminSettlementReviewUseCase(
       LoadQnaAdminReviewContextPort loadQnaAdminReviewContextPort) {
     return new CalculateQnaAdminSettlementReviewService(loadQnaAdminReviewContextPort);
   }
 
   @Bean
+  @ConditionalOnQnaAdminEnabled
   CalculateQnaAdminRefundReviewUseCase calculateQnaAdminRefundReviewUseCase(
       LoadQnaAdminReviewContextPort loadQnaAdminReviewContextPort) {
     return new CalculateQnaAdminRefundReviewService(loadQnaAdminReviewContextPort);
   }
 
   @Bean
+  @ConditionalOnQnaAdminOrAutoAcceptEnabled
   QuestionEscrowAdminExecutionService questionEscrowAdminExecutionService(
       QnaProjectionPersistencePort qnaProjectionPersistencePort,
       LoadQnaAnswerIdsPort loadQnaAnswerIdsPort,
@@ -58,18 +65,48 @@ public class QnaAdminExecutionServiceConfig {
   }
 
   @Bean
-  PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase(
+  @ConditionalOnQnaAdminOrAutoAcceptEnabled
+  PrepareQnaAdminSettlementService prepareQnaAdminSettlementService(
       QuestionEscrowAdminExecutionService questionEscrowAdminExecutionService) {
     return new PrepareQnaAdminSettlementService(questionEscrowAdminExecutionService);
   }
 
   @Bean
-  PrepareQnaAdminRefundUseCase prepareQnaAdminRefundUseCase(
+  @ConditionalOnQnaAdminOrAutoAcceptEnabled
+  PrepareQnaInternalSettlementUseCase prepareQnaInternalSettlementUseCase(
+      PrepareQnaAdminSettlementService delegate) {
+    return delegate::execute;
+  }
+
+  @Bean
+  @ConditionalOnQnaAdminEnabled
+  PrepareQnaAdminSettlementUseCase prepareQnaAdminSettlementUseCase(
+      PrepareQnaAdminSettlementService delegate) {
+    return delegate::execute;
+  }
+
+  @Bean
+  @ConditionalOnQnaAdminEnabled
+  PrepareQnaAdminRefundService prepareQnaAdminRefundService(
       QuestionEscrowAdminExecutionService questionEscrowAdminExecutionService) {
     return new PrepareQnaAdminRefundService(questionEscrowAdminExecutionService);
   }
 
   @Bean
+  @ConditionalOnQnaAdminEnabled
+  PrepareQnaInternalRefundUseCase prepareQnaInternalRefundUseCase(
+      PrepareQnaAdminRefundService delegate) {
+    return delegate::execute;
+  }
+
+  @Bean
+  @ConditionalOnQnaAdminEnabled
+  PrepareQnaAdminRefundUseCase prepareQnaAdminRefundUseCase(PrepareQnaAdminRefundService delegate) {
+    return delegate::execute;
+  }
+
+  @Bean
+  @ConditionalOnQnaAdminEnabled
   ExecuteQnaAdminSettlementService executeQnaAdminSettlementService(
       LoadQnaAdminReviewContextPort loadQnaAdminReviewContextPort,
       QnaAcceptStateSyncPort qnaAcceptStateSyncPort,
@@ -79,14 +116,16 @@ public class QnaAdminExecutionServiceConfig {
   }
 
   @Bean
+  @ConditionalOnQnaAdminEnabled
   ExecuteQnaAdminRefundService executeQnaAdminRefundService(
       LoadQnaAdminReviewContextPort loadQnaAdminReviewContextPort,
-      PrepareQnaAdminRefundUseCase prepareQnaAdminRefundUseCase) {
+      PrepareQnaInternalRefundUseCase prepareQnaInternalRefundUseCase) {
     return new ExecuteQnaAdminRefundService(
-        loadQnaAdminReviewContextPort, prepareQnaAdminRefundUseCase);
+        loadQnaAdminReviewContextPort, prepareQnaInternalRefundUseCase);
   }
 
   @Bean
+  @ConditionalOnQnaAdminEnabled
   ExecuteQnaAdminSettlementUseCase executeQnaAdminSettlementUseCase(
       ExecuteQnaAdminSettlementService delegate, PlatformTransactionManager transactionManager) {
     return new AdminAuditedExecuteQnaAdminSettlementUseCase(
@@ -94,6 +133,7 @@ public class QnaAdminExecutionServiceConfig {
   }
 
   @Bean
+  @ConditionalOnQnaAdminEnabled
   ExecuteQnaAdminRefundUseCase executeQnaAdminRefundUseCase(
       ExecuteQnaAdminRefundService delegate, PlatformTransactionManager transactionManager) {
     return new AdminAuditedExecuteQnaAdminRefundUseCase(

@@ -54,7 +54,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
   }
 
   @Test
-  @DisplayName("refund action-type 누락이면 startup validation 이 실패한다")
+  @DisplayName("refund action-policy 누락이면 startup validation 이 실패한다")
   void validateConfiguration_rejectsMissingRefundActionType() {
     when(loadExecutionInternalIssuerPolicyPort.loadPolicy())
         .thenReturn(new ExecutionInternalIssuerPolicy(true, true, false));
