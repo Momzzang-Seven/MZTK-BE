@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminRe
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.ExecuteQnaAdminRefundService;
@@ -35,6 +36,8 @@ class QnaAdminExecutionServiceConfigTest {
           .withBean(
               LoadQnaAdminReviewContextPort.class, () -> mock(LoadQnaAdminReviewContextPort.class))
           .withBean(QnaAcceptStateSyncPort.class, () -> mock(QnaAcceptStateSyncPort.class))
+          .withBean(
+              QnaAdminRefundStateSyncPort.class, () -> mock(QnaAdminRefundStateSyncPort.class))
           .withBean(
               QnaProjectionPersistencePort.class, () -> mock(QnaProjectionPersistencePort.class))
           .withBean(LoadQnaAnswerIdsPort.class, () -> mock(LoadQnaAnswerIdsPort.class))

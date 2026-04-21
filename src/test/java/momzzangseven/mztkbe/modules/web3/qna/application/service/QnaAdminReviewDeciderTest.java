@@ -104,8 +104,32 @@ class QnaAdminReviewDeciderTest {
     assertThat(review.questionConflictingActiveIntent()).isTrue();
   }
 
+  @Test
+  @DisplayName("refund review allows retry when local question is already pending admin refund")
+  void assessRefund_allowsPendingAdminRefundStatus() {
+    RefundContext context =
+        new RefundContext(
+            Optional.of(localQuestion(PostStatus.PENDING_ADMIN_REFUND)),
+            Optional.of(onchainQuestion(0)),
+            Optional.empty(),
+            List.of(),
+            authority(),
+            enabledPolicy());
+
+    var review = QnaAdminReviewDecider.assessRefund(101L, context);
+
+    assertThat(review.processable()).isTrue();
+    assertThat(review.blockingReason()).isNull();
+  }
+
   private LocalQuestion localQuestion() {
-    return new LocalQuestion(101L, 7L, true, PostStatus.OPEN, false, false, "질문 본문", 50L, null);
+    return localQuestion(PostStatus.OPEN);
+  }
+
+  private LocalQuestion localQuestion(PostStatus status) {
+    boolean pendingAdminRefund = status == PostStatus.PENDING_ADMIN_REFUND;
+    return new LocalQuestion(
+        101L, 7L, true, status, pendingAdminRefund, pendingAdminRefund, "질문 본문", 50L, null);
   }
 
   private LocalAnswer localAnswer() {

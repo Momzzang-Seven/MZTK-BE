@@ -103,4 +103,24 @@ class PostDetailResultTest {
 
     assertThat(result.isSolved()).isTrue();
   }
+
+  @Test
+  @DisplayName("fromDomain derives solved true from pending admin refund status")
+  void fromDomainDerivesSolvedTrueFromPendingAdminRefundStatus() {
+    Post post =
+        Post.builder()
+            .id(3L)
+            .userId(4L)
+            .type(PostType.QUESTION)
+            .title("refund pending")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.PENDING_ADMIN_REFUND)
+            .build();
+
+    PostDetailResult result =
+        PostDetailResult.fromDomain(post, 0L, false, "writer", "profile", null, null);
+
+    assertThat(result.isSolved()).isTrue();
+  }
 }

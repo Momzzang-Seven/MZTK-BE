@@ -241,9 +241,9 @@ final class QnaAdminReviewDecider {
     validations.add(
         item(
             LOCAL_QUESTION_NOT_OPEN,
-            localQuestion != null && localQuestion.status() == PostStatus.OPEN,
+            localQuestion != null && isRefundLocallyProcessableStatus(localQuestion.status()),
             false,
-            "local question must be OPEN"));
+            "local question must be OPEN or PENDING_ADMIN_REFUND"));
     validations.add(
         item(
             ONCHAIN_QUESTION_MISSING,
@@ -355,5 +355,9 @@ final class QnaAdminReviewDecider {
 
   private static boolean isRefundableState(QnaQuestionState state) {
     return isSettlableState(state);
+  }
+
+  private static boolean isRefundLocallyProcessableStatus(PostStatus status) {
+    return status == PostStatus.OPEN || status == PostStatus.PENDING_ADMIN_REFUND;
   }
 }
