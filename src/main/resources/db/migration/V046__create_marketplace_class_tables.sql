@@ -28,7 +28,7 @@ CREATE TABLE marketplace_classes (
     CONSTRAINT chk_marketplace_classes_price        CHECK (price_amount > 0),
     CONSTRAINT chk_marketplace_classes_capacity_dur CHECK (duration_minutes > 0),
     CONSTRAINT chk_marketplace_classes_category     CHECK (
-        category IN ('PT','PILATES','YOGA','CROSSFIT','DANCE','SWIMMING','BOXING','ETC')
+        category IN ('PT','PILATES','YOGA','CROSSFIT','BOXING','DANCE','REHABILITATION','OTHER')
     )
 );
 
