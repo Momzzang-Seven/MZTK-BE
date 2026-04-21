@@ -35,7 +35,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaAutoAcceptBatchUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaAdminExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAcceptContextPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
@@ -59,7 +59,9 @@ import org.springframework.transaction.support.TransactionTemplate;
       "web3.reward-token.enabled=true",
       "web3.eip7702.enabled=true",
       "web3.execution.internal.enabled=true",
-      "web3.qna.auto-accept.enabled=true"
+      "web3.qna.auto-accept.enabled=true",
+      "web3.execution.internal.signer.wallet-alias=test-sponsor",
+      "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA=="
     })
 @Tag("e2e")
 @DisplayName("[E2E] QnA auto-accept scheduler flow")
@@ -82,7 +84,7 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
-  @MockitoBean private BuildQnaExecutionDraftPort buildQnaExecutionDraftPort;
+  @MockitoBean private BuildQnaAdminExecutionDraftPort buildQnaAdminExecutionDraftPort;
   @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
   @MockitoBean private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
   @MockitoBean private ExecutionEip7702GatewayPort executionEip7702GatewayPort;
@@ -101,7 +103,7 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
     org.mockito.BDDMockito.given(executionEip1559SigningPort.sign(any()))
         .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
     org.mockito.BDDMockito.willAnswer(invocation -> draft(invocation.getArgument(0)))
-        .given(buildQnaExecutionDraftPort)
+        .given(buildQnaAdminExecutionDraftPort)
         .build(any());
   }
 
