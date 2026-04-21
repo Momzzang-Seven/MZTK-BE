@@ -10,7 +10,6 @@ import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -94,20 +93,21 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     BDDMockito.willDoNothing()
         .given(qnaContractCallSupport)
         .requireRelayerCallable(anyString(), anyString());
-    BDDMockito.given(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
+    BDDMockito.given(
+            qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
         .willReturn(
             new QnaContractCallSupport.QnaCallPrevalidationResult(
                 BigInteger.valueOf(210_000L),
                 BigInteger.valueOf(2_000_000_000L),
                 BigInteger.valueOf(30_000_000_000L)));
     BDDMockito.given(executionEip1559SigningPort.sign(any()))
-        .willReturn(
-            new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash-signed"));
+        .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash-signed"));
     BDDMockito.given(executionTransactionGatewayPort.reserveNextNonce(anyString())).willReturn(77L);
   }
 
   @Test
-  @DisplayName("admin settlement review/settle가 real draft builder와 internal issuer를 통해 admin settle 완료까지 이어진다")
+  @DisplayName(
+      "admin settlement review/settle가 real draft builder와 internal issuer를 통해 admin settle 완료까지 이어진다")
   void adminSettlementFlow_executesInternalIssuerAndConfirmsAdminSettle() throws Exception {
     AtomicReference<ExecutionTransactionGatewayPort.CreateTransactionCommand> createdCommandRef =
         new AtomicReference<>();
@@ -122,8 +122,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
             });
     BDDMockito.given(executionTransactionGatewayPort.broadcast("0xsigned"))
         .willReturn(
-            new ExecutionTransactionGatewayPort.BroadcastResult(
-                true, "0xhash801", null, "main"));
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash801", null, "main"));
 
     AdminUser admin = createAdminAndLogin();
     TestUser asker = signupAndLogin("manual-settle-asker");
@@ -206,7 +205,8 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("admin refund review/refund가 real draft builder와 internal issuer를 통해 admin refund 완료까지 이어진다")
+  @DisplayName(
+      "admin refund review/refund가 real draft builder와 internal issuer를 통해 admin refund 완료까지 이어진다")
   void adminRefundFlow_executesInternalIssuerAndConfirmsAdminRefund() throws Exception {
     AtomicReference<ExecutionTransactionGatewayPort.CreateTransactionCommand> createdCommandRef =
         new AtomicReference<>();
@@ -221,8 +221,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
             });
     BDDMockito.given(executionTransactionGatewayPort.broadcast("0xsigned"))
         .willReturn(
-            new ExecutionTransactionGatewayPort.BroadcastResult(
-                true, "0xhash802", null, "main"));
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash802", null, "main"));
 
     AdminUser admin = createAdminAndLogin();
     TestUser asker = signupAndLogin("manual-refund-asker");

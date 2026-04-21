@@ -4,8 +4,7 @@ import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceQnaAdminSett
 
 public record ForceQnaAdminSettlementRequestDTO(Long operatorId, Long postId, Long answerId) {
 
-  public static ForceQnaAdminSettlementRequestDTO of(
-      Long operatorId, Long postId, Long answerId) {
+  public static ForceQnaAdminSettlementRequestDTO of(Long operatorId, Long postId, Long answerId) {
     return new ForceQnaAdminSettlementRequestDTO(operatorId, postId, answerId);
   }
 
