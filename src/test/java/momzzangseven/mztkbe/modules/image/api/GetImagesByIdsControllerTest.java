@@ -73,7 +73,7 @@ class GetImagesByIdsControllerTest {
             ImageReferenceType.COMMUNITY_FREE,
             100L,
             ImageStatus.COMPLETED,
-            "public/community/free/abc123.webp",
+            "https://test-bucket.s3.ap-northeast-2.amazonaws.com/public/community/free/abc123.webp",
             1,
             Instant.parse("2026-03-27T12:00:00Z"),
             Instant.parse("2026-03-27T12:01:00Z"));
@@ -249,6 +249,8 @@ class GetImagesByIdsControllerTest {
         .andExpect(jsonPath("$.data.images[0].referenceType").isString())
         .andExpect(jsonPath("$.data.images[0].referenceId").isNumber())
         .andExpect(jsonPath("$.data.images[0].status").isString())
+        .andExpect(jsonPath("$.data.images[0].imageUrl").isString())
+        .andExpect(jsonPath("$.data.images[0].finalObjectKey").doesNotExist())
         .andExpect(jsonPath("$.data.images[0].imgOrder").isNumber())
         .andExpect(jsonPath("$.data.images[0].createdAt").isString())
         .andExpect(jsonPath("$.data.images[0].updatedAt").isString());
@@ -264,7 +266,7 @@ class GetImagesByIdsControllerTest {
             ImageReferenceType.COMMUNITY_FREE,
             100L,
             ImageStatus.COMPLETED,
-            "key1.webp",
+            "https://test-bucket.s3.ap-northeast-2.amazonaws.com/key1.webp",
             1,
             Instant.now(),
             Instant.now());

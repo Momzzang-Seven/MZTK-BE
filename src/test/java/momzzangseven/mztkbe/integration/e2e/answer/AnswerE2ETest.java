@@ -93,8 +93,7 @@ class AnswerE2ETest extends E2ETestBase {
     }
 
     @Test
-    @DisplayName(
-        "get answers returns accepted answer first with writer fields and rebuilt imageUrls")
+    @DisplayName("get answers returns accepted answer first with writer fields and rebuilt images")
     void getAnswers_success_returnsAcceptedFirstAndResponseFields() throws Exception {
       TestUser author = signupAndLoginAs("question-owner");
       TestUser regularAnswerer = signupAndLoginAs("regular-answerer");
@@ -142,9 +141,11 @@ class AnswerE2ETest extends E2ETestBase {
       assertThat(second.at("/userId").asLong()).isEqualTo(regularAnswerer.userId());
       assertThat(second.at("/nickname").asText()).isEqualTo(regularAnswerer.nickname());
       assertThat(second.at("/content").asText()).isEqualTo("regular answer");
-      assertThat(second.at("/imageUrls/0").asText())
+      assertThat(second.at("/images/0/imageId").asLong()).isPositive();
+      assertThat(second.at("/images/0/imageUrl").asText())
           .isEqualTo(buildPublicImageUrl("answers/regular.webp"));
-      assertThat(second.at("/imageUrls/1").isNull()).isTrue();
+      assertThat(second.at("/images/1/imageId").asLong()).isPositive();
+      assertThat(second.at("/images/1/imageUrl").isNull()).isTrue();
       assertThat(second.at("/isAccepted").asBoolean()).isFalse();
     }
 
@@ -282,7 +283,7 @@ class AnswerE2ETest extends E2ETestBase {
       JsonNode firstAnswer = parse(getResponse).at("/data/0");
       assertThat(firstAnswer.at("/answerId").asLong()).isEqualTo(answerId);
       assertThat(firstAnswer.at("/content").asText()).isEqualTo("after update");
-      assertThat(firstAnswer.at("/imageUrls/0").asText())
+      assertThat(firstAnswer.at("/images/0/imageUrl").asText())
           .isEqualTo(buildPublicImageUrl("answers/new.webp"));
     }
 

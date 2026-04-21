@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.response.ImageItemResponse;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,7 +33,8 @@ class AnswerResponseTest {
               true,
               5L,
               true,
-              List.of("https://cdn.example.com/answer.webp"),
+              List.of(
+                  new AnswerImageResult.AnswerImageSlot(1L, "https://cdn.example.com/answer.webp")),
               null,
               createdAt,
               updatedAt);
@@ -46,14 +49,15 @@ class AnswerResponseTest {
       assertThat(response.isAccepted()).isTrue();
       assertThat(response.likeCount()).isEqualTo(5L);
       assertThat(response.isLiked()).isTrue();
-      assertThat(response.imageUrls()).containsExactly("https://cdn.example.com/answer.webp");
+      assertThat(response.images())
+          .containsExactly(new ImageItemResponse(1L, "https://cdn.example.com/answer.webp"));
       assertThat(response.createdAt()).isEqualTo(createdAt);
       assertThat(response.updatedAt()).isEqualTo(updatedAt);
     }
 
     @Test
-    @DisplayName("converts null imageUrls to empty list")
-    void from_convertsNullImageUrlsToEmptyList() {
+    @DisplayName("converts null images to empty list")
+    void from_convertsNullImagesToEmptyList() {
       AnswerResult result =
           new AnswerResult(
               10L,
@@ -73,7 +77,7 @@ class AnswerResponseTest {
 
       assertThat(response.likeCount()).isZero();
       assertThat(response.isLiked()).isFalse();
-      assertThat(response.imageUrls()).isEmpty();
+      assertThat(response.images()).isEmpty();
     }
   }
 }

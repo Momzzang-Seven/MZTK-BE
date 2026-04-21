@@ -91,7 +91,8 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
 
     PostImageResult imageResult = loadPostImagesPort.loadImages(post.getType(), post.getId());
 
-    List<String> imageUrls = imageResult.slots().stream().map(slot -> slot.imageUrl()).toList();
+    List<PostImageResult.PostImageSlot> imageSlots =
+        imageResult == null ? List.of() : imageResult.slots();
 
     long likeCount = postLikePersistencePort.countByTarget(PostLikeTargetType.POST, postId);
     boolean liked =
@@ -103,6 +104,6 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
             : null;
 
     return PostDetailResult.fromDomain(
-        post, likeCount, liked, nickname, profileImageUrl, imageUrls, web3Execution);
+        post, likeCount, liked, nickname, profileImageUrl, imageSlots, web3Execution);
   }
 }
