@@ -73,7 +73,7 @@ public class InternalExecutionIssuerProperties implements LoadInternalExecutionI
     private final String walletAlias;
 
     Signer(String keyEncryptionKeyB64, String walletAlias) {
-      this.keyEncryptionKeyB64 = keyEncryptionKeyB64;
+      this.keyEncryptionKeyB64 = keyEncryptionKeyB64; // gitleaks:allow
       this.walletAlias = walletAlias;
     }
   }
