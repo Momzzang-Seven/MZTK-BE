@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminOnchainQues
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRefundReviewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementReviewResult;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.RefundContext;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalQuestionStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.RefundContext;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.SettlementContext;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 
@@ -358,7 +358,6 @@ final class QnaAdminReviewDecider {
   }
 
   private static boolean isRefundLocallyProcessableStatus(LocalQuestionStatus status) {
-    return status == LocalQuestionStatus.OPEN
-        || status == LocalQuestionStatus.PENDING_ADMIN_REFUND;
+    return status == LocalQuestionStatus.OPEN || status == LocalQuestionStatus.PENDING_ADMIN_REFUND;
   }
 }

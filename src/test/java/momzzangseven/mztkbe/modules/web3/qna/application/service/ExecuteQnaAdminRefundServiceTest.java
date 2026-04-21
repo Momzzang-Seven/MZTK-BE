@@ -47,15 +47,7 @@ class ExecuteQnaAdminRefundServiceTest {
         new RefundContext(
             Optional.of(
                 new LocalQuestion(
-                    101L,
-                    7L,
-                    true,
-                    LocalQuestionStatus.OPEN,
-                    false,
-                    false,
-                    "질문 본문",
-                    50L,
-                    null)),
+                    101L, 7L, true, LocalQuestionStatus.OPEN, false, false, "질문 본문", 50L, null)),
             Optional.of(onchainQuestion()),
             Optional.empty(),
             List.of(),
