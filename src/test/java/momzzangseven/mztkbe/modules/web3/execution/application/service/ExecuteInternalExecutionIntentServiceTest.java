@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -21,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -58,6 +60,7 @@ class ExecuteInternalExecutionIntentServiceTest {
   @Mock private LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
   @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
   @Mock private ExecutionEip1559SigningPort executionEip1559SigningPort;
+  @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
 
@@ -72,6 +75,7 @@ class ExecuteInternalExecutionIntentServiceTest {
             loadInternalExecutionSignerConfigPort,
             loadExecutionSponsorKeyPort,
             executionEip1559SigningPort,
+            eip1559TransactionCodecPort,
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             FIXED_CLOCK);
@@ -99,6 +103,9 @@ class ExecuteInternalExecutionIntentServiceTest {
         .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
         .thenReturn(new ExecutionRetryPolicy(30));
     lenient()
+        .when(eip1559TransactionCodecPort.computeFingerprint(any()))
+        .thenReturn("0x" + "c".repeat(64));
+    lenient()
         .when(executionIntentPersistencePort.update(any()))
         .thenAnswer(invocation -> invocation.getArgument(0));
   }
@@ -118,12 +125,20 @@ class ExecuteInternalExecutionIntentServiceTest {
   }
 
   @Test
-  void execute_marksNonceStaleWhenPendingNonceChanged() {
+  void execute_rebindsReservedNonceWhenLocalAllocatorAdvances() {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce() + 1);
+    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40))).thenReturn(13L);
+    when(executionEip1559SigningPort.sign(any()))
+        .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
+    when(executionTransactionGatewayPort.createAndFlush(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.TransactionRecord(
+                77L, ExecutionTransactionStatus.CREATED, null));
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", null, "main"));
 
     ExecuteInternalExecutionIntentResult result =
         service.execute(
@@ -131,30 +146,11 @@ class ExecuteInternalExecutionIntentServiceTest {
                 List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
 
     assertThat(result.executed()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.NONCE_STALE);
-    verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
-  }
-
-  @Test
-  void execute_keepsNonceStaleTransitionWhenTerminationHookThrows() {
-    ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce() + 1);
-    doThrow(new IllegalStateException("rollback failed"))
-        .when(executionActionHandlerPort)
-        .afterExecutionTerminated(any(), any(), any(), any());
-
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
-
-    assertThat(result.executed()).isTrue();
-    assertThat(result.quarantined()).isFalse();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.NONCE_STALE);
-    verify(executionIntentPersistencePort).update(any());
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    verify(executionEip1559SigningPort)
+        .sign(argThat(command -> command.nonce() == 13L));
+    verify(executionTransactionGatewayPort)
+        .createAndFlush(argThat(command -> command.nonce().equals(13L)));
   }
 
   @Test
@@ -162,7 +158,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
@@ -192,7 +188,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
@@ -232,7 +228,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
-    verify(executionTransactionGatewayPort, never()).loadPendingNonce(any());
+    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -254,7 +250,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionIntentPersistencePort).update(any());
-    verify(executionTransactionGatewayPort, never()).loadPendingNonce(any());
+    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
   }
 
   @Test
@@ -277,7 +273,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
-    verify(executionTransactionGatewayPort, never()).loadPendingNonce(any());
+    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
@@ -286,7 +282,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.loadPendingNonce("0x" + "4".repeat(40)))
+    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new Web3InvalidInputException("invalid EVM address: broken"));
