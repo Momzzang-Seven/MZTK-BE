@@ -2,15 +2,15 @@ package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceQnaAdminRefundRequestDTO;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceQnaAdminSettlementRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceQnaAdminRefundResponseDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ForceQnaAdminSettlementResponseDTO;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.GetQnaAdminRefundReviewRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.GetQnaAdminRefundReviewResponseDTO;
+import momzzangseven.mztkbe.modules.web3.admin.api.dto.GetQnaAdminSettlementReviewRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.GetQnaAdminSettlementReviewResponseDTO;
-import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceQnaAdminRefundCommand;
-import momzzangseven.mztkbe.modules.web3.admin.application.dto.ForceQnaAdminSettlementCommand;
-import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetQnaAdminRefundReviewQuery;
-import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetQnaAdminSettlementReviewQuery;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ForceQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.GetQnaAdminRefundReviewUseCase;
@@ -38,10 +38,10 @@ public class QnaAdminEscrowController {
   @GetMapping("/{postId}/answers/{answerId}/settlement-review")
   public ResponseEntity<ApiResponse<GetQnaAdminSettlementReviewResponseDTO>> getSettlementReview(
       @PathVariable Long postId, @PathVariable Long answerId) {
+    var request = GetQnaAdminSettlementReviewRequestDTO.of(postId, answerId);
     var response =
         GetQnaAdminSettlementReviewResponseDTO.from(
-            getQnaAdminSettlementReviewUseCase.execute(
-                new GetQnaAdminSettlementReviewQuery(postId, answerId)));
+            getQnaAdminSettlementReviewUseCase.execute(request.toQuery()));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
@@ -50,30 +50,31 @@ public class QnaAdminEscrowController {
       @AuthenticationPrincipal Long operatorId,
       @PathVariable Long postId,
       @PathVariable Long answerId) {
+    var request =
+        ForceQnaAdminSettlementRequestDTO.of(requireOperatorId(operatorId), postId, answerId);
     var response =
         ForceQnaAdminSettlementResponseDTO.from(
-            forceQnaAdminSettlementUseCase.execute(
-                new ForceQnaAdminSettlementCommand(
-                    requireOperatorId(operatorId), postId, answerId)));
+            forceQnaAdminSettlementUseCase.execute(request.toCommand()));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
   @GetMapping("/{postId}/refund-review")
   public ResponseEntity<ApiResponse<GetQnaAdminRefundReviewResponseDTO>> getRefundReview(
       @PathVariable Long postId) {
+    var request = GetQnaAdminRefundReviewRequestDTO.of(postId);
     var response =
         GetQnaAdminRefundReviewResponseDTO.from(
-            getQnaAdminRefundReviewUseCase.execute(new GetQnaAdminRefundReviewQuery(postId)));
+            getQnaAdminRefundReviewUseCase.execute(request.toQuery()));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
   @PostMapping("/{postId}/refund")
   public ResponseEntity<ApiResponse<ForceQnaAdminRefundResponseDTO>> refund(
       @AuthenticationPrincipal Long operatorId, @PathVariable Long postId) {
+    var request = ForceQnaAdminRefundRequestDTO.of(requireOperatorId(operatorId), postId);
     var response =
         ForceQnaAdminRefundResponseDTO.from(
-            forceQnaAdminRefundUseCase.execute(
-                new ForceQnaAdminRefundCommand(requireOperatorId(operatorId), postId)));
+            forceQnaAdminRefundUseCase.execute(request.toCommand()));
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
