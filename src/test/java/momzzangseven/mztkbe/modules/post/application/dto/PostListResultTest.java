@@ -120,9 +120,11 @@ class PostListResultTest {
             .status(PostStatus.PENDING_ADMIN_REFUND)
             .build();
 
-    PostListResult result = PostListResult.fromDomain(post, 1L, false, "writer", "profile");
+    PostListResult result =
+        PostListResult.fromDomain(post, 1L, false, "writer", "profile", List.of());
 
     assertThat(result.isSolved()).isTrue();
+  }
 
   @Nested
   @DisplayName("images null/empty handling")
