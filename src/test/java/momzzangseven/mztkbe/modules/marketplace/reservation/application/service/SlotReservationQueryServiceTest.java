@@ -15,40 +15,38 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class SlotReservationQueryServiceTest {
 
-    @Mock
-    private LoadReservationPort loadReservationPort;
+  @Mock private LoadReservationPort loadReservationPort;
 
-    @InjectMocks
-    private SlotReservationQueryService sut;
+  @InjectMocks private SlotReservationQueryService sut;
 
-    @Test
-    @DisplayName("countActiveReservations - returns correct count")
-    void countActiveReservations_ReturnsCorrectCount() {
-        // Arrange
-        Long slotId = 1L;
-        int expectedCount = 5;
-        given(loadReservationPort.countActiveReservationsBySlotId(slotId)).willReturn(expectedCount);
+  @Test
+  @DisplayName("countActiveReservations - returns correct count")
+  void countActiveReservations_ReturnsCorrectCount() {
+    // Arrange
+    Long slotId = 1L;
+    int expectedCount = 5;
+    given(loadReservationPort.countActiveReservationsBySlotId(slotId)).willReturn(expectedCount);
 
-        // Act
-        int actualCount = sut.countActiveReservations(slotId);
+    // Act
+    int actualCount = sut.countActiveReservations(slotId);
 
-        // Assert
-        assertThat(actualCount).isEqualTo(expectedCount);
-        verify(loadReservationPort).countActiveReservationsBySlotId(slotId);
-    }
+    // Assert
+    assertThat(actualCount).isEqualTo(expectedCount);
+    verify(loadReservationPort).countActiveReservationsBySlotId(slotId);
+  }
 
-    @Test
-    @DisplayName("hasAnyReservationHistory - returns boolean correctly")
-    void hasAnyReservationHistory_ReturnsCorrectly() {
-        // Arrange
-        Long slotId = 1L;
-        given(loadReservationPort.hasAnyReservationHistory(slotId)).willReturn(true);
+  @Test
+  @DisplayName("hasAnyReservationHistory - returns boolean correctly")
+  void hasAnyReservationHistory_ReturnsCorrectly() {
+    // Arrange
+    Long slotId = 1L;
+    given(loadReservationPort.hasAnyReservationHistory(slotId)).willReturn(true);
 
-        // Act
-        boolean result = sut.hasAnyReservationHistory(slotId);
+    // Act
+    boolean result = sut.hasAnyReservationHistory(slotId);
 
-        // Assert
-        assertThat(result).isTrue();
-        verify(loadReservationPort).hasAnyReservationHistory(slotId);
-    }
+    // Assert
+    assertThat(result).isTrue();
+    verify(loadReservationPort).hasAnyReservationHistory(slotId);
+  }
 }

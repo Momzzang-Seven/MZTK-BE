@@ -19,38 +19,34 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class AutoCancelBatchItemProcessorTest {
 
-    @Mock
-    private SaveReservationPort saveReservationPort;
-    @Mock
-    private SubmitEscrowTransactionPort submitEscrowTransactionPort;
-    @Mock
-    private RecordTrainerStrikePort recordTrainerStrikePort;
+  @Mock private SaveReservationPort saveReservationPort;
+  @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  @Mock private RecordTrainerStrikePort recordTrainerStrikePort;
 
-    @InjectMocks
-    private AutoCancelBatchItemProcessor sut;
+  @InjectMocks private AutoCancelBatchItemProcessor sut;
 
-    @Test
-    @DisplayName("process - successfully processes auto-cancel")
-    void process_SuccessfullyProcessesAutoCancel() {
-        // Arrange
-        Reservation reservation = mock(Reservation.class);
-        Reservation cancelledReservation = mock(Reservation.class);
-        String orderId = "order123";
-        String txHash = "0xhash";
-        Long trainerId = 100L;
+  @Test
+  @DisplayName("process - successfully processes auto-cancel")
+  void process_SuccessfullyProcessesAutoCancel() {
+    // Arrange
+    Reservation reservation = mock(Reservation.class);
+    Reservation cancelledReservation = mock(Reservation.class);
+    String orderId = "order123";
+    String txHash = "0xhash";
+    Long trainerId = 100L;
 
-        given(reservation.getOrderId()).willReturn(orderId);
-        given(reservation.getTrainerId()).willReturn(trainerId);
-        given(submitEscrowTransactionPort.submitAdminRefund(orderId)).willReturn(txHash);
-        given(reservation.timeoutCancel(txHash)).willReturn(cancelledReservation);
+    given(reservation.getOrderId()).willReturn(orderId);
+    given(reservation.getTrainerId()).willReturn(trainerId);
+    given(submitEscrowTransactionPort.submitAdminRefund(orderId)).willReturn(txHash);
+    given(reservation.timeoutCancel(txHash)).willReturn(cancelledReservation);
 
-        // Act
-        sut.process(reservation);
+    // Act
+    sut.process(reservation);
 
-        // Assert
-        verify(submitEscrowTransactionPort).submitAdminRefund(orderId);
-        verify(reservation).timeoutCancel(txHash);
-        verify(saveReservationPort).save(cancelledReservation);
-        verify(recordTrainerStrikePort).recordStrike(trainerId, TrainerStrikeEvent.REASON_TIMEOUT);
-    }
+    // Assert
+    verify(submitEscrowTransactionPort).submitAdminRefund(orderId);
+    verify(reservation).timeoutCancel(txHash);
+    verify(saveReservationPort).save(cancelledReservation);
+    verify(recordTrainerStrikePort).recordStrike(trainerId, TrainerStrikeEvent.REASON_TIMEOUT);
+  }
 }

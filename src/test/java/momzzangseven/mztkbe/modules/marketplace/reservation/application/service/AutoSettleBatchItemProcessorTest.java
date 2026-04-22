@@ -17,33 +17,30 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class AutoSettleBatchItemProcessorTest {
 
-    @Mock
-    private SaveReservationPort saveReservationPort;
-    @Mock
-    private SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  @Mock private SaveReservationPort saveReservationPort;
+  @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
 
-    @InjectMocks
-    private AutoSettleBatchItemProcessor sut;
+  @InjectMocks private AutoSettleBatchItemProcessor sut;
 
-    @Test
-    @DisplayName("process - successfully processes auto-settle")
-    void process_SuccessfullyProcessesAutoSettle() {
-        // Arrange
-        Reservation reservation = mock(Reservation.class);
-        Reservation settledReservation = mock(Reservation.class);
-        String orderId = "order123";
-        String txHash = "0xhash";
+  @Test
+  @DisplayName("process - successfully processes auto-settle")
+  void process_SuccessfullyProcessesAutoSettle() {
+    // Arrange
+    Reservation reservation = mock(Reservation.class);
+    Reservation settledReservation = mock(Reservation.class);
+    String orderId = "order123";
+    String txHash = "0xhash";
 
-        given(reservation.getOrderId()).willReturn(orderId);
-        given(submitEscrowTransactionPort.submitAdminSettle(orderId)).willReturn(txHash);
-        given(reservation.autoSettle(txHash)).willReturn(settledReservation);
+    given(reservation.getOrderId()).willReturn(orderId);
+    given(submitEscrowTransactionPort.submitAdminSettle(orderId)).willReturn(txHash);
+    given(reservation.autoSettle(txHash)).willReturn(settledReservation);
 
-        // Act
-        sut.process(reservation);
+    // Act
+    sut.process(reservation);
 
-        // Assert
-        verify(submitEscrowTransactionPort).submitAdminSettle(orderId);
-        verify(reservation).autoSettle(txHash);
-        verify(saveReservationPort).save(settledReservation);
-    }
+    // Assert
+    verify(submitEscrowTransactionPort).submitAdminSettle(orderId);
+    verify(reservation).autoSettle(txHash);
+    verify(saveReservationPort).save(settledReservation);
+  }
 }
