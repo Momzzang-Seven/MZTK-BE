@@ -12,8 +12,8 @@ import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassSlotPort;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
@@ -43,8 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CreateReservationService implements CreateReservationUseCase {
 
-  private final LoadClassSlotPort loadClassSlotPort;
-  private final LoadClassPort loadClassPort;
+  private final GetClassSlotInfoUseCase getClassSlotInfoUseCase;
+  private final GetClassInfoUseCase getClassInfoUseCase;
   private final LoadTrainerSanctionPort loadTrainerSanctionPort;
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
@@ -62,7 +62,7 @@ public class CreateReservationService implements CreateReservationUseCase {
 
     // 1. Load the target slot with pessimistic write lock — prevents over-commit under concurrency
     ClassSlot slot =
-        loadClassSlotPort
+        getClassSlotInfoUseCase
             .findByIdWithLock(command.slotId())
             .orElseThrow(
                 () ->
@@ -93,7 +93,7 @@ public class CreateReservationService implements CreateReservationUseCase {
 
     // 3. Load class and validate active status
     MarketplaceClass cls =
-        loadClassPort
+        getClassInfoUseCase
             .findById(command.classId())
             .orElseThrow(() -> new ClassNotFoundException(command.classId()));
 

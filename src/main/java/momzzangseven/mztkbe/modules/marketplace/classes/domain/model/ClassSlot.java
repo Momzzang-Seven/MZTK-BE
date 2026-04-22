@@ -89,6 +89,34 @@ public class ClassSlot {
   }
 
   /**
+   * Create a transient slot used <em>only</em> for conflict detection before the owning class has
+   * been persisted (and therefore has no real ID yet).
+   *
+   * <p>The returned instance has {@code classId = null}, {@code id = null}, and
+   * {@code active = false}. It must never be saved to the database.
+   *
+   * @param daysOfWeek list of days this slot runs on
+   * @param startTime slot start time
+   * @param capacity max participants
+   * @return transient slot for conflict-detection purposes only
+   */
+  public static ClassSlot forConflictCheck(
+      List<DayOfWeek> daysOfWeek, LocalTime startTime, int capacity) {
+
+    validateDaysOfWeek(daysOfWeek);
+    validateStartTime(startTime);
+    validateCapacity(capacity);
+
+    return ClassSlot.builder()
+        .classId(null)
+        .daysOfWeek(daysOfWeek == null ? List.of() : List.copyOf(daysOfWeek))
+        .startTime(startTime)
+        .capacity(capacity)
+        .active(false)
+        .build();
+  }
+
+  /**
    * Update this slot's mutable fields while preserving identity (id, classId).
    *
    * @param daysOfWeek new days of week

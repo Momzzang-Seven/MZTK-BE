@@ -15,7 +15,7 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClass
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassSlotPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetSlotReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import org.springframework.stereotype.Service;
@@ -36,7 +36,7 @@ public class GetClassReservationInfoService implements GetClassReservationInfoUs
 
   private final LoadClassPort loadClassPort;
   private final LoadClassSlotPort loadClassSlotPort;
-  private final LoadReservationPort loadReservationPort;
+  private final GetSlotReservationInfoUseCase getSlotReservationInfoUseCase;
 
   /**
    * Clock for computing today's date. Injected for testability — unit tests can provide a fixed
@@ -67,7 +67,11 @@ public class GetClassReservationInfoService implements GetClassReservationInfoUs
 
     List<Long> slotIds = activeSlots.stream().map(ClassSlot::getId).toList();
     Map<Long, Integer> activeCountBySlot =
-        loadReservationPort.countActiveReservationsBySlotIdIn(slotIds);
+        slotIds.stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    id -> id,
+                    id -> getSlotReservationInfoUseCase.countActiveReservations(id)));
 
     LocalDate today = LocalDate.now(clock);
     LocalDate windowEnd = today.plusDays(DAYS_WINDOW);
