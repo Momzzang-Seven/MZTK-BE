@@ -73,6 +73,17 @@ public interface Web3ExecutionIntentJpaRepository
   List<Web3ExecutionIntentEntity> findAllByRootIdempotencyKey(
       @Param("rootIdempotencyKey") String rootIdempotencyKey, Pageable pageable);
 
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " and e.status in :statuses"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findLatestByResourceAndStatusIn(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      @Param("statuses") Collection<ExecutionIntentStatus> statuses,
+      Pageable pageable);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "select e from Web3ExecutionIntentEntity e"

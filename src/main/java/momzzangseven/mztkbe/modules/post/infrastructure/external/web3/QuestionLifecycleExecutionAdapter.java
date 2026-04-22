@@ -10,15 +10,12 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCrea
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnUserExecutionEnabled
 public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecutionPort {
 
   private final QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;

@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionAuditCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionBroadcastResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.ExecutionTransactionRecordCommand;
@@ -13,15 +14,11 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionAuditE
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionGatewayPort {
 
   private final ManageExecutionTransactionUseCase manageExecutionTransactionUseCase;
@@ -72,6 +69,11 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   @Override
   public long reserveNextNonce(String fromAddress) {
     return manageExecutionTransactionUseCase.reserveNextNonce(fromAddress);
+  }
+
+  @Override
+  public long loadPendingNonce(String fromAddress) {
+    return manageExecutionTransactionUseCase.loadPendingNonce(fromAddress);
   }
 
   @Override

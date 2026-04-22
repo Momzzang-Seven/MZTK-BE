@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.answer.application.port.in.ConfirmAnswerDeleteSyncUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.ConfirmQuestionDeleteSyncUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,10 +15,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class QnaLocalDeleteSyncAdapter implements QnaLocalDeleteSyncPort {
 
   private final ConfirmQuestionDeleteSyncUseCase confirmQuestionDeleteSyncUseCase;

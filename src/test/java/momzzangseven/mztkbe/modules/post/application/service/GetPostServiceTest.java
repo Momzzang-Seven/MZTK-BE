@@ -100,6 +100,33 @@ class GetPostServiceTest {
   }
 
   @Test
+  @DisplayName("returns pending admin refund post context as solved and answer locked")
+  void getPostContextPendingAdminRefundMarksSolved() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(411L)
+            .userId(16L)
+            .type(PostType.QUESTION)
+            .title("refund pending question")
+            .content("content")
+            .reward(100L)
+            .status(PostStatus.PENDING_ADMIN_REFUND)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(411L)).thenReturn(Optional.of(post));
+
+    var result = getPostService.getPostContext(411L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().solved()).isTrue();
+    assertThat(result.get().answerLocked()).isTrue();
+    assertThat(result.get().status()).isEqualTo(PostStatus.PENDING_ADMIN_REFUND);
+  }
+
+  @Test
   @DisplayName("returns locked post context through loadPostForUpdate for mutation flows")
   void getPostContextForUpdateSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);

@@ -1,6 +1,5 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
-import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -12,14 +11,14 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -39,10 +38,10 @@ public class ExecuteInternalExecutionIntentService
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  private final LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
+  private final LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
   private final LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
   private final ExecutionEip1559SigningPort executionEip1559SigningPort;
-  private final ExecutionEip7702GatewayPort executionEip7702GatewayPort;
+  private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final Clock appClock;
@@ -116,7 +115,7 @@ public class ExecuteInternalExecutionIntentService
     }
 
     ExecutionSponsorWalletConfig sponsorWalletConfig =
-        loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig();
+        loadInternalExecutionSignerConfigPort.loadSignerConfig();
     LoadExecutionSponsorKeyPort.ExecutionSponsorKey sponsorKey =
         loadExecutionSponsorKeyPort
             .loadByAlias(
@@ -141,38 +140,22 @@ public class ExecuteInternalExecutionIntentService
           "internal intent signer does not match sponsor signer");
     }
 
-    BigInteger currentPendingNonce =
-        executionEip7702GatewayPort.loadPendingAccountNonce(expectedSigner);
-    if (currentPendingNonce.longValueExact() != intent.getUnsignedTxSnapshot().expectedNonce()) {
-      ExecutionIntent staleIntent =
-          executionIntentPersistencePort.update(
-              intent.markNonceStale(
-                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
-                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
-                  now));
-      safeAfterExecutionTerminated(
-          actionHandler,
-          staleIntent,
-          actionPlan,
-          ExecutionIntentStatus.NONCE_STALE,
-          ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name());
-      return new ExecuteInternalExecutionIntentResult(
-          true, false, staleIntent.getPublicId(), staleIntent.getStatus(), null, null, null);
-    }
+    long reservedNonce = executionTransactionGatewayPort.reserveNextNonce(expectedSigner);
+    ExecutionIntent signableIntent = rebindReservedNonce(intent, reservedNonce);
 
     ExecutionEip1559SigningPort.SignedTransaction signedTransaction;
     try {
       signedTransaction =
           executionEip1559SigningPort.sign(
               new ExecutionEip1559SigningPort.SignCommand(
-                  intent.getUnsignedTxSnapshot().chainId(),
-                  intent.getUnsignedTxSnapshot().expectedNonce(),
-                  intent.getUnsignedTxSnapshot().gasLimit(),
-                  intent.getUnsignedTxSnapshot().toAddress(),
-                  intent.getUnsignedTxSnapshot().valueWei(),
-                  intent.getUnsignedTxSnapshot().data(),
-                  intent.getUnsignedTxSnapshot().maxPriorityFeePerGas(),
-                  intent.getUnsignedTxSnapshot().maxFeePerGas(),
+                  signableIntent.getUnsignedTxSnapshot().chainId(),
+                  signableIntent.getUnsignedTxSnapshot().expectedNonce(),
+                  signableIntent.getUnsignedTxSnapshot().gasLimit(),
+                  signableIntent.getUnsignedTxSnapshot().toAddress(),
+                  signableIntent.getUnsignedTxSnapshot().valueWei(),
+                  signableIntent.getUnsignedTxSnapshot().data(),
+                  signableIntent.getUnsignedTxSnapshot().maxPriorityFeePerGas(),
+                  signableIntent.getUnsignedTxSnapshot().maxFeePerGas(),
                   sponsorKey.privateKeyHex()));
     } catch (Web3InvalidInputException e) {
       return quarantineInvalidIntent(intent, actionHandler, actionPlan, e.getMessage());
@@ -187,9 +170,9 @@ public class ExecuteInternalExecutionIntentService
                 intent.getRequesterUserId(),
                 intent.getCounterpartyUserId(),
                 expectedSigner,
-                intent.getUnsignedTxSnapshot().toAddress(),
+                signableIntent.getUnsignedTxSnapshot().toAddress(),
                 actionPlan.amountWei(),
-                intent.getUnsignedTxSnapshot().expectedNonce(),
+                signableIntent.getUnsignedTxSnapshot().expectedNonce(),
                 ExecutionTransactionStatus.CREATED,
                 ExecutionTransactionType.EIP1559,
                 null,
@@ -199,10 +182,10 @@ public class ExecuteInternalExecutionIntentService
 
     executionTransactionGatewayPort.markSigned(
         created.transactionId(),
-        intent.getUnsignedTxSnapshot().expectedNonce(),
+        signableIntent.getUnsignedTxSnapshot().expectedNonce(),
         signedTransaction.rawTransaction(),
         signedTransaction.txHash());
-    executionIntentPersistencePort.update(intent.markSigned(created.transactionId(), now));
+    executionIntentPersistencePort.update(signableIntent.markSigned(created.transactionId(), now));
     audit(
         created.transactionId(),
         ExecutionAuditEventType.SIGN,
@@ -224,9 +207,9 @@ public class ExecuteInternalExecutionIntentService
               : broadcast.txHash();
       executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
       executionIntentPersistencePort.update(
-          intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
+          signableIntent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
       actionHandler.afterTransactionSubmitted(
-          intent, actionPlan, ExecutionTransactionStatus.PENDING);
+          signableIntent, actionPlan, ExecutionTransactionStatus.PENDING);
       return new ExecuteInternalExecutionIntentResult(
           true,
           false,
@@ -247,8 +230,9 @@ public class ExecuteInternalExecutionIntentService
         LocalDateTime.now(appClock)
             .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
     executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, ExecutionTransactionStatus.SIGNED);
+        signableIntent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
+    actionHandler.afterTransactionSubmitted(
+        signableIntent, actionPlan, ExecutionTransactionStatus.SIGNED);
     return new ExecuteInternalExecutionIntentResult(
         true,
         false,
@@ -257,6 +241,25 @@ public class ExecuteInternalExecutionIntentService
         created.transactionId(),
         ExecutionTransactionStatus.SIGNED,
         signedTransaction.txHash());
+  }
+
+  private ExecutionIntent rebindReservedNonce(ExecutionIntent intent, long reservedNonce) {
+    if (intent.getUnsignedTxSnapshot().expectedNonce() == reservedNonce) {
+      return intent;
+    }
+    var reboundSnapshot =
+        new momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot(
+            intent.getUnsignedTxSnapshot().chainId(),
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot().toAddress(),
+            intent.getUnsignedTxSnapshot().valueWei(),
+            intent.getUnsignedTxSnapshot().data(),
+            reservedNonce,
+            intent.getUnsignedTxSnapshot().gasLimit(),
+            intent.getUnsignedTxSnapshot().maxPriorityFeePerGas(),
+            intent.getUnsignedTxSnapshot().maxFeePerGas());
+    return intent.rebindUnsignedTxSnapshot(
+        reboundSnapshot, eip1559TransactionCodecPort.computeFingerprint(reboundSnapshot));
   }
 
   private void audit(

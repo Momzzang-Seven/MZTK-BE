@@ -15,7 +15,8 @@ class AuditTargetTypeTest {
         .containsExactlyInAnyOrder(
             AuditTargetType.TREASURY_KEY,
             AuditTargetType.WEB3_TRANSACTION,
-            AuditTargetType.ADMIN_ACCOUNT);
+            AuditTargetType.ADMIN_ACCOUNT,
+            AuditTargetType.QNA_ESCROW_QUESTION);
   }
 
   @Test
@@ -37,17 +38,24 @@ class AuditTargetTypeTest {
   void values_includesAdminAccountAlongsideExistingValues() {
     AuditTargetType[] values = AuditTargetType.values();
 
-    assertThat(values).hasSize(3);
+    assertThat(values).hasSize(4);
     assertThat(values)
         .containsExactlyInAnyOrder(
             AuditTargetType.TREASURY_KEY,
             AuditTargetType.WEB3_TRANSACTION,
-            AuditTargetType.ADMIN_ACCOUNT);
+            AuditTargetType.ADMIN_ACCOUNT,
+            AuditTargetType.QNA_ESCROW_QUESTION);
   }
 
   @Test
   @DisplayName("[M-74] AuditTargetType.ADMIN_ACCOUNT name() returns \"ADMIN_ACCOUNT\"")
   void adminAccount_name_returnsAdminAccount() {
     assertThat(AuditTargetType.ADMIN_ACCOUNT.name()).isEqualTo("ADMIN_ACCOUNT");
+  }
+
+  @Test
+  @DisplayName("QNA_ESCROW_QUESTION name() returns expected enum constant")
+  void qnaEscrowQuestion_name_returnsExpectedName() {
+    assertThat(AuditTargetType.QNA_ESCROW_QUESTION.name()).isEqualTo("QNA_ESCROW_QUESTION");
   }
 }
