@@ -35,8 +35,9 @@ public record CreateReservationCommand(
    * Validates structural preconditions of the command.
    *
    * <p>Does not validate business rules (price match, capacity, etc.) — those belong in the
-   * service. This method only guards against obviously malformed input that would cause a
-   * NullPointerException or data-corruption downstream.
+   * service. This method guards against obviously malformed input that would cause a
+   * NullPointerException or data-corruption downstream, including basic EIP-7702 signature format
+   * checks.
    *
    * @throws IllegalArgumentException when any required field is null, non-positive, or blank
    */
@@ -59,11 +60,32 @@ public record CreateReservationCommand(
     if (signedAmount == null || signedAmount.signum() <= 0) {
       throw new IllegalArgumentException("signedAmount must be a positive value");
     }
-    if (delegationSignature == null || delegationSignature.isBlank()) {
-      throw new IllegalArgumentException("delegationSignature must not be blank");
+    validateSignature("delegationSignature", delegationSignature);
+    validateSignature("executionSignature", executionSignature);
+  }
+
+  /**
+   * Validates that a Web3 signature string is structurally sound:
+   *
+   * <ul>
+   *   <li>Not null or blank
+   *   <li>Starts with {@code "0x"} (EIP prefix)
+   *   <li>At least 132 characters total ({@code "0x"} + 130 hex chars for a 65-byte ECDSA sig)
+   * </ul>
+   *
+   * <p>Does NOT perform cryptographic verification — that is deferred to the relayer (web3 module).
+   */
+  private static void validateSignature(String fieldName, String sig) {
+    if (sig == null || sig.isBlank()) {
+      throw new IllegalArgumentException(fieldName + " must not be blank");
     }
-    if (executionSignature == null || executionSignature.isBlank()) {
-      throw new IllegalArgumentException("executionSignature must not be blank");
+    if (!sig.startsWith("0x")) {
+      throw new IllegalArgumentException(fieldName + " must start with '0x'");
+    }
+    // EIP-7702 / ECDSA: 0x + 130 hex chars = 132 minimum
+    if (sig.length() < 132) {
+      throw new IllegalArgumentException(
+          fieldName + " is too short (minimum 132 chars including '0x' prefix)");
     }
   }
 }

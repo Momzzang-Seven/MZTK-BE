@@ -4,9 +4,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.application.dto.RecordTrainerStrikeCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.port.in.AutoCancelReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.application.port.in.RecordTrainerStrikeUseCase;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.application.port.out.ManageTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.domain.model.Reservation;
@@ -16,8 +17,16 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Batch service that auto-cancels PENDING reservations due to trainer inactivity.
  *
- * <p>Conditions: created_at older than 72 h OR session starts within 1 h. Calls adminRefund
- * on-chain and records a TIMEOUT strike.
+ * <p>Conditions (OR): created_at older than 72 h, OR session starts within 1 h.
+ *
+ * <p>Strike recording uses {@link RecordTrainerStrikeUseCase} (input port) — the same interface
+ * used by {@link momzzangseven.mztkbe.modules.marketplace.infrastructure.event.ReservationSanctionEventListener}.
+ * This keeps the two cancel paths (trainer-explicit reject vs scheduler timeout) consistent: both
+ * go through an input port instead of touching {@code ManageTrainerSanctionPort} (output port)
+ * directly.
+ *
+ * <p>Each reservation is processed individually inside a try-catch (best-effort policy). A single
+ * failed item does not abort the remainder of the batch.
  */
 @Slf4j
 @Service
@@ -31,7 +40,15 @@ public class AutoCancelReservationService implements AutoCancelReservationUseCas
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
-  private final ManageTrainerSanctionPort manageTrainerSanctionPort;
+
+  /**
+   * Input port for recording trainer strikes.
+   *
+   * <p>Using an input port (not {@code ManageTrainerSanctionPort} output port directly) keeps this
+   * service consistent with the event-listener-driven reject path and satisfies ARCHITECTURE.md:
+   * "application/service must not call another module's output port directly."
+   */
+  private final RecordTrainerStrikeUseCase recordTrainerStrikeUseCase;
 
   @Override
   @Transactional
@@ -53,7 +70,11 @@ public class AutoCancelReservationService implements AutoCancelReservationUseCas
             submitEscrowTransactionPort.submitAdminRefund(reservation.getOrderId());
         Reservation cancelled = reservation.timeoutCancel(refundTxHash);
         saveReservationPort.save(cancelled);
-        manageTrainerSanctionPort.recordStrike(reservation.getTrainerId(), "TIMEOUT");
+
+        // Record TIMEOUT strike via input port — same path as ReservationSanctionEventListener
+        recordTrainerStrikeUseCase.execute(
+            new RecordTrainerStrikeCommand(reservation.getTrainerId(), "TIMEOUT"));
+
         processed++;
         log.info(
             "AutoCancel: reservationId={}, trainerId={}",

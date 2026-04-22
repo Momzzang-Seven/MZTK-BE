@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.application.service;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,18 @@ import momzzangseven.mztkbe.modules.marketplace.domain.vo.ReservationStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Service that marks a reservation as SETTLED after the user confirms class completion.
+ *
+ * <p>Guards:
+ *
+ * <ol>
+ *   <li>Ownership — only the reservation's buyer may confirm.
+ *   <li>Status transition — must be in APPROVED state.
+ *   <li>Early-complete prevention — session start time must have passed (uses injected {@link
+ *       Clock} for testable, timezone-aware "now").
+ * </ol>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -26,6 +39,14 @@ public class CompleteReservationService implements CompleteReservationUseCase {
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
+
+  /**
+   * Injected clock for testable, timezone-aware "now" computation.
+   *
+   * <p>In production this is bound to {@code Asia/Seoul} by the {@code @Bean Clock} in {@code
+   * TimeConfig}. In tests, a fixed clock can be substituted via the constructor.
+   */
+  private final Clock clock;
 
   @Override
   @Transactional
@@ -56,7 +77,7 @@ public class CompleteReservationService implements CompleteReservationUseCase {
 
     LocalDateTime sessionStart =
         LocalDateTime.of(reservation.getReservationDate(), reservation.getReservationTime());
-    if (LocalDateTime.now().isBefore(sessionStart)) {
+    if (LocalDateTime.now(clock).isBefore(sessionStart)) {
       throw new ReservationEarlyCompleteException();
     }
 

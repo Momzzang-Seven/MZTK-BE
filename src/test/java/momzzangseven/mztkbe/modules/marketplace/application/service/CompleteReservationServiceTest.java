@@ -4,9 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -17,11 +21,11 @@ import momzzangseven.mztkbe.modules.marketplace.application.port.out.SaveReserva
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.domain.vo.ReservationStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -33,20 +37,42 @@ class CompleteReservationServiceTest {
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
 
-  @InjectMocks private CompleteReservationService sut;
+  /**
+   * Fixed clock pointing to 2025-06-01T12:00:00 KST.
+   *
+   * <p>Used as "now" for all time-comparison checks. Reservation dates are defined relative to this
+   * fixed point so tests are deterministic regardless of actual wall-clock time.
+   */
+  private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+  private static final Instant FIXED_NOW = Instant.parse("2025-06-01T03:00:00Z"); // 12:00 KST
+  private static final Clock FIXED_CLOCK = Clock.fixed(FIXED_NOW, ZONE);
+
+  // "now" as seen by the service = 2025-06-01 12:00 KST
+  private static final LocalDate TODAY = LocalDate.of(2025, 6, 1);
+  private static final LocalDate YESTERDAY = TODAY.minusDays(1);
+  private static final LocalDate TOMORROW = TODAY.plusDays(1);
+
+  private CompleteReservationService sut;
 
   private static final Long RESERVATION_ID = 1L;
   private static final Long USER_ID = 1L;
   private static final Long OTHER_USER_ID = 999L;
 
-  /** APPROVED 예약, 수업 시간은 이미 과거. */
+  @BeforeEach
+  void setUp() {
+    // Explicit constructor injection so Clock is deterministic in tests.
+    sut = new CompleteReservationService(
+        loadReservationPort, saveReservationPort, submitEscrowTransactionPort, FIXED_CLOCK);
+  }
+
+  /** APPROVED 예약, 수업 시간은 이미 과거(어제). */
   private Reservation approvedPastReservation() {
     return Reservation.builder()
         .id(RESERVATION_ID)
         .userId(USER_ID)
         .trainerId(100L)
         .slotId(1L)
-        .reservationDate(LocalDate.now().minusDays(1)) // 어제 수업
+        .reservationDate(YESTERDAY)
         .reservationTime(LocalTime.of(10, 0))
         .durationMinutes(60)
         .status(ReservationStatus.APPROVED)
@@ -55,14 +81,14 @@ class CompleteReservationServiceTest {
         .build();
   }
 
-  /** APPROVED 예약, 수업 시간은 미래. */
+  /** APPROVED 예약, 수업 시간은 미래(내일). */
   private Reservation approvedFutureReservation() {
     return Reservation.builder()
         .id(RESERVATION_ID)
         .userId(USER_ID)
         .trainerId(100L)
         .slotId(1L)
-        .reservationDate(LocalDate.now().plusDays(1)) // 내일 수업
+        .reservationDate(TOMORROW)
         .reservationTime(LocalTime.of(10, 0))
         .durationMinutes(60)
         .status(ReservationStatus.APPROVED)
@@ -101,7 +127,7 @@ class CompleteReservationServiceTest {
     @Test
     @DisplayName("[CM-02] 수업 시작 전 완료 시도 시 MARKETPLACE_RESERVATION_EARLY_COMPLETE 예외")
     void 수업_시작_전_완료() {
-      // given
+      // given — 내일 수업이므로 fixed clock 기준 미래
       given(loadReservationPort.findById(RESERVATION_ID))
           .willReturn(Optional.of(approvedFutureReservation()));
 
@@ -141,7 +167,7 @@ class CompleteReservationServiceTest {
               .userId(USER_ID)
               .trainerId(100L)
               .slotId(1L)
-              .reservationDate(LocalDate.now().minusDays(1))
+              .reservationDate(YESTERDAY)
               .reservationTime(LocalTime.of(10, 0))
               .durationMinutes(60)
               .status(ReservationStatus.PENDING)

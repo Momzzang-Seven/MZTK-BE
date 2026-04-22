@@ -12,7 +12,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Map;
-import java.util.UUID;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
@@ -490,7 +489,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
           ps.setLong(2, storeId);
           ps.setString(3, title);
           ps.setString(4, "E2E test class");
-          ps.setString(5, "YOGA");
+          ps.setString(5, "YOGA"); // ClassCategory.YOGA.name()
           ps.setBigDecimal(6, BigDecimal.valueOf(price));
           ps.setInt(7, 60);
           ps.setTimestamp(8, now);

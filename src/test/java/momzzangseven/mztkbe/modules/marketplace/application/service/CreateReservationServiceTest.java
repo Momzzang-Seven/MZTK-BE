@@ -98,8 +98,8 @@ class CreateReservationServiceTest {
             START_TIME,
             null,
             BigInteger.valueOf(PRICE),
-            "delegSig",
-            "execSig");
+            "0x" + "a".repeat(130),
+            "0x" + "b".repeat(130));
   }
 
   @Nested
@@ -110,7 +110,7 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-01] 정상 예약 생성 시 PENDING 상태 반환")
     void 정상_예약_생성() {
       // given
-      given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of(slot));
+      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID)).willReturn(0);
@@ -138,7 +138,7 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-02] 슬롯 정원 초과 시 MARKETPLACE_RESERVATION_SLOT_FULL 예외")
     void 슬롯_정원_초과() {
       // given
-      given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of(slot));
+      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID))
@@ -166,10 +166,10 @@ class CreateReservationServiceTest {
               START_TIME,
               null,
               BigInteger.valueOf(99_999L),
-              "delegSig",
-              "execSig");
+              "0x" + "a".repeat(130),
+              "0x" + "b".repeat(130));
 
-      given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of(slot));
+      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
 
@@ -186,7 +186,7 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-04] 트레이너 정지 상태 시 MARKETPLACE_TRAINER_SUSPENDED 예외")
     void 트레이너_정지_상태() {
       // given
-      given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of(slot));
+      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
 
@@ -213,10 +213,10 @@ class CreateReservationServiceTest {
               START_TIME,
               null,
               BigInteger.valueOf(PRICE),
-              "delegSig",
-              "execSig");
+              "0x" + "a".repeat(130),
+              "0x" + "b".repeat(130));
 
-      given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of(slot));
+      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
 
       // when & then
       assertThatThrownBy(() -> sut.execute(wrongDayCmd))
