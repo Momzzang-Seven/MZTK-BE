@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.application.service;
 
 import java.math.BigInteger;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,12 +60,10 @@ public class CreateReservationService implements CreateReservationUseCase {
         command.classId(),
         command.slotId());
 
-    // 1. Load slots with pessimistic lock to prevent over-commit
-    List<ClassSlot> slotsWithLock = loadClassSlotPort.findByClassIdWithLock(command.classId());
+    // 1. Load the target slot with pessimistic write lock — prevents over-commit under concurrency
     ClassSlot slot =
-        slotsWithLock.stream()
-            .filter(s -> s.getId().equals(command.slotId()))
-            .findFirst()
+        loadClassSlotPort
+            .findByIdWithLock(command.slotId())
             .orElseThrow(
                 () ->
                     new BusinessException(

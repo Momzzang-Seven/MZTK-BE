@@ -38,4 +38,15 @@ public interface LoadClassSlotPort {
    * @return list of ClassSlot domain models (locked)
    */
   List<ClassSlot> findByClassIdWithLock(Long classId);
+
+  /**
+   * Find a single slot by its own ID under a pessimistic write lock.
+   *
+   * <p>Preferred over {@link #findByClassIdWithLock} in reservation creation: locks only the
+   * targeted slot row instead of every slot in the class, minimising the lock contention surface.
+   *
+   * @param slotId the slot ID to lock and load
+   * @return the matching ClassSlot, or empty if not found
+   */
+  java.util.Optional<ClassSlot> findByIdWithLock(Long slotId);
 }

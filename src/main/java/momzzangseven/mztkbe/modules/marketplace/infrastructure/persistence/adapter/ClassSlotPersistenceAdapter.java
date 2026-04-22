@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.infrastructure.persistence.adapter;
 
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadClassSlotPort;
@@ -39,6 +40,12 @@ public class ClassSlotPersistenceAdapter implements LoadClassSlotPort, SaveClass
     return classSlotJpaRepository.findByClassIdWithLock(classId).stream()
         .map(ClassSlotEntity::toDomain)
         .toList();
+  }
+
+  @Override
+  public Optional<ClassSlot> findByIdWithLock(Long slotId) {
+    log.debug("Loading slot with pessimistic lock for slotId={}", slotId);
+    return classSlotJpaRepository.findByIdWithLock(slotId).map(ClassSlotEntity::toDomain);
   }
 
   // ========== SaveClassSlotPort ==========
