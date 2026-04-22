@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  * cross-module adapter once the sanction module is available.
  */
 @Component
-@Profile({"local", "dev", "test"})
+@Profile({"local", "dev", "test", "integration"})
 public class SanctionCheckAdapter implements LoadTrainerSanctionPort {
 
   @Override

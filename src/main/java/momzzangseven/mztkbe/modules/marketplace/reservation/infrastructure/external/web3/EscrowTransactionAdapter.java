@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@Profile({"local", "dev", "test"})
+@Profile({"local", "dev", "test", "integration"})
 public class EscrowTransactionAdapter implements SubmitEscrowTransactionPort {
 
   private static final String STUB_TX_HASH =

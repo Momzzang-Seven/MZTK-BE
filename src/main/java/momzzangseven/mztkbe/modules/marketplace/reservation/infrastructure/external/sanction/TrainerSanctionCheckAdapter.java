@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
  * Replace with a real adapter calling the sanction module's input port once available.
  */
 @Component
-@Profile({"local", "dev", "test"})
+@Profile({"local", "dev", "test", "integration"})
 public class TrainerSanctionCheckAdapter implements CheckTrainerSanctionPort {
 
   @Override
