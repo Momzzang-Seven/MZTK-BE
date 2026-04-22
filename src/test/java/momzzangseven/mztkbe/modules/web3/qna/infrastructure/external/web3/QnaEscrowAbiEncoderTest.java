@@ -85,6 +85,63 @@ class QnaEscrowAbiEncoderTest {
   }
 
   @Test
+  @DisplayName("encodes adminSettle with questionHash and contentHash")
+  void encodeAdminSettle_matchesContractSignature() {
+    String questionId = "0x" + "0".repeat(63) + "1";
+    String answerId = "0x" + "0".repeat(63) + "2";
+    String questionHash = "0x" + "a".repeat(64);
+    String contentHash = "0x" + "b".repeat(64);
+
+    String encoded =
+        encoder.encode(
+            QnaExecutionActionType.QNA_ADMIN_SETTLE,
+            questionId,
+            answerId,
+            null,
+            BigInteger.ZERO,
+            questionHash,
+            contentHash);
+
+    String expected =
+        FunctionEncoder.encode(
+            new Function(
+                "adminSettle",
+                List.of(
+                    new Bytes32(Numeric.hexStringToByteArray(questionId)),
+                    new Bytes32(Numeric.hexStringToByteArray(answerId)),
+                    new Bytes32(Numeric.hexStringToByteArray(questionHash)),
+                    new Bytes32(Numeric.hexStringToByteArray(contentHash))),
+                Collections.emptyList()));
+
+    assertThat(encoded).isEqualTo(expected);
+  }
+
+  @Test
+  @DisplayName("encodes adminRefund with questionId only")
+  void encodeAdminRefund_matchesContractSignature() {
+    String questionId = "0x" + "0".repeat(63) + "1";
+
+    String encoded =
+        encoder.encode(
+            QnaExecutionActionType.QNA_ADMIN_REFUND,
+            questionId,
+            null,
+            null,
+            BigInteger.ZERO,
+            null,
+            null);
+
+    String expected =
+        FunctionEncoder.encode(
+            new Function(
+                "adminRefund",
+                List.of(new Bytes32(Numeric.hexStringToByteArray(questionId))),
+                Collections.emptyList()));
+
+    assertThat(encoded).isEqualTo(expected);
+  }
+
+  @Test
   @DisplayName("encodes submitAnswer with answer content hash")
   void encodeSubmitAnswer_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";

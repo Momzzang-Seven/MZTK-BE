@@ -3,6 +3,12 @@ package momzzangseven.mztkbe.modules.marketplace.domain.model;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidCoordinatesException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidPhoneNumberException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidStoreAddressException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidStoreNameException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidStoreUrlException;
+import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidTrainerIdException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -53,10 +59,8 @@ class TrainerStoreTest {
     @Test
     @DisplayName("유효한 필드로 TrainerStore를 생성한다")
     void create_withValidFields_succeeds() {
-      // when
       TrainerStore store = createValidStore();
 
-      // then
       assertThat(store.getTrainerId()).isEqualTo(VALID_TRAINER_ID);
       assertThat(store.getStoreName()).isEqualTo(VALID_STORE_NAME);
       assertThat(store.getAddress()).isEqualTo(VALID_ADDRESS);
@@ -72,10 +76,8 @@ class TrainerStoreTest {
     @Test
     @DisplayName("id, createdAt, updatedAt은 null로 생성된다 (DB에서 관리)")
     void create_timestampsAndIdAreNull() {
-      // when
       TrainerStore store = createValidStore();
 
-      // then
       assertThat(store.getId()).isNull();
       assertThat(store.getCreatedAt()).isNull();
       assertThat(store.getUpdatedAt()).isNull();
@@ -84,7 +86,6 @@ class TrainerStoreTest {
     @Test
     @DisplayName("선택 필드(URL들)가 null이어도 생성된다")
     void create_withNullOptionalFields_succeeds() {
-      // when
       TrainerStore store =
           TrainerStore.create(
               VALID_TRAINER_ID,
@@ -94,11 +95,10 @@ class TrainerStoreTest {
               VALID_LATITUDE,
               VALID_LONGITUDE,
               VALID_PHONE,
-              null, // homepageUrl
-              null, // instagramUrl
-              null); // xProfileUrl
+              null,
+              null,
+              null);
 
-      // then
       assertThat(store.getHomepageUrl()).isNull();
       assertThat(store.getInstagramUrl()).isNull();
       assertThat(store.getXProfileUrl()).isNull();
@@ -171,7 +171,6 @@ class TrainerStoreTest {
     @Test
     @DisplayName("update()로 기존 ID/trainerId를 유지하면서 필드를 변경할 수 있다")
     void update_preservesIdentityAndUpdatesFields() {
-      // given
       TrainerStore original =
           TrainerStore.builder()
               .id(100L)
@@ -187,7 +186,6 @@ class TrainerStoreTest {
               .xProfileUrl(VALID_X_PROFILE_URL)
               .build();
 
-      // when
       TrainerStore updated =
           original.update(
               "New Studio",
@@ -200,11 +198,10 @@ class TrainerStoreTest {
               null,
               null);
 
-      // then — identity preserved
+      // identity preserved
       assertThat(updated.getId()).isEqualTo(100L);
       assertThat(updated.getTrainerId()).isEqualTo(VALID_TRAINER_ID);
-
-      // then — fields updated
+      // fields updated
       assertThat(updated.getStoreName()).isEqualTo("New Studio");
       assertThat(updated.getAddress()).isEqualTo("서울시 서초구");
       assertThat(updated.getDetailAddress()).isEqualTo("3층 301호");
@@ -214,18 +211,15 @@ class TrainerStoreTest {
       assertThat(updated.getHomepageUrl()).isEqualTo("https://newsite.com");
       assertThat(updated.getInstagramUrl()).isNull();
       assertThat(updated.getXProfileUrl()).isNull();
-
-      // then — original immutable
+      // original immutable
       assertThat(original.getStoreName()).isEqualTo(VALID_STORE_NAME);
     }
 
     @Test
-    @DisplayName("update()에서 잘못된 값이 들어오면 validation 예외가 발생한다")
-    void update_withInvalidValues_throwsException() {
-      // given
+    @DisplayName("update()에서 잘못된 값이 들어오면 BusinessException 계열 예외가 발생한다")
+    void update_withInvalidValues_throwsBusinessException() {
       TrainerStore original = createValidStore();
 
-      // when & then — blank storeName
       assertThatThrownBy(
               () ->
                   original.update(
@@ -238,7 +232,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreNameException.class)
           .hasMessageContaining("Store name must not be null or blank");
     }
   }
@@ -252,7 +246,7 @@ class TrainerStoreTest {
   class TrainerIdValidation {
 
     @Test
-    @DisplayName("trainerId가 null이면 예외 발생")
+    @DisplayName("trainerId가 null이면 MarketplaceInvalidTrainerIdException 발생")
     void create_withNullTrainerId_throwsException() {
       assertThatThrownBy(
               () ->
@@ -267,12 +261,11 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("Trainer ID must be a positive number");
+          .isInstanceOf(MarketplaceInvalidTrainerIdException.class);
     }
 
     @Test
-    @DisplayName("trainerId가 0이면 예외 발생")
+    @DisplayName("trainerId가 0이면 MarketplaceInvalidTrainerIdException 발생")
     void create_withZeroTrainerId_throwsException() {
       assertThatThrownBy(
               () ->
@@ -287,12 +280,11 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("Trainer ID must be a positive number");
+          .isInstanceOf(MarketplaceInvalidTrainerIdException.class);
     }
 
     @Test
-    @DisplayName("trainerId가 음수이면 예외 발생")
+    @DisplayName("trainerId가 음수이면 MarketplaceInvalidTrainerIdException 발생")
     void create_withNegativeTrainerId_throwsException() {
       assertThatThrownBy(
               () ->
@@ -307,8 +299,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("Trainer ID must be a positive number");
+          .isInstanceOf(MarketplaceInvalidTrainerIdException.class);
     }
   }
 
@@ -323,7 +314,7 @@ class TrainerStoreTest {
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"", "   "})
-    @DisplayName("storeName이 null 또는 공백이면 예외 발생")
+    @DisplayName("storeName이 null 또는 공백이면 MarketplaceInvalidStoreNameException 발생")
     void create_withInvalidStoreName_throwsException(String storeName) {
       assertThatThrownBy(
               () ->
@@ -338,12 +329,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreNameException.class)
           .hasMessageContaining("Store name must not be null or blank");
     }
 
     @Test
-    @DisplayName("storeName이 최대 길이를 초과하면 예외 발생")
+    @DisplayName("storeName이 최대 길이를 초과하면 MarketplaceInvalidStoreNameException 발생")
     void create_withTooLongStoreName_throwsException() {
       String longName = "A".repeat(TrainerStore.MAX_STORE_NAME_LENGTH + 1);
       assertThatThrownBy(
@@ -359,7 +350,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreNameException.class)
           .hasMessageContaining("must not exceed");
     }
   }
@@ -375,7 +366,7 @@ class TrainerStoreTest {
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"", "   "})
-    @DisplayName("address가 null 또는 공백이면 예외 발생")
+    @DisplayName("address가 null 또는 공백이면 MarketplaceInvalidStoreAddressException 발생")
     void create_withInvalidAddress_throwsException(String address) {
       assertThatThrownBy(
               () ->
@@ -390,12 +381,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("Address must not be null or blank");
     }
 
     @Test
-    @DisplayName("address가 최대 길이를 초과하면 예외 발생")
+    @DisplayName("address가 최대 길이를 초과하면 MarketplaceInvalidStoreAddressException 발생")
     void create_withTooLongAddress_throwsException() {
       String longAddress = "A".repeat(TrainerStore.MAX_ADDRESS_LENGTH + 1);
       assertThatThrownBy(
@@ -411,7 +402,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("must not exceed");
     }
   }
@@ -427,7 +418,7 @@ class TrainerStoreTest {
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"", "   "})
-    @DisplayName("detailAddress가 null 또는 공백이면 예외 발생")
+    @DisplayName("detailAddress가 null 또는 공백이면 MarketplaceInvalidStoreAddressException 발생")
     void create_withInvalidDetailAddress_throwsException(String detailAddress) {
       assertThatThrownBy(
               () ->
@@ -442,12 +433,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("Detail address must not be null or blank");
     }
 
     @Test
-    @DisplayName("detailAddress가 최대 길이를 초과하면 예외 발생")
+    @DisplayName("detailAddress가 최대 길이를 초과하면 MarketplaceInvalidStoreAddressException 발생")
     void create_withTooLongDetailAddress_throwsException() {
       String longDetail = "A".repeat(TrainerStore.MAX_DETAIL_ADDRESS_LENGTH + 1);
       assertThatThrownBy(
@@ -463,7 +454,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreAddressException.class)
           .hasMessageContaining("must not exceed");
     }
   }
@@ -477,7 +468,7 @@ class TrainerStoreTest {
   class CoordinateValidation {
 
     @Test
-    @DisplayName("위도가 null이면 예외 발생")
+    @DisplayName("위도가 null이면 MarketplaceInvalidCoordinatesException 발생")
     void create_withNullLatitude_throwsException() {
       assertThatThrownBy(
               () ->
@@ -492,12 +483,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Latitude");
     }
 
     @Test
-    @DisplayName("경도가 null이면 예외 발생")
+    @DisplayName("경도가 null이면 MarketplaceInvalidCoordinatesException 발생")
     void create_withNullLongitude_throwsException() {
       assertThatThrownBy(
               () ->
@@ -512,12 +503,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Longitude");
     }
 
     @Test
-    @DisplayName("위도가 범위를 초과하면 예외 발생 (> 90.0)")
+    @DisplayName("위도가 90.1이면 MarketplaceInvalidCoordinatesException 발생")
     void create_withLatitudeAboveMax_throwsException() {
       assertThatThrownBy(
               () ->
@@ -532,12 +523,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Latitude must be between");
     }
 
     @Test
-    @DisplayName("위도가 범위 미만이면 예외 발생 (< -90.0)")
+    @DisplayName("위도가 -90.1이면 MarketplaceInvalidCoordinatesException 발생")
     void create_withLatitudeBelowMin_throwsException() {
       assertThatThrownBy(
               () ->
@@ -552,12 +543,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Latitude must be between");
     }
 
     @Test
-    @DisplayName("경도가 범위를 초과하면 예외 발생 (> 180.0)")
+    @DisplayName("경도가 180.1이면 MarketplaceInvalidCoordinatesException 발생")
     void create_withLongitudeAboveMax_throwsException() {
       assertThatThrownBy(
               () ->
@@ -572,12 +563,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Longitude must be between");
     }
 
     @Test
-    @DisplayName("경도가 범위 미만이면 예외 발생 (< -180.0)")
+    @DisplayName("경도가 -180.1이면 MarketplaceInvalidCoordinatesException 발생")
     void create_withLongitudeBelowMin_throwsException() {
       assertThatThrownBy(
               () ->
@@ -592,7 +583,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidCoordinatesException.class)
           .hasMessageContaining("Longitude must be between");
     }
   }
@@ -608,7 +599,7 @@ class TrainerStoreTest {
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"", "   "})
-    @DisplayName("phoneNumber가 null 또는 공백이면 예외 발생")
+    @DisplayName("phoneNumber가 null 또는 공백이면 MarketplaceInvalidPhoneNumberException 발생")
     void create_withInvalidPhoneNumber_throwsException(String phoneNumber) {
       assertThatThrownBy(
               () ->
@@ -623,7 +614,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidPhoneNumberException.class)
           .hasMessageContaining("Phone number must not be null or blank");
     }
 
@@ -648,7 +639,7 @@ class TrainerStoreTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"abc", "12", "phone-number", "!@#$%"})
-    @DisplayName("잘못된 전화번호 포맷이면 예외 발생")
+    @DisplayName("잘못된 전화번호 포맷이면 MarketplaceInvalidPhoneNumberException 발생")
     void create_withInvalidPhoneFormat_throwsException(String phone) {
       assertThatThrownBy(
               () ->
@@ -663,12 +654,12 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidPhoneNumberException.class)
           .hasMessageContaining("Phone number must be a valid format");
     }
 
     @Test
-    @DisplayName("phoneNumber가 최대 길이를 초과하면 예외 발생")
+    @DisplayName("phoneNumber가 최대 길이를 초과하면 MarketplaceInvalidPhoneNumberException 발생")
     void create_withTooLongPhoneNumber_throwsException() {
       String longPhone = "+82-10-1234-5678-9012345";
       assertThatThrownBy(
@@ -684,7 +675,7 @@ class TrainerStoreTest {
                       null,
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class);
+          .isInstanceOf(MarketplaceInvalidPhoneNumberException.class);
     }
   }
 
@@ -735,7 +726,7 @@ class TrainerStoreTest {
     }
 
     @Test
-    @DisplayName("non-HTTP 스킴(ftp://)은 예외 발생")
+    @DisplayName("non-HTTP 스킴(ftp://)은 MarketplaceInvalidStoreUrlException 발생")
     void create_withFtpScheme_throwsException() {
       assertThatThrownBy(
               () ->
@@ -750,12 +741,12 @@ class TrainerStoreTest {
                       "ftp://example.com/files",
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreUrlException.class)
           .hasMessageContaining("must use http or https scheme");
     }
 
     @Test
-    @DisplayName("file:// 스킴은 예외 발생")
+    @DisplayName("file:// 스킴은 MarketplaceInvalidStoreUrlException 발생")
     void create_withFileScheme_throwsException() {
       assertThatThrownBy(
               () ->
@@ -770,12 +761,12 @@ class TrainerStoreTest {
                       "file:///etc/passwd",
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreUrlException.class)
           .hasMessageContaining("must use http or https scheme");
     }
 
     @Test
-    @DisplayName("잘못된 형식의 URL은 예외 발생")
+    @DisplayName("잘못된 형식의 URL은 MarketplaceInvalidStoreUrlException 발생")
     void create_withMalformedUrl_throwsException() {
       assertThatThrownBy(
               () ->
@@ -790,12 +781,12 @@ class TrainerStoreTest {
                       "not a url at all",
                       null,
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
+          .isInstanceOf(MarketplaceInvalidStoreUrlException.class)
           .hasMessageContaining("must be a valid URL");
     }
 
     @Test
-    @DisplayName("Instagram URL 검증도 동일하게 작동한다")
+    @DisplayName("Instagram URL 검증도 MarketplaceInvalidStoreUrlException로 동일하게 작동한다")
     void create_withInvalidInstagramUrl_throwsException() {
       assertThatThrownBy(
               () ->
@@ -808,14 +799,13 @@ class TrainerStoreTest {
                       VALID_LONGITUDE,
                       VALID_PHONE,
                       null,
-                      "ftp://invalid",
+                      "ftp://bad-instagram-url",
                       null))
-          .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("Instagram URL");
+          .isInstanceOf(MarketplaceInvalidStoreUrlException.class);
     }
 
     @Test
-    @DisplayName("X Profile URL 검증도 동일하게 작동한다")
+    @DisplayName("X Profile URL 검증도 MarketplaceInvalidStoreUrlException로 동일하게 작동한다")
     void create_withInvalidXProfileUrl_throwsException() {
       assertThatThrownBy(
               () ->
@@ -829,30 +819,8 @@ class TrainerStoreTest {
                       VALID_PHONE,
                       null,
                       null,
-                      "ftp://invalid"))
-          .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("X Profile URL");
-    }
-
-    @Test
-    @DisplayName("URL이 최대 길이를 초과하면 예외 발생")
-    void create_withTooLongUrl_throwsException() {
-      String longUrl = "https://example.com/" + "a".repeat(TrainerStore.MAX_URL_LENGTH);
-      assertThatThrownBy(
-              () ->
-                  TrainerStore.create(
-                      VALID_TRAINER_ID,
-                      VALID_STORE_NAME,
-                      VALID_ADDRESS,
-                      VALID_DETAIL_ADDRESS,
-                      VALID_LATITUDE,
-                      VALID_LONGITUDE,
-                      VALID_PHONE,
-                      longUrl,
-                      null,
-                      null))
-          .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("must not exceed");
+                      "not-a-url"))
+          .isInstanceOf(MarketplaceInvalidStoreUrlException.class);
     }
   }
 }

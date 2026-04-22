@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.adapter;
 
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
@@ -20,13 +21,24 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
   private final QnaAnswerProjectionJpaRepository qnaAnswerProjectionJpaRepository;
 
   @Override
+  public Optional<QnaQuestionProjection> findQuestionByPostId(Long postId) {
+    return qnaQuestionProjectionJpaRepository.findByPostId(postId).map(this::toDomain);
+  }
+
+  @Override
   public Optional<QnaQuestionProjection> findQuestionByPostIdForUpdate(Long postId) {
     return qnaQuestionProjectionJpaRepository.findByPostIdForUpdate(postId).map(this::toDomain);
   }
 
   @Override
   public QnaQuestionProjection saveQuestion(QnaQuestionProjection questionProjection) {
-    return toDomain(qnaQuestionProjectionJpaRepository.save(toEntity(questionProjection)));
+    return toDomain(
+        qnaQuestionProjectionJpaRepository.save(mergeQuestionEntity(questionProjection)));
+  }
+
+  @Override
+  public Optional<QnaAnswerProjection> findAnswerByAnswerId(Long answerId) {
+    return qnaAnswerProjectionJpaRepository.findByAnswerId(answerId).map(this::toDomain);
   }
 
   @Override
@@ -35,8 +47,22 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
   }
 
   @Override
+  public List<QnaAnswerProjection> findAnswersByPostId(Long postId) {
+    return qnaAnswerProjectionJpaRepository.findAllByPostId(postId).stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<QnaAnswerProjection> findAnswersByPostIdForUpdate(Long postId) {
+    return qnaAnswerProjectionJpaRepository.findAllByPostIdForUpdate(postId).stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public QnaAnswerProjection saveAnswer(QnaAnswerProjection answerProjection) {
-    return toDomain(qnaAnswerProjectionJpaRepository.save(toEntity(answerProjection)));
+    return toDomain(qnaAnswerProjectionJpaRepository.save(mergeAnswerEntity(answerProjection)));
   }
 
   @Override
@@ -56,6 +82,19 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
         .answerCount(questionProjection.getAnswerCount())
         .state(questionProjection.getState().code())
         .build();
+  }
+
+  private QnaQuestionProjectionEntity mergeQuestionEntity(
+      QnaQuestionProjection questionProjection) {
+    QnaQuestionProjectionEntity entity = toEntity(questionProjection);
+    qnaQuestionProjectionJpaRepository
+        .findById(questionProjection.getPostId())
+        .ifPresent(
+            existing -> {
+              entity.setCreatedAt(existing.getCreatedAt());
+              entity.setUpdatedAt(existing.getUpdatedAt());
+            });
+    return entity;
   }
 
   private QnaQuestionProjection toDomain(QnaQuestionProjectionEntity entity) {
@@ -82,6 +121,18 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
         .contentHash(answerProjection.getContentHash())
         .accepted(answerProjection.isAccepted())
         .build();
+  }
+
+  private QnaAnswerProjectionEntity mergeAnswerEntity(QnaAnswerProjection answerProjection) {
+    QnaAnswerProjectionEntity entity = toEntity(answerProjection);
+    qnaAnswerProjectionJpaRepository
+        .findById(answerProjection.getAnswerId())
+        .ifPresent(
+            existing -> {
+              entity.setCreatedAt(existing.getCreatedAt());
+              entity.setUpdatedAt(existing.getUpdatedAt());
+            });
+    return entity;
   }
 
   private QnaAnswerProjection toDomain(QnaAnswerProjectionEntity entity) {

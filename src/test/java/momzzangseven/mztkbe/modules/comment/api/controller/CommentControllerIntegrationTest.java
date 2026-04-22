@@ -10,10 +10,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.UUID;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
@@ -22,6 +24,9 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostJpaRepository;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.user.infrastructure.persistence.entity.UserEntity;
+import momzzangseven.mztkbe.modules.user.infrastructure.persistence.repository.UserJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,6 +58,9 @@ class CommentControllerIntegrationTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected PostJpaRepository postJpaRepository;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  protected UserJpaRepository userJpaRepository;
 
   @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -107,6 +115,8 @@ class CommentControllerIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("SUCCESS"))
             .andExpect(jsonPath("$.data.content").value("first comment"))
+            .andExpect(jsonPath("$.data.writer").doesNotExist())
+            .andExpect(jsonPath("$.data.replyCount").doesNotExist())
             .andReturn();
     Long commentId = extractLong(createCommentResult, "/data/commentId");
 
@@ -206,9 +216,169 @@ class CommentControllerIntegrationTest {
         .andExpect(jsonPath("$.code").value("POST_001"));
   }
 
+  @Test
+  @DisplayName("root comment query includes writer details, replyCount, and Page last metadata")
+  void getRootComments_includesWriterReplyCountAndPageLast() throws Exception {
+    UserEntity writer = saveUser("root-writer", "root-profile.webp");
+    PostEntity savedPost =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(writer.getId())
+                .type(PostType.FREE)
+                .title("comment response contract")
+                .content("body")
+                .reward(0L)
+                .status(PostStatus.OPEN)
+                .build());
+
+    Long firstRootId = createComment(savedPost.getId(), writer.getId(), "first root", null);
+    createComment(savedPost.getId(), writer.getId(), "second root", null);
+    createComment(savedPost.getId(), writer.getId(), "reply-1", firstRootId);
+    createComment(savedPost.getId(), writer.getId(), "reply-2", firstRootId);
+
+    mockMvc
+        .perform(
+            get("/posts/" + savedPost.getId() + "/comments?page=0&size=1")
+                .with(userPrincipal(writer.getId())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content[0].commentId").value(firstRootId))
+        .andExpect(jsonPath("$.data.content[0].writer.userId").value(writer.getId()))
+        .andExpect(jsonPath("$.data.content[0].writer.nickname").value("root-writer"))
+        .andExpect(jsonPath("$.data.content[0].writer.profileImage").value("root-profile.webp"))
+        .andExpect(jsonPath("$.data.content[0].replyCount").value(2))
+        .andExpect(jsonPath("$.data.last").value(false));
+  }
+
+  @Test
+  @DisplayName("reply query includes writer details")
+  void getReplies_includesWriterDetails() throws Exception {
+    UserEntity rootWriter = saveUser("root-owner", "root.webp");
+    UserEntity replyWriter = saveUser("reply-owner", "reply.webp");
+    PostEntity savedPost =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(rootWriter.getId())
+                .type(PostType.FREE)
+                .title("reply response contract")
+                .content("body")
+                .reward(0L)
+                .status(PostStatus.OPEN)
+                .build());
+
+    Long rootId = createComment(savedPost.getId(), rootWriter.getId(), "root", null);
+    Long replyId = createComment(savedPost.getId(), replyWriter.getId(), "reply", rootId);
+    CommentEntity reply = commentJpaRepository.findById(replyId).orElseThrow();
+    commentJpaRepository.save(
+        CommentEntity.builder()
+            .postId(savedPost.getId())
+            .writerId(replyWriter.getId())
+            .content("legacy nested reply")
+            .parent(reply)
+            .isDeleted(false)
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build());
+
+    mockMvc
+        .perform(get("/comments/" + rootId + "/replies").with(userPrincipal(rootWriter.getId())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content[0].commentId").value(replyId))
+        .andExpect(jsonPath("$.data.content[0].writer.userId").value(replyWriter.getId()))
+        .andExpect(jsonPath("$.data.content[0].writer.nickname").value("reply-owner"))
+        .andExpect(jsonPath("$.data.content[0].writer.profileImage").value("reply.webp"))
+        .andExpect(jsonPath("$.data.content[0].replyCount").value(0))
+        .andExpect(jsonPath("$.data.last").value(true));
+  }
+
+  @Test
+  @DisplayName("creating a reply to a reply returns 400")
+  void createComment_nestedReply_returns400() throws Exception {
+    UserEntity writer = saveUser("nested-writer", "nested.webp");
+    PostEntity savedPost =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(writer.getId())
+                .type(PostType.FREE)
+                .title("nested reply policy")
+                .content("body")
+                .reward(0L)
+                .status(PostStatus.OPEN)
+                .build());
+    Long rootId = createComment(savedPost.getId(), writer.getId(), "root", null);
+    Long replyId = createComment(savedPost.getId(), writer.getId(), "reply", rootId);
+
+    mockMvc
+        .perform(
+            post("/posts/" + savedPost.getId() + "/comments")
+                .with(userPrincipal(writer.getId()))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "nested reply", "parentId", replyId))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("COMMENT_008"));
+  }
+
+  @Test
+  @DisplayName("fetching replies of a reply returns 400")
+  void getReplies_nestedReplyParent_returns400() throws Exception {
+    UserEntity writer = saveUser("nested-fetch-writer", "nested-fetch.webp");
+    PostEntity savedPost =
+        postJpaRepository.save(
+            PostEntity.builder()
+                .userId(writer.getId())
+                .type(PostType.FREE)
+                .title("nested reply fetch policy")
+                .content("body")
+                .reward(0L)
+                .status(PostStatus.OPEN)
+                .build());
+    Long rootId = createComment(savedPost.getId(), writer.getId(), "root", null);
+    Long replyId = createComment(savedPost.getId(), writer.getId(), "reply", rootId);
+
+    mockMvc
+        .perform(get("/comments/" + replyId + "/replies").with(userPrincipal(writer.getId())))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("COMMENT_008"));
+  }
+
   private Long extractLong(MvcResult result, String pointer) throws Exception {
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
     return body.at(pointer).asLong();
+  }
+
+  private Long createComment(Long targetPostId, Long userId, String content, Long parentId)
+      throws Exception {
+    Map<String, Object> body =
+        parentId == null
+            ? Map.of("content", content)
+            : Map.of("content", content, "parentId", parentId);
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/posts/" + targetPostId + "/comments")
+                    .with(userPrincipal(userId))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(body)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andReturn();
+    return extractLong(result, "/data/commentId");
+  }
+
+  private UserEntity saveUser(String nickname, String profileImageUrl) {
+    Instant now = Instant.now();
+    return userJpaRepository.save(
+        UserEntity.builder()
+            .email(UUID.randomUUID() + "@example.com")
+            .nickname(nickname)
+            .profileImageUrl(profileImageUrl)
+            .role(UserRole.USER)
+            .createdAt(now)
+            .updatedAt(now)
+            .build());
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {

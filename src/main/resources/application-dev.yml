@@ -6,7 +6,7 @@ spring:
   
   sql:
     init:
-      mode: always
+      mode: never
       data-locations:
         - classpath:db/seed/level_policies.sql
         - classpath:db/seed/xp_policies.sql
@@ -21,6 +21,10 @@ spring:
   
   flyway:
     enabled: false  # 로컬은 Flyway 비활성화
+
+info:
+  app:
+    environment: dev
 
 security:
   cors:

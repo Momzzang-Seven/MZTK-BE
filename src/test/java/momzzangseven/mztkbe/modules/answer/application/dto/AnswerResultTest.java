@@ -46,7 +46,9 @@ class AnswerResultTest {
               "https://cdn.example.com/profile.webp",
               3L,
               true,
-              List.of("https://cdn.example.com/answer-1.webp"),
+              List.of(
+                  new AnswerImageResult.AnswerImageSlot(
+                      1L, "https://cdn.example.com/answer-1.webp")),
               null);
 
       assertThat(result.answerId()).isEqualTo(100L);
@@ -57,14 +59,16 @@ class AnswerResultTest {
       assertThat(result.accepted()).isTrue();
       assertThat(result.likeCount()).isEqualTo(3L);
       assertThat(result.liked()).isTrue();
-      assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/answer-1.webp");
+      assertThat(result.images())
+          .containsExactly(
+              new AnswerImageResult.AnswerImageSlot(1L, "https://cdn.example.com/answer-1.webp"));
       assertThat(result.createdAt()).isEqualTo(createdAt);
       assertThat(result.updatedAt()).isEqualTo(updatedAt);
     }
 
     @Test
-    @DisplayName("converts null imageUrls to empty list")
-    void from_convertsNullImageUrlsToEmptyList() {
+    @DisplayName("converts null images to empty list")
+    void from_convertsNullImagesToEmptyList() {
       Answer answer =
           mockedAnswer(
               Map.of(
@@ -85,7 +89,7 @@ class AnswerResultTest {
 
       assertThat(result.likeCount()).isZero();
       assertThat(result.liked()).isFalse();
-      assertThat(result.imageUrls()).isEmpty();
+      assertThat(result.images()).isEmpty();
     }
   }
 

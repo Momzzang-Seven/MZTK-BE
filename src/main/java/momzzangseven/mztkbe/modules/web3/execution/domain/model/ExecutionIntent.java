@@ -184,6 +184,25 @@ public class ExecutionIntent {
         .build();
   }
 
+  /** Rebinds the stored EIP-1559 snapshot when the nonce is fixed at execution time. */
+  public ExecutionIntent rebindUnsignedTxSnapshot(
+      UnsignedTxSnapshot nextUnsignedTxSnapshot, String nextUnsignedTxFingerprint) {
+    requireStatus(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    if (mode != ExecutionMode.EIP1559) {
+      throw new IllegalStateException("only EIP1559 intents can rebind unsigned tx snapshot");
+    }
+    if (nextUnsignedTxSnapshot == null) {
+      throw new Web3InvalidInputException("nextUnsignedTxSnapshot is required");
+    }
+    if (nextUnsignedTxFingerprint == null || nextUnsignedTxFingerprint.isBlank()) {
+      throw new Web3InvalidInputException("nextUnsignedTxFingerprint is required");
+    }
+    return toBuilder()
+        .unsignedTxSnapshot(nextUnsignedTxSnapshot)
+        .unsignedTxFingerprint(nextUnsignedTxFingerprint)
+        .build();
+  }
+
   /** Transitions intent to {@code PENDING_ONCHAIN}. */
   public ExecutionIntent markPendingOnchain(Long nextSubmittedTxId, LocalDateTime now) {
     if (status != ExecutionIntentStatus.AWAITING_SIGNATURE

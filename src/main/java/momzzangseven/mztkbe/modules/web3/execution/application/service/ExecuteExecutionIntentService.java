@@ -32,19 +32,12 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEvent
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.utils.Numeric;
 
-@Service
 @Slf4j
 @RequiredArgsConstructor
 @Transactional
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
 /**
  * Executes a previously created execution intent.
  *
@@ -272,10 +265,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         created.transactionId(),
         ExecutionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
-        java.util.Map.of(
-            "success", broadcast.success(),
-            "txHash", broadcast.txHash(),
-            "failureReason", broadcast.failureReason()));
+        broadcastDetail(broadcast));
 
     if (broadcast.success()) {
       String txHash =
@@ -389,10 +379,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
         created.transactionId(),
         ExecutionAuditEventType.BROADCAST,
         broadcast.rpcAlias(),
-        java.util.Map.of(
-            "success", broadcast.success(),
-            "txHash", broadcast.txHash(),
-            "failureReason", broadcast.failureReason()));
+        broadcastDetail(broadcast));
 
     if (broadcast.success()) {
       String txHash =
@@ -482,6 +469,15 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       log.warn(
           "failed to record transaction audit: txId={}, eventType={}", transactionId, eventType, e);
     }
+  }
+
+  private java.util.Map<String, Object> broadcastDetail(
+      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
+    java.util.Map<String, Object> detail = new java.util.LinkedHashMap<>();
+    detail.put("success", broadcast.success());
+    detail.put("txHash", broadcast.txHash());
+    detail.put("failureReason", broadcast.failureReason());
+    return detail;
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {

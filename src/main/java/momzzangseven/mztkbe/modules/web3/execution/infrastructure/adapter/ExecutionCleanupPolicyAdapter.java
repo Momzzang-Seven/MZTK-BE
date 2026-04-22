@@ -4,10 +4,12 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionCleanupPolicy;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ExecutionEip7702Properties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class ExecutionCleanupPolicyAdapter implements LoadExecutionCleanupPolicyPort {
 
   private final ExecutionEip7702Properties executionEip7702Properties;

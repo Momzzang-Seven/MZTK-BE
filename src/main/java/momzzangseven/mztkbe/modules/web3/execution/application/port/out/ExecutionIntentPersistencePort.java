@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 
@@ -35,8 +36,14 @@ public interface ExecutionIntentPersistencePort {
 
   Optional<ExecutionIntent> findLatestByRootIdempotencyKey(String rootIdempotencyKey);
 
+  Optional<ExecutionIntent> findLatestActiveByResource(
+      ExecutionResourceType resourceType, String resourceId);
+
   Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId);
+
+  Optional<ExecutionIntent> claimNextInternalExecutableForUpdate(
+      List<ExecutionActionType> actionTypes);
 
   Optional<ExecutionIntent> findBySubmittedTxId(Long submittedTxId);
 

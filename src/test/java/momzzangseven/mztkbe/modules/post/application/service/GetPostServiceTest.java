@@ -100,6 +100,63 @@ class GetPostServiceTest {
   }
 
   @Test
+  @DisplayName("returns pending admin refund post context as solved and answer locked")
+  void getPostContextPendingAdminRefundMarksSolved() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(411L)
+            .userId(16L)
+            .type(PostType.QUESTION)
+            .title("refund pending question")
+            .content("content")
+            .reward(100L)
+            .status(PostStatus.PENDING_ADMIN_REFUND)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(411L)).thenReturn(Optional.of(post));
+
+    var result = getPostService.getPostContext(411L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().solved()).isTrue();
+    assertThat(result.get().answerLocked()).isTrue();
+    assertThat(result.get().status()).isEqualTo(PostStatus.PENDING_ADMIN_REFUND);
+  }
+
+  @Test
+  @DisplayName("returns locked post context through loadPostForUpdate for mutation flows")
+  void getPostContextForUpdateSuccess() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(42L)
+            .userId(17L)
+            .type(PostType.QUESTION)
+            .title("locked question")
+            .content("locked content")
+            .reward(150L)
+            .status(PostStatus.OPEN)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPostForUpdate(42L)).thenReturn(Optional.of(post));
+
+    var result = getPostService.getPostContextForUpdate(42L);
+
+    assertThat(result).isPresent();
+    assertThat(result.get().postId()).isEqualTo(42L);
+    assertThat(result.get().writerId()).isEqualTo(17L);
+    assertThat(result.get().content()).isEqualTo("locked content");
+    assertThat(result.get().reward()).isEqualTo(150L);
+    verify(postPersistencePort).loadPostForUpdate(42L);
+    verify(postPersistencePort, never()).loadPost(42L);
+  }
+
+  @Test
   @DisplayName("returns mapped post with tags and images from image module")
   void getPostSuccess() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
@@ -129,14 +186,14 @@ class GetPostServiceTest {
     assertThat(result.postId()).isEqualTo(20L);
     assertThat(result.tags()).containsExactly("java", "spring");
     assertThat(result.isSolved()).isFalse();
-    assertThat(result.imageUrls()).isEmpty();
+    assertThat(result.images()).isEmpty();
     assertThat(result.likeCount()).isEqualTo(3L);
     assertThat(result.liked()).isTrue();
   }
 
   @Test
-  @DisplayName("returns imageUrls from image module")
-  void getPostReturnsImageUrls() {
+  @DisplayName("returns images from image module")
+  void getPostReturnsImages() {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     Post post =
         Post.builder()
@@ -164,7 +221,9 @@ class GetPostServiceTest {
 
     PostDetailResult result = getPostService.getPost(20L, 99L);
 
-    assertThat(result.imageUrls()).containsExactly("https://cdn.example.com/images/img1.webp");
+    assertThat(result.images())
+        .containsExactly(
+            new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/images/img1.webp"));
   }
 
   @Test
@@ -232,6 +291,34 @@ class GetPostServiceTest {
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isTrue();
     assertThat(result.web3Execution()).isNull();
+  }
+
+  @Test
+  @DisplayName("[M-35] handles null imageResult gracefully as empty images list")
+  void getPost_nullImageResult_returnsEmptyImages() {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    Post post =
+        Post.builder()
+            .id(22L)
+            .userId(8L)
+            .type(PostType.FREE)
+            .title("hello")
+            .content("world")
+            .reward(0L)
+            .status(PostStatus.OPEN)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    when(postPersistencePort.loadPost(22L)).thenReturn(Optional.of(post));
+    when(loadTagPort.findTagNamesByPostId(22L)).thenReturn(List.of());
+    when(loadPostWriterPort.loadWriterById(8L)).thenReturn(Optional.empty());
+    when(loadPostImagesPort.loadImages(PostType.FREE, 22L)).thenReturn(null);
+    when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(0L);
+
+    PostDetailResult result = getPostService.getPost(22L, 99L);
+
+    assertThat(result.images()).isNotNull().isEmpty();
   }
 
   @Test

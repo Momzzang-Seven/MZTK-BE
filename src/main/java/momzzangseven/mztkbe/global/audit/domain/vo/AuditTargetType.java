@@ -10,5 +10,6 @@ package momzzangseven.mztkbe.global.audit.domain.vo;
 public enum AuditTargetType {
   TREASURY_KEY,
   WEB3_TRANSACTION,
-  ADMIN_ACCOUNT
+  ADMIN_ACCOUNT,
+  QNA_ESCROW_QUESTION
 }

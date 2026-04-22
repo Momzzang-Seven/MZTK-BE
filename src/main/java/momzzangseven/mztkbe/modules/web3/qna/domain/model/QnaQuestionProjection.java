@@ -65,8 +65,22 @@ public class QnaQuestionProjection {
     return toBuilder().acceptedAnswerId(acceptedAnswerId).state(QnaQuestionState.PAID_OUT).build();
   }
 
+  public QnaQuestionProjection markAdminSettled(String acceptedAnswerId) {
+    if (acceptedAnswerId == null || acceptedAnswerId.isBlank()) {
+      throw new Web3InvalidInputException("acceptedAnswerId is required");
+    }
+    return toBuilder()
+        .acceptedAnswerId(acceptedAnswerId)
+        .state(QnaQuestionState.ADMIN_SETTLED)
+        .build();
+  }
+
   public QnaQuestionProjection markDeleted() {
     return toBuilder().state(QnaQuestionState.DELETED).build();
+  }
+
+  public QnaQuestionProjection markDeletedWithAnswers() {
+    return toBuilder().state(QnaQuestionState.DELETED_WITH_ANSWERS).build();
   }
 
   private static void validateCore(

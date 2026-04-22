@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.CountAnswersUseCa
 import momzzangseven.mztkbe.modules.answer.application.port.in.CreateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerIdsByPostUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
@@ -41,6 +42,7 @@ import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -55,6 +57,7 @@ public class AnswerService
     implements CountAnswersUseCase,
         CreateAnswerUseCase,
         GetAnswerUseCase,
+        GetAnswerIdsByPostUseCase,
         GetAnswerSummaryUseCase,
         GetAnswerSummaryForUpdateUseCase,
         UpdateAnswerUseCase,
@@ -194,12 +197,21 @@ public class AnswerService
   }
 
   @Override
-  @Transactional
+  @Transactional(propagation = Propagation.MANDATORY)
   public Optional<GetAnswerSummaryUseCase.AnswerSummary> getAnswerSummaryForUpdate(Long answerId) {
     if (answerId == null) {
       throw new AnswerInvalidInputException("answerId is required.");
     }
     return loadAnswerPort.loadAnswerForUpdate(answerId).map(this::toAnswerSummary);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<Long> getAnswerIdsByPostId(Long postId) {
+    if (postId == null) {
+      throw new AnswerInvalidInputException("postId is required.");
+    }
+    return loadAnswerPort.loadAnswerIdsByPostId(postId);
   }
 
   /** Updates mutable answer fields. Omitted fields are preserved. */
@@ -363,6 +375,10 @@ public class AnswerService
 
   private GetAnswerSummaryUseCase.AnswerSummary toAnswerSummary(Answer answer) {
     return new GetAnswerSummaryUseCase.AnswerSummary(
-        answer.getId(), answer.getPostId(), answer.getUserId(), answer.getContent());
+        answer.getId(),
+        answer.getPostId(),
+        answer.getUserId(),
+        answer.getContent(),
+        Boolean.TRUE.equals(answer.getIsAccepted()));
   }
 }

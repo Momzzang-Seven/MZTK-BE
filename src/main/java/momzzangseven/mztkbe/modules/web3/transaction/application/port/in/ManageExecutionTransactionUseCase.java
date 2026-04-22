@@ -36,6 +36,8 @@ public interface ManageExecutionTransactionUseCase {
 
   long reserveNextNonce(String fromAddress);
 
+  long loadPendingNonce(String fromAddress);
+
   void recordAudit(ExecutionTransactionAuditCommand command);
 
   ExecutionTransactionBroadcastResult broadcast(String rawTx);

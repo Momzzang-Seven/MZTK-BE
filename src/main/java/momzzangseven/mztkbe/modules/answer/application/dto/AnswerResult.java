@@ -14,10 +14,14 @@ public record AnswerResult(
     boolean accepted,
     long likeCount,
     boolean liked,
-    List<String> imageUrls,
+    List<AnswerImageResult.AnswerImageSlot> images,
     AnswerExecutionResumeView web3Execution,
     LocalDateTime createdAt,
     LocalDateTime updatedAt) {
+
+  public AnswerResult {
+    images = images == null ? List.of() : images;
+  }
 
   public static AnswerResult from(
       Answer answer,
@@ -25,7 +29,7 @@ public record AnswerResult(
       String profileImageUrl,
       long likeCount,
       boolean liked,
-      List<String> imageUrls,
+      List<AnswerImageResult.AnswerImageSlot> images,
       AnswerExecutionResumeView web3Execution) {
     return new AnswerResult(
         answer.getId(),
@@ -36,7 +40,7 @@ public record AnswerResult(
         answer.getIsAccepted(),
         likeCount,
         liked,
-        imageUrls == null ? List.of() : imageUrls,
+        images,
         web3Execution,
         answer.getCreatedAt(),
         answer.getUpdatedAt());

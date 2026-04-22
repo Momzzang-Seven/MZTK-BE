@@ -181,11 +181,20 @@ async function setUserXpInDb(userId: number, xp: number): Promise<void> {
   await client.connect();
   try {
     await client.query(
-      `UPDATE user_progress
-          SET available_xp = $1,
-              lifetime_xp  = GREATEST(lifetime_xp, $1),
-              updated_at   = NOW()
-        WHERE user_id = $2`,
+      `INSERT INTO user_progress (
+          user_id,
+          level,
+          available_xp,
+          lifetime_xp,
+          created_at,
+          updated_at
+        )
+        VALUES ($2, 1, $1, $1, NOW(), NOW())
+        ON CONFLICT (user_id)
+        DO UPDATE
+          SET available_xp = EXCLUDED.available_xp,
+              lifetime_xp = GREATEST(user_progress.lifetime_xp, EXCLUDED.lifetime_xp),
+              updated_at = NOW()`,
       [xp, userId]
     );
   } finally {

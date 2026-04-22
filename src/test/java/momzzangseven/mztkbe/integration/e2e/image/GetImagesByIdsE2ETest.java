@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -39,7 +40,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
  *   <li>[E-5] Unknown referenceType enum → 400 VALIDATION_001
  *   <li>[E-6] Internal-only referenceType (MARKET_STORE_THUMB) → 400 IMAGE_006
  *   <li>[E-7] Single COMPLETED image → 200 + response shape verification
- *   <li>[E-8] Multiple images (COMPLETED + PENDING) → 200 + finalObjectKey null check
+ *   <li>[E-8] Multiple images (COMPLETED + PENDING) → 200 + imageUrl null check
  *   <li>[E-9] Non-existent id soft-miss → 200 + images=[]
  *   <li>[E-10] Image owned by another user → 403 IMAGE_009
  *   <li>[E-11] Mismatched referenceId → 403 IMAGE_009
@@ -56,6 +57,9 @@ class GetImagesByIdsE2ETest extends E2ETestBase {
 
   @Autowired private ImageJpaRepository imageJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
+
+  @Value("${cloud.aws.s3.url-prefix}")
+  private String urlPrefix;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -277,14 +281,15 @@ class GetImagesByIdsE2ETest extends E2ETestBase {
     assertThat(img.at("/referenceType").asText()).isEqualTo("COMMUNITY_FREE");
     assertThat(img.at("/referenceId").asLong()).isEqualTo(100L);
     assertThat(img.at("/status").asText()).isEqualTo("COMPLETED");
-    assertThat(img.at("/finalObjectKey").asText()).isEqualTo("public/community/free/test.webp");
+    assertThat(img.at("/imageUrl").asText())
+        .isEqualTo(urlPrefix + "public/community/free/test.webp");
     assertThat(img.at("/imgOrder").asInt()).isEqualTo(1);
     assertThat(img.at("/createdAt").asText()).isNotBlank();
     assertThat(img.at("/updatedAt").asText()).isNotBlank();
   }
 
   @Test
-  @DisplayName("[E-8] 복수 이미지(COMPLETED + PENDING) — 200 + finalObjectKey null 여부 검증")
+  @DisplayName("[E-8] 복수 이미지(COMPLETED + PENDING) — 200 + imageUrl null 여부 검증")
   void getImages_returns200_withMultipleImagesIncludingPending() throws Exception {
     // given
     Long completedId =
@@ -303,12 +308,12 @@ class GetImagesByIdsE2ETest extends E2ETestBase {
     JsonNode completedImg =
         images.get(0).at("/imageId").asLong() == completedId ? images.get(0) : images.get(1);
     assertThat(completedImg.at("/status").asText()).isEqualTo("COMPLETED");
-    assertThat(completedImg.at("/finalObjectKey").asText()).isNotBlank();
+    assertThat(completedImg.at("/imageUrl").asText()).isNotBlank();
 
     JsonNode pendingImg =
         images.get(0).at("/imageId").asLong() == pendingId ? images.get(0) : images.get(1);
     assertThat(pendingImg.at("/status").asText()).isEqualTo("PENDING");
-    assertThat(pendingImg.at("/finalObjectKey").isNull()).isTrue();
+    assertThat(pendingImg.at("/imageUrl").isNull()).isTrue();
   }
 
   @Test

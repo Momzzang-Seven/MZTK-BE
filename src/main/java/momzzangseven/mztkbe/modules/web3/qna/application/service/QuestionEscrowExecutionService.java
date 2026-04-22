@@ -25,17 +25,8 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-@Service
 @RequiredArgsConstructor
-@Transactional
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
 public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUseCase {
 
   private final PrecheckQuestionFundingPort precheckQuestionFundingPort;
@@ -76,7 +67,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             command.requesterUserId(),
             null,
             command.postId(),
-            null,
             null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
@@ -125,7 +115,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             null,
             command.postId(),
             null,
-            null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
             questionHash,
@@ -148,7 +137,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             command.requesterUserId(),
             null,
             command.postId(),
-            null,
             null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
@@ -180,7 +168,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             command.answerWriterUserId(),
             command.postId(),
             command.answerId(),
-            null,
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
             question.getQuestionHash(),

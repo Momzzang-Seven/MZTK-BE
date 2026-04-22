@@ -26,10 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/users/me/web3/execution-intents")
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class ExecutionIntentController {
 
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;

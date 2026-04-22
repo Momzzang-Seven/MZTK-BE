@@ -7,7 +7,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResu
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionResumeViewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-@ConditionalOnBean(GetQnaExecutionResumeViewUseCase.class)
+@ConditionalOnUserExecutionEnabled
 public class QuestionExecutionResumeAdapter implements LoadQuestionExecutionResumePort {
 
   private final GetQnaExecutionResumeViewUseCase getQnaExecutionResumeViewUseCase;
