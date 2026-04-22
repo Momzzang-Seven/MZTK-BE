@@ -11,9 +11,11 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminOnchainQues
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRefundReviewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementReviewResult;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.ExecutionAuthority;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalQuestionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.RefundContext;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.SettlementContext;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 
 final class QnaAdminReviewDecider {
@@ -64,18 +66,14 @@ final class QnaAdminReviewDecider {
             && localQuestion.content() != null
             && onchainQuestion
                 .getQuestionHash()
-                .equals(
-                    momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory.hash(
-                        localQuestion.content()));
+                .equals(QnaContentHashFactory.hash(localQuestion.content()));
     boolean answerHashMatches =
         localAnswer != null
             && onchainAnswer != null
             && localAnswer.content() != null
             && onchainAnswer
                 .getContentHash()
-                .equals(
-                    momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory.hash(
-                        localAnswer.content()));
+                .equals(QnaContentHashFactory.hash(localAnswer.content()));
     boolean questionConflict = context.activeQuestionIntent().isPresent();
     boolean answerConflict = context.activeAnswerIntent().isPresent();
 
@@ -341,10 +339,7 @@ final class QnaAdminReviewDecider {
         .orElse(null);
   }
 
-  private static QnaAdminExecutionAuthorityView authorityView(
-      momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort
-              .ExecutionAuthority
-          authority) {
+  private static QnaAdminExecutionAuthorityView authorityView(ExecutionAuthority authority) {
     return new QnaAdminExecutionAuthorityView(
         authority.signerAddress(), authority.relayerRegistered(), false, AUTHORITY_MODEL);
   }

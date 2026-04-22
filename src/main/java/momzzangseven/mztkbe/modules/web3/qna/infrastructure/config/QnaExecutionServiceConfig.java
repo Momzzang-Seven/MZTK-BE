@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.config;
 
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -68,9 +69,7 @@ public class QnaExecutionServiceConfig {
 
   @Bean
   GetQnaExecutionResumeViewUseCase getQnaExecutionResumeViewUseCase(
-      momzzangseven.mztkbe.modules.web3.execution.application.port.in
-              .GetLatestExecutionIntentSummaryUseCase
-          getLatestExecutionIntentSummaryUseCase) {
+      GetLatestExecutionIntentSummaryUseCase getLatestExecutionIntentSummaryUseCase) {
     return new GetQnaExecutionResumeViewService(getLatestExecutionIntentSummaryUseCase);
   }
 
