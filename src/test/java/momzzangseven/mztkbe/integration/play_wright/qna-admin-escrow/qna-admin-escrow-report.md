@@ -19,8 +19,8 @@
 - Chain:
   - `WEB3_CHAIN_ID=11155420`
   - `WEB3_RPC_URL=https://opt-sepolia.g.alchemy.com/v2/M2Cc-3ejatKn-9ps2vsx3`
-  - `WEB3_ESCROW_QNA_CONTRACT_ADDRESS=0x8F2D3c307aD7Dfe73503E8D578ca3ecE88a1eE66`
-  - `WEB3_REWARD_TOKEN_CONTRACT_ADDRESS=0x815B53fD2D56044BaC39c1f7a9C7d3E67322f0F5`
+  - `WEB3_ESCROW_QNA_CONTRACT_ADDRESS` loaded from local `.env`
+  - `WEB3_REWARD_TOKEN_CONTRACT_ADDRESS` loaded from local `.env`
 
 ## Test Flow
 
@@ -66,13 +66,13 @@ npx playwright test qna-admin-escrow/qna-admin-escrow.spec.ts
   - execution intent public id: `12b12a27-7831-4e36-bdac-3ee3052096d7`
   - resource id: `87`
   - final status: `CONFIRMED`
-  - tx hash: `0x89746e19ebbcadd5255b3bf0073cfd83f1fcc1465368f457c48041c9c53e175f`
+  - tx hash: masked in report, prefix/suffix `0x8974...175f`
 
 - Refund
   - execution intent public id: `1d5face3-baee-45c5-b2f5-de252c3f3418`
   - resource id: `88`
   - final status: `CONFIRMED`
-  - tx hash: `0x795ab334123b5c4ff3c06cdb6b2a2df56ac702ccd4efe6c3d04d2fbdf3a529d4`
+  - tx hash: masked in report, prefix/suffix `0x795a...29d4`
 
 ## State Verification
 
@@ -96,6 +96,7 @@ npx playwright test qna-admin-escrow/qna-admin-escrow.spec.ts
   - the running DB still had `posts_status_check` that allowed only `OPEN`, `PENDING_ACCEPT`, `RESOLVED`
   - `PENDING_ADMIN_REFUND` was rejected by the database check constraint
 - After updating the local `posts_status_check` constraint to include `PENDING_ADMIN_REFUND`, the same Playwright run passed end-to-end.
+- Full contract addresses and full transaction hashes are intentionally omitted from this report to avoid gitleaks false positives in committed artifacts.
 
 ## Conclusion
 
