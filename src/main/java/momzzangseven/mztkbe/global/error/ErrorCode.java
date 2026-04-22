@@ -313,6 +313,9 @@ public enum ErrorCode {
       "Invalid comment hard-delete configuration",
       HttpStatus.INTERNAL_SERVER_ERROR // 500
       ),
+  COMMENT_DEPTH_EXCEEDED(
+      "COMMENT_008", "Replies cannot have nested replies", HttpStatus.BAD_REQUEST // 400
+      ),
   // ========================================
   // Answer Errors (ANSWER_xxx)
   // ========================================

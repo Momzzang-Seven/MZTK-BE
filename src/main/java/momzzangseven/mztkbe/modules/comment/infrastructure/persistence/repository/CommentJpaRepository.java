@@ -22,6 +22,13 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
       "SELECT c FROM CommentEntity c WHERE c.parent.id = :parentId ORDER BY c.createdAt ASC, c.id ASC")
   Page<CommentEntity> findRepliesByParentId(@Param("parentId") Long parentId, Pageable pageable);
 
+  @Query(
+      "SELECT c.parent.id AS parentId, COUNT(c.id) AS replyCount "
+          + "FROM CommentEntity c "
+          + "WHERE c.parent.id IN :parentIds "
+          + "GROUP BY c.parent.id")
+  List<DirectReplyCount> countDirectRepliesByParentIds(@Param("parentIds") List<Long> parentIds);
+
   @Modifying(clearAutomatically = true)
   @Query(
       value =
@@ -37,4 +44,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
   @Modifying(clearAutomatically = true)
   @Query("DELETE FROM CommentEntity c WHERE c.parent.id IN :parentIds")
   void deleteByParentIdIn(@Param("parentIds") List<Long> parentIds);
+
+  interface DirectReplyCount {
+    Long getParentId();
+
+    Long getReplyCount();
+  }
 }
