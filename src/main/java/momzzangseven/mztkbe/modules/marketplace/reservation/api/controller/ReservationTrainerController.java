@@ -10,10 +10,13 @@ import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ApproveReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationDetailResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationSummaryResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ApproveReservationCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.ApproveReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * <ul>
  *   <li>GET /marketplace/trainer/reservations — trainer's incoming reservation list
+ *   <li>GET /marketplace/trainer/reservations/{id} — reservation detail (trainer view)
  *   <li>PATCH /marketplace/trainer/reservations/{id}/approve — approve a pending reservation
  *   <li>PATCH /marketplace/trainer/reservations/{id}/reject — reject a pending reservation
  * </ul>
@@ -39,6 +43,7 @@ import org.springframework.web.bind.annotation.*;
 public class ReservationTrainerController {
 
   private final GetTrainerReservationsUseCase getTrainerReservationsUseCase;
+  private final GetReservationDetailUseCase getReservationDetailUseCase;
   private final ApproveReservationUseCase approveReservationUseCase;
   private final RejectReservationUseCase rejectReservationUseCase;
 
@@ -55,6 +60,17 @@ public class ReservationTrainerController {
             .toList();
     return ResponseEntity.ok(ApiResponse.success(response));
   }
+
+  @GetMapping("/{id}")
+  public ResponseEntity<ApiResponse<ReservationDetailResponseDTO>> getReservationDetail(
+      @PathVariable @Positive Long id, @AuthenticationPrincipal Long trainerId) {
+    requireTrainerId(trainerId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            ReservationDetailResponseDTO.from(
+                getReservationDetailUseCase.execute(new GetReservationQuery(id, trainerId)))));
+  }
+
   @PatchMapping("/{id}/approve")
   public ResponseEntity<ApiResponse<ApproveReservationResponseDTO>> approveReservation(
       @PathVariable @Positive Long id, @AuthenticationPrincipal Long trainerId) {

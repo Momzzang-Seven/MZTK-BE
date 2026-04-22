@@ -8,4 +8,10 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
  * @param trainerId the authenticated trainer's ID
  * @param status optional status filter; null means all statuses
  */
-public record GetTrainerReservationsQuery(Long trainerId, ReservationStatus status) {}
+public record GetTrainerReservationsQuery(Long trainerId, ReservationStatus status) {
+
+  public void validate() {
+    if (trainerId == null || trainerId <= 0)
+      throw new IllegalArgumentException("trainerId must be a positive number");
+  }
+}

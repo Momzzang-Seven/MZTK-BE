@@ -80,9 +80,7 @@ public class ReservationUserController {
       @RequestParam(required = false) ReservationStatus status) {
     requireUserId(userId);
     List<ReservationSummaryResponseDTO> response =
-        getUserReservationsUseCase
-            .execute(new GetUserReservationsQuery(userId, status))
-            .stream()
+        getUserReservationsUseCase.execute(new GetUserReservationsQuery(userId, status)).stream()
             .map(ReservationSummaryResponseDTO::from)
             .toList();
     return ResponseEntity.ok(ApiResponse.success(response));

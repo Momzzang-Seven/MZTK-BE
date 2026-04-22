@@ -24,6 +24,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
   @Override
   @Transactional(readOnly = true)
   public List<ReservationSummaryResult> execute(GetTrainerReservationsQuery query) {
+    query.validate();
     return loadReservationPort.findByTrainerId(query.trainerId(), query.status()).stream()
         .map(ReservationSummaryResult::from)
         .toList();

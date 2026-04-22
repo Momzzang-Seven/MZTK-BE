@@ -474,6 +474,232 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
   }
 
   // ===================================================================
+  // Query: reservation list and detail
+  // ===================================================================
+
+  @Nested
+  @DisplayName("예약 목록 및 상세 조회")
+  class ReservationQueryApis {
+
+    @Test
+    @DisplayName("GET /me/reservations - 유저 예약 목록 조회: 본인 예약만 반환")
+    void getMyReservations_returnsOnlyOwnReservations() throws Exception {
+      TestUser trainer = signupAndLogin("trainer-qlist");
+      promoteToTrainer(trainer.userId());
+      long storeId = insertStore(trainer.userId());
+      long classId = insertClass(trainer.userId(), storeId, "Query List PT", 10_000);
+      LocalDate sessionDate = nextWeekday(DayOfWeek.MONDAY);
+      long slotId = insertSlot(classId, DayOfWeek.MONDAY, LocalTime.of(8, 0), 5, 50);
+
+      TestUser owner = signupAndLogin("user-qlist-owner");
+      TestUser other = signupAndLogin("user-qlist-other");
+
+      long reservationId =
+          createReservation(owner, classId, slotId, sessionDate, "08:00:00", 10_000);
+
+      // owner can see their own reservation
+      ResponseEntity<String> ownerRes =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/me/reservations",
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(owner.accessToken())),
+              String.class);
+
+      assertThat(ownerRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode ownerData = parse(ownerRes).at("/data");
+      assertThat(ownerData.isArray()).isTrue();
+      assertThat(ownerData.size()).isGreaterThanOrEqualTo(1);
+      boolean found = false;
+      for (JsonNode node : ownerData) {
+        if (node.at("/reservationId").asLong() == reservationId) {
+          found = true;
+          break;
+        }
+      }
+      assertThat(found).as("owner's reservation should appear in their list").isTrue();
+
+      // other user's list should NOT contain owner's reservation
+      ResponseEntity<String> otherRes =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/me/reservations",
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(other.accessToken())),
+              String.class);
+
+      assertThat(otherRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode otherData = parse(otherRes).at("/data");
+      for (JsonNode node : otherData) {
+        assertThat(node.at("/reservationId").asLong())
+            .as("other user must not see owner's reservation")
+            .isNotEqualTo(reservationId);
+      }
+    }
+
+    @Test
+    @DisplayName("GET /me/reservations?status=PENDING - 상태 필터 적용")
+    void getMyReservations_withStatusFilter_returnsFilteredList() throws Exception {
+      TestUser trainer = signupAndLogin("trainer-qfilter");
+      promoteToTrainer(trainer.userId());
+      long storeId = insertStore(trainer.userId());
+      long classId = insertClass(trainer.userId(), storeId, "Filter PT", 12_000);
+      LocalDate sessionDate = nextWeekday(DayOfWeek.WEDNESDAY);
+      long slotId = insertSlot(classId, DayOfWeek.WEDNESDAY, LocalTime.of(9, 0), 5, 50);
+
+      TestUser user = signupAndLogin("user-qfilter");
+      long reservationId =
+          createReservation(user, classId, slotId, sessionDate, "09:00:00", 12_000);
+
+      // status=PENDING → should include the new reservation
+      ResponseEntity<String> pendingRes =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/me/reservations?status=PENDING",
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+              String.class);
+
+      assertThat(pendingRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode data = parse(pendingRes).at("/data");
+      boolean found = false;
+      for (JsonNode node : data) {
+        if (node.at("/reservationId").asLong() == reservationId) {
+          assertThat(node.at("/status").asText()).isEqualTo("PENDING");
+          found = true;
+        }
+      }
+      assertThat(found).as("PENDING reservation should appear in filtered result").isTrue();
+
+      // status=APPROVED → should NOT include it (still PENDING)
+      ResponseEntity<String> approvedRes =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/me/reservations?status=APPROVED",
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+              String.class);
+
+      assertThat(approvedRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      for (JsonNode node : parse(approvedRes).at("/data")) {
+        assertThat(node.at("/reservationId").asLong())
+            .as("PENDING reservation must not appear in APPROVED filter")
+            .isNotEqualTo(reservationId);
+      }
+    }
+
+    @Test
+    @DisplayName("GET /marketplace/reservations/{id} - 예약 상세 조회: 소유 유저가 조회하면 성공")
+    void getReservationDetail_byOwnerUser_returnsFullDetail() throws Exception {
+      TestUser trainer = signupAndLogin("trainer-qdetail");
+      promoteToTrainer(trainer.userId());
+      long storeId = insertStore(trainer.userId());
+      long classId = insertClass(trainer.userId(), storeId, "Detail PT", 15_000);
+      LocalDate sessionDate = nextWeekday(DayOfWeek.THURSDAY);
+      long slotId = insertSlot(classId, DayOfWeek.THURSDAY, LocalTime.of(11, 0), 5, 60);
+
+      TestUser user = signupAndLogin("user-qdetail");
+      long reservationId =
+          createReservation(user, classId, slotId, sessionDate, "11:00:00", 15_000);
+
+      ResponseEntity<String> detailRes =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/reservations/" + reservationId,
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+              String.class);
+
+      assertThat(detailRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode data = parse(detailRes).at("/data");
+      assertThat(data.at("/reservationId").asLong()).isEqualTo(reservationId);
+      assertThat(data.at("/status").asText()).isEqualTo("PENDING");
+      assertThat(data.at("/orderId").asText()).isNotBlank();
+      assertThat(data.at("/txHash").asText()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("GET /marketplace/trainer/reservations/{id} - 담당 트레이너가 예약 상세 조회하면 성공")
+    void getReservationDetail_byTrainer_returnsFullDetail() throws Exception {
+      TestUser trainer = signupAndLogin("trainer-qdetail2");
+      promoteToTrainer(trainer.userId());
+      long storeId = insertStore(trainer.userId());
+      long classId = insertClass(trainer.userId(), storeId, "Detail PT2", 20_000);
+      LocalDate sessionDate = nextWeekday(DayOfWeek.FRIDAY);
+      long slotId = insertSlot(classId, DayOfWeek.FRIDAY, LocalTime.of(14, 0), 5, 60);
+
+      TestUser user = signupAndLogin("user-qdetail2");
+      long reservationId =
+          createReservation(user, classId, slotId, sessionDate, "14:00:00", 20_000);
+
+      ResponseEntity<String> detailRes =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/trainer/reservations/" + reservationId,
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
+              String.class);
+
+      assertThat(detailRes.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode data = parse(detailRes).at("/data");
+      assertThat(data.at("/reservationId").asLong()).isEqualTo(reservationId);
+    }
+
+    @Test
+    @DisplayName("GET /marketplace/reservations/{id} - 제3자가 상세 조회 시 403")
+    void getReservationDetail_byThirdParty_returns403() throws Exception {
+      TestUser trainer = signupAndLogin("trainer-qauth");
+      promoteToTrainer(trainer.userId());
+      long storeId = insertStore(trainer.userId());
+      long classId = insertClass(trainer.userId(), storeId, "Auth Detail PT", 10_000);
+      LocalDate sessionDate = nextWeekday(DayOfWeek.MONDAY);
+      long slotId = insertSlot(classId, DayOfWeek.MONDAY, LocalTime.of(7, 0), 5, 50);
+
+      TestUser owner = signupAndLogin("user-qauth-owner");
+      TestUser intruder = signupAndLogin("user-qauth-intruder");
+      long reservationId =
+          createReservation(owner, classId, slotId, sessionDate, "07:00:00", 10_000);
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/reservations/" + reservationId,
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(intruder.accessToken())),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("GET /marketplace/trainer/reservations - 트레이너 수강 신청 목록 조회")
+    void getTrainerReservations_returnsOwnReservations() throws Exception {
+      TestUser trainer = signupAndLogin("trainer-qtlist");
+      promoteToTrainer(trainer.userId());
+      long storeId = insertStore(trainer.userId());
+      long classId = insertClass(trainer.userId(), storeId, "Trainer List PT", 10_000);
+      LocalDate sessionDate = nextWeekday(DayOfWeek.TUESDAY);
+      long slotId = insertSlot(classId, DayOfWeek.TUESDAY, LocalTime.of(10, 0), 5, 60);
+
+      TestUser user = signupAndLogin("user-qtlist");
+      long reservationId =
+          createReservation(user, classId, slotId, sessionDate, "10:00:00", 10_000);
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl() + "/marketplace/trainer/reservations",
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+      JsonNode data = parse(res).at("/data");
+      assertThat(data.isArray()).isTrue();
+      boolean found = false;
+      for (JsonNode node : data) {
+        if (node.at("/reservationId").asLong() == reservationId) {
+          found = true;
+          break;
+        }
+      }
+      assertThat(found).as("trainer should see the reservation in their list").isTrue();
+    }
+  }
+
+  // ===================================================================
   // Private helpers
   // ===================================================================
 

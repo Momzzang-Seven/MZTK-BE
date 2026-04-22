@@ -1819,7 +1819,7 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // TC-RV-12: 전체 라이프사이클 — 생성 → 승인 → 반려 불가 (이미 APPROVED)
+  // TC-RV-12: APPROVED 예약을 다시 반려하면 409 INVALID_STATUS를 반환한다
   // ──────────────────────────────────────────────────────────────────────────
   test("TC-RV-12: APPROVED 예약을 다시 반려하면 409 INVALID_STATUS를 반환한다", async ({
     request,
@@ -1854,5 +1854,177 @@ test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () =>
     const body = await rejectRes.json();
     expect(body.code).toBe("MARKETPLACE_018");
     console.log(`[TC-RV-12] APPROVED 상태에서 반려 차단 확인. code=${body.code}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-13: 내 예약 목록 조회 — 본인 예약만 반환
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-13: 내 예약 목록 조회 시 본인 예약만 반환된다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "WEDNESDAY", "08:00:00", 10000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "내 예약 목록 조회 실패").toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("SUCCESS");
+    expect(Array.isArray(body.data), "data가 배열이 아님").toBe(true);
+
+    const found = body.data.some(
+      (r: { reservationId: number }) => r.reservationId === reservationId
+    );
+    expect(found, "본인 예약이 목록에 없음").toBe(true);
+    console.log(`[TC-RV-13] 내 예약 목록 조회 성공. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-14: 내 예약 목록 — status=PENDING 필터
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-14: status=PENDING 필터 적용 시 PENDING 예약만 반환된다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "THURSDAY", "09:00:00", 12000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations?status=PENDING`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "PENDING 필터 조회 실패").toBe(200);
+    const body = await res.json();
+    const found = body.data.some(
+      (r: { reservationId: number; status: string }) =>
+        r.reservationId === reservationId && r.status === "PENDING"
+    );
+    expect(found, "PENDING 예약이 필터 결과에 없음").toBe(true);
+
+    // APPROVED 필터에는 포함되지 않아야 함
+    const approvedRes = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations?status=APPROVED`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    const approvedBody = await approvedRes.json();
+    const notFound = approvedBody.data.every(
+      (r: { reservationId: number }) => r.reservationId !== reservationId
+    );
+    expect(notFound, "PENDING 예약이 APPROVED 필터에 노출됨").toBe(true);
+    console.log(`[TC-RV-14] 상태 필터 정상 동작. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-15: 예약 상세 조회 — 소유 유저 성공
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-15: 예약 소유자가 상세 조회 시 200과 전체 필드를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "FRIDAY", "11:00:00", 15000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "예약 상세 조회 실패").toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("SUCCESS");
+    const data = body.data;
+    expect(data.reservationId).toBe(reservationId);
+    expect(data.status).toBe("PENDING");
+    expect(data.orderId, "orderId 없음").toBeTruthy();
+    expect(data.txHash, "txHash 없음").toBeTruthy();
+    console.log(`[TC-RV-15] 예약 상세 조회 성공. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-16: 예약 상세 조회 — 담당 트레이너 성공
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-16: 담당 트레이너가 예약 상세 조회 시 200을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "MONDAY", "13:00:00", 18000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${trainerToken}` } }
+    );
+
+    expect(res.status(), "트레이너 상세 조회 실패").toBe(200);
+    const data = (await res.json()).data;
+    expect(data.reservationId).toBe(reservationId);
+    console.log(`[TC-RV-16] 트레이너 예약 상세 조회 성공. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-17: 예약 상세 조회 — 제3자 접근 시 403
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-17: 제3자가 예약 상세 조회 시 403 Forbidden을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "TUESDAY", "15:00:00", 10000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    // 제3자 계정 생성
+    const intruderEmail = `intruder-rv17-${Date.now()}@mztk-test.com`;
+    const intruderToken = await signUpAndLoginAsUser(request, intruderEmail);
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${intruderToken}` } }
+    );
+
+    expect(res.status(), "제3자 접근인데 403 아님").toBe(403);
+    console.log(`[TC-RV-17] 제3자 접근 차단 확인: ${res.status()}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-18: 트레이너 수강 신청 목록 조회
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-18: 트레이너가 수강 신청 목록 조회 시 본인 클래스 예약만 반환된다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "WEDNESDAY", "10:00:00", 20000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations`,
+      { headers: { Authorization: `Bearer ${trainerToken}` } }
+    );
+
+    expect(res.status(), "트레이너 목록 조회 실패").toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("SUCCESS");
+    expect(Array.isArray(body.data)).toBe(true);
+
+    const found = body.data.some(
+      (r: { reservationId: number }) => r.reservationId === reservationId
+    );
+    expect(found, "트레이너 목록에 예약이 없음").toBe(true);
+    console.log(`[TC-RV-18] 트레이너 수강 신청 목록 조회 성공. reservationId=${reservationId}`);
   });
 });
