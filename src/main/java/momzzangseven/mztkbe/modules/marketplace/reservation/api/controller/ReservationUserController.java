@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.api.controller;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
@@ -13,11 +14,18 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CancelPendin
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CompleteReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CreateReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CreateReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationDetailResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationSummaryResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CancelPendingReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CompleteReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetReservationDetailUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetUserReservationsUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -27,6 +35,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -34,6 +43,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <ul>
  *   <li>GET /marketplace/classes/{classId}/reservation-info — 4-week availability (public)
+ *   <li>GET /marketplace/me/reservations — user's own reservation list
+ *   <li>GET /marketplace/reservations/{id} — reservation detail (user or trainer)
  *   <li>POST /marketplace/classes/{classId}/reservations — create reservation (user)
  *   <li>PATCH /marketplace/me/reservations/{id}/cancel — cancel pending (user)
  *   <li>PATCH /marketplace/me/reservations/{id}/complete — complete & settle (user)
@@ -47,6 +58,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReservationUserController {
 
   private final GetClassReservationInfoUseCase getClassReservationInfoUseCase;
+  private final GetUserReservationsUseCase getUserReservationsUseCase;
+  private final GetReservationDetailUseCase getReservationDetailUseCase;
   private final CreateReservationUseCase createReservationUseCase;
   private final CancelPendingReservationUseCase cancelPendingReservationUseCase;
   private final CompleteReservationUseCase completeReservationUseCase;
@@ -59,6 +72,30 @@ public class ReservationUserController {
             GetClassReservationInfoResponseDTO.from(
                 getClassReservationInfoUseCase.execute(
                     new GetClassReservationInfoQuery(classId)))));
+  }
+
+  @GetMapping("/me/reservations")
+  public ResponseEntity<ApiResponse<List<ReservationSummaryResponseDTO>>> getMyReservations(
+      @AuthenticationPrincipal Long userId,
+      @RequestParam(required = false) ReservationStatus status) {
+    requireUserId(userId);
+    List<ReservationSummaryResponseDTO> response =
+        getUserReservationsUseCase
+            .execute(new GetUserReservationsQuery(userId, status))
+            .stream()
+            .map(ReservationSummaryResponseDTO::from)
+            .toList();
+    return ResponseEntity.ok(ApiResponse.success(response));
+  }
+
+  @GetMapping("/reservations/{id}")
+  public ResponseEntity<ApiResponse<ReservationDetailResponseDTO>> getReservationDetail(
+      @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
+    requireUserId(userId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            ReservationDetailResponseDTO.from(
+                getReservationDetailUseCase.execute(new GetReservationQuery(id, userId)))));
   }
 
   @PostMapping("/classes/{classId}/reservations")

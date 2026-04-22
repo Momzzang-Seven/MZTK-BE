@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
 /**
  * Output port for reading reservation data from persistence.
@@ -61,4 +62,22 @@ public interface LoadReservationPort {
 
   /** Returns true if the slot has any reservation (active or historical). */
   boolean hasAnyReservationHistory(Long slotId);
+
+  /**
+   * Fetch all reservations belonging to the given user, ordered by reservation_date DESC.
+   *
+   * @param userId the user's ID
+   * @param status optional status filter; if null, all statuses are returned
+   * @return list of matching reservations
+   */
+  List<Reservation> findByUserId(Long userId, ReservationStatus status);
+
+  /**
+   * Fetch all reservations assigned to the given trainer, ordered by reservation_date DESC.
+   *
+   * @param trainerId the trainer's ID
+   * @param status optional status filter; if null, all statuses are returned
+   * @return list of matching reservations
+   */
+  List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status);
 }
