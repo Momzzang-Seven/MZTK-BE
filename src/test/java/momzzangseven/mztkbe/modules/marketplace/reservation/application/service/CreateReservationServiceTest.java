@@ -20,12 +20,12 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -44,7 +44,7 @@ class CreateReservationServiceTest {
 
   @Mock private GetClassSlotInfoUseCase getClassSlotInfoUseCase;
   @Mock private GetClassInfoUseCase getClassInfoUseCase;
-  @Mock private LoadTrainerSanctionPort loadTrainerSanctionPort;
+  @Mock private CheckTrainerSanctionPort checkTrainerSanctionPort;
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
@@ -112,7 +112,7 @@ class CreateReservationServiceTest {
       // given
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID)).willReturn(0);
       given(submitEscrowTransactionPort.submitPurchase(any(), any(), any(), any()))
           .willReturn("0xTXHASH");
@@ -140,7 +140,7 @@ class CreateReservationServiceTest {
       // given
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID))
           .willReturn(CAPACITY); // 이미 가득 참
 
@@ -171,7 +171,7 @@ class CreateReservationServiceTest {
 
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
 
       // when & then
       assertThatThrownBy(() -> sut.execute(wrongAmountCmd))
@@ -188,7 +188,7 @@ class CreateReservationServiceTest {
       // given
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
 
       // when & then
       assertThatThrownBy(() -> sut.execute(command))

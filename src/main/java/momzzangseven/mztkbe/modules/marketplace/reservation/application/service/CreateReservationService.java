@@ -16,11 +16,11 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.Marketplace
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +45,7 @@ public class CreateReservationService implements CreateReservationUseCase {
 
   private final GetClassSlotInfoUseCase getClassSlotInfoUseCase;
   private final GetClassInfoUseCase getClassInfoUseCase;
-  private final LoadTrainerSanctionPort loadTrainerSanctionPort;
+  private final CheckTrainerSanctionPort checkTrainerSanctionPort;
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
@@ -108,7 +108,7 @@ public class CreateReservationService implements CreateReservationUseCase {
     }
 
     // 5. Trainer sanction check
-    if (loadTrainerSanctionPort.hasActiveSanction(cls.getTrainerId())) {
+    if (checkTrainerSanctionPort.hasActiveSanction(cls.getTrainerId())) {
       throw new TrainerSuspendedException();
     }
 

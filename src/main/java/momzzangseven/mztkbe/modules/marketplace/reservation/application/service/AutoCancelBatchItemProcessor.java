@@ -2,12 +2,11 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.dto.RecordTrainerStrikeCommand;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.in.RecordTrainerStrikeUseCase;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +28,7 @@ public class AutoCancelBatchItemProcessor {
 
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
-  private final RecordTrainerStrikeUseCase recordTrainerStrikeUseCase;
+  private final RecordTrainerStrikePort recordTrainerStrikePort;
 
   /**
    * Processes a single auto-cancel item in its own isolated transaction.
@@ -42,9 +41,8 @@ public class AutoCancelBatchItemProcessor {
     String refundTxHash = submitEscrowTransactionPort.submitAdminRefund(reservation.getOrderId());
     Reservation cancelled = reservation.timeoutCancel(refundTxHash);
     saveReservationPort.save(cancelled);
-    recordTrainerStrikeUseCase.execute(
-        new RecordTrainerStrikeCommand(
-            reservation.getTrainerId(), TrainerStrikeEvent.REASON_TIMEOUT));
+    recordTrainerStrikePort.recordStrike(
+        reservation.getTrainerId(), TrainerStrikeEvent.REASON_TIMEOUT);
     log.info(
         "AutoCancel processed: reservationId={}, trainerId={}",
         reservation.getId(),
