@@ -15,9 +15,9 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClass
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassSlotPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetSlotReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetSlotReservationInfoUseCase;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,8 +70,7 @@ public class GetClassReservationInfoService implements GetClassReservationInfoUs
         slotIds.stream()
             .collect(
                 java.util.stream.Collectors.toMap(
-                    id -> id,
-                    id -> getSlotReservationInfoUseCase.countActiveReservations(id)));
+                    id -> id, id -> getSlotReservationInfoUseCase.countActiveReservations(id)));
 
     LocalDate today = LocalDate.now(clock);
     LocalDate windowEnd = today.plusDays(DAYS_WINDOW);

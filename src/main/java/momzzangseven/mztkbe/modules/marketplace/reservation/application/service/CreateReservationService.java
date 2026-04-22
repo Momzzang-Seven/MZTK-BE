@@ -9,18 +9,18 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.ClassNotFoundException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationInvalidSlotDateException;
 import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
+import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,10 +77,7 @@ public class CreateReservationService implements CreateReservationUseCase {
     if (!slot.getClassId().equals(command.classId())) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
-          "Slot "
-              + command.slotId()
-              + " does not belong to class "
-              + command.classId());
+          "Slot " + command.slotId() + " does not belong to class " + command.classId());
     }
 
     // 2. Validate date/time against slot schedule

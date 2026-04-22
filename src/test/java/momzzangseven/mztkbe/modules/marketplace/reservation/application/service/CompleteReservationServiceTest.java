@@ -43,6 +43,7 @@ class CompleteReservationServiceTest {
    * fixed point so tests are deterministic regardless of actual wall-clock time.
    */
   private static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
+
   private static final Instant FIXED_NOW = Instant.parse("2025-06-01T03:00:00Z"); // 12:00 KST
   private static final Clock FIXED_CLOCK = Clock.fixed(FIXED_NOW, ZONE);
 
@@ -60,8 +61,9 @@ class CompleteReservationServiceTest {
   @BeforeEach
   void setUp() {
     // Explicit constructor injection so Clock is deterministic in tests.
-    sut = new CompleteReservationService(
-        loadReservationPort, saveReservationPort, submitEscrowTransactionPort, FIXED_CLOCK);
+    sut =
+        new CompleteReservationService(
+            loadReservationPort, saveReservationPort, submitEscrowTransactionPort, FIXED_CLOCK);
   }
 
   /** APPROVED 예약, 수업 시간은 이미 과거(어제). */

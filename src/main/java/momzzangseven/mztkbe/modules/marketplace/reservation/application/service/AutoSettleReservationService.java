@@ -50,10 +50,7 @@ public class AutoSettleReservationService implements AutoSettleReservationUseCas
         processed++;
       } catch (Exception e) {
         log.error(
-            "AutoSettle failed for reservationId={}: {}",
-            reservation.getId(),
-            e.getMessage(),
-            e);
+            "AutoSettle failed for reservationId={}: {}", reservation.getId(), e.getMessage(), e);
       }
     }
     return processed;

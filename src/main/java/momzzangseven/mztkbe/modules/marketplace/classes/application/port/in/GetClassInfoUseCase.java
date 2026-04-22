@@ -6,9 +6,9 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.Marketplace
 /**
  * Input port that exposes class aggregate lookup to other modules.
  *
- * <p>Cross-module callers (e.g., the {@code reservation} module) must use this interface instead
- * of directly referencing the output port {@code LoadClassPort}. This keeps the dependency
- * direction correct: only {@code application/port/in/} is the public API surface of a module.
+ * <p>Cross-module callers (e.g., the {@code reservation} module) must use this interface instead of
+ * directly referencing the output port {@code LoadClassPort}. This keeps the dependency direction
+ * correct: only {@code application/port/in/} is the public API surface of a module.
  */
 public interface GetClassInfoUseCase {
 

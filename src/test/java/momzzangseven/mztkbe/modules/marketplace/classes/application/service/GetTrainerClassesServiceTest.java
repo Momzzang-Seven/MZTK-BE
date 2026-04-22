@@ -17,9 +17,9 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrain
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrainerClassesResult;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
+import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

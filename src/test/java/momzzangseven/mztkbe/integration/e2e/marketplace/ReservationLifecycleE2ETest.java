@@ -32,8 +32,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 /**
  * E2E integration tests for the Marketplace Reservation lifecycle.
  *
- * <p>Covers the full happy-path flow (PENDING → APPROVED → SETTLED / REJECTED) and critical
- * failure cases. Web3 escrow calls are transparently handled by the {@link
+ * <p>Covers the full happy-path flow (PENDING → APPROVED → SETTLED / REJECTED) and critical failure
+ * cases. Web3 escrow calls are transparently handled by the {@link
  * momzzangseven.mztkbe.modules.marketplace.infrastructure.external.web3.EscrowTransactionAdapter}
  * stub, which returns a deterministic fake {@code txHash} — sufficient for verifying DB state
  * transitions without a live blockchain connection.
@@ -85,12 +85,18 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               HttpMethod.POST,
               new HttpEntity<>(
                   Map.of(
-                      "slotId", slotId,
-                      "reservationDate", sessionDate.toString(),
-                      "reservationTime", "10:00:00",
-                      "signedAmount", 50_000,
-                      "delegationSignature", "0x" + "a".repeat(130),
-                      "executionSignature", "0x" + "b".repeat(130)),
+                      "slotId",
+                      slotId,
+                      "reservationDate",
+                      sessionDate.toString(),
+                      "reservationTime",
+                      "10:00:00",
+                      "signedAmount",
+                      50_000,
+                      "delegationSignature",
+                      "0x" + "a".repeat(130),
+                      "executionSignature",
+                      "0x" + "b".repeat(130)),
                   bearerJsonHeaders(user.accessToken())),
               String.class);
 
@@ -154,7 +160,8 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       TestUser user = signupAndLogin("user-reject");
 
-      long reservationId = createReservation(user, classId, slotId, sessionDate, "14:00:00", 30_000);
+      long reservationId =
+          createReservation(user, classId, slotId, sessionDate, "14:00:00", 30_000);
       assertDbStatus(reservationId, "PENDING");
 
       ResponseEntity<String> rejectResponse =
@@ -198,7 +205,8 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       long slotId = insertSlot(classId, DayOfWeek.FRIDAY, LocalTime.of(8, 0), 2, 45);
 
       TestUser user = signupAndLogin("user-cancel");
-      long reservationId = createReservation(user, classId, slotId, sessionDate, "08:00:00", 20_000);
+      long reservationId =
+          createReservation(user, classId, slotId, sessionDate, "08:00:00", 20_000);
 
       ResponseEntity<String> cancelResponse =
           restTemplate.exchange(
@@ -281,12 +289,18 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               HttpMethod.POST,
               new HttpEntity<>(
                   Map.of(
-                      "slotId", slotId,
-                      "reservationDate", wrongDate.toString(),
-                      "reservationTime", "09:00:00",
-                      "signedAmount", 50_000,
-                      "delegationSignature", "0x" + "a".repeat(130),
-                      "executionSignature", "0x" + "b".repeat(130)),
+                      "slotId",
+                      slotId,
+                      "reservationDate",
+                      wrongDate.toString(),
+                      "reservationTime",
+                      "09:00:00",
+                      "signedAmount",
+                      50_000,
+                      "delegationSignature",
+                      "0x" + "a".repeat(130),
+                      "executionSignature",
+                      "0x" + "b".repeat(130)),
                   bearerJsonHeaders(user.accessToken())),
               String.class);
 
@@ -313,12 +327,18 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               HttpMethod.POST,
               new HttpEntity<>(
                   Map.of(
-                      "slotId", slotId,
-                      "reservationDate", sessionDate.toString(),
-                      "reservationTime", "09:00:00",
-                      "signedAmount", 99_999, // wrong amount
-                      "delegationSignature", "0x" + "a".repeat(130),
-                      "executionSignature", "0x" + "b".repeat(130)),
+                      "slotId",
+                      slotId,
+                      "reservationDate",
+                      sessionDate.toString(),
+                      "reservationTime",
+                      "09:00:00",
+                      "signedAmount",
+                      99_999, // wrong amount
+                      "delegationSignature",
+                      "0x" + "a".repeat(130),
+                      "executionSignature",
+                      "0x" + "b".repeat(130)),
                   bearerJsonHeaders(user.accessToken())),
               String.class);
 
@@ -338,7 +358,8 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       long slotId = insertSlot(classId, DayOfWeek.THURSDAY, LocalTime.of(16, 0), 3, 40);
 
       TestUser user = signupAndLogin("user-status");
-      long reservationId = createReservation(user, classId, slotId, sessionDate, "16:00:00", 20_000);
+      long reservationId =
+          createReservation(user, classId, slotId, sessionDate, "16:00:00", 20_000);
 
       // try to complete without approval
       ResponseEntity<String> response =
@@ -365,7 +386,8 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       TestUser owner = signupAndLogin("user-owner");
       TestUser intruder = signupAndLogin("user-intruder");
-      long reservationId = createReservation(owner, classId, slotId, sessionDate, "07:00:00", 10_000);
+      long reservationId =
+          createReservation(owner, classId, slotId, sessionDate, "07:00:00", 10_000);
 
       ResponseEntity<String> response =
           restTemplate.exchange(
@@ -431,12 +453,18 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
               HttpMethod.POST,
               new HttpEntity<>(
                   Map.of(
-                      "slotId", slotId,
-                      "reservationDate", sessionDate.toString(),
-                      "reservationTime", "12:00:00",
-                      "signedAmount", 10_000,
-                      "delegationSignature", "0x" + "a".repeat(130),
-                      "executionSignature", "0x" + "b".repeat(130)),
+                      "slotId",
+                      slotId,
+                      "reservationDate",
+                      sessionDate.toString(),
+                      "reservationTime",
+                      "12:00:00",
+                      "signedAmount",
+                      10_000,
+                      "delegationSignature",
+                      "0x" + "a".repeat(130),
+                      "executionSignature",
+                      "0x" + "b".repeat(130)),
                   bearerJsonHeaders(user2.accessToken())),
               String.class);
 
@@ -539,12 +567,18 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
             HttpMethod.POST,
             new HttpEntity<>(
                 Map.of(
-                    "slotId", slotId,
-                    "reservationDate", date.toString(),
-                    "reservationTime", time,
-                    "signedAmount", amount,
-                    "delegationSignature", "0x" + "a".repeat(130),
-                    "executionSignature", "0x" + "b".repeat(130)),
+                    "slotId",
+                    slotId,
+                    "reservationDate",
+                    date.toString(),
+                    "reservationTime",
+                    time,
+                    "signedAmount",
+                    amount,
+                    "delegationSignature",
+                    "0x" + "a".repeat(130),
+                    "executionSignature",
+                    "0x" + "b".repeat(130)),
                 bearerJsonHeaders(user.accessToken())),
             String.class);
 

@@ -9,9 +9,9 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ToggleCl
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ToggleClassStatusResult;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.ToggleClassStatusUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.SaveClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
+import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

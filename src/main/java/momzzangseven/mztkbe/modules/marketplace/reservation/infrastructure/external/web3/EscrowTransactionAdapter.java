@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
  * on the web3 module.
  *
  * <p><b>Active profiles:</b> {@code local}, {@code dev}, {@code test}. This bean is explicitly
- * excluded from the {@code prod} profile. Replace with a real cross-module adapter calling
- * {@code web3/application/port/in/SendEscrowTransactionUseCase} once the web3 module is ready.
+ * excluded from the {@code prod} profile. Replace with a real cross-module adapter calling {@code
+ * web3/application/port/in/SendEscrowTransactionUseCase} once the web3 module is ready.
  */
 @Slf4j
 @Component

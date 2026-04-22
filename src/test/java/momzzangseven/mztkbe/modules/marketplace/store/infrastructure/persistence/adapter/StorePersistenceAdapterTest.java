@@ -1,11 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.adapter;
 
-import momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.adapter.StorePersistenceAdapter;
-
-import momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.adapter.StorePersistenceAdapter;
-
-import momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.adapter.StorePersistenceAdapter;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;

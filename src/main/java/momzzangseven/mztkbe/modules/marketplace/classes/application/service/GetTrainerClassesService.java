@@ -12,8 +12,8 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrain
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetTrainerClassesUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
+import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;

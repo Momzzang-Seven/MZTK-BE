@@ -16,8 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>This service exists solely as the cross-module API surface for the {@code classes} submodule.
  * Callers in other submodules (e.g., {@code reservation}) must depend on the use case interfaces
- * ({@link GetClassInfoUseCase}, {@link GetClassSlotInfoUseCase}), never on the output ports
- * ({@code LoadClassPort}, {@code LoadClassSlotPort}) directly.
+ * ({@link GetClassInfoUseCase}, {@link GetClassSlotInfoUseCase}), never on the output ports ({@code
+ * LoadClassPort}, {@code LoadClassSlotPort}) directly.
  */
 @Service
 @RequiredArgsConstructor

@@ -7,8 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Exposes slot-level reservation statistics to other modules via the input port
- * {@link GetSlotReservationInfoUseCase}.
+ * Exposes slot-level reservation statistics to other modules via the input port {@link
+ * GetSlotReservationInfoUseCase}.
  *
  * <p>The {@code classes} module's {@code SlotReservationAdapter} depends on this service (through
  * the use-case interface) rather than calling {@code LoadReservationPort} directly, ensuring the

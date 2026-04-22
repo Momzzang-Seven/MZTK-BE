@@ -71,7 +71,9 @@ class RecordTrainerStrikeServiceTest {
     @DisplayName("[RS-03] 스트라이크 기록 후 isBanned=true 반환 시 예외 없이 정상 처리 (로그만 기록)")
     void 밴_상태_반환_정상처리() {
       // given
-      given(manageTrainerSanctionPort.recordStrike(eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_TIMEOUT)))
+      given(
+              manageTrainerSanctionPort.recordStrike(
+                  eq(TRAINER_ID), eq(RecordTrainerStrikeCommand.REASON_TIMEOUT)))
           .willReturn(new RecordStrikeResult(3, true));
 
       // when: 예외 없이 완료되어야 함

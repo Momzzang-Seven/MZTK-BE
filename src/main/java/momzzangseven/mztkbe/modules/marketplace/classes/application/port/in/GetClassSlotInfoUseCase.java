@@ -6,8 +6,8 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 /**
  * Input port that exposes class slot lookup (with pessimistic lock) to other modules.
  *
- * <p>Cross-module callers (e.g., the {@code reservation} module) must use this interface instead
- * of referencing the output port {@code LoadClassSlotPort} directly.
+ * <p>Cross-module callers (e.g., the {@code reservation} module) must use this interface instead of
+ * referencing the output port {@code LoadClassSlotPort} directly.
  */
 public interface GetClassSlotInfoUseCase {
 

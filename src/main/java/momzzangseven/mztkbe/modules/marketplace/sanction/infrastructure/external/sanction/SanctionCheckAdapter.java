@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.externa
 import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * cross-module adapter once the sanction module is available.
  */
 @Component
+@Profile({"local", "dev", "test"})
 public class SanctionCheckAdapter implements LoadTrainerSanctionPort {
 
   @Override
