@@ -92,8 +92,8 @@ public class ClassSlot {
    * Create a transient slot used <em>only</em> for conflict detection before the owning class has
    * been persisted (and therefore has no real ID yet).
    *
-   * <p>The returned instance has {@code classId = null}, {@code id = null}, and
-   * {@code active = false}. It must never be saved to the database.
+   * <p>The returned instance has {@code classId = null}, {@code id = null}, and {@code active =
+   * false}. It must never be saved to the database.
    *
    * @param daysOfWeek list of days this slot runs on
    * @param startTime slot start time

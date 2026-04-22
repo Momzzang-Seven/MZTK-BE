@@ -2,8 +2,6 @@ package momzzangseven.mztkbe.modules.marketplace.store.api.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import momzzangseven.mztkbe.modules.marketplace.store.api.dto.UpsertStoreRequestDTO;
-import momzzangseven.mztkbe.modules.marketplace.store.api.dto.UpsertStoreRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.store.application.dto.UpsertStoreCommand;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

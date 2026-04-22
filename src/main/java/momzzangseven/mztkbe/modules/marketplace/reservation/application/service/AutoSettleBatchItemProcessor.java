@@ -30,13 +30,12 @@ public class AutoSettleBatchItemProcessor {
   /**
    * Settles a single approved reservation in its own isolated transaction.
    *
-   * <p>On success: persists AUTO_SETTLED status and the on-chain txHash.
-   * On failure: the individual transaction rolls back; the caller catches and logs.
+   * <p>On success: persists AUTO_SETTLED status and the on-chain txHash. On failure: the individual
+   * transaction rolls back; the caller catches and logs.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation reservation) {
-    String settleTxHash =
-        submitEscrowTransactionPort.submitAdminSettle(reservation.getOrderId());
+    String settleTxHash = submitEscrowTransactionPort.submitAdminSettle(reservation.getOrderId());
     Reservation settled = reservation.autoSettle(settleTxHash);
     saveReservationPort.save(settled);
     log.info(

@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.marketplace.store.domain.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import momzzangseven.mztkbe.modules.marketplace.store.domain.model.TrainerStore;
 
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidCoordinatesException;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceInvalidPhoneNumberException;

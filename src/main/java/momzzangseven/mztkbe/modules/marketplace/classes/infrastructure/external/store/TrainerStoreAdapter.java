@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.external
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.marketplace.store.application.port.out.LoadStorePort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort;
+import momzzangseven.mztkbe.modules.marketplace.store.application.port.out.LoadStorePort;
 import momzzangseven.mztkbe.modules.marketplace.store.domain.model.TrainerStore;
 import org.springframework.stereotype.Component;
 

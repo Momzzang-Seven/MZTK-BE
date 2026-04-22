@@ -27,8 +27,8 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.Marketplace
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.MarketplaceClassEntity;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.QClassSlotEntity;
-import momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.entity.TrainerStoreEntity;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.repository.MarketplaceClassJpaRepository;
+import momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.entity.TrainerStoreEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;

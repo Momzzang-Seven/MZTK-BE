@@ -39,8 +39,7 @@ class GetClassReservationInfoServiceTest {
 
   /** 2024-06-03 (월요일) 정오로 고정된 Clock — 달력 결과를 결정론적으로 검증 */
   @Spy
-  private Clock clock =
-      Clock.fixed(Instant.parse("2024-06-03T03:00:00Z"), ZoneId.of("Asia/Seoul"));
+  private Clock clock = Clock.fixed(Instant.parse("2024-06-03T03:00:00Z"), ZoneId.of("Asia/Seoul"));
 
   @InjectMocks private GetClassReservationInfoService sut;
 
@@ -83,7 +82,8 @@ class GetClassReservationInfoServiceTest {
       given(loadClassSlotPort.findByClassId(CLASS_ID)).willReturn(List.of());
 
       // when
-      GetClassReservationInfoResult result = sut.execute(new GetClassReservationInfoQuery(CLASS_ID));
+      GetClassReservationInfoResult result =
+          sut.execute(new GetClassReservationInfoQuery(CLASS_ID));
 
       // then
       assertThat(result.availableDates()).isEmpty();
@@ -98,7 +98,8 @@ class GetClassReservationInfoServiceTest {
       given(getSlotReservationInfoUseCase.countActiveReservations(SLOT_ID)).willReturn(2);
 
       // when
-      GetClassReservationInfoResult result = sut.execute(new GetClassReservationInfoQuery(CLASS_ID));
+      GetClassReservationInfoResult result =
+          sut.execute(new GetClassReservationInfoQuery(CLASS_ID));
 
       // then: 4개의 월요일 날짜가 availableDates에 포함
       assertThat(result.availableDates()).hasSize(4);
@@ -121,12 +122,12 @@ class GetClassReservationInfoServiceTest {
       given(getSlotReservationInfoUseCase.countActiveReservations(SLOT_ID)).willReturn(3);
 
       // when
-      GetClassReservationInfoResult result = sut.execute(new GetClassReservationInfoQuery(CLASS_ID));
+      GetClassReservationInfoResult result =
+          sut.execute(new GetClassReservationInfoQuery(CLASS_ID));
 
       // then
       assertThat(result.availableDates())
-          .allSatisfy(
-              d -> assertThat(d.availableTimes().get(0).availableCapacity()).isZero());
+          .allSatisfy(d -> assertThat(d.availableTimes().get(0).availableCapacity()).isZero());
     }
   }
 

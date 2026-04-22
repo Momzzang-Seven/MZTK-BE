@@ -1,7 +1,5 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.adapter;
 
-import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.adapter.ClassSlotPersistenceAdapter;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;

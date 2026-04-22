@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.dto.RecordTrainerStrikeCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RejectReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RejectReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
@@ -14,7 +13,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
-import momzzangseven.mztkbe.modules.marketplace.sanction.domain.vo.TrainerStrikeEvent;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,7 +67,7 @@ public class RejectReservationService implements RejectReservationUseCase {
 
     // Publish strike event — handled AFTER_COMMIT by ReservationSanctionEventListener
     eventPublisher.publishEvent(
-        new TrainerStrikeEvent(reservation.getTrainerId(), RecordTrainerStrikeCommand.REASON_REJECT));
+        new TrainerStrikeEvent(reservation.getTrainerId(), TrainerStrikeEvent.REASON_REJECT));
 
     log.info(
         "Reservation rejected: id={}, trainerId={}",

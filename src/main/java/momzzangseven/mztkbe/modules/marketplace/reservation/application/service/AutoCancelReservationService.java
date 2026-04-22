@@ -35,8 +35,8 @@ public class AutoCancelReservationService implements AutoCancelReservationUseCas
   private final LoadReservationPort loadReservationPort;
 
   /**
-   * Handles per-item on-chain refund + DB update + strike recording, each in a separate
-   * {@code REQUIRES_NEW} transaction.
+   * Handles per-item on-chain refund + DB update + strike recording, each in a separate {@code
+   * REQUIRES_NEW} transaction.
    */
   private final AutoCancelBatchItemProcessor itemProcessor;
 
@@ -62,10 +62,7 @@ public class AutoCancelReservationService implements AutoCancelReservationUseCas
         // Best-effort: log and continue so one bad item does not block the batch.
         // TODO: dead-letter queue or alert for repeated failures on the same reservationId.
         log.error(
-            "AutoCancel failed for reservationId={}: {}",
-            reservation.getId(),
-            e.getMessage(),
-            e);
+            "AutoCancel failed for reservationId={}: {}", reservation.getId(), e.getMessage(), e);
       }
     }
     return processed;

@@ -2,11 +2,12 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.dto.RecordTrainerStrikeCommand;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.in.RecordTrainerStrikeUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
+import momzzangseven.mztkbe.modules.marketplace.sanction.application.dto.RecordTrainerStrikeCommand;
+import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.in.RecordTrainerStrikeUseCase;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,18 +34,17 @@ public class AutoCancelBatchItemProcessor {
   /**
    * Processes a single auto-cancel item in its own isolated transaction.
    *
-   * <p>On success: persists TIMEOUT_CANCELLED status, records a TIMEOUT strike.
-   * On failure: the individual transaction rolls back; the caller catches and logs.
+   * <p>On success: persists TIMEOUT_CANCELLED status, records a TIMEOUT strike. On failure: the
+   * individual transaction rolls back; the caller catches and logs.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation reservation) {
-    String refundTxHash =
-        submitEscrowTransactionPort.submitAdminRefund(reservation.getOrderId());
+    String refundTxHash = submitEscrowTransactionPort.submitAdminRefund(reservation.getOrderId());
     Reservation cancelled = reservation.timeoutCancel(refundTxHash);
     saveReservationPort.save(cancelled);
     recordTrainerStrikeUseCase.execute(
         new RecordTrainerStrikeCommand(
-            reservation.getTrainerId(), RecordTrainerStrikeCommand.REASON_TIMEOUT));
+            reservation.getTrainerId(), TrainerStrikeEvent.REASON_TIMEOUT));
     log.info(
         "AutoCancel processed: reservationId={}, trainerId={}",
         reservation.getId(),

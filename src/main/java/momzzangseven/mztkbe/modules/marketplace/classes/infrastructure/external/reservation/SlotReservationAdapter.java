@@ -1,17 +1,17 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.external.reservation;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetSlotReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadSlotReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetSlotReservationInfoUseCase;
 import org.springframework.stereotype.Component;
 
 /**
- * Implementation of {@link LoadSlotReservationPort} backed by
- * {@link GetSlotReservationInfoUseCase}.
+ * Implementation of {@link LoadSlotReservationPort} backed by {@link
+ * GetSlotReservationInfoUseCase}.
  *
- * <p>Bridges the classes module's slot-management needs to the reservation module using the
- * correct cross-module pattern: depending on the reservation module's <em>input port</em>
- * (use-case interface) rather than its internal output port.
+ * <p>Bridges the classes module's slot-management needs to the reservation module using the correct
+ * cross-module pattern: depending on the reservation module's <em>input port</em> (use-case
+ * interface) rather than its internal output port.
  */
 @Component
 @RequiredArgsConstructor

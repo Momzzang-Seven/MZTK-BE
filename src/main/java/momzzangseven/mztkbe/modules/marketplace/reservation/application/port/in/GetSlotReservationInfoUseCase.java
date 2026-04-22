@@ -7,8 +7,8 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in
  * how many active reservations exist for a given slot — for example, to show remaining capacity in
  * the class detail view, or to verify that a slot can still be deactivated.
  *
- * <p>Cross-module callers must depend on this interface, not on the output port
- * {@code LoadReservationPort}.
+ * <p>Cross-module callers must depend on this interface, not on the output port {@code
+ * LoadReservationPort}.
  */
 public interface GetSlotReservationInfoUseCase {
 
