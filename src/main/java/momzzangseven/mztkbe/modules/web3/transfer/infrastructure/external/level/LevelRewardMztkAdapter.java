@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkPort;
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
 import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryAddressProjectionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
@@ -17,7 +18,6 @@ import momzzangseven.mztkbe.modules.web3.transfer.domain.model.RewardIdempotency
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.web3j.crypto.WalletUtils;
 
 /** RewardMztkPort adapter backed by web3_transactions idempotent intent creation. */
 @Component
@@ -28,6 +28,7 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
   private final CreateLevelUpRewardTransactionIntentUseCase
       createLevelUpRewardTransactionIntentUseCase;
   private final TransferRewardTokenProperties rewardTokenProperties;
+  private final LoadTreasuryAddressProjectionPort loadTreasuryAddressProjectionPort;
 
   @Override
   public RewardMztkResult reward(RewardMztkCommand command) {
@@ -89,15 +90,9 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
   }
 
   private String resolveTreasuryAddress() {
-    String treasuryAddress = rewardTokenProperties.getTreasury().getTreasuryAddress();
-    if (treasuryAddress == null || treasuryAddress.isBlank()) {
-      throw new RewardTreasuryAddressInvalidException(treasuryAddress);
-    }
-
-    String normalized = EvmAddress.of(treasuryAddress).value();
-    if (!WalletUtils.isValidAddress(normalized)) {
-      throw new RewardTreasuryAddressInvalidException(treasuryAddress);
-    }
-    return normalized;
+    String walletAlias = rewardTokenProperties.getTreasury().getWalletAlias();
+    return loadTreasuryAddressProjectionPort
+        .loadAddressByAlias(walletAlias)
+        .orElseThrow(() -> new RewardTreasuryAddressInvalidException("walletAlias=" + walletAlias));
   }
 }

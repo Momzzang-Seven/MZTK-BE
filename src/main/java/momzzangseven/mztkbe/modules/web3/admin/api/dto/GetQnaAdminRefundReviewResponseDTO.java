@@ -6,12 +6,13 @@ import momzzangseven.mztkbe.modules.web3.admin.application.dto.GetQnaAdminRefund
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminExecutionAuthorityView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalQuestionView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminOnchainQuestionView;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
 
 public record GetQnaAdminRefundReviewResponseDTO(
     Long postId,
     boolean processable,
-    String blockingReason,
+    QnaAdminReviewValidationCode blockingReason,
     QnaAdminExecutionAuthorityView authority,
     QnaAdminLocalQuestionView localQuestion,
     QnaAdminOnchainQuestionView onchainQuestion,

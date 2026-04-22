@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.post;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
@@ -13,8 +14,8 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryU
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
@@ -26,6 +27,8 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,7 +46,7 @@ class QnaAdminReviewContextAdapterTest {
   @Mock private LoadQnaAnswerIdsPort loadQnaAnswerIdsPort;
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
-  @Mock private LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
+  @Mock private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
   @Mock private LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
 
@@ -61,7 +64,7 @@ class QnaAdminReviewContextAdapterTest {
             loadQnaAnswerIdsPort,
             qnaProjectionPersistencePort,
             loadQnaExecutionIntentStatePort,
-            loadQnaAdminSignerAddressPort,
+            probeExecutionSignerCapabilityUseCase,
             qnaContractCallSupport,
             loadExecutionInternalIssuerPolicyPort,
             qnaEscrowProperties);
@@ -85,8 +88,10 @@ class QnaAdminReviewContextAdapterTest {
             momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType.QUESTION,
             "101"))
         .thenReturn(Optional.empty());
-    when(loadQnaAdminSignerAddressPort.loadSignerAddress())
-        .thenReturn("0x3333333333333333333333333333333333333333");
+    when(probeExecutionSignerCapabilityUseCase.execute())
+        .thenReturn(
+            ExecutionSignerCapabilityView.ready(
+                "sponsor-treasury", "0x3333333333333333333333333333333333333333"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x1111111111111111111111111111111111111111",
             "0x3333333333333333333333333333333333333333"))
@@ -113,6 +118,30 @@ class QnaAdminReviewContextAdapterTest {
     assertThat(context.activeAnswerIntents())
         .extracting(QnaExecutionIntentStateView::executionIntentId)
         .containsExactly("intent-local-answer", "intent-projected-answer");
+  }
+
+  @Test
+  @DisplayName("review context soft-fails when relayer check throws")
+  void loadRefund_returnsAuthorityEvenWhenRelayerCheckFails() {
+    when(loadQnaAnswerIdsPort.loadAnswerIdsByPostId(101L)).thenReturn(List.of());
+    when(qnaProjectionPersistencePort.findAnswersByPostId(101L)).thenReturn(List.of());
+    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResources(
+            momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType.ANSWER,
+            List.of()))
+        .thenReturn(Map.of());
+    when(qnaContractCallSupport.isRelayerRegistered(
+            "0x1111111111111111111111111111111111111111",
+            "0x3333333333333333333333333333333333333333"))
+        .thenThrow(new RuntimeException("rpc down"));
+
+    assertThatCode(() -> adapter.loadRefund(101L)).doesNotThrowAnyException();
+
+    var context = adapter.loadRefund(101L);
+
+    assertThat(context.authority().serverSigner().signable()).isTrue();
+    assertThat(context.authority().relayerRegistered()).isFalse();
+    assertThat(context.authority().relayerRegistrationStatus())
+        .isEqualTo(QnaAdminRelayerRegistrationStatus.CHECK_FAILED);
   }
 
   private Map<String, QnaExecutionIntentStateView> activeAnswerIntents() {

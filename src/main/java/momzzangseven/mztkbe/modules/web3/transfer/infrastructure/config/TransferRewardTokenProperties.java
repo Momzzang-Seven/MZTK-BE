@@ -39,7 +39,8 @@ public class TransferRewardTokenProperties {
   @Getter
   @Setter
   public static class Treasury {
-    @NotBlank private String treasuryAddress;
+    @NotBlank private String walletAlias;
+    @NotBlank private String keyEncryptionKeyB64;
   }
 
   @Getter

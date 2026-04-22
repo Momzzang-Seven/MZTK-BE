@@ -8,13 +8,14 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalAnswer
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalQuestionView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminOnchainAnswerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminOnchainQuestionView;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
 
 public record GetQnaAdminSettlementReviewResponseDTO(
     Long postId,
     Long answerId,
     boolean processable,
-    String blockingReason,
+    QnaAdminReviewValidationCode blockingReason,
     QnaAdminExecutionAuthorityView authority,
     QnaAdminLocalQuestionView localQuestion,
     QnaAdminLocalAnswerView localAnswer,
