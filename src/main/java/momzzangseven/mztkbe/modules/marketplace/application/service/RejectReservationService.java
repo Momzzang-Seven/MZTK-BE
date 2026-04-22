@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
+import momzzangseven.mztkbe.modules.marketplace.application.dto.RecordTrainerStrikeCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.RejectReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.application.dto.RejectReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.application.port.in.RejectReservationUseCase;
@@ -66,7 +67,8 @@ public class RejectReservationService implements RejectReservationUseCase {
     Reservation saved = saveReservationPort.save(rejected);
 
     // Publish strike event — handled AFTER_COMMIT by ReservationSanctionEventListener
-    eventPublisher.publishEvent(new TrainerStrikeEvent(reservation.getTrainerId(), "REJECT"));
+    eventPublisher.publishEvent(
+        new TrainerStrikeEvent(reservation.getTrainerId(), RecordTrainerStrikeCommand.REASON_REJECT));
 
     log.info(
         "Reservation rejected: id={}, trainerId={}",

@@ -73,6 +73,16 @@ public class CreateReservationService implements CreateReservationUseCase {
                             + " slotId="
                             + command.slotId()));
 
+    // 1-a. Verify the slot belongs to the requested class (tamper guard)
+    if (!slot.getClassId().equals(command.classId())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
+          "Slot "
+              + command.slotId()
+              + " does not belong to class "
+              + command.classId());
+    }
+
     // 2. Validate date/time against slot schedule
     if (!slot.getDaysOfWeek().contains(command.reservationDate().getDayOfWeek())) {
       throw new ReservationInvalidSlotDateException(slot.getId());
