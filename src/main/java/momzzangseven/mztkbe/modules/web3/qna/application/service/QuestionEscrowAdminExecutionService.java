@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.service;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminRefundCommand;
@@ -122,9 +124,8 @@ public class QuestionEscrowAdminExecutionService {
     }
   }
 
-  private java.util.Set<Long> loadAnswerIdsForRefund(Long postId) {
-    java.util.Set<Long> answerIds =
-        new java.util.LinkedHashSet<>(loadQnaAnswerIdsPort.loadAnswerIdsByPostId(postId));
+  private Set<Long> loadAnswerIdsForRefund(Long postId) {
+    Set<Long> answerIds = new LinkedHashSet<>(loadQnaAnswerIdsPort.loadAnswerIdsByPostId(postId));
     qnaProjectionPersistencePort.findAnswersByPostIdForUpdate(postId).stream()
         .map(QnaAnswerProjection::getAnswerId)
         .forEach(answerIds::add);

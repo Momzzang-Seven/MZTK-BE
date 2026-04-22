@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.post;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -120,7 +121,7 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
 
   private List<String> loadRefundAnswerResourceIds(Long postId, boolean forUpdate) {
     Set<String> answerResourceIds =
-        new java.util.LinkedHashSet<>(
+        new LinkedHashSet<>(
             loadQnaAnswerIdsPort.loadAnswerIdsByPostId(postId).stream()
                 .map(String::valueOf)
                 .toList());
