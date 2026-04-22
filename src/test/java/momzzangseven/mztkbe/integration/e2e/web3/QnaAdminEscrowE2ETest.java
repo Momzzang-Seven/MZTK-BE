@@ -5,11 +5,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.nio.charset.StandardCharsets;
 import java.math.BigInteger;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,6 +46,8 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.web3j.crypto.Credentials;
 
@@ -53,8 +57,7 @@ import org.web3j.crypto.Credentials;
       "web3.eip7702.enabled=false",
       "web3.execution.internal.enabled=true",
       "web3.qna.admin.enabled=true",
-      "web3.execution.internal.signer.wallet-alias=test-sponsor",
-      "web3.execution.internal.signer.key-encryption-key-b64=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+      "web3.execution.internal.signer.wallet-alias=test-sponsor"
     })
 @Tag("e2e")
 @DisplayName("[E2E] QnA admin manual settle/refund flow")
@@ -66,8 +69,15 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   private static final String TOKEN_ADDRESS = "0x1111111111111111111111111111111111111111";
   private static final BigInteger REWARD_AMOUNT_WEI = new BigInteger("50000000000000000000");
   private static final String PRIVATE_KEY_HEX = "0x" + "9".repeat(64);
-  private static final String KEY_ENCRYPTION_KEY_B64 =
-      "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
+  private static final String TEST_KEK_RAW = "0123456789abcdef".repeat(2);
+  private static final String KEY_ENCRYPTION_KEY_B64 = encodeTestKek();
+
+  @DynamicPropertySource
+  static void registerSignerProperties(DynamicPropertyRegistry registry) {
+    registry.add(
+        "web3.execution.internal.signer.key-encryption-key-b64",
+        QnaAdminEscrowE2ETest::encodeTestKek);
+  }
 
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
@@ -109,6 +119,10 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     BDDMockito.given(executionEip1559SigningPort.sign(any()))
         .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash-signed"));
     BDDMockito.given(executionTransactionGatewayPort.reserveNextNonce(anyString())).willReturn(77L);
+  }
+
+  private static String encodeTestKek() {
+    return Base64.getEncoder().encodeToString(TEST_KEK_RAW.getBytes(StandardCharsets.UTF_8));
   }
 
   @Test
