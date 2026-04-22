@@ -17,8 +17,7 @@ class QnaAdminExecutionAuthorityViewTest {
     assertThatThrownBy(
             () ->
                 new QnaAdminExecutionAuthorityView(
-                    ExecutionSignerCapabilityView.ready(
-                        "sponsor-treasury", "0x" + "1".repeat(40)),
+                    ExecutionSignerCapabilityView.ready("sponsor-treasury", "0x" + "1".repeat(40)),
                     false,
                     QnaAdminRelayerRegistrationStatus.REGISTERED,
                     false,
@@ -33,8 +32,7 @@ class QnaAdminExecutionAuthorityViewTest {
     assertThatThrownBy(
             () ->
                 new QnaAdminExecutionAuthorityView(
-                    ExecutionSignerCapabilityView.ready(
-                        "sponsor-treasury", "0x" + "1".repeat(40)),
+                    ExecutionSignerCapabilityView.ready("sponsor-treasury", "0x" + "1".repeat(40)),
                     false,
                     QnaAdminRelayerRegistrationStatus.UNCHECKED,
                     false,
@@ -49,8 +47,7 @@ class QnaAdminExecutionAuthorityViewTest {
     assertThatCode(
             () ->
                 new QnaAdminExecutionAuthorityView(
-                    ExecutionSignerCapabilityView.ready(
-                        "sponsor-treasury", "0x" + "1".repeat(40)),
+                    ExecutionSignerCapabilityView.ready("sponsor-treasury", "0x" + "1".repeat(40)),
                     true,
                     QnaAdminRelayerRegistrationStatus.REGISTERED,
                     false,
