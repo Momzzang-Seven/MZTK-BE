@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminEnabled
-  @ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
+@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
 public class QnaAdminExecutionConfigurationValidator {
 
   private final LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;

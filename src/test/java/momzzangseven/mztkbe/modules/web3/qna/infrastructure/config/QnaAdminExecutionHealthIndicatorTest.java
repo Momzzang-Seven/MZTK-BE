@@ -44,8 +44,7 @@ class QnaAdminExecutionHealthIndicatorTest {
     assertThat(health.getStatus().getCode()).isEqualTo("UP");
     assertThat(health.getDetails()).containsEntry("relayerRegistered", false);
     assertThat(health.getDetails())
-        .containsEntry(
-            "relayerRegistrationStatus", QnaAdminRelayerRegistrationStatus.CHECK_FAILED);
+        .containsEntry("relayerRegistrationStatus", QnaAdminRelayerRegistrationStatus.CHECK_FAILED);
     assertThat(health.getDetails())
         .containsEntry(
             "relayerRegistrationCheckError", IllegalStateException.class.getSimpleName());
