@@ -1,31 +1,29 @@
 package momzzangseven.mztkbe.modules.marketplace.infrastructure.external.reservation;
 
+import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.application.port.out.LoadSlotReservationPort;
 import org.springframework.stereotype.Component;
 
 /**
- * Stub implementation of {@link LoadSlotReservationPort}.
+ * Implementation of {@link LoadSlotReservationPort} backed by {@link LoadReservationPort}.
  *
- * <p>The reservation module is not yet integrated with the marketplace class module. This adapter
- * always reports zero active reservations and no reservation history, allowing all slot
- * modifications (including hard-deletes) to proceed without restriction.
- *
- * <p>Replace this stub with a real cross-module adapter once the reservation module is available.
- * The real adapter should call the reservation module's input port (e.g. {@code
- * GetSlotReservationCountUseCase}) — never the reservation module's infrastructure directly.
+ * <p>Bridges the class module's slot-management needs to the reservation persistence layer using
+ * the proper cross-module port pattern.
  */
 @Component
+@RequiredArgsConstructor
 public class SlotReservationAdapter implements LoadSlotReservationPort {
+
+  private final LoadReservationPort loadReservationPort;
 
   @Override
   public int countActiveReservations(Long slotId) {
-    // TODO: delegate to reservation module input port when available
-    return 0;
+    return loadReservationPort.countActiveReservationsBySlotId(slotId);
   }
 
   @Override
   public boolean hasAnyReservationHistory(Long slotId) {
-    // TODO: delegate to reservation module input port when available
-    return false;
+    return loadReservationPort.hasAnyReservationHistory(slotId);
   }
 }
