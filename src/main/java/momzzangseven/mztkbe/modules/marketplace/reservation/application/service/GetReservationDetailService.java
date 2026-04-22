@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
@@ -27,14 +26,12 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
   @Override
   @Transactional(readOnly = true)
   public GetReservationResult execute(GetReservationQuery query) {
+    query.validate();
+
     Reservation reservation =
         loadReservationPort
             .findById(query.reservationId())
-            .orElseThrow(
-                () ->
-                    new ReservationNotFoundException(
-                        ErrorCode.MARKETPLACE_RESERVATION_NOT_FOUND,
-                        "Reservation not found: " + query.reservationId()));
+            .orElseThrow(() -> new ReservationNotFoundException(query.reservationId()));
 
     Long requesterId = query.requesterId();
     if (!reservation.isOwnedByUser(requesterId) && !reservation.isOwnedByTrainer(requesterId)) {

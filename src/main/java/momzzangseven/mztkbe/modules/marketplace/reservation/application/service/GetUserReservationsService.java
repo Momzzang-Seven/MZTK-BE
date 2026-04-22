@@ -24,6 +24,7 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
   @Override
   @Transactional(readOnly = true)
   public List<ReservationSummaryResult> execute(GetUserReservationsQuery query) {
+    query.validate();
     return loadReservationPort.findByUserId(query.userId(), query.status()).stream()
         .map(ReservationSummaryResult::from)
         .toList();
