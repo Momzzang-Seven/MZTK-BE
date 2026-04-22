@@ -1,29 +1,31 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.external.reservation;
 
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetSlotReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadSlotReservationPort;
 import org.springframework.stereotype.Component;
 
 /**
- * Implementation of {@link LoadSlotReservationPort} backed by {@link LoadReservationPort}.
+ * Implementation of {@link LoadSlotReservationPort} backed by
+ * {@link GetSlotReservationInfoUseCase}.
  *
- * <p>Bridges the class module's slot-management needs to the reservation persistence layer using
- * the proper cross-module port pattern.
+ * <p>Bridges the classes module's slot-management needs to the reservation module using the
+ * correct cross-module pattern: depending on the reservation module's <em>input port</em>
+ * (use-case interface) rather than its internal output port.
  */
 @Component
 @RequiredArgsConstructor
 public class SlotReservationAdapter implements LoadSlotReservationPort {
 
-  private final LoadReservationPort loadReservationPort;
+  private final GetSlotReservationInfoUseCase getSlotReservationInfoUseCase;
 
   @Override
   public int countActiveReservations(Long slotId) {
-    return loadReservationPort.countActiveReservationsBySlotId(slotId);
+    return getSlotReservationInfoUseCase.countActiveReservations(slotId);
   }
 
   @Override
   public boolean hasAnyReservationHistory(Long slotId) {
-    return loadReservationPort.hasAnyReservationHistory(slotId);
+    return getSlotReservationInfoUseCase.hasAnyReservationHistory(slotId);
   }
 }

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.exte
 import java.math.BigInteger;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -12,11 +13,13 @@ import org.springframework.stereotype.Component;
  * txHash} so that all reservation services can be developed and tested end-to-end without blocking
  * on the web3 module.
  *
- * <p>Replace with a real cross-module adapter calling {@code
- * web3/application/port/in/SendEscrowTransactionUseCase} once the web3 module is ready.
+ * <p><b>Active profiles:</b> {@code local}, {@code dev}, {@code test}. This bean is explicitly
+ * excluded from the {@code prod} profile. Replace with a real cross-module adapter calling
+ * {@code web3/application/port/in/SendEscrowTransactionUseCase} once the web3 module is ready.
  */
 @Slf4j
 @Component
+@Profile({"local", "dev", "test"})
 public class EscrowTransactionAdapter implements SubmitEscrowTransactionPort {
 
   private static final String STUB_TX_HASH =

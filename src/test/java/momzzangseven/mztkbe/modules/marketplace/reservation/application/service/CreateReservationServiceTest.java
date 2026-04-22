@@ -16,8 +16,8 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassSlotPort;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
@@ -42,8 +42,8 @@ import org.mockito.quality.Strictness;
 @DisplayName("CreateReservationService 단위 테스트")
 class CreateReservationServiceTest {
 
-  @Mock private LoadClassSlotPort loadClassSlotPort;
-  @Mock private LoadClassPort loadClassPort;
+  @Mock private GetClassSlotInfoUseCase getClassSlotInfoUseCase;
+  @Mock private GetClassInfoUseCase getClassInfoUseCase;
   @Mock private LoadTrainerSanctionPort loadTrainerSanctionPort;
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
@@ -110,8 +110,8 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-01] 정상 예약 생성 시 PENDING 상태 반환")
     void 정상_예약_생성() {
       // given
-      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID)).willReturn(0);
       given(submitEscrowTransactionPort.submitPurchase(any(), any(), any(), any()))
@@ -138,8 +138,8 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-02] 슬롯 정원 초과 시 MARKETPLACE_RESERVATION_SLOT_FULL 예외")
     void 슬롯_정원_초과() {
       // given
-      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID))
           .willReturn(CAPACITY); // 이미 가득 참
@@ -169,8 +169,8 @@ class CreateReservationServiceTest {
               "0x" + "a".repeat(130),
               "0x" + "b".repeat(130));
 
-      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
 
       // when & then
@@ -186,8 +186,8 @@ class CreateReservationServiceTest {
     @DisplayName("[CR-04] 트레이너 정지 상태 시 MARKETPLACE_TRAINER_SUSPENDED 예외")
     void 트레이너_정지_상태() {
       // given
-      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(cls));
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
 
       // when & then
@@ -216,7 +216,7 @@ class CreateReservationServiceTest {
               "0x" + "a".repeat(130),
               "0x" + "b".repeat(130));
 
-      given(loadClassSlotPort.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
 
       // when & then
       assertThatThrownBy(() -> sut.execute(wrongDayCmd))

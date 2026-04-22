@@ -128,17 +128,15 @@ public class RegisterClassService implements RegisterClassUseCase {
   }
 
   /**
-   * Validates time-slot conflicts using a temporary placeholder classId before any DB write.
+   * Validates time-slot conflicts before any DB write.
    *
-   * <p>Because {@link ClassSlot#create} requires a positive classId, a sentinel value of {@code 1L}
-   * is used for the pre-save validation pass. The actual classId is assigned after the class row is
-   * persisted in the subsequent step.
+   * <p>Uses {@link ClassSlot#forConflictCheck} to create transient slots without a real classId.
+   * These instances are never persisted; they exist solely to run conflict-detection logic.
    */
   private void validateNoConflictsEarly(List<ClassTimeCommand> classTimes, int durationMinutes) {
-    // Use sentinel classId=1L (valid positive value) solely for conflict detection
     List<ClassSlot> tempSlots =
         classTimes.stream()
-            .map(ct -> ClassSlot.create(1L, ct.daysOfWeek(), ct.startTime(), ct.capacity()))
+            .map(ct -> ClassSlot.forConflictCheck(ct.daysOfWeek(), ct.startTime(), ct.capacity()))
             .toList();
     for (int i = 0; i < tempSlots.size(); i++) {
       for (int j = i + 1; j < tempSlots.size(); j++) {
