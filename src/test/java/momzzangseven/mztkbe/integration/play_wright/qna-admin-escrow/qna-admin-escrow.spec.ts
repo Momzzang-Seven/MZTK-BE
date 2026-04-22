@@ -244,6 +244,9 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
       const reviewBody = await reviewRes.json();
       expect(reviewBody.status).toBe("SUCCESS");
       expect(reviewBody.data.processable).toBe(true);
+      expect(reviewBody.data.authority.relayerRegistrationStatus).toBe(
+        "REGISTERED"
+      );
 
       const settleRes = await request.post(
         `${ENV.BACKEND_URL}/admin/web3/qna/questions/${postId}/answers/${answerId}/settle`,
@@ -272,9 +275,12 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
       const txHash =
         finalState.transaction?.txHash ?? (await loadTransactionHash(publicId));
       expect(txHash).toBeTruthy();
+      if (!txHash) {
+        throw new Error(`transaction hash is missing for execution intent ${publicId}`);
+      }
 
       const receipt = await waitForReceipt(txHash, RECEIPT_TIMEOUT_MS);
-      expect(receipt?.status === 1 || receipt?.status === 1n).toBe(true);
+      expect(Number(receipt.status)).toBe(1);
       expect(await adminAuditCount("QNA_ADMIN_SETTLE", `post:${postId}`)).toBeGreaterThanOrEqual(
         1
       );
@@ -318,6 +324,9 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
       const reviewBody = await reviewRes.json();
       expect(reviewBody.status).toBe("SUCCESS");
       expect(reviewBody.data.processable).toBe(true);
+      expect(reviewBody.data.authority.relayerRegistrationStatus).toBe(
+        "REGISTERED"
+      );
 
       const refundRes = await request.post(
         `${ENV.BACKEND_URL}/admin/web3/qna/questions/${postId}/refund`,
@@ -346,9 +355,12 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
       const txHash =
         finalState.transaction?.txHash ?? (await loadTransactionHash(publicId));
       expect(txHash).toBeTruthy();
+      if (!txHash) {
+        throw new Error(`transaction hash is missing for execution intent ${publicId}`);
+      }
 
       const receipt = await waitForReceipt(txHash, RECEIPT_TIMEOUT_MS);
-      expect(receipt?.status === 1 || receipt?.status === 1n).toBe(true);
+      expect(Number(receipt.status)).toBe(1);
       expect(await adminAuditCount("QNA_ADMIN_REFUND", `post:${postId}`)).toBeGreaterThanOrEqual(1);
     }
   );

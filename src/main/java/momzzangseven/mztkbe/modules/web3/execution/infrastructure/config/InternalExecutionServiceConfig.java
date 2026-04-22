@@ -5,6 +5,7 @@ import java.util.List;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionSponsorWalletAddressUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetInternalExecutionIssuerPolicyUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetInternalExecutionSignerConfigUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
@@ -18,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInte
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionSignerConfigService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.context.annotation.Bean;
@@ -42,6 +44,12 @@ public class InternalExecutionServiceConfig {
   GetInternalExecutionIssuerPolicyUseCase getInternalExecutionIssuerPolicyUseCase(
       LoadInternalExecutionIssuerPolicyPort loadInternalExecutionIssuerPolicyPort) {
     return new GetInternalExecutionIssuerPolicyService(loadInternalExecutionIssuerPolicyPort);
+  }
+
+  @Bean
+  GetInternalExecutionSignerConfigUseCase getInternalExecutionSignerConfigUseCase(
+      LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort) {
+    return new GetInternalExecutionSignerConfigService(loadInternalExecutionSignerConfigPort);
   }
 
   @Bean

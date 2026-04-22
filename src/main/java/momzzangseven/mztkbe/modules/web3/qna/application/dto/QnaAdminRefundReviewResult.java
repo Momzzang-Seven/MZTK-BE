@@ -6,7 +6,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 public record QnaAdminRefundReviewResult(
     Long postId,
     boolean processable,
-    String blockingReason,
+    QnaAdminReviewValidationCode blockingReason,
     QnaAdminExecutionAuthorityView authority,
     QnaAdminLocalQuestionView localQuestion,
     QnaAdminOnchainQuestionView onchainQuestion,

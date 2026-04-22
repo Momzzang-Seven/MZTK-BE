@@ -7,7 +7,7 @@ public record QnaAdminSettlementReviewResult(
     Long postId,
     Long answerId,
     boolean processable,
-    String blockingReason,
+    QnaAdminReviewValidationCode blockingReason,
     QnaAdminExecutionAuthorityView authority,
     QnaAdminLocalQuestionView localQuestion,
     QnaAdminLocalAnswerView localAnswer,
