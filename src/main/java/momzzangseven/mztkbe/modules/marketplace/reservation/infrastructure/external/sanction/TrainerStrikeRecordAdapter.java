@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@Profile({"local", "dev", "test"})
+@Profile({"local", "dev", "test", "integration"})
 @RequiredArgsConstructor
 public class TrainerStrikeRecordAdapter implements RecordTrainerStrikePort {
 

@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@Profile({"local", "dev", "test"})
+@Profile({"local", "dev", "test", "integration"})
 public class SanctionManageAdapter implements ManageTrainerSanctionPort {
 
   @Override
