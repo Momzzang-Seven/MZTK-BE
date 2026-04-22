@@ -268,6 +268,17 @@ class CommentControllerIntegrationTest {
 
     Long rootId = createComment(savedPost.getId(), rootWriter.getId(), "root", null);
     Long replyId = createComment(savedPost.getId(), replyWriter.getId(), "reply", rootId);
+    CommentEntity reply = commentJpaRepository.findById(replyId).orElseThrow();
+    commentJpaRepository.save(
+        CommentEntity.builder()
+            .postId(savedPost.getId())
+            .writerId(replyWriter.getId())
+            .content("legacy nested reply")
+            .parent(reply)
+            .isDeleted(false)
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build());
 
     mockMvc
         .perform(get("/comments/" + rootId + "/replies").with(userPrincipal(rootWriter.getId())))
@@ -277,6 +288,7 @@ class CommentControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].writer.userId").value(replyWriter.getId()))
         .andExpect(jsonPath("$.data.content[0].writer.nickname").value("reply-owner"))
         .andExpect(jsonPath("$.data.content[0].writer.profileImage").value("reply.webp"))
+        .andExpect(jsonPath("$.data.content[0].replyCount").value(0))
         .andExpect(jsonPath("$.data.last").value(true));
   }
 

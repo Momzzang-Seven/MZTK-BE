@@ -106,7 +106,7 @@ public class CommentService
   @Override
   public Page<CommentResult> getRootComments(GetRootCommentsQuery query) {
     validatePostExists(query.postId());
-    return toResultPage(loadCommentPort.loadRootComments(query.postId(), query.pageable()));
+    return toResultPage(loadCommentPort.loadRootComments(query.postId(), query.pageable()), true);
   }
 
   // 5. 대댓글 조회 (Read)
@@ -118,7 +118,7 @@ public class CommentService
     validatePostExists(parent.getPostId());
     validateParentIsRootComment(parent);
 
-    return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()));
+    return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()), false);
   }
 
   // --- Private Helper Methods ---
@@ -153,14 +153,15 @@ public class CommentService
     }
   }
 
-  private Page<CommentResult> toResultPage(Page<Comment> comments) {
+  private Page<CommentResult> toResultPage(Page<Comment> comments, boolean includeReplyCount) {
     List<Comment> content = comments.getContent();
     if (content.isEmpty()) {
       return comments.map(comment -> CommentResult.from(comment, null, 0L));
     }
 
     List<Long> commentIds = content.stream().map(Comment::getId).toList();
-    Map<Long, Long> replyCounts = loadCommentPort.countDirectRepliesByParentIds(commentIds);
+    Map<Long, Long> replyCounts =
+        includeReplyCount ? loadCommentPort.countDirectRepliesByParentIds(commentIds) : Map.of();
 
     Set<Long> writerIds =
         content.stream()
