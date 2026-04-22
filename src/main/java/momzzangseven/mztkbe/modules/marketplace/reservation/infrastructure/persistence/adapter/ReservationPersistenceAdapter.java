@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
 import org.springframework.stereotype.Component;
@@ -69,6 +70,20 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   @Override
   public boolean hasAnyReservationHistory(Long slotId) {
     return reservationJpaRepository.existsBySlotId(slotId);
+  }
+
+  @Override
+  public List<Reservation> findByUserId(Long userId, ReservationStatus status) {
+    return reservationJpaRepository.findByUserId(userId, status).stream()
+        .map(ReservationEntity::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status) {
+    return reservationJpaRepository.findByTrainerId(trainerId, status).stream()
+        .map(ReservationEntity::toDomain)
+        .toList();
   }
 
   @Override

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.pers
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -83,4 +84,30 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   List<ReservationEntity> findApprovedForAutoSettle(@Param("now") LocalDateTime now);
 
   boolean existsBySlotId(Long slotId);
+
+  /**
+   * Fetch reservations for a specific user, ordered by reservation_date DESC.
+   *
+   * <p>If {@code status} is null all statuses are returned; otherwise only the matching status.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.userId = :userId "
+          + "AND (:status IS NULL OR r.status = :status) "
+          + "ORDER BY r.reservationDate DESC")
+  List<ReservationEntity> findByUserId(
+      @Param("userId") Long userId, @Param("status") ReservationStatus status);
+
+  /**
+   * Fetch reservations assigned to a specific trainer, ordered by reservation_date DESC.
+   *
+   * <p>If {@code status} is null all statuses are returned; otherwise only the matching status.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.trainerId = :trainerId "
+          + "AND (:status IS NULL OR r.status = :status) "
+          + "ORDER BY r.reservationDate DESC")
+  List<ReservationEntity> findByTrainerId(
+      @Param("trainerId") Long trainerId, @Param("status") ReservationStatus status);
 }
