@@ -73,6 +73,17 @@ public interface Web3ExecutionIntentJpaRepository
   List<Web3ExecutionIntentEntity> findAllByRootIdempotencyKey(
       @Param("rootIdempotencyKey") String rootIdempotencyKey, Pageable pageable);
 
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " and e.status in :statuses"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findLatestByResourceAndStatusIn(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      @Param("statuses") Collection<ExecutionIntentStatus> statuses,
+      Pageable pageable);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "select e from Web3ExecutionIntentEntity e"
@@ -88,6 +99,22 @@ public interface Web3ExecutionIntentJpaRepository
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select e from Web3ExecutionIntentEntity e where e.id in :ids")
   List<Web3ExecutionIntentEntity> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
+
+  @Query(
+      value =
+          """
+          select e.id
+          from web3_execution_intents e
+          where e.status = 'AWAITING_SIGNATURE'
+            and e.mode = 'EIP1559'
+            and e.action_type in :actionTypes
+          order by e.created_at asc, e.id asc
+          limit 1
+          for update skip locked
+          """,
+      nativeQuery = true)
+  Optional<Long> claimNextInternalExecutableIdForUpdate(
+      @Param("actionTypes") Collection<String> actionTypes);
 
   @Query(
       "select e.id from Web3ExecutionIntentEntity e"

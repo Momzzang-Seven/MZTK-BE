@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.comment.api.dto.CommentMutationResponse;
 import momzzangseven.mztkbe.modules.comment.api.dto.CommentResponse;
 import momzzangseven.mztkbe.modules.comment.api.dto.CreateCommentRequest;
 import momzzangseven.mztkbe.modules.comment.api.dto.UpdateCommentRequest;
@@ -29,7 +30,7 @@ public class CommentController {
 
   /** Create a new comment */
   @PostMapping("/posts/{postId}/comments")
-  public ResponseEntity<ApiResponse<CommentResponse>> createComment(
+  public ResponseEntity<ApiResponse<CommentMutationResponse>> createComment(
       @PathVariable Long postId,
       @Valid @RequestBody CreateCommentRequest request,
       @AuthenticationPrincipal Long userId) {
@@ -39,15 +40,15 @@ public class CommentController {
     // Command 생성
     CreateCommentCommand command = request.toCommand(postId, userId);
 
-    CommentResult result = createCommentUseCase.createComment(command);
-    CommentResponse response = CommentResponse.from(result);
+    CommentMutationResult result = createCommentUseCase.createComment(command);
+    CommentMutationResponse response = CommentMutationResponse.from(result);
 
     return ResponseEntity.ok(ApiResponse.success("Comment created successfully", response));
   }
 
   /** Update comment */
   @PutMapping("/comments/{commentId}")
-  public ResponseEntity<ApiResponse<CommentResponse>> updateComment(
+  public ResponseEntity<ApiResponse<CommentMutationResponse>> updateComment(
       @PathVariable Long commentId,
       @Valid @RequestBody UpdateCommentRequest request,
       @AuthenticationPrincipal Long userId) {
@@ -57,8 +58,8 @@ public class CommentController {
     // Command 생성 (UpdateCommentCommand)
     UpdateCommentCommand command = new UpdateCommentCommand(commentId, userId, request.content());
 
-    CommentResult result = updateCommentUseCase.updateComment(command);
-    CommentResponse response = CommentResponse.from(result);
+    CommentMutationResult result = updateCommentUseCase.updateComment(command);
+    CommentMutationResponse response = CommentMutationResponse.from(result);
 
     return ResponseEntity.ok(ApiResponse.success("Comment updated successfully", response));
   }

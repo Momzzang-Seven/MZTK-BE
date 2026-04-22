@@ -12,16 +12,10 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSpon
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
+import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionActionTypeCode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
-@Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
 /**
  * Selects execution mode for a newly created intent.
  *
@@ -41,8 +35,12 @@ public class ExecutionModeSelector {
 
   /** Returns selected mode and reservation metadata used during intent creation. */
   public ExecutionModeSelection select(CreateExecutionIntentCommand command) {
-    SponsorPolicy sponsorPolicy = loadSponsorPolicyPort.loadSponsorPolicy();
     LocalDate usageDateKst = LocalDate.now(appClock);
+    if (requiresDirectEip1559(command)) {
+      return new ExecutionModeSelection(ExecutionMode.EIP1559, BigInteger.ZERO, usageDateKst);
+    }
+
+    SponsorPolicy sponsorPolicy = loadSponsorPolicyPort.loadSponsorPolicy();
     BigInteger reservedCostWei = estimateReservedCostWei(sponsorPolicy);
     if (isSponsorEligible(command, sponsorPolicy, reservedCostWei, usageDateKst)) {
       return new ExecutionModeSelection(ExecutionMode.EIP7702, reservedCostWei, usageDateKst);
@@ -53,6 +51,16 @@ public class ExecutionModeSelector {
     }
 
     throw new Web3TransferException(ErrorCode.SPONSOR_DAILY_LIMIT_EXCEEDED, true);
+  }
+
+  private boolean requiresDirectEip1559(CreateExecutionIntentCommand command) {
+    return command.draft().unsignedTxSnapshot() != null
+        && command.draft().authorityAddress() == null
+        && command.draft().authorityNonce() == null
+        && command.draft().delegateTarget() == null
+        && command.draft().authorizationPayloadHash() == null
+        && (command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_SETTLE
+            || command.draft().actionType() == ExecutionActionTypeCode.QNA_ADMIN_REFUND);
   }
 
   private boolean isSponsorEligible(

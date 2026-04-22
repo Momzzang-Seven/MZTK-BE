@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
@@ -73,7 +74,7 @@ class CommentControllerTest {
     @DisplayName("정상 요청이면 200과 댓글 데이터를 반환한다")
     void createComment_success() throws Exception {
       given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
-          .willReturn(comment(1L, "첫 댓글", false));
+          .willReturn(mutationResult(1L, "첫 댓글", null, false));
 
       mockMvc
           .perform(
@@ -84,7 +85,9 @@ class CommentControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.commentId").value(1))
-          .andExpect(jsonPath("$.data.content").value("첫 댓글"));
+          .andExpect(jsonPath("$.data.content").value("첫 댓글"))
+          .andExpect(jsonPath("$.data.writer").doesNotExist())
+          .andExpect(jsonPath("$.data.replyCount").doesNotExist());
 
       verify(createCommentUseCase).createComment(any(CreateCommentCommand.class));
     }
@@ -130,7 +133,7 @@ class CommentControllerTest {
     void createComment_longContent_returns200() throws Exception {
       String longContent = "a".repeat(5000);
       given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
-          .willReturn(comment(2L, longContent, false));
+          .willReturn(mutationResult(2L, longContent, null, false));
       mockMvc
           .perform(
               post("/posts/10/comments")
@@ -154,7 +157,7 @@ class CommentControllerTest {
     @DisplayName("정상 수정이면 200을 반환한다")
     void updateComment_success() throws Exception {
       given(updateCommentUseCase.updateComment(any(UpdateCommentCommand.class)))
-          .willReturn(comment(7L, "수정된 댓글", false));
+          .willReturn(mutationResult(7L, "수정된 댓글", null, false));
 
       mockMvc
           .perform(
@@ -165,7 +168,9 @@ class CommentControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.commentId").value(7))
-          .andExpect(jsonPath("$.data.content").value("수정된 댓글"));
+          .andExpect(jsonPath("$.data.content").value("수정된 댓글"))
+          .andExpect(jsonPath("$.data.writer").doesNotExist())
+          .andExpect(jsonPath("$.data.replyCount").doesNotExist());
     }
 
     @Test
@@ -185,7 +190,7 @@ class CommentControllerTest {
     void updateComment_longContent_returns200() throws Exception {
       String longContent = "a".repeat(5000);
       given(updateCommentUseCase.updateComment(any(UpdateCommentCommand.class)))
-          .willReturn(comment(7L, longContent, false));
+          .willReturn(mutationResult(7L, longContent, null, false));
 
       mockMvc
           .perform(
@@ -266,7 +271,29 @@ class CommentControllerTest {
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.content[0].commentId").value(11))
           .andExpect(jsonPath("$.data.content[0].isDeleted").value(true))
-          .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."));
+          .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."))
+          .andExpect(jsonPath("$.data.content[0].writer").doesNotExist())
+          .andExpect(jsonPath("$.data.content[0].replyCount").value(1));
+    }
+
+    @Test
+    @DisplayName("루트 댓글 조회 응답은 writer 상세와 replyCount 및 last를 포함한다")
+    void getRootComments_includesWriterReplyCountAndLast() throws Exception {
+      given(getCommentUseCase.getRootComments(any(GetRootCommentsQuery.class)))
+          .willReturn(
+              new PageImpl<>(
+                  java.util.List.of(comment(13L, "댓글", false)), PageRequest.of(0, 1), 2));
+
+      mockMvc
+          .perform(get("/posts/10/comments?page=0&size=1").with(userPrincipal(1L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.content[0].commentId").value(13))
+          .andExpect(jsonPath("$.data.content[0].writer.userId").value(1))
+          .andExpect(jsonPath("$.data.content[0].writer.nickname").value("writer-1"))
+          .andExpect(jsonPath("$.data.content[0].writer.profileImage").value("profile-1"))
+          .andExpect(jsonPath("$.data.content[0].replyCount").value(1))
+          .andExpect(jsonPath("$.data.last").value(false));
     }
 
     @Test
@@ -285,7 +312,11 @@ class CommentControllerTest {
           .perform(get("/comments/5/replies").with(userPrincipal(1L)))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data.content[0].commentId").value(12));
+          .andExpect(jsonPath("$.data.content[0].commentId").value(12))
+          .andExpect(jsonPath("$.data.content[0].writer.userId").value(1))
+          .andExpect(jsonPath("$.data.content[0].writer.nickname").value("writer-1"))
+          .andExpect(jsonPath("$.data.content[0].writer.profileImage").value("profile-1"))
+          .andExpect(jsonPath("$.data.last").value(true));
     }
 
     @Test
@@ -297,7 +328,14 @@ class CommentControllerTest {
 
   private CommentResult comment(Long id, String content, boolean isDeleted) {
     LocalDateTime now = LocalDateTime.now();
-    return new CommentResult(id, content, 1L, null, isDeleted, now, now);
+    return new CommentResult(
+        id, content, 1L, "writer-1", "profile-1", null, 1L, isDeleted, now, now);
+  }
+
+  private CommentMutationResult mutationResult(
+      Long id, String content, Long parentId, boolean isDeleted) {
+    LocalDateTime now = LocalDateTime.now();
+    return new CommentMutationResult(id, content, 1L, parentId, isDeleted, now, now);
   }
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor userPrincipal(

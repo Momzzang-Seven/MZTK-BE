@@ -34,6 +34,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
@@ -152,6 +153,43 @@ class ExecuteExecutionIntentServiceTest {
         .isInstanceOf(Web3TransferException.class)
         .extracting(ex -> ((Web3TransferException) ex).getCode())
         .isEqualTo(ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getCode());
+  }
+
+  @Test
+  void executeEip1559_handlesBroadcastNullAuditFields_withoutThrowing() throws Exception {
+    ExecutionIntent intent = existingEip1559Intent();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+    ExecutionTransactionGatewayPort.TransactionRecord created =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            101L, ExecutionTransactionStatus.CREATED, null);
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(new ExecutionTransactionGatewayPort.BroadcastResult(false, null, null, null));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    ExecuteExecutionIntentResult result =
+        service.execute(new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"));
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
+    assertThat(result.transactionId()).isEqualTo(101L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
+    assertThat(result.txHash()).isEqualTo("0xhash");
   }
 
   @Test

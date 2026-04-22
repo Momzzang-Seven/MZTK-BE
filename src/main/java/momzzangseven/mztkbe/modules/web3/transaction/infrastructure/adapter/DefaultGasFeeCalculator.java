@@ -3,13 +3,13 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter;
 import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnRewardTokenOrAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
+@ConditionalOnRewardTokenOrAnyExecutionEnabled
 public class DefaultGasFeeCalculator {
 
   private final TransactionRewardTokenProperties rewardTokenProperties;

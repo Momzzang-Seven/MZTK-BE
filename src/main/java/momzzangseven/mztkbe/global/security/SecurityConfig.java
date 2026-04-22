@@ -237,6 +237,19 @@ public class SecurityConfig {
                     .requestMatchers(
                         HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/admin/web3/qna/questions/{postId}/answers/{answerId}/settlement-review")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/admin/web3/qna/questions/{postId}/answers/{answerId}/settle")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.GET, "/admin/web3/qna/questions/{postId}/refund-review")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/admin/web3/qna/questions/{postId}/refund")
+                    .hasAuthority("ROLE_ADMIN")
 
                     // --- Image Endpoints ---
                     .requestMatchers(HttpMethod.POST, "/images/presigned-urls")
@@ -251,10 +264,25 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
 
                     // --- Marketplace Endpoints ---
+                    // Store
                     .requestMatchers(HttpMethod.PUT, "/marketplace/trainer/store")
                     .hasAuthority("ROLE_TRAINER")
                     .requestMatchers(HttpMethod.GET, "/marketplace/trainer/store")
                     .hasAuthority("ROLE_TRAINER")
+                    // Class — trainer-only mutations
+                    .requestMatchers(HttpMethod.POST, "/marketplace/trainer/classes")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.PUT, "/marketplace/trainer/classes/*")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/classes/*/status")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.GET, "/marketplace/trainer/classes")
+                    .hasAuthority("ROLE_TRAINER")
+                    // Class — public reads
+                    .requestMatchers(HttpMethod.GET, "/marketplace/classes")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/classes/*")
+                    .permitAll()
 
                     // --- Internal Endpoints ---
 

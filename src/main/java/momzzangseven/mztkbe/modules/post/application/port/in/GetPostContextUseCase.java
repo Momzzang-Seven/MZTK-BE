@@ -1,10 +1,13 @@
 package momzzangseven.mztkbe.modules.post.application.port.in;
 
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 
 public interface GetPostContextUseCase {
 
   Optional<PostContext> getPostContext(Long postId);
+
+  Optional<PostContext> getPostContextForUpdate(Long postId);
 
   record PostContext(
       Long postId,
@@ -13,10 +16,12 @@ public interface GetPostContextUseCase {
       boolean questionPost,
       String content,
       Long reward,
-      boolean answerLocked) {
+      boolean answerLocked,
+      PostStatus status,
+      Long acceptedAnswerId) {
 
     public PostContext(Long postId, Long writerId, boolean solved, boolean questionPost) {
-      this(postId, writerId, solved, questionPost, null, null, solved);
+      this(postId, writerId, solved, questionPost, null, null, solved, null, null);
     }
 
     public PostContext(
@@ -26,7 +31,18 @@ public interface GetPostContextUseCase {
         boolean questionPost,
         String content,
         Long reward) {
-      this(postId, writerId, solved, questionPost, content, reward, solved);
+      this(postId, writerId, solved, questionPost, content, reward, solved, null, null);
+    }
+
+    public PostContext(
+        Long postId,
+        Long writerId,
+        boolean solved,
+        boolean questionPost,
+        String content,
+        Long reward,
+        boolean answerLocked) {
+      this(postId, writerId, solved, questionPost, content, reward, answerLocked, null, null);
     }
   }
 }

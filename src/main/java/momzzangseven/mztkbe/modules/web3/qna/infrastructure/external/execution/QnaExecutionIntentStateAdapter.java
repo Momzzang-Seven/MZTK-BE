@@ -9,16 +9,13 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecuti
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.stereotype.Component;
 
 /** Bridges shared execution intent persistence into qna-owned conflict/recovery state checks. */
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class QnaExecutionIntentStateAdapter implements LoadQnaExecutionIntentStatePort {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
@@ -33,6 +30,14 @@ public class QnaExecutionIntentStateAdapter implements LoadQnaExecutionIntentSta
 
   @Override
   public Optional<QnaExecutionIntentStateView> loadLatestActiveByResource(
+      QnaExecutionResourceType resourceType, String resourceId) {
+    return executionIntentPersistencePort
+        .findLatestActiveByResource(toExecutionResourceType(resourceType), resourceId)
+        .map(this::toView);
+  }
+
+  @Override
+  public Optional<QnaExecutionIntentStateView> loadLatestActiveByResourceForUpdate(
       QnaExecutionResourceType resourceType, String resourceId) {
     return executionIntentPersistencePort
         .findLatestActiveByResourceForUpdate(toExecutionResourceType(resourceType), resourceId)

@@ -15,21 +15,19 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentS
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHandlerPort {
 
   private static final EnumSet<ExecutionActionType> SUPPORTED_ACTIONS =
@@ -40,11 +38,14 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
           ExecutionActionType.QNA_ANSWER_SUBMIT,
           ExecutionActionType.QNA_ANSWER_UPDATE,
           ExecutionActionType.QNA_ANSWER_DELETE,
-          ExecutionActionType.QNA_ANSWER_ACCEPT);
+          ExecutionActionType.QNA_ANSWER_ACCEPT,
+          ExecutionActionType.QNA_ADMIN_SETTLE,
+          ExecutionActionType.QNA_ADMIN_REFUND);
 
   private final ObjectMapper objectMapper;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
+  private final QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
   private final momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort
       qnaLocalDeleteSyncPort;
 
@@ -73,14 +74,17 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       case QNA_ANSWER_UPDATE -> applyAnswerUpdate(payload);
       case QNA_ANSWER_DELETE -> applyAnswerDelete(payload);
       case QNA_ANSWER_ACCEPT -> applyAnswerAccept(payload);
+      case QNA_ADMIN_SETTLE -> applyAdminSettle(payload);
+      case QNA_ADMIN_REFUND -> applyAdminRefund(payload);
     }
   }
 
   @Override
   public void afterExecutionFailedOnchain(
       ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {
-    afterExecutionTerminated(
-        intent, actionPlan, ExecutionIntentStatus.FAILED_ONCHAIN, failureReason);
+    // Failed-onchain specific handling is intentionally empty.
+    // MarkExecutionIntentFailedOnchainService invokes afterExecutionTerminated immediately after
+    // this hook, and rollback belongs to that terminal callback.
   }
 
   @Override
@@ -90,13 +94,20 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       ExecutionIntentStatus terminalStatus,
       String failureReason) {
     QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
+    if (!shouldRollbackPendingState(terminalStatus, failureReason)) {
+      return;
+    }
     if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
-        && shouldRollbackPendingAccept(terminalStatus, failureReason)) {
+        || payload.actionType() == QnaExecutionActionType.QNA_ADMIN_SETTLE) {
       qnaAcceptStateSyncPort.rollbackPendingAccept(payload.postId(), payload.answerId());
+      return;
+    }
+    if (payload.actionType() == QnaExecutionActionType.QNA_ADMIN_REFUND) {
+      qnaAdminRefundStateSyncPort.rollbackPendingRefund(payload.postId());
     }
   }
 
-  private boolean shouldRollbackPendingAccept(
+  private boolean shouldRollbackPendingState(
       ExecutionIntentStatus terminalStatus, String failureReason) {
     if (terminalStatus == ExecutionIntentStatus.EXPIRED
         || terminalStatus == ExecutionIntentStatus.CANCELED
@@ -125,7 +136,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
 
   private ExecutionReferenceType referenceType(QnaExecutionActionType actionType) {
     return switch (actionType) {
-      case QNA_ANSWER_ACCEPT -> ExecutionReferenceType.USER_TO_USER;
+      case QNA_ANSWER_ACCEPT, QNA_ADMIN_SETTLE -> ExecutionReferenceType.USER_TO_USER;
       default -> ExecutionReferenceType.USER_TO_SERVER;
     };
   }
@@ -195,6 +206,25 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     qnaProjectionPersistencePort.saveAnswer(answer.markAccepted());
     qnaProjectionPersistencePort.saveQuestion(
         question.updateQuestionHash(payload.questionHash()).markAccepted(answer.getAnswerKey()));
+  }
+
+  private void applyAdminSettle(QnaEscrowExecutionPayload payload) {
+    qnaAcceptStateSyncPort.confirmAccepted(payload.postId(), payload.answerId());
+    QnaQuestionProjection question = requireQuestion(payload.postId());
+    QnaAnswerProjection answer = requireAnswer(payload.answerId());
+    qnaProjectionPersistencePort.saveAnswer(answer.markAccepted());
+    qnaProjectionPersistencePort.saveQuestion(
+        question
+            .updateQuestionHash(payload.questionHash())
+            .markAdminSettled(answer.getAnswerKey()));
+  }
+
+  private void applyAdminRefund(QnaEscrowExecutionPayload payload) {
+    QnaQuestionProjection question = requireQuestion(payload.postId());
+    QnaQuestionProjection refunded =
+        question.getAnswerCount() > 0 ? question.markDeletedWithAnswers() : question.markDeleted();
+    qnaProjectionPersistencePort.saveQuestion(refunded);
+    qnaLocalDeleteSyncPort.confirmQuestionDeleted(payload.postId());
   }
 
   private QnaQuestionProjection requireQuestion(Long postId) {

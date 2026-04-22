@@ -18,12 +18,8 @@ public class AnswerReadAssembler {
       long likeCount,
       boolean liked,
       AnswerExecutionResumeView web3Execution) {
-    List<String> imageUrls =
-        imageResult == null
-            ? List.of()
-            : imageResult.slots().stream()
-                .map(AnswerImageResult.AnswerImageSlot::imageUrl)
-                .toList();
+    List<AnswerImageResult.AnswerImageSlot> images =
+        imageResult == null ? List.of() : imageResult.slots();
 
     return AnswerResult.from(
         answer,
@@ -31,7 +27,7 @@ public class AnswerReadAssembler {
         writer != null ? writer.profileImageUrl() : null,
         likeCount,
         liked,
-        imageUrls,
+        images,
         web3Execution);
   }
 }

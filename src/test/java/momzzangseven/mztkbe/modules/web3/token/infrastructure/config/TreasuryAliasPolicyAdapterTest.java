@@ -12,20 +12,22 @@ class TreasuryAliasPolicyAdapterTest {
     RewardTokenProperties properties = new RewardTokenProperties();
     properties.getTreasury().setWalletAlias("reward-main");
 
-    TreasuryAliasPolicyAdapter adapter = new TreasuryAliasPolicyAdapter(properties, "sponsor-main");
+    TreasuryAliasPolicyAdapter adapter =
+        new TreasuryAliasPolicyAdapter(properties, "sponsor-main", "internal-main");
 
     assertThat(adapter.defaultRewardTreasuryAlias()).isEqualTo("reward-main");
   }
 
   @Test
-  void allowedAliases_includesTrimmedRewardAndSponsorAliases() {
+  void allowedAliases_includesTrimmedRewardSponsorAndInternalIssuerAliases() {
     RewardTokenProperties properties = new RewardTokenProperties();
     properties.getTreasury().setWalletAlias(" reward-main ");
 
     TreasuryAliasPolicyAdapter adapter =
-        new TreasuryAliasPolicyAdapter(properties, " sponsor-main ");
+        new TreasuryAliasPolicyAdapter(properties, " sponsor-main ", " internal-main ");
 
-    assertThat(adapter.allowedAliases()).isEqualTo(Set.of("reward-main", "sponsor-main"));
+    assertThat(adapter.allowedAliases())
+        .isEqualTo(Set.of("reward-main", "sponsor-main", "internal-main"));
   }
 
   @Test
@@ -33,7 +35,7 @@ class TreasuryAliasPolicyAdapterTest {
     RewardTokenProperties properties = new RewardTokenProperties();
     properties.getTreasury().setWalletAlias(" ");
 
-    TreasuryAliasPolicyAdapter adapter = new TreasuryAliasPolicyAdapter(properties, " ");
+    TreasuryAliasPolicyAdapter adapter = new TreasuryAliasPolicyAdapter(properties, " ", " ");
 
     assertThat(adapter.allowedAliases()).isEmpty();
   }
@@ -43,7 +45,7 @@ class TreasuryAliasPolicyAdapterTest {
     RewardTokenProperties properties = new RewardTokenProperties();
     properties.getTreasury().setWalletAlias(null);
 
-    TreasuryAliasPolicyAdapter adapter = new TreasuryAliasPolicyAdapter(properties, null);
+    TreasuryAliasPolicyAdapter adapter = new TreasuryAliasPolicyAdapter(properties, null, null);
 
     assertThat(adapter.allowedAliases()).isEmpty();
   }
@@ -53,7 +55,8 @@ class TreasuryAliasPolicyAdapterTest {
     RewardTokenProperties properties = new RewardTokenProperties();
     properties.getTreasury().setWalletAlias("shared");
 
-    TreasuryAliasPolicyAdapter adapter = new TreasuryAliasPolicyAdapter(properties, "shared");
+    TreasuryAliasPolicyAdapter adapter =
+        new TreasuryAliasPolicyAdapter(properties, "shared", "shared");
 
     assertThat(adapter.allowedAliases()).isEqualTo(Set.of("shared"));
   }

@@ -6,9 +6,9 @@ import java.math.BigInteger;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.DefaultGasFeeCalculator;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
@@ -28,10 +28,7 @@ import org.web3j.protocol.http.HttpService;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class QnaContractCallSupport {
 
   private final Web3CoreProperties web3CoreProperties;
@@ -94,6 +91,44 @@ public class QnaContractCallSupport {
     return Boolean.TRUE.equals(decodeBool(response.getValue()));
   }
 
+  public void requireRelayerCallable(String escrowAddress, String callerAddress) {
+    String normalizedCaller = callerAddress == null ? null : callerAddress.trim();
+    if (normalizedCaller == null || normalizedCaller.isBlank()) {
+      throw new Web3InvalidInputException("callerAddress is required");
+    }
+
+    if (!isRelayerRegistered(escrowAddress, normalizedCaller)) {
+      throw new Web3InvalidInputException(
+          "current server signer is not a registered relayer: " + normalizedCaller);
+    }
+  }
+
+  public boolean isRelayerRegistered(String escrowAddress, String callerAddress) {
+    String normalizedCaller = callerAddress == null ? null : callerAddress.trim();
+    if (normalizedCaller == null || normalizedCaller.isBlank()) {
+      throw new Web3InvalidInputException("callerAddress is required");
+    }
+
+    String isRelayerData =
+        FunctionEncoder.encode(
+            new Function(
+                "isRelayer",
+                List.of(new Address(normalizedCaller)),
+                List.of(TypeReference.create(Bool.class))));
+    Transaction isRelayerRequest =
+        Transaction.createEthCallTransaction(normalizedCaller, escrowAddress, isRelayerData);
+    EthCall isRelayerResponse =
+        requireSuccess(
+            callWithFallback(
+                web3j -> web3j.ethCall(isRelayerRequest, DefaultBlockParameterName.PENDING).send()),
+            "isRelayer");
+    if (isRelayerResponse.isReverted()) {
+      throw new Web3InvalidInputException(
+          "isRelayer eth_call reverted: " + isRelayerResponse.getRevertReason());
+    }
+    return Boolean.TRUE.equals(decodeBool(isRelayerResponse.getValue()));
+  }
+
   public QnaCallPrevalidationResult prevalidateContractCall(
       String fromAddress, String contractAddress, String callData) {
     Transaction callStaticRequest =
@@ -127,24 +162,27 @@ public class QnaContractCallSupport {
   }
 
   private DefaultGasFeeCalculator.FeePlan loadFeePlan(BigInteger estimatedGas) {
-    BigInteger maxPriorityFeePerGas =
-        positiveOrNull(
-            requireSuccess(
-                    callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send()),
-                    "eth_maxPriorityFeePerGas")
-                .getMaxPriorityFeePerGas());
+    BigInteger maxPriorityFeePerGas = null;
+    RpcAttempt<org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> priorityAttempt =
+        callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send());
+    if (priorityAttempt.success()) {
+      maxPriorityFeePerGas = positiveOrNull(priorityAttempt.response().getMaxPriorityFeePerGas());
+    }
 
-    BigInteger baseFee =
-        positiveOrNull(
-            requireSuccess(callWithFallback(web3j -> web3j.ethBaseFee().send()), "eth_baseFee")
-                .getBaseFee());
+    BigInteger baseFee = null;
+    RpcAttempt<org.web3j.protocol.core.methods.response.EthBaseFee> baseFeeAttempt =
+        callWithFallback(web3j -> web3j.ethBaseFee().send());
+    if (baseFeeAttempt.success()) {
+      baseFee = positiveOrNull(baseFeeAttempt.response().getBaseFee());
+    }
 
     BigInteger gasPrice = null;
     if (baseFee == null) {
-      gasPrice =
-          positiveOrNull(
-              requireSuccess(callWithFallback(web3j -> web3j.ethGasPrice().send()), "eth_gasPrice")
-                  .getGasPrice());
+      RpcAttempt<org.web3j.protocol.core.methods.response.EthGasPrice> gasPriceAttempt =
+          callWithFallback(web3j -> web3j.ethGasPrice().send());
+      if (gasPriceAttempt.success()) {
+        gasPrice = positiveOrNull(gasPriceAttempt.response().getGasPrice());
+      }
     }
 
     return defaultGasFeeCalculator.calculate(
@@ -201,6 +239,18 @@ public class QnaContractCallSupport {
     }
     Object value = decoded.getFirst().getValue();
     return value instanceof Boolean boolValue ? boolValue : null;
+  }
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private String decodeAddress(String encoded) {
+    List<Type> decoded =
+        FunctionReturnDecoder.decode(
+            encoded, List.of((TypeReference) TypeReference.create(Address.class)));
+    if (decoded.isEmpty()) {
+      return null;
+    }
+    Object value = decoded.getFirst().getValue();
+    return value instanceof String addressValue ? addressValue : null;
   }
 
   private BigInteger positiveOrNull(BigInteger value) {

@@ -33,14 +33,14 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
   public AcceptAnswerResult execute(AcceptAnswerCommand command) {
     command.validate();
 
+    LoadAcceptedAnswerPort.AcceptedAnswerInfo answer =
+        loadAcceptedAnswerPort
+            .loadAcceptedAnswerForUpdate(command.answerId())
+            .orElseThrow(AnswerNotFoundException::new);
     Post post =
         postPersistencePort
             .loadPostForUpdate(command.postId())
             .orElseThrow(PostNotFoundException::new);
-    LoadAcceptedAnswerPort.AcceptedAnswerInfo answer =
-        loadAcceptedAnswerPort
-            .loadAcceptedAnswer(command.answerId())
-            .orElseThrow(AnswerNotFoundException::new);
 
     validateQuestionPost(post);
     validatePostWriter(post, command.requesterId());

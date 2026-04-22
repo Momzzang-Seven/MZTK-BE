@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -104,7 +105,6 @@ class QnaExecutionDraftBuilderAdapterTest {
                 null,
                 101L,
                 null,
-                null,
                 "0x4444444444444444444444444444444444444444",
                 new BigInteger("50000000000000000000"),
                 "0x" + "a".repeat(64),
@@ -117,5 +117,26 @@ class QnaExecutionDraftBuilderAdapterTest {
     ObjectMapper objectMapper = new ObjectMapper();
     assertThat(objectMapper.readTree(draft.payloadSnapshotJson()).get("callTarget").asText())
         .isEqualTo("0x3333333333333333333333333333333333333333");
+  }
+
+  @Test
+  void build_rejectsAdminAction() {
+    assertThatThrownBy(
+            () ->
+                adapter.build(
+                    new QnaEscrowExecutionRequest(
+                        QnaExecutionResourceType.QUESTION,
+                        "101",
+                        QnaExecutionActionType.QNA_ADMIN_SETTLE,
+                        7L,
+                        22L,
+                        101L,
+                        201L,
+                        "0x4444444444444444444444444444444444444444",
+                        new BigInteger("50000000000000000000"),
+                        "0x" + "a".repeat(64),
+                        "0x" + "b".repeat(64))))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("user draft builder does not support admin settle/refund");
   }
 }

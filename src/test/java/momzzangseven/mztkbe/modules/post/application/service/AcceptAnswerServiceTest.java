@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -48,11 +49,11 @@ class AcceptAnswerServiceTest {
     Post post = questionPost(10L, 1L, PostStatus.OPEN, null);
     Post acceptedPost = questionPost(10L, 1L, PostStatus.RESOLVED, 20L);
 
-    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
-    when(loadAcceptedAnswerPort.loadAcceptedAnswer(20L))
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(20L))
         .thenReturn(
             Optional.of(
                 new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
+    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(acceptedPost);
     when(questionLifecycleExecutionPort.prepareAnswerAccept(
             10L, 20L, 1L, 2L, "content", "answer content", 100L))
@@ -67,6 +68,9 @@ class AcceptAnswerServiceTest {
     verify(markAcceptedAnswerPort).markAccepted(20L);
     verify(questionLifecycleExecutionPort)
         .prepareAnswerAccept(10L, 20L, 1L, 2L, "content", "answer content", 100L);
+    var inOrder = inOrder(loadAcceptedAnswerPort, postPersistencePort);
+    inOrder.verify(loadAcceptedAnswerPort).loadAcceptedAnswerForUpdate(20L);
+    inOrder.verify(postPersistencePort).loadPostForUpdate(10L);
   }
 
   @Test
@@ -77,11 +81,11 @@ class AcceptAnswerServiceTest {
     Post pendingPost = questionPost(10L, 1L, PostStatus.PENDING_ACCEPT, 20L);
 
     given(questionLifecycleExecutionPort.managesAcceptLifecycle()).willReturn(true);
-    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
-    when(loadAcceptedAnswerPort.loadAcceptedAnswer(20L))
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(20L))
         .thenReturn(
             Optional.of(
                 new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
+    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
     when(postPersistencePort.savePost(any(Post.class))).thenReturn(pendingPost);
     when(questionLifecycleExecutionPort.prepareAnswerAccept(
             10L, 20L, 1L, 2L, "content", "answer content", 100L))
@@ -100,12 +104,12 @@ class AcceptAnswerServiceTest {
   @Test
   @DisplayName("rejects acceptance by a non-writer")
   void execute_throwsWhenRequesterIsNotWriter() {
-    when(postPersistencePort.loadPostForUpdate(10L))
-        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.OPEN, null)));
-    when(loadAcceptedAnswerPort.loadAcceptedAnswer(20L))
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(20L))
         .thenReturn(
             Optional.of(
                 new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
+    when(postPersistencePort.loadPostForUpdate(10L))
+        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.OPEN, null)));
 
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 3L)))
         .isInstanceOf(OnlyPostWriterCanAcceptException.class);
@@ -116,12 +120,12 @@ class AcceptAnswerServiceTest {
   @Test
   @DisplayName("rejects answers that belong to another post")
   void execute_throwsWhenAnswerDoesNotBelongToPost() {
-    when(postPersistencePort.loadPostForUpdate(10L))
-        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.OPEN, null)));
-    when(loadAcceptedAnswerPort.loadAcceptedAnswer(20L))
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(20L))
         .thenReturn(
             Optional.of(
                 new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 99L, 2L, "answer content")));
+    when(postPersistencePort.loadPostForUpdate(10L))
+        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.OPEN, null)));
 
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
         .isInstanceOf(AnswerNotBelongToPostException.class);
@@ -132,12 +136,29 @@ class AcceptAnswerServiceTest {
   @Test
   @DisplayName("rejects already solved posts")
   void execute_throwsWhenPostAlreadySolved() {
-    when(postPersistencePort.loadPostForUpdate(10L))
-        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.RESOLVED, 30L)));
-    when(loadAcceptedAnswerPort.loadAcceptedAnswer(20L))
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(20L))
         .thenReturn(
             Optional.of(
                 new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
+    when(postPersistencePort.loadPostForUpdate(10L))
+        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.RESOLVED, 30L)));
+
+    assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
+        .isInstanceOf(PostAlreadySolvedException.class);
+    verifyNoInteractions(markAcceptedAnswerPort);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareAnswerAccept(any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("rejects admin refund pending posts")
+  void execute_throwsWhenPostIsPendingAdminRefund() {
+    when(loadAcceptedAnswerPort.loadAcceptedAnswerForUpdate(20L))
+        .thenReturn(
+            Optional.of(
+                new LoadAcceptedAnswerPort.AcceptedAnswerInfo(20L, 10L, 2L, "answer content")));
+    when(postPersistencePort.loadPostForUpdate(10L))
+        .thenReturn(Optional.of(questionPost(10L, 1L, PostStatus.PENDING_ADMIN_REFUND, null)));
 
     assertThatThrownBy(() -> acceptAnswerService.execute(new AcceptAnswerCommand(10L, 20L, 1L)))
         .isInstanceOf(PostAlreadySolvedException.class);
