@@ -370,7 +370,6 @@ class CommentServiceTest {
     given(loadPostPort.existsPost(100L)).willReturn(true);
     given(loadCommentPort.loadReplies(10L, pageable))
         .willReturn(new PageImpl<>(List.of(reply), pageable, 2));
-    given(loadCommentPort.countDirectRepliesByParentIds(List.of(12L))).willReturn(Map.of());
     given(loadCommentWriterPort.loadWritersByIds(java.util.Set.of(202L)))
         .willReturn(
             Map.of(202L, new LoadCommentWriterPort.WriterSummary(202L, "reply-writer", "p.webp")));
@@ -383,6 +382,7 @@ class CommentServiceTest {
     assertThat(first.writerNickname()).isEqualTo("reply-writer");
     assertThat(first.writerProfileImageUrl()).isEqualTo("p.webp");
     assertThat(first.replyCount()).isZero();
+    verify(loadCommentPort, never()).countDirectRepliesByParentIds(any());
   }
 
   @Test
