@@ -67,6 +67,29 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName("countDirectRepliesByParentIds() returns direct child counts by parent id")
+  void countDirectRepliesByParentIds_returnsDirectReplyCounts() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 10, 0);
+    CommentEntity parent1 = persistRoot(100L, 31L, "parent-1", base);
+    CommentEntity parent2 = persistRoot(100L, 32L, "parent-2", base.plusMinutes(1));
+    CommentEntity reply1 = persistReply(100L, 33L, "reply-1", parent1, base.plusMinutes(2));
+    persistReply(100L, 34L, "reply-2", parent1, base.plusMinutes(3));
+    persistReply(100L, 35L, "reply-3", parent2, base.plusMinutes(4));
+    persistReply(100L, 36L, "nested-reply", reply1, base.plusMinutes(5));
+
+    List<CommentJpaRepository.DirectReplyCount> counts =
+        commentJpaRepository.countDirectRepliesByParentIds(List.of(idOf(parent1), idOf(parent2)));
+
+    assertThat(counts)
+        .extracting(
+            CommentJpaRepository.DirectReplyCount::getParentId,
+            CommentJpaRepository.DirectReplyCount::getReplyCount)
+        .containsExactlyInAnyOrder(
+            org.assertj.core.groups.Tuple.tuple(idOf(parent1), 2L),
+            org.assertj.core.groups.Tuple.tuple(idOf(parent2), 1L));
+  }
+
+  @Test
   @DisplayName("deleteAllByPostId() soft-deletes all comments of the post")
   void deleteAllByPostId_softDeletesCommentsByPostId() {
     LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 10, 0);
