@@ -13,6 +13,8 @@ import org.springframework.stereotype.Repository;
 public interface QnaQuestionProjectionJpaRepository
     extends JpaRepository<QnaQuestionProjectionEntity, Long> {
 
+  Optional<QnaQuestionProjectionEntity> findByPostId(Long postId);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select q from QnaQuestionProjectionEntity q where q.postId = :postId")
   Optional<QnaQuestionProjectionEntity> findByPostIdForUpdate(@Param("postId") Long postId);

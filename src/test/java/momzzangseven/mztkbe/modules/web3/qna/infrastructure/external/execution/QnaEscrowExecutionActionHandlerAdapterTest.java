@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
@@ -43,6 +44,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
 
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
+  @Mock private QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
   @Mock private QnaLocalDeleteSyncPort qnaLocalDeleteSyncPort;
 
   private QnaEscrowExecutionActionHandlerAdapter adapter;
@@ -56,6 +58,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             objectMapper,
             qnaProjectionPersistencePort,
             qnaAcceptStateSyncPort,
+            qnaAdminRefundStateSyncPort,
             qnaLocalDeleteSyncPort);
   }
 
@@ -241,13 +244,47 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName("afterExecutionConfirmed marks refunded question as deleted when no answers remain")
+  void afterExecutionConfirmed_marksAdminRefundDeleted() throws Exception {
+    when(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(questionProjection("0x" + "a".repeat(64), 0)));
+
+    adapter.afterExecutionConfirmed(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan());
+
+    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
+        ArgumentCaptor.forClass(QnaQuestionProjection.class);
+    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
+    assertThat(questionCaptor.getValue().getState()).isEqualTo(QnaQuestionState.DELETED);
+    verify(qnaLocalDeleteSyncPort).confirmQuestionDeleted(101L);
+  }
+
+  @Test
+  @DisplayName(
+      "afterExecutionConfirmed marks refunded question as deleted_with_answers when answers remain")
+  void afterExecutionConfirmed_marksAdminRefundDeletedWithAnswers() throws Exception {
+    when(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(questionProjection("0x" + "a".repeat(64), 2)));
+
+    adapter.afterExecutionConfirmed(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan());
+
+    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
+        ArgumentCaptor.forClass(QnaQuestionProjection.class);
+    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
+    assertThat(questionCaptor.getValue().getState())
+        .isEqualTo(QnaQuestionState.DELETED_WITH_ANSWERS);
+    verify(qnaLocalDeleteSyncPort).confirmQuestionDeleted(101L);
+  }
+
+  @Test
   @DisplayName(
       "afterExecutionFailedOnchain defers rollback to terminal callback when failure reason is missing")
   void afterExecutionFailedOnchain_defersRollbackWhenFailureReasonIsNull() throws Exception {
     adapter.afterExecutionFailedOnchain(
         intent(acceptPayload(), ExecutionResourceType.QUESTION, "101", 7L), plan(), null);
 
-    verifyNoInteractions(qnaAcceptStateSyncPort);
+    verifyNoInteractions(qnaAcceptStateSyncPort, qnaAdminRefundStateSyncPort);
   }
 
   @Test
@@ -332,7 +369,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         ExecutionIntentStatus.FAILED_ONCHAIN,
         "TREASURY_TOKEN_INSUFFICIENT");
 
-    verifyNoInteractions(qnaAcceptStateSyncPort);
+    verifyNoInteractions(qnaAcceptStateSyncPort, qnaAdminRefundStateSyncPort);
   }
 
   @Test
@@ -383,6 +420,43 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
   }
 
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending admin refund on expire")
+  void afterExecutionTerminated_rollsBackPendingAdminRefundOnExpired() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.EXPIRED,
+        "EXECUTION_INTENT_EXPIRED");
+
+    verify(qnaAdminRefundStateSyncPort).rollbackPendingRefund(101L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated rolls back pending admin refund for non retryable failure")
+  void afterExecutionTerminated_rollsBackPendingAdminRefundForNonRetryableFailure()
+      throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "TREASURY_TOKEN_INSUFFICIENT");
+
+    verify(qnaAdminRefundStateSyncPort).rollbackPendingRefund(101L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated keeps pending admin refund for retryable failure")
+  void afterExecutionTerminated_keepsPendingAdminRefundForRetryableFailure() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(adminRefundPayload(), ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "RPC_UNAVAILABLE");
+
+    verify(qnaAdminRefundStateSyncPort, never()).rollbackPendingRefund(101L);
+  }
+
   private ExecutionIntent intent(
       QnaEscrowExecutionPayload payload,
       ExecutionResourceType resourceType,
@@ -429,6 +503,20 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         new BigInteger("50000000000000000000"),
         "0x" + "c".repeat(64),
         "0x" + "d".repeat(64),
+        "0x" + "3".repeat(40),
+        "0x1234");
+  }
+
+  private QnaEscrowExecutionPayload adminRefundPayload() {
+    return new QnaEscrowExecutionPayload(
+        QnaExecutionActionType.QNA_ADMIN_REFUND,
+        101L,
+        null,
+        "0x" + "1".repeat(40),
+        "0x" + "2".repeat(40),
+        new BigInteger("50000000000000000000"),
+        "0x" + "a".repeat(64),
+        null,
         "0x" + "3".repeat(40),
         "0x1234");
   }
@@ -485,6 +573,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
       case QNA_ANSWER_DELETE -> ExecutionActionType.QNA_ANSWER_DELETE;
       case QNA_ANSWER_ACCEPT -> ExecutionActionType.QNA_ANSWER_ACCEPT;
       case QNA_ADMIN_SETTLE -> ExecutionActionType.QNA_ADMIN_SETTLE;
+      case QNA_ADMIN_REFUND -> ExecutionActionType.QNA_ADMIN_REFUND;
     };
   }
 }

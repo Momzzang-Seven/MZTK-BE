@@ -22,6 +22,10 @@ spring:
   flyway:
     enabled: false  # 로컬은 Flyway 비활성화
 
+info:
+  app:
+    environment: dev
+
 security:
   cors:
     allowed-origins:

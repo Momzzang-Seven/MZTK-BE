@@ -6,20 +6,20 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteIn
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionSponsorWalletAddressUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetInternalExecutionIssuerPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -27,18 +27,15 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnInternalExecutionEnabled
 public class InternalExecutionServiceConfig {
 
   @Bean
   GetExecutionSponsorWalletAddressUseCase getExecutionSponsorWalletAddressUseCase(
-      LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort,
+      LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort,
       LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort) {
     return new GetExecutionSponsorWalletAddressService(
-        loadExecutionSponsorWalletConfigPort, loadExecutionSponsorKeyPort);
+        loadInternalExecutionSignerConfigPort, loadExecutionSponsorKeyPort);
   }
 
   @Bean
@@ -51,20 +48,20 @@ public class InternalExecutionServiceConfig {
   ExecuteInternalExecutionIntentService executeInternalExecutionIntentService(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       ExecutionTransactionGatewayPort executionTransactionGatewayPort,
-      LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort,
+      LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort,
       LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort,
       ExecutionEip1559SigningPort executionEip1559SigningPort,
-      ExecutionEip7702GatewayPort executionEip7702GatewayPort,
+      Eip1559TransactionCodecPort eip1559TransactionCodecPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       Clock appClock) {
     return new ExecuteInternalExecutionIntentService(
         executionIntentPersistencePort,
         executionTransactionGatewayPort,
-        loadExecutionSponsorWalletConfigPort,
+        loadInternalExecutionSignerConfigPort,
         loadExecutionSponsorKeyPort,
         executionEip1559SigningPort,
-        executionEip7702GatewayPort,
+        eip1559TransactionCodecPort,
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         appClock);

@@ -4,5 +4,6 @@ public interface LoadExecutionInternalIssuerPolicyPort {
 
   ExecutionInternalIssuerPolicy loadPolicy();
 
-  record ExecutionInternalIssuerPolicy(boolean enabled, boolean qnaAdminSettleEnabled) {}
+  record ExecutionInternalIssuerPolicy(
+      boolean enabled, boolean qnaAdminSettleEnabled, boolean qnaAdminRefundEnabled) {}
 }

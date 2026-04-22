@@ -54,7 +54,9 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                     PostType.QUESTION.equals(post.getType()),
                     post.getContent(),
                     post.getReward(),
-                    post.getStatus() != PostStatus.OPEN));
+                    post.getStatus() != PostStatus.OPEN,
+                    post.getStatus(),
+                    post.getAcceptedAnswerId()));
   }
 
   @Override
@@ -71,7 +73,9 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                     PostType.QUESTION.equals(post.getType()),
                     post.getContent(),
                     post.getReward(),
-                    post.getStatus() != PostStatus.OPEN));
+                    post.getStatus() != PostStatus.OPEN,
+                    post.getStatus(),
+                    post.getAcceptedAnswerId()));
   }
 
   /** Loads public post detail, enriching optional viewer-specific state when requester is known. */

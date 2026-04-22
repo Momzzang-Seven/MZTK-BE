@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ScheduleNextQnaAutoAcceptResult;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ScheduleNextQnaAutoAcceptUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ClaimNextQnaAutoAcceptCandidatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAcceptContextPort;
@@ -26,7 +26,7 @@ public class ScheduleNextQnaAutoAcceptService implements ScheduleNextQnaAutoAcce
   private final LoadQnaAcceptContextPort loadQnaAcceptContextPort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
-  private final QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
+  private final PrepareQnaInternalSettlementUseCase prepareQnaInternalSettlementUseCase;
   private final Clock appClock;
 
   @Override
@@ -65,7 +65,7 @@ public class ScheduleNextQnaAutoAcceptService implements ScheduleNextQnaAutoAcce
     }
 
     qnaAcceptStateSyncPort.beginPendingAccept(context.postId(), context.answerId());
-    questionEscrowExecutionUseCase.prepareAdminSettle(
+    prepareQnaInternalSettlementUseCase.execute(
         new PrepareAdminSettleCommand(
             context.postId(),
             context.answerId(),
@@ -78,7 +78,7 @@ public class ScheduleNextQnaAutoAcceptService implements ScheduleNextQnaAutoAcce
 
   private boolean hasActiveIntent(QnaExecutionResourceType resourceType, Long resourceId) {
     return loadQnaExecutionIntentStatePort
-        .loadLatestActiveByResource(resourceType, String.valueOf(resourceId))
+        .loadLatestActiveByResourceForUpdate(resourceType, String.valueOf(resourceId))
         .isPresent();
   }
 }

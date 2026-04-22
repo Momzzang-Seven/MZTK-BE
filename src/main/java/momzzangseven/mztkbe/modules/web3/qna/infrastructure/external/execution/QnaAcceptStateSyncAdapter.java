@@ -2,17 +2,14 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
 import momzzangseven.mztkbe.modules.post.application.port.in.SyncAcceptedAnswerUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
+@ConditionalOnAnyExecutionEnabled
 public class QnaAcceptStateSyncAdapter implements QnaAcceptStateSyncPort {
 
   private final SyncAcceptedAnswerUseCase syncAcceptedAnswerUseCase;

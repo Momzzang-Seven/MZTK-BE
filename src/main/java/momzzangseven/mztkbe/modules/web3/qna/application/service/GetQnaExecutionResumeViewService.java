@@ -12,17 +12,10 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResu
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaExecutionResumeViewQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionResumeViewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
 public class GetQnaExecutionResumeViewService implements GetQnaExecutionResumeViewUseCase {
 
   private final GetLatestExecutionIntentSummaryUseCase getLatestExecutionIntentSummaryUseCase;

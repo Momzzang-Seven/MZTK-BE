@@ -3,8 +3,6 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,13 +11,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
@@ -35,7 +31,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaExecutionDraftBuilderAdapterTest {
 
   @Mock private GetActiveWalletAddressUseCase getActiveWalletAddressUseCase;
-  @Mock private LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
   @Mock private Eip7702ChainPort eip7702ChainPort;
   @Mock private Eip7702AuthorizationPort eip7702AuthorizationPort;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
@@ -72,7 +67,6 @@ class QnaExecutionDraftBuilderAdapterTest {
     adapter =
         new QnaExecutionDraftBuilderAdapter(
             getActiveWalletAddressUseCase,
-            loadQnaAdminSignerAddressPort,
             eip7702ChainPort,
             eip7702AuthorizationPort,
             eip7702Properties,
@@ -126,56 +120,7 @@ class QnaExecutionDraftBuilderAdapterTest {
   }
 
   @Test
-  void build_adminSettleUsesSponsorSignerAddressAndDisablesFallback() {
-    when(loadQnaAdminSignerAddressPort.loadSignerAddress())
-        .thenReturn("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    when(eip7702ChainPort.loadPendingAccountNonce("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
-        .thenReturn(BigInteger.valueOf(21));
-    when(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
-        .thenReturn(
-            new QnaContractCallSupport.QnaCallPrevalidationResult(
-                BigInteger.valueOf(210_000),
-                BigInteger.valueOf(3_000_000_000L),
-                BigInteger.valueOf(30_000_000_000L)));
-
-    QnaExecutionDraft draft =
-        adapter.build(
-            new QnaEscrowExecutionRequest(
-                QnaExecutionResourceType.QUESTION,
-                "101",
-                QnaExecutionActionType.QNA_ADMIN_SETTLE,
-                7L,
-                22L,
-                101L,
-                201L,
-                "0x4444444444444444444444444444444444444444",
-                new BigInteger("50000000000000000000"),
-                "0x" + "a".repeat(64),
-                "0x" + "b".repeat(64)));
-
-    verify(qnaContractCallSupport)
-        .requireAdminCallable(
-            "0x3333333333333333333333333333333333333333",
-            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    assertThat(draft.fallbackAllowed()).isFalse();
-    assertThat(draft.authorityAddress()).isNull();
-    assertThat(draft.authorityNonce()).isNull();
-    assertThat(draft.delegateTarget()).isNull();
-    assertThat(draft.unsignedTxSnapshot().fromAddress())
-        .isEqualTo("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    assertThat(draft.unsignedTxSnapshot().nonce()).isEqualTo(21L);
-  }
-
-  @Test
-  void build_adminSettleFailsWhenSignerIsNotRelayerOrOwner() {
-    when(loadQnaAdminSignerAddressPort.loadSignerAddress())
-        .thenReturn("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    doThrow(new Web3InvalidInputException("adminSettle caller is not relayer or owner"))
-        .when(qnaContractCallSupport)
-        .requireAdminCallable(
-            "0x3333333333333333333333333333333333333333",
-            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-
+  void build_rejectsAdminAction() {
     assertThatThrownBy(
             () ->
                 adapter.build(
@@ -191,7 +136,7 @@ class QnaExecutionDraftBuilderAdapterTest {
                         new BigInteger("50000000000000000000"),
                         "0x" + "a".repeat(64),
                         "0x" + "b".repeat(64))))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("not relayer or owner");
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("user draft builder does not support admin settle/refund");
   }
 }

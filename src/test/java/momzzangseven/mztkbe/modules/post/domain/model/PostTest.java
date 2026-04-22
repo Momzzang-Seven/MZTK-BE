@@ -365,6 +365,92 @@ class PostTest {
   }
 
   @Test
+  @DisplayName("beginAdminRefund marks question as pending admin refund")
+  void beginAdminRefund_marksPending() {
+    Post post =
+        Post.builder()
+            .id(222L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    Post pendingRefund = post.beginAdminRefund();
+
+    assertThat(pendingRefund.getAcceptedAnswerId()).isNull();
+    assertThat(pendingRefund.getStatus()).isEqualTo(PostStatus.PENDING_ADMIN_REFUND);
+    assertThat(pendingRefund.getIsSolved()).isTrue();
+  }
+
+  @Test
+  @DisplayName("cancelAdminRefund reopens pending admin refund question")
+  void cancelAdminRefund_reopensPendingRefundQuestion() {
+    Post pendingRefund =
+        Post.builder()
+            .id(224L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.PENDING_ADMIN_REFUND)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    Post reopened = pendingRefund.cancelAdminRefund();
+
+    assertThat(reopened.getAcceptedAnswerId()).isNull();
+    assertThat(reopened.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(reopened.getIsSolved()).isFalse();
+  }
+
+  @Test
+  @DisplayName("cancelAdminRefund rejects non pending post")
+  void cancelAdminRefund_rejectsWhenNotPendingRefund() {
+    Post post =
+        Post.builder()
+            .id(225L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.OPEN)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> post.cancelAdminRefund())
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("not pending admin refund");
+  }
+
+  @Test
+  @DisplayName("pending admin refund question cannot have accepted answer id")
+  void pendingAdminRefundQuestionCannotHaveAcceptedAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Post.builder()
+                    .id(223L)
+                    .userId(1L)
+                    .type(PostType.QUESTION)
+                    .title("question")
+                    .content("content")
+                    .reward(10L)
+                    .acceptedAnswerId(99L)
+                    .status(PostStatus.PENDING_ADMIN_REFUND)
+                    .build())
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("cannot have acceptedAnswerId");
+  }
+
+  @Test
   @DisplayName("confirmAccepted finalizes a pending accept")
   void confirmAccepted_resolvesPendingAccept() {
     Post pending =
@@ -468,6 +554,25 @@ class PostTest {
             .reward(10L)
             .acceptedAnswerId(55L)
             .status(PostStatus.RESOLVED)
+            .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+            .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+            .build();
+
+    assertThatThrownBy(() -> post.accept(99L)).isInstanceOf(PostAlreadySolvedException.class);
+  }
+
+  @Test
+  @DisplayName("accept rejects admin refund pending question with PostAlreadySolvedException")
+  void accept_rejectsPendingAdminRefundQuestion() {
+    Post post =
+        Post.builder()
+            .id(211L)
+            .userId(1L)
+            .type(PostType.QUESTION)
+            .title("question")
+            .content("content")
+            .reward(10L)
+            .status(PostStatus.PENDING_ADMIN_REFUND)
             .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
             .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
             .build();

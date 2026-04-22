@@ -90,6 +90,23 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public Optional<ExecutionIntent> findLatestActiveByResource(
+      ExecutionResourceType resourceType, String resourceId) {
+    return repository
+        .findLatestByResourceAndStatusIn(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN),
+            PageRequest.of(0, 1))
+        .stream()
+        .findFirst()
+        .map(this::toDomain);
+  }
+
+  @Override
   public Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId) {
     return repository

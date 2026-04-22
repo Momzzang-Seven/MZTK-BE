@@ -12,10 +12,12 @@ import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Pr
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class ExecutionDraftPolicyValidatorAdapter implements ValidateExecutionDraftPolicyPort {
 
   private static final int FUNCTION_SELECTOR_LENGTH = 10;

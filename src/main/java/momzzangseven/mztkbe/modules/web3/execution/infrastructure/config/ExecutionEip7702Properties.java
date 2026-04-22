@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
@@ -15,6 +16,7 @@ import org.springframework.validation.annotation.Validated;
 @Getter
 @Setter
 @Component
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 @Validated
 @ConfigurationProperties(prefix = "web3.eip7702")
 public class ExecutionEip7702Properties {

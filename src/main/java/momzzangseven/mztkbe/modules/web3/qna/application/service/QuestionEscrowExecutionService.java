@@ -5,7 +5,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
-import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
@@ -165,36 +164,6 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
             QnaExecutionResourceType.QUESTION,
             String.valueOf(command.postId()),
             QnaExecutionActionType.QNA_ANSWER_ACCEPT,
-            command.requesterUserId(),
-            command.answerWriterUserId(),
-            command.postId(),
-            command.answerId(),
-            rewardContext.tokenAddress(),
-            rewardContext.amountWei(),
-            question.getQuestionHash(),
-            answer.getContentHash()));
-  }
-
-  @Override
-  public QnaExecutionIntentResult prepareAdminSettle(PrepareAdminSettleCommand command) {
-    command.validate();
-
-    QnaQuestionProjection question = requireQuestionProjection(command.postId());
-    QnaAnswerProjection answer = requireAnswerProjection(command.answerId());
-    ensureQuestionMutationConflictFree(command.postId(), QnaExecutionActionType.QNA_ADMIN_SETTLE);
-    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ADMIN_SETTLE);
-    ensureHashesMatch(
-        command.questionContent(),
-        question.getQuestionHash(),
-        command.answerContent(),
-        answer.getContentHash());
-    RewardContext rewardContext = rewardContext(question);
-
-    return submit(
-        new QnaEscrowExecutionRequest(
-            QnaExecutionResourceType.QUESTION,
-            String.valueOf(command.postId()),
-            QnaExecutionActionType.QNA_ADMIN_SETTLE,
             command.requesterUserId(),
             command.answerWriterUserId(),
             command.postId(),

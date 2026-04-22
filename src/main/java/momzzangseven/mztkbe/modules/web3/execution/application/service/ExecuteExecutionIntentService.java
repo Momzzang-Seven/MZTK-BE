@@ -32,19 +32,12 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEvent
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.utils.Numeric;
 
-@Service
 @Slf4j
 @RequiredArgsConstructor
 @Transactional
-@ConditionalOnProperty(
-    prefix = "web3",
-    name = {"eip7702.enabled", "reward-token.enabled"},
-    havingValue = "true")
 /**
  * Executes a previously created execution intent.
  *

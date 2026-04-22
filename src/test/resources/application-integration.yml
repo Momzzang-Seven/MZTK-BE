@@ -69,7 +69,19 @@ web3:
     chain-id: 1337
     verifying-contract: "0x0000000000000000000000000000000000000000"
   eip7702:
-    enabled: true
+    enabled: false
+  execution:
+    internal:
+      enabled: false
+      action-policy: QNA_ADMIN
+  qna:
+    admin:
+      enabled: false
+    auto-accept:
+      enabled: false
+  marketplace:
+    admin:
+      enabled: false
   reward-token:
     enabled: true
     token-contract-address: "0x0000000000000000000000000000000000000000"

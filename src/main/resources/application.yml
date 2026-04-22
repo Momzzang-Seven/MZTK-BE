@@ -31,10 +31,10 @@ spring:
 
 info:
   app:
-    name: ${APP_NAME:MZTK-BE}
-    version: ${APP_VERSION:0.0.1-SNAPSHOT}
-    description: ${APP_DESCRIPTION:MZTK-BE Backend Service}
-    environment: ${APP_ENVIRONMENT:local}
+    name: MZTK-BE
+    version: 0.0.1-SNAPSHOT
+    description: MZTK-BE Backend Service
+    environment: local
 
 security:
   cors:
@@ -94,16 +94,16 @@ withdrawal:
 
 comment:
   hard-delete:
-    retention-days: ${COMMENT_HARD_DELETE_RETENTION_DAYS:30}
-    batch-size: ${COMMENT_HARD_DELETE_BATCH_SIZE:100}
-    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
-    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
+    retention-days: 30
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
 
 answer:
   orphan-cleanup:
-    batch-size: ${ANSWER_ORPHAN_CLEANUP_BATCH_SIZE:100}
-    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
-    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
 
 logging:
   level:
@@ -152,8 +152,8 @@ web3:
 
   explorer:
     base-url: ${WEB3_EXPLORER_BASE_URL}
-    api-url: ${WEB3_EXPLORER_API_URL:https://api.etherscan.io/v2/api}     # 편의 기본값(필수 아님)
-    api-key: ${WEB3_EXPLORER_API_KEY}            # prod에서 보통 필요
+    api-url: ${WEB3_EXPLORER_API_URL}
+    api-key: ${WEB3_EXPLORER_API_KEY}
 
   # 로그인/지갑 연결(서명) - 온체인 결합은 chain-id만
   challenge:
@@ -241,11 +241,11 @@ web3:
 
     execution:
       allowed-delegate-targets:
-        - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS:}
+        - ${WEB3_EIP7702_BATCH_IMPL_ADDRESS}
       allowed-call-targets:
-        - ${MZTK_TOKEN_CONTRACT_ADDRESS:}
-        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS:}
-        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS:}
+        - ${MZTK_TOKEN_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
       allowed-target-contracts: []               # deprecated fallback. use split allowlists above
       blocked-function-selectors: []             # prod에서만 채우는 것을 권장
 
@@ -260,20 +260,28 @@ web3:
       log-auth-hash: true
       log-user-op: false
   execution:
-    internal-issuer:
-      enabled: ${WEB3_EXECUTION_INTERNAL_ISSUER_ENABLED}
+    internal:
+      enabled: ${WEB3_EXECUTION_INTERNAL_ENABLED}
       batch-size: 20
       cron: "0/10 * * * * *"
-      zone: "Asia/Seoul"
-      action-types:
-        - QNA_ADMIN_SETTLE
+      zone: Asia/Seoul
+      eip1559-ttl-seconds: 90
+      action-policy: ${WEB3_EXECUTION_INTERNAL_ACTION_POLICY}
+      signer:
+        key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
+        wallet-alias: sponsor-treasury
   qna:
+    admin:
+      enabled: ${WEB3_QNA_ADMIN_ENABLED}
     auto-accept:
       enabled: ${WEB3_QNA_AUTO_ACCEPT_ENABLED}
       delay-seconds: 604800
       batch-size: 50
       cron: "0 17 * * * *"
       zone: "Asia/Seoul"
+  marketplace:
+    admin:
+      enabled: ${WEB3_MARKETPLACE_ADMIN_ENABLED}
   escrow:
     marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
     qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
@@ -302,13 +310,13 @@ cloud:
 
 image:
   post-orphan-cleanup:
-    batch-size: ${IMAGE_POST_ORPHAN_CLEANUP_BATCH_SIZE:100}
-    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
-    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
   answer-orphan-cleanup:
-    batch-size: ${IMAGE_ANSWER_ORPHAN_CLEANUP_BATCH_SIZE:100}
-    cron: ${ASYNC_CLEANUP_CRON:0 30 * * * *}
-    zone: ${ASYNC_CLEANUP_ZONE:Asia/Seoul}
+    batch-size: 100
+    cron: "0 30 * * * *"
+    zone: Asia/Seoul
   pending-cleanup:
     retention-hours: 5
     batch-size: 100
@@ -322,7 +330,7 @@ image:
 
 verification:
   ai:
-    api-key: ${GEMINI_API_KEY:}
+    api-key: ${GEMINI_API_KEY}
     model: gemini-2.5-flash-lite
     timeout-seconds: 12
     retry-count: 2
@@ -341,9 +349,9 @@ lambda:
 mztk:
   admin:
     seed:
-      seed-count: ${ADMIN_SEED_COUNT:2}
-      delivery-target: ${ADMIN_SEED_DELIVERY_TARGET:mztk/admin/bootstrap-delivery}
+      seed-count: 2
+      delivery-target: mztk/admin/bootstrap-delivery
     recovery:
-      secret-id: ${ADMIN_RECOVERY_SECRET_ID:mztk/admin/recovery-anchor}
+      secret-id: mztk/admin/recovery-anchor
       rate-limit:
         trust-forwarded-for: false
