@@ -28,6 +28,20 @@ public class SlotReservationQueryService implements GetSlotReservationInfoUseCas
 
   @Override
   @Transactional(readOnly = true)
+  public int countActiveReservations(Long slotId, java.time.LocalDate date) {
+    return loadReservationPort.countActiveReservationsBySlotIdAndDate(slotId, date);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public java.util.Map<java.time.LocalDate, Integer> countActiveReservationsForDateRange(
+      Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate) {
+    return loadReservationPort.countActiveReservationsBySlotIdAndDateRange(
+        slotId, startDate, endDate);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public boolean hasAnyReservationHistory(Long slotId) {
     return loadReservationPort.hasAnyReservationHistory(slotId);
   }

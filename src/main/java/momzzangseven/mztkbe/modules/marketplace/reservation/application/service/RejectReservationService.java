@@ -44,7 +44,7 @@ public class RejectReservationService implements RejectReservationUseCase {
 
     Reservation reservation =
         loadReservationPort
-            .findById(command.reservationId())
+            .findByIdWithLock(command.reservationId())
             .orElseThrow(
                 () ->
                     new BusinessException(

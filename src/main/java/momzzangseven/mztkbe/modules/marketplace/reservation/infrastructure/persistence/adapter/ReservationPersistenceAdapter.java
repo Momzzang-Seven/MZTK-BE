@@ -28,22 +28,41 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   }
 
   @Override
+  public Optional<Reservation> findByIdWithLock(Long reservationId) {
+    return reservationJpaRepository
+        .findByIdWithLock(reservationId)
+        .map(ReservationEntity::toDomain);
+  }
+
+  @Override
   public int countActiveReservationsBySlotId(Long slotId) {
     return reservationJpaRepository.countActiveBySlotId(slotId);
   }
 
   @Override
-  public int countActiveReservationsBySlotIdWithLock(Long slotId) {
-    return reservationJpaRepository.countActiveBySlotIdWithLock(slotId);
+  public int countActiveReservationsBySlotIdAndDate(Long slotId, java.time.LocalDate date) {
+    return reservationJpaRepository.countActiveBySlotIdAndDate(slotId, date);
   }
 
   @Override
-  public Map<Long, Integer> countActiveReservationsBySlotIdIn(List<Long> slotIds) {
-    if (slotIds == null || slotIds.isEmpty()) return Map.of();
-    List<Object[]> rows = reservationJpaRepository.countActiveBySlotIdIn(slotIds);
-    Map<Long, Integer> result = new HashMap<>();
+  public int countActiveReservationsBySlotIdAndDateWithLock(Long slotId, java.time.LocalDate date) {
+    return reservationJpaRepository.countActiveBySlotIdAndDateWithLock(slotId, date);
+  }
+
+  @Override
+  public Map<java.time.LocalDate, Integer> countActiveReservationsBySlotIdAndDateRange(
+      Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate) {
+    List<Object[]> rows =
+        reservationJpaRepository.countActiveBySlotIdAndDateRange(slotId, startDate, endDate);
+    Map<java.time.LocalDate, Integer> result = new HashMap<>();
     for (Object[] row : rows) {
-      result.put((Long) row[0], ((Long) row[1]).intValue());
+      // JPA might return Date or LocalDate, assuming it returns LocalDate or java.sql.Date
+      Object dateObj = row[0];
+      java.time.LocalDate date =
+          (dateObj instanceof java.sql.Date)
+              ? ((java.sql.Date) dateObj).toLocalDate()
+              : (java.time.LocalDate) dateObj;
+      result.put(date, ((Long) row[1]).intValue());
     }
     return result;
   }
@@ -52,18 +71,30 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   public List<Reservation> findPendingForAutoCancel(
       LocalDateTime nowMinusTimeout, LocalDateTime nowPlusWindow, int batchSize) {
     return reservationJpaRepository
-        .findPendingForAutoCancel(nowMinusTimeout, nowPlusWindow)
+        .findPendingForAutoCancel(
+            nowMinusTimeout,
+            nowPlusWindow.toLocalDate(),
+            nowPlusWindow.toLocalTime(),
+            org.springframework.data.domain.PageRequest.of(0, batchSize))
         .stream()
-        .limit(batchSize)
         .map(ReservationEntity::toDomain)
         .toList();
   }
 
   @Override
   public List<Reservation> findApprovedForAutoSettle(LocalDateTime now, int batchSize) {
-    return reservationJpaRepository.findApprovedForAutoSettle(now).stream()
-        .limit(batchSize)
+    // Session end + 24h < now -> Session end < now - 24h
+    LocalDateTime target = now.minusHours(24);
+    java.time.LocalDate targetDate = target.toLocalDate();
+
+    // Fetch batchSize * 2 to account for some rows that might be filtered out
+    return reservationJpaRepository
+        .findApprovedCandidates(
+            targetDate, org.springframework.data.domain.PageRequest.of(0, batchSize * 2))
+        .stream()
         .map(ReservationEntity::toDomain)
+        .filter(r -> r.sessionEndAt().plusHours(24).isBefore(now))
+        .limit(batchSize)
         .toList();
   }
 
