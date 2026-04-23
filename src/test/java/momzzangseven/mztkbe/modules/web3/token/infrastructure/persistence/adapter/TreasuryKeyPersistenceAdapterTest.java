@@ -143,4 +143,26 @@ class TreasuryKeyPersistenceAdapterTest {
     assertThat(captor.getValue().getWalletAlias()).isEqualTo("reward-main");
     assertThat(captor.getValue().getTreasuryPrivateKeyEncrypted()).isEqualTo("enc");
   }
+
+  @Test
+  void upsert_updatesExistingEntity_whenAliasAlreadyExists() {
+    Web3TreasuryKeyEntity existing =
+        Web3TreasuryKeyEntity.builder()
+            .id(1L)
+            .walletAlias("reward-main")
+            .treasuryAddress("0x" + "a".repeat(40))
+            .treasuryPrivateKeyEncrypted("old-enc")
+            .build();
+    when(repository.findByWalletAlias("reward-main")).thenReturn(Optional.of(existing));
+
+    adapter.upsert("reward-main", "0x" + "b".repeat(40), "new-enc");
+
+    ArgumentCaptor<Web3TreasuryKeyEntity> captor =
+        ArgumentCaptor.forClass(Web3TreasuryKeyEntity.class);
+    verify(repository).save(captor.capture());
+    assertThat(captor.getValue().getId()).isEqualTo(1L);
+    assertThat(captor.getValue().getWalletAlias()).isEqualTo("reward-main");
+    assertThat(captor.getValue().getTreasuryAddress()).isEqualTo("0x" + "b".repeat(40));
+    assertThat(captor.getValue().getTreasuryPrivateKeyEncrypted()).isEqualTo("new-enc");
+  }
 }
