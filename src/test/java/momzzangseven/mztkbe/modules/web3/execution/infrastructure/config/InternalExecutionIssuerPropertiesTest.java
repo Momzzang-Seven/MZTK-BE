@@ -22,8 +22,6 @@ class InternalExecutionIssuerPropertiesTest {
             "web3.execution.internal.enabled=true",
             "web3.execution.internal.batch-size=31",
             "web3.execution.internal.eip1559-ttl-seconds=123",
-            "web3.execution.internal.signer.wallet-alias=internal-signer",
-            "web3.execution.internal.signer.key-encryption-key-b64=test-key",
             "web3.execution.internal.action-policy=QNA_AND_MARKETPLACE_ADMIN")
         .run(
             context -> {
@@ -33,8 +31,6 @@ class InternalExecutionIssuerPropertiesTest {
               assertThat(properties.getEnabled()).isTrue();
               assertThat(properties.getBatchSize()).isEqualTo(31);
               assertThat(properties.getEip1559TtlSeconds()).isEqualTo(123);
-              assertThat(properties.getSigner().getWalletAlias()).isEqualTo("internal-signer");
-              assertThat(properties.getSigner().getKeyEncryptionKeyB64()).isEqualTo("test-key");
               assertThat(properties.getActionPolicy())
                   .isEqualTo(InternalExecutionActionPolicy.QNA_AND_MARKETPLACE_ADMIN);
               assertThat(properties.getActionTypes())
@@ -61,8 +57,6 @@ class InternalExecutionIssuerPropertiesTest {
               assertThat(properties.getCron()).isEqualTo("0/10 * * * * *");
               assertThat(properties.getZone()).isEqualTo("Asia/Seoul");
               assertThat(properties.getEip1559TtlSeconds()).isEqualTo(90);
-              assertThat(properties.getSigner().getWalletAlias()).isNull();
-              assertThat(properties.getSigner().getKeyEncryptionKeyB64()).isNull();
               assertThat(properties.getActionPolicy())
                   .isEqualTo(InternalExecutionActionPolicy.QNA_ADMIN);
               assertThat(properties.getActionTypes())

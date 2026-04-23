@@ -24,7 +24,6 @@ public class InternalExecutionIssuerProperties implements LoadInternalExecutionI
   private final String cron;
   private final String zone;
   private final int eip1559TtlSeconds;
-  private final Signer signer;
   private final InternalExecutionActionPolicy actionPolicy;
 
   public InternalExecutionIssuerProperties(Environment environment) {
@@ -37,14 +36,6 @@ public class InternalExecutionIssuerProperties implements LoadInternalExecutionI
     this.zone = bind(binder, Bindable.of(String.class), "Asia/Seoul", NEW_PREFIX + ".zone");
     this.eip1559TtlSeconds =
         bind(binder, Bindable.of(Integer.class), 90, NEW_PREFIX + ".eip1559-ttl-seconds");
-    this.signer =
-        new Signer(
-            bind(
-                binder,
-                Bindable.of(String.class),
-                null,
-                NEW_PREFIX + ".signer.key-encryption-key-b64"),
-            bind(binder, Bindable.of(String.class), null, NEW_PREFIX + ".signer.wallet-alias"));
     this.actionPolicy =
         bind(
             binder,
@@ -65,16 +56,5 @@ public class InternalExecutionIssuerProperties implements LoadInternalExecutionI
   private static <T> T bind(
       Binder binder, Bindable<T> bindable, T defaultValue, String propertyName) {
     return binder.bind(propertyName, bindable).orElse(defaultValue);
-  }
-
-  @Getter
-  public static class Signer {
-    private final String keyEncryptionKeyB64;
-    private final String walletAlias;
-
-    Signer(String keyEncryptionKeyB64, String walletAlias) {
-      this.keyEncryptionKeyB64 = keyEncryptionKeyB64; // gitleaks:allow
-      this.walletAlias = walletAlias;
-    }
   }
 }

@@ -5,30 +5,36 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaAdminExecutionDraftPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadExecutionSignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminOrAutoAcceptEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminOrAutoAcceptEnabled
+@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
 public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecutionDraftPort {
 
-  private final LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
+  private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
   private final LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   private final Web3CoreProperties web3CoreProperties;
   private final QnaEscrowProperties qnaEscrowProperties;
@@ -49,8 +55,23 @@ public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecut
     String questionId = QnaEscrowIdCodec.questionId(request.postId());
     String answerId =
         request.answerId() == null ? null : QnaEscrowIdCodec.answerId(request.answerId());
-    String signerAddress = EvmAddress.of(loadQnaAdminSignerAddressPort.loadSignerAddress()).value();
-    qnaContractCallSupport.requireRelayerCallable(callTarget, signerAddress);
+    var serverSigner = probeExecutionSignerCapabilityUseCase.execute();
+    if (!serverSigner.signable() || serverSigner.signerAddress() == null) {
+      throw new Web3TransactionStateInvalidException(
+          QnaAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE.name());
+    }
+    String signerAddress = EvmAddress.of(serverSigner.signerAddress()).value();
+    boolean relayerRegistered;
+    try {
+      relayerRegistered = qnaContractCallSupport.isRelayerRegistered(callTarget, signerAddress);
+    } catch (RuntimeException e) {
+      throw new Web3TransactionStateInvalidException(
+          QnaAdminReviewValidationCode.RELAYER_REGISTRATION_CHECK_FAILED.name());
+    }
+    if (!relayerRegistered) {
+      throw new Web3TransactionStateInvalidException(
+          QnaAdminReviewValidationCode.RELAYER_NOT_REGISTERED.name());
+    }
 
     String callData =
         qnaEscrowAbiEncoder.encode(

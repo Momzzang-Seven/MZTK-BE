@@ -6,6 +6,8 @@ import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.ExecutionAuthority;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalAnswer;
@@ -19,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -45,16 +48,17 @@ class QnaAdminReviewDeciderTest {
 
     assertThat(review.processable()).isFalse();
     assertThat(review.blockingReason())
-        .isEqualTo(QnaAdminReviewDecider.ACTIVE_QUESTION_INTENT_PRESENT);
+        .isEqualTo(QnaAdminReviewValidationCode.ACTIVE_QUESTION_INTENT_PRESENT);
     assertThat(review.questionConflictingActiveIntent()).isTrue();
     assertThat(review.answerConflictingActiveIntent()).isTrue();
     assertThat(review.validations())
         .filteredOn(
-            item -> QnaAdminReviewDecider.ACTIVE_QUESTION_INTENT_PRESENT.equals(item.code()))
+            item -> QnaAdminReviewValidationCode.ACTIVE_QUESTION_INTENT_PRESENT.equals(item.code()))
         .singleElement()
         .satisfies(item -> assertThat(item.valid()).isFalse());
     assertThat(review.validations())
-        .filteredOn(item -> QnaAdminReviewDecider.ACTIVE_ANSWER_INTENT_PRESENT.equals(item.code()))
+        .filteredOn(
+            item -> QnaAdminReviewValidationCode.ACTIVE_ANSWER_INTENT_PRESENT.equals(item.code()))
         .singleElement()
         .satisfies(item -> assertThat(item.valid()).isFalse());
   }
@@ -75,10 +79,11 @@ class QnaAdminReviewDeciderTest {
 
     assertThat(review.processable()).isFalse();
     assertThat(review.blockingReason())
-        .isEqualTo(QnaAdminReviewDecider.ACTIVE_ANSWER_INTENT_PRESENT);
+        .isEqualTo(QnaAdminReviewValidationCode.ACTIVE_ANSWER_INTENT_PRESENT);
     assertThat(review.answerConflictingActiveIntent()).isTrue();
     assertThat(review.validations())
-        .filteredOn(item -> QnaAdminReviewDecider.ACTIVE_ANSWER_INTENT_PRESENT.equals(item.code()))
+        .filteredOn(
+            item -> QnaAdminReviewValidationCode.ACTIVE_ANSWER_INTENT_PRESENT.equals(item.code()))
         .singleElement()
         .satisfies(item -> assertThat(item.valid()).isFalse());
   }
@@ -100,7 +105,7 @@ class QnaAdminReviewDeciderTest {
 
     assertThat(review.processable()).isFalse();
     assertThat(review.blockingReason())
-        .isEqualTo(QnaAdminReviewDecider.ACTIVE_QUESTION_INTENT_PRESENT);
+        .isEqualTo(QnaAdminReviewValidationCode.ACTIVE_QUESTION_INTENT_PRESENT);
     assertThat(review.questionConflictingActiveIntent()).isTrue();
   }
 
@@ -120,6 +125,29 @@ class QnaAdminReviewDeciderTest {
 
     assertThat(review.processable()).isTrue();
     assertThat(review.blockingReason()).isNull();
+  }
+
+  @Test
+  @DisplayName("refund review distinguishes relayer check failure from relayer not registered")
+  void assessRefund_blocksWhenRelayerRegistrationCheckFails() {
+    RefundContext context =
+        new RefundContext(
+            Optional.of(localQuestion()),
+            Optional.of(onchainQuestion(0)),
+            Optional.empty(),
+            List.of(),
+            new ExecutionAuthority(
+                ExecutionSignerCapabilityView.ready(
+                    "sponsor-treasury", "0x2222222222222222222222222222222222222222"),
+                false,
+                QnaAdminRelayerRegistrationStatus.CHECK_FAILED),
+            enabledPolicy());
+
+    var review = QnaAdminReviewDecider.assessRefund(101L, context);
+
+    assertThat(review.processable()).isFalse();
+    assertThat(review.blockingReason())
+        .isEqualTo(QnaAdminReviewValidationCode.RELAYER_REGISTRATION_CHECK_FAILED);
   }
 
   private LocalQuestion localQuestion() {
@@ -163,7 +191,11 @@ class QnaAdminReviewDeciderTest {
   }
 
   private ExecutionAuthority authority() {
-    return new ExecutionAuthority("0x2222222222222222222222222222222222222222", true);
+    return new ExecutionAuthority(
+        ExecutionSignerCapabilityView.ready(
+            "sponsor-treasury", "0x2222222222222222222222222222222222222222"),
+        true,
+        QnaAdminRelayerRegistrationStatus.REGISTERED);
   }
 
   private LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy enabledPolicy() {

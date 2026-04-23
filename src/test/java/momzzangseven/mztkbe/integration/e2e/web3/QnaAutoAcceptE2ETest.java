@@ -60,6 +60,8 @@ import org.springframework.transaction.support.TransactionTemplate;
       "web3.eip7702.enabled=true",
       "web3.execution.internal.enabled=true",
       "web3.qna.auto-accept.enabled=true",
+      "web3.eip7702.sponsor.wallet-alias=test-sponsor",
+      "web3.eip7702.sponsor.key-encryption-key-b64=dGVzdA==",
       "web3.execution.internal.signer.wallet-alias=test-sponsor",
       "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA=="
     })

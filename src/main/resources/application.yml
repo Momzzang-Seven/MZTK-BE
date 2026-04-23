@@ -188,7 +188,6 @@ web3:
     treasury:
       wallet-alias: reward-treasury
       key-encryption-key-b64: ${TREASURY_KEY_ENCRYPTION_KEY_B64}
-      treasury-address: ${TREASURY_WALLET_ADDRESS}
       provisioning:
         enabled: ${WEB3_TREASURY_PROVISIONING_ENABLED}
 

@@ -5,6 +5,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminRefundCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalRefundUseCase;
@@ -40,10 +41,10 @@ public class ExecuteQnaAdminRefundService implements ExecuteQnaAdminRefundUseCas
         new PrepareAdminRefundCommand(command.postId(), localQuestion.writerUserId()));
   }
 
-  private void throwValidationFailure(String blockingReason) {
+  private void throwValidationFailure(QnaAdminReviewValidationCode blockingReason) {
     if (QnaAdminReviewDecider.isBadRequestCode(blockingReason)) {
-      throw new Web3InvalidInputException(blockingReason);
+      throw new Web3InvalidInputException(blockingReason.name());
     }
-    throw new Web3TransactionStateInvalidException(blockingReason);
+    throw new Web3TransactionStateInvalidException(blockingReason.name());
   }
 }
