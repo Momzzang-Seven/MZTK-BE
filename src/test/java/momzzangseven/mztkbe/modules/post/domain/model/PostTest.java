@@ -135,9 +135,52 @@ class PostTest {
   }
 
   @Test
+  @DisplayName("FREE update ignores null title and keeps existing title")
+  void updateFreeWithNullTitleKeepsTitle() {
+    Post post = basePost();
+
+    Post updated = post.update(null, "new-content", null, 0L);
+
+    assertThat(updated.getTitle()).isEqualTo("title");
+    assertThat(updated.getContent()).isEqualTo("new-content");
+  }
+
+  @Test
+  @DisplayName("FREE update rejects non-blank title")
+  void updateFreeWithNonBlankTitleThrows() {
+    Post post = basePost();
+
+    assertThatThrownBy(() -> post.update("new title", null, null, 0L))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Free posts do not support title updates.");
+  }
+
+  @Test
+  @DisplayName("QUESTION update with null title keeps existing title")
+  void updateQuestionWithNullTitleKeepsTitle() {
+    Post post = baseQuestionPost();
+
+    Post updated = post.update(null, "new-content", null, 0L);
+
+    assertThat(updated.getTitle()).isEqualTo("question title");
+    assertThat(updated.getContent()).isEqualTo("new-content");
+  }
+
+  @Test
+  @DisplayName("QUESTION update with non-blank title changes title")
+  void updateQuestionWithNonBlankTitleChangesTitle() {
+    Post post = baseQuestionPost();
+
+    Post updated = post.update("new question title", null, null, 0L);
+
+    assertThat(updated.getTitle()).isEqualTo("new question title");
+    assertThat(updated.getContent()).isEqualTo("question content");
+  }
+
+  @Test
   @DisplayName("update replaces fields and refreshes updatedAt")
   void updateChangesFields() {
-    Post post = basePost();
+    Post post = baseQuestionPost();
 
     Post updated = post.update("new", "new-content", List.of("tag2"), 0L);
 
@@ -588,6 +631,21 @@ class PostTest {
         .title("title")
         .content("content")
         .reward(0L)
+        .status(PostStatus.OPEN)
+        .tags(List.of("tag1"))
+        .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
+        .updatedAt(LocalDateTime.of(2026, 1, 1, 10, 0))
+        .build();
+  }
+
+  private Post baseQuestionPost() {
+    return Post.builder()
+        .id(2L)
+        .userId(1L)
+        .type(PostType.QUESTION)
+        .title("question title")
+        .content("question content")
+        .reward(10L)
         .status(PostStatus.OPEN)
         .tags(List.of("tag1"))
         .createdAt(LocalDateTime.of(2026, 1, 1, 9, 0))
