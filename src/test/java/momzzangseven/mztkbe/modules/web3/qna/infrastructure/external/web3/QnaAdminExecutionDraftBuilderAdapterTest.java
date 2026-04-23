@@ -11,14 +11,17 @@ import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerFailureReason;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class QnaAdminExecutionDraftBuilderAdapterTest {
 
-  @Mock private LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
+  @Mock private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
   @Mock private LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
 
@@ -49,7 +52,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
     adapter =
         new QnaAdminExecutionDraftBuilderAdapter(
-            loadQnaAdminSignerAddressPort,
+            probeExecutionSignerCapabilityUseCase,
             loadInternalExecutionEip1559TtlPort,
             web3CoreProperties,
             qnaEscrowProperties,
@@ -62,8 +65,10 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
   @Test
   void build_adminSettleUsesServerSignerWithoutUserAuthority() {
-    when(loadQnaAdminSignerAddressPort.loadSignerAddress())
-        .thenReturn("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    when(probeExecutionSignerCapabilityUseCase.execute())
+        .thenReturn(
+            ExecutionSignerCapabilityView.ready(
+                "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     when(loadInternalExecutionEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
     when(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
         .thenReturn(
@@ -71,6 +76,10 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
                 BigInteger.valueOf(210_000),
                 BigInteger.valueOf(3_000_000_000L),
                 BigInteger.valueOf(30_000_000_000L)));
+    when(qnaContractCallSupport.isRelayerRegistered(
+            "0x3333333333333333333333333333333333333333",
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+        .thenReturn(true);
 
     QnaExecutionDraft draft =
         adapter.build(
@@ -88,7 +97,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
                 "0x" + "b".repeat(64)));
 
     verify(qnaContractCallSupport)
-        .requireRelayerCallable(
+        .isRelayerRegistered(
             "0x3333333333333333333333333333333333333333",
             "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
     assertThat(draft.fallbackAllowed()).isFalse();
@@ -124,14 +133,14 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
   @Test
   void build_adminRefundFailsWhenSignerIsNotRegisteredRelayer() {
-    when(loadQnaAdminSignerAddressPort.loadSignerAddress())
-        .thenReturn("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-    org.mockito.Mockito.doThrow(
-            new Web3InvalidInputException("current server signer is not a registered relayer"))
-        .when(qnaContractCallSupport)
-        .requireRelayerCallable(
+    when(probeExecutionSignerCapabilityUseCase.execute())
+        .thenReturn(
+            ExecutionSignerCapabilityView.ready(
+                "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+    when(qnaContractCallSupport.isRelayerRegistered(
             "0x3333333333333333333333333333333333333333",
-            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+        .thenReturn(false);
 
     assertThatThrownBy(
             () ->
@@ -148,7 +157,65 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
                         new BigInteger("50000000000000000000"),
                         "0x" + "a".repeat(64),
                         null)))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("registered relayer");
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("RELAYER_NOT_REGISTERED");
+  }
+
+  @Test
+  void build_rejectsUnavailableServerSigner() {
+    when(probeExecutionSignerCapabilityUseCase.execute())
+        .thenReturn(
+            ExecutionSignerCapabilityView.unavailable(
+                "sponsor-treasury",
+                ExecutionSignerSlotStatus.UNPROVISIONED,
+                ExecutionSignerFailureReason.NONE));
+
+    assertThatThrownBy(
+            () ->
+                adapter.build(
+                    new QnaEscrowExecutionRequest(
+                        QnaExecutionResourceType.QUESTION,
+                        "101",
+                        QnaExecutionActionType.QNA_ADMIN_REFUND,
+                        7L,
+                        null,
+                        101L,
+                        null,
+                        "0x4444444444444444444444444444444444444444",
+                        new BigInteger("50000000000000000000"),
+                        "0x" + "a".repeat(64),
+                        null)))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("SERVER_SIGNER_UNAVAILABLE");
+  }
+
+  @Test
+  void build_rejectsWhenRelayerRegistrationCheckFails() {
+    when(probeExecutionSignerCapabilityUseCase.execute())
+        .thenReturn(
+            ExecutionSignerCapabilityView.ready(
+                "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+    when(qnaContractCallSupport.isRelayerRegistered(
+            "0x3333333333333333333333333333333333333333",
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+        .thenThrow(new RuntimeException("rpc down"));
+
+    assertThatThrownBy(
+            () ->
+                adapter.build(
+                    new QnaEscrowExecutionRequest(
+                        QnaExecutionResourceType.QUESTION,
+                        "101",
+                        QnaExecutionActionType.QNA_ADMIN_REFUND,
+                        7L,
+                        null,
+                        101L,
+                        null,
+                        "0x4444444444444444444444444444444444444444",
+                        new BigInteger("50000000000000000000"),
+                        "0x" + "a".repeat(64),
+                        null)))
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("RELAYER_REGISTRATION_CHECK_FAILED");
   }
 }

@@ -1,13 +1,15 @@
-package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.level.LevelUpCommandInvalidException;
 import momzzangseven.mztkbe.global.error.level.RewardTreasuryAddressInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -15,12 +17,13 @@ import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkCommand
 import momzzangseven.mztkbe.modules.level.application.port.out.RewardMztkResult;
 import momzzangseven.mztkbe.modules.level.domain.vo.RewardTxStatus;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryAddressProjectionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadRewardTreasurySignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.external.level.LevelRewardMztkAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +40,9 @@ class LevelRewardMztkAdapterTest {
   @Mock
   private CreateLevelUpRewardTransactionIntentUseCase createLevelUpRewardTransactionIntentUseCase;
 
+  @Mock private LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort;
+  @Mock private LoadTreasuryAddressProjectionPort loadTreasuryAddressProjectionPort;
+
   private TransferRewardTokenProperties properties;
   private LevelRewardMztkAdapter adapter;
 
@@ -44,8 +50,20 @@ class LevelRewardMztkAdapterTest {
   void setUp() {
     properties = new TransferRewardTokenProperties();
     properties.setDecimals(18);
-    properties.getTreasury().setTreasuryAddress(TREASURY);
-    adapter = new LevelRewardMztkAdapter(createLevelUpRewardTransactionIntentUseCase, properties);
+    lenient()
+        .when(loadRewardTreasurySignerConfigPort.load())
+        .thenReturn(
+            new LoadRewardTreasurySignerConfigPort.RewardTreasurySignerConfig(
+                "reward-treasury", "test-kek"));
+    lenient()
+        .when(loadTreasuryAddressProjectionPort.loadAddressByAlias("reward-treasury"))
+        .thenReturn(Optional.of(TREASURY));
+    adapter =
+        new LevelRewardMztkAdapter(
+            createLevelUpRewardTransactionIntentUseCase,
+            properties,
+            loadRewardTreasurySignerConfigPort,
+            loadTreasuryAddressProjectionPort);
   }
 
   @Test
@@ -217,24 +235,11 @@ class LevelRewardMztkAdapterTest {
   }
 
   @Test
-  void reward_rejectsBlankTreasuryAddress() {
-    properties.getTreasury().setTreasuryAddress(" ");
+  void reward_rejectsMissingRewardTreasuryAddressProjection() {
+    when(loadTreasuryAddressProjectionPort.loadAddressByAlias("reward-treasury"))
+        .thenReturn(Optional.empty());
     assertThatThrownBy(() -> adapter.reward(validCommand(3)))
         .isInstanceOf(RewardTreasuryAddressInvalidException.class);
-  }
-
-  @Test
-  void reward_rejectsNullTreasuryAddress() {
-    properties.getTreasury().setTreasuryAddress(null);
-    assertThatThrownBy(() -> adapter.reward(validCommand(3)))
-        .isInstanceOf(RewardTreasuryAddressInvalidException.class);
-  }
-
-  @Test
-  void reward_rejectsInvalidTreasuryAddressFormat() {
-    properties.getTreasury().setTreasuryAddress("not-address");
-    assertThatThrownBy(() -> adapter.reward(validCommand(3)))
-        .isInstanceOf(Web3InvalidInputException.class);
   }
 
   private RewardMztkCommand validCommand(int reward) {

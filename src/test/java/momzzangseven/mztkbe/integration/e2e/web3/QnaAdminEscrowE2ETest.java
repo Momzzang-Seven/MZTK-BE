@@ -6,10 +6,12 @@ import static org.mockito.ArgumentMatchers.anyString;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,6 +30,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
+import momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter.TreasuryKeyCipher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -42,8 +45,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.web3j.crypto.Credentials;
 
 @TestPropertySource(
     properties = {
@@ -51,24 +57,33 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.eip7702.enabled=false",
       "web3.execution.internal.enabled=true",
       "web3.qna.admin.enabled=true",
-      "web3.execution.internal.signer.wallet-alias=test-sponsor",
-      "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA=="
+      "web3.execution.internal.signer.wallet-alias=test-sponsor"
     })
 @Tag("e2e")
 @DisplayName("[E2E] QnA admin manual settle/refund flow")
 class QnaAdminEscrowE2ETest extends E2ETestBase {
 
   private static final Instant NOW = Instant.parse("2026-04-21T00:00:00Z");
-  private static final String SIGNER_ADDRESS = "0xd799cd2b5258edc2157bec7e2cd069f31f2678c2";
+  private static final String SIGNER_ADDRESS = "0x0d8e461687b7d06f86ec348e0c270b0f279855f0";
   private static final String CALL_TARGET = "0x0000000000000000000000000000000000000000";
   private static final String TOKEN_ADDRESS = "0x1111111111111111111111111111111111111111";
   private static final BigInteger REWARD_AMOUNT_WEI = new BigInteger("50000000000000000000");
   private static final String PRIVATE_KEY_HEX = "0x" + "9".repeat(64);
+  private static final String TEST_KEK_RAW = "0123456789abcdef".repeat(2);
+  private static final String KEY_ENCRYPTION_KEY_B64 = encodeTestKek();
+
+  @DynamicPropertySource
+  static void registerSignerProperties(DynamicPropertyRegistry registry) {
+    registry.add(
+        "web3.execution.internal.signer.key-encryption-key-b64",
+        QnaAdminEscrowE2ETest::encodeTestKek);
+  }
 
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private RunInternalExecutionBatchUseCase runInternalExecutionBatchUseCase;
   @Autowired private MarkExecutionIntentSucceededUseCase markExecutionIntentSucceededUseCase;
+  @Autowired private TreasuryKeyCipher treasuryKeyCipher;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -83,6 +98,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
 
   @BeforeEach
   void setUp() {
+    seedExecutionSignerSlot();
     BDDMockito.given(loadExecutionSponsorKeyPort.loadByAlias(any(), any()))
         .willReturn(
             Optional.of(
@@ -103,6 +119,10 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     BDDMockito.given(executionEip1559SigningPort.sign(any()))
         .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash-signed"));
     BDDMockito.given(executionTransactionGatewayPort.reserveNextNonce(anyString())).willReturn(77L);
+  }
+
+  private static String encodeTestKek() {
+    return Base64.getEncoder().encodeToString(TEST_KEK_RAW.getBytes(StandardCharsets.UTF_8));
   }
 
   @Test
@@ -148,9 +168,11 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(reviewData.path("processable").asBoolean()).isTrue();
     assertThat(reviewData.path("questionConflictingActiveIntent").asBoolean()).isFalse();
     assertThat(reviewData.path("answerConflictingActiveIntent").asBoolean()).isFalse();
-    assertThat(reviewData.path("authority").path("currentServerSignerAddress").asText())
+    assertThat(reviewData.path("authority").path("serverSigner").path("signerAddress").asText())
         .isEqualTo(SIGNER_ADDRESS);
     assertThat(reviewData.path("authority").path("relayerRegistered").asBoolean()).isTrue();
+    assertThat(reviewData.path("authority").path("relayerRegistrationStatus").asText())
+        .isEqualTo("REGISTERED");
 
     ResponseEntity<String> settleResponse =
         restTemplate.exchange(
@@ -239,6 +261,11 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(reviewData.path("processable").asBoolean()).isTrue();
     assertThat(reviewData.path("questionConflictingActiveIntent").asBoolean()).isFalse();
     assertThat(reviewData.path("answerConflictingActiveIntent").asBoolean()).isFalse();
+    assertThat(reviewData.path("authority").path("serverSigner").path("signerAddress").asText())
+        .isEqualTo(SIGNER_ADDRESS);
+    assertThat(reviewData.path("authority").path("relayerRegistered").asBoolean()).isTrue();
+    assertThat(reviewData.path("authority").path("relayerRegistrationStatus").asText())
+        .isEqualTo("REGISTERED");
 
     ResponseEntity<String> refundResponse =
         restTemplate.exchange(
@@ -333,6 +360,21 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     insertAnswerProjection(
         postId, answerId, responderUserId, answerContent, createdAt.plusMinutes(5));
     return new SeededSettlementScenario(postId, answerId);
+  }
+
+  private void seedExecutionSignerSlot() {
+    String normalizedPrivateKey = PRIVATE_KEY_HEX.substring(2);
+    String encryptedPrivateKey =
+        treasuryKeyCipher.encrypt(normalizedPrivateKey, KEY_ENCRYPTION_KEY_B64);
+    String treasuryAddress = Credentials.create(normalizedPrivateKey).getAddress().toLowerCase();
+
+    jdbcTemplate.update("delete from web3_treasury_keys where wallet_alias = ?", "test-sponsor");
+    jdbcTemplate.update(
+        "insert into web3_treasury_keys (wallet_alias, treasury_address, treasury_private_key_encrypted, created_at, updated_at)"
+            + " values (?, ?, ?, now(), now())",
+        "test-sponsor",
+        treasuryAddress,
+        encryptedPrivateKey);
   }
 
   private Long seedRefundScenario(Long askerUserId, String questionContent) {
