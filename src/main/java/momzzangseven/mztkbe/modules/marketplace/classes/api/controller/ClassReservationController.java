@@ -40,20 +40,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST controller for user-facing reservation endpoints. Moved to classes
- * sub-module per user
+ * REST controller for user-facing reservation endpoints. Moved to classes sub-module per user
  * request.
  *
  * <ul>
- * <li>GET /marketplace/classes/{classId}/reservation-info — 4-week availability
- * (public)
- * <li>GET /marketplace/me/reservations — user's own reservation list
- * <li>GET /marketplace/reservations/{id} — reservation detail (user or trainer)
- * <li>POST /marketplace/classes/{classId}/reservations — create reservation
- * (user)
- * <li>PATCH /marketplace/me/reservations/{id}/cancel — cancel pending (user)
- * <li>PATCH /marketplace/me/reservations/{id}/complete — complete & settle
- * (user)
+ *   <li>GET /marketplace/classes/{classId}/reservation-info — 4-week availability (public)
+ *   <li>GET /marketplace/me/reservations — user's own reservation list
+ *   <li>GET /marketplace/reservations/{id} — reservation detail (user or trainer)
+ *   <li>POST /marketplace/classes/{classId}/reservations — create reservation (user)
+ *   <li>PATCH /marketplace/me/reservations/{id}/cancel — cancel pending (user)
+ *   <li>PATCH /marketplace/me/reservations/{id}/complete — complete & settle (user)
  * </ul>
  */
 @Slf4j
@@ -63,80 +59,79 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class ClassReservationController {
 
-    private final GetClassReservationInfoUseCase getClassReservationInfoUseCase;
-    private final GetUserReservationsUseCase getUserReservationsUseCase;
-    private final GetReservationDetailUseCase getReservationDetailUseCase;
-    private final CreateReservationUseCase createReservationUseCase;
-    private final CancelPendingReservationUseCase cancelPendingReservationUseCase;
-    private final CompleteReservationUseCase completeReservationUseCase;
+  private final GetClassReservationInfoUseCase getClassReservationInfoUseCase;
+  private final GetUserReservationsUseCase getUserReservationsUseCase;
+  private final GetReservationDetailUseCase getReservationDetailUseCase;
+  private final CreateReservationUseCase createReservationUseCase;
+  private final CancelPendingReservationUseCase cancelPendingReservationUseCase;
+  private final CompleteReservationUseCase completeReservationUseCase;
 
-    @GetMapping("/classes/{classId}/reservation-info")
-    public ResponseEntity<ApiResponse<GetClassReservationInfoResponseDTO>> getReservationInfo(
-            @PathVariable @Positive Long classId) {
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        GetClassReservationInfoResponseDTO.from(
-                                getClassReservationInfoUseCase.execute(
-                                        new GetClassReservationInfoQuery(classId)))));
-    }
+  @GetMapping("/classes/{classId}/reservation-info")
+  public ResponseEntity<ApiResponse<GetClassReservationInfoResponseDTO>> getReservationInfo(
+      @PathVariable @Positive Long classId) {
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            GetClassReservationInfoResponseDTO.from(
+                getClassReservationInfoUseCase.execute(
+                    new GetClassReservationInfoQuery(classId)))));
+  }
 
-    @GetMapping("/me/reservations")
-    public ResponseEntity<ApiResponse<List<ReservationSummaryResponseDTO>>> getMyReservations(
-            @AuthenticationPrincipal Long userId,
-            @RequestParam(required = false) ReservationStatus status) {
-        requireUserId(userId);
-        List<ReservationSummaryResponseDTO> response = getUserReservationsUseCase
-                .execute(new GetUserReservationsQuery(userId, status)).stream()
-                .map(ReservationSummaryResponseDTO::from)
-                .toList();
-        return ResponseEntity.ok(ApiResponse.success(response));
-    }
+  @GetMapping("/me/reservations")
+  public ResponseEntity<ApiResponse<List<ReservationSummaryResponseDTO>>> getMyReservations(
+      @AuthenticationPrincipal Long userId,
+      @RequestParam(required = false) ReservationStatus status) {
+    requireUserId(userId);
+    List<ReservationSummaryResponseDTO> response =
+        getUserReservationsUseCase.execute(new GetUserReservationsQuery(userId, status)).stream()
+            .map(ReservationSummaryResponseDTO::from)
+            .toList();
+    return ResponseEntity.ok(ApiResponse.success(response));
+  }
 
-    @GetMapping("/reservations/{id}")
-    public ResponseEntity<ApiResponse<ReservationDetailResponseDTO>> getReservationDetail(
-            @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
-        requireUserId(userId);
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        ReservationDetailResponseDTO.from(
-                                getReservationDetailUseCase.execute(new GetReservationQuery(id, userId)))));
-    }
+  @GetMapping("/reservations/{id}")
+  public ResponseEntity<ApiResponse<ReservationDetailResponseDTO>> getReservationDetail(
+      @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
+    requireUserId(userId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            ReservationDetailResponseDTO.from(
+                getReservationDetailUseCase.execute(new GetReservationQuery(id, userId)))));
+  }
 
-    @PostMapping("/classes/{classId}/reservations")
-    public ResponseEntity<ApiResponse<CreateReservationResponseDTO>> createReservation(
-            @PathVariable @Positive Long classId,
-            @AuthenticationPrincipal Long userId,
-            @Valid @RequestBody CreateReservationRequestDTO request) {
-        requireUserId(userId);
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        CreateReservationResponseDTO.from(
-                                createReservationUseCase.execute(request.toCommand(userId, classId)))));
-    }
+  @PostMapping("/classes/{classId}/reservations")
+  public ResponseEntity<ApiResponse<CreateReservationResponseDTO>> createReservation(
+      @PathVariable @Positive Long classId,
+      @AuthenticationPrincipal Long userId,
+      @Valid @RequestBody CreateReservationRequestDTO request) {
+    requireUserId(userId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            CreateReservationResponseDTO.from(
+                createReservationUseCase.execute(request.toCommand(userId, classId)))));
+  }
 
-    @PatchMapping("/me/reservations/{id}/cancel")
-    public ResponseEntity<ApiResponse<CancelPendingReservationResponseDTO>> cancelReservation(
-            @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
-        requireUserId(userId);
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        CancelPendingReservationResponseDTO.from(
-                                cancelPendingReservationUseCase.execute(
-                                        new CancelPendingReservationCommand(id, userId)))));
-    }
+  @PatchMapping("/me/reservations/{id}/cancel")
+  public ResponseEntity<ApiResponse<CancelPendingReservationResponseDTO>> cancelReservation(
+      @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
+    requireUserId(userId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            CancelPendingReservationResponseDTO.from(
+                cancelPendingReservationUseCase.execute(
+                    new CancelPendingReservationCommand(id, userId)))));
+  }
 
-    @PatchMapping("/me/reservations/{id}/complete")
-    public ResponseEntity<ApiResponse<CompleteReservationResponseDTO>> completeReservation(
-            @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
-        requireUserId(userId);
-        return ResponseEntity.ok(
-                ApiResponse.success(
-                        CompleteReservationResponseDTO.from(
-                                completeReservationUseCase.execute(new CompleteReservationCommand(id, userId)))));
-    }
+  @PatchMapping("/me/reservations/{id}/complete")
+  public ResponseEntity<ApiResponse<CompleteReservationResponseDTO>> completeReservation(
+      @PathVariable @Positive Long id, @AuthenticationPrincipal Long userId) {
+    requireUserId(userId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            CompleteReservationResponseDTO.from(
+                completeReservationUseCase.execute(new CompleteReservationCommand(id, userId)))));
+  }
 
-    private void requireUserId(Long userId) {
-        if (userId == null)
-            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
-    }
+  private void requireUserId(Long userId) {
+    if (userId == null) throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+  }
 }
