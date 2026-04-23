@@ -30,6 +30,8 @@ public interface LoadSlotReservationPort {
    */
   int countActiveReservations(Long slotId);
 
+  java.util.Map<Long, Integer> countActiveReservationsIn(java.util.List<Long> slotIds);
+
   int countActiveReservations(Long slotId, java.time.LocalDate date);
 
   java.util.Map<java.time.LocalDate, Integer> countActiveReservationsForDateRange(

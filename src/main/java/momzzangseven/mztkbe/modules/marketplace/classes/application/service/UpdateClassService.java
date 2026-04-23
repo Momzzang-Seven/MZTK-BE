@@ -176,6 +176,13 @@ public class UpdateClassService implements UpdateClassUseCase {
     Set<Long> processedIds = new HashSet<>();
     Long classId = command.classId();
 
+    // Batch fetch active reservations for existing slots
+    List<Long> existingSlotIds = new ArrayList<>(existingActiveById.keySet());
+    Map<Long, Integer> activeReservationCounts =
+        existingSlotIds.isEmpty()
+            ? new HashMap<>()
+            : loadSlotReservationPort.countActiveReservationsIn(existingSlotIds);
+
     for (ClassTimeCommand ct : command.classTimes()) {
       if (ct.timeId() != null) {
         // ── Update existing slot ──────────────────────────────────────────────
@@ -186,7 +193,7 @@ public class UpdateClassService implements UpdateClassUseCase {
         }
 
         // Capacity reduction guard: must not go below active reservation count
-        int activeReservations = loadSlotReservationPort.countActiveReservations(ct.timeId());
+        int activeReservations = activeReservationCounts.getOrDefault(ct.timeId(), 0);
         if (ct.capacity() < activeReservations) {
           throw new CapacityShorterThanReservationsException(activeReservations, ct.capacity());
         }
@@ -205,7 +212,7 @@ public class UpdateClassService implements UpdateClassUseCase {
       ClassSlot slot = entry.getValue();
 
       if (!processedIds.contains(slotId)) {
-        int activeReservations = loadSlotReservationPort.countActiveReservations(slotId);
+        int activeReservations = activeReservationCounts.getOrDefault(slotId, 0);
         if (activeReservations > 0) {
           // Active reservations exist — cannot remove
           throw new SlotHasActiveReservationException(slotId);

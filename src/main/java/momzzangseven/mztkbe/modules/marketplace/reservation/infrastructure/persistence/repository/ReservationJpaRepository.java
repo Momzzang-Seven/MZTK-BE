@@ -29,6 +29,10 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       "SELECT COUNT(r) FROM ReservationEntity r WHERE r.slotId = :slotId AND r.status IN ('PENDING', 'APPROVED')")
   int countActiveBySlotId(@Param("slotId") Long slotId);
 
+  @Query(
+      "SELECT r.slotId, COUNT(r) FROM ReservationEntity r WHERE r.slotId IN :slotIds AND r.status IN ('PENDING', 'APPROVED') GROUP BY r.slotId")
+  List<Object[]> countActiveBySlotIdIn(@Param("slotIds") List<Long> slotIds);
+
   /**
    * Same as {@link #countActiveBySlotId} but acquires a pessimistic write lock on matched rows.
    *
