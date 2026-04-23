@@ -80,6 +80,13 @@ public class CreateReservationService implements CreateReservationUseCase {
           "Slot " + command.slotId() + " does not belong to class " + command.classId());
     }
 
+    // 1-b. Guard against booking a soft-deleted slot
+    if (!slot.isActive()) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
+          "Slot " + command.slotId() + " is inactive and cannot be booked");
+    }
+
     // 2. Validate date/time against slot schedule
     if (!slot.getDaysOfWeek().contains(command.reservationDate().getDayOfWeek())) {
       throw new ReservationInvalidSlotDateException(slot.getId());
@@ -113,7 +120,9 @@ public class CreateReservationService implements CreateReservationUseCase {
     }
 
     // 6. Capacity check with pessimistic write lock — prevents over-commit under concurrency
-    int activeCount = loadReservationPort.countActiveReservationsBySlotIdWithLock(slot.getId());
+    int activeCount =
+        loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(
+            slot.getId(), command.reservationDate());
     if (activeCount >= slot.getCapacity()) {
       throw new BusinessException(
           ErrorCode.MARKETPLACE_RESERVATION_SLOT_FULL,

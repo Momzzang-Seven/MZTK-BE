@@ -38,7 +38,7 @@ public class ApproveReservationService implements ApproveReservationUseCase {
 
     Reservation reservation =
         loadReservationPort
-            .findById(command.reservationId())
+            .findByIdWithLock(command.reservationId())
             .orElseThrow(
                 () ->
                     new BusinessException(

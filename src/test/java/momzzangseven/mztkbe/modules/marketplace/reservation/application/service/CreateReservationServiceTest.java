@@ -113,7 +113,8 @@ class CreateReservationServiceTest {
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
-      given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID)).willReturn(0);
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
+          .willReturn(0);
       given(submitEscrowTransactionPort.submitPurchase(any(), any(), any(), any()))
           .willReturn("0xTXHASH");
       Reservation saved =
@@ -141,7 +142,7 @@ class CreateReservationServiceTest {
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
       given(getClassInfoUseCase.findById(CLASS_ID)).willReturn(Optional.of(cls));
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
-      given(loadReservationPort.countActiveReservationsBySlotIdWithLock(SLOT_ID))
+      given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
           .willReturn(CAPACITY); // 이미 가득 참
 
       // when & then
@@ -220,6 +221,32 @@ class CreateReservationServiceTest {
 
       // when & then
       assertThatThrownBy(() -> sut.execute(wrongDayCmd))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE.getCode()));
+    }
+
+    @Test
+    @DisplayName("[CR-06] 비활성 슬롯 예약 시도 시 MARKETPLACE_RESERVATION_INVALID_SLOT_DATE 예외")
+    void 비활성_슬롯() {
+      // given: 슬롯이 soft-delete 된 상태
+      ClassSlot inactiveSlot =
+          ClassSlot.builder()
+              .id(SLOT_ID)
+              .classId(CLASS_ID)
+              .daysOfWeek(List.of(DayOfWeek.MONDAY))
+              .startTime(START_TIME)
+              .capacity(CAPACITY)
+              .active(false) // 비활성화
+              .build();
+
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID))
+          .willReturn(Optional.of(inactiveSlot));
+
+      // when & then
+      assertThatThrownBy(() -> sut.execute(command))
           .isInstanceOf(BusinessException.class)
           .satisfies(
               ex ->

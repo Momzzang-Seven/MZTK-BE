@@ -58,7 +58,7 @@ public class CompleteReservationService implements CompleteReservationUseCase {
 
     Reservation reservation =
         loadReservationPort
-            .findById(command.reservationId())
+            .findByIdWithLock(command.reservationId())
             .orElseThrow(
                 () ->
                     new BusinessException(

@@ -41,7 +41,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
 
     Reservation reservation =
         loadReservationPort
-            .findById(command.reservationId())
+            .findByIdWithLock(command.reservationId())
             .orElseThrow(
                 () ->
                     new BusinessException(

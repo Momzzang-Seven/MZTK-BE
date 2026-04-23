@@ -95,7 +95,13 @@ class GetClassReservationInfoServiceTest {
       // given: 2024-06-03(월)부터 28일 → 월요일 4번: 6/3, 6/10, 6/17, 6/24
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(activeClass()));
       given(loadClassSlotPort.findByClassId(CLASS_ID)).willReturn(List.of(mondaySlot(5)));
-      given(getSlotReservationInfoUseCase.countActiveReservations(SLOT_ID)).willReturn(2);
+      java.time.LocalDate today = java.time.LocalDate.now(clock);
+      given(
+              getSlotReservationInfoUseCase.countActiveReservationsForDateRange(
+                  org.mockito.ArgumentMatchers.eq(SLOT_ID),
+                  org.mockito.ArgumentMatchers.any(),
+                  org.mockito.ArgumentMatchers.any()))
+          .willReturn(java.util.Map.of(today, 2));
 
       // when
       GetClassReservationInfoResult result =
@@ -108,18 +114,29 @@ class GetClassReservationInfoServiceTest {
               dateInfo -> {
                 assertThat(dateInfo.availableTimes()).hasSize(1);
                 assertThat(dateInfo.availableTimes().get(0).slotId()).isEqualTo(SLOT_ID);
-                // 용량 5, 활성 예약 2 → 가용 3
-                assertThat(dateInfo.availableTimes().get(0).availableCapacity()).isEqualTo(3);
+                if (dateInfo.date().equals(today)) {
+                  // 용량 5, 오늘 활성 예약 2 → 가용 3
+                  assertThat(dateInfo.availableTimes().get(0).availableCapacity()).isEqualTo(3);
+                } else {
+                  // 그 외의 날짜는 예약 0 → 가용 5
+                  assertThat(dateInfo.availableTimes().get(0).availableCapacity()).isEqualTo(5);
+                }
               });
     }
 
     @Test
     @DisplayName("[GRI-03] 활성 예약 수가 용량과 같으면 availableCapacity=0 반환")
     void 만석_슬롯() {
-      // given: 용량 3, 활성 예약 3
+      // given: 용량 3, 오늘 활성 예약 3
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(activeClass()));
       given(loadClassSlotPort.findByClassId(CLASS_ID)).willReturn(List.of(mondaySlot(3)));
-      given(getSlotReservationInfoUseCase.countActiveReservations(SLOT_ID)).willReturn(3);
+      java.time.LocalDate today = java.time.LocalDate.now(clock);
+      given(
+              getSlotReservationInfoUseCase.countActiveReservationsForDateRange(
+                  org.mockito.ArgumentMatchers.eq(SLOT_ID),
+                  org.mockito.ArgumentMatchers.any(),
+                  org.mockito.ArgumentMatchers.any()))
+          .willReturn(java.util.Map.of(today, 3));
 
       // when
       GetClassReservationInfoResult result =
@@ -127,7 +144,11 @@ class GetClassReservationInfoServiceTest {
 
       // then
       assertThat(result.availableDates())
-          .allSatisfy(d -> assertThat(d.availableTimes().get(0).availableCapacity()).isZero());
+          .anySatisfy(
+              d -> {
+                assertThat(d.date()).isEqualTo(today);
+                assertThat(d.availableTimes().get(0).availableCapacity()).isZero();
+              });
     }
   }
 

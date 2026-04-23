@@ -30,6 +30,11 @@ public interface LoadSlotReservationPort {
    */
   int countActiveReservations(Long slotId);
 
+  int countActiveReservations(Long slotId, java.time.LocalDate date);
+
+  java.util.Map<java.time.LocalDate, Integer> countActiveReservationsForDateRange(
+      Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate);
+
   /**
    * Returns true if the slot has any reservation record in history (active or past).
    *

@@ -25,6 +25,18 @@ public class SlotReservationAdapter implements LoadSlotReservationPort {
   }
 
   @Override
+  public int countActiveReservations(Long slotId, java.time.LocalDate date) {
+    return getSlotReservationInfoUseCase.countActiveReservations(slotId, date);
+  }
+
+  @Override
+  public java.util.Map<java.time.LocalDate, Integer> countActiveReservationsForDateRange(
+      Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate) {
+    return getSlotReservationInfoUseCase.countActiveReservationsForDateRange(
+        slotId, startDate, endDate);
+  }
+
+  @Override
   public boolean hasAnyReservationHistory(Long slotId) {
     return getSlotReservationInfoUseCase.hasAnyReservationHistory(slotId);
   }

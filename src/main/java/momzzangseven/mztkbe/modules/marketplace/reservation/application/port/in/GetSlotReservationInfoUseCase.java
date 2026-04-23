@@ -20,6 +20,12 @@ public interface GetSlotReservationInfoUseCase {
    */
   int countActiveReservations(Long slotId);
 
+  int countActiveReservations(Long slotId, java.time.LocalDate date);
+
+  /** Get active reservations counts for a date range for a specific slot. */
+  java.util.Map<java.time.LocalDate, Integer> countActiveReservationsForDateRange(
+      Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate);
+
   /**
    * Returns true if the slot has any reservation in its history (any status).
    *

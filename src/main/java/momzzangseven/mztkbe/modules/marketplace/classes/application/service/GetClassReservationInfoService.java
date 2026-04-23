@@ -65,15 +65,17 @@ public class GetClassReservationInfoService implements GetClassReservationInfoUs
       return buildResult(cls, List.of());
     }
 
-    List<Long> slotIds = activeSlots.stream().map(ClassSlot::getId).toList();
-    Map<Long, Integer> activeCountBySlot =
-        slotIds.stream()
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    id -> id, id -> getSlotReservationInfoUseCase.countActiveReservations(id)));
-
     LocalDate today = LocalDate.now(clock);
     LocalDate windowEnd = today.plusDays(DAYS_WINDOW);
+
+    // Map: slotId -> (Map: date -> count)
+    Map<Long, Map<LocalDate, Integer>> activeCountBySlotAndDate = new java.util.HashMap<>();
+    for (ClassSlot slot : activeSlots) {
+      activeCountBySlotAndDate.put(
+          slot.getId(),
+          getSlotReservationInfoUseCase.countActiveReservationsForDateRange(
+              slot.getId(), today, windowEnd));
+    }
 
     List<AvailableDateInfo> availableDates = new ArrayList<>();
     for (LocalDate date = today; date.isBefore(windowEnd); date = date.plusDays(1)) {
@@ -82,7 +84,7 @@ public class GetClassReservationInfoService implements GetClassReservationInfoUs
 
       for (ClassSlot slot : activeSlots) {
         if (slot.getDaysOfWeek().contains(currentDate.getDayOfWeek())) {
-          int active = activeCountBySlot.getOrDefault(slot.getId(), 0);
+          int active = activeCountBySlotAndDate.get(slot.getId()).getOrDefault(currentDate, 0);
           int available = Math.max(0, slot.getCapacity() - active);
           timesForDate.add(
               new AvailableTimeInfo(
