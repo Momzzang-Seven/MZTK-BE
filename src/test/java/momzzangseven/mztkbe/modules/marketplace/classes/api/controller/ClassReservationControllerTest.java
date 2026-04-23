@@ -9,7 +9,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -93,18 +92,24 @@ class ClassReservationControllerTest {
 
   private ReservationSummaryResult summaryResult() {
     return new ReservationSummaryResult(
-        1L, 10L, 100L, 50L,
-        FUTURE_DATE, LocalTime.of(10, 0),
-        60, ReservationStatus.PENDING, null);
+        1L, 10L, 100L, 50L, FUTURE_DATE, LocalTime.of(10, 0), 60, ReservationStatus.PENDING, null);
   }
 
   private GetReservationResult detailResult(Long viewerId) {
     return new GetReservationResult(
-        1L, viewerId, 100L, 10L,
-        FUTURE_DATE, LocalTime.of(10, 0),
-        60, ReservationStatus.PENDING,
-        null, "order-abc", null,
-        LocalDateTime.now(), LocalDateTime.now());
+        1L,
+        viewerId,
+        100L,
+        10L,
+        FUTURE_DATE,
+        LocalTime.of(10, 0),
+        60,
+        ReservationStatus.PENDING,
+        null,
+        "order-abc",
+        null,
+        LocalDateTime.now(),
+        LocalDateTime.now());
   }
 
   /** Minimal valid create-reservation request body. */
@@ -170,9 +175,7 @@ class ClassReservationControllerTest {
     @Test
     @DisplayName("[CR-04] 인증 없이 요청하면 401을 반환한다")
     void getMyReservations_unauthenticated_returns401() throws Exception {
-      mockMvc
-          .perform(get("/marketplace/me/reservations"))
-          .andExpect(status().isUnauthorized());
+      mockMvc.perform(get("/marketplace/me/reservations")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -217,9 +220,7 @@ class ClassReservationControllerTest {
     @Test
     @DisplayName("[CR-08] 인증 없이 조회하면 401을 반환한다")
     void getDetail_unauthenticated_returns401() throws Exception {
-      mockMvc
-          .perform(get("/marketplace/reservations/1"))
-          .andExpect(status().isUnauthorized());
+      mockMvc.perform(get("/marketplace/reservations/1")).andExpect(status().isUnauthorized());
     }
 
     @Test

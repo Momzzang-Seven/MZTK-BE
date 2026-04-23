@@ -24,9 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
  * Service for a trainer to reject a PENDING reservation.
  *
  * <p><b>Transaction ordering (DB-first, escrow-after-commit):</b><br>
- * The reservation row is saved with a sentinel {@code txHash} value (
- * {@value EscrowDispatchEventListener#PENDING_TX_HASH}), and the DB transaction is committed.
- * After the commit, two AFTER_COMMIT events are dispatched:
+ * The reservation row is saved with a sentinel {@code txHash} value ( {@value
+ * EscrowDispatchEventListener#PENDING_TX_HASH}), and the DB transaction is committed. After the
+ * commit, two AFTER_COMMIT events are dispatched:
  *
  * <ol>
  *   <li>{@link EscrowDispatchEvent} — calls {@code cancelClass} on-chain and writes back the real

@@ -16,7 +16,8 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SanctionPersistenceAdapter implements ManageTrainerSanctionPort, LoadTrainerSanctionPort {
+public class SanctionPersistenceAdapter
+    implements ManageTrainerSanctionPort, LoadTrainerSanctionPort {
 
   private final TrainerSanctionJpaRepository sanctionRepository;
   private final TrainerStrikeRecordJpaRepository strikeRecordRepository;
@@ -24,27 +25,34 @@ public class SanctionPersistenceAdapter implements ManageTrainerSanctionPort, Lo
 
   @Override
   public RecordStrikeResult recordStrike(Long trainerId, String reason) {
-    TrainerSanctionEntity sanction = sanctionRepository.findById(trainerId)
-        .orElseGet(() -> TrainerSanctionEntity.builder().trainerId(trainerId).build());
+    TrainerSanctionEntity sanction =
+        sanctionRepository
+            .findById(trainerId)
+            .orElseGet(() -> TrainerSanctionEntity.builder().trainerId(trainerId).build());
 
     LocalDateTime now = LocalDateTime.now(clock);
-    boolean wasBanned = sanction.getSuspendedUntil() != null && sanction.getSuspendedUntil().isAfter(now);
-    
+    boolean wasBanned =
+        sanction.getSuspendedUntil() != null && sanction.getSuspendedUntil().isAfter(now);
+
     TrainerSanctionEntity updatedSanction = sanction.addStrike(now);
-    boolean isBanned = updatedSanction.getSuspendedUntil() != null && updatedSanction.getSuspendedUntil().isAfter(now);
-    
+    boolean isBanned =
+        updatedSanction.getSuspendedUntil() != null
+            && updatedSanction.getSuspendedUntil().isAfter(now);
+
     boolean newlyBanned = !wasBanned && isBanned;
 
     sanctionRepository.save(updatedSanction);
 
-    TrainerStrikeRecordEntity record = TrainerStrikeRecordEntity.builder()
-        .trainerId(trainerId)
-        .reason(reason)
-        .build();
+    TrainerStrikeRecordEntity record =
+        TrainerStrikeRecordEntity.builder().trainerId(trainerId).reason(reason).build();
     strikeRecordRepository.save(record);
 
-    log.info("Recorded strike for trainerId={}, reason={}, count={}, banned={}", 
-        trainerId, reason, updatedSanction.getStrikeCount(), isBanned);
+    log.info(
+        "Recorded strike for trainerId={}, reason={}, count={}, banned={}",
+        trainerId,
+        reason,
+        updatedSanction.getStrikeCount(),
+        isBanned);
 
     return new RecordStrikeResult(updatedSanction.getStrikeCount(), newlyBanned);
   }
@@ -58,7 +66,6 @@ public class SanctionPersistenceAdapter implements ManageTrainerSanctionPort, Lo
 
   @Override
   public Optional<LocalDateTime> getSuspendedUntil(Long trainerId) {
-    return sanctionRepository.findById(trainerId)
-        .map(TrainerSanctionEntity::getSuspendedUntil);
+    return sanctionRepository.findById(trainerId).map(TrainerSanctionEntity::getSuspendedUntil);
   }
 }
