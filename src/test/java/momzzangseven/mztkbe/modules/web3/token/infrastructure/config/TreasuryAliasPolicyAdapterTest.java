@@ -2,8 +2,8 @@ package momzzangseven.mztkbe.modules.web3.token.infrastructure.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Set;
 import java.util.Optional;
+import java.util.Set;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadRewardTreasuryAliasPort;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadSponsorTreasuryAliasPort;
 import org.junit.jupiter.api.Test;
@@ -22,7 +22,8 @@ class TreasuryAliasPolicyAdapterTest {
   @Test
   void allowedAliases_includesTrimmedRewardAndSponsorAliases() {
     TreasuryAliasPolicyAdapter adapter =
-        new TreasuryAliasPolicyAdapter(rewardAliasPort(" reward-main "), sponsorAliasPort(" sponsor-main "));
+        new TreasuryAliasPolicyAdapter(
+            rewardAliasPort(" reward-main "), sponsorAliasPort(" sponsor-main "));
 
     assertThat(adapter.allowedAliases()).isEqualTo(Set.of("reward-main", "sponsor-main"));
   }

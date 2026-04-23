@@ -20,8 +20,7 @@ class SponsorTreasurySignerPropertiesTest {
                 .withProperty("web3.eip7702.sponsor.wallet-alias", " sponsor-main ")
                 .withProperty("web3.execution.internal.signer.wallet-alias", "sponsor-main")
                 .withProperty("web3.eip7702.sponsor.key-encryption-key-b64", " test-kek ")
-                .withProperty(
-                    "web3.execution.internal.signer.key-encryption-key-b64", "test-kek"));
+                .withProperty("web3.execution.internal.signer.key-encryption-key-b64", "test-kek"));
 
     assertThat(properties.getWalletAlias()).isEqualTo("sponsor-main");
     assertThat(properties.getKeyEncryptionKeyB64()).isEqualTo("test-kek");
@@ -84,7 +83,8 @@ class SponsorTreasurySignerPropertiesTest {
                 .withProperty("web3.eip7702.sponsor.key-encryption-key-b64", "test-kek")
                 .withProperty("web3.execution.internal.enabled", "true")
                 .withProperty("web3.execution.internal.signer.wallet-alias", "internal-main")
-                .withProperty("web3.execution.internal.signer.key-encryption-key-b64", "internal-kek"));
+                .withProperty(
+                    "web3.execution.internal.signer.key-encryption-key-b64", "internal-kek"));
 
     assertThat(properties.getWalletAlias()).isEqualTo("internal-main");
     assertThat(properties.getKeyEncryptionKeyB64()).isEqualTo("internal-kek");

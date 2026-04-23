@@ -6,10 +6,10 @@ import momzzangseven.mztkbe.modules.web3.shared.application.port.in.GetSponsorTr
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadSponsorTreasurySignerConfigSourcePort;
 
 @RequiredArgsConstructor
-public class GetSponsorTreasurySignerConfigService implements GetSponsorTreasurySignerConfigUseCase {
+public class GetSponsorTreasurySignerConfigService
+    implements GetSponsorTreasurySignerConfigUseCase {
 
-  private final LoadSponsorTreasurySignerConfigSourcePort
-      loadSponsorTreasurySignerConfigSourcePort;
+  private final LoadSponsorTreasurySignerConfigSourcePort loadSponsorTreasurySignerConfigSourcePort;
 
   @Override
   public TreasurySignerConfigView execute() {
