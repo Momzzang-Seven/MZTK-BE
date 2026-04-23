@@ -48,13 +48,13 @@ class PostProcessServiceTest {
   @InjectMocks private PostProcessService postProcessService;
 
   @Test
-  @DisplayName("update saves modified post and updates tags when tag list is present")
+  @DisplayName("FREE update saves content and updates tags when tag list is present")
   void updatePostSuccessWithTags() {
     Long ownerId = 7L;
     Long postId = 50L;
     Post post = ownedPost(ownerId, postId);
     UpdatePostCommand command =
-        UpdatePostCommand.of("new title", "new content", List.of(Long.valueOf(1)), List.of("java"));
+        UpdatePostCommand.of(null, "new content", List.of(Long.valueOf(1)), List.of("java"));
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
 
@@ -64,7 +64,7 @@ class PostProcessServiceTest {
     verify(postPersistencePort).savePost(postCaptor.capture());
 
     Post saved = postCaptor.getValue();
-    assertThat(saved.getTitle()).isEqualTo("new title");
+    assertThat(saved.getTitle()).isEqualTo("old title");
     assertThat(saved.getContent()).isEqualTo("new content");
     assertThat(saved.getTags()).containsExactly("java");
     assertThat(saved.getUpdatedAt()).isAfter(post.getUpdatedAt());
@@ -82,7 +82,7 @@ class PostProcessServiceTest {
     Long ownerId = 7L;
     Long postId = 51L;
     Post post = ownedPost(ownerId, postId);
-    UpdatePostCommand command = UpdatePostCommand.of("only title", null, null, null);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "only content", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
 
@@ -93,6 +93,25 @@ class PostProcessServiceTest {
     verify(linkTagPort, never()).updateTags(postId, null);
     verify(updatePostImagesPort, never()).updateImages(ownerId, postId, post.getType(), null);
     verifyNoInteractions(questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("FREE update with title propagates domain policy violation without saving")
+  void updateFreePostWithTitleThrowsBeforeSave() {
+    Long ownerId = 7L;
+    Long postId = 54L;
+    Post post = ownedPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("new title", null, null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Free posts do not support title updates.");
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(
+        linkTagPort, validatePostImagesPort, updatePostImagesPort, questionLifecycleExecutionPort);
   }
 
   @Test
