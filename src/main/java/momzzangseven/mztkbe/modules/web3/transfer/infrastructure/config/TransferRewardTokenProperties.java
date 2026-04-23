@@ -31,17 +31,9 @@ public class TransferRewardTokenProperties {
   @Min(0)
   private Integer decimals;
 
-  @Valid private Treasury treasury = new Treasury();
   @Valid private Prevalidate prevalidate = new Prevalidate();
   @Valid private Gas gas = new Gas();
   @Valid private Worker worker = new Worker();
-
-  @Getter
-  @Setter
-  public static class Treasury {
-    @NotBlank private String walletAlias;
-    @NotBlank private String keyEncryptionKeyB64;
-  }
 
   @Getter
   @Setter

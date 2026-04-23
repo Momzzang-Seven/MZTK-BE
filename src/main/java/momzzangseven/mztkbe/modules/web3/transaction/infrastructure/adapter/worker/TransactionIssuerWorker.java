@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.SignAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasurySignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -35,6 +36,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private final ReserveNoncePort reserveNoncePort;
   private final Web3ContractPort web3ContractPort;
   private final Web3CoreProperties web3CoreProperties;
+  private final LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort;
 
   private final String workerId = "issuer-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -46,6 +48,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       ReserveNoncePort reserveNoncePort,
       Web3ContractPort web3ContractPort,
       TransactionRewardTokenProperties rewardTokenProperties,
+      LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort,
       RetryStrategy retryStrategy,
       Web3CoreProperties web3CoreProperties) {
     super(
@@ -57,6 +60,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.loadTreasuryKeyPort = loadTreasuryKeyPort;
     this.reserveNoncePort = reserveNoncePort;
     this.web3ContractPort = web3ContractPort;
+    this.loadRewardTreasurySignerConfigPort = loadRewardTreasurySignerConfigPort;
     this.web3CoreProperties = web3CoreProperties;
   }
 
@@ -76,11 +80,12 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
+    var rewardTreasurySignerConfig = loadRewardTreasurySignerConfigPort.load();
     var treasuryKey =
         loadTreasuryKeyPort
             .loadByAlias(
-                rewardTokenProperties.getTreasury().getWalletAlias(),
-                rewardTokenProperties.getTreasury().getKeyEncryptionKeyB64())
+                rewardTreasurySignerConfig.walletAlias(),
+                rewardTreasurySignerConfig.keyEncryptionKeyB64())
             .orElse(null);
     if (treasuryKey == null) {
       items.forEach(

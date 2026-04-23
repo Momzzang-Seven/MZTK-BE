@@ -45,10 +45,6 @@ public class Eip7702Properties {
   public static class Sponsor {
     @NotNull private Boolean enabled;
 
-    @NotBlank private String keyEncryptionKeyB64;
-
-    @NotBlank private String walletAlias;
-
     @Min(21_000)
     private long maxGasLimit;
 

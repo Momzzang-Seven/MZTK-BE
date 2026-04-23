@@ -39,8 +39,6 @@ public class ExecutionEip7702Properties {
   @Setter
   public static class Sponsor {
     @NotNull private Boolean enabled;
-    @NotBlank private String keyEncryptionKeyB64;
-    @NotBlank private String walletAlias;
 
     @Min(21_000)
     private long maxGasLimit;
