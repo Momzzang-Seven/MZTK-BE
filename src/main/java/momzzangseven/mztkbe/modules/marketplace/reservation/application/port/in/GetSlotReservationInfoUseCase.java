@@ -20,6 +20,8 @@ public interface GetSlotReservationInfoUseCase {
    */
   int countActiveReservations(Long slotId);
 
+  java.util.Map<Long, Integer> countActiveReservationsIn(java.util.List<Long> slotIds);
+
   int countActiveReservations(Long slotId, java.time.LocalDate date);
 
   /** Get active reservations counts for a date range for a specific slot. */

@@ -40,6 +40,17 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   }
 
   @Override
+  public Map<Long, Integer> countActiveReservationsBySlotIds(List<Long> slotIds) {
+    if (slotIds == null || slotIds.isEmpty()) return new HashMap<>();
+    List<Object[]> results = reservationJpaRepository.countActiveBySlotIdIn(slotIds);
+    Map<Long, Integer> map = new HashMap<>();
+    for (Object[] row : results) {
+      map.put((Long) row[0], ((Long) row[1]).intValue());
+    }
+    return map;
+  }
+
+  @Override
   public int countActiveReservationsBySlotIdAndDate(Long slotId, java.time.LocalDate date) {
     return reservationJpaRepository.countActiveBySlotIdAndDate(slotId, date);
   }
