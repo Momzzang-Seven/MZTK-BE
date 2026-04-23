@@ -5,8 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import java.nio.charset.StandardCharsets;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -45,9 +45,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.web3j.crypto.Credentials;
 
