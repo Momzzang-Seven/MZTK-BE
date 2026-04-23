@@ -122,6 +122,9 @@ public class Post {
 
     if (title != null) {
       if (title.isBlank()) throw new IllegalArgumentException("Title cannot be blank.");
+      if (PostType.FREE.equals(this.type)) {
+        throw new PostInvalidInputException("Free posts do not support title updates.");
+      }
       builder.title(title);
       isUpdated = true;
     }
