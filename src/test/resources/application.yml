@@ -125,7 +125,6 @@ web3:
     treasury:
       wallet-alias: reward-treasury
       key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk= # gitleaks:allow
-      treasury-address: "0x0000000000000000000000000000000000000001"
       provisioning:
         enabled: false
     prevalidate:

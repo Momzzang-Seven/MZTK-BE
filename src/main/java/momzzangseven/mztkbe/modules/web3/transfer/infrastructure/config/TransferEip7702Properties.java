@@ -34,9 +34,6 @@ public class TransferEip7702Properties {
   @Getter
   @Setter
   public static class Sponsor {
-    @NotBlank private String keyEncryptionKeyB64;
-    @NotBlank private String walletAlias;
-
     @Min(21_000)
     private long maxGasLimit;
 

@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -17,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasurySignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
@@ -42,6 +44,7 @@ class TransactionIssuerWorkerTest {
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
   @Mock private LoadTreasuryKeyPort loadTreasuryKeyPort;
+  @Mock private LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort;
   @Mock private ReserveNoncePort reserveNoncePort;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private RetryStrategy retryStrategy;
@@ -55,8 +58,11 @@ class TransactionIssuerWorkerTest {
     rewardProperties = new TransactionRewardTokenProperties();
     rewardProperties.getWorker().setClaimTtlSeconds(120);
     rewardProperties.setTokenContractAddress("0x" + "a".repeat(40));
-    rewardProperties.getTreasury().setWalletAlias("reward-treasury");
-    rewardProperties.getTreasury().setKeyEncryptionKeyB64("kek");
+    lenient()
+        .when(loadRewardTreasurySignerConfigPort.load())
+        .thenReturn(
+            new LoadRewardTreasurySignerConfigPort.RewardTreasurySignerConfig(
+                "reward-treasury", "kek"));
 
     web3CoreProperties = new Web3CoreProperties();
     web3CoreProperties.setChainId(11155111L);
@@ -70,6 +76,7 @@ class TransactionIssuerWorkerTest {
             reserveNoncePort,
             web3ContractPort,
             rewardProperties,
+            loadRewardTreasurySignerConfigPort,
             retryStrategy,
             web3CoreProperties);
   }
