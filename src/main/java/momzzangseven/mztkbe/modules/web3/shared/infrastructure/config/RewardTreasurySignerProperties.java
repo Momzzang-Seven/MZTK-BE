@@ -18,7 +18,9 @@ public class RewardTreasurySignerProperties {
     Binder binder = Binder.get(environment);
     boolean rewardTokenEnabled = bindBoolean(binder, REWARD_TOKEN_ENABLED_PROPERTY);
     this.walletAlias =
-        rewardTokenEnabled ? normalize(bind(binder, REWARD_TREASURY_PREFIX + ".wallet-alias")) : null;
+        rewardTokenEnabled
+            ? normalize(bind(binder, REWARD_TREASURY_PREFIX + ".wallet-alias"))
+            : null;
     this.keyEncryptionKeyB64 =
         rewardTokenEnabled
             ? normalize(bind(binder, REWARD_TREASURY_PREFIX + ".key-encryption-key-b64"))
