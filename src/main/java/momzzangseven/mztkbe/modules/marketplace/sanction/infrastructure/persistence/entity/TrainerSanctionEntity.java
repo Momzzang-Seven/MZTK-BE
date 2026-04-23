@@ -55,9 +55,6 @@ public class TrainerSanctionEntity {
       newSuspendedUntil = now.plusDays(7);
     }
 
-    return this.toBuilder()
-        .strikeCount(newCount)
-        .suspendedUntil(newSuspendedUntil)
-        .build();
+    return this.toBuilder().strikeCount(newCount).suspendedUntil(newSuspendedUntil).build();
   }
 }

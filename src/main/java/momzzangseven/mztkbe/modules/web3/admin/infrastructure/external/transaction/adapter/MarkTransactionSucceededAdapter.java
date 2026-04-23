@@ -11,24 +11,28 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class MarkTransactionSucceededAdapter implements MarkTransactionSucceededPort {
 
-    private final momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+  private final momzzangseven.mztkbe.modules.web3.transaction.application.port.in
+          .MarkTransactionSucceededUseCase
+      markTransactionSucceededUseCase;
 
-    @Override
-    public MarkTransactionSucceededResult markSucceeded(
-            Long operatorId,
-            Long transactionId,
-            String txHash,
-            String explorerUrl,
-            String reason,
-            String evidence) {
-        var result = markTransactionSucceededUseCase.execute(
-                new momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand(
-                        operatorId, transactionId, txHash, explorerUrl, reason, evidence));
-        return new MarkTransactionSucceededResult(
-                result.transactionId(),
-                result.status().name(),
-                result.previousStatus().name(),
-                result.txHash(),
-                result.explorerUrl());
-    }
+  @Override
+  public MarkTransactionSucceededResult markSucceeded(
+      Long operatorId,
+      Long transactionId,
+      String txHash,
+      String explorerUrl,
+      String reason,
+      String evidence) {
+    var result =
+        markTransactionSucceededUseCase.execute(
+            new momzzangseven.mztkbe.modules.web3.transaction.application.dto
+                .MarkTransactionSucceededCommand(
+                operatorId, transactionId, txHash, explorerUrl, reason, evidence));
+    return new MarkTransactionSucceededResult(
+        result.transactionId(),
+        result.status().name(),
+        result.previousStatus().name(),
+        result.txHash(),
+        result.explorerUrl());
+  }
 }

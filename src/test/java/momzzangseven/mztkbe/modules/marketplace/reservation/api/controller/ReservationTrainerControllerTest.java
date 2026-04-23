@@ -39,8 +39,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 /**
  * Controller contract tests for {@link ReservationTrainerController}.
  *
- * <p>Uses a full {@code @SpringBootTest} context with MockMvc so that the security filter chain
- * and content-negotiation are exercised. All use-case beans are replaced with mocks.
+ * <p>Uses a full {@code @SpringBootTest} context with MockMvc so that the security filter chain and
+ * content-negotiation are exercised. All use-case beans are replaced with mocks.
  */
 @DisplayName("ReservationTrainerController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @SpringBootTest
@@ -81,18 +81,32 @@ class ReservationTrainerControllerTest {
 
   private ReservationSummaryResult summaryResult() {
     return new ReservationSummaryResult(
-        1L, 10L, 100L, 50L,
-        LocalDate.of(2025, 6, 10), LocalTime.of(10, 0),
-        60, ReservationStatus.PENDING, "부탁드립니다");
+        1L,
+        10L,
+        100L,
+        50L,
+        LocalDate.of(2025, 6, 10),
+        LocalTime.of(10, 0),
+        60,
+        ReservationStatus.PENDING,
+        "부탁드립니다");
   }
 
   private GetReservationResult detailResult() {
     return new GetReservationResult(
-        1L, 50L, 100L, 10L,
-        LocalDate.of(2025, 6, 10), LocalTime.of(10, 0),
-        60, ReservationStatus.PENDING,
-        "부탁드립니다", "order-abc", null,
-        java.time.LocalDateTime.now(), java.time.LocalDateTime.now());
+        1L,
+        50L,
+        100L,
+        10L,
+        LocalDate.of(2025, 6, 10),
+        LocalTime.of(10, 0),
+        60,
+        ReservationStatus.PENDING,
+        "부탁드립니다",
+        "order-abc",
+        null,
+        java.time.LocalDateTime.now(),
+        java.time.LocalDateTime.now());
   }
 
   // ── GET /marketplace/trainer/reservations ──────────────────────────────

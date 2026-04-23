@@ -36,8 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Transaction ordering (DB-first, escrow-after-commit):</b><br>
  * The reservation row is saved as SETTLED with a sentinel {@code txHash}, the DB transaction is
- * committed, then {@link EscrowDispatchEvent} is handled AFTER_COMMIT by
- * {@code EscrowDispatchEventListener} to call {@code confirmClass} on-chain and write back the real
+ * committed, then {@link EscrowDispatchEvent} is handled AFTER_COMMIT by {@code
+ * EscrowDispatchEventListener} to call {@code confirmClass} on-chain and write back the real
  * txHash.
  */
 @Slf4j

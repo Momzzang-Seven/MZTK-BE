@@ -14,10 +14,10 @@ import org.springframework.stereotype.Component;
  * txHash} so that all reservation services can be developed and tested end-to-end without blocking
  * on the web3 module.
  *
- * <p><b>Note:</b> Active in all profiles. A {@link PostConstruct} guard will throw
- * {@link IllegalStateException} on startup if the active profile is {@code prod}, ensuring this
- * stub is never silently used in production. Replace with a real cross-module adapter calling
- * {@code web3/application/port/in/SendEscrowTransactionUseCase} once the web3 module is ready.
+ * <p><b>Note:</b> Active in all profiles. A {@link PostConstruct} guard will throw {@link
+ * IllegalStateException} on startup if the active profile is {@code prod}, ensuring this stub is
+ * never silently used in production. Replace with a real cross-module adapter calling {@code
+ * web3/application/port/in/SendEscrowTransactionUseCase} once the web3 module is ready.
  */
 @Slf4j
 @Component

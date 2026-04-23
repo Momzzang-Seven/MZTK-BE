@@ -3,5 +3,4 @@ package momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persist
 import momzzangseven.mztkbe.modules.marketplace.sanction.infrastructure.persistence.entity.TrainerSanctionEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface TrainerSanctionJpaRepository extends JpaRepository<TrainerSanctionEntity, Long> {
-}
+public interface TrainerSanctionJpaRepository extends JpaRepository<TrainerSanctionEntity, Long> {}

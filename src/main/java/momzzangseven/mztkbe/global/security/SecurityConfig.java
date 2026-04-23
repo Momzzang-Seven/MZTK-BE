@@ -304,7 +304,8 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_TRAINER")
                     .requestMatchers(HttpMethod.GET, "/marketplace/trainer/reservations/*")
                     .hasAuthority("ROLE_TRAINER")
-                    .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/approve")
+                    .requestMatchers(
+                        HttpMethod.PATCH, "/marketplace/trainer/reservations/*/approve")
                     .hasAuthority("ROLE_TRAINER")
                     .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/reject")
                     .hasAuthority("ROLE_TRAINER")

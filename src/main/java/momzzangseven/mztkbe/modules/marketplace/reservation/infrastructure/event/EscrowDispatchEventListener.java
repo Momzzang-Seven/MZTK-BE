@@ -7,7 +7,6 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
-import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +24,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * AFTER_COMMIT, we guarantee the DB row is durable before any on-chain side-effect is triggered.
  *
  * <p><b>txHash write-back:</b><br>
- * The reservation row is initially saved with a sentinel {@code txHash} value
- * ({@value PENDING_TX_HASH}). This listener calls escrow, receives the real txHash, then updates
- * the row in a fresh {@code REQUIRES_NEW} transaction.
+ * The reservation row is initially saved with a sentinel {@code txHash} value ({@value
+ * PENDING_TX_HASH}). This listener calls escrow, receives the real txHash, then updates the row in
+ * a fresh {@code REQUIRES_NEW} transaction.
  *
  * <p><b>Failure handling:</b><br>
  * If escrow submission or the txHash write-back fails, the DB status is already committed and the

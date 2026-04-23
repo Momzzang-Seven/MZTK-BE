@@ -22,9 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
  * proxy-based transaction management only intercepts calls that cross bean boundaries.
  *
  * <p><b>Transaction ordering (DB-first, escrow-after):</b><br>
- * The reservation status is persisted first. Then the on-chain {@code adminRefund} call is made.
- * If the escrow call fails, the status remains TIMEOUT_CANCELLED in DB (correct terminal state)
- * and the strike is still recorded. The missing on-chain refund can be resolved by a reconciliation
+ * The reservation status is persisted first. Then the on-chain {@code adminRefund} call is made. If
+ * the escrow call fails, the status remains TIMEOUT_CANCELLED in DB (correct terminal state) and
+ * the strike is still recorded. The missing on-chain refund can be resolved by a reconciliation
  * job. This prevents the inverse failure (on-chain success + DB rollback) which would be harder to
  * detect and recover from.
  */

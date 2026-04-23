@@ -27,9 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p><b>Transaction ordering (DB-first, escrow-after-commit):</b><br>
  * The reservation row is saved as USER_CANCELLED with a sentinel {@code txHash}, the DB transaction
- * is committed, then {@link EscrowDispatchEvent} is handled AFTER_COMMIT by
- * {@code EscrowDispatchEventListener} to call {@code cancelClass} on-chain and write back the real
- * txHash.
+ * is committed, then {@link EscrowDispatchEvent} is handled AFTER_COMMIT by {@code
+ * EscrowDispatchEventListener} to call {@code cancelClass} on-chain and write back the real txHash.
  */
 @Slf4j
 @Service
@@ -67,7 +66,8 @@ public class CancelPendingReservationService implements CancelPendingReservation
           "Cannot cancel reservation in status: " + reservation.getStatus());
     }
 
-    // Persist USER_CANCELLED with sentinel txHash; real escrow cancelClass call happens AFTER_COMMIT.
+    // Persist USER_CANCELLED with sentinel txHash; real escrow cancelClass call happens
+    // AFTER_COMMIT.
     Reservation cancelled = reservation.cancelByUser(EscrowDispatchEventListener.PENDING_TX_HASH);
     Reservation saved = saveReservationPort.save(cancelled);
 

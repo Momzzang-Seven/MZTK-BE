@@ -49,8 +49,8 @@ class CreateReservationServiceTest {
   @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
 
   /**
-   * Fixed clock: 2024-06-03T10:00:00 KST (UTC+9).
-   * MONDAY is set to 2024-06-10, which is after this clock's date — always in the future.
+   * Fixed clock: 2024-06-03T10:00:00 KST (UTC+9). MONDAY is set to 2024-06-10, which is after this
+   * clock's date — always in the future.
    */
   private static final java.time.Clock FIXED_CLOCK =
       java.time.Clock.fixed(
@@ -77,14 +77,15 @@ class CreateReservationServiceTest {
 
   @BeforeEach
   void setUp() {
-    sut = new CreateReservationService(
-        getClassSlotInfoUseCase,
-        getClassInfoUseCase,
-        checkTrainerSanctionPort,
-        loadReservationPort,
-        saveReservationPort,
-        submitEscrowTransactionPort,
-        FIXED_CLOCK);
+    sut =
+        new CreateReservationService(
+            getClassSlotInfoUseCase,
+            getClassInfoUseCase,
+            checkTrainerSanctionPort,
+            loadReservationPort,
+            saveReservationPort,
+            submitEscrowTransactionPort,
+            FIXED_CLOCK);
 
     slot =
         ClassSlot.builder()

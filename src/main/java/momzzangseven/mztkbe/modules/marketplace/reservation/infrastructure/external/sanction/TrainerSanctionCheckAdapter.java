@@ -11,8 +11,8 @@ import org.springframework.stereotype.Component;
 /**
  * Stub implementation of {@link CheckTrainerSanctionPort}.
  *
- * <p>The real adapter should delegate to the sanction module's {@code LoadTrainerSanctionPort}
- * once cross-module wiring is complete. Until then this stub always reports no active sanction.
+ * <p>The real adapter should delegate to the sanction module's {@code LoadTrainerSanctionPort} once
+ * cross-module wiring is complete. Until then this stub always reports no active sanction.
  *
  * <p><b>Note:</b> A {@link PostConstruct} guard throws {@link IllegalStateException} on startup
  * when the active profile is {@code prod}, preventing silent stub usage in production. Replace with
