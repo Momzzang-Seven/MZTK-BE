@@ -111,7 +111,7 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.userId = :userId "
           + "AND (:status IS NULL OR r.status = :status) "
-          + "ORDER BY r.reservationDate DESC")
+          + "ORDER BY r.reservationDate DESC, r.reservationTime DESC")
   List<ReservationEntity> findByUserId(
       @Param("userId") Long userId, @Param("status") ReservationStatus status);
 
@@ -124,7 +124,7 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.trainerId = :trainerId "
           + "AND (:status IS NULL OR r.status = :status) "
-          + "ORDER BY r.reservationDate DESC")
+          + "ORDER BY r.reservationDate DESC, r.reservationTime DESC")
   List<ReservationEntity> findByTrainerId(
       @Param("trainerId") Long trainerId, @Param("status") ReservationStatus status);
 }

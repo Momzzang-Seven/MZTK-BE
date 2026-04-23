@@ -10,10 +10,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Reje
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.RejectReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.TrainerStrikeEvent;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.event.EscrowDispatchEventListener;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +23,20 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Service for a trainer to reject a PENDING reservation.
  *
- * <p>Triggers on-chain cancelClass to refund the user. Publishes a {@link TrainerStrikeEvent}
- * (AFTER_COMMIT) for the sanction listener to record a strike asynchronously.
+ * <p><b>Transaction ordering (DB-first, escrow-after-commit):</b><br>
+ * The reservation row is saved with a sentinel {@code txHash} value (
+ * {@value EscrowDispatchEventListener#PENDING_TX_HASH}), and the DB transaction is committed.
+ * After the commit, two AFTER_COMMIT events are dispatched:
+ *
+ * <ol>
+ *   <li>{@link EscrowDispatchEvent} — calls {@code cancelClass} on-chain and writes back the real
+ *       txHash via {@code EscrowDispatchEventListener}.
+ *   <li>{@link TrainerStrikeEvent} — records a trainer strike via {@code
+ *       ReservationSanctionEventListener}.
+ * </ol>
+ *
+ * <p>This ordering guarantees the DB row is durable before any on-chain side-effect is triggered,
+ * preventing the "on-chain success + DB rollback" divergence.
  */
 @Slf4j
 @Service
@@ -31,7 +45,6 @@ public class RejectReservationService implements RejectReservationUseCase {
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
-  private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final ApplicationEventPublisher eventPublisher;
 
   @Override
@@ -61,11 +74,14 @@ public class RejectReservationService implements RejectReservationUseCase {
           "Cannot reject reservation in status: " + reservation.getStatus());
     }
 
-    String cancelTxHash = submitEscrowTransactionPort.submitCancel(reservation.getOrderId());
-    Reservation rejected = reservation.reject(cancelTxHash);
+    // Persist REJECTED status with a sentinel txHash; the real escrow call happens AFTER_COMMIT.
+    Reservation rejected =
+        reservation.reject(EscrowDispatchEventListener.PENDING_TX_HASH, command.rejectionReason());
     Reservation saved = saveReservationPort.save(rejected);
 
-    // Publish strike event — handled AFTER_COMMIT by ReservationSanctionEventListener
+    // Publish events — both handled AFTER_COMMIT by their respective listeners.
+    eventPublisher.publishEvent(
+        new EscrowDispatchEvent(saved.getId(), reservation.getOrderId(), EscrowAction.CANCEL));
     eventPublisher.publishEvent(
         new TrainerStrikeEvent(reservation.getTrainerId(), TrainerStrikeEvent.REASON_REJECT));
 

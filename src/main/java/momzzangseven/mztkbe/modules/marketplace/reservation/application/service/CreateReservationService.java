@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +51,7 @@ public class CreateReservationService implements CreateReservationUseCase {
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  private final Clock clock;
 
   @Override
   @Transactional
@@ -93,6 +96,15 @@ public class CreateReservationService implements CreateReservationUseCase {
     }
     if (!slot.getStartTime().equals(command.reservationTime())) {
       throw new ReservationInvalidSlotDateException(slot.getId());
+    }
+
+    // 2-a. 요청한 세션 시작 시각이 현재 시각보다 미래인지 확인
+    LocalDateTime requestedSessionStart =
+        LocalDateTime.of(command.reservationDate(), command.reservationTime());
+    if (requestedSessionStart.isBefore(LocalDateTime.now(clock))) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_PAST_TIME,
+          "Cannot book a session in the past: " + requestedSessionStart);
     }
 
     // 3. Load class and validate active status

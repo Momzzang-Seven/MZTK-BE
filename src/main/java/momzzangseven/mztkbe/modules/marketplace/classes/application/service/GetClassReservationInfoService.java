@@ -84,6 +84,11 @@ public class GetClassReservationInfoService implements GetClassReservationInfoUs
 
       for (ClassSlot slot : activeSlots) {
         if (slot.getDaysOfWeek().contains(currentDate.getDayOfWeek())) {
+          // If it's today, filter out slots that have already started
+          if (currentDate.equals(today) && slot.getStartTime().isBefore(java.time.LocalTime.now(clock))) {
+            continue;
+          }
+          
           int active = activeCountBySlotAndDate.get(slot.getId()).getOrDefault(currentDate, 0);
           int available = Math.max(0, slot.getCapacity() - active);
           timesForDate.add(

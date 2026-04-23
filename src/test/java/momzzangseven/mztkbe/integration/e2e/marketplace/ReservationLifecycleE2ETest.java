@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.integration.e2e.marketplace;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.DayOfWeek;
@@ -28,32 +27,58 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import momzzangseven.mztkbe.modules.web3.admin.application.port.in.MarkTransactionSucceededUseCase;
 
 /**
  * E2E integration tests for the Marketplace Reservation lifecycle.
  *
- * <p>Covers the full happy-path flow (PENDING → APPROVED → SETTLED / REJECTED) and critical failure
+ * <p>
+ * Covers the full happy-path flow (PENDING → APPROVED → SETTLED / REJECTED) and
+ * critical failure
  * cases. Web3 escrow calls are transparently handled by the {@link
  * momzzangseven.mztkbe.modules.marketplace.infrastructure.external.web3.EscrowTransactionAdapter}
- * stub, which returns a deterministic fake {@code txHash} — sufficient for verifying DB state
+ * stub, which returns a deterministic fake {@code txHash} — sufficient for
+ * verifying DB state
  * transitions without a live blockchain connection.
  *
- * <p>Run with: {@code ./gradlew e2eTest}
+ * <p>
+ * Run with: {@code ./gradlew e2eTest}
  */
-@TestPropertySource(
-    properties = {
-      "web3.chain-id=1337",
-      "web3.eip712.chain-id=1337",
-      "web3.eip7702.enabled=false",
-      "web3.reward-token.enabled=false"
-    })
+@TestPropertySource(properties = {
+    "web3.chain-id=1337",
+    "web3.eip712.chain-id=1337",
+    "web3.eip7702.enabled=false"
+})
 @DisplayName("[E2E] Marketplace Reservation lifecycle")
 class ReservationLifecycleE2ETest extends E2ETestBase {
 
-  @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired
+  private JdbcTemplate jdbcTemplate;
 
-  @MockitoBean private KakaoAuthPort kakaoAuthPort;
-  @MockitoBean private GoogleAuthPort googleAuthPort;
+  @MockitoBean
+  private KakaoAuthPort kakaoAuthPort;
+  @MockitoBean
+  private GoogleAuthPort googleAuthPort;
+
+  // web3.admin layer — mocked so MarkTransactionSucceededAdapter is
+  // replaced without requiring a live transaction module
+  @MockitoBean
+  private MarkTransactionSucceededUseCase markTransactionSucceededUseCase;
+
+  // web3.transaction layer — must be mocked so MarkTransactionSucceededAdapter
+  // (which depends on this use case) can be created even when
+  // the transaction module's own beans are conditional.
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase txMarkTransactionSucceededUseCase;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.TransactionReceiptWorker txTransactionReceiptWorker;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.TransactionIssuerWorker txTransactionIssuerWorker;
+
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.SignedRecoveryWorker txSignedRecoveryWorker;
 
   // ===================================================================
   // Happy-path: PENDING → APPROVED → SETTLED
@@ -68,7 +93,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     void fullSettlementFlow_persistsCorrectStatusSequence() throws Exception {
       // given — trainer with a registered class and slot
       TestUser trainer = signupAndLogin("trainer-full");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Full PT", 50_000);
 
@@ -79,26 +104,25 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       TestUser user = signupAndLogin("user-full");
 
       // when — user creates reservation
-      ResponseEntity<String> createResponse =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/classes/" + classId + "/reservations",
-              HttpMethod.POST,
-              new HttpEntity<>(
-                  Map.of(
-                      "slotId",
-                      slotId,
-                      "reservationDate",
-                      sessionDate.toString(),
-                      "reservationTime",
-                      "10:00:00",
-                      "signedAmount",
-                      50_000,
-                      "delegationSignature",
-                      "0x" + "a".repeat(130),
-                      "executionSignature",
-                      "0x" + "b".repeat(130)),
-                  bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> createResponse = restTemplate.exchange(
+          baseUrl() + "/marketplace/classes/" + classId + "/reservations",
+          HttpMethod.POST,
+          new HttpEntity<>(
+              Map.of(
+                  "slotId",
+                  slotId,
+                  "reservationDate",
+                  sessionDate.toString(),
+                  "reservationTime",
+                  "10:00:00",
+                  "signedAmount",
+                  50_000,
+                  "delegationSignature",
+                  "0x" + "a".repeat(130),
+                  "executionSignature",
+                  "0x" + "b".repeat(130)),
+              bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode createRoot = parse(createResponse);
@@ -108,18 +132,18 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       assertDbStatus(reservationId, "PENDING");
 
       // trainer approves
-      ResponseEntity<String> approveResponse =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/trainer/reservations/" + reservationId + "/approve",
-              HttpMethod.PATCH,
-              new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
-              String.class);
+      ResponseEntity<String> approveResponse = restTemplate.exchange(
+          baseUrl() + "/marketplace/trainer/reservations/" + reservationId + "/approve",
+          HttpMethod.PATCH,
+          new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
+          String.class);
 
       assertThat(approveResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
       assertThat(parse(approveResponse).at("/data/status").asText()).isEqualTo("APPROVED");
       assertDbStatus(reservationId, "APPROVED");
 
-      // force session to past so complete is allowed (update reservation_date to yesterday)
+      // force session to past so complete is allowed (update reservation_date to
+      // yesterday)
       jdbcTemplate.update(
           "UPDATE class_reservations SET reservation_date = ?, reservation_time = ? WHERE id = ?",
           java.sql.Date.valueOf(LocalDate.now().minusDays(1)),
@@ -127,12 +151,11 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
           reservationId);
 
       // user completes
-      ResponseEntity<String> completeResponse =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations/" + reservationId + "/complete",
-              HttpMethod.PATCH,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> completeResponse = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations/" + reservationId + "/complete",
+          HttpMethod.PATCH,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(completeResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
       assertThat(parse(completeResponse).at("/data/status").asText()).isEqualTo("SETTLED");
@@ -152,7 +175,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("trainer rejects pending reservation → DB shows REJECTED with txHash")
     void trainerReject_persistsRejectedStatusAndTxHash() throws Exception {
       TestUser trainer = signupAndLogin("trainer-reject");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Reject PT", 30_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.WEDNESDAY);
@@ -160,18 +183,16 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       TestUser user = signupAndLogin("user-reject");
 
-      long reservationId =
-          createReservation(user, classId, slotId, sessionDate, "14:00:00", 30_000);
+      long reservationId = createReservation(user, classId, slotId, sessionDate, "14:00:00", 30_000);
       assertDbStatus(reservationId, "PENDING");
 
-      ResponseEntity<String> rejectResponse =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/trainer/reservations/" + reservationId + "/reject",
-              HttpMethod.PATCH,
-              new HttpEntity<>(
-                  Map.of("rejectionReason", "해당 시간에 타 일정이 있습니다."),
-                  bearerJsonHeaders(trainer.accessToken())),
-              String.class);
+      ResponseEntity<String> rejectResponse = restTemplate.exchange(
+          baseUrl() + "/marketplace/trainer/reservations/" + reservationId + "/reject",
+          HttpMethod.PATCH,
+          new HttpEntity<>(
+              Map.of("rejectionReason", "해당 시간에 타 일정이 있습니다."),
+              bearerJsonHeaders(trainer.accessToken())),
+          String.class);
 
       assertThat(rejectResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode rejectRoot = parse(rejectResponse);
@@ -179,9 +200,8 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       assertDbStatus(reservationId, "REJECTED");
 
       // txHash should have been updated (stub returns deterministic value)
-      String txHash =
-          jdbcTemplate.queryForObject(
-              "SELECT tx_hash FROM class_reservations WHERE id = ?", String.class, reservationId);
+      String txHash = jdbcTemplate.queryForObject(
+          "SELECT tx_hash FROM class_reservations WHERE id = ?", String.class, reservationId);
       assertThat(txHash).isNotBlank();
     }
   }
@@ -198,22 +218,20 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("user cancels pending reservation → DB shows USER_CANCELLED")
     void userCancel_persistsCancelledStatus() throws Exception {
       TestUser trainer = signupAndLogin("trainer-cancel");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Cancel PT", 20_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.FRIDAY);
       long slotId = insertSlot(classId, DayOfWeek.FRIDAY, LocalTime.of(8, 0), 2, 45);
 
       TestUser user = signupAndLogin("user-cancel");
-      long reservationId =
-          createReservation(user, classId, slotId, sessionDate, "08:00:00", 20_000);
+      long reservationId = createReservation(user, classId, slotId, sessionDate, "08:00:00", 20_000);
 
-      ResponseEntity<String> cancelResponse =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations/" + reservationId + "/cancel",
-              HttpMethod.PATCH,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> cancelResponse = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations/" + reservationId + "/cancel",
+          HttpMethod.PATCH,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(cancelResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
       assertThat(parse(cancelResponse).at("/data/status").asText()).isEqualTo("USER_CANCELLED");
@@ -233,7 +251,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("GET reservation-info returns available dates within 28-day window")
     void getReservationInfo_returnsAvailableDates() throws Exception {
       TestUser trainer = signupAndLogin("trainer-schedule");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Schedule PT", 40_000);
       insertSlot(classId, DayOfWeek.TUESDAY, LocalTime.of(11, 0), 5, 60);
@@ -241,12 +259,11 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       TestUser user = signupAndLogin("user-schedule");
 
-      ResponseEntity<String> response =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/classes/" + classId + "/reservation-info",
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> response = restTemplate.exchange(
+          baseUrl() + "/marketplace/classes/" + classId + "/reservation-info",
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode root = parse(response);
@@ -270,7 +287,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("creating reservation with wrong day-of-week returns 400 INVALID_SLOT_DATE")
     void createReservation_wrongDayOfWeek_returns400() throws Exception {
       TestUser trainer = signupAndLogin("trainer-badday");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "BadDay PT", 50_000);
       // slot is on MONDAY but we will send TUESDAY
@@ -279,30 +296,28 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       TestUser user = signupAndLogin("user-badday");
       // find the next TUESDAY (wrong day)
       LocalDate wrongDate = nextWeekday(DayOfWeek.TUESDAY);
-      long slotId =
-          jdbcTemplate.queryForObject(
-              "SELECT id FROM class_slots WHERE marketplace_class_id = ?", Long.class, classId);
+      long slotId = jdbcTemplate.queryForObject(
+          "SELECT id FROM class_slots WHERE class_id = ?", Long.class, classId);
 
-      ResponseEntity<String> response =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/classes/" + classId + "/reservations",
-              HttpMethod.POST,
-              new HttpEntity<>(
-                  Map.of(
-                      "slotId",
-                      slotId,
-                      "reservationDate",
-                      wrongDate.toString(),
-                      "reservationTime",
-                      "09:00:00",
-                      "signedAmount",
-                      50_000,
-                      "delegationSignature",
-                      "0x" + "a".repeat(130),
-                      "executionSignature",
-                      "0x" + "b".repeat(130)),
-                  bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> response = restTemplate.exchange(
+          baseUrl() + "/marketplace/classes/" + classId + "/reservations",
+          HttpMethod.POST,
+          new HttpEntity<>(
+              Map.of(
+                  "slotId",
+                  slotId,
+                  "reservationDate",
+                  wrongDate.toString(),
+                  "reservationTime",
+                  "09:00:00",
+                  "signedAmount",
+                  50_000,
+                  "delegationSignature",
+                  "0x" + "a".repeat(130),
+                  "executionSignature",
+                  "0x" + "b".repeat(130)),
+              bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
       assertThat(parse(response).at("/code").asText()).isEqualTo("MARKETPLACE_021");
@@ -313,7 +328,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("price mismatch returns 400 PRICE_MISMATCH and no reservation row created")
     void createReservation_priceMismatch_returns400() throws Exception {
       TestUser trainer = signupAndLogin("trainer-price");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Price PT", 50_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.MONDAY);
@@ -321,26 +336,25 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       TestUser user = signupAndLogin("user-price");
 
-      ResponseEntity<String> response =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/classes/" + classId + "/reservations",
-              HttpMethod.POST,
-              new HttpEntity<>(
-                  Map.of(
-                      "slotId",
-                      slotId,
-                      "reservationDate",
-                      sessionDate.toString(),
-                      "reservationTime",
-                      "09:00:00",
-                      "signedAmount",
-                      99_999, // wrong amount
-                      "delegationSignature",
-                      "0x" + "a".repeat(130),
-                      "executionSignature",
-                      "0x" + "b".repeat(130)),
-                  bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> response = restTemplate.exchange(
+          baseUrl() + "/marketplace/classes/" + classId + "/reservations",
+          HttpMethod.POST,
+          new HttpEntity<>(
+              Map.of(
+                  "slotId",
+                  slotId,
+                  "reservationDate",
+                  sessionDate.toString(),
+                  "reservationTime",
+                  "09:00:00",
+                  "signedAmount",
+                  99_999, // wrong amount
+                  "delegationSignature",
+                  "0x" + "a".repeat(130),
+                  "executionSignature",
+                  "0x" + "b".repeat(130)),
+              bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
       assertThat(parse(response).at("/code").asText()).isEqualTo("MARKETPLACE_020");
@@ -351,23 +365,21 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("completing a PENDING reservation (not APPROVED) returns 409 INVALID_STATUS")
     void completeReservation_onPending_returns409() throws Exception {
       TestUser trainer = signupAndLogin("trainer-status");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Status PT", 20_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.THURSDAY);
       long slotId = insertSlot(classId, DayOfWeek.THURSDAY, LocalTime.of(16, 0), 3, 40);
 
       TestUser user = signupAndLogin("user-status");
-      long reservationId =
-          createReservation(user, classId, slotId, sessionDate, "16:00:00", 20_000);
+      long reservationId = createReservation(user, classId, slotId, sessionDate, "16:00:00", 20_000);
 
       // try to complete without approval
-      ResponseEntity<String> response =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations/" + reservationId + "/complete",
-              HttpMethod.PATCH,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> response = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations/" + reservationId + "/complete",
+          HttpMethod.PATCH,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
       assertThat(parse(response).at("/code").asText()).isEqualTo("MARKETPLACE_018");
@@ -378,7 +390,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("other user cannot cancel a reservation they do not own → 403")
     void cancelReservation_byOtherUser_returns403() throws Exception {
       TestUser trainer = signupAndLogin("trainer-auth");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Auth PT", 10_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.MONDAY);
@@ -386,15 +398,13 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       TestUser owner = signupAndLogin("user-owner");
       TestUser intruder = signupAndLogin("user-intruder");
-      long reservationId =
-          createReservation(owner, classId, slotId, sessionDate, "07:00:00", 10_000);
+      long reservationId = createReservation(owner, classId, slotId, sessionDate, "07:00:00", 10_000);
 
-      ResponseEntity<String> response =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations/" + reservationId + "/cancel",
-              HttpMethod.PATCH,
-              new HttpEntity<>(bearerJsonHeaders(intruder.accessToken())),
-              String.class);
+      ResponseEntity<String> response = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations/" + reservationId + "/cancel",
+          HttpMethod.PATCH,
+          new HttpEntity<>(bearerJsonHeaders(intruder.accessToken())),
+          String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
       assertDbStatus(reservationId, "PENDING");
@@ -404,7 +414,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("completing before class start time returns 400 EARLY_COMPLETE")
     void completeReservation_beforeClassStart_returns400() throws Exception {
       TestUser trainer = signupAndLogin("trainer-early");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Early PT", 15_000);
       LocalDate futureDate = nextWeekday(DayOfWeek.FRIDAY);
@@ -418,12 +428,11 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
           "UPDATE class_reservations SET status = 'APPROVED' WHERE id = ?", reservationId);
 
       // try to complete (session is in the future)
-      ResponseEntity<String> response =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations/" + reservationId + "/complete",
-              HttpMethod.PATCH,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> response = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations/" + reservationId + "/complete",
+          HttpMethod.PATCH,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
       assertThat(parse(response).at("/code").asText()).isEqualTo("MARKETPLACE_023");
@@ -433,7 +442,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("slot capacity exceeded returns 409 SLOT_FULL")
     void createReservation_slotFull_returns409() throws Exception {
       TestUser trainer = signupAndLogin("trainer-full-cap");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Full Cap PT", 10_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.TUESDAY);
@@ -447,26 +456,25 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       createReservation(user1, classId, slotId, sessionDate, "12:00:00", 10_000);
 
       // second reservation should fail
-      ResponseEntity<String> response =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/classes/" + classId + "/reservations",
-              HttpMethod.POST,
-              new HttpEntity<>(
-                  Map.of(
-                      "slotId",
-                      slotId,
-                      "reservationDate",
-                      sessionDate.toString(),
-                      "reservationTime",
-                      "12:00:00",
-                      "signedAmount",
-                      10_000,
-                      "delegationSignature",
-                      "0x" + "a".repeat(130),
-                      "executionSignature",
-                      "0x" + "b".repeat(130)),
-                  bearerJsonHeaders(user2.accessToken())),
-              String.class);
+      ResponseEntity<String> response = restTemplate.exchange(
+          baseUrl() + "/marketplace/classes/" + classId + "/reservations",
+          HttpMethod.POST,
+          new HttpEntity<>(
+              Map.of(
+                  "slotId",
+                  slotId,
+                  "reservationDate",
+                  sessionDate.toString(),
+                  "reservationTime",
+                  "12:00:00",
+                  "signedAmount",
+                  10_000,
+                  "delegationSignature",
+                  "0x" + "a".repeat(130),
+                  "executionSignature",
+                  "0x" + "b".repeat(130)),
+              bearerJsonHeaders(user2.accessToken())),
+          String.class);
 
       assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
       assertThat(parse(response).at("/code").asText()).isEqualTo("MARKETPLACE_017");
@@ -485,7 +493,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("GET /me/reservations - 유저 예약 목록 조회: 본인 예약만 반환")
     void getMyReservations_returnsOnlyOwnReservations() throws Exception {
       TestUser trainer = signupAndLogin("trainer-qlist");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Query List PT", 10_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.MONDAY);
@@ -494,16 +502,14 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       TestUser owner = signupAndLogin("user-qlist-owner");
       TestUser other = signupAndLogin("user-qlist-other");
 
-      long reservationId =
-          createReservation(owner, classId, slotId, sessionDate, "08:00:00", 10_000);
+      long reservationId = createReservation(owner, classId, slotId, sessionDate, "08:00:00", 10_000);
 
       // owner can see their own reservation
-      ResponseEntity<String> ownerRes =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations",
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(owner.accessToken())),
-              String.class);
+      ResponseEntity<String> ownerRes = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations",
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(owner.accessToken())),
+          String.class);
 
       assertThat(ownerRes.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode ownerData = parse(ownerRes).at("/data");
@@ -519,12 +525,11 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       assertThat(found).as("owner's reservation should appear in their list").isTrue();
 
       // other user's list should NOT contain owner's reservation
-      ResponseEntity<String> otherRes =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations",
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(other.accessToken())),
-              String.class);
+      ResponseEntity<String> otherRes = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations",
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(other.accessToken())),
+          String.class);
 
       assertThat(otherRes.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode otherData = parse(otherRes).at("/data");
@@ -539,23 +544,21 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("GET /me/reservations?status=PENDING - 상태 필터 적용")
     void getMyReservations_withStatusFilter_returnsFilteredList() throws Exception {
       TestUser trainer = signupAndLogin("trainer-qfilter");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Filter PT", 12_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.WEDNESDAY);
       long slotId = insertSlot(classId, DayOfWeek.WEDNESDAY, LocalTime.of(9, 0), 5, 50);
 
       TestUser user = signupAndLogin("user-qfilter");
-      long reservationId =
-          createReservation(user, classId, slotId, sessionDate, "09:00:00", 12_000);
+      long reservationId = createReservation(user, classId, slotId, sessionDate, "09:00:00", 12_000);
 
       // status=PENDING → should include the new reservation
-      ResponseEntity<String> pendingRes =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations?status=PENDING",
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> pendingRes = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations?status=PENDING",
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(pendingRes.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode data = parse(pendingRes).at("/data");
@@ -569,12 +572,11 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
       assertThat(found).as("PENDING reservation should appear in filtered result").isTrue();
 
       // status=APPROVED → should NOT include it (still PENDING)
-      ResponseEntity<String> approvedRes =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/me/reservations?status=APPROVED",
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> approvedRes = restTemplate.exchange(
+          baseUrl() + "/marketplace/me/reservations?status=APPROVED",
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(approvedRes.getStatusCode()).isEqualTo(HttpStatus.OK);
       for (JsonNode node : parse(approvedRes).at("/data")) {
@@ -588,22 +590,20 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("GET /marketplace/reservations/{id} - 예약 상세 조회: 소유 유저가 조회하면 성공")
     void getReservationDetail_byOwnerUser_returnsFullDetail() throws Exception {
       TestUser trainer = signupAndLogin("trainer-qdetail");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Detail PT", 15_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.THURSDAY);
       long slotId = insertSlot(classId, DayOfWeek.THURSDAY, LocalTime.of(11, 0), 5, 60);
 
       TestUser user = signupAndLogin("user-qdetail");
-      long reservationId =
-          createReservation(user, classId, slotId, sessionDate, "11:00:00", 15_000);
+      long reservationId = createReservation(user, classId, slotId, sessionDate, "11:00:00", 15_000);
 
-      ResponseEntity<String> detailRes =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/reservations/" + reservationId,
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
-              String.class);
+      ResponseEntity<String> detailRes = restTemplate.exchange(
+          baseUrl() + "/marketplace/reservations/" + reservationId,
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(user.accessToken())),
+          String.class);
 
       assertThat(detailRes.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode data = parse(detailRes).at("/data");
@@ -617,22 +617,20 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("GET /marketplace/trainer/reservations/{id} - 담당 트레이너가 예약 상세 조회하면 성공")
     void getReservationDetail_byTrainer_returnsFullDetail() throws Exception {
       TestUser trainer = signupAndLogin("trainer-qdetail2");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Detail PT2", 20_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.FRIDAY);
       long slotId = insertSlot(classId, DayOfWeek.FRIDAY, LocalTime.of(14, 0), 5, 60);
 
       TestUser user = signupAndLogin("user-qdetail2");
-      long reservationId =
-          createReservation(user, classId, slotId, sessionDate, "14:00:00", 20_000);
+      long reservationId = createReservation(user, classId, slotId, sessionDate, "14:00:00", 20_000);
 
-      ResponseEntity<String> detailRes =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/trainer/reservations/" + reservationId,
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
-              String.class);
+      ResponseEntity<String> detailRes = restTemplate.exchange(
+          baseUrl() + "/marketplace/trainer/reservations/" + reservationId,
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
+          String.class);
 
       assertThat(detailRes.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode data = parse(detailRes).at("/data");
@@ -643,7 +641,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("GET /marketplace/reservations/{id} - 제3자가 상세 조회 시 403")
     void getReservationDetail_byThirdParty_returns403() throws Exception {
       TestUser trainer = signupAndLogin("trainer-qauth");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Auth Detail PT", 10_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.MONDAY);
@@ -651,15 +649,13 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
       TestUser owner = signupAndLogin("user-qauth-owner");
       TestUser intruder = signupAndLogin("user-qauth-intruder");
-      long reservationId =
-          createReservation(owner, classId, slotId, sessionDate, "07:00:00", 10_000);
+      long reservationId = createReservation(owner, classId, slotId, sessionDate, "07:00:00", 10_000);
 
-      ResponseEntity<String> res =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/reservations/" + reservationId,
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(intruder.accessToken())),
-              String.class);
+      ResponseEntity<String> res = restTemplate.exchange(
+          baseUrl() + "/marketplace/reservations/" + reservationId,
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(intruder.accessToken())),
+          String.class);
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
@@ -668,22 +664,20 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     @DisplayName("GET /marketplace/trainer/reservations - 트레이너 수강 신청 목록 조회")
     void getTrainerReservations_returnsOwnReservations() throws Exception {
       TestUser trainer = signupAndLogin("trainer-qtlist");
-      promoteToTrainer(trainer.userId());
+      trainer = promoteToTrainer(trainer);
       long storeId = insertStore(trainer.userId());
       long classId = insertClass(trainer.userId(), storeId, "Trainer List PT", 10_000);
       LocalDate sessionDate = nextWeekday(DayOfWeek.TUESDAY);
       long slotId = insertSlot(classId, DayOfWeek.TUESDAY, LocalTime.of(10, 0), 5, 60);
 
       TestUser user = signupAndLogin("user-qtlist");
-      long reservationId =
-          createReservation(user, classId, slotId, sessionDate, "10:00:00", 10_000);
+      long reservationId = createReservation(user, classId, slotId, sessionDate, "10:00:00", 10_000);
 
-      ResponseEntity<String> res =
-          restTemplate.exchange(
-              baseUrl() + "/marketplace/trainer/reservations",
-              HttpMethod.GET,
-              new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
-              String.class);
+      ResponseEntity<String> res = restTemplate.exchange(
+          baseUrl() + "/marketplace/trainer/reservations",
+          HttpMethod.GET,
+          new HttpEntity<>(bearerJsonHeaders(trainer.accessToken())),
+          String.class);
 
       assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
       JsonNode data = parse(res).at("/data");
@@ -703,25 +697,28 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
   // Private helpers
   // ===================================================================
 
-  private void promoteToTrainer(Long userId) {
-    jdbcTemplate.update("UPDATE users SET role = 'TRAINER' WHERE id = ?", userId);
+  private TestUser promoteToTrainer(TestUser user) {
+    jdbcTemplate.update("UPDATE users SET role = 'TRAINER' WHERE id = ?", user.userId());
+    String newAccessToken = loginUser(user.email(), user.password());
+    return new TestUser(user.userId(), user.email(), user.password(), newAccessToken);
   }
 
   private long insertStore(Long trainerId) {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcTemplate.update(
         conn -> {
-          PreparedStatement ps =
-              conn.prepareStatement(
-                  "INSERT INTO trainer_stores (trainer_id, store_name, description, created_at, updated_at)"
-                      + " VALUES (?, ?, ?, ?, ?)",
-                  new String[] {"id"});
+          PreparedStatement ps = conn.prepareStatement(
+              "INSERT INTO trainer_stores (user_id, store_name, address, detail_address, phone_number, created_at, updated_at)"
+                  + " VALUES (?, ?, ?, ?, ?, ?, ?)",
+              new String[] { "id" });
           Timestamp now = Timestamp.from(Instant.now());
           ps.setLong(1, trainerId);
           ps.setString(2, "E2E Store " + trainerId);
-          ps.setString(3, "E2E test store");
-          ps.setTimestamp(4, now);
-          ps.setTimestamp(5, now);
+          ps.setString(3, "Test Address");
+          ps.setString(4, "Test Detail Address");
+          ps.setString(5, "010-1234-5678");
+          ps.setTimestamp(6, now);
+          ps.setTimestamp(7, now);
           return ps;
         },
         keyHolder);
@@ -732,22 +729,20 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcTemplate.update(
         conn -> {
-          PreparedStatement ps =
-              conn.prepareStatement(
-                  "INSERT INTO marketplace_classes"
-                      + " (trainer_id, store_id, title, description, category, price_amount, duration_minutes, is_active, created_at, updated_at)"
-                      + " VALUES (?, ?, ?, ?, ?, ?, ?, true, ?, ?)",
-                  new String[] {"id"});
+          PreparedStatement ps = conn.prepareStatement(
+              "INSERT INTO marketplace_classes"
+                  + " (trainer_id, title, description, category, price_amount, duration_minutes, active, created_at, updated_at)"
+                  + " VALUES (?, ?, ?, ?, ?, ?, true, ?, ?)",
+              new String[] { "id" });
           Timestamp now = Timestamp.from(Instant.now());
           ps.setLong(1, trainerId);
-          ps.setLong(2, storeId);
-          ps.setString(3, title);
-          ps.setString(4, "E2E test class");
-          ps.setString(5, "YOGA"); // ClassCategory.YOGA.name()
-          ps.setBigDecimal(6, BigDecimal.valueOf(price));
-          ps.setInt(7, 60);
+          ps.setString(2, title);
+          ps.setString(3, "E2E test class");
+          ps.setString(4, "YOGA"); // ClassCategory.YOGA.name()
+          ps.setInt(5, (int) price);
+          ps.setInt(6, 60);
+          ps.setTimestamp(7, now);
           ps.setTimestamp(8, now);
-          ps.setTimestamp(9, now);
           return ps;
         },
         keyHolder);
@@ -759,19 +754,14 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     KeyHolder keyHolder = new GeneratedKeyHolder();
     jdbcTemplate.update(
         conn -> {
-          PreparedStatement ps =
-              conn.prepareStatement(
-                  "INSERT INTO class_slots"
-                      + " (marketplace_class_id, start_time, capacity, duration_minutes, is_active, created_at, updated_at)"
-                      + " VALUES (?, ?, ?, ?, true, ?, ?)",
-                  new String[] {"id"});
-          Timestamp now = Timestamp.from(Instant.now());
+          PreparedStatement ps = conn.prepareStatement(
+              "INSERT INTO class_slots"
+                  + " (class_id, start_time, capacity, active)"
+                  + " VALUES (?, ?::time, ?, true)",
+              new String[] { "id" });
           ps.setLong(1, classId);
           ps.setString(2, startTime.toString());
           ps.setInt(3, capacity);
-          ps.setInt(4, durationMinutes);
-          ps.setTimestamp(5, now);
-          ps.setTimestamp(6, now);
           return ps;
         },
         keyHolder);
@@ -779,7 +769,7 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
     long slotId = keyHolder.getKey().longValue();
     // insert days_of_week element (stored in separate collection table)
     jdbcTemplate.update(
-        "INSERT INTO class_slot_days (class_slot_id, day_of_week) VALUES (?, ?)",
+        "INSERT INTO class_slot_days (slot_id, day_of_week) VALUES (?, ?)",
         slotId,
         dayOfWeek.name());
     return slotId;
@@ -787,26 +777,25 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
 
   private long createReservation(
       TestUser user, long classId, long slotId, LocalDate date, String time, long amount) {
-    ResponseEntity<String> response =
-        restTemplate.exchange(
-            baseUrl() + "/marketplace/classes/" + classId + "/reservations",
-            HttpMethod.POST,
-            new HttpEntity<>(
-                Map.of(
-                    "slotId",
-                    slotId,
-                    "reservationDate",
-                    date.toString(),
-                    "reservationTime",
-                    time,
-                    "signedAmount",
-                    amount,
-                    "delegationSignature",
-                    "0x" + "a".repeat(130),
-                    "executionSignature",
-                    "0x" + "b".repeat(130)),
-                bearerJsonHeaders(user.accessToken())),
-            String.class);
+    ResponseEntity<String> response = restTemplate.exchange(
+        baseUrl() + "/marketplace/classes/" + classId + "/reservations",
+        HttpMethod.POST,
+        new HttpEntity<>(
+            Map.of(
+                "slotId",
+                slotId,
+                "reservationDate",
+                date.toString(),
+                "reservationTime",
+                time,
+                "signedAmount",
+                amount,
+                "delegationSignature",
+                "0x" + "a".repeat(130),
+                "executionSignature",
+                "0x" + "b".repeat(130)),
+            bearerJsonHeaders(user.accessToken())),
+        String.class);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     try {
@@ -817,20 +806,18 @@ class ReservationLifecycleE2ETest extends E2ETestBase {
   }
 
   private void assertDbStatus(long reservationId, String expectedStatus) {
-    String actual =
-        jdbcTemplate.queryForObject(
-            "SELECT status FROM class_reservations WHERE id = ?", String.class, reservationId);
+    String actual = jdbcTemplate.queryForObject(
+        "SELECT status FROM class_reservations WHERE id = ?", String.class, reservationId);
     assertThat(actual).isEqualTo(expectedStatus);
   }
 
   private int countReservationsByClass(long classId) {
-    Integer count =
-        jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM class_reservations cr"
-                + " JOIN class_slots cs ON cr.class_slot_id = cs.id"
-                + " WHERE cs.marketplace_class_id = ?",
-            Integer.class,
-            classId);
+    Integer count = jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM class_reservations cr"
+            + " JOIN class_slots cs ON cr.class_slot_id = cs.id"
+            + " WHERE cs.class_id = ?",
+        Integer.class,
+        classId);
     return count == null ? 0 : count;
   }
 

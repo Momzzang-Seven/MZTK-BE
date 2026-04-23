@@ -90,35 +90,37 @@ class GetClassReservationInfoServiceTest {
     }
 
     @Test
-    @DisplayName("[GRI-02] 월요일 슬롯 조회 시 28일 창 내 월요일 날짜에 해당 슬롯만 포함")
+    @DisplayName("[GRI-02] 월요일 슬롯 조회 시 28일 창 내 미래 월요일 날짜에 해당 슬롯만 포함")
     void 월요일_슬롯_4주_조회() {
-      // given: 2024-06-03(월)부터 28일 → 월요일 4번: 6/3, 6/10, 6/17, 6/24
+      // given: 2024-06-03(월) 12:00 KST 기준.
+      // slot startTime=10:00 이므로 오늘(6/3) 10:00는 이미 지남 → 필터 제외.
+      // 28일 창 내 남은 월요일: 6/10, 6/17, 6/24 → 3개
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(activeClass()));
       given(loadClassSlotPort.findByClassId(CLASS_ID)).willReturn(List.of(mondaySlot(5)));
-      java.time.LocalDate today = java.time.LocalDate.now(clock);
+      java.time.LocalDate nextMonday = java.time.LocalDate.of(2024, 6, 10);
       given(
               getSlotReservationInfoUseCase.countActiveReservationsForDateRange(
                   org.mockito.ArgumentMatchers.eq(SLOT_ID),
                   org.mockito.ArgumentMatchers.any(),
                   org.mockito.ArgumentMatchers.any()))
-          .willReturn(java.util.Map.of(today, 2));
+          .willReturn(java.util.Map.of(nextMonday, 2));
 
       // when
       GetClassReservationInfoResult result =
           sut.execute(new GetClassReservationInfoQuery(CLASS_ID));
 
-      // then: 4개의 월요일 날짜가 availableDates에 포함
-      assertThat(result.availableDates()).hasSize(4);
+      // then: 오늘 제외, 남은 월요일 3개(6/10, 6/17, 6/24)
+      assertThat(result.availableDates()).hasSize(3);
       assertThat(result.availableDates())
           .allSatisfy(
               dateInfo -> {
                 assertThat(dateInfo.availableTimes()).hasSize(1);
                 assertThat(dateInfo.availableTimes().get(0).slotId()).isEqualTo(SLOT_ID);
-                if (dateInfo.date().equals(today)) {
-                  // 용량 5, 오늘 활성 예약 2 → 가용 3
+                if (dateInfo.date().equals(nextMonday)) {
+                  // 용량 5, 6/10 활성 예약 2 → 가용 3
                   assertThat(dateInfo.availableTimes().get(0).availableCapacity()).isEqualTo(3);
                 } else {
-                  // 그 외의 날짜는 예약 0 → 가용 5
+                  // 그 외 날짜는 예약 0 → 가용 5
                   assertThat(dateInfo.availableTimes().get(0).availableCapacity()).isEqualTo(5);
                 }
               });
@@ -127,16 +129,17 @@ class GetClassReservationInfoServiceTest {
     @Test
     @DisplayName("[GRI-03] 활성 예약 수가 용량과 같으면 availableCapacity=0 반환")
     void 만석_슬롯() {
-      // given: 용량 3, 오늘 활성 예약 3
+      // given: 용량 3, 다음주 월요일(6/10) 활성 예약 3
+      // 오늘(6/3) 10:00는 clock(12:00) 기준 이미 지났으므로 제외됨.
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(activeClass()));
       given(loadClassSlotPort.findByClassId(CLASS_ID)).willReturn(List.of(mondaySlot(3)));
-      java.time.LocalDate today = java.time.LocalDate.now(clock);
+      java.time.LocalDate nextMonday = java.time.LocalDate.of(2024, 6, 10);
       given(
               getSlotReservationInfoUseCase.countActiveReservationsForDateRange(
                   org.mockito.ArgumentMatchers.eq(SLOT_ID),
                   org.mockito.ArgumentMatchers.any(),
                   org.mockito.ArgumentMatchers.any()))
-          .willReturn(java.util.Map.of(today, 3));
+          .willReturn(java.util.Map.of(nextMonday, 3));
 
       // when
       GetClassReservationInfoResult result =
@@ -146,7 +149,7 @@ class GetClassReservationInfoServiceTest {
       assertThat(result.availableDates())
           .anySatisfy(
               d -> {
-                assertThat(d.date()).isEqualTo(today);
+                assertThat(d.date()).isEqualTo(nextMonday);
                 assertThat(d.availableTimes().get(0).availableCapacity()).isZero();
               });
     }

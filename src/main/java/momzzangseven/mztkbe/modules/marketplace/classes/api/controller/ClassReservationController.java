@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.marketplace.reservation.api.controller;
+package momzzangseven.mztkbe.modules.marketplace.classes.api.controller;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
@@ -40,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * REST controller for user-facing reservation endpoints.
+ * Moved to classes sub-module per user request.
  *
  * <ul>
  *   <li>GET /marketplace/classes/{classId}/reservation-info — 4-week availability (public)
@@ -55,7 +56,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/marketplace")
 @RequiredArgsConstructor
 @Validated
-public class ReservationUserController {
+public class ClassReservationController {
 
   private final GetClassReservationInfoUseCase getClassReservationInfoUseCase;
   private final GetUserReservationsUseCase getUserReservationsUseCase;
