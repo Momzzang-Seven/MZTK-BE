@@ -149,7 +149,8 @@ class UpdateClassServiceTest {
       // given: 기존 슬롯 존재, 활성 예약 없음
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(activeSlot(SLOT_ID)));
-      given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(0);
+      given(loadSlotReservationPort.countActiveReservationsIn(java.util.List.of(SLOT_ID)))
+          .willReturn(java.util.Map.of(SLOT_ID, 0));
 
       // when
       UpdateClassResult result = updateClassService.execute(updateExistingSlotCommand(SLOT_ID));
@@ -179,7 +180,8 @@ class UpdateClassServiceTest {
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(activeSlot(SLOT_ID)));
       // 삭제 대상 슬롯: 활성 예약 없음, 이력도 없음
-      given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(0);
+      given(loadSlotReservationPort.countActiveReservationsIn(java.util.List.of(SLOT_ID)))
+          .willReturn(java.util.Map.of(SLOT_ID, 0));
       given(loadSlotReservationPort.hasAnyReservationHistory(SLOT_ID)).willReturn(false);
 
       // addNewSlotCommand: SLOT_ID 없는 커맨드 (SLOT_ID → 삭제 대상)
@@ -195,7 +197,8 @@ class UpdateClassServiceTest {
       // given
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(activeSlot(SLOT_ID)));
-      given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(0);
+      given(loadSlotReservationPort.countActiveReservationsIn(java.util.List.of(SLOT_ID)))
+          .willReturn(java.util.Map.of(SLOT_ID, 0));
       given(loadSlotReservationPort.hasAnyReservationHistory(SLOT_ID)).willReturn(true);
 
       updateClassService.execute(addNewSlotCommand());
@@ -261,7 +264,8 @@ class UpdateClassServiceTest {
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(validClass()));
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(activeSlot(SLOT_ID)));
-      given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(2); // 활성 예약 2건
+      given(loadSlotReservationPort.countActiveReservationsIn(java.util.List.of(SLOT_ID)))
+          .willReturn(java.util.Map.of(SLOT_ID, 2)); // 활성 예약 2건
 
       // when & then
       assertThatThrownBy(() -> updateClassService.execute(addNewSlotCommand()))
@@ -276,7 +280,8 @@ class UpdateClassServiceTest {
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(validClass()));
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(activeSlot(SLOT_ID)));
-      given(loadSlotReservationPort.countActiveReservations(SLOT_ID)).willReturn(4); // 예약 4건
+      given(loadSlotReservationPort.countActiveReservationsIn(java.util.List.of(SLOT_ID)))
+          .willReturn(java.util.Map.of(SLOT_ID, 4)); // 예약 4건
 
       // 기존 슬롯을 capacity=2로 축소 시도 (4명 예약 중 → 불가)
       UpdateClassCommand reducedCapacityCmd =
