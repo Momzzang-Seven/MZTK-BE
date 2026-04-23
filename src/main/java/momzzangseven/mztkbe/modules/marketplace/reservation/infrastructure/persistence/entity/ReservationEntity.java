@@ -59,6 +59,9 @@ public class ReservationEntity {
   @Column(name = "user_request", length = 500)
   private String userRequest;
 
+  @Column(name = "rejection_reason", length = 500)
+  private String rejectionReason;
+
   @Column(name = "order_id", length = 100)
   private String orderId;
 
@@ -88,6 +91,7 @@ public class ReservationEntity {
         .durationMinutes(domain.getDurationMinutes())
         .status(domain.getStatus())
         .userRequest(domain.getUserRequest())
+        .rejectionReason(domain.getRejectionReason())
         .orderId(domain.getOrderId())
         .txHash(domain.getTxHash())
         .version(domain.getVersion())
@@ -105,6 +109,7 @@ public class ReservationEntity {
         .durationMinutes(this.durationMinutes)
         .status(this.status)
         .userRequest(this.userRequest)
+        .rejectionReason(this.rejectionReason)
         .orderId(this.orderId)
         .txHash(this.txHash)
         .version(this.version)

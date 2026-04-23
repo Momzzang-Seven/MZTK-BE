@@ -31,7 +31,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -49,16 +48,25 @@ class CreateReservationServiceTest {
   @Mock private SaveReservationPort saveReservationPort;
   @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
 
-  @InjectMocks private CreateReservationService sut;
+  /**
+   * Fixed clock: 2024-06-03T10:00:00 KST (UTC+9).
+   * MONDAY is set to 2024-06-10, which is after this clock's date — always in the future.
+   */
+  private static final java.time.Clock FIXED_CLOCK =
+      java.time.Clock.fixed(
+          java.time.Instant.parse("2024-06-03T01:00:00Z"), // 10:00 KST
+          java.time.ZoneId.of("Asia/Seoul"));
+
+  private CreateReservationService sut;
 
   private static final Long USER_ID = 1L;
   private static final Long CLASS_ID = 10L;
   private static final Long TRAINER_ID = 100L;
   private static final Long SLOT_ID = 200L;
 
-  // 다음 주 월요일 (FutureOrPresent 검증 우회)
+  // 다음 주 월요일
   private static final LocalDate MONDAY =
-      LocalDate.now().with(java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY));
+      LocalDate.of(2024, 6, 3).with(java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY));
   private static final LocalTime START_TIME = LocalTime.of(10, 0);
   private static final int PRICE = 50_000;
   private static final int CAPACITY = 3;
@@ -69,6 +77,15 @@ class CreateReservationServiceTest {
 
   @BeforeEach
   void setUp() {
+    sut = new CreateReservationService(
+        getClassSlotInfoUseCase,
+        getClassInfoUseCase,
+        checkTrainerSanctionPort,
+        loadReservationPort,
+        saveReservationPort,
+        submitEscrowTransactionPort,
+        FIXED_CLOCK);
+
     slot =
         ClassSlot.builder()
             .id(SLOT_ID)
@@ -252,6 +269,47 @@ class CreateReservationServiceTest {
               ex ->
                   assertThat(((BusinessException) ex).getCode())
                       .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE.getCode()));
+    }
+
+    @Test
+    @DisplayName("[CR-07] 이미 지난 시간대 예약 시도 시 MARKETPLACE_RESERVATION_PAST_TIME 예외")
+    void 과거_시간대_예약() {
+      // given: FIXED_CLOCK = 2024-06-03 10:00 KST, 과거 날짜(2024-06-03 09:00)로 요청
+      // session: 2024-06-03(월) 09:00 → clock보다 1시간 앞
+      LocalDate today = LocalDate.of(2024, 6, 3); // 월요일
+      LocalTime pastTime = LocalTime.of(9, 0);
+
+      ClassSlot mondaySlot =
+          ClassSlot.builder()
+              .id(SLOT_ID)
+              .classId(CLASS_ID)
+              .daysOfWeek(List.of(DayOfWeek.MONDAY))
+              .startTime(pastTime)
+              .capacity(CAPACITY)
+              .active(true)
+              .build();
+
+      CreateReservationCommand pastCmd =
+          new CreateReservationCommand(
+              USER_ID,
+              CLASS_ID,
+              SLOT_ID,
+              today,
+              pastTime,
+              null,
+              BigInteger.valueOf(PRICE),
+              "0x" + "a".repeat(130),
+              "0x" + "b".repeat(130));
+
+      given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(mondaySlot));
+
+      // when & then
+      assertThatThrownBy(() -> sut.execute(pastCmd))
+          .isInstanceOf(BusinessException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((BusinessException) ex).getCode())
+                      .isEqualTo(ErrorCode.MARKETPLACE_RESERVATION_PAST_TIME.getCode()));
     }
   }
 }

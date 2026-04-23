@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -17,16 +18,19 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Comp
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.event.EscrowDispatchEventListener;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CompleteReservationService 단위 테스트")
@@ -34,7 +38,7 @@ class CompleteReservationServiceTest {
 
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
-  @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   /**
    * Fixed clock pointing to 2025-06-01T12:00:00 KST.
@@ -63,7 +67,7 @@ class CompleteReservationServiceTest {
     // Explicit constructor injection so Clock is deterministic in tests.
     sut =
         new CompleteReservationService(
-            loadReservationPort, saveReservationPort, submitEscrowTransactionPort, FIXED_CLOCK);
+            loadReservationPort, saveReservationPort, eventPublisher, FIXED_CLOCK);
   }
 
   /** APPROVED 예약, 수업 시간은 이미 과거(어제). */
@@ -103,21 +107,29 @@ class CompleteReservationServiceTest {
   class 성공 {
 
     @Test
-    @DisplayName("[CM-01] 수업 종료 후 완료 확인 시 SETTLED 상태 반환")
+    @DisplayName("[CM-01] 수업 종료 후 완료 확인 시 SETTLED 상태 반환 및 EscrowDispatchEvent(CONFIRM) 발행")
     void 수업_종료_후_완료() {
-      // given
-      given(loadReservationPort.findById(RESERVATION_ID))
+      // given — service saves with PENDING_TX_HASH; real confirm call happens AFTER_COMMIT
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(approvedPastReservation()));
-      given(submitEscrowTransactionPort.submitConfirm("order-1")).willReturn("0xCONFIRM");
-      Reservation settled = approvedPastReservation().complete("0xCONFIRM");
+      Reservation settled =
+          approvedPastReservation().complete(EscrowDispatchEventListener.PENDING_TX_HASH);
       given(saveReservationPort.save(any())).willReturn(settled);
 
       // when
       CompleteReservationResult result =
           sut.execute(new CompleteReservationCommand(RESERVATION_ID, USER_ID));
 
-      // then
+      // then — SETTLED status returned
       assertThat(result.status()).isEqualTo(ReservationStatus.SETTLED);
+
+      // EscrowDispatchEvent published with CONFIRM action
+      ArgumentCaptor<EscrowDispatchEvent> eventCaptor =
+          ArgumentCaptor.forClass(EscrowDispatchEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue().action())
+          .isEqualTo(EscrowDispatchEvent.EscrowAction.CONFIRM);
+      assertThat(eventCaptor.getValue().orderId()).isEqualTo("order-1");
     }
   }
 
@@ -129,7 +141,7 @@ class CompleteReservationServiceTest {
     @DisplayName("[CM-02] 수업 시작 전 완료 시도 시 MARKETPLACE_RESERVATION_EARLY_COMPLETE 예외")
     void 수업_시작_전_완료() {
       // given — 내일 수업이므로 fixed clock 기준 미래
-      given(loadReservationPort.findById(RESERVATION_ID))
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(approvedFutureReservation()));
 
       // when & then
@@ -145,7 +157,7 @@ class CompleteReservationServiceTest {
     @DisplayName("[CM-03] 타인이 완료 시도 시 MARKETPLACE_UNAUTHORIZED_ACCESS 예외")
     void 타인_완료_시도() {
       // given
-      given(loadReservationPort.findById(RESERVATION_ID))
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(approvedPastReservation()));
 
       // when & then
@@ -175,7 +187,7 @@ class CompleteReservationServiceTest {
               .orderId("order-1")
               .version(0L)
               .build();
-      given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(pending));
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(pending));
 
       // when & then
       assertThatThrownBy(() -> sut.execute(new CompleteReservationCommand(RESERVATION_ID, USER_ID)))

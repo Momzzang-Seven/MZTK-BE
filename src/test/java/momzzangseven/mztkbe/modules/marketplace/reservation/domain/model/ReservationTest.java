@@ -77,7 +77,7 @@ class ReservationTest {
   @DisplayName("reject - transitions PENDING to REJECTED")
   void reject_Success() {
     Reservation pending = createDefaultPendingReservation();
-    Reservation rejected = pending.reject("reject-tx");
+    Reservation rejected = pending.reject("reject-tx", "Too busy");
 
     assertThat(rejected.getStatus()).isEqualTo(ReservationStatus.REJECTED);
     assertThat(rejected.getTxHash()).isEqualTo("reject-tx");

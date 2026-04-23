@@ -16,16 +16,19 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Canc
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.event.EscrowDispatchEventListener;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("CancelPendingReservationService 단위 테스트")
@@ -33,7 +36,7 @@ class CancelPendingReservationServiceTest {
 
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
-  @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   @InjectMocks private CancelPendingReservationService sut;
 
@@ -61,13 +64,13 @@ class CancelPendingReservationServiceTest {
   class 성공 {
 
     @Test
-    @DisplayName("[CP-01] PENDING 예약을 본인이 취소하면 USER_CANCELLED 반환")
+    @DisplayName("[CP-01] PENDING 예약을 본인이 취소하면 USER_CANCELLED 반환 및 EscrowDispatchEvent 발행")
     void 정상_취소() {
-      // given
-      given(loadReservationPort.findById(RESERVATION_ID))
+      // given — service saves with PENDING_TX_HASH sentinel; real escrow call happens AFTER_COMMIT
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(pendingReservation()));
-      given(submitEscrowTransactionPort.submitCancel(any())).willReturn("0xTXCANCEL");
-      Reservation cancelled = pendingReservation().cancelByUser("0xTXCANCEL");
+      Reservation cancelled =
+          pendingReservation().cancelByUser(EscrowDispatchEventListener.PENDING_TX_HASH);
       given(saveReservationPort.save(any())).willReturn(cancelled);
 
       // when
@@ -76,8 +79,15 @@ class CancelPendingReservationServiceTest {
 
       // then
       assertThat(result.status()).isEqualTo(ReservationStatus.USER_CANCELLED);
-      then(submitEscrowTransactionPort).should().submitCancel("order-cancel");
       then(saveReservationPort).should().save(any());
+
+      // EscrowDispatchEvent published with CANCEL action
+      ArgumentCaptor<EscrowDispatchEvent> eventCaptor =
+          ArgumentCaptor.forClass(EscrowDispatchEvent.class);
+      then(eventPublisher).should().publishEvent(eventCaptor.capture());
+      assertThat(eventCaptor.getValue().action())
+          .isEqualTo(EscrowDispatchEvent.EscrowAction.CANCEL);
+      assertThat(eventCaptor.getValue().orderId()).isEqualTo("order-cancel");
     }
   }
 
@@ -89,7 +99,7 @@ class CancelPendingReservationServiceTest {
     @DisplayName("[CP-02] 존재하지 않는 예약 ID로 요청 시 MARKETPLACE_RESERVATION_NOT_FOUND 예외")
     void 존재하지_않는_예약() {
       // given
-      given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.empty());
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.empty());
 
       // when & then
       assertThatThrownBy(
@@ -105,7 +115,7 @@ class CancelPendingReservationServiceTest {
     @DisplayName("[CP-03] 타인 예약 취소 시도 시 MarketplaceUnauthorizedAccessException 예외")
     void 타인_예약_취소_시도() {
       // given
-      given(loadReservationPort.findById(RESERVATION_ID))
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(pendingReservation()));
 
       // when & then
@@ -119,7 +129,7 @@ class CancelPendingReservationServiceTest {
     void 승인된_예약_취소_시도() {
       // given: PENDING → APPROVED 전환된 예약
       Reservation approved = pendingReservation().approve();
-      given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(approved));
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(approved));
 
       // when & then
       assertThatThrownBy(

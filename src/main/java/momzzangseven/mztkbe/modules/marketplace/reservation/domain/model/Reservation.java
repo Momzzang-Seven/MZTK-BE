@@ -62,6 +62,9 @@ public class Reservation {
   /** Optional note from the user (max 500 chars). */
   private final String userRequest;
 
+  /** Optional reason from the trainer when rejecting the reservation. */
+  private final String rejectionReason;
+
   /** Server-generated UUID used as the on-chain order identifier in the escrow contract. */
   private final String orderId;
 
@@ -112,6 +115,7 @@ public class Reservation {
         .durationMinutes(durationMinutes)
         .status(ReservationStatus.PENDING)
         .userRequest(userRequest)
+        .rejectionReason(null)
         .orderId(orderId)
         .txHash(txHash)
         .build();
@@ -147,11 +151,26 @@ public class Reservation {
    * Reject this reservation by the trainer (PENDING → REJECTED).
    *
    * @param rejectionTxHash on-chain transaction hash of the cancelClass call
+   * @param rejectionReason reason provided by the trainer (nullable)
    * @return new REJECTED reservation
    */
-  public Reservation reject(String rejectionTxHash) {
+  public Reservation reject(String rejectionTxHash, String rejectionReason) {
     guardTransition(ReservationStatus.REJECTED);
-    return toBuilder().status(ReservationStatus.REJECTED).txHash(rejectionTxHash).build();
+    return toBuilder()
+        .status(ReservationStatus.REJECTED)
+        .txHash(rejectionTxHash)
+        .rejectionReason(rejectionReason)
+        .build();
+  }
+
+  /**
+   * Reject this reservation without a reason (PENDING → REJECTED).
+   *
+   * @param rejectionTxHash on-chain transaction hash of the cancelClass call
+   * @return new REJECTED reservation with {@code rejectionReason = null}
+   */
+  public Reservation reject(String rejectionTxHash) {
+    return reject(rejectionTxHash, null);
   }
 
   /**
@@ -204,6 +223,19 @@ public class Reservation {
   /** Computes the session end {@link LocalDateTime} using the denormalised duration. */
   public LocalDateTime sessionEndAt() {
     return LocalDateTime.of(reservationDate, reservationTime).plusMinutes(durationMinutes);
+  }
+
+  /**
+   * Return a new instance with only the {@code txHash} field updated.
+   *
+   * <p>Used by the {@code EscrowDispatchEventListener} to write back the real on-chain transaction
+   * hash after the escrow call succeeds post-commit. All other fields remain unchanged.
+   *
+   * @param newTxHash the real txHash returned by the escrow contract
+   * @return new reservation instance with updated txHash
+   */
+  public Reservation updateTxHash(String newTxHash) {
+    return toBuilder().txHash(newTxHash).build();
   }
 
   // ============================================================

@@ -13,9 +13,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Comp
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CompleteReservationUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
+import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.event.EscrowDispatchEventListener;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,9 +30,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>Ownership — only the reservation's buyer may confirm.
  *   <li>Status transition — must be in APPROVED state.
- *   <li>Early-complete prevention — session start time must have passed (uses injected {@link
- *       Clock} for testable, timezone-aware "now").
+ *   <li>Early-complete prevention — session end time must have passed (uses injected {@link Clock}
+ *       for testable, timezone-aware "now").
  * </ol>
+ *
+ * <p><b>Transaction ordering (DB-first, escrow-after-commit):</b><br>
+ * The reservation row is saved as SETTLED with a sentinel {@code txHash}, the DB transaction is
+ * committed, then {@link EscrowDispatchEvent} is handled AFTER_COMMIT by
+ * {@code EscrowDispatchEventListener} to call {@code confirmClass} on-chain and write back the real
+ * txHash.
  */
 @Slf4j
 @Service
@@ -38,7 +47,7 @@ public class CompleteReservationService implements CompleteReservationUseCase {
 
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
-  private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  private final ApplicationEventPublisher eventPublisher;
 
   /**
    * Injected clock for testable, timezone-aware "now" computation.
@@ -75,15 +84,19 @@ public class CompleteReservationService implements CompleteReservationUseCase {
           "Cannot complete reservation in status: " + reservation.getStatus());
     }
 
-    LocalDateTime sessionStart =
-        LocalDateTime.of(reservation.getReservationDate(), reservation.getReservationTime());
-    if (LocalDateTime.now(clock).isBefore(sessionStart)) {
+    LocalDateTime sessionEnd =
+        LocalDateTime.of(reservation.getReservationDate(), reservation.getReservationTime())
+            .plusMinutes(reservation.getDurationMinutes());
+    if (LocalDateTime.now(clock).isBefore(sessionEnd)) {
       throw new ReservationEarlyCompleteException();
     }
 
-    String confirmTxHash = submitEscrowTransactionPort.submitConfirm(reservation.getOrderId());
-    Reservation completed = reservation.complete(confirmTxHash);
+    // Persist SETTLED with sentinel txHash; real escrow confirmClass call happens AFTER_COMMIT.
+    Reservation completed = reservation.complete(EscrowDispatchEventListener.PENDING_TX_HASH);
     Reservation saved = saveReservationPort.save(completed);
+
+    eventPublisher.publishEvent(
+        new EscrowDispatchEvent(saved.getId(), reservation.getOrderId(), EscrowAction.CONFIRM));
 
     log.info("Reservation settled: id={}, userId={}", saved.getId(), command.userId());
     return new CompleteReservationResult(saved.getId(), saved.getStatus());

@@ -18,6 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Must be a separate Spring bean to cross the proxy boundary required for AOP transaction
  * interception.
+ *
+ * <p><b>Transaction ordering (DB-first, escrow-after):</b><br>
+ * The reservation status is persisted as AUTO_SETTLED first. Then the on-chain {@code adminSettle}
+ * call is made and the txHash is written back. If the escrow call fails, the DB status is still
+ * AUTO_SETTLED (correct terminal state) and the missing txHash can be reconciled separately.
  */
 @Slf4j
 @Component
@@ -30,14 +35,22 @@ public class AutoSettleBatchItemProcessor {
   /**
    * Settles a single approved reservation in its own isolated transaction.
    *
-   * <p>On success: persists AUTO_SETTLED status and the on-chain txHash. On failure: the individual
-   * transaction rolls back; the caller catches and logs.
+   * <p>Order: persist AUTO_SETTLED → submit adminSettle on-chain → update txHash. On failure: the
+   * individual transaction rolls back; the caller catches and logs.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void process(Reservation reservation) {
-    String settleTxHash = submitEscrowTransactionPort.submitAdminSettle(reservation.getOrderId());
-    Reservation settled = reservation.autoSettle(settleTxHash);
+    // 1. Persist status first.
+    Reservation settled = reservation.autoSettle("ESCROW_DISPATCH_PENDING");
     saveReservationPort.save(settled);
+
+    // 2. Submit on-chain settle — after DB save in REQUIRES_NEW.
+    String settleTxHash = submitEscrowTransactionPort.submitAdminSettle(reservation.getOrderId());
+
+    // 3. Write back the real txHash.
+    Reservation withTxHash = settled.updateTxHash(settleTxHash);
+    saveReservationPort.save(withTxHash);
+
     log.info(
         "AutoSettle processed: reservationId={}, trainerId={}",
         reservation.getId(),

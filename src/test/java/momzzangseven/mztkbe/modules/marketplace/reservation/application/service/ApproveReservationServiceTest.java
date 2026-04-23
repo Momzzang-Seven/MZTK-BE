@@ -61,7 +61,7 @@ class ApproveReservationServiceTest {
     @DisplayName("[AP-01] 본인 예약 승인 시 APPROVED 상태 반환")
     void 정상_승인() {
       // given
-      given(loadReservationPort.findById(RESERVATION_ID))
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(pendingReservation()));
       Reservation approvedRes = pendingReservation().approve();
       given(saveReservationPort.save(any())).willReturn(approvedRes);
@@ -84,7 +84,7 @@ class ApproveReservationServiceTest {
     @DisplayName("[AP-02] 타인 트레이너가 승인 시도 시 MARKETPLACE_UNAUTHORIZED_ACCESS 예외")
     void 타인_트레이너_승인_시도() {
       // given
-      given(loadReservationPort.findById(RESERVATION_ID))
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID))
           .willReturn(Optional.of(pendingReservation()));
 
       // when & then
@@ -102,7 +102,7 @@ class ApproveReservationServiceTest {
     void 이미_승인된_예약_재승인() {
       // given: 이미 APPROVED 상태
       Reservation approved = pendingReservation().approve();
-      given(loadReservationPort.findById(RESERVATION_ID)).willReturn(Optional.of(approved));
+      given(loadReservationPort.findByIdWithLock(RESERVATION_ID)).willReturn(Optional.of(approved));
 
       // when & then
       assertThatThrownBy(

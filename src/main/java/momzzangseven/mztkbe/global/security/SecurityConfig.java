@@ -283,6 +283,31 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/marketplace/classes/*")
                     .permitAll()
+                    // Class availability read
+                    .requestMatchers(HttpMethod.GET, "/marketplace/classes/*/reservation-info")
+                    .permitAll()
+
+                    // Reservation — user actions
+                    .requestMatchers(HttpMethod.POST, "/marketplace/classes/*/reservations")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/me/reservations")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/me/reservations/*")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/complete")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/cancel")
+                    .authenticated()
+
+                    // Reservation — trainer-only actions
+                    .requestMatchers(HttpMethod.GET, "/marketplace/trainer/reservations")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.GET, "/marketplace/trainer/reservations/*")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/approve")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/reject")
+                    .hasAuthority("ROLE_TRAINER")
 
                     // --- Internal Endpoints ---
 

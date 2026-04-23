@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.dto.RecordTrainerStrikeCommand;
 import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.in.RecordTrainerStrikeUseCase;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,13 +14,11 @@ import org.springframework.stereotype.Component;
  * <p>This is the only class in the reservation module allowed to import from the sanction module,
  * per the ARCHITECTURE.md cross-module dependency rules.
  *
- * <p><b>Active profiles:</b> {@code local}, {@code dev}, {@code test}. The underlying {@code
- * ManageTrainerSanctionPort} implementation (sanction module) is also stub-only for these profiles.
- * Replace or promote to all profiles once the real sanction persistence is implemented.
+ * <p><b>Note:</b> Active in all profiles. The underlying sanction module implementation is
+ * stub-only until the real sanction persistence is implemented. Replace or promote once ready.
  */
 @Slf4j
 @Component
-@Profile({"local", "dev", "test", "integration"})
 @RequiredArgsConstructor
 public class TrainerStrikeRecordAdapter implements RecordTrainerStrikePort {
 
