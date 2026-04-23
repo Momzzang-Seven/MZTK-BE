@@ -138,11 +138,13 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiResponse<?>> handleConstraintViolationException(
       ConstraintViolationException ex) {
     Map<String, String> fieldErrors = new LinkedHashMap<>();
-    ex.getConstraintViolations().forEach(violation -> {
-      String propertyPath = violation.getPropertyPath().toString();
-      String fieldName = propertyPath.substring(propertyPath.lastIndexOf('.') + 1);
-      fieldErrors.put(fieldName, violation.getMessage());
-    });
+    ex.getConstraintViolations()
+        .forEach(
+            violation -> {
+              String propertyPath = violation.getPropertyPath().toString();
+              String fieldName = propertyPath.substring(propertyPath.lastIndexOf('.') + 1);
+              fieldErrors.put(fieldName, violation.getMessage());
+            });
 
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
