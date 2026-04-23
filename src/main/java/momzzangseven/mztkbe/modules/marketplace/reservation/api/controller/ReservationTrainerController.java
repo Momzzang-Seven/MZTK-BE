@@ -5,7 +5,8 @@ import jakarta.validation.constraints.Positive;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAccessException;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ApproveReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationRequestDTO;
@@ -29,10 +30,14 @@ import org.springframework.web.bind.annotation.*;
  * REST controller for trainer-facing reservation endpoints.
  *
  * <ul>
- *   <li>GET /marketplace/trainer/reservations — trainer's incoming reservation list
- *   <li>GET /marketplace/trainer/reservations/{id} — reservation detail (trainer view)
- *   <li>PATCH /marketplace/trainer/reservations/{id}/approve — approve a pending reservation
- *   <li>PATCH /marketplace/trainer/reservations/{id}/reject — reject a pending reservation
+ * <li>GET /marketplace/trainer/reservations — trainer's incoming reservation
+ * list
+ * <li>GET /marketplace/trainer/reservations/{id} — reservation detail (trainer
+ * view)
+ * <li>PATCH /marketplace/trainer/reservations/{id}/approve — approve a pending
+ * reservation
+ * <li>PATCH /marketplace/trainer/reservations/{id}/reject — reject a pending
+ * reservation
  * </ul>
  */
 @Slf4j
@@ -52,12 +57,11 @@ public class ReservationTrainerController {
       @AuthenticationPrincipal Long trainerId,
       @RequestParam(required = false) ReservationStatus status) {
     requireTrainerId(trainerId);
-    List<ReservationSummaryResponseDTO> response =
-        getTrainerReservationsUseCase
-            .execute(new GetTrainerReservationsQuery(trainerId, status))
-            .stream()
-            .map(ReservationSummaryResponseDTO::from)
-            .toList();
+    List<ReservationSummaryResponseDTO> response = getTrainerReservationsUseCase
+        .execute(new GetTrainerReservationsQuery(trainerId, status))
+        .stream()
+        .map(ReservationSummaryResponseDTO::from)
+        .toList();
     return ResponseEntity.ok(ApiResponse.success(response));
   }
 
@@ -94,6 +98,7 @@ public class ReservationTrainerController {
   }
 
   private void requireTrainerId(Long trainerId) {
-    if (trainerId == null) throw new MarketplaceUnauthorizedAccessException();
+    if (trainerId == null)
+      throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
   }
 }
