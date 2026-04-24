@@ -49,7 +49,7 @@ public record PostDetailResponse(
         result.content(),
         result.likeCount(),
         result.liked(),
-        0,
+        Math.toIntExact(result.commentCount()),
         result.tags(),
         result.createdAt(),
         result.updatedAt(),
