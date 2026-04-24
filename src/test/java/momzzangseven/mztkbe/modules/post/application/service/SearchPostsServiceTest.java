@@ -8,12 +8,16 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult.PostImageSlot;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
+import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsCursorResult;
 import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
@@ -226,6 +230,51 @@ class SearchPostsServiceTest {
     verify(countCommentsPort, times(1)).countCommentsByPostIds(List.of(1L, 2L));
   }
 
+  @Test
+  @DisplayName("cursor search returns empty immediately when tag does not exist")
+  void searchPostsByCursorReturnsEmptyWhenTagNotFound() {
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.QUESTION, "missing", "query", null, 10);
+
+    when(loadTagPort.findTagIdByName("missing")).thenReturn(java.util.Optional.empty());
+
+    SearchPostsCursorResult result = searchPostsService.searchPostsByCursor(condition, 99L);
+
+    assertThat(result.posts()).isEmpty();
+    assertThat(result.hasNext()).isFalse();
+    assertThat(result.nextCursor()).isNull();
+    verify(postPersistencePort, never()).findPostsByCursorCondition(any(), any());
+  }
+
+  @Test
+  @DisplayName("cursor search trims probe row, builds next cursor, and counts only page posts")
+  void searchPostsByCursorTrimsProbeAndCountsOnlyPagePosts() {
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.FREE, null, null, null, 2);
+    Post first = post(1L, LocalDateTime.of(2026, 4, 24, 12, 0));
+    Post second = post(2L, LocalDateTime.of(2026, 4, 24, 11, 0));
+    Post probe = post(3L, LocalDateTime.of(2026, 4, 24, 10, 0));
+
+    when(postPersistencePort.findPostsByCursorCondition(condition, null))
+        .thenReturn(List.of(first, second, probe));
+    when(loadTagPort.findTagsByPostIdsIn(List.of(1L, 2L))).thenReturn(Map.of());
+    when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
+    when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
+    when(countCommentsPort.countCommentsByPostIds(List.of(1L, 2L))).thenReturn(Map.of(2L, 7L));
+    when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
+    when(loadPostImagesPort.loadImagesByPostIds(any())).thenReturn(Map.of());
+
+    SearchPostsCursorResult result = searchPostsService.searchPostsByCursor(condition, 99L);
+
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.posts()).extracting("postId").containsExactly(1L, 2L);
+    assertThat(result.posts().get(1).commentCount()).isEqualTo(7L);
+    assertThat(result.nextCursor()).isNotNull();
+    assertThat(CursorCodec.decode(result.nextCursor(), condition.pageRequest().scope()).id())
+        .isEqualTo(2L);
+    verify(countCommentsPort).countCommentsByPostIds(List.of(1L, 2L));
+  }
+
   private Post post(Long id) {
     return Post.builder()
         .id(id)
@@ -247,6 +296,20 @@ class SearchPostsServiceTest {
         .content("content")
         .reward(0L)
         .status(PostStatus.OPEN)
+        .build();
+  }
+
+  private Post post(Long id, LocalDateTime createdAt) {
+    return Post.builder()
+        .id(id)
+        .userId(1L)
+        .type(PostType.FREE)
+        .title("title")
+        .content("content")
+        .reward(0L)
+        .status(PostStatus.OPEN)
+        .createdAt(createdAt)
+        .updatedAt(createdAt)
         .build();
   }
 

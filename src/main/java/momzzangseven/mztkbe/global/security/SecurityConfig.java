@@ -183,6 +183,12 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/posts")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/posts/{postId}/comments")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/comments/{commentId}/replies")
+                    .authenticated()
                     // Public detail read supports optional JWT. Missing/invalid tokens fall back to
                     // anonymous access in JwtAuthenticationFilter, while withdrawn-user tokens are
                     // still blocked there before authorization rules run.

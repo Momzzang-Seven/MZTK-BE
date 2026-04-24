@@ -14,12 +14,12 @@ public class CommentCountAdapter implements CountCommentsPort {
   private final CountCommentsUseCase countCommentsUseCase;
 
   @Override
-  public long countCommentsByPostId(Long postId) {
-    return countCommentsUseCase.countCommentsByPostId(postId);
+  public Map<Long, Long> countCommentsByPostIds(List<Long> postIds) {
+    return countCommentsUseCase.countCommentsByPostIds(postIds);
   }
 
   @Override
-  public Map<Long, Long> countCommentsByPostIds(List<Long> postIds) {
-    return countCommentsUseCase.countCommentsByPostIds(postIds);
+  public long countCommentsByPostId(Long postId) {
+    return countCommentsUseCase.countCommentsByPostId(postId);
   }
 }
