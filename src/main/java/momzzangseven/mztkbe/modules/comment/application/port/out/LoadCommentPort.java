@@ -15,6 +15,10 @@ public interface LoadCommentPort {
 
   Page<Comment> loadReplies(Long parentId, Pageable pageable);
 
+  long countCommentsByPostId(Long postId);
+
+  Map<Long, Long> countCommentsByPostIds(List<Long> postIds);
+
   Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds);
 
   /** 하드 딜리트 정책에 따라 삭제 대상을 조회합니다. */

@@ -8,6 +8,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionExecutionResumePort;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
 
   private final PostPersistencePort postPersistencePort;
+  private final CountCommentsPort countCommentsPort;
   private final LoadTagPort loadTagPort;
   private final LoadPostWriterPort loadPostWriterPort;
   private final LoadPostImagesPort loadPostImagesPort;
@@ -99,6 +101,7 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
         imageResult == null ? List.of() : imageResult.slots();
 
     long likeCount = postLikePersistencePort.countByTarget(PostLikeTargetType.POST, postId);
+    long commentCount = countCommentsPort.countCommentsByPostId(postId);
     boolean liked =
         requesterUserId != null
             && postLikePersistencePort.exists(PostLikeTargetType.POST, postId, requesterUserId);
@@ -108,6 +111,6 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
             : null;
 
     return PostDetailResult.fromDomain(
-        post, likeCount, liked, nickname, profileImageUrl, imageSlots, web3Execution);
+        post, likeCount, commentCount, liked, nickname, profileImageUrl, imageSlots, web3Execution);
   }
 }

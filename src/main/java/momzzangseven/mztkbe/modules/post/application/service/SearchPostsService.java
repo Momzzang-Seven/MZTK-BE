@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort.WriterSummary;
@@ -30,6 +31,7 @@ import org.springframework.util.StringUtils;
 public class SearchPostsService implements SearchPostsUseCase {
 
   private final PostPersistencePort postPersistencePort;
+  private final CountCommentsPort countCommentsPort;
   private final LoadTagPort loadTagPort;
   private final LoadPostWriterPort loadPostWriterPort;
   private final PostLikePersistencePort postLikePersistencePort;
@@ -58,6 +60,7 @@ public class SearchPostsService implements SearchPostsUseCase {
 
     // 3. 태그 일괄 조회
     Map<Long, List<String>> tagMap = loadTagPort.findTagsByPostIdsIn(postIds);
+    Map<Long, Long> commentCounts = countCommentsPort.countCommentsByPostIds(postIds);
 
     // 4. 작성자 일괄 조회
     Set<Long> userIds = pagePosts.stream().map(Post::getUserId).collect(Collectors.toSet());
@@ -87,12 +90,19 @@ public class SearchPostsService implements SearchPostsUseCase {
                   String nickname = writer != null ? writer.nickname() : null;
                   String profileImageUrl = writer != null ? writer.profileImageUrl() : null;
                   long likeCount = likeCounts.getOrDefault(post.getId(), 0L);
+                  long commentCount = commentCounts.getOrDefault(post.getId(), 0L);
                   boolean liked = likedPostIds.contains(post.getId());
                   PostImageResult images = imagesByPostId.get(post.getId());
                   List<PostImageResult.PostImageSlot> imageSlots =
                       images == null ? List.of() : images.slots();
                   return PostListResult.fromDomain(
-                      post.withTags(tags), likeCount, liked, nickname, profileImageUrl, imageSlots);
+                      post.withTags(tags),
+                      likeCount,
+                      commentCount,
+                      liked,
+                      nickname,
+                      profileImageUrl,
+                      imageSlots);
                 })
             .toList();
     return new SearchPostsResult(results, hasNext);
