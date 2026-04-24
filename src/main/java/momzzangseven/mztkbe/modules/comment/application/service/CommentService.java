@@ -29,7 +29,11 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CommentService
-    implements CreateCommentUseCase, GetCommentUseCase, UpdateCommentUseCase, DeleteCommentUseCase {
+    implements CreateCommentUseCase,
+        GetCommentUseCase,
+        CountCommentsUseCase,
+        UpdateCommentUseCase,
+        DeleteCommentUseCase {
 
   private final LoadCommentPort loadCommentPort;
   private final SaveCommentPort saveCommentPort;
@@ -119,6 +123,18 @@ public class CommentService
     validateParentIsRootComment(parent);
 
     return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()), false);
+  }
+
+  /** Counts all persisted comments for a post, including soft-deleted rows shown as masked text. */
+  @Override
+  public long countCommentsByPostId(Long postId) {
+    return loadCommentPort.countCommentsByPostId(postId);
+  }
+
+  /** Counts all persisted comments for each post, including soft-deleted rows. */
+  @Override
+  public Map<Long, Long> countCommentsByPostIds(List<Long> postIds) {
+    return loadCommentPort.countCommentsByPostIds(postIds);
   }
 
   // --- Private Helper Methods ---

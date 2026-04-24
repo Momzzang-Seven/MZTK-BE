@@ -152,6 +152,7 @@ class PostControllerTest {
                 "title",
                 "content",
                 3L,
+                7L,
                 true,
                 1L,
                 "nickname",
@@ -171,6 +172,7 @@ class PostControllerTest {
         .andExpect(jsonPath("$.data.postId").value(1))
         .andExpect(jsonPath("$.data.type").value("FREE"))
         .andExpect(jsonPath("$.data.likeCount").value(3))
+        .andExpect(jsonPath("$.data.commentCount").value(7))
         .andExpect(jsonPath("$.data.isLiked").value(true))
         .andExpect(jsonPath("$.data.images").isArray());
   }
@@ -233,6 +235,7 @@ class PostControllerTest {
             "list",
             "content",
             4L,
+            2L,
             true,
             1L,
             "nickname",
@@ -254,6 +257,7 @@ class PostControllerTest {
         .andExpect(jsonPath("$.data.posts[0].postId").value(2))
         .andExpect(jsonPath("$.data.posts[0].type").value("FREE"))
         .andExpect(jsonPath("$.data.posts[0].likeCount").value(4))
+        .andExpect(jsonPath("$.data.posts[0].commentCount").value(2))
         .andExpect(jsonPath("$.data.posts[0].isLiked").value(true));
   }
 
@@ -329,6 +333,7 @@ class PostControllerTest {
                 "question",
                 "body",
                 0L,
+                3L,
                 false,
                 1L,
                 "nickname",
@@ -347,6 +352,7 @@ class PostControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.type").value("QUESTION"))
         .andExpect(jsonPath("$.data.question.reward").value(50))
+        .andExpect(jsonPath("$.data.commentCount").value(3))
         .andExpect(jsonPath("$.data.question.isSolved").value(false));
   }
 
@@ -570,6 +576,7 @@ class PostControllerTest {
         "title",
         "content",
         3L,
+        0L,
         false,
         1L,
         "nickname",
