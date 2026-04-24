@@ -63,6 +63,24 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public long countCommentsByPostId(Long postId) {
+    return commentRepository.countByPostId(postId);
+  }
+
+  @Override
+  public Map<Long, Long> countCommentsByPostIds(List<Long> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countCommentsByPostIds(postIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.PostCommentCount::getPostId,
+                CommentJpaRepository.PostCommentCount::getCommentCount));
+  }
+
+  @Override
   public Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds) {
     if (parentIds == null || parentIds.isEmpty()) {
       return Map.of();

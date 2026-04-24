@@ -13,6 +13,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionExecutionResumePort;
@@ -34,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GetPostServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
+  @Mock private CountCommentsPort countCommentsPort;
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
   @Mock private LoadPostImagesPort loadPostImagesPort;
@@ -179,6 +181,7 @@ class GetPostServiceTest {
     when(loadPostImagesPort.loadImages(PostType.FREE, 20L))
         .thenReturn(new PostImageResult(List.of()));
     when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(3L);
+    when(countCommentsPort.countCommentsByPostId(20L)).thenReturn(5L);
     when(postLikePersistencePort.exists(any(), any(), any())).thenReturn(true);
 
     PostDetailResult result = getPostService.getPost(20L, 99L);
@@ -188,6 +191,7 @@ class GetPostServiceTest {
     assertThat(result.isSolved()).isFalse();
     assertThat(result.images()).isEmpty();
     assertThat(result.likeCount()).isEqualTo(3L);
+    assertThat(result.commentCount()).isEqualTo(5L);
     assertThat(result.liked()).isTrue();
   }
 
@@ -218,6 +222,7 @@ class GetPostServiceTest {
                     new PostImageResult.PostImageSlot(
                         1L, "https://cdn.example.com/images/img1.webp"))));
     when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(0L);
+    when(countCommentsPort.countCommentsByPostId(20L)).thenReturn(0L);
 
     PostDetailResult result = getPostService.getPost(20L, 99L);
 
@@ -250,11 +255,13 @@ class GetPostServiceTest {
     when(loadPostImagesPort.loadImages(PostType.FREE, 21L))
         .thenReturn(new PostImageResult(List.of()));
     when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(0L);
+    when(countCommentsPort.countCommentsByPostId(21L)).thenReturn(2L);
 
     PostDetailResult result = getPostService.getPost(21L, 99L);
 
     assertThat(result.nickname()).isEqualTo("writer");
     assertThat(result.profileImageUrl()).isEqualTo("profile.png");
+    assertThat(result.commentCount()).isEqualTo(2L);
     assertThat(result.tags()).containsExactly("java");
   }
 

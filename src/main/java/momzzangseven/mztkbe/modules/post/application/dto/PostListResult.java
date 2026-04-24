@@ -11,6 +11,7 @@ public record PostListResult(
     String title,
     String content,
     long likeCount,
+    long commentCount,
     boolean liked,
     Long userId,
     String nickname,
@@ -29,6 +30,7 @@ public record PostListResult(
   public static PostListResult fromDomain(
       Post post,
       long likeCount,
+      long commentCount,
       boolean liked,
       String nickname,
       String profileImageUrl,
@@ -39,6 +41,7 @@ public record PostListResult(
         post.getTitle(),
         post.getContent(),
         likeCount,
+        commentCount,
         liked,
         post.getUserId(),
         nickname,
