@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -63,8 +64,38 @@ public class CommentPersistenceAdapter
   }
 
   @Override
-  public long countCommentsByPostId(Long postId) {
-    return commentRepository.countByPostId(postId);
+  public List<Comment> loadRootCommentsByCursor(Long postId, CursorPageRequest pageRequest) {
+    Pageable pageable = PageRequest.of(0, pageRequest.limitWithProbe());
+    List<CommentEntity> entities =
+        pageRequest.hasCursor()
+            ? commentRepository.findRootCommentsByPostIdAfterCursor(
+                postId, pageRequest.cursor().createdAt(), pageRequest.cursor().id(), pageable)
+            : commentRepository.findRootCommentsByPostIdFirstPage(postId, pageable);
+    return entities.stream().map(CommentEntity::toDomain).toList();
+  }
+
+  @Override
+  public List<Comment> loadRepliesByCursor(Long parentId, CursorPageRequest pageRequest) {
+    Pageable pageable = PageRequest.of(0, pageRequest.limitWithProbe());
+    List<CommentEntity> entities =
+        pageRequest.hasCursor()
+            ? commentRepository.findRepliesByParentIdAfterCursor(
+                parentId, pageRequest.cursor().createdAt(), pageRequest.cursor().id(), pageable)
+            : commentRepository.findRepliesByParentIdFirstPage(parentId, pageable);
+    return entities.stream().map(CommentEntity::toDomain).toList();
+  }
+
+  @Override
+  public Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds) {
+    if (parentIds == null || parentIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countDirectRepliesByParentIds(parentIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.DirectReplyCount::getParentId,
+                CommentJpaRepository.DirectReplyCount::getReplyCount));
   }
 
   @Override
@@ -81,16 +112,11 @@ public class CommentPersistenceAdapter
   }
 
   @Override
-  public Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds) {
-    if (parentIds == null || parentIds.isEmpty()) {
-      return Map.of();
+  public long countCommentsByPostId(Long postId) {
+    if (postId == null) {
+      return 0L;
     }
-
-    return commentRepository.countDirectRepliesByParentIds(parentIds).stream()
-        .collect(
-            Collectors.toMap(
-                CommentJpaRepository.DirectReplyCount::getParentId,
-                CommentJpaRepository.DirectReplyCount::getReplyCount));
+    return commentRepository.countByPostId(postId);
   }
 
   @Override

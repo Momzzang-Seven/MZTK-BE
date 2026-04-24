@@ -67,6 +67,28 @@ class PostTagLinkAdapterTest {
   }
 
   @Test
+  @DisplayName("findTagIdByName trims and lowercases query")
+  void findTagIdByNameNormalizesInput() {
+    when(queryFactory.select(tagEntity.id)).thenReturn(postIdQuery);
+    when(postIdQuery.from(tagEntity)).thenReturn(postIdQuery);
+    when(postIdQuery.where(any(Predicate.class))).thenReturn(postIdQuery);
+    when(postIdQuery.fetchOne()).thenReturn(7L);
+
+    java.util.Optional<Long> result = postTagLinkAdapter.findTagIdByName("  JAVA ");
+
+    assertThat(result).contains(7L);
+    verify(postIdQuery).where(any(Predicate.class));
+  }
+
+  @Test
+  @DisplayName("findTagIdByName returns empty for blank input")
+  void findTagIdByNameBlankReturnsEmpty() {
+    java.util.Optional<Long> result = postTagLinkAdapter.findTagIdByName("   ");
+
+    assertThat(result).isEmpty();
+  }
+
+  @Test
   @DisplayName("findTagNamesByPostId returns names from query")
   void findTagNamesByPostIdReturnsNames() {
     when(queryFactory.select(tagEntity.name)).thenReturn(tagNameQuery);

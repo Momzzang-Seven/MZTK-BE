@@ -23,25 +23,24 @@ class CommentCountAdapterTest {
   @InjectMocks private CommentCountAdapter commentCountAdapter;
 
   @Test
-  @DisplayName("countCommentsByPostId() delegates to comment use case")
-  void countCommentsByPostId_delegatesToUseCase() {
-    when(countCommentsUseCase.countCommentsByPostId(10L)).thenReturn(3L);
+  @DisplayName("countCommentsByPostIds() delegates to comment module use case")
+  void countCommentsByPostIds_delegatesToUseCase() {
+    when(countCommentsUseCase.countCommentsByPostIds(List.of(1L, 2L))).thenReturn(Map.of(1L, 3L));
 
-    long result = commentCountAdapter.countCommentsByPostId(10L);
+    Map<Long, Long> result = commentCountAdapter.countCommentsByPostIds(List.of(1L, 2L));
 
-    assertThat(result).isEqualTo(3L);
-    verify(countCommentsUseCase).countCommentsByPostId(10L);
+    assertThat(result).containsEntry(1L, 3L);
+    verify(countCommentsUseCase).countCommentsByPostIds(List.of(1L, 2L));
   }
 
   @Test
-  @DisplayName("countCommentsByPostIds() delegates batch counting to comment use case")
-  void countCommentsByPostIds_delegatesToUseCase() {
-    when(countCommentsUseCase.countCommentsByPostIds(List.of(10L, 11L)))
-        .thenReturn(Map.of(10L, 2L, 11L, 0L));
+  @DisplayName("countCommentsByPostId() delegates to comment module use case")
+  void countCommentsByPostId_delegatesToUseCase() {
+    when(countCommentsUseCase.countCommentsByPostId(1L)).thenReturn(3L);
 
-    Map<Long, Long> result = commentCountAdapter.countCommentsByPostIds(List.of(10L, 11L));
+    long result = commentCountAdapter.countCommentsByPostId(1L);
 
-    assertThat(result).containsEntry(10L, 2L).containsEntry(11L, 0L);
-    verify(countCommentsUseCase).countCommentsByPostIds(List.of(10L, 11L));
+    assertThat(result).isEqualTo(3L);
+    verify(countCommentsUseCase).countCommentsByPostId(1L);
   }
 }
