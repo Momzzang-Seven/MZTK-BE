@@ -12,6 +12,15 @@ import org.springframework.data.repository.query.Param;
 
 public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
 
+  long countByPostId(Long postId);
+
+  @Query(
+      "SELECT c.postId AS postId, COUNT(c.id) AS commentCount "
+          + "FROM CommentEntity c "
+          + "WHERE c.postId IN :postIds "
+          + "GROUP BY c.postId")
+  List<PostCommentCount> countCommentsByPostIds(@Param("postIds") List<Long> postIds);
+
   // 1. 최상위 댓글 조회
   @Query(
       "SELECT c FROM CommentEntity c WHERE c.postId = :postId AND c.parent IS NULL ORDER BY c.createdAt ASC, c.id ASC")
@@ -49,5 +58,11 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
     Long getParentId();
 
     Long getReplyCount();
+  }
+
+  interface PostCommentCount {
+    Long getPostId();
+
+    Long getCommentCount();
   }
 }
