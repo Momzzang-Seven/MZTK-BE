@@ -114,6 +114,40 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName(
+      "countCommentsByPostId() delegates to repository count query including soft-deleted rows")
+  void countCommentsByPostId_delegatesToRepository() {
+    given(commentRepository.countByPostId(10L)).willReturn(4L);
+
+    long result = adapter.countCommentsByPostId(10L);
+
+    assertThat(result).isEqualTo(4L);
+    verify(commentRepository).countByPostId(10L);
+  }
+
+  @Test
+  @DisplayName("countCommentsByPostIds() maps repository projections including soft-deleted rows")
+  void countCommentsByPostIds_mapsProjection() {
+    CommentJpaRepository.PostCommentCount first = postCommentCount(10L, 3L);
+    CommentJpaRepository.PostCommentCount second = postCommentCount(11L, 1L);
+    given(commentRepository.countCommentsByPostIds(List.of(10L, 11L)))
+        .willReturn(List.of(first, second));
+
+    Map<Long, Long> result = adapter.countCommentsByPostIds(List.of(10L, 11L));
+
+    assertThat(result).containsEntry(10L, 3L).containsEntry(11L, 1L);
+  }
+
+  @Test
+  @DisplayName("countCommentsByPostIds() no-ops for null or empty list")
+  void countCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
+    assertThat(adapter.countCommentsByPostIds(null)).isEmpty();
+    assertThat(adapter.countCommentsByPostIds(List.of())).isEmpty();
+
+    verifyNoInteractions(commentRepository);
+  }
+
+  @Test
   @DisplayName("countDirectRepliesByParentIds() maps repository projections")
   void countDirectRepliesByParentIds_mapsProjection() {
     CommentJpaRepository.DirectReplyCount first = directReplyCount(10L, 2L);
@@ -187,6 +221,20 @@ class CommentPersistenceAdapterTest {
       @Override
       public Long getReplyCount() {
         return replyCount;
+      }
+    };
+  }
+
+  private CommentJpaRepository.PostCommentCount postCommentCount(Long postId, Long commentCount) {
+    return new CommentJpaRepository.PostCommentCount() {
+      @Override
+      public Long getPostId() {
+        return postId;
+      }
+
+      @Override
+      public Long getCommentCount() {
+        return commentCount;
       }
     };
   }

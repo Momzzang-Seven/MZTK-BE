@@ -44,7 +44,7 @@ public record PostListResponse(
         result.content(),
         result.likeCount(),
         result.liked(),
-        0,
+        Math.toIntExact(result.commentCount()),
         result.tags(),
         images,
         result.createdAt(),

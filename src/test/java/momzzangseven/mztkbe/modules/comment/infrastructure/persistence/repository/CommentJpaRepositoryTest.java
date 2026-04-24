@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,40 @@ class CommentJpaRepositoryTest {
         .containsExactlyInAnyOrder(
             org.assertj.core.groups.Tuple.tuple(idOf(parent1), 2L),
             org.assertj.core.groups.Tuple.tuple(idOf(parent2), 1L));
+  }
+
+  @Test
+  @DisplayName("countByPostId() includes root, reply, and soft-deleted comments for the post")
+  void countByPostId_includesSoftDeletedComments() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 11, 0);
+    CommentEntity root = persistRoot(700L, 31L, "root", base);
+    persistReply(700L, 32L, "reply", root, base.plusMinutes(1));
+    persistRoot(700L, 33L, "deleted-root", base.plusMinutes(2), true);
+    persistRoot(701L, 34L, "other-post", base.plusMinutes(3));
+
+    long count = commentJpaRepository.countByPostId(700L);
+
+    assertThat(count).isEqualTo(3L);
+  }
+
+  @Test
+  @DisplayName("countCommentsByPostIds() groups counts by post id including soft-deleted comments")
+  void countCommentsByPostIds_groupsCountsIncludingSoftDeletedComments() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 12, 0);
+    CommentEntity root = persistRoot(800L, 41L, "root", base);
+    persistReply(800L, 42L, "reply", root, base.plusMinutes(1));
+    persistRoot(800L, 43L, "deleted-root", base.plusMinutes(2), true);
+    persistRoot(801L, 44L, "single", base.plusMinutes(3));
+    persistRoot(802L, 45L, "ignored", base.plusMinutes(4));
+
+    Map<Long, Long> counts =
+        commentJpaRepository.countCommentsByPostIds(List.of(800L, 801L)).stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    CommentJpaRepository.PostCommentCount::getPostId,
+                    CommentJpaRepository.PostCommentCount::getCommentCount));
+
+    assertThat(counts).containsEntry(800L, 3L).containsEntry(801L, 1L).doesNotContainKey(802L);
   }
 
   @Test

@@ -23,23 +23,30 @@ import momzzangseven.mztkbe.modules.comment.application.port.in.CreateCommentUse
 import momzzangseven.mztkbe.modules.comment.application.port.in.DeleteCommentUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.GetCommentUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.UpdateCommentUseCase;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @DisplayName("CommentController 컨트롤러 계약 테스트 (MockMvc + H2)")
 @org.springframework.boot.test.context.SpringBootTest
 @org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 class CommentControllerTest {
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected org.springframework.test.web.servlet.MockMvc mockMvc;
+  @Autowired protected org.springframework.test.web.servlet.MockMvc mockMvc;
 
-  @org.springframework.beans.factory.annotation.Autowired
-  protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+  @Autowired protected com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+  @Autowired private CreateCommentUseCase createCommentUseCase;
+  @Autowired private GetCommentUseCase getCommentUseCase;
+  @Autowired private UpdateCommentUseCase updateCommentUseCase;
+  @Autowired private DeleteCommentUseCase deleteCommentUseCase;
 
   @org.springframework.test.context.bean.override.mockito.MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -61,10 +68,39 @@ class CommentControllerTest {
           .SignedRecoveryWorker
       txSignedRecoveryWorker;
 
-  @MockitoBean private CreateCommentUseCase createCommentUseCase;
-  @MockitoBean private GetCommentUseCase getCommentUseCase;
-  @MockitoBean private UpdateCommentUseCase updateCommentUseCase;
-  @MockitoBean private DeleteCommentUseCase deleteCommentUseCase;
+  @TestConfiguration
+  static class CommentControllerTestConfig {
+
+    @Bean
+    @Primary
+    CreateCommentUseCase createCommentUseCase() {
+      return Mockito.mock(CreateCommentUseCase.class);
+    }
+
+    @Bean
+    @Primary
+    GetCommentUseCase getCommentUseCase() {
+      return Mockito.mock(GetCommentUseCase.class);
+    }
+
+    @Bean
+    @Primary
+    UpdateCommentUseCase updateCommentUseCase() {
+      return Mockito.mock(UpdateCommentUseCase.class);
+    }
+
+    @Bean
+    @Primary
+    DeleteCommentUseCase deleteCommentUseCase() {
+      return Mockito.mock(DeleteCommentUseCase.class);
+    }
+  }
+
+  @BeforeEach
+  void resetMocks() {
+    Mockito.reset(
+        createCommentUseCase, getCommentUseCase, updateCommentUseCase, deleteCommentUseCase);
+  }
 
   @Nested
   @DisplayName("POST /posts/{postId}/comments")
