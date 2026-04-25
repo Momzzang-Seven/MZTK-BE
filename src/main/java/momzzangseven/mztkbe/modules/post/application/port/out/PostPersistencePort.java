@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.port.out;
 
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 
@@ -19,6 +20,8 @@ public interface PostPersistencePort {
   boolean existsPost(Long postId);
 
   List<Post> findPostsByCondition(PostSearchCondition condition, List<Long> filteredPostIds);
+
+  List<Post> findPostsByCursorCondition(PostCursorSearchCondition condition, Long tagId);
 
   int markQuestionPostSolved(Long postId);
 }

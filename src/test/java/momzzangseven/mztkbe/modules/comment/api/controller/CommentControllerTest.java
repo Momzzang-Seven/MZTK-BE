@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery
 import momzzangseven.mztkbe.modules.comment.application.dto.UpdateCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.port.in.CreateCommentUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.DeleteCommentUseCase;
+import momzzangseven.mztkbe.modules.comment.application.port.in.GetCommentCursorUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.GetCommentUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.UpdateCommentUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,6 +82,12 @@ class CommentControllerTest {
     @Primary
     GetCommentUseCase getCommentUseCase() {
       return Mockito.mock(GetCommentUseCase.class);
+    }
+
+    @Bean
+    @Primary
+    GetCommentCursorUseCase getCommentCursorUseCase() {
+      return Mockito.mock(GetCommentCursorUseCase.class);
     }
 
     @Bean
