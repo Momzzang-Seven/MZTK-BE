@@ -29,6 +29,54 @@ public record PostDetailResult(
     images = images == null ? List.of() : images;
   }
 
+  public PostDetailResult(
+      Long postId,
+      PostType type,
+      String title,
+      String content,
+      long likeCount,
+      boolean liked,
+      Long userId,
+      String nickname,
+      String profileImageUrl,
+      List<PostImageResult.PostImageSlot> images,
+      Long reward,
+      boolean isSolved,
+      QuestionExecutionResumeView web3Execution,
+      List<String> tags,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this(
+        postId,
+        type,
+        title,
+        content,
+        likeCount,
+        0L,
+        liked,
+        userId,
+        nickname,
+        profileImageUrl,
+        images,
+        reward,
+        isSolved,
+        web3Execution,
+        tags,
+        createdAt,
+        updatedAt);
+  }
+
+  public static PostDetailResult fromDomain(
+      Post post,
+      long likeCount,
+      boolean liked,
+      String nickname,
+      String profileImageUrl,
+      List<PostImageResult.PostImageSlot> images,
+      QuestionExecutionResumeView web3Execution) {
+    return fromDomain(post, likeCount, 0L, liked, nickname, profileImageUrl, images, web3Execution);
+  }
+
   public static PostDetailResult fromDomain(
       Post post,
       long likeCount,

@@ -16,10 +16,16 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.pagination.CursorScope;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetCommentsCursorResult;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesCursorQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsCursorQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
@@ -437,10 +443,83 @@ class CommentServiceTest {
   }
 
   @Test
+  @DisplayName("getRootCommentsByCursor trims probe row and builds next cursor")
+  void getRootCommentsByCursor_trimsProbeAndBuildsNextCursor() {
+    LocalDateTime firstTime = LocalDateTime.of(2026, 4, 24, 10, 0);
+    LocalDateTime secondTime = LocalDateTime.of(2026, 4, 24, 11, 0);
+    LocalDateTime probeTime = LocalDateTime.of(2026, 4, 24, 12, 0);
+    Comment first = comment(11L, 100L, 201L, null, "first", false, firstTime);
+    Comment second = comment(12L, 100L, 202L, null, "second", false, secondTime);
+    Comment probe = comment(13L, 100L, 203L, null, "probe", false, probeTime);
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(null, 2, 20, 50, CursorScope.rootComments(100L));
+    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadCommentPort.loadRootCommentsByCursor(100L, pageRequest))
+        .willReturn(List.of(first, second, probe));
+    given(loadCommentPort.countDirectRepliesByParentIds(List.of(11L, 12L)))
+        .willReturn(Map.of(11L, 1L, 12L, 2L));
+    given(loadCommentWriterPort.loadWritersByIds(java.util.Set.of(201L, 202L)))
+        .willReturn(Map.of());
+
+    GetCommentsCursorResult result =
+        commentService.getRootCommentsByCursor(new GetRootCommentsCursorQuery(100L, pageRequest));
+
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.comments()).extracting("id").containsExactly(11L, 12L);
+    assertThat(result.comments()).extracting("replyCount").containsExactly(1L, 2L);
+    assertThat(CursorCodec.decode(result.nextCursor(), pageRequest.scope()).id()).isEqualTo(12L);
+    verify(loadCommentPort).countDirectRepliesByParentIds(List.of(11L, 12L));
+  }
+
+  @Test
+  @DisplayName("getRepliesByCursor does not count nested replies")
+  void getRepliesByCursor_doesNotCountNestedReplies() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment parent = comment(10L, 100L, 99L, null, "parent", false, now);
+    Comment firstReply = comment(21L, 100L, 201L, 10L, "reply", false, now.plusMinutes(1));
+    Comment probe = comment(22L, 100L, 202L, 10L, "probe", false, now.plusMinutes(2));
+    CursorPageRequest pageRequest = CursorPageRequest.of(null, 1, 10, 50, CursorScope.replies(10L));
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
+    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadCommentPort.loadRepliesByCursor(10L, pageRequest))
+        .willReturn(List.of(firstReply, probe));
+    given(loadCommentWriterPort.loadWritersByIds(java.util.Set.of(201L))).willReturn(Map.of());
+
+    GetCommentsCursorResult result =
+        commentService.getRepliesByCursor(new GetRepliesCursorQuery(10L, pageRequest));
+
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.comments()).extracting("id").containsExactly(21L);
+    assertThat(result.comments().getFirst().replyCount()).isZero();
+    assertThat(CursorCodec.decode(result.nextCursor(), pageRequest.scope()).id()).isEqualTo(21L);
+    verify(loadCommentPort, never()).countDirectRepliesByParentIds(any());
+  }
+
+  @Test
   @DisplayName("deleteCommentsByPostId() delegates to delete port")
   void deleteCommentsByPostId_delegatesToDeletePort() {
     commentService.deleteCommentsByPostId(33L);
 
     verify(deleteCommentPort).deleteAllByPostId(33L);
+  }
+
+  private Comment comment(
+      Long id,
+      Long postId,
+      Long writerId,
+      Long parentId,
+      String content,
+      boolean isDeleted,
+      LocalDateTime createdAt) {
+    return Comment.builder()
+        .id(id)
+        .postId(postId)
+        .writerId(writerId)
+        .parentId(parentId)
+        .content(content)
+        .isDeleted(isDeleted)
+        .createdAt(createdAt)
+        .updatedAt(createdAt)
+        .build();
   }
 }

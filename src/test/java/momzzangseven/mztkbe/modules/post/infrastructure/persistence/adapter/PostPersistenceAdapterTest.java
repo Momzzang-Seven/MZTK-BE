@@ -10,6 +10,10 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.global.pagination.CursorScope;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
+import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -206,6 +210,40 @@ class PostPersistenceAdapterTest {
         .markResolvedByIdIfType(9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
   }
 
+  @Test
+  @DisplayName("cursor tag first page delegates to native query with normalized FREE search")
+  void findPostsByCursorConditionWithTagFirstPageDelegates() {
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.FREE, "Java", "ignored", null, 10);
+    when(postJpaRepository.findPostsByConditionWithTagFirstPageNative("FREE", null, 7L, 11))
+        .thenReturn(List.of());
+
+    List<Post> result = postPersistenceAdapter.findPostsByCursorCondition(condition, 7L);
+
+    assertThat(result).isEmpty();
+    verify(postJpaRepository).findPostsByConditionWithTagFirstPageNative("FREE", null, 7L, 11);
+  }
+
+  @Test
+  @DisplayName("cursor tag next page delegates to native query with keyset cursor")
+  void findPostsByCursorConditionWithTagAfterCursorDelegates() {
+    LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 4, 24, 12, 0);
+    String scope = CursorScope.posts("QUESTION", "java", "form");
+    String cursor = CursorCodec.encode(new KeysetCursor(cursorCreatedAt, 15L, scope));
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.QUESTION, "Java", "FoRm", cursor, 10);
+    when(postJpaRepository.findPostsByConditionWithTagAfterCursorNative(
+            "QUESTION", "form", 7L, cursorCreatedAt, 15L, 11))
+        .thenReturn(List.of());
+
+    List<Post> result = postPersistenceAdapter.findPostsByCursorCondition(condition, 7L);
+
+    assertThat(result).isEmpty();
+    verify(postJpaRepository)
+        .findPostsByConditionWithTagAfterCursorNative(
+            "QUESTION", "form", 7L, cursorCreatedAt, 15L, 11);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // findPostsByCondition() private helper branches
   // QueryDSL 표현식 생성 메서드는 DB 없이 순수 Java 객체를 생성하므로
@@ -285,6 +323,38 @@ class PostPersistenceAdapterTest {
     void searchWithNullType_returnsBooleanExpression() throws Exception {
       Object result = containsSearch.invoke(postPersistenceAdapter, null, "spring");
       assertThat(result).isNotNull();
+    }
+  }
+
+  @Nested
+  @DisplayName("containsCursorSearch() - v2 커서 검색어 필터 분기")
+  class ContainsCursorSearchBranch {
+
+    private java.lang.reflect.Method containsCursorSearch;
+
+    @BeforeEach
+    void setUp() throws Exception {
+      containsCursorSearch =
+          PostPersistenceAdapter.class.getDeclaredMethod(
+              "containsCursorSearch", PostType.class, String.class);
+      containsCursorSearch.setAccessible(true);
+    }
+
+    @Test
+    @DisplayName("search=text, type=QUESTION → 대소문자 무시 제목 포함 표현식 반환")
+    void searchWithNonFreeType_returnsIgnoreCaseBooleanExpression() throws Exception {
+      Object result =
+          containsCursorSearch.invoke(postPersistenceAdapter, PostType.QUESTION, "form");
+
+      assertThat(result).isNotNull();
+    }
+
+    @Test
+    @DisplayName("search=text, type=FREE → null 반환")
+    void searchWithFreeType_returnsNull() throws Exception {
+      Object result = containsCursorSearch.invoke(postPersistenceAdapter, PostType.FREE, "form");
+
+      assertThat(result).isNull();
     }
   }
 
