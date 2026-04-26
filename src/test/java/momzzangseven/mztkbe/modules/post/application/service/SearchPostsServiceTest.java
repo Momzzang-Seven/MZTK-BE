@@ -28,12 +28,12 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePor
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -48,7 +48,19 @@ class SearchPostsServiceTest {
   @Mock private PostLikePersistencePort postLikePersistencePort;
   @Mock private LoadPostImagesPort loadPostImagesPort;
 
-  @InjectMocks private SearchPostsService searchPostsService;
+  private SearchPostsService searchPostsService;
+
+  @BeforeEach
+  void setUp() {
+    PostListEnricher postListEnricher =
+        new PostListEnricher(
+            countCommentsPort,
+            loadTagPort,
+            loadPostWriterPort,
+            postLikePersistencePort,
+            loadPostImagesPort);
+    searchPostsService = new SearchPostsService(postPersistencePort, loadTagPort, postListEnricher);
+  }
 
   @Test
   @DisplayName("returns empty immediately when tag filter has no matching post IDs")

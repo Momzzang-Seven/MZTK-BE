@@ -19,6 +19,11 @@ public final class CursorScope {
             + "|sort=POST_CREATED_DESC");
   }
 
+  public static String likedPosts(Long userId, String type) {
+    return hash(
+        "liked-posts|userId=" + userId + "|type=" + normalize(type) + "|sort=LIKE_CREATED_DESC");
+  }
+
   public static String rootComments(Long postId) {
     return hash("root-comments|postId=" + postId + "|sort=COMMENT_CREATED_ASC");
   }

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -66,9 +67,99 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
   void deleteByTargetTypeAndTargetId(
       @Param("targetType") PostLikeTargetType targetType, @Param("targetId") Long targetId);
 
+  @Query(
+      value =
+          """
+          SELECT
+              pl.id AS likeId,
+              pl.created_at AS likedAt,
+              p.id AS postId,
+              p.user_id AS userId,
+              p.type AS type,
+              p.title AS title,
+              p.content AS content,
+              p.reward AS reward,
+              p.accepted_answer_id AS acceptedAnswerId,
+              p.status AS status,
+              p.created_at AS postCreatedAt,
+              p.updated_at AS postUpdatedAt
+          FROM post_like pl
+          JOIN posts p ON p.id = pl.target_id
+          WHERE pl.user_id = :userId
+            AND pl.target_type = 'POST'
+            AND p.type = :type
+          ORDER BY pl.created_at DESC, pl.id DESC
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<LikedPostProjection> findLikedPostsFirstPageNative(
+      @Param("userId") Long userId, @Param("type") String type, @Param("limit") int limit);
+
+  @Query(
+      value =
+          """
+          SELECT
+              pl.id AS likeId,
+              pl.created_at AS likedAt,
+              p.id AS postId,
+              p.user_id AS userId,
+              p.type AS type,
+              p.title AS title,
+              p.content AS content,
+              p.reward AS reward,
+              p.accepted_answer_id AS acceptedAnswerId,
+              p.status AS status,
+              p.created_at AS postCreatedAt,
+              p.updated_at AS postUpdatedAt
+          FROM post_like pl
+          JOIN posts p ON p.id = pl.target_id
+          WHERE pl.user_id = :userId
+            AND pl.target_type = 'POST'
+            AND p.type = :type
+            AND (
+              pl.created_at < :cursorLikedAt
+              OR (pl.created_at = :cursorLikedAt AND pl.id < :cursorLikeId)
+            )
+          ORDER BY pl.created_at DESC, pl.id DESC
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<LikedPostProjection> findLikedPostsAfterCursorNative(
+      @Param("userId") Long userId,
+      @Param("type") String type,
+      @Param("cursorLikedAt") LocalDateTime cursorLikedAt,
+      @Param("cursorLikeId") Long cursorLikeId,
+      @Param("limit") int limit);
+
   interface TargetLikeCountProjection {
     Long getTargetId();
 
     Long getLikeCount();
+  }
+
+  interface LikedPostProjection {
+    Long getLikeId();
+
+    LocalDateTime getLikedAt();
+
+    Long getPostId();
+
+    Long getUserId();
+
+    String getType();
+
+    String getTitle();
+
+    String getContent();
+
+    Long getReward();
+
+    Long getAcceptedAnswerId();
+
+    String getStatus();
+
+    LocalDateTime getPostCreatedAt();
+
+    LocalDateTime getPostUpdatedAt();
   }
 }
