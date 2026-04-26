@@ -197,6 +197,36 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("loadPostsByIdsPreservingOrder maps existing posts in requested order")
+  void loadPostsByIdsPreservingOrder_mapsInRequestedOrder() {
+    PostEntity first =
+        PostEntity.builder()
+            .id(1L)
+            .userId(4L)
+            .type(PostType.FREE)
+            .title(null)
+            .content("first")
+            .reward(0L)
+            .status(PostStatus.OPEN)
+            .build();
+    PostEntity second =
+        PostEntity.builder()
+            .id(2L)
+            .userId(5L)
+            .type(PostType.FREE)
+            .title(null)
+            .content("second")
+            .reward(0L)
+            .status(PostStatus.OPEN)
+            .build();
+    when(postJpaRepository.findAllById(List.of(2L, 999L, 1L))).thenReturn(List.of(first, second));
+
+    List<Post> posts = postPersistenceAdapter.loadPostsByIdsPreservingOrder(List.of(2L, 999L, 1L));
+
+    assertThat(posts).extracting(Post::getId).containsExactly(2L, 1L);
+  }
+
+  @Test
   @DisplayName("markQuestionPostSolved performs status-only conditional resolve update")
   void markQuestionPostSolvedDelegates() {
     when(postJpaRepository.markResolvedByIdIfType(
