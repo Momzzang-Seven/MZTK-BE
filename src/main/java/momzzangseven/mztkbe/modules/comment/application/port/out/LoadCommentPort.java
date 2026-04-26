@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,14 @@ public interface LoadCommentPort {
   Page<Comment> loadRootComments(Long postId, Pageable pageable);
 
   Page<Comment> loadReplies(Long parentId, Pageable pageable);
+
+  List<Comment> loadRootCommentsByCursor(Long postId, CursorPageRequest pageRequest);
+
+  List<Comment> loadRepliesByCursor(Long parentId, CursorPageRequest pageRequest);
+
+  long countCommentsByPostId(Long postId);
+
+  Map<Long, Long> countCommentsByPostIds(List<Long> postIds);
 
   Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds);
 

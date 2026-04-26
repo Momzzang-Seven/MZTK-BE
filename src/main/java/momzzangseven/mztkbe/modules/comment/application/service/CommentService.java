@@ -10,6 +10,8 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
@@ -29,7 +31,11 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CommentService
-    implements CreateCommentUseCase, GetCommentUseCase, UpdateCommentUseCase, DeleteCommentUseCase {
+    implements CreateCommentUseCase,
+        GetCommentUseCase,
+        GetCommentCursorUseCase,
+        UpdateCommentUseCase,
+        DeleteCommentUseCase {
 
   private final LoadCommentPort loadCommentPort;
   private final SaveCommentPort saveCommentPort;
@@ -121,6 +127,42 @@ public class CommentService
     return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()), false);
   }
 
+  @Override
+  public GetCommentsCursorResult getRootCommentsByCursor(GetRootCommentsCursorQuery query) {
+    validatePostExists(query.postId());
+    List<Comment> comments =
+        loadCommentPort.loadRootCommentsByCursor(query.postId(), query.pageRequest());
+    boolean hasNext = comments.size() > query.pageRequest().size();
+    List<Comment> pageComments =
+        hasNext ? comments.subList(0, query.pageRequest().size()) : comments;
+    String nextCursor =
+        hasNext
+            ? createNextCursor(
+                pageComments.get(pageComments.size() - 1), query.pageRequest().scope())
+            : null;
+    return new GetCommentsCursorResult(toResultList(pageComments, true), hasNext, nextCursor);
+  }
+
+  @Override
+  public GetCommentsCursorResult getRepliesByCursor(GetRepliesCursorQuery query) {
+    Comment parent =
+        loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
+    validatePostExists(parent.getPostId());
+    validateParentIsRootComment(parent);
+
+    List<Comment> comments =
+        loadCommentPort.loadRepliesByCursor(query.parentId(), query.pageRequest());
+    boolean hasNext = comments.size() > query.pageRequest().size();
+    List<Comment> pageComments =
+        hasNext ? comments.subList(0, query.pageRequest().size()) : comments;
+    String nextCursor =
+        hasNext
+            ? createNextCursor(
+                pageComments.get(pageComments.size() - 1), query.pageRequest().scope())
+            : null;
+    return new GetCommentsCursorResult(toResultList(pageComments, false), hasNext, nextCursor);
+  }
+
   // --- Private Helper Methods ---
 
   private Comment loadCommentOrThrow(Long commentId) {
@@ -176,5 +218,35 @@ public class CommentService
                 comment,
                 writers.get(comment.getWriterId()),
                 replyCounts.getOrDefault(comment.getId(), 0L)));
+  }
+
+  private List<CommentResult> toResultList(List<Comment> comments, boolean includeReplyCount) {
+    if (comments.isEmpty()) {
+      return List.of();
+    }
+
+    List<Long> commentIds = comments.stream().map(Comment::getId).toList();
+    Map<Long, Long> replyCounts =
+        includeReplyCount ? loadCommentPort.countDirectRepliesByParentIds(commentIds) : Map.of();
+
+    Set<Long> writerIds =
+        comments.stream()
+            .filter(comment -> !comment.isDeleted())
+            .map(Comment::getWriterId)
+            .collect(Collectors.toSet());
+    Map<Long, WriterSummary> writers = loadCommentWriterPort.loadWritersByIds(writerIds);
+
+    return comments.stream()
+        .map(
+            comment ->
+                CommentResult.from(
+                    comment,
+                    writers.get(comment.getWriterId()),
+                    replyCounts.getOrDefault(comment.getId(), 0L)))
+        .toList();
+  }
+
+  private String createNextCursor(Comment comment, String scope) {
+    return CursorCodec.encode(new KeysetCursor(comment.getCreatedAt(), comment.getId(), scope));
   }
 }

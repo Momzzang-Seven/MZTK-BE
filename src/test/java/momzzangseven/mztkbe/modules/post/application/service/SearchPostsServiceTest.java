@@ -8,13 +8,18 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult.PostImageSlot;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
+import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsCursorResult;
 import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
@@ -37,6 +42,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class SearchPostsServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
+  @Mock private CountCommentsPort countCommentsPort;
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
   @Mock private PostLikePersistencePort postLikePersistencePort;
@@ -66,6 +72,7 @@ class SearchPostsServiceTest {
 
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of(post));
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L))).thenReturn(Map.of());
+    when(countCommentsPort.countCommentsByPostIds(List.of(1L))).thenReturn(Map.of());
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
@@ -76,6 +83,7 @@ class SearchPostsServiceTest {
     assertThat(results.posts()).hasSize(1);
     assertThat(results.posts().getFirst().tags()).isEmpty();
     assertThat(results.posts().getFirst().images()).isEmpty();
+    assertThat(results.posts().getFirst().commentCount()).isZero();
     assertThat(results.hasNext()).isFalse();
     verify(loadTagPort, never()).findPostIdsByTagName("   ");
   }
@@ -92,6 +100,8 @@ class SearchPostsServiceTest {
         .thenReturn(List.of(first, second));
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L, 2L)))
         .thenReturn(Map.of(1L, List.of("java"), 2L, List.of("spring", "kotlin")));
+    when(countCommentsPort.countCommentsByPostIds(List.of(1L, 2L)))
+        .thenReturn(Map.of(1L, 3L, 2L, 1L));
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of(1L, 2L, 2L, 1L));
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of(2L));
@@ -110,6 +120,8 @@ class SearchPostsServiceTest {
     assertThat(results.posts().get(1).tags()).containsExactly("spring", "kotlin");
     assertThat(results.posts().get(0).likeCount()).isEqualTo(2L);
     assertThat(results.posts().get(1).liked()).isTrue();
+    assertThat(results.posts().get(0).commentCount()).isEqualTo(3L);
+    assertThat(results.posts().get(1).commentCount()).isEqualTo(1L);
     assertThat(results.posts().get(0).images())
         .containsExactly(new PostImageSlot(10L, "https://cdn/a.webp"));
     assertThat(results.posts().get(1).images())
@@ -125,6 +137,7 @@ class SearchPostsServiceTest {
 
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of(post));
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L))).thenReturn(Map.of(1L, List.of("java")));
+    when(countCommentsPort.countCommentsByPostIds(List.of(1L))).thenReturn(Map.of());
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L)))
         .thenReturn(Map.of(1L, new LoadPostWriterPort.WriterSummary(1L, "writer", "profile.png")));
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
@@ -136,6 +149,7 @@ class SearchPostsServiceTest {
     assertThat(results.posts()).hasSize(1);
     assertThat(results.posts().getFirst().nickname()).isEqualTo("writer");
     assertThat(results.posts().getFirst().profileImageUrl()).isEqualTo("profile.png");
+    assertThat(results.posts().getFirst().commentCount()).isZero();
     assertThat(results.posts().getFirst().tags()).containsExactly("java");
     assertThat(results.hasNext()).isFalse();
   }
@@ -158,6 +172,7 @@ class SearchPostsServiceTest {
 
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of(post));
     when(loadTagPort.findTagsByPostIdsIn(List.of(3L))).thenReturn(Map.of());
+    when(countCommentsPort.countCommentsByPostIds(List.of(3L))).thenReturn(Map.of(3L, 2L));
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
@@ -167,6 +182,7 @@ class SearchPostsServiceTest {
 
     assertThat(results.posts()).hasSize(1);
     assertThat(results.posts().getFirst().isSolved()).isTrue();
+    assertThat(results.posts().getFirst().commentCount()).isEqualTo(2L);
     assertThat(results.hasNext()).isFalse();
   }
 
@@ -196,6 +212,7 @@ class SearchPostsServiceTest {
         .thenReturn(List.of(first, second, probe));
     when(loadTagPort.findTagsByPostIdsIn(List.of(1L, 2L)))
         .thenReturn(Map.of(1L, List.of("java"), 2L, List.of("spring")));
+    when(countCommentsPort.countCommentsByPostIds(List.of(1L, 2L))).thenReturn(Map.of(1L, 4L));
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of(1L, 2L, 2L, 1L));
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of(2L));
@@ -207,7 +224,55 @@ class SearchPostsServiceTest {
     assertThat(results.posts()).hasSize(2);
     assertThat(results.posts().get(0).postId()).isEqualTo(1L);
     assertThat(results.posts().get(1).postId()).isEqualTo(2L);
+    assertThat(results.posts().get(0).commentCount()).isEqualTo(4L);
+    assertThat(results.posts().get(1).commentCount()).isZero();
     verify(loadTagPort).findTagsByPostIdsIn(List.of(1L, 2L));
+    verify(countCommentsPort, times(1)).countCommentsByPostIds(List.of(1L, 2L));
+  }
+
+  @Test
+  @DisplayName("cursor search returns empty immediately when tag does not exist")
+  void searchPostsByCursorReturnsEmptyWhenTagNotFound() {
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.QUESTION, "missing", "query", null, 10);
+
+    when(loadTagPort.findTagIdByName("missing")).thenReturn(java.util.Optional.empty());
+
+    SearchPostsCursorResult result = searchPostsService.searchPostsByCursor(condition, 99L);
+
+    assertThat(result.posts()).isEmpty();
+    assertThat(result.hasNext()).isFalse();
+    assertThat(result.nextCursor()).isNull();
+    verify(postPersistencePort, never()).findPostsByCursorCondition(any(), any());
+  }
+
+  @Test
+  @DisplayName("cursor search trims probe row, builds next cursor, and counts only page posts")
+  void searchPostsByCursorTrimsProbeAndCountsOnlyPagePosts() {
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.FREE, null, null, null, 2);
+    Post first = post(1L, LocalDateTime.of(2026, 4, 24, 12, 0));
+    Post second = post(2L, LocalDateTime.of(2026, 4, 24, 11, 0));
+    Post probe = post(3L, LocalDateTime.of(2026, 4, 24, 10, 0));
+
+    when(postPersistencePort.findPostsByCursorCondition(condition, null))
+        .thenReturn(List.of(first, second, probe));
+    when(loadTagPort.findTagsByPostIdsIn(List.of(1L, 2L))).thenReturn(Map.of());
+    when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
+    when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
+    when(countCommentsPort.countCommentsByPostIds(List.of(1L, 2L))).thenReturn(Map.of(2L, 7L));
+    when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
+    when(loadPostImagesPort.loadImagesByPostIds(any())).thenReturn(Map.of());
+
+    SearchPostsCursorResult result = searchPostsService.searchPostsByCursor(condition, 99L);
+
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.posts()).extracting("postId").containsExactly(1L, 2L);
+    assertThat(result.posts().get(1).commentCount()).isEqualTo(7L);
+    assertThat(result.nextCursor()).isNotNull();
+    assertThat(CursorCodec.decode(result.nextCursor(), condition.pageRequest().scope()).id())
+        .isEqualTo(2L);
+    verify(countCommentsPort).countCommentsByPostIds(List.of(1L, 2L));
   }
 
   private Post post(Long id) {
@@ -231,6 +296,20 @@ class SearchPostsServiceTest {
         .content("content")
         .reward(0L)
         .status(PostStatus.OPEN)
+        .build();
+  }
+
+  private Post post(Long id, LocalDateTime createdAt) {
+    return Post.builder()
+        .id(id)
+        .userId(1L)
+        .type(PostType.FREE)
+        .title("title")
+        .content("content")
+        .reward(0L)
+        .status(PostStatus.OPEN)
+        .createdAt(createdAt)
+        .updatedAt(createdAt)
         .build();
   }
 

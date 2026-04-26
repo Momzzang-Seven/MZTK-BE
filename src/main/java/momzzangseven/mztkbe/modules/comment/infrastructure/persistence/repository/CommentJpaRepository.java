@@ -12,15 +12,62 @@ import org.springframework.data.repository.query.Param;
 
 public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
 
+  long countByPostId(Long postId);
+
+  @Query(
+      "SELECT c.postId AS postId, COUNT(c.id) AS commentCount "
+          + "FROM CommentEntity c "
+          + "WHERE c.postId IN :postIds "
+          + "GROUP BY c.postId")
+  List<PostCommentCount> countCommentsByPostIds(@Param("postIds") List<Long> postIds);
+
   // 1. 최상위 댓글 조회
   @Query(
       "SELECT c FROM CommentEntity c WHERE c.postId = :postId AND c.parent IS NULL ORDER BY c.createdAt ASC, c.id ASC")
   Page<CommentEntity> findRootCommentsByPostId(@Param("postId") Long postId, Pageable pageable);
 
+  @Query(
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.postId = :postId AND c.parent IS NULL "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  List<CommentEntity> findRootCommentsByPostIdFirstPage(
+      @Param("postId") Long postId, Pageable pageable);
+
+  @Query(
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.postId = :postId AND c.parent IS NULL "
+          + "AND (c.createdAt > :cursorCreatedAt "
+          + "OR (c.createdAt = :cursorCreatedAt AND c.id > :cursorId)) "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  List<CommentEntity> findRootCommentsByPostIdAfterCursor(
+      @Param("postId") Long postId,
+      @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
   // 2. 대댓글 조회
   @Query(
       "SELECT c FROM CommentEntity c WHERE c.parent.id = :parentId ORDER BY c.createdAt ASC, c.id ASC")
   Page<CommentEntity> findRepliesByParentId(@Param("parentId") Long parentId, Pageable pageable);
+
+  @Query(
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.parent.id = :parentId "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  List<CommentEntity> findRepliesByParentIdFirstPage(
+      @Param("parentId") Long parentId, Pageable pageable);
+
+  @Query(
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.parent.id = :parentId "
+          + "AND (c.createdAt > :cursorCreatedAt "
+          + "OR (c.createdAt = :cursorCreatedAt AND c.id > :cursorId)) "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  List<CommentEntity> findRepliesByParentIdAfterCursor(
+      @Param("parentId") Long parentId,
+      @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
 
   @Query(
       "SELECT c.parent.id AS parentId, COUNT(c.id) AS replyCount "
@@ -49,5 +96,11 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
     Long getParentId();
 
     Long getReplyCount();
+  }
+
+  interface PostCommentCount {
+    Long getPostId();
+
+    Long getCommentCount();
   }
 }
