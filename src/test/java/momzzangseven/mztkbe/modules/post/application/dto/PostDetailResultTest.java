@@ -41,7 +41,7 @@ class PostDetailResultTest {
             new PostImageResult.PostImageSlot(2L, "https://cdn.example.com/img2.webp"));
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 3L, true, nickname, profileImageUrl, images, null);
+        PostDetailResult.fromDomain(post, 3L, 4L, true, nickname, profileImageUrl, images, null);
 
     assertThat(result.postId()).isEqualTo(100L);
     assertThat(result.userId()).isEqualTo(7L);
@@ -53,6 +53,7 @@ class PostDetailResultTest {
             new PostImageResult.PostImageSlot(1L, "https://cdn.example.com/img1.webp"),
             new PostImageResult.PostImageSlot(2L, "https://cdn.example.com/img2.webp"));
     assertThat(result.likeCount()).isEqualTo(3L);
+    assertThat(result.commentCount()).isEqualTo(4L);
     assertThat(result.liked()).isTrue();
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isFalse();
@@ -82,7 +83,7 @@ class PostDetailResultTest {
     String profileImageUrl = "test/image/url";
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 0L, false, nickname, profileImageUrl, null, null);
+        PostDetailResult.fromDomain(post, 0L, 0L, false, nickname, profileImageUrl, null, null);
 
     assertThat(result.isSolved()).isTrue();
     assertThat(result.images()).isEmpty();
@@ -104,7 +105,7 @@ class PostDetailResultTest {
             .build();
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 0L, false, "writer", "profile", null, null);
+        PostDetailResult.fromDomain(post, 0L, 0L, false, "writer", "profile", null, null);
 
     assertThat(result.isSolved()).isTrue();
   }
@@ -124,7 +125,7 @@ class PostDetailResultTest {
             .build();
 
     PostDetailResult result =
-        PostDetailResult.fromDomain(post, 0L, false, "writer", "profile", null, null);
+        PostDetailResult.fromDomain(post, 0L, 0L, false, "writer", "profile", null, null);
 
     assertThat(result.isSolved()).isTrue();
   }

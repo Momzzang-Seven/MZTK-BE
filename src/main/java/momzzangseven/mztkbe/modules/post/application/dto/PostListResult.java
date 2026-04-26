@@ -11,6 +11,7 @@ public record PostListResult(
     String title,
     String content,
     long likeCount,
+    long commentCount,
     boolean liked,
     Long userId,
     String nickname,
@@ -26,9 +27,55 @@ public record PostListResult(
     images = images == null ? List.of() : images;
   }
 
+  public PostListResult(
+      Long postId,
+      PostType type,
+      String title,
+      String content,
+      long likeCount,
+      boolean liked,
+      Long userId,
+      String nickname,
+      String profileImageUrl,
+      Long reward,
+      boolean isSolved,
+      List<String> tags,
+      List<PostImageResult.PostImageSlot> images,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this(
+        postId,
+        type,
+        title,
+        content,
+        likeCount,
+        0L,
+        liked,
+        userId,
+        nickname,
+        profileImageUrl,
+        reward,
+        isSolved,
+        tags,
+        images,
+        createdAt,
+        updatedAt);
+  }
+
   public static PostListResult fromDomain(
       Post post,
       long likeCount,
+      boolean liked,
+      String nickname,
+      String profileImageUrl,
+      List<PostImageResult.PostImageSlot> images) {
+    return fromDomain(post, likeCount, 0L, liked, nickname, profileImageUrl, images);
+  }
+
+  public static PostListResult fromDomain(
+      Post post,
+      long likeCount,
+      long commentCount,
       boolean liked,
       String nickname,
       String profileImageUrl,
@@ -39,6 +86,7 @@ public record PostListResult(
         post.getTitle(),
         post.getContent(),
         likeCount,
+        commentCount,
         liked,
         post.getUserId(),
         nickname,
