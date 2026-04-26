@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.modules.comment.application.dto.CommentedPostRef;
+import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -109,6 +111,30 @@ public class CommentPersistenceAdapter
             Collectors.toMap(
                 CommentJpaRepository.PostCommentCount::getPostId,
                 CommentJpaRepository.PostCommentCount::getCommentCount));
+  }
+
+  @Override
+  public List<CommentedPostRef> findCommentedPostRefsByUserCursor(
+      FindCommentedPostRefsQuery query) {
+    query.validate();
+    List<CommentJpaRepository.CommentedPostRefProjection> refs =
+        query.pageRequest().hasCursor()
+            ? commentRepository.findCommentedPostRefsAfterCursor(
+                query.requesterId(),
+                query.normalizedPostType(),
+                query.pageRequest().cursor().createdAt(),
+                query.pageRequest().cursor().id(),
+                query.pageRequest().limitWithProbe())
+            : commentRepository.findCommentedPostRefsFirstPage(
+                query.requesterId(),
+                query.normalizedPostType(),
+                query.pageRequest().limitWithProbe());
+    return refs.stream()
+        .map(
+            ref ->
+                new CommentedPostRef(
+                    ref.getPostId(), ref.getLatestCommentId(), ref.getLatestCommentedAt()))
+        .toList();
   }
 
   @Override

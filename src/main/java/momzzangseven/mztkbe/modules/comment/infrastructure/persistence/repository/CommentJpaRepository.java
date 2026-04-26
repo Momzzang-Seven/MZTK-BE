@@ -76,6 +76,73 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
           + "GROUP BY c.parent.id")
   List<DirectReplyCount> countDirectRepliesByParentIds(@Param("parentIds") List<Long> parentIds);
 
+  @Query(
+      value =
+          """
+          SELECT ranked.post_id AS "postId",
+                 ranked.latest_comment_id AS "latestCommentId",
+                 ranked.latest_commented_at AS "latestCommentedAt"
+          FROM (
+            SELECT c.post_id,
+                   c.id AS latest_comment_id,
+                   c.created_at AS latest_commented_at,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY c.post_id
+                     ORDER BY c.created_at DESC, c.id DESC
+                   ) AS rn
+            FROM comments c
+            JOIN posts p ON p.id = c.post_id
+            WHERE c.writer_id = :userId
+              AND c.is_deleted = false
+              AND p.type = :postType
+          ) ranked
+          WHERE ranked.rn = 1
+          ORDER BY ranked.latest_commented_at DESC, ranked.latest_comment_id DESC
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<CommentedPostRefProjection> findCommentedPostRefsFirstPage(
+      @Param("userId") Long userId, @Param("postType") String postType, @Param("limit") int limit);
+
+  @Query(
+      value =
+          """
+          SELECT ranked.post_id AS "postId",
+                 ranked.latest_comment_id AS "latestCommentId",
+                 ranked.latest_commented_at AS "latestCommentedAt"
+          FROM (
+            SELECT c.post_id,
+                   c.id AS latest_comment_id,
+                   c.created_at AS latest_commented_at,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY c.post_id
+                     ORDER BY c.created_at DESC, c.id DESC
+                   ) AS rn
+            FROM comments c
+            JOIN posts p ON p.id = c.post_id
+            WHERE c.writer_id = :userId
+              AND c.is_deleted = false
+              AND p.type = :postType
+          ) ranked
+          WHERE ranked.rn = 1
+            AND (
+              ranked.latest_commented_at < :cursorCreatedAt
+              OR (
+                ranked.latest_commented_at = :cursorCreatedAt
+                AND ranked.latest_comment_id < :cursorId
+              )
+            )
+          ORDER BY ranked.latest_commented_at DESC, ranked.latest_comment_id DESC
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<CommentedPostRefProjection> findCommentedPostRefsAfterCursor(
+      @Param("userId") Long userId,
+      @Param("postType") String postType,
+      @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+      @Param("cursorId") Long cursorId,
+      @Param("limit") int limit);
+
   @Modifying(clearAutomatically = true)
   @Query(
       value =
@@ -102,5 +169,13 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
     Long getPostId();
 
     Long getCommentCount();
+  }
+
+  interface CommentedPostRefProjection {
+    Long getPostId();
+
+    Long getLatestCommentId();
+
+    LocalDateTime getLatestCommentedAt();
   }
 }
