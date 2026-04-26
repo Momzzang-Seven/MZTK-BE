@@ -118,6 +118,8 @@ public class SecurityConfig {
                     .authenticated()
 
                     // --- User & Me Endpoints ---
+                    .requestMatchers(HttpMethod.GET, "/users/leaderboard")
+                    .permitAll()
                     .requestMatchers(HttpMethod.GET, "/users/me")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/auth/withdrawal")
