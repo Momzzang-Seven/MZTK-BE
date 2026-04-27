@@ -31,7 +31,7 @@ public class GetMyCommentedPostsCursorService implements GetMyCommentedPostsCurs
     CursorPageRequest pageRequest = command.pageRequest();
     List<CommentedPostRef> refs =
         loadCommentedPostRefsPort.loadCommentedPostRefs(
-            command.requesterId(), command.type(), pageRequest);
+            command.requesterId(), command.type(), command.effectiveSearch(), pageRequest);
     boolean hasNext = refs.size() > pageRequest.size();
     List<CommentedPostRef> pageRefs = hasNext ? refs.subList(0, pageRequest.size()) : refs;
     if (pageRefs.isEmpty()) {

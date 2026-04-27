@@ -177,15 +177,16 @@ class CommentPersistenceAdapterTest {
   @DisplayName("findCommentedPostRefsByUserCursor() uses first-page query when cursor is absent")
   void findCommentedPostRefsByUserCursor_firstPage() {
     CursorPageRequest pageRequest = new CursorPageRequest(null, 2, "scope");
-    FindCommentedPostRefsQuery query = new FindCommentedPostRefsQuery(10L, "free", pageRequest);
+    FindCommentedPostRefsQuery query =
+        new FindCommentedPostRefsQuery(10L, "free", null, pageRequest);
     LocalDateTime latest = LocalDateTime.of(2026, 4, 26, 12, 0);
-    given(commentRepository.findCommentedPostRefsFirstPage(10L, "FREE", 3))
+    given(commentRepository.findCommentedPostRefsFirstPage(10L, "FREE", null, 3))
         .willReturn(List.of(commentedPostRef(100L, 1000L, latest)));
 
     List<LatestCommentedPostRef> refs = adapter.findCommentedPostRefsByUserCursor(query);
 
     assertThat(refs).containsExactly(new LatestCommentedPostRef(100L, 1000L, latest));
-    verify(commentRepository).findCommentedPostRefsFirstPage(10L, "FREE", 3);
+    verify(commentRepository).findCommentedPostRefsFirstPage(10L, "FREE", null, 3);
   }
 
   @Test
@@ -194,12 +195,31 @@ class CommentPersistenceAdapterTest {
     LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 4, 26, 11, 0);
     CursorPageRequest pageRequest =
         new CursorPageRequest(new KeysetCursor(cursorCreatedAt, 900L, "scope"), 2, "scope");
-    FindCommentedPostRefsQuery query = new FindCommentedPostRefsQuery(10L, "QUESTION", pageRequest);
+    FindCommentedPostRefsQuery query =
+        new FindCommentedPostRefsQuery(10L, "QUESTION", null, pageRequest);
+    given(
+            commentRepository.findCommentedPostRefsAfterCursor(
+                10L, "QUESTION", null, cursorCreatedAt, 900L, 3))
+        .willReturn(List.of());
 
     adapter.findCommentedPostRefsByUserCursor(query);
 
     verify(commentRepository)
-        .findCommentedPostRefsAfterCursor(10L, "QUESTION", cursorCreatedAt, 900L, 3);
+        .findCommentedPostRefsAfterCursor(10L, "QUESTION", null, cursorCreatedAt, 900L, 3);
+  }
+
+  @Test
+  @DisplayName("findCommentedPostRefsByUserCursor() escapes LIKE wildcards in title search")
+  void findCommentedPostRefsByUserCursor_escapesSearchPattern() {
+    CursorPageRequest pageRequest = new CursorPageRequest(null, 2, "scope");
+    FindCommentedPostRefsQuery query =
+        new FindCommentedPostRefsQuery(10L, "QUESTION", "  100%_! Form  ", pageRequest);
+    given(commentRepository.findCommentedPostRefsFirstPage(10L, "QUESTION", "100!%!_!! form", 3))
+        .willReturn(List.of());
+
+    adapter.findCommentedPostRefsByUserCursor(query);
+
+    verify(commentRepository).findCommentedPostRefsFirstPage(10L, "QUESTION", "100!%!_!! form", 3);
   }
 
   @Test
