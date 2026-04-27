@@ -29,7 +29,8 @@ class CommentedPostRefServiceTest {
   @DisplayName("validates query and delegates to LoadCommentPort")
   void execute_delegatesToPort() {
     CursorPageRequest pageRequest = new CursorPageRequest(null, 10, "scope");
-    FindCommentedPostRefsQuery query = new FindCommentedPostRefsQuery(1L, "free", pageRequest);
+    FindCommentedPostRefsQuery query =
+        new FindCommentedPostRefsQuery(1L, "free", null, pageRequest);
     LatestCommentedPostRef ref =
         new LatestCommentedPostRef(100L, 10L, LocalDateTime.of(2026, 4, 26, 12, 0));
     given(loadCommentPort.findCommentedPostRefsByUserCursor(query)).willReturn(List.of(ref));

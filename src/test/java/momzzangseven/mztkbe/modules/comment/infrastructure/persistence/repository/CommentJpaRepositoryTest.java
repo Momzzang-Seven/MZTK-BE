@@ -142,7 +142,7 @@ class CommentJpaRepositoryTest {
     persistRoot(1001L, 77L, "deleted-newer", base.plusMinutes(2), true);
 
     List<CommentJpaRepository.CommentedPostRefProjection> refs =
-        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "FREE", 10);
+        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "FREE", null, 10);
 
     assertThat(refs)
         .extracting(
@@ -173,14 +173,14 @@ class CommentJpaRepositoryTest {
         persistRoot(1102L, 77L, "post-1102-latest", base.minusMinutes(3), false);
 
     List<CommentJpaRepository.CommentedPostRefProjection> firstPage =
-        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "FREE", 2);
+        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "FREE", null, 2);
     assertThat(firstPage)
         .extracting(CommentJpaRepository.CommentedPostRefProjection::getPostId)
         .containsExactly(1100L, 1101L);
 
     List<CommentJpaRepository.CommentedPostRefProjection> nextPage =
         commentJpaRepository.findCommentedPostRefsAfterCursor(
-            77L, "FREE", post1101Latest.getCreatedAt(), idOf(post1101Latest), 10);
+            77L, "FREE", null, post1101Latest.getCreatedAt(), idOf(post1101Latest), 10);
 
     assertThat(nextPage)
         .extracting(
@@ -191,6 +191,42 @@ class CommentJpaRepositoryTest {
         .extracting(CommentJpaRepository.CommentedPostRefProjection::getPostId)
         .doesNotContain(1100L);
     assertThat(idOf(post1100Latest)).isNotNull();
+  }
+
+  @Test
+  @DisplayName(
+      "findCommentedPostRefsAfterCursor() filters title search inside commented ref set and treats wildcards literally")
+  void findCommentedPostRefsAfterCursor_filtersTitleSearchInsideCommentedRefSet() {
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
+    persistPost(1200L, "QUESTION", "100%_ Form", base);
+    persistPost(1201L, "QUESTION", "100%_ Second", base);
+    persistPost(1202L, "QUESTION", "100ab Form", base);
+    persistPost(1203L, "QUESTION", "100%_ Other User", base);
+    persistPost(1204L, "QUESTION", "100%_ Deleted", base);
+    CommentEntity matchingLatest =
+        persistRoot(1200L, 77L, "matching latest", base.minusMinutes(1), false);
+    CommentEntity matchingNext =
+        persistRoot(1201L, 77L, "matching next", base.minusMinutes(2), false);
+    persistRoot(1202L, 77L, "wildcard decoy", base.minusMinutes(3), false);
+    persistRoot(1203L, 88L, "other user", base.minusMinutes(4), false);
+    persistRoot(1204L, 77L, "deleted", base.minusMinutes(5), true);
+
+    List<CommentJpaRepository.CommentedPostRefProjection> firstPage =
+        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "QUESTION", "100!%!_", 1);
+    List<CommentJpaRepository.CommentedPostRefProjection> nextPage =
+        commentJpaRepository.findCommentedPostRefsAfterCursor(
+            77L, "QUESTION", "100!%!_", matchingLatest.getCreatedAt(), idOf(matchingLatest), 10);
+
+    assertThat(firstPage)
+        .extracting(
+            CommentJpaRepository.CommentedPostRefProjection::getPostId,
+            CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .containsExactly(org.assertj.core.groups.Tuple.tuple(1200L, idOf(matchingLatest)));
+    assertThat(nextPage)
+        .extracting(
+            CommentJpaRepository.CommentedPostRefProjection::getPostId,
+            CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .containsExactly(org.assertj.core.groups.Tuple.tuple(1201L, idOf(matchingNext)));
   }
 
   @Test
@@ -265,6 +301,10 @@ class CommentJpaRepositoryTest {
   }
 
   private void persistPost(Long postId, String type, LocalDateTime createdAt) {
+    persistPost(postId, type, "QUESTION".equals(type) ? "title" : null, createdAt);
+  }
+
+  private void persistPost(Long postId, String type, String title, LocalDateTime createdAt) {
     jdbcTemplate.update(
         """
         INSERT INTO posts (id, user_id, type, title, content, reward, status, created_at, updated_at)
@@ -273,7 +313,7 @@ class CommentJpaRepositoryTest {
         postId,
         1L,
         type,
-        "QUESTION".equals(type) ? "title" : null,
+        title,
         "content",
         "QUESTION".equals(type) ? 100L : 0L,
         "OPEN",
