@@ -1,13 +1,13 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
 import java.util.Locale;
-import momzzangseven.mztkbe.global.error.post.InvalidLikedPostsQueryException;
+import momzzangseven.mztkbe.global.error.post.InvalidMyPostsQueryException;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorScope;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
-public record GetMyLikedPostsCursorCommand(
-    Long requesterId, PostType type, String search, String cursor, Integer size) {
+public record GetMyPostsCursorCommand(
+    Long requesterId, PostType type, String tag, String search, String cursor, Integer size) {
 
   private static final int DEFAULT_SIZE = 10;
   private static final int MAX_SIZE = 50;
@@ -25,6 +25,10 @@ public record GetMyLikedPostsCursorCommand(
     return pageRequest().size();
   }
 
+  public String tagName() {
+    return normalize(tag);
+  }
+
   public String effectiveSearch() {
     if (type == PostType.FREE) {
       return null;
@@ -33,18 +37,19 @@ public record GetMyLikedPostsCursorCommand(
   }
 
   private String scope() {
-    return CursorScope.likedPosts(requesterId, type.name(), effectiveSearch());
+    return CursorScope.myPosts(
+        requesterId, type == null ? null : type.name(), tagName(), effectiveSearch());
   }
 
   private void validateNonCursorInput() {
     if (requesterId == null || requesterId <= 0) {
-      throw new InvalidLikedPostsQueryException("requesterId must be positive.");
+      throw new InvalidMyPostsQueryException("requesterId must be positive.");
     }
     if (type == null) {
-      throw new InvalidLikedPostsQueryException("type is required.");
+      throw new InvalidMyPostsQueryException("type is required.");
     }
     if (type != PostType.FREE && type != PostType.QUESTION) {
-      throw new InvalidLikedPostsQueryException("type must be FREE or QUESTION.");
+      throw new InvalidMyPostsQueryException("type must be FREE or QUESTION.");
     }
   }
 

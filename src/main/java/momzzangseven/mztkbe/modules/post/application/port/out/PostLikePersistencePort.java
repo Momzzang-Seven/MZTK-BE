@@ -32,5 +32,5 @@ public interface PostLikePersistencePort {
   void deleteByTarget(PostLikeTargetType targetType, Long targetId);
 
   List<LikedPostRow> findLikedPostsByCursor(
-      Long userId, PostType type, CursorPageRequest pageRequest);
+      Long userId, PostType type, String search, CursorPageRequest pageRequest);
 }

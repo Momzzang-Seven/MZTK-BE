@@ -3,11 +3,11 @@ package momzzangseven.mztkbe.modules.post.api.controller;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.post.api.dto.GetMyLikedPostsV2Request;
-import momzzangseven.mztkbe.modules.post.api.dto.GetMyLikedPostsV2Response;
-import momzzangseven.mztkbe.modules.post.application.dto.GetMyLikedPostsCursorCommand;
-import momzzangseven.mztkbe.modules.post.application.dto.GetMyLikedPostsCursorResult;
-import momzzangseven.mztkbe.modules.post.application.port.in.GetMyLikedPostsCursorUseCase;
+import momzzangseven.mztkbe.modules.post.api.dto.GetMyPostsV2Request;
+import momzzangseven.mztkbe.modules.post.api.dto.GetMyPostsV2Response;
+import momzzangseven.mztkbe.modules.post.application.dto.GetMyPostsCursorCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.GetMyPostsCursorResult;
+import momzzangseven.mztkbe.modules.post.application.port.in.GetMyPostsCursorUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,22 +17,23 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-public class PostLikeV2Controller {
+public class MyPostV2Controller {
 
-  private final GetMyLikedPostsCursorUseCase getMyLikedPostsCursorUseCase;
+  private final GetMyPostsCursorUseCase getMyPostsCursorUseCase;
 
-  @GetMapping("/v2/users/me/liked-posts")
-  public ResponseEntity<ApiResponse<GetMyLikedPostsV2Response>> getMyLikedPosts(
+  @GetMapping("/v2/users/me/posts")
+  public ResponseEntity<ApiResponse<GetMyPostsV2Response>> getMyPosts(
       @AuthenticationPrincipal Long userId,
       @RequestParam(required = false) PostType type,
+      @RequestParam(required = false) String tag,
       @RequestParam(required = false) String search,
       @RequestParam(required = false) String cursor,
       @RequestParam(required = false) Integer size) {
     Long validatedUserId = requireUserId(userId);
-    GetMyLikedPostsCursorCommand command =
-        new GetMyLikedPostsV2Request(type, search, cursor, size).toCommand(validatedUserId);
-    GetMyLikedPostsCursorResult result = getMyLikedPostsCursorUseCase.execute(command);
-    return ResponseEntity.ok(ApiResponse.success(GetMyLikedPostsV2Response.from(result)));
+    GetMyPostsCursorCommand command =
+        new GetMyPostsV2Request(type, tag, search, cursor, size).toCommand(validatedUserId);
+    GetMyPostsCursorResult result = getMyPostsCursorUseCase.execute(command);
+    return ResponseEntity.ok(ApiResponse.success(GetMyPostsV2Response.from(result)));
   }
 
   private Long requireUserId(Long userId) {

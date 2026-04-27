@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.global.pagination;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Locale;
 
 public final class CursorScope {
 
@@ -24,6 +25,33 @@ public final class CursorScope {
         "liked-posts|userId=" + userId + "|type=" + normalize(type) + "|sort=LIKE_CREATED_DESC");
   }
 
+  public static String likedPosts(Long userId, String type, String search) {
+    if (search == null || search.isBlank()) {
+      return likedPosts(userId, type);
+    }
+    return hash(
+        "liked-posts|userId="
+            + userId
+            + "|type="
+            + normalize(type)
+            + "|search="
+            + normalize(search)
+            + "|sort=LIKE_CREATED_DESC");
+  }
+
+  public static String myPosts(Long userId, String type, String tag, String search) {
+    return hash(
+        "my-posts|userId="
+            + userId
+            + "|type="
+            + normalize(type)
+            + "|tag="
+            + normalize(tag)
+            + "|search="
+            + normalize(search)
+            + "|sort=POST_CREATED_DESC");
+  }
+
   public static String rootComments(Long postId) {
     return hash("root-comments|postId=" + postId + "|sort=COMMENT_CREATED_ASC");
   }
@@ -36,7 +64,7 @@ public final class CursorScope {
     if (value == null || value.isBlank()) {
       return "";
     }
-    return value.trim().toLowerCase();
+    return value.trim().toLowerCase(Locale.ROOT);
   }
 
   private static String hash(String value) {
