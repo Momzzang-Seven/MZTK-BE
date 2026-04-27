@@ -1352,3 +1352,679 @@ test.describe("마켓플레이스 — 클래스 (Class) API 테스트", () => {
     );
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [그룹 3] 예약 (Reservation) API 테스트
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * 다음 주어진 요일의 날짜를 YYYY-MM-DD 형식으로 반환합니다.
+ * 오늘과 같은 요일이면 다음 주 날짜를 반환합니다.
+ */
+function getNextWeekday(
+  dayName: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY"
+): string {
+  const dayIndex: Record<string, number> = {
+    SUNDAY: 0, MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3,
+    THURSDAY: 4, FRIDAY: 5, SATURDAY: 6,
+  };
+  const target = dayIndex[dayName];
+  // 내일부터 시작해서 목표 요일을 찾습니다 (로컬 시간 기준).
+  const result = new Date();
+  result.setDate(result.getDate() + 1);
+  while (result.getDay() !== target) {
+    result.setDate(result.getDate() + 1);
+  }
+  // 로컬 날짜로 YYYY-MM-DD 포맷 (toISOString은 UTC 기준이라 사용 금지)
+  const yyyy = result.getFullYear();
+  const mm = String(result.getMonth() + 1).padStart(2, "0");
+  const dd = String(result.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * 클래스 상세 조회로 첫 번째 slotId를 가져옵니다.
+ */
+async function getFirstSlotId(
+  apiContext: APIRequestContext,
+  classId: number
+): Promise<number> {
+  const res = await apiContext.get(
+    `${ENV.BACKEND_URL}/marketplace/classes/${classId}`
+  );
+  const body = await res.json();
+  const classTimes: Array<{ timeId: number }> = body?.data?.classTimes ?? [];
+  expect(classTimes.length, "클래스에 슬롯이 없음").toBeGreaterThan(0);
+  return classTimes[0].timeId;
+}
+
+/**
+ * 예약을 생성하고 reservationId를 반환합니다.
+ */
+async function createReservation(
+  apiContext: APIRequestContext,
+  userToken: string,
+  classId: number,
+  slotId: number,
+  reservationDate: string,
+  reservationTime: string,
+  signedAmount: number
+): Promise<number> {
+  const res = await apiContext.post(
+    `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservations`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${userToken}`,
+      },
+      data: {
+        slotId,
+        reservationDate,
+        reservationTime,
+        signedAmount,
+        delegationSignature: "0x" + "a".repeat(130),
+        executionSignature: "0x" + "b".repeat(130),
+      },
+    }
+  );
+  expect(res.status(), `예약 생성 실패 (classId=${classId})`).toBe(200);
+  const body = await res.json();
+  return body?.data?.reservationId as number;
+}
+
+/**
+ * 테스트용 클래스(슬롯 포함)를 등록하고 { classId, slotId, priceAmount, reservationDate, reservationTime }을 반환합니다.
+ */
+async function setupClassWithSlot(
+  apiContext: APIRequestContext,
+  trainerToken: string,
+  dayOfWeek: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY",
+  startTime: string,
+  priceAmount: number
+): Promise<{
+  classId: number;
+  slotId: number;
+  priceAmount: number;
+  reservationDate: string;
+  reservationTime: string;
+}> {
+  const classRes = await apiContext.post(
+    `${ENV.BACKEND_URL}/marketplace/trainer/classes`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${trainerToken}`,
+      },
+      data: {
+        title: `예약테스트 클래스 ${Date.now()}`,
+        category: "PT",
+        description: "예약 E2E 테스트용 클래스",
+        priceAmount,
+        durationMinutes: 60,
+        classTimes: [{ daysOfWeek: [dayOfWeek], startTime, capacity: 5 }],
+      },
+    }
+  );
+  expect(classRes.status(), "클래스 등록 실패").toBe(201);
+  const classId: number = (await classRes.json())?.data?.classId;
+  const slotId = await getFirstSlotId(apiContext, classId);
+  const reservationDate = getNextWeekday(dayOfWeek);
+  return { classId, slotId, priceAmount, reservationDate, reservationTime: startTime };
+}
+
+test.describe("마켓플레이스 — 예약 (Reservation) API 테스트", () => {
+  let trainerToken: string;
+  let otherTrainerToken: string;
+  let userToken: string;
+
+  test.beforeAll(async ({ request }) => {
+    const trainerEmail = `trainer-rv-${Date.now()}@mztk-test.com`;
+    const otherEmail = `trainer-rv-other-${Date.now()}@mztk-test.com`;
+    const userEmail = `user-rv-${Date.now()}@mztk-test.com`;
+
+    trainerToken = await signUpAndLoginAsTrainer(request, trainerEmail);
+    await upsertStore(request, trainerToken);
+
+    otherTrainerToken = await signUpAndLoginAsTrainer(request, otherEmail);
+    await upsertStore(request, otherTrainerToken);
+
+    userToken = await signUpAndLoginAsUser(request, userEmail);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-01: 예약 생성 성공 → 200 + PENDING 상태
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-01: 유효한 요청으로 예약을 생성하면 200과 PENDING 상태를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "MONDAY", "10:00:00", 50000);
+
+    const res = await request.post(
+      `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservations`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        data: {
+          slotId,
+          reservationDate,
+          reservationTime,
+          signedAmount: priceAmount,
+          delegationSignature: "0x" + "a".repeat(130),
+          executionSignature: "0x" + "b".repeat(130),
+        },
+      }
+    );
+
+    expect(res.status(), "예약 생성 실패").toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty("status", "SUCCESS");
+    expect(body.data.reservationId, "reservationId 없음").toBeDefined();
+    expect(body.data.status).toBe("PENDING");
+    console.log(`[TC-RV-01] 예약 생성 성공. reservationId=${body.data.reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-02: 트레이너 승인 → APPROVED
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-02: 트레이너가 예약을 승인하면 200과 APPROVED 상태를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "TUESDAY", "11:00:00", 40000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}/approve`,
+      { headers: { Authorization: `Bearer ${trainerToken}` } }
+    );
+
+    expect(res.status(), "승인 실패").toBe(200);
+    const body = await res.json();
+    expect(body.data.status).toBe("APPROVED");
+    console.log(`[TC-RV-02] 승인 성공. reservationId=${reservationId}, status=APPROVED`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-03: 트레이너 반려 → REJECTED + txHash 존재
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-03: 트레이너가 예약을 반려하면 200과 REJECTED 상태를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "WEDNESDAY", "14:00:00", 30000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}/reject`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${trainerToken}`,
+        },
+        data: { rejectionReason: "해당 시간에 타 일정이 있습니다." },
+      }
+    );
+
+    expect(res.status(), "반려 실패").toBe(200);
+    const body = await res.json();
+    expect(body.data.status).toBe("REJECTED");
+    console.log(`[TC-RV-03] 반려 성공. reservationId=${reservationId}, status=REJECTED`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-04: 유저 취소 → USER_CANCELLED
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-04: 유저가 PENDING 예약을 취소하면 200과 USER_CANCELLED 상태를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "THURSDAY", "09:00:00", 20000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/cancel`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "취소 실패").toBe(200);
+    const body = await res.json();
+    expect(body.data.status).toBe("USER_CANCELLED");
+    console.log(`[TC-RV-04] 취소 성공. reservationId=${reservationId}, status=USER_CANCELLED`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-05: 4주 스케줄 조회 → availableDates 배열 존재
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-05: 클래스 예약 정보 조회 시 200과 availableDates 배열을 반환한다", async ({
+    request,
+  }) => {
+    const { classId } = await setupClassWithSlot(
+      request, trainerToken, "FRIDAY", "08:00:00", 15000
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservation-info`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "스케줄 조회 실패").toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty("status", "SUCCESS");
+    expect(body.data.classId).toBe(classId);
+    expect(Array.isArray(body.data.availableDates), "availableDates가 배열이 아님").toBe(true);
+    expect(body.data.availableDates.length, "28일 내 날짜가 없음").toBeGreaterThan(0);
+    console.log(`[TC-RV-05] 스케줄 조회 성공. classId=${classId}, dates=${body.data.availableDates.length}개`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-06: 가격 불일치 → 400 MARKETPLACE_020
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-06: 서명 금액이 실제 클래스 가격과 다르면 400을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "MONDAY", "13:00:00", 50000);
+
+    const res = await request.post(
+      `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservations`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        data: {
+          slotId,
+          reservationDate,
+          reservationTime,
+          signedAmount: 99999, // 실제 50000과 불일치
+          delegationSignature: "0x" + "a".repeat(130),
+          executionSignature: "0x" + "b".repeat(130),
+        },
+      }
+    );
+
+    expect(res.status(), "가격 불일치인데 400 아님").toBe(400);
+    const body = await res.json();
+    expect(body.code).toBe("MARKETPLACE_020");
+    console.log(`[TC-RV-06] 가격 불일치 방어 확인. code=${body.code}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-07: 슬롯 정원 초과 → 409 MARKETPLACE_017
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-07: 슬롯 정원이 가득 차면 두 번째 예약은 409 SLOT_FULL을 반환한다", async ({
+    request,
+  }) => {
+    // capacity=1 슬롯을 위한 전용 트레이너/클래스
+    const freshEmail = `trainer-cap-${Date.now()}@mztk-test.com`;
+    const freshToken = await signUpAndLoginAsTrainer(request, freshEmail);
+    await upsertStore(request, freshToken);
+
+    const classRes = await request.post(
+      `${ENV.BACKEND_URL}/marketplace/trainer/classes`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${freshToken}`,
+        },
+        data: {
+          title: `정원1 클래스 ${Date.now()}`,
+          category: "PT",
+          description: "정원 초과 테스트",
+          priceAmount: 10000,
+          durationMinutes: 60,
+          classTimes: [{ daysOfWeek: ["TUESDAY"], startTime: "12:00:00", capacity: 1 }],
+        },
+      }
+    );
+    expect(classRes.status()).toBe(201);
+    const classId: number = (await classRes.json()).data.classId;
+    const slotId = await getFirstSlotId(request, classId);
+    const reservationDate = getNextWeekday("TUESDAY");
+
+    const user2Email = `user-cap2-${Date.now()}@mztk-test.com`;
+    const user2Token = await signUpAndLoginAsUser(request, user2Email);
+
+    // 첫 번째 예약 (성공)
+    await createReservation(request, userToken, classId, slotId, reservationDate, "12:00:00", 10000);
+
+    // 두 번째 예약 (409)
+    const res = await request.post(
+      `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservations`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user2Token}`,
+        },
+        data: {
+          slotId,
+          reservationDate,
+          reservationTime: "12:00:00",
+          signedAmount: 10000,
+          delegationSignature: "0x" + "a".repeat(130),
+          executionSignature: "0x" + "b".repeat(130),
+        },
+      }
+    );
+
+    expect(res.status(), "정원 초과인데 409 아님").toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe("MARKETPLACE_017");
+    console.log(`[TC-RV-07] 정원 초과 방어 확인. code=${body.code}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-08: 타인이 예약 취소 시도 → 403
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-08: 예약 소유자가 아닌 다른 유저가 취소하면 403을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "MONDAY", "15:00:00", 20000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const intruderEmail = `user-intruder-${Date.now()}@mztk-test.com`;
+    const intruderToken = await signUpAndLoginAsUser(request, intruderEmail);
+
+    const res = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/cancel`,
+      { headers: { Authorization: `Bearer ${intruderToken}` } }
+    );
+
+    expect(res.status(), "타인 취소인데 403 아님").toBe(403);
+    console.log(`[TC-RV-08] 타인 취소 차단 확인. status=${res.status()}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-09: 타 트레이너가 승인 시도 → 403
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-09: 클래스 소유자가 아닌 트레이너가 승인하면 403을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "WEDNESDAY", "16:00:00", 30000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}/approve`,
+      { headers: { Authorization: `Bearer ${otherTrainerToken}` } }
+    );
+
+    expect(res.status(), "타 트레이너 승인인데 403 아님").toBe(403);
+    console.log(`[TC-RV-09] 타 트레이너 승인 차단 확인. status=${res.status()}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-10: 미인증 예약 생성 → 401
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-10: 인증 없이 예약을 생성하면 401을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "THURSDAY", "10:00:00", 25000);
+
+    const res = await request.post(
+      `${ENV.BACKEND_URL}/marketplace/classes/${classId}/reservations`,
+      {
+        headers: { "Content-Type": "application/json" },
+        data: {
+          slotId,
+          reservationDate,
+          reservationTime,
+          signedAmount: priceAmount,
+          delegationSignature: "0x" + "a".repeat(130),
+          executionSignature: "0x" + "b".repeat(130),
+        },
+      }
+    );
+
+    expect(res.status(), "미인증 예약인데 401 아님").toBe(401);
+    console.log(`[TC-RV-10] 미인증 예약 차단 확인. status=${res.status()}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-11: PENDING 상태에서 완료 시도 → 409 MARKETPLACE_018
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-11: APPROVED 되지 않은 예약을 완료하면 409 INVALID_STATUS를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "FRIDAY", "09:00:00", 20000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations/${reservationId}/complete`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "PENDING 완료인데 409 아님").toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe("MARKETPLACE_018");
+    console.log(`[TC-RV-11] PENDING 완료 차단 확인. code=${body.code}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TC-RV-12: APPROVED 예약을 다시 반려하면 409 INVALID_STATUS를 반환한다
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-12: APPROVED 예약을 다시 반려하면 409 INVALID_STATUS를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "TUESDAY", "17:00:00", 35000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    // 승인
+    const approveRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}/approve`,
+      { headers: { Authorization: `Bearer ${trainerToken}` } }
+    );
+    expect(approveRes.status(), "승인 실패").toBe(200);
+    expect((await approveRes.json()).data.status).toBe("APPROVED");
+
+    // APPROVED 상태에서 반려 시도
+    const rejectRes = await request.patch(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}/reject`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${trainerToken}`,
+        },
+        data: { rejectionReason: "취소 시도" },
+      }
+    );
+
+    expect(rejectRes.status(), "APPROVED → 반려인데 409 아님").toBe(409);
+    const body = await rejectRes.json();
+    expect(body.code).toBe("MARKETPLACE_018");
+    console.log(`[TC-RV-12] APPROVED 상태에서 반려 차단 확인. code=${body.code}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-13: 내 예약 목록 조회 — 본인 예약만 반환
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-13: 내 예약 목록 조회 시 본인 예약만 반환된다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "WEDNESDAY", "08:00:00", 10000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "내 예약 목록 조회 실패").toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("SUCCESS");
+    expect(Array.isArray(body.data), "data가 배열이 아님").toBe(true);
+
+    const found = body.data.some(
+      (r: { reservationId: number }) => r.reservationId === reservationId
+    );
+    expect(found, "본인 예약이 목록에 없음").toBe(true);
+    console.log(`[TC-RV-13] 내 예약 목록 조회 성공. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-14: 내 예약 목록 — status=PENDING 필터
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-14: status=PENDING 필터 적용 시 PENDING 예약만 반환된다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "THURSDAY", "09:00:00", 12000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations?status=PENDING`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "PENDING 필터 조회 실패").toBe(200);
+    const body = await res.json();
+    const found = body.data.some(
+      (r: { reservationId: number; status: string }) =>
+        r.reservationId === reservationId && r.status === "PENDING"
+    );
+    expect(found, "PENDING 예약이 필터 결과에 없음").toBe(true);
+
+    // APPROVED 필터에는 포함되지 않아야 함
+    const approvedRes = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/me/reservations?status=APPROVED`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+    const approvedBody = await approvedRes.json();
+    const notFound = approvedBody.data.every(
+      (r: { reservationId: number }) => r.reservationId !== reservationId
+    );
+    expect(notFound, "PENDING 예약이 APPROVED 필터에 노출됨").toBe(true);
+    console.log(`[TC-RV-14] 상태 필터 정상 동작. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-15: 예약 상세 조회 — 소유 유저 성공
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-15: 예약 소유자가 상세 조회 시 200과 전체 필드를 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "FRIDAY", "11:00:00", 15000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${userToken}` } }
+    );
+
+    expect(res.status(), "예약 상세 조회 실패").toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("SUCCESS");
+    const data = body.data;
+    expect(data.reservationId).toBe(reservationId);
+    expect(data.status).toBe("PENDING");
+    expect(data.orderId, "orderId 없음").toBeTruthy();
+    expect(data.txHash, "txHash 없음").toBeTruthy();
+    console.log(`[TC-RV-15] 예약 상세 조회 성공. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-16: 예약 상세 조회 — 담당 트레이너 성공
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-16: 담당 트레이너가 예약 상세 조회 시 200을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "MONDAY", "13:00:00", 18000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${trainerToken}` } }
+    );
+
+    expect(res.status(), "트레이너 상세 조회 실패").toBe(200);
+    const data = (await res.json()).data;
+    expect(data.reservationId).toBe(reservationId);
+    console.log(`[TC-RV-16] 트레이너 예약 상세 조회 성공. reservationId=${reservationId}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-17: 예약 상세 조회 — 제3자 접근 시 403
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-17: 제3자가 예약 상세 조회 시 403 Forbidden을 반환한다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "TUESDAY", "15:00:00", 10000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    // 제3자 계정 생성
+    const intruderEmail = `intruder-rv17-${Date.now()}@mztk-test.com`;
+    const intruderToken = await signUpAndLoginAsUser(request, intruderEmail);
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/reservations/${reservationId}`,
+      { headers: { Authorization: `Bearer ${intruderToken}` } }
+    );
+
+    expect(res.status(), "제3자 접근인데 403 아님").toBe(403);
+    console.log(`[TC-RV-17] 제3자 접근 차단 확인: ${res.status()}`);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [조회] TC-RV-18: 트레이너 수강 신청 목록 조회
+  // ──────────────────────────────────────────────────────────────────────────
+  test("TC-RV-18: 트레이너가 수강 신청 목록 조회 시 본인 클래스 예약만 반환된다", async ({
+    request,
+  }) => {
+    const { classId, slotId, priceAmount, reservationDate, reservationTime } =
+      await setupClassWithSlot(request, trainerToken, "WEDNESDAY", "10:00:00", 20000);
+    const reservationId = await createReservation(
+      request, userToken, classId, slotId, reservationDate, reservationTime, priceAmount
+    );
+
+    const res = await request.get(
+      `${ENV.BACKEND_URL}/marketplace/trainer/reservations`,
+      { headers: { Authorization: `Bearer ${trainerToken}` } }
+    );
+
+    expect(res.status(), "트레이너 목록 조회 실패").toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("SUCCESS");
+    expect(Array.isArray(body.data)).toBe(true);
+
+    const found = body.data.some(
+      (r: { reservationId: number }) => r.reservationId === reservationId
+    );
+    expect(found, "트레이너 목록에 예약이 없음").toBe(true);
+    console.log(`[TC-RV-18] 트레이너 수강 신청 목록 조회 성공. reservationId=${reservationId}`);
+  });
+});

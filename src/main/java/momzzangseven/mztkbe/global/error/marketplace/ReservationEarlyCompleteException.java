@@ -11,4 +11,9 @@ public class ReservationEarlyCompleteException extends BusinessException {
         ErrorCode.MARKETPLACE_RESERVATION_EARLY_COMPLETE,
         "Cannot complete reservation before the class starts: reservationId=" + reservationId);
   }
+
+  /** Used when reservation ID is already available in context. */
+  public ReservationEarlyCompleteException() {
+    super(ErrorCode.MARKETPLACE_RESERVATION_EARLY_COMPLETE);
+  }
 }
