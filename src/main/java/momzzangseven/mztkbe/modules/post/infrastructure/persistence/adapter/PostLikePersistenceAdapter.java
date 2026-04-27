@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
+import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.post.application.port.out.LikedPostRow;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -194,10 +195,6 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
     if (!hasLikedPostSearch(type, search)) {
       return null;
     }
-    return postEntity.title.lower().like("%" + escapeLikePattern(search) + "%", '!');
-  }
-
-  private String escapeLikePattern(String search) {
-    return search.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    return postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
   }
 }

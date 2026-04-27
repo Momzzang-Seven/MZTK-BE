@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.integration.e2e.post;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
@@ -19,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @TestPropertySource(
     properties = {
@@ -76,6 +78,14 @@ class PostV2CursorE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody());
   }
 
+  private JsonNode fetchPosts(URI uri) throws Exception {
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            uri, HttpMethod.GET, new HttpEntity<>(bearerJsonHeaders(accessToken)), String.class);
+    assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+    return objectMapper.readTree(res.getBody());
+  }
+
   @Test
   @DisplayName("[E-1] 태그 검색 cursor는 search 대소문자가 달라도 다음 페이지를 조회한다")
   void getPostsV2_withTagAndDifferentSearchCase_returnsNextPage() throws Exception {
@@ -111,5 +121,47 @@ class PostV2CursorE2ETest extends E2ETestBase {
     JsonNode secondPage = fetchPosts("?type=QUESTION&search=mixedcase&size=1&cursor=" + nextCursor);
 
     assertThat(secondPage.at("/data/posts/0/postId").asLong()).isEqualTo(olderPostId);
+  }
+
+  @Test
+  @DisplayName("[E-3] 태그 없는 검색은 wildcard 문자를 literal로 처리한다")
+  void getPostsV2_withoutTag_searchTreatsWildcardsLiterally() throws Exception {
+    createQuestionPost("100ab form decoy", List.of());
+    Long literalMatchPostId = createQuestionPost("100%_ form match", List.of());
+
+    JsonNode response =
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("search", "100%_")
+                .build()
+                .encode()
+                .toUri());
+
+    assertThat(response.at("/data/posts").size()).isEqualTo(1);
+    assertThat(response.at("/data/posts/0/postId").asLong()).isEqualTo(literalMatchPostId);
+    assertThat(response.at("/data/posts/0/title").asText()).isEqualTo("100%_ form match");
+  }
+
+  @Test
+  @DisplayName("[E-4] 태그 검색은 wildcard 문자를 literal로 처리한다")
+  void getPostsV2_withTag_searchTreatsWildcardsLiterally() throws Exception {
+    createQuestionPost("100ab form tagged decoy", List.of("java"));
+    Long literalMatchPostId = createQuestionPost("100%_ form tagged match", List.of("java"));
+    createQuestionPost("100%_ form other tag", List.of("spring"));
+
+    JsonNode response =
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("tag", "java")
+                .queryParam("search", "100%_")
+                .build()
+                .encode()
+                .toUri());
+
+    assertThat(response.at("/data/posts").size()).isEqualTo(1);
+    assertThat(response.at("/data/posts/0/postId").asLong()).isEqualTo(literalMatchPostId);
+    assertThat(response.at("/data/posts/0/title").asText()).isEqualTo("100%_ form tagged match");
   }
 }

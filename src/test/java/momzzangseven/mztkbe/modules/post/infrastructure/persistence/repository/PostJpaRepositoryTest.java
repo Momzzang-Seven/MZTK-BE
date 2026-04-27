@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -24,6 +25,28 @@ class PostJpaRepositoryTest {
   @Autowired private PostJpaRepository postJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private EntityManager entityManager;
+
+  @Test
+  @DisplayName("public posts tag query treats wildcard characters in search literally")
+  void findPostsByConditionWithTagFirstPageNative_treatsWildcardsLiterally() {
+    LocalDateTime base = LocalDateTime.of(2026, 4, 27, 12, 0);
+    Long literalTagId = persistTag("literal");
+    PostEntity literalMatch = persistPost(7L, PostType.QUESTION, "100%_ form", "content", base);
+    PostEntity wildcardDecoy =
+        persistPost(7L, PostType.QUESTION, "100ab form", "content", base.minusMinutes(1));
+    PostEntity otherTag =
+        persistPost(7L, PostType.QUESTION, "100%_ form other tag", "content", base.minusMinutes(2));
+    linkTag(literalMatch.getId(), literalTagId);
+    linkTag(wildcardDecoy.getId(), literalTagId);
+    linkTag(otherTag.getId(), persistTag("other"));
+    entityManager.clear();
+
+    List<PostEntity> results =
+        postJpaRepository.findPostsByConditionWithTagFirstPageNative(
+            "QUESTION", LikePatternEscaper.escape("100%_ form"), literalTagId, 10);
+
+    assertThat(results).extracting(PostEntity::getId).containsExactly(literalMatch.getId());
+  }
 
   @Test
   @DisplayName("authored posts query filters by author and board type")

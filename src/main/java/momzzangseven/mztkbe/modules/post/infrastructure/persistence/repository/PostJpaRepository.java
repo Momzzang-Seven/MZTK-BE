@@ -37,7 +37,7 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
           SELECT p.*
           FROM posts p
           WHERE (:type IS NULL OR p.type = :type)
-            AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%'))
+            AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!')
             AND EXISTS (
               SELECT 1
               FROM post_tags pt
@@ -60,7 +60,7 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
           SELECT p.*
           FROM posts p
           WHERE (:type IS NULL OR p.type = :type)
-            AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%'))
+            AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!')
             AND EXISTS (
               SELECT 1
               FROM post_tags pt
