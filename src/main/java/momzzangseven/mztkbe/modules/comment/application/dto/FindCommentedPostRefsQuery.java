@@ -5,7 +5,7 @@ import java.util.Set;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 
 public record FindCommentedPostRefsQuery(
-    Long requesterId, String postType, CursorPageRequest pageRequest) {
+    Long requesterId, String postType, String search, CursorPageRequest pageRequest) {
 
   private static final Set<String> SUPPORTED_POST_TYPES = Set.of("FREE", "QUESTION");
 
@@ -26,5 +26,15 @@ public record FindCommentedPostRefsQuery(
 
   public String normalizedPostType() {
     return postType.trim().toUpperCase(Locale.ROOT);
+  }
+
+  public String normalizedSearch() {
+    if (postType == null || postType.isBlank() || search == null || search.isBlank()) {
+      return null;
+    }
+    if (!"QUESTION".equals(normalizedPostType())) {
+      return null;
+    }
+    return search.trim().toLowerCase(Locale.ROOT);
   }
 }

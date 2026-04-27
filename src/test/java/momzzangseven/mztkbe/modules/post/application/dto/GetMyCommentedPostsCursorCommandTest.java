@@ -21,7 +21,7 @@ class GetMyCommentedPostsCursorCommandTest {
   @DisplayName("applies default size when size is null")
   void pageRequest_appliesDefaultSize() {
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, null, null);
+        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, null, null, null);
 
     CursorPageRequest pageRequest = command.pageRequest();
 
@@ -33,7 +33,7 @@ class GetMyCommentedPostsCursorCommandTest {
   @DisplayName("allows max size boundary")
   void pageRequest_allowsMaxSize() {
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(1L, PostType.QUESTION, null, 50);
+        new GetMyCommentedPostsCursorCommand(1L, PostType.QUESTION, null, null, 50);
 
     CursorPageRequest pageRequest = command.pageRequest();
 
@@ -45,7 +45,7 @@ class GetMyCommentedPostsCursorCommandTest {
   @DisplayName("rejects size over max")
   void pageRequest_rejectsSizeOverMax() {
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, null, 51);
+        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, null, null, 51);
 
     assertThatThrownBy(command::pageRequest).isInstanceOf(InvalidCursorException.class);
   }
@@ -54,7 +54,7 @@ class GetMyCommentedPostsCursorCommandTest {
   @DisplayName("rejects null requester id")
   void validate_rejectsNullRequesterId() {
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(null, PostType.FREE, null, 10);
+        new GetMyCommentedPostsCursorCommand(null, PostType.FREE, null, null, 10);
 
     assertThatThrownBy(command::validate).isInstanceOf(PostInvalidInputException.class);
   }
@@ -63,7 +63,7 @@ class GetMyCommentedPostsCursorCommandTest {
   @DisplayName("rejects non-positive requester id")
   void validate_rejectsNonPositiveRequesterId() {
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(0L, PostType.FREE, null, 10);
+        new GetMyCommentedPostsCursorCommand(0L, PostType.FREE, null, null, 10);
 
     assertThatThrownBy(command::validate).isInstanceOf(PostInvalidInputException.class);
   }
@@ -72,7 +72,7 @@ class GetMyCommentedPostsCursorCommandTest {
   @DisplayName("rejects null type")
   void validate_rejectsNullType() {
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(1L, null, null, 10);
+        new GetMyCommentedPostsCursorCommand(1L, null, null, null, 10);
 
     assertThatThrownBy(command::validate).isInstanceOf(PostInvalidInputException.class);
   }
@@ -84,7 +84,7 @@ class GetMyCommentedPostsCursorCommandTest {
     String cursor =
         CursorCodec.encode(new KeysetCursor(LocalDateTime.of(2026, 4, 26, 12, 0), 10L, otherScope));
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, cursor, 10);
+        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, null, cursor, 10);
 
     assertThatThrownBy(command::pageRequest).isInstanceOf(InvalidCursorException.class);
   }
@@ -96,8 +96,42 @@ class GetMyCommentedPostsCursorCommandTest {
     String cursor =
         CursorCodec.encode(new KeysetCursor(LocalDateTime.of(2026, 4, 26, 12, 0), 10L, otherScope));
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, cursor, 10);
+        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, null, cursor, 10);
 
     assertThatThrownBy(command::pageRequest).isInstanceOf(InvalidCursorException.class);
+  }
+
+  @Test
+  @DisplayName("normalizes search for QUESTION and ignores search for FREE")
+  void effectiveSearch_normalizesQuestionOnly() {
+    GetMyCommentedPostsCursorCommand questionCommand =
+        new GetMyCommentedPostsCursorCommand(1L, PostType.QUESTION, "  FoRm  ", null, 10);
+    GetMyCommentedPostsCursorCommand freeCommand =
+        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, "  FoRm  ", null, 10);
+
+    assertThat(questionCommand.effectiveSearch()).isEqualTo("form");
+    assertThat(freeCommand.effectiveSearch()).isNull();
+  }
+
+  @Test
+  @DisplayName("rejects cursor from different search scope")
+  void pageRequest_rejectsCursorSearchScopeMismatch() {
+    String originalScope = CursorScope.commentedPosts(1L, PostType.QUESTION.name(), "form");
+    String cursor =
+        CursorCodec.encode(
+            new KeysetCursor(LocalDateTime.of(2026, 4, 26, 12, 0), 10L, originalScope));
+    GetMyCommentedPostsCursorCommand command =
+        new GetMyCommentedPostsCursorCommand(1L, PostType.QUESTION, "other", cursor, 10);
+
+    assertThatThrownBy(command::pageRequest).isInstanceOf(InvalidCursorException.class);
+  }
+
+  @Test
+  @DisplayName("validate rejects malformed cursor")
+  void validate_rejectsMalformedCursor() {
+    GetMyCommentedPostsCursorCommand command =
+        new GetMyCommentedPostsCursorCommand(1L, PostType.FREE, null, "%%%", 10);
+
+    assertThatThrownBy(command::validate).isInstanceOf(InvalidCursorException.class);
   }
 }

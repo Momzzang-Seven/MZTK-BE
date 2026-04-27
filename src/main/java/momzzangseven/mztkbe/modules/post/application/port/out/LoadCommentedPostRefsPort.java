@@ -7,5 +7,5 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 public interface LoadCommentedPostRefsPort {
 
   List<CommentedPostRef> loadCommentedPostRefs(
-      Long requesterId, PostType type, CursorPageRequest pageRequest);
+      Long requesterId, PostType type, String search, CursorPageRequest pageRequest);
 }

@@ -95,6 +95,7 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
             WHERE c.writer_id = :userId
               AND c.is_deleted = false
               AND p.type = :postType
+              AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!')
           ) ranked
           WHERE ranked.rn = 1
           ORDER BY ranked.latest_commented_at DESC, ranked.latest_comment_id DESC
@@ -102,7 +103,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
           """,
       nativeQuery = true)
   List<CommentedPostRefProjection> findCommentedPostRefsFirstPage(
-      @Param("userId") Long userId, @Param("postType") String postType, @Param("limit") int limit);
+      @Param("userId") Long userId,
+      @Param("postType") String postType,
+      @Param("search") String search,
+      @Param("limit") int limit);
 
   @Query(
       value =
@@ -123,6 +127,7 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
             WHERE c.writer_id = :userId
               AND c.is_deleted = false
               AND p.type = :postType
+              AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!')
           ) ranked
           WHERE ranked.rn = 1
             AND (
@@ -139,6 +144,7 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
   List<CommentedPostRefProjection> findCommentedPostRefsAfterCursor(
       @Param("userId") Long userId,
       @Param("postType") String postType,
+      @Param("search") String search,
       @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
       @Param("cursorId") Long cursorId,
       @Param("limit") int limit);

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -43,7 +44,7 @@ class GetMyCommentedPostsCursorServiceTest {
   void execute_trimsProbeAndBuildsCursor() {
     LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(10L, PostType.FREE, null, 2);
+        new GetMyCommentedPostsCursorCommand(10L, PostType.FREE, null, null, 2);
     CommentedPostRef first = new CommentedPostRef(100L, 1000L, base);
     CommentedPostRef second = new CommentedPostRef(200L, 900L, base.minusMinutes(1));
     CommentedPostRef probe = new CommentedPostRef(300L, 800L, base.minusMinutes(2));
@@ -52,7 +53,9 @@ class GetMyCommentedPostsCursorServiceTest {
     PostListResult firstResult = result(100L, PostType.FREE, base);
     PostListResult secondResult = result(200L, PostType.FREE, base.minusMinutes(1));
 
-    given(loadCommentedPostRefsPort.loadCommentedPostRefs(eq(10L), eq(PostType.FREE), any()))
+    given(
+            loadCommentedPostRefsPort.loadCommentedPostRefs(
+                eq(10L), eq(PostType.FREE), isNull(), any()))
         .willReturn(List.of(first, second, probe));
     given(postPersistencePort.loadPostsByIdsPreservingOrder(List.of(100L, 200L)))
         .willReturn(List.of(firstPost, secondPost));
@@ -70,7 +73,7 @@ class GetMyCommentedPostsCursorServiceTest {
     ArgumentCaptor<CursorPageRequest> pageRequestCaptor =
         ArgumentCaptor.forClass(CursorPageRequest.class);
     verify(loadCommentedPostRefsPort)
-        .loadCommentedPostRefs(eq(10L), eq(PostType.FREE), pageRequestCaptor.capture());
+        .loadCommentedPostRefs(eq(10L), eq(PostType.FREE), isNull(), pageRequestCaptor.capture());
     assertThat(pageRequestCaptor.getValue().limitWithProbe()).isEqualTo(3);
   }
 
@@ -78,8 +81,10 @@ class GetMyCommentedPostsCursorServiceTest {
   @DisplayName("returns empty without post load when there are no comment refs")
   void execute_emptyRefs_returnsEmpty() {
     GetMyCommentedPostsCursorCommand command =
-        new GetMyCommentedPostsCursorCommand(10L, PostType.QUESTION, null, 10);
-    given(loadCommentedPostRefsPort.loadCommentedPostRefs(eq(10L), eq(PostType.QUESTION), any()))
+        new GetMyCommentedPostsCursorCommand(10L, PostType.QUESTION, " Form ", null, 10);
+    given(
+            loadCommentedPostRefsPort.loadCommentedPostRefs(
+                eq(10L), eq(PostType.QUESTION), eq("form"), any()))
         .willReturn(List.of());
 
     GetMyCommentedPostsCursorResult result = service.execute(command);
@@ -87,6 +92,8 @@ class GetMyCommentedPostsCursorServiceTest {
     assertThat(result.posts()).isEmpty();
     assertThat(result.hasNext()).isFalse();
     assertThat(result.nextCursor()).isNull();
+    verify(loadCommentedPostRefsPort)
+        .loadCommentedPostRefs(eq(10L), eq(PostType.QUESTION), eq("form"), any());
     verify(postPersistencePort, never()).loadPostsByIdsPreservingOrder(any());
     verify(postListEnricher, never()).enrich(any(), any());
   }
