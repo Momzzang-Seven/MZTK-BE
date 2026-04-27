@@ -43,4 +43,18 @@ class CursorScopeTest {
     assertThat(base).isNotEqualTo(otherSearch);
     assertThat(base).isEqualTo(normalized);
   }
+
+  @Test
+  @DisplayName("commented posts scope changes by search and keeps blank search compatible")
+  void commentedPostsScopeIncludesSearchWhenPresent() {
+    String noSearch = CursorScope.commentedPosts(1L, PostType.QUESTION.name());
+    String blankSearch = CursorScope.commentedPosts(1L, PostType.QUESTION.name(), " ");
+    String formSearch = CursorScope.commentedPosts(1L, PostType.QUESTION.name(), " FoRm ");
+    String otherSearch = CursorScope.commentedPosts(1L, PostType.QUESTION.name(), "other");
+
+    assertThat(blankSearch).isEqualTo(noSearch);
+    assertThat(formSearch).isNotEqualTo(noSearch);
+    assertThat(formSearch).isNotEqualTo(otherSearch);
+    assertThat(formSearch).isEqualTo(CursorScope.commentedPosts(1L, "question", "form"));
+  }
 }

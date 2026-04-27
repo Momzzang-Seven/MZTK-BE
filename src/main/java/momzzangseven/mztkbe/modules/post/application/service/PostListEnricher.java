@@ -29,23 +29,31 @@ public class PostListEnricher {
   private final PostLikePersistencePort postLikePersistencePort;
   private final LoadPostImagesPort loadPostImagesPort;
 
-  public List<PostListResult> enrich(List<Post> pagePosts, Long requesterUserId) {
-    List<Long> postIds = pagePosts.stream().map(Post::getId).toList();
+  public List<PostListResult> enrich(List<Post> posts, Long requesterUserId) {
+    if (posts == null || posts.isEmpty()) {
+      return List.of();
+    }
+
+    List<Long> postIds = posts.stream().map(Post::getId).toList();
     Set<Long> likedPostIds =
         postLikePersistencePort.findLikedTargetIds(
             PostLikeTargetType.POST, postIds, requesterUserId);
-    return enrich(pagePosts, postIds, likedPostIds == null ? Set.of() : likedPostIds, false);
+    return enrich(posts, postIds, likedPostIds == null ? Set.of() : likedPostIds, false);
   }
 
-  public List<PostListResult> enrichAllLiked(List<Post> pagePosts) {
-    List<Long> postIds = pagePosts.stream().map(Post::getId).toList();
-    return enrich(pagePosts, postIds, Set.of(), true);
+  public List<PostListResult> enrichAllLiked(List<Post> posts) {
+    if (posts == null || posts.isEmpty()) {
+      return List.of();
+    }
+
+    List<Long> postIds = posts.stream().map(Post::getId).toList();
+    return enrich(posts, postIds, Set.of(), true);
   }
 
   private List<PostListResult> enrich(
-      List<Post> pagePosts, List<Long> postIds, Set<Long> likedPostIds, boolean allLiked) {
+      List<Post> posts, List<Long> postIds, Set<Long> likedPostIds, boolean allLiked) {
     Map<Long, List<String>> tagMap = loadTagPort.findTagsByPostIdsIn(postIds);
-    Set<Long> userIds = pagePosts.stream().map(Post::getUserId).collect(Collectors.toSet());
+    Set<Long> userIds = posts.stream().map(Post::getUserId).collect(Collectors.toSet());
     Map<Long, WriterSummary> writerMap = loadPostWriterPort.loadWritersByIds(userIds);
     Map<Long, Long> likeCounts =
         postLikePersistencePort.countByTargetIds(PostLikeTargetType.POST, postIds);
@@ -53,14 +61,14 @@ public class PostListEnricher {
     Map<Long, Long> commentCounts = loadedCommentCounts == null ? Map.of() : loadedCommentCounts;
 
     Map<PostType, List<Long>> postIdsByType =
-        pagePosts.stream()
+        posts.stream()
             .collect(
                 Collectors.groupingBy(
                     Post::getType, Collectors.mapping(Post::getId, Collectors.toList())));
     Map<Long, PostImageResult> imagesByPostId =
         loadPostImagesPort.loadImagesByPostIds(postIdsByType);
 
-    return pagePosts.stream()
+    return posts.stream()
         .map(
             post -> {
               List<String> tags = tagMap.getOrDefault(post.getId(), Collections.emptyList());

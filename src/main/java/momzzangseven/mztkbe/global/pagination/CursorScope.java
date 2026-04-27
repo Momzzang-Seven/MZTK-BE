@@ -60,6 +60,29 @@ public final class CursorScope {
     return hash("replies|parentCommentId=" + parentCommentId + "|sort=COMMENT_CREATED_ASC");
   }
 
+  public static String commentedPosts(Long userId, String type) {
+    return hash(
+        "commented-posts|userId="
+            + userId
+            + "|type="
+            + normalize(type)
+            + "|sort=COMMENT_ACTIVITY_DESC");
+  }
+
+  public static String commentedPosts(Long userId, String type, String search) {
+    if (search == null || search.isBlank()) {
+      return commentedPosts(userId, type);
+    }
+    return hash(
+        "commented-posts|userId="
+            + userId
+            + "|type="
+            + normalize(type)
+            + "|search="
+            + normalize(search)
+            + "|sort=COMMENT_ACTIVITY_DESC");
+  }
+
   private static String normalize(String value) {
     if (value == null || value.isBlank()) {
       return "";
