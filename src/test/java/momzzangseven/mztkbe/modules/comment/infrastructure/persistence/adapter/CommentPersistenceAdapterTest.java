@@ -14,8 +14,8 @@ import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
-import momzzangseven.mztkbe.modules.comment.application.dto.CommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
@@ -182,9 +182,9 @@ class CommentPersistenceAdapterTest {
     given(commentRepository.findCommentedPostRefsFirstPage(10L, "FREE", 3))
         .willReturn(List.of(commentedPostRef(100L, 1000L, latest)));
 
-    List<CommentedPostRef> refs = adapter.findCommentedPostRefsByUserCursor(query);
+    List<LatestCommentedPostRef> refs = adapter.findCommentedPostRefsByUserCursor(query);
 
-    assertThat(refs).containsExactly(new CommentedPostRef(100L, 1000L, latest));
+    assertThat(refs).containsExactly(new LatestCommentedPostRef(100L, 1000L, latest));
     verify(commentRepository).findCommentedPostRefsFirstPage(10L, "FREE", 3);
   }
 
