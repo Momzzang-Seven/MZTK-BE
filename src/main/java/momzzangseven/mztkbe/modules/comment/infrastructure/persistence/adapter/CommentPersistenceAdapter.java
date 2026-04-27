@@ -7,8 +7,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
-import momzzangseven.mztkbe.modules.comment.application.dto.CommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -114,7 +114,7 @@ public class CommentPersistenceAdapter
   }
 
   @Override
-  public List<CommentedPostRef> findCommentedPostRefsByUserCursor(
+  public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
       FindCommentedPostRefsQuery query) {
     query.validate();
     List<CommentJpaRepository.CommentedPostRefProjection> refs =
@@ -132,7 +132,7 @@ public class CommentPersistenceAdapter
     return refs.stream()
         .map(
             ref ->
-                new CommentedPostRef(
+                new LatestCommentedPostRef(
                     ref.getPostId(), ref.getLatestCommentId(), ref.getLatestCommentedAt()))
         .toList();
   }
