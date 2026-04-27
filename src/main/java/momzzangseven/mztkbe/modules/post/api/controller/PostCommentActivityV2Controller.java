@@ -23,7 +23,7 @@ public class PostCommentActivityV2Controller {
   @GetMapping("/v2/users/me/commented-posts")
   public ResponseEntity<ApiResponse<GetMyCommentedPostsV2Response>> getMyCommentedPosts(
       @AuthenticationPrincipal Long userId,
-      @RequestParam PostType type,
+      @RequestParam(required = false) PostType type,
       @RequestParam(required = false) String search,
       @RequestParam(required = false) String cursor,
       @RequestParam(required = false) Integer size) {

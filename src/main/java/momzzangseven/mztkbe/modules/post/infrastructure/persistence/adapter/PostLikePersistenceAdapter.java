@@ -123,7 +123,7 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
             postLikeEntity.targetType.eq(PostLikeTargetType.POST),
             postLikeEntity.targetId.eq(postEntity.id),
             postEntity.type.eq(type),
-            postEntity.title.containsIgnoreCase(search),
+            likedSearchPredicate(type, search),
             likedCursorBefore(pageRequest))
         .orderBy(postLikeEntity.createdAt.desc(), postLikeEntity.id.desc())
         .limit(pageRequest.limitWithProbe())
@@ -188,5 +188,16 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
 
   private boolean hasLikedPostSearch(PostType type, String search) {
     return type != PostType.FREE && StringUtils.hasText(search);
+  }
+
+  private BooleanExpression likedSearchPredicate(PostType type, String search) {
+    if (!hasLikedPostSearch(type, search)) {
+      return null;
+    }
+    return postEntity.title.lower().like("%" + escapeLikePattern(search) + "%", '!');
+  }
+
+  private String escapeLikePattern(String search) {
+    return search.replace("!", "!!").replace("%", "!%").replace("_", "!_");
   }
 }

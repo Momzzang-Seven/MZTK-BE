@@ -231,7 +231,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
         .where(
             postEntity.userId.eq(authorId),
             eqType(type),
-            containsCursorSearch(type, search),
+            containsLiteralCursorSearch(type, search),
             hasTagId(tagId),
             cursorBefore(pageRequest))
         .orderBy(postEntity.createdAt.desc(), postEntity.id.desc())
@@ -271,6 +271,20 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
         .from(postTagEntity)
         .where(postTagEntity.postId.eq(postEntity.id), postTagEntity.tagId.eq(tagId))
         .exists();
+  }
+
+  private BooleanExpression containsLiteralCursorSearch(PostType type, String search) {
+    if (!StringUtils.hasText(search)) {
+      return null;
+    }
+    if (type == PostType.FREE) {
+      return null;
+    }
+    return postEntity.title.lower().like("%" + escapeLikePattern(search) + "%", '!');
+  }
+
+  private String escapeLikePattern(String search) {
+    return search.replace("!", "!!").replace("%", "!%").replace("_", "!_");
   }
 
   private boolean hasAuthorSearch(PostType type, String search) {
