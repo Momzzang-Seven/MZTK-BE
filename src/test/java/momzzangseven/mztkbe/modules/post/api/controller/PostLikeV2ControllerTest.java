@@ -9,11 +9,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.pagination.InvalidCursorException;
+import momzzangseven.mztkbe.global.error.post.InvalidLikedPostsQueryException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.in.CheckAdminAccountStatusUseCase;
+import momzzangseven.mztkbe.modules.post.application.dto.GetMyLikedPostsCursorResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
-import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsCursorResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
@@ -37,10 +39,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-@DisplayName("PostV2Controller contract test")
+@DisplayName("PostLikeV2Controller contract test")
 @SpringBootTest
 @AutoConfigureMockMvc
-class PostV2ControllerTest {
+class PostLikeV2ControllerTest {
 
   @Autowired private MockMvc mockMvc;
 
@@ -80,15 +82,15 @@ class PostV2ControllerTest {
   @MockitoBean private LikePostUseCase likePostUseCase;
 
   @Test
-  @DisplayName("GET /v2/posts returns cursor post list")
-  void getPostsV2_success() throws Exception {
-    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 12, 0);
-    PostListResult postResult =
+  @DisplayName("GET /v2/users/me/liked-posts returns FREE liked post list")
+  void getMyLikedPosts_free_success() throws Exception {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 26, 12, 0);
+    PostListResult post =
         new PostListResult(
             2L,
             PostType.FREE,
-            "list",
-            "content",
+            null,
+            "liked free content",
             4L,
             3L,
             true,
@@ -97,40 +99,92 @@ class PostV2ControllerTest {
             null,
             0L,
             false,
-            List.of("health"),
+            List.of("routine"),
             List.of(),
             now,
             now);
-    given(searchPostsCursorUseCase.searchPostsByCursor(any(), any(Long.class)))
-        .willReturn(new SearchPostsCursorResult(List.of(postResult), true, "next"));
+    given(getMyLikedPostsCursorUseCase.execute(any()))
+        .willReturn(new GetMyLikedPostsCursorResult(List.of(post), true, "next"));
 
     mockMvc
-        .perform(get("/v2/posts?type=FREE&tag=health&search=list&size=1").with(userPrincipal(1L)))
+        .perform(get("/v2/users/me/liked-posts?type=FREE&size=1").with(userPrincipal(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.hasNext").value(true))
         .andExpect(jsonPath("$.data.nextCursor").value("next"))
         .andExpect(jsonPath("$.data.posts[0].postId").value(2))
-        .andExpect(jsonPath("$.data.posts[0].commentCount").value(3));
+        .andExpect(jsonPath("$.data.posts[0].type").value("FREE"))
+        .andExpect(jsonPath("$.data.posts[0].isLiked").value(true));
   }
 
   @Test
-  @DisplayName("GET /v2/posts returns 400 for malformed cursor")
-  void getPostsV2_malformedCursor_returns400() throws Exception {
+  @DisplayName("GET /v2/users/me/liked-posts returns QUESTION liked post list")
+  void getMyLikedPosts_question_success() throws Exception {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 26, 12, 0);
+    PostListResult post =
+        new PostListResult(
+            3L,
+            PostType.QUESTION,
+            "question",
+            "liked question content",
+            5L,
+            4L,
+            true,
+            1L,
+            "nickname",
+            null,
+            100L,
+            false,
+            List.of("squat"),
+            List.of(),
+            now,
+            now);
+    given(getMyLikedPostsCursorUseCase.execute(any()))
+        .willReturn(new GetMyLikedPostsCursorResult(List.of(post), false, null));
+
     mockMvc
-        .perform(get("/v2/posts?cursor=%%%").with(userPrincipal(1L)))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
-
-    verifyNoInteractions(searchPostsCursorUseCase);
+        .perform(get("/v2/users/me/liked-posts?type=QUESTION&size=10").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.nextCursor").doesNotExist())
+        .andExpect(jsonPath("$.data.posts[0].postId").value(3))
+        .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"))
+        .andExpect(jsonPath("$.data.posts[0].question.reward").value(100));
   }
 
   @Test
-  @DisplayName("GET /v2/posts returns 401 when unauthenticated")
-  void getPostsV2_unauthenticated_returns401() throws Exception {
-    mockMvc.perform(get("/v2/posts")).andExpect(status().isUnauthorized());
+  @DisplayName("GET /v2/users/me/liked-posts returns 400 for missing type")
+  void getMyLikedPosts_missingType_returns400() throws Exception {
+    given(getMyLikedPostsCursorUseCase.execute(any()))
+        .willThrow(new InvalidLikedPostsQueryException("type is required."));
 
-    verifyNoInteractions(searchPostsCursorUseCase);
+    mockMvc
+        .perform(get("/v2/users/me/liked-posts").with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+  }
+
+  @Test
+  @DisplayName("GET /v2/users/me/liked-posts returns 400 for malformed cursor")
+  void getMyLikedPosts_malformedCursor_returns400() throws Exception {
+    given(getMyLikedPostsCursorUseCase.execute(any()))
+        .willThrow(new InvalidCursorException("Invalid cursor"));
+
+    mockMvc
+        .perform(get("/v2/users/me/liked-posts?type=FREE&cursor=%%%").with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+  }
+
+  @Test
+  @DisplayName("GET /v2/users/me/liked-posts returns 401 when unauthenticated")
+  void getMyLikedPosts_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(get("/v2/users/me/liked-posts?type=FREE")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(getMyLikedPostsCursorUseCase);
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {

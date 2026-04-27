@@ -1,16 +1,24 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
+import momzzangseven.mztkbe.modules.post.application.port.out.LikedPostRow;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
+import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLike;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostLikeEntity;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostLikeJpaRepository;
+import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostLikeJpaRepository.LikedPostProjection;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -81,6 +89,19 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
     postLikeJpaRepository.deleteByTargetTypeAndTargetId(targetType, targetId);
   }
 
+  @Override
+  public List<LikedPostRow> findLikedPostsByCursor(
+      Long userId, PostType type, CursorPageRequest pageRequest) {
+    KeysetCursor cursor = pageRequest.cursor();
+    List<LikedPostProjection> projections =
+        cursor == null
+            ? postLikeJpaRepository.findLikedPostsFirstPageNative(
+                userId, type.name(), pageRequest.limitWithProbe())
+            : postLikeJpaRepository.findLikedPostsAfterCursorNative(
+                userId, type.name(), cursor.createdAt(), cursor.id(), pageRequest.limitWithProbe());
+    return projections.stream().map(this::toLikedPostRow).toList();
+  }
+
   private PostLikeEntity toEntity(PostLike postLike) {
     return PostLikeEntity.builder()
         .id(postLike.getId())
@@ -98,5 +119,22 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
         .userId(entity.getUserId())
         .createdAt(entity.getCreatedAt())
         .build();
+  }
+
+  private LikedPostRow toLikedPostRow(LikedPostProjection projection) {
+    Post post =
+        Post.builder()
+            .id(projection.getPostId())
+            .userId(projection.getUserId())
+            .type(PostType.valueOf(projection.getType()))
+            .title(projection.getTitle())
+            .content(projection.getContent())
+            .reward(projection.getReward())
+            .acceptedAnswerId(projection.getAcceptedAnswerId())
+            .status(PostStatus.valueOf(projection.getStatus()))
+            .createdAt(projection.getPostCreatedAt())
+            .updatedAt(projection.getPostUpdatedAt())
+            .build();
+    return new LikedPostRow(post, projection.getLikeId(), projection.getLikedAt());
   }
 }
