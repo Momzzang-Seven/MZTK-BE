@@ -187,6 +187,8 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/v2/posts")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/users/me/commented-posts")
+                    .authenticated()
                     .requestMatchers(HttpMethod.GET, "/v2/posts/{postId}/comments")
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/v2/comments/{commentId}/replies")
