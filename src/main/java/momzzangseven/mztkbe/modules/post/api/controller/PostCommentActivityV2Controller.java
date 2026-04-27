@@ -24,12 +24,14 @@ public class PostCommentActivityV2Controller {
   public ResponseEntity<ApiResponse<GetMyCommentedPostsV2Response>> getMyCommentedPosts(
       @AuthenticationPrincipal Long userId,
       @RequestParam PostType type,
+      @RequestParam(required = false) String search,
       @RequestParam(required = false) String cursor,
       @RequestParam(required = false) Integer size) {
     Long validatedUserId = requireUserId(userId);
     GetMyCommentedPostsCursorResult result =
         getMyCommentedPostsCursorUseCase.execute(
-            new GetMyCommentedPostsV2Request(type, cursor, size).toCommand(validatedUserId));
+            new GetMyCommentedPostsV2Request(type, search, cursor, size)
+                .toCommand(validatedUserId));
     return ResponseEntity.ok(ApiResponse.success(GetMyCommentedPostsV2Response.from(result)));
   }
 

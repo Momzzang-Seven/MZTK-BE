@@ -18,9 +18,9 @@ public class CommentedPostRefsAdapter implements LoadCommentedPostRefsPort {
 
   @Override
   public List<CommentedPostRef> loadCommentedPostRefs(
-      Long requesterId, PostType type, CursorPageRequest pageRequest) {
+      Long requesterId, PostType type, String search, CursorPageRequest pageRequest) {
     return findCommentedPostRefsUseCase
-        .execute(new FindCommentedPostRefsQuery(requesterId, type.name(), pageRequest))
+        .execute(new FindCommentedPostRefsQuery(requesterId, type.name(), search, pageRequest))
         .stream()
         .map(
             ref ->

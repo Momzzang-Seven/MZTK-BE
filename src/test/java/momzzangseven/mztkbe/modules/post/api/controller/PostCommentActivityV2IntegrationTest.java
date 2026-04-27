@@ -147,6 +147,43 @@ class PostCommentActivityV2IntegrationTest {
         .andExpect(jsonPath("$.data.posts[0].question.reward").value(100));
   }
 
+  @Test
+  @DisplayName("GET /v2/users/me/commented-posts searches title inside my commented post refs")
+  void getMyCommentedPosts_searchesTitleInsideMyCommentedRefs() throws Exception {
+    UserEntity requester = saveUser("search-requester@example.com", "search-requester");
+    UserEntity writer = saveUser("search-writer@example.com", "search-writer");
+    UserEntity otherCommenter = saveUser("search-other@example.com", "search-other");
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
+    PostEntity matching =
+        savePost(writer.getId(), PostType.QUESTION, "100%_ Form", "matching content");
+    PostEntity wildcardDecoy =
+        savePost(writer.getId(), PostType.QUESTION, "100ab Form", "wildcard decoy");
+    PostEntity notCommented =
+        savePost(writer.getId(), PostType.QUESTION, "100%_ Form - not commented", "not mine");
+    PostEntity otherUserCommented =
+        savePost(writer.getId(), PostType.QUESTION, "100%_ Form - other user", "other user");
+
+    saveComment(matching.getId(), requester.getId(), "matching", base.minusMinutes(1));
+    saveComment(wildcardDecoy.getId(), requester.getId(), "wildcard decoy", base.minusMinutes(2));
+    saveComment(
+        otherUserCommented.getId(), otherCommenter.getId(), "other user", base.minusMinutes(3));
+
+    mockMvc
+        .perform(
+            get("/v2/users/me/commented-posts")
+                .param("type", "QUESTION")
+                .param("search", "100%_")
+                .with(userPrincipal(requester.getId())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.posts.length()").value(1))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(matching.getId()))
+        .andExpect(jsonPath("$.data.posts[0].title").value("100%_ Form"));
+
+    assertThat(notCommented.getId()).isNotEqualTo(matching.getId());
+  }
+
   private UserEntity saveUser(String email, String nickname) {
     return userJpaRepository.save(
         UserEntity.builder()

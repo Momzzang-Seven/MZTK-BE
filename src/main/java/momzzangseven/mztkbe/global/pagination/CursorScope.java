@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.global.pagination;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Locale;
 
 public final class CursorScope {
 
@@ -41,11 +42,25 @@ public final class CursorScope {
             + "|sort=COMMENT_ACTIVITY_DESC");
   }
 
+  public static String commentedPosts(Long userId, String type, String search) {
+    if (search == null || search.isBlank()) {
+      return commentedPosts(userId, type);
+    }
+    return hash(
+        "commented-posts|userId="
+            + userId
+            + "|type="
+            + normalize(type)
+            + "|search="
+            + normalize(search)
+            + "|sort=COMMENT_ACTIVITY_DESC");
+  }
+
   private static String normalize(String value) {
     if (value == null || value.isBlank()) {
       return "";
     }
-    return value.trim().toLowerCase();
+    return value.trim().toLowerCase(Locale.ROOT);
   }
 
   private static String hash(String value) {

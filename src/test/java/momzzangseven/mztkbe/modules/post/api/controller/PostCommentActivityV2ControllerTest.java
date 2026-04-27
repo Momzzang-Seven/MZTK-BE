@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.post.api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -29,6 +31,7 @@ import momzzangseven.mztkbe.modules.post.application.service.GetPostService;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -106,13 +109,24 @@ class PostCommentActivityV2ControllerTest {
         .willReturn(new GetMyCommentedPostsCursorResult(List.of(postResult), true, "next"));
 
     mockMvc
-        .perform(get("/v2/users/me/commented-posts?type=QUESTION&size=1").with(userPrincipal(1L)))
+        .perform(
+            get("/v2/users/me/commented-posts")
+                .param("type", "QUESTION")
+                .param("search", " FoRm ")
+                .param("size", "1")
+                .with(userPrincipal(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.hasNext").value(true))
         .andExpect(jsonPath("$.data.nextCursor").value("next"))
         .andExpect(jsonPath("$.data.posts[0].postId").value(5))
         .andExpect(jsonPath("$.data.posts[0].question.reward").value(100));
+
+    ArgumentCaptor<GetMyCommentedPostsCursorCommand> commandCaptor =
+        ArgumentCaptor.forClass(GetMyCommentedPostsCursorCommand.class);
+    verify(getMyCommentedPostsCursorUseCase).execute(commandCaptor.capture());
+    assertThat(commandCaptor.getValue().search()).isEqualTo(" FoRm ");
+    assertThat(commandCaptor.getValue().effectiveSearch()).isEqualTo("form");
   }
 
   @Test
