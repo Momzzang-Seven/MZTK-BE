@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -18,6 +20,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Component
 @RequiredArgsConstructor
@@ -112,6 +115,33 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
+      FindCommentedPostRefsQuery query) {
+    query.validate();
+    String searchPattern = escapeLikePattern(query.normalizedSearch());
+    List<CommentJpaRepository.CommentedPostRefProjection> refs =
+        query.pageRequest().hasCursor()
+            ? commentRepository.findCommentedPostRefsAfterCursor(
+                query.requesterId(),
+                query.normalizedPostType(),
+                searchPattern,
+                query.pageRequest().cursor().createdAt(),
+                query.pageRequest().cursor().id(),
+                query.pageRequest().limitWithProbe())
+            : commentRepository.findCommentedPostRefsFirstPage(
+                query.requesterId(),
+                query.normalizedPostType(),
+                searchPattern,
+                query.pageRequest().limitWithProbe());
+    return refs.stream()
+        .map(
+            ref ->
+                new LatestCommentedPostRef(
+                    ref.getPostId(), ref.getLatestCommentId(), ref.getLatestCommentedAt()))
+        .toList();
+  }
+
+  @Override
   public long countCommentsByPostId(Long postId) {
     if (postId == null) {
       return 0L;
@@ -123,6 +153,13 @@ public class CommentPersistenceAdapter
   public List<Long> loadCommentIdsForDeletion(LocalDateTime cutoff, int batchSize) {
     return commentRepository.findIdsByIsDeletedTrueAndUpdatedAtBefore(
         cutoff, PageRequest.of(0, batchSize));
+  }
+
+  private String escapeLikePattern(String search) {
+    if (!StringUtils.hasText(search)) {
+      return null;
+    }
+    return search.replace("!", "!!").replace("%", "!%").replace("_", "!_");
   }
 
   // ========== DeleteCommentPort Implementation ==========
