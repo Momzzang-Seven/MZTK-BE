@@ -21,6 +21,8 @@ public interface PostPersistencePort {
 
   boolean existsPost(Long postId);
 
+  List<Post> loadPostsByIdsPreservingOrder(List<Long> postIds);
+
   List<Post> findPostsByCondition(PostSearchCondition condition, List<Long> filteredPostIds);
 
   List<Post> findPostsByCursorCondition(PostCursorSearchCondition condition, Long tagId);
