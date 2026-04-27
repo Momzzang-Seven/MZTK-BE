@@ -6,7 +6,10 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
@@ -69,6 +72,21 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
   @Override
   public boolean existsPost(Long postId) {
     return postJpaRepository.existsById(postId);
+  }
+
+  @Override
+  public List<Post> loadPostsByIdsPreservingOrder(List<Long> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return List.of();
+    }
+    Map<Long, PostEntity> entitiesById =
+        postJpaRepository.findAllById(postIds).stream()
+            .collect(Collectors.toMap(PostEntity::getId, Function.identity()));
+    return postIds.stream()
+        .map(entitiesById::get)
+        .filter(java.util.Objects::nonNull)
+        .map(PostEntity::toDomain)
+        .toList();
   }
 
   @Override

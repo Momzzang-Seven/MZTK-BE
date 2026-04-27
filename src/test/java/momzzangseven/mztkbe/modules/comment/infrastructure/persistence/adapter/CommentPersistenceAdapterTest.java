@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
+import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
@@ -170,6 +174,35 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("findCommentedPostRefsByUserCursor() uses first-page query when cursor is absent")
+  void findCommentedPostRefsByUserCursor_firstPage() {
+    CursorPageRequest pageRequest = new CursorPageRequest(null, 2, "scope");
+    FindCommentedPostRefsQuery query = new FindCommentedPostRefsQuery(10L, "free", pageRequest);
+    LocalDateTime latest = LocalDateTime.of(2026, 4, 26, 12, 0);
+    given(commentRepository.findCommentedPostRefsFirstPage(10L, "FREE", 3))
+        .willReturn(List.of(commentedPostRef(100L, 1000L, latest)));
+
+    List<LatestCommentedPostRef> refs = adapter.findCommentedPostRefsByUserCursor(query);
+
+    assertThat(refs).containsExactly(new LatestCommentedPostRef(100L, 1000L, latest));
+    verify(commentRepository).findCommentedPostRefsFirstPage(10L, "FREE", 3);
+  }
+
+  @Test
+  @DisplayName("findCommentedPostRefsByUserCursor() uses cursor query when cursor is present")
+  void findCommentedPostRefsByUserCursor_afterCursor() {
+    LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 4, 26, 11, 0);
+    CursorPageRequest pageRequest =
+        new CursorPageRequest(new KeysetCursor(cursorCreatedAt, 900L, "scope"), 2, "scope");
+    FindCommentedPostRefsQuery query = new FindCommentedPostRefsQuery(10L, "QUESTION", pageRequest);
+
+    adapter.findCommentedPostRefsByUserCursor(query);
+
+    verify(commentRepository)
+        .findCommentedPostRefsAfterCursor(10L, "QUESTION", cursorCreatedAt, 900L, 3);
+  }
+
+  @Test
   @DisplayName("deleteAllById() no-ops for null or empty list")
   void deleteAllById_nullOrEmpty_noOp() {
     adapter.deleteAllById(null);
@@ -235,6 +268,26 @@ class CommentPersistenceAdapterTest {
       @Override
       public Long getCommentCount() {
         return commentCount;
+      }
+    };
+  }
+
+  private CommentJpaRepository.CommentedPostRefProjection commentedPostRef(
+      Long postId, Long latestCommentId, LocalDateTime latestCommentedAt) {
+    return new CommentJpaRepository.CommentedPostRefProjection() {
+      @Override
+      public Long getPostId() {
+        return postId;
+      }
+
+      @Override
+      public Long getLatestCommentId() {
+        return latestCommentId;
+      }
+
+      @Override
+      public LocalDateTime getLatestCommentedAt() {
+        return latestCommentedAt;
       }
     };
   }
