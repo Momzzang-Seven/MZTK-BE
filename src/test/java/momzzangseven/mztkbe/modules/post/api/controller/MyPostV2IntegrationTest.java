@@ -163,6 +163,32 @@ class MyPostV2IntegrationTest {
   }
 
   @Test
+  @DisplayName("GET /v2/users/me/posts treats wildcard characters in QUESTION search literally")
+  void getMyPosts_realFlow_searchTreatsWildcardsLiterally() throws Exception {
+    Long requesterId = persistUser("requester").getId();
+    Long otherUserId = persistUser("other").getId();
+    LocalDateTime base = LocalDateTime.of(2026, 4, 27, 12, 0);
+    PostEntity literalMatch =
+        persistPost(requesterId, PostType.QUESTION, "100%_ form check", "question", base);
+    persistPost(
+        requesterId, PostType.QUESTION, "100ab form check", "question", base.minusMinutes(1));
+    persistPost(
+        otherUserId, PostType.QUESTION, "100%_ form other user", "question", base.minusMinutes(2));
+
+    mockMvc
+        .perform(
+            get("/v2/users/me/posts")
+                .param("type", "QUESTION")
+                .param("search", "100%_")
+                .with(userPrincipal(requesterId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(literalMatch.getId()))
+        .andExpect(jsonPath("$.data.posts[1]").doesNotExist());
+  }
+
+  @Test
   @DisplayName("GET /v2/users/me/posts returns empty page when tag is missing")
   void getMyPosts_missingTag_returnsEmptyPage() throws Exception {
     Long requesterId = persistUser("requester").getId();

@@ -14,6 +14,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
@@ -169,7 +170,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
     if (type == PostType.FREE) {
       return null;
     }
-    return postEntity.title.containsIgnoreCase(search);
+    return postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
   }
 
   private BooleanExpression filterByTagIds(List<Long> postIds) {
@@ -210,14 +211,15 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
   private List<PostEntity> findPostsWithTagByCursor(
       PostCursorSearchCondition condition, Long tagId) {
     String type = condition.type() == null ? null : condition.type().name();
+    String escapedSearch = LikePatternEscaper.escape(condition.search());
     if (!condition.pageRequest().hasCursor()) {
       return postJpaRepository.findPostsByConditionWithTagFirstPageNative(
-          type, condition.search(), tagId, condition.pageRequest().limitWithProbe());
+          type, escapedSearch, tagId, condition.pageRequest().limitWithProbe());
     }
     var cursor = condition.pageRequest().cursor();
     return postJpaRepository.findPostsByConditionWithTagAfterCursorNative(
         type,
-        condition.search(),
+        escapedSearch,
         tagId,
         cursor.createdAt(),
         cursor.id(),
@@ -231,7 +233,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
         .where(
             postEntity.userId.eq(authorId),
             eqType(type),
-            containsLiteralCursorSearch(type, search),
+            containsCursorSearch(type, search),
             hasTagId(tagId),
             cursorBefore(pageRequest))
         .orderBy(postEntity.createdAt.desc(), postEntity.id.desc())
@@ -271,20 +273,6 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
         .from(postTagEntity)
         .where(postTagEntity.postId.eq(postEntity.id), postTagEntity.tagId.eq(tagId))
         .exists();
-  }
-
-  private BooleanExpression containsLiteralCursorSearch(PostType type, String search) {
-    if (!StringUtils.hasText(search)) {
-      return null;
-    }
-    if (type == PostType.FREE) {
-      return null;
-    }
-    return postEntity.title.lower().like("%" + escapeLikePattern(search) + "%", '!');
-  }
-
-  private String escapeLikePattern(String search) {
-    return search.replace("!", "!!").replace("%", "!%").replace("_", "!_");
   }
 
   private boolean hasAuthorSearch(PostType type, String search) {
