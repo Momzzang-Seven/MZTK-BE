@@ -1,14 +1,12 @@
 package momzzangseven.mztkbe.modules.post.api.controller;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Map;
@@ -35,23 +33,24 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.transaction.annotation.Transactional;
 
-@DisplayName("PostLikeV2 실경로 통합 테스트 (MockMvc + H2)")
+@DisplayName("MyPostV2 실경로 통합 테스트 (MockMvc + H2)")
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class PostLikeV2IntegrationTest {
+class MyPostV2IntegrationTest {
 
   @Autowired private MockMvc mockMvc;
-  @Autowired private ObjectMapper objectMapper;
   @Autowired private UserJpaRepository userJpaRepository;
   @Autowired private PostJpaRepository postJpaRepository;
   @Autowired private PostLikeJpaRepository postLikeJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private EntityManager entityManager;
 
   @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -81,110 +80,128 @@ class PostLikeV2IntegrationTest {
   }
 
   @Test
-  @DisplayName("GET /v2/users/me/liked-posts는 실제 service/repository를 통해 타입 필터와 cursor를 적용한다")
-  void getMyLikedPosts_realFlow_filtersTypeAndAppliesCursor() throws Exception {
+  @DisplayName("GET /v2/users/me/posts applies author, type, cursor, and requester like state")
+  void getMyPosts_realFlow_filtersTypeAndAppliesCursor() throws Exception {
     Long requesterId = persistUser("requester").getId();
-    Long firstWriterId = persistUser("first-writer").getId();
-    Long secondWriterId = persistUser("second-writer").getId();
-    Long questionWriterId = persistUser("question-writer").getId();
+    Long otherUserId = persistUser("other").getId();
 
-    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
-    PostEntity firstFree =
-        persistPost(firstWriterId, PostType.FREE, null, "first liked free content");
+    LocalDateTime base = LocalDateTime.of(2026, 4, 27, 12, 0);
+    PostEntity firstFree = persistPost(requesterId, PostType.FREE, null, "first free", base);
     PostEntity secondFree =
-        persistPost(secondWriterId, PostType.FREE, null, "second liked free content");
-    PostEntity question =
-        persistPost(questionWriterId, PostType.QUESTION, "liked question", "question content");
-
-    persistLike(PostLikeTargetType.POST, secondFree.getId(), requesterId, base.minusMinutes(1));
-    persistLike(PostLikeTargetType.POST, firstFree.getId(), requesterId, base);
-    persistLike(PostLikeTargetType.POST, question.getId(), requesterId, base.minusMinutes(2));
-
-    PostEntity otherUserFree =
-        persistPost(firstWriterId, PostType.FREE, null, "other user liked free content");
-    persistLike(PostLikeTargetType.POST, otherUserFree.getId(), 999L, base.minusMinutes(3));
-    persistLike(
-        PostLikeTargetType.ANSWER, otherUserFree.getId(), requesterId, base.minusMinutes(4));
-    persistLike(PostLikeTargetType.POST, firstFree.getId(), 999L, base.minusMinutes(5));
+        persistPost(requesterId, PostType.FREE, null, "second free", base.minusMinutes(1));
+    persistPost(otherUserId, PostType.FREE, null, "other free", base.plusMinutes(1));
+    persistPost(requesterId, PostType.QUESTION, "question", "question", base.minusMinutes(2));
+    persistLike(PostLikeTargetType.POST, firstFree.getId(), requesterId);
+    persistLike(PostLikeTargetType.POST, secondFree.getId(), otherUserId);
 
     MvcResult firstPage =
         mockMvc
-            .perform(
-                get("/v2/users/me/liked-posts?type=FREE&size=1").with(userPrincipal(requesterId)))
+            .perform(get("/v2/users/me/posts?type=FREE&size=1").with(userPrincipal(requesterId)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("SUCCESS"))
             .andExpect(jsonPath("$.data.hasNext").value(true))
             .andExpect(jsonPath("$.data.posts[0].postId").value(firstFree.getId()))
-            .andExpect(jsonPath("$.data.posts[0].content").value("first liked free content"))
-            .andExpect(jsonPath("$.data.posts[0].likeCount").value(2))
+            .andExpect(jsonPath("$.data.posts[0].content").value("first free"))
             .andExpect(jsonPath("$.data.posts[0].isLiked").value(true))
-            .andExpect(jsonPath("$.data.posts[0].writer.nickname").value("first-writer"))
+            .andExpect(jsonPath("$.data.posts[0].writer.nickname").value("requester"))
             .andReturn();
 
-    String nextCursor = nextCursor(firstPage);
+    String nextCursor =
+        com.jayway.jsonpath.JsonPath.read(
+            firstPage.getResponse().getContentAsString(), "$.data.nextCursor");
 
     mockMvc
         .perform(
-            get("/v2/users/me/liked-posts?type=FREE&size=1&cursor=" + nextCursor)
+            get("/v2/users/me/posts?type=FREE&size=1&cursor=" + nextCursor)
                 .with(userPrincipal(requesterId)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.hasNext").value(false))
         .andExpect(jsonPath("$.data.nextCursor").doesNotExist())
         .andExpect(jsonPath("$.data.posts[0].postId").value(secondFree.getId()))
-        .andExpect(jsonPath("$.data.posts[0].content").value("second liked free content"))
-        .andExpect(jsonPath("$.data.posts[0].isLiked").value(true));
-
-    mockMvc
-        .perform(
-            get("/v2/users/me/liked-posts?type=QUESTION&size=10").with(userPrincipal(requesterId)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.hasNext").value(false))
-        .andExpect(jsonPath("$.data.posts[0].postId").value(question.getId()))
-        .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"))
-        .andExpect(jsonPath("$.data.posts[0].question.reward").value(100));
+        .andExpect(jsonPath("$.data.posts[0].content").value("second free"))
+        .andExpect(jsonPath("$.data.posts[0].isLiked").value(false));
   }
 
   @Test
-  @DisplayName("GET /v2/users/me/liked-posts는 좋아요한 질문글 내부에서 제목 검색을 적용한다")
-  void getMyLikedPosts_realFlow_searchesWithinLikedPosts() throws Exception {
+  @DisplayName("GET /v2/users/me/posts applies tag and QUESTION search filters")
+  void getMyPosts_realFlow_filtersTagAndSearch() throws Exception {
     Long requesterId = persistUser("requester").getId();
-    Long writerId = persistUser("writer").getId();
     Long otherUserId = persistUser("other").getId();
-    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
-
+    Long squatTagId = persistTag("squat");
+    Long benchTagId = persistTag("bench");
+    LocalDateTime base = LocalDateTime.of(2026, 4, 27, 12, 0);
     PostEntity matching =
-        persistPost(writerId, PostType.QUESTION, "100%_ form check", "matching content");
-    PostEntity wildcardExpandedWithoutEscape =
-        persistPost(writerId, PostType.QUESTION, "100ab form check", "wildcard content");
-    PostEntity notLikedMatching =
-        persistPost(writerId, PostType.QUESTION, "100%_ not liked", "not liked content");
-    PostEntity likedByOtherUser =
-        persistPost(writerId, PostType.QUESTION, "100%_ other liked", "other liked content");
-    persistLike(PostLikeTargetType.POST, matching.getId(), requesterId, base);
-    persistLike(
-        PostLikeTargetType.POST,
-        wildcardExpandedWithoutEscape.getId(),
-        requesterId,
-        base.minusMinutes(1));
-    persistLike(
-        PostLikeTargetType.POST, likedByOtherUser.getId(), otherUserId, base.minusMinutes(2));
+        persistPost(
+            requesterId,
+            PostType.QUESTION,
+            "Squat Form Check",
+            "question",
+            base,
+            PostStatus.PENDING_ACCEPT,
+            1L);
+    PostEntity wrongTag =
+        persistPost(requesterId, PostType.QUESTION, "Squat Form", "question", base.minusMinutes(1));
+    PostEntity otherUser =
+        persistPost(otherUserId, PostType.QUESTION, "Squat Form", "question", base.minusMinutes(2));
+    linkTag(matching.getId(), squatTagId);
+    linkTag(wrongTag.getId(), benchTagId);
+    linkTag(otherUser.getId(), squatTagId);
+    entityManager.clear();
 
     mockMvc
         .perform(
-            get("/v2/users/me/liked-posts")
-                .queryParam("type", "QUESTION")
-                .queryParam("search", "100%_")
+            get("/v2/users/me/posts?type=QUESTION&tag=Squat&search=form")
                 .with(userPrincipal(requesterId)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.hasNext").value(false))
         .andExpect(jsonPath("$.data.posts[0].postId").value(matching.getId()))
-        .andExpect(jsonPath("$.data.posts[0].content").value("matching content"))
-        .andExpect(jsonPath("$.data.posts.length()").value(1));
+        .andExpect(jsonPath("$.data.posts[0].question.reward").value(100))
+        .andExpect(jsonPath("$.data.posts[0].question.isSolved").value(true))
+        .andExpect(jsonPath("$.data.posts[0].status").doesNotExist());
+  }
 
-    assertThat(notLikedMatching.getId()).isNotEqualTo(matching.getId());
+  @Test
+  @DisplayName("GET /v2/users/me/posts returns empty page when tag is missing")
+  void getMyPosts_missingTag_returnsEmptyPage() throws Exception {
+    Long requesterId = persistUser("requester").getId();
+    persistPost(
+        requesterId,
+        PostType.QUESTION,
+        "Squat Form Check",
+        "question",
+        LocalDateTime.of(2026, 4, 27, 12, 0));
+
+    mockMvc
+        .perform(
+            get("/v2/users/me/posts?type=QUESTION&tag=missing").with(userPrincipal(requesterId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.nextCursor").doesNotExist())
+        .andExpect(jsonPath("$.data.posts").isArray())
+        .andExpect(jsonPath("$.data.posts").isEmpty());
+  }
+
+  @Test
+  @DisplayName("GET /v2/users/me/posts ignores search for FREE posts")
+  void getMyPosts_freeSearchIgnored() throws Exception {
+    Long requesterId = persistUser("requester").getId();
+    PostEntity free =
+        persistPost(
+            requesterId,
+            PostType.FREE,
+            null,
+            "content without keyword",
+            LocalDateTime.of(2026, 4, 27, 12, 0));
+
+    mockMvc
+        .perform(
+            get("/v2/users/me/posts?type=FREE&search=not-present").with(userPrincipal(requesterId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(free.getId()));
   }
 
   private UserEntity persistUser(String nickname) {
@@ -198,7 +215,23 @@ class PostLikeV2IntegrationTest {
     return userJpaRepository.saveAndFlush(entity);
   }
 
+  private PostEntity persistPost(
+      Long userId, PostType type, String title, String content, LocalDateTime createdAt) {
+    return persistPost(userId, type, title, content, createdAt, PostStatus.OPEN, null);
+  }
+
   private PostEntity persistPost(Long userId, PostType type, String title, String content) {
+    return persistPost(userId, type, title, content, LocalDateTime.now(), PostStatus.OPEN, null);
+  }
+
+  private PostEntity persistPost(
+      Long userId,
+      PostType type,
+      String title,
+      String content,
+      LocalDateTime createdAt,
+      PostStatus status,
+      Long acceptedAnswerId) {
     PostEntity entity =
         PostEntity.builder()
             .userId(userId)
@@ -206,24 +239,34 @@ class PostLikeV2IntegrationTest {
             .title(title)
             .content(content)
             .reward(type == PostType.QUESTION ? 100L : 0L)
-            .status(PostStatus.OPEN)
+            .acceptedAnswerId(acceptedAnswerId)
+            .status(status)
             .build();
-    return postJpaRepository.saveAndFlush(entity);
-  }
-
-  private PostLikeEntity persistLike(
-      PostLikeTargetType targetType, Long targetId, Long userId, LocalDateTime createdAt) {
-    PostLikeEntity entity =
-        PostLikeEntity.builder().targetType(targetType).targetId(targetId).userId(userId).build();
-    PostLikeEntity saved = postLikeJpaRepository.saveAndFlush(entity);
+    ReflectionTestUtils.setField(entity, "createdAt", createdAt);
+    ReflectionTestUtils.setField(entity, "updatedAt", createdAt);
+    PostEntity saved = postJpaRepository.saveAndFlush(entity);
     jdbcTemplate.update(
-        "UPDATE post_like SET created_at = ? WHERE id = ?", createdAt, saved.getId());
+        "UPDATE posts SET created_at = ?, updated_at = ? WHERE id = ?",
+        createdAt,
+        createdAt,
+        saved.getId());
+    entityManager.clear();
     return saved;
   }
 
-  private String nextCursor(MvcResult result) throws Exception {
-    JsonNode root = objectMapper.readTree(result.getResponse().getContentAsString());
-    return root.path("data").path("nextCursor").asText();
+  private PostLikeEntity persistLike(PostLikeTargetType targetType, Long targetId, Long userId) {
+    PostLikeEntity entity =
+        PostLikeEntity.builder().targetType(targetType).targetId(targetId).userId(userId).build();
+    return postLikeJpaRepository.saveAndFlush(entity);
+  }
+
+  private Long persistTag(String name) {
+    jdbcTemplate.update("INSERT INTO tags (name) VALUES (?)", name);
+    return jdbcTemplate.queryForObject("SELECT id FROM tags WHERE name = ?", Long.class, name);
+  }
+
+  private void linkTag(Long postId, Long tagId) {
+    jdbcTemplate.update("INSERT INTO post_tags (post_id, tag_id) VALUES (?, ?)", postId, tagId);
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {
