@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.pagination.InvalidCursorException;
+import momzzangseven.mztkbe.global.error.post.InvalidCommentedPostsQueryException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.in.CheckAdminAccountStatusUseCase;
@@ -130,6 +132,44 @@ class PostCommentActivityV2ControllerTest {
   }
 
   @Test
+  @DisplayName("GET /v2/users/me/commented-posts returns 400 for missing type")
+  void getMyCommentedPostsV2_missingType_returns400() throws Exception {
+    given(getMyCommentedPostsCursorUseCase.execute(any(GetMyCommentedPostsCursorCommand.class)))
+        .willThrow(new InvalidCommentedPostsQueryException("type is required."));
+
+    mockMvc
+        .perform(get("/v2/users/me/commented-posts").with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+  }
+
+  @Test
+  @DisplayName("GET /v2/users/me/commented-posts returns 400 for invalid type")
+  void getMyCommentedPostsV2_invalidType_returns400() throws Exception {
+    mockMvc
+        .perform(get("/v2/users/me/commented-posts?type=UNKNOWN").with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+
+    verifyNoInteractions(getMyCommentedPostsCursorUseCase);
+  }
+
+  @Test
+  @DisplayName("GET /v2/users/me/commented-posts returns 400 for invalid size")
+  void getMyCommentedPostsV2_invalidSize_returns400() throws Exception {
+    given(getMyCommentedPostsCursorUseCase.execute(any(GetMyCommentedPostsCursorCommand.class)))
+        .willThrow(new InvalidCursorException("size must be between 1 and 50"));
+
+    mockMvc
+        .perform(get("/v2/users/me/commented-posts?type=FREE&size=0").with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+  }
+
+  @Test
   @DisplayName("GET /v2/users/me/commented-posts returns 400 for malformed cursor")
   void getMyCommentedPostsV2_malformedCursor_returns400() throws Exception {
     given(getMyCommentedPostsCursorUseCase.execute(any(GetMyCommentedPostsCursorCommand.class)))
@@ -143,7 +183,8 @@ class PostCommentActivityV2ControllerTest {
     mockMvc
         .perform(get("/v2/users/me/commented-posts?type=FREE&cursor=%%%").with(userPrincipal(1L)))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.status").value("FAIL"));
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
   }
 
   @Test

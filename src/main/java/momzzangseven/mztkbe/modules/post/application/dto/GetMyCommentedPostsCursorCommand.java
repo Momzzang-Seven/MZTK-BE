@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
 import java.util.Locale;
-import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
+import momzzangseven.mztkbe.global.error.post.InvalidCommentedPostsQueryException;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorScope;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -34,10 +34,13 @@ public record GetMyCommentedPostsCursorCommand(
 
   private void validateNonCursorInput() {
     if (requesterId == null || requesterId <= 0) {
-      throw new PostInvalidInputException("Requester id is required.");
+      throw new InvalidCommentedPostsQueryException("requesterId must be positive.");
     }
     if (type == null) {
-      throw new PostInvalidInputException("Post type is required.");
+      throw new InvalidCommentedPostsQueryException("type is required.");
+    }
+    if (type != PostType.FREE && type != PostType.QUESTION) {
+      throw new InvalidCommentedPostsQueryException("type must be FREE or QUESTION.");
     }
   }
 }
