@@ -21,10 +21,6 @@ public record GetMyPostsCursorCommand(
     return CursorPageRequest.of(cursor, size, DEFAULT_SIZE, MAX_SIZE, scope());
   }
 
-  public int resolvedSize() {
-    return pageRequest().size();
-  }
-
   public String tagName() {
     return normalize(tag);
   }
@@ -37,8 +33,7 @@ public record GetMyPostsCursorCommand(
   }
 
   private String scope() {
-    return CursorScope.myPosts(
-        requesterId, type == null ? null : type.name(), tagName(), effectiveSearch());
+    return CursorScope.myPosts(requesterId, type.name(), tagName(), effectiveSearch());
   }
 
   private void validateNonCursorInput() {

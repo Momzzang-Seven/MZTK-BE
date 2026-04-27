@@ -21,10 +21,6 @@ public record GetMyLikedPostsCursorCommand(
     return CursorPageRequest.of(cursor, size, DEFAULT_SIZE, MAX_SIZE, scope());
   }
 
-  public int resolvedSize() {
-    return pageRequest().size();
-  }
-
   public String effectiveSearch() {
     if (type == PostType.FREE) {
       return null;
