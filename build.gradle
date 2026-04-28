@@ -92,10 +92,14 @@ dependencies {
     // Rate limiting
     implementation 'com.bucket4j:bucket4j-core:8.10.1'
 
+    // In-memory caching (managed by Spring Boot BOM)
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+
     // AWS
     implementation platform('software.amazon.awssdk:bom:2.27.21')
     implementation 'software.amazon.awssdk:s3'
     implementation 'software.amazon.awssdk:secretsmanager'
+    implementation 'software.amazon.awssdk:kms'
 }
 
 spotless {

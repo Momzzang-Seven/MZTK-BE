@@ -31,7 +31,7 @@ Back-End Server for Momzzang Token.
 - `build/` – 빌드 산출물(버전 관리 대상 아님)
 - `config/checkstyle/` – Checkstyle 설정(`google_checks.xml`)
 - `gradle/` – Gradle Wrapper 설정
-- `src/main/java/momzzangseven/mztkbe/bootstrap/MztkBeApplication.java` – 엔트리포인트
+- `src/main/java/momzzangseven/mztkbe/MztkBeApplication.java` – 엔트리포인트
 - `src/main/resources/application.yml` – dev 기본 설정
 - `.env.example` – 환경 변수 템플릿
 - `build.gradle`, `settings.gradle`, `gradlew*` – 빌드/실행 스크립트

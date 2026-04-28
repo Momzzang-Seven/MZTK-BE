@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 
 /**
@@ -25,6 +26,14 @@ public class AwsConfig {
   @Bean
   public SecretsManagerClient secretsManagerClient() {
     return SecretsManagerClient.builder()
+        .region(Region.of(region))
+        .credentialsProvider(DefaultCredentialsProvider.create())
+        .build();
+  }
+
+  @Bean
+  public KmsClient kmsClient() {
+    return KmsClient.builder()
         .region(Region.of(region))
         .credentialsProvider(DefaultCredentialsProvider.create())
         .build();

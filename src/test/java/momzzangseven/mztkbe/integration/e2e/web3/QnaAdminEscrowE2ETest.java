@@ -30,7 +30,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.token.infrastructure.adapter.TreasuryKeyCipher;
+import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter.TreasuryKeyCipher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -368,9 +368,9 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         treasuryKeyCipher.encrypt(normalizedPrivateKey, KEY_ENCRYPTION_KEY_B64);
     String treasuryAddress = Credentials.create(normalizedPrivateKey).getAddress().toLowerCase();
 
-    jdbcTemplate.update("delete from web3_treasury_keys where wallet_alias = ?", "test-sponsor");
+    jdbcTemplate.update("delete from web3_treasury_wallets where wallet_alias = ?", "test-sponsor");
     jdbcTemplate.update(
-        "insert into web3_treasury_keys (wallet_alias, treasury_address, treasury_private_key_encrypted, created_at, updated_at)"
+        "insert into web3_treasury_wallets (wallet_alias, treasury_address, treasury_private_key_encrypted, created_at, updated_at)"
             + " values (?, ?, ?, now(), now())",
         "test-sponsor",
         treasuryAddress,
