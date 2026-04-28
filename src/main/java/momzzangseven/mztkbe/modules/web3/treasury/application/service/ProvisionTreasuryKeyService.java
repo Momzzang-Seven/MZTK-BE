@@ -34,12 +34,12 @@ import org.web3j.crypto.Credentials;
  * any KMS resources it allocated (disable + 7-day scheduled deletion) so a half-provisioned key
  * cannot accumulate.
  *
- * <p>Audit entries are recorded via {@link TreasuryAuditRecorder} which runs them in
- * {@code REQUIRES_NEW} so they survive even when the outer transaction rolls back — the operator
- * must always see a row in {@code web3_treasury_provision_audits} regardless of outcome. Routing
- * audit writes through a separate bean (rather than a {@code @Transactional} method on this same
- * class) is required because Spring AOP cannot intercept a self-invocation, so an inline
- * {@code recordAudit} would silently lose its {@code REQUIRES_NEW} guarantee.
+ * <p>Audit entries are recorded via {@link TreasuryAuditRecorder} which runs them in {@code
+ * REQUIRES_NEW} so they survive even when the outer transaction rolls back — the operator must
+ * always see a row in {@code web3_treasury_provision_audits} regardless of outcome. Routing audit
+ * writes through a separate bean (rather than a {@code @Transactional} method on this same class)
+ * is required because Spring AOP cannot intercept a self-invocation, so an inline {@code
+ * recordAudit} would silently lose its {@code REQUIRES_NEW} guarantee.
  */
 @Service
 @Slf4j
@@ -81,7 +81,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
           "derived address does not match expectedAddress");
     }
     if (loadTreasuryWalletPort.existsByAliasOrAddress(walletAlias, derivedAddress)) {
-      treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
       throw new TreasuryWalletAlreadyProvisionedException(
           "treasury wallet already provisioned for alias '" + walletAlias + "'");
     }
@@ -109,7 +110,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       return ProvisionTreasuryKeyResult.from(saved, role);
     } catch (RuntimeException e) {
       cleanupKmsKey(kmsKeyId);
-      treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
       throw e;
     } finally {
       zeroize(rawPrivateKey);

@@ -21,16 +21,16 @@ import org.springframework.transaction.annotation.Transactional;
  * deletion. The default 30-day pending window matches the KMS minimum and gives operators a
  * recovery buffer before the key material is destroyed.
  *
- * <p>Audit writes go through {@link TreasuryAuditRecorder} (separate bean) so they run in
- * {@code REQUIRES_NEW} and survive a rollback of the outer transaction. An inline
- * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP
- * cannot intercept self-invocation, so the propagation hint would be silently dropped.
+ * <p>Audit writes go through {@link TreasuryAuditRecorder} (separate bean) so they run in {@code
+ * REQUIRES_NEW} and survive a rollback of the outer transaction. An inline
+ * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP cannot
+ * intercept self-invocation, so the propagation hint would be silently dropped.
  *
- * <p><b>Save-first ordering</b> — DB save commits before the KMS {@code ScheduleKeyDeletion}
- * call. This intentionally diverges from the design doc §4-4 KMS-first sequence: save-first
- * leaves a recoverable state on KMS failure (ARCHIVED row + still-live KMS key, retryable),
- * while KMS-first would leave the DB unchanged and the KMS key invisibly scheduled for
- * deletion, which is much harder to recover from.
+ * <p><b>Save-first ordering</b> — DB save commits before the KMS {@code ScheduleKeyDeletion} call.
+ * This intentionally diverges from the design doc §4-4 KMS-first sequence: save-first leaves a
+ * recoverable state on KMS failure (ARCHIVED row + still-live KMS key, retryable), while KMS-first
+ * would leave the DB unchanged and the KMS key invisibly scheduled for deletion, which is much
+ * harder to recover from.
  */
 @Service
 @Slf4j
