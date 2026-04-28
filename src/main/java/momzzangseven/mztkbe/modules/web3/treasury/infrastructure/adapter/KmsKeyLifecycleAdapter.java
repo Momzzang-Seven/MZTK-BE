@@ -82,8 +82,7 @@ public class KmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
   }
 
   @Override
-  public void importKeyMaterial(
-      String kmsKeyId, byte[] encryptedKeyMaterial, byte[] importToken) {
+  public void importKeyMaterial(String kmsKeyId, byte[] encryptedKeyMaterial, byte[] importToken) {
     ImportKeyMaterialRequest request =
         ImportKeyMaterialRequest.builder()
             .keyId(kmsKeyId)

@@ -4,8 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,15 +30,29 @@ class ProvisionTreasuryKeyAdapterTest {
   }
 
   @Test
-  void provision_mapsTokenResultToAdminResult() {
-    when(provisionTreasuryKeyUseCase.execute(1L, "reward-main", "f".repeat(64)))
-        .thenReturn(
-            momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult
-                .of("0x" + "a".repeat(40), "enc", "kek-base64"));
+  void provision_mapsTreasuryResultToAdminResult() {
+    String address = "0x" + "a".repeat(40);
+    var treasuryResult =
+        new momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult(
+            "reward-treasury",
+            TreasuryRole.REWARD,
+            "kms-key-id",
+            address,
+            TreasuryWalletStatus.ACTIVE,
+            TreasuryKeyOrigin.IMPORTED,
+            LocalDateTime.now());
+    when(provisionTreasuryKeyUseCase.execute(
+            new ProvisionTreasuryKeyCommand(1L, "f".repeat(64), TreasuryRole.REWARD, address)))
+        .thenReturn(treasuryResult);
 
-    ProvisionTreasuryKeyResult result = adapter.provision(1L, "reward-main", "f".repeat(64));
+    ProvisionTreasuryKeyResult result =
+        adapter.provision(1L, "f".repeat(64), TreasuryRole.REWARD, address);
 
-    assertThat(result.treasuryKeyEncryptionKeyB64()).isEqualTo("kek-base64");
-    verify(provisionTreasuryKeyUseCase).execute(1L, "reward-main", "f".repeat(64));
+    assertThat(result.kmsKeyId()).isEqualTo("kms-key-id");
+    assertThat(result.walletAddress()).isEqualTo(address);
+    assertThat(result.status()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+    verify(provisionTreasuryKeyUseCase)
+        .execute(
+            new ProvisionTreasuryKeyCommand(1L, "f".repeat(64), TreasuryRole.REWARD, address));
   }
 }

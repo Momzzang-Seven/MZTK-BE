@@ -6,11 +6,11 @@ import org.springframework.stereotype.Component;
 
 /**
  * Non-production stand-in for {@link KmsKeyLifecyclePort}. Treasury provisioning / disable /
- * archive flows require a real KMS key, so this adapter is intentionally inert: every method
- * throws {@link UnsupportedOperationException}, which surfaces as HTTP 500 if a non-prod call ever
- * reaches it. Its sole purpose is to satisfy bean wiring for {@code DisableTreasuryWalletService}
- * / {@code ArchiveTreasuryWalletService} / {@code ProvisionTreasuryKeyService} so the Spring
- * context starts cleanly in local / dev / test / E2E.
+ * archive flows require a real KMS key, so this adapter is intentionally inert: every method throws
+ * {@link UnsupportedOperationException}, which surfaces as HTTP 500 if a non-prod call ever reaches
+ * it. Its sole purpose is to satisfy bean wiring for {@code DisableTreasuryWalletService} / {@code
+ * ArchiveTreasuryWalletService} / {@code ProvisionTreasuryKeyService} so the Spring context starts
+ * cleanly in local / dev / test / E2E.
  */
 @Component
 @Profile("!prod")
@@ -27,8 +27,7 @@ public class LocalKmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
   }
 
   @Override
-  public void importKeyMaterial(
-      String kmsKeyId, byte[] encryptedKeyMaterial, byte[] importToken) {
+  public void importKeyMaterial(String kmsKeyId, byte[] encryptedKeyMaterial, byte[] importToken) {
     throw unsupported("importKeyMaterial");
   }
 
