@@ -23,9 +23,9 @@ public interface KmsKeyLifecyclePort {
 
   /**
    * Fetch a wrapping public key + import token bound to the supplied {@code kmsKeyId}.
-   * Implementations request {@code WrappingAlgorithm=RSAES_OAEP_SHA_256} and
-   * {@code WrappingKeySpec=RSA_4096} so the caller can RSA-OAEP-SHA-256 wrap the raw secp256k1
-   * private key locally before uploading.
+   * Implementations request {@code WrappingAlgorithm=RSAES_OAEP_SHA_256} and {@code
+   * WrappingKeySpec=RSA_4096} so the caller can RSA-OAEP-SHA-256 wrap the raw secp256k1 private key
+   * locally before uploading.
    */
   ImportParams getParametersForImport(String kmsKeyId);
 
@@ -52,12 +52,12 @@ public interface KmsKeyLifecyclePort {
   void scheduleKeyDeletion(String kmsKeyId, int pendingWindowDays);
 
   /**
-   * Wrapping public key + import token bundle returned by {@link
-   * #getParametersForImport(String)}. Both arrays are owned by the caller after the call returns;
-   * implementations are not required to defensively copy.
+   * Wrapping public key + import token bundle returned by {@link #getParametersForImport(String)}.
+   * Both arrays are owned by the caller after the call returns; implementations are not required to
+   * defensively copy.
    *
-   * @param wrappingPublicKey DER-encoded RSA-4096 public key used by the caller for RSA-OAEP-SHA-256
-   *     wrapping
+   * @param wrappingPublicKey DER-encoded RSA-4096 public key used by the caller for
+   *     RSA-OAEP-SHA-256 wrapping
    * @param importToken opaque token that must be passed back unchanged to {@link
    *     #importKeyMaterial(String, byte[], byte[])}
    */
