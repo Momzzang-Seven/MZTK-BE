@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.dto;
 
+import java.util.regex.Pattern;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
@@ -28,6 +29,9 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
 public record ProvisionTreasuryKeyCommand(
     Long operatorUserId, String rawPrivateKey, TreasuryRole role, String expectedAddress) {
 
+  private static final Pattern PRIVATE_KEY_HEX = Pattern.compile("^(0x)?[0-9a-fA-F]{64}$");
+  private static final Pattern ADDRESS_HEX = Pattern.compile("^0x[0-9a-fA-F]{40}$");
+
   public void validate() {
     if (operatorUserId == null || operatorUserId <= 0) {
       throw new Web3InvalidInputException("operatorUserId must be positive");
@@ -35,13 +39,16 @@ public record ProvisionTreasuryKeyCommand(
     if (rawPrivateKey == null || rawPrivateKey.isBlank()) {
       throw new TreasuryPrivateKeyInvalidException("rawPrivateKey is required");
     }
+    if (!PRIVATE_KEY_HEX.matcher(rawPrivateKey.trim()).matches()) {
+      throw new TreasuryPrivateKeyInvalidException("rawPrivateKey must be 32-byte hex");
+    }
     if (role == null) {
       throw new Web3InvalidInputException("role is required");
     }
     if (expectedAddress == null || expectedAddress.isBlank()) {
       throw new Web3InvalidInputException("expectedAddress is required");
     }
-    if (!expectedAddress.startsWith("0x") || expectedAddress.length() != 42) {
+    if (!ADDRESS_HEX.matcher(expectedAddress).matches()) {
       throw new Web3InvalidInputException("expectedAddress must be 0x-prefixed 40-hex");
     }
   }

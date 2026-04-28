@@ -18,13 +18,11 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProvisionT
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.crypto.Credentials;
 
@@ -36,9 +34,12 @@ import org.web3j.crypto.Credentials;
  * any KMS resources it allocated (disable + 7-day scheduled deletion) so a half-provisioned key
  * cannot accumulate.
  *
- * <p>Audit entries are recorded in {@link Propagation#REQUIRES_NEW} so they survive even when the
- * outer transaction rolls back — the operator must always see a row in {@code
- * web3_treasury_provision_audits} regardless of outcome.
+ * <p>Audit entries are recorded via {@link TreasuryAuditRecorder} which runs them in
+ * {@code REQUIRES_NEW} so they survive even when the outer transaction rolls back — the operator
+ * must always see a row in {@code web3_treasury_provision_audits} regardless of outcome. Routing
+ * audit writes through a separate bean (rather than a {@code @Transactional} method on this same
+ * class) is required because Spring AOP cannot intercept a self-invocation, so an inline
+ * {@code recordAudit} would silently lose its {@code REQUIRES_NEW} guarantee.
  */
 @Service
 @Slf4j
@@ -54,7 +55,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
   private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
   private final KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   private final SignDigestPort signDigestPort;
-  private final RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
+  private final TreasuryAuditRecorder treasuryAuditRecorder;
   private final Clock clock;
   private final SecureRandom secureRandom = new SecureRandom();
 
@@ -75,12 +76,12 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     String walletAlias = role.toAlias();
     String derivedAddress = deriveAddress(command.rawPrivateKey());
     if (!derivedAddress.equalsIgnoreCase(command.expectedAddress())) {
-      recordAudit(command.operatorUserId(), null, false, "ADDRESS_MISMATCH");
+      treasuryAuditRecorder.record(command.operatorUserId(), null, false, "ADDRESS_MISMATCH");
       throw new TreasuryWalletAddressMismatchException(
           "derived address does not match expectedAddress");
     }
     if (loadTreasuryWalletPort.existsByAliasOrAddress(walletAlias, derivedAddress)) {
-      recordAudit(command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
+      treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
       throw new TreasuryWalletAlreadyProvisionedException(
           "treasury wallet already provisioned for alias '" + walletAlias + "'");
     }
@@ -104,11 +105,11 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
           TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
 
-      recordAudit(command.operatorUserId(), derivedAddress, true, null);
+      treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, true, null);
       return ProvisionTreasuryKeyResult.from(saved, role);
     } catch (RuntimeException e) {
       cleanupKmsKey(kmsKeyId);
-      recordAudit(command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
+      treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
       throw e;
     } finally {
       zeroize(rawPrivateKey);
@@ -163,21 +164,6 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       kmsKeyLifecyclePort.scheduleKeyDeletion(kmsKeyId, CLEANUP_PENDING_WINDOW_DAYS);
     } catch (RuntimeException ex) {
       log.warn("Cleanup scheduleKeyDeletion failed for kmsKeyId={}", kmsKeyId, ex);
-    }
-  }
-
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
-  void recordAudit(Long operatorId, String walletAddress, boolean success, String failureReason) {
-    try {
-      recordTreasuryProvisionAuditPort.record(
-          new RecordTreasuryProvisionAuditPort.AuditCommand(
-              operatorId, walletAddress, success, failureReason));
-    } catch (Exception e) {
-      log.warn(
-          "Failed to record provision-treasury audit: operatorId={}, success={}",
-          operatorId,
-          success,
-          e);
     }
   }
 
