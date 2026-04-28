@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
@@ -67,6 +68,19 @@ class PostV2CursorE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
   }
 
+  private Long createFreePost(String content, List<String> tags) throws Exception {
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            baseUrl() + "/posts/free",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("content", content, "imageIds", List.of(), "tags", tags),
+                bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
+  }
+
   private JsonNode fetchPosts(String query) throws Exception {
     ResponseEntity<String> res =
         restTemplate.exchange(
@@ -76,6 +90,12 @@ class PostV2CursorE2ETest extends E2ETestBase {
             String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
     return objectMapper.readTree(res.getBody());
+  }
+
+  private List<Long> postIds(JsonNode response) {
+    List<Long> ids = new ArrayList<>();
+    response.at("/data/posts").forEach(post -> ids.add(post.at("/postId").asLong()));
+    return ids;
   }
 
   private JsonNode fetchPosts(URI uri) throws Exception {
@@ -163,5 +183,37 @@ class PostV2CursorE2ETest extends E2ETestBase {
     assertThat(response.at("/data/posts").size()).isEqualTo(1);
     assertThat(response.at("/data/posts/0/postId").asLong()).isEqualTo(literalMatchPostId);
     assertThat(response.at("/data/posts/0/title").asText()).isEqualTo("100%_ form tagged match");
+  }
+
+  @Test
+  @DisplayName("[E-5] type 생략 검색은 FREE를 유지하고 QUESTION 제목에만 search를 적용한다")
+  void getPostsV2_withoutTypeAndSearch_keepsFreeAndFiltersQuestionTitle() throws Exception {
+    Long nonMatchingQuestionId = createQuestionPost("other nulltypea question", List.of());
+    Long matchingQuestionId = createQuestionPost("NULLTYPEA question match", List.of());
+    Long freePostId = createFreePost("nulltypea free content", List.of());
+
+    JsonNode response = fetchPosts("?search=nulltypea&size=50");
+
+    assertThat(postIds(response))
+        .contains(freePostId, matchingQuestionId)
+        .doesNotContain(nonMatchingQuestionId);
+  }
+
+  @Test
+  @DisplayName("[E-6] type 생략 태그 검색은 FREE를 유지하고 QUESTION 제목에만 search를 적용한다")
+  void getPostsV2_withTagWithoutTypeAndSearch_keepsTaggedFreeAndFiltersQuestionTitle()
+      throws Exception {
+    String tag = "nulltype-tag";
+    Long nonMatchingQuestionId = createQuestionPost("other nulltypeb question", List.of(tag));
+    Long matchingQuestionId = createQuestionPost("NULLTYPEB question match", List.of(tag));
+    Long otherTagQuestionId =
+        createQuestionPost("NULLTYPEB other tag question", List.of("other-tag"));
+    Long freePostId = createFreePost("nulltypeb free content", List.of(tag));
+
+    JsonNode response = fetchPosts("?tag=" + tag + "&search=nulltypeb&size=50");
+
+    assertThat(postIds(response))
+        .contains(freePostId, matchingQuestionId)
+        .doesNotContain(nonMatchingQuestionId, otherTagQuestionId);
   }
 }

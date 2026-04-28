@@ -170,7 +170,15 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
     if (type == PostType.FREE) {
       return null;
     }
-    return postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
+    BooleanExpression questionTitleMatches =
+        postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
+    if (type == null) {
+      return postEntity
+          .type
+          .eq(PostType.FREE)
+          .or(postEntity.type.eq(PostType.QUESTION).and(questionTitleMatches));
+    }
+    return questionTitleMatches;
   }
 
   private BooleanExpression filterByTagIds(List<Long> postIds) {
