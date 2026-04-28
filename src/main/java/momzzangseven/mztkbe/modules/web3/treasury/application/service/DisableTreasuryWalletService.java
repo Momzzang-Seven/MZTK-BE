@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Transitions a wallet ACTIVE → DISABLED, persists, then asks KMS to disable the backing key.
  *
-치 * <p>Audit writes go through {@link TreasuryAuditRecorder} (separate bean) so they run in {@code
+ * <p>Audit writes go through {@link TreasuryAuditRecorder} (separate bean) so they run in {@code
  * REQUIRES_NEW} and survive a rollback of the outer transaction. An inline
  * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP cannot
  * intercept self-invocation, so the propagation hint would be silently dropped.
