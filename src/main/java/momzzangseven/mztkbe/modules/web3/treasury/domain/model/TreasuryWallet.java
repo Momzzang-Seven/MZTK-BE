@@ -48,11 +48,7 @@ public class TreasuryWallet {
    * @return a new ACTIVE treasury wallet ready to be persisted
    */
   public static TreasuryWallet provision(
-      String walletAlias,
-      String kmsKeyId,
-      String walletAddress,
-      TreasuryRole role,
-      Clock clock) {
+      String walletAlias, String kmsKeyId, String walletAddress, TreasuryRole role, Clock clock) {
     Objects.requireNonNull(walletAlias, "walletAlias must not be null");
     Objects.requireNonNull(kmsKeyId, "kmsKeyId must not be null");
     Objects.requireNonNull(walletAddress, "walletAddress must not be null");
