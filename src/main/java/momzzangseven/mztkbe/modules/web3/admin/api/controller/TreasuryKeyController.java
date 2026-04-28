@@ -51,8 +51,7 @@ public class TreasuryKeyController {
             request.role(),
             request.expectedAddress());
     ProvisionTreasuryKeyResult result = provisionTreasuryKeyUseCase.execute(command);
-    return ResponseEntity.ok(
-        ApiResponse.success(ProvisionTreasuryKeyResponseDTO.from(result)));
+    return ResponseEntity.ok(ApiResponse.success(ProvisionTreasuryKeyResponseDTO.from(result)));
   }
 
   @GetMapping("/{walletAlias}")

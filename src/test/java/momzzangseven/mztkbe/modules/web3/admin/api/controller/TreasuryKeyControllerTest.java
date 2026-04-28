@@ -107,7 +107,15 @@ class TreasuryKeyControllerTest {
             post("/admin/web3/treasury-keys/provision")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("rawPrivateKey", "0xabc", "role", "REWARD", "expectedAddress", "0xabc"))))
+                .content(
+                    json(
+                        Map.of(
+                            "rawPrivateKey",
+                            "0xabc",
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            "0xabc"))))
         .andExpect(status().isForbidden());
   }
 
@@ -127,7 +135,15 @@ class TreasuryKeyControllerTest {
             post("/admin/web3/treasury-keys/provision")
                 .with(adminPrincipal(9L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("rawPrivateKey", " ", "role", "REWARD", "expectedAddress", "0x" + "a".repeat(40)))))
+                .content(
+                    json(
+                        Map.of(
+                            "rawPrivateKey",
+                            " ",
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            "0x" + "a".repeat(40)))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
   }

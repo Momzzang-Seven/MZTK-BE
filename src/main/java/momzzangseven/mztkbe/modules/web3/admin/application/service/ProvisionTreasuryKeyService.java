@@ -26,9 +26,6 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     }
     command.validate();
     return provisionTreasuryKeyPort.provision(
-        command.operatorId(),
-        command.rawPrivateKey(),
-        command.role(),
-        command.expectedAddress());
+        command.operatorId(), command.rawPrivateKey(), command.role(), command.expectedAddress());
   }
 }

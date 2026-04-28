@@ -91,8 +91,7 @@ class ProvisionTreasuryKeyServiceTest {
         .thenReturn(true);
 
     ProvisionTreasuryKeyCommand command =
-        new ProvisionTreasuryKeyCommand(
-            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
 
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
@@ -114,24 +113,25 @@ class ProvisionTreasuryKeyServiceTest {
     when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
-        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[]{1, 2, 3}, new byte[]{4, 5, 6}));
+        .thenReturn(
+            new KmsKeyLifecyclePort.ImportParams(new byte[] {1, 2, 3}, new byte[] {4, 5, 6}));
     when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
-        .thenReturn(new byte[]{7, 8, 9});
+        .thenReturn(new byte[] {7, 8, 9});
     when(signDigestPort.signDigest(eq("kms-key-id"), any(byte[].class), eq(DERIVED_ADDRESS)))
         .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
     when(saveTreasuryWalletPort.save(any(TreasuryWallet.class)))
         .thenAnswer(inv -> inv.getArgument(0));
 
     ProvisionTreasuryKeyCommand command =
-        new ProvisionTreasuryKeyCommand(
-            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
 
     ProvisionTreasuryKeyResult result = service.execute(command);
 
     assertThat(result.walletAlias()).isEqualTo("reward-treasury");
     assertThat(result.kmsKeyId()).isEqualTo("kms-key-id");
     assertThat(result.walletAddress()).isEqualTo(DERIVED_ADDRESS);
-    verify(kmsKeyLifecyclePort).importKeyMaterial(eq("kms-key-id"), any(byte[].class), any(byte[].class));
+    verify(kmsKeyLifecyclePort)
+        .importKeyMaterial(eq("kms-key-id"), any(byte[].class), any(byte[].class));
     verify(kmsKeyLifecyclePort).createAlias("reward-treasury", "kms-key-id");
     verify(saveTreasuryWalletPort).save(any(TreasuryWallet.class));
   }
@@ -141,15 +141,14 @@ class ProvisionTreasuryKeyServiceTest {
     when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
-        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[]{1}, new byte[]{2}));
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
     when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
-        .thenReturn(new byte[]{3});
+        .thenReturn(new byte[] {3});
     when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
         .thenThrow(new RuntimeException("kms unreachable"));
 
     ProvisionTreasuryKeyCommand command =
-        new ProvisionTreasuryKeyCommand(
-            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
 
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(RuntimeException.class)
@@ -165,24 +164,20 @@ class ProvisionTreasuryKeyServiceTest {
     when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
     when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
     when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
-        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[]{1}, new byte[]{2}));
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
     when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
-        .thenReturn(new byte[]{3});
+        .thenReturn(new byte[] {3});
     when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
         .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
     when(saveTreasuryWalletPort.save(any(TreasuryWallet.class)))
         .thenAnswer(inv -> inv.getArgument(0));
 
     ProvisionTreasuryKeyCommand command =
-        new ProvisionTreasuryKeyCommand(
-            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
 
     service.execute(command);
 
     verify(recordTreasuryProvisionAuditPort)
-        .record(
-            new RecordTreasuryProvisionAuditPort.AuditCommand(
-                1L, DERIVED_ADDRESS, true, null));
+        .record(new RecordTreasuryProvisionAuditPort.AuditCommand(1L, DERIVED_ADDRESS, true, null));
   }
-
 }
