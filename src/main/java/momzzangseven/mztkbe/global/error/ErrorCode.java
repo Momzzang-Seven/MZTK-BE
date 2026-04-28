@@ -193,6 +193,9 @@ public enum ErrorCode {
       "WEB3_016",
       "Failed to recover Ethereum address from KMS signature",
       HttpStatus.INTERNAL_SERVER_ERROR),
+  WEB3_KMS_SIGN_FAILED("WEB3_017", "KMS sign operation failed", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEB3_KMS_KEY_DESCRIBE_FAILED(
+      "WEB3_018", "KMS DescribeKey operation failed", HttpStatus.INTERNAL_SERVER_ERROR),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
