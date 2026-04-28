@@ -12,16 +12,16 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreas
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Transitions a wallet ACTIVE → DISABLED, persists, then asks KMS to disable the backing key.
- * Audit entries are recorded in a separate transaction so the audit trail survives a failure of
- * the KMS step.
- *
- * <p>Skeleton — not yet registered as a Spring bean. {@code @Service} / {@code @Transactional}
- * annotations and the {@code REQUIRES_NEW} audit propagation land in commit 1-10 once the lifecycle
- * adapter exists.
+ * Audit entries are recorded in {@link Propagation#REQUIRES_NEW} so the audit trail survives a
+ * failure of the KMS step.
  */
+@Service
 @Slf4j
 @RequiredArgsConstructor
 public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCase {
@@ -33,6 +33,7 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
   private final Clock clock;
 
   @Override
+  @Transactional
   public TreasuryWalletView execute(DisableTreasuryWalletCommand command) {
     TreasuryWallet wallet =
         loadTreasuryWalletPort
@@ -55,6 +56,7 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
     }
   }
 
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   void recordAudit(Long operatorId, String walletAddress, boolean success, String failureReason) {
     try {
       recordTreasuryProvisionAuditPort.record(

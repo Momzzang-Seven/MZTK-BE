@@ -21,7 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-class TreasuryKeyPersistenceAdapterTest {
+class TreasuryWalletPersistenceAdapterTest {
 
   private static final String MATCHING_PRIVATE_KEY_HEX =
       "4f3edf983ac636a65a842ce7c78d9aa706d3b113bce036f4edc6f6dc0d1e6f73";
@@ -30,11 +30,11 @@ class TreasuryKeyPersistenceAdapterTest {
   @Mock private Web3TreasuryWalletJpaRepository repository;
   @Mock private TreasuryKeyCipher treasuryKeyCipher;
 
-  private TreasuryKeyPersistenceAdapter adapter;
+  private TreasuryWalletPersistenceAdapter adapter;
 
   @BeforeEach
   void setUp() {
-    adapter = new TreasuryKeyPersistenceAdapter(repository, treasuryKeyCipher);
+    adapter = new TreasuryWalletPersistenceAdapter(repository, treasuryKeyCipher);
   }
 
   @Test
