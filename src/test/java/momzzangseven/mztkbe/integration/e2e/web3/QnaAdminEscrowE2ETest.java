@@ -368,9 +368,10 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
         treasuryKeyCipher.encrypt(normalizedPrivateKey, KEY_ENCRYPTION_KEY_B64);
     String treasuryAddress = Credentials.create(normalizedPrivateKey).getAddress().toLowerCase();
 
-    jdbcTemplate.update("delete from web3_treasury_keys where wallet_alias = ?", "test-sponsor");
     jdbcTemplate.update(
-        "insert into web3_treasury_keys (wallet_alias, treasury_address, treasury_private_key_encrypted, created_at, updated_at)"
+        "delete from web3_treasury_wallets where wallet_alias = ?", "test-sponsor");
+    jdbcTemplate.update(
+        "insert into web3_treasury_wallets (wallet_alias, treasury_address, treasury_private_key_encrypted, created_at, updated_at)"
             + " values (?, ?, ?, now(), now())",
         "test-sponsor",
         treasuryAddress,

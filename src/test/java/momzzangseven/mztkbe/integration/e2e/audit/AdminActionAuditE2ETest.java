@@ -397,12 +397,12 @@ class AdminActionAuditE2ETest extends E2ETestBase {
   @Test
   @DisplayName(
       "[E-4] ProvisionTreasuryKey 성공 → admin_action_audits target_type='TREASURY_KEY', "
-          + "rawPrivateKey 마스킹, web3_treasury_keys 저장")
+          + "rawPrivateKey 마스킹, web3_treasury_wallets 저장")
   void provisionTreasuryKey_success_recordsAuditAndMasksPrivateKey() throws Exception {
     AdminUser admin = createAdminAndLogin();
     String walletAlias = "reward-treasury";
     // pre-clean any pre-existing alias row from a previous flaky test
-    jdbcTemplate.update("DELETE FROM web3_treasury_keys WHERE wallet_alias = ?", walletAlias);
+    jdbcTemplate.update("DELETE FROM web3_treasury_wallets WHERE wallet_alias = ?", walletAlias);
 
     ResponseEntity<String> response =
         provisionTreasury(admin.accessToken(), VALID_TEST_PRIVATE_KEY, walletAlias);
@@ -441,7 +441,7 @@ class AdminActionAuditE2ETest extends E2ETestBase {
     // treasury key row persisted
     Integer treasuryKeyCount =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM web3_treasury_keys WHERE wallet_alias = ?",
+            "SELECT COUNT(*) FROM web3_treasury_wallets WHERE wallet_alias = ?",
             Integer.class,
             walletAlias);
     assertThat(treasuryKeyCount).isEqualTo(1);
@@ -491,7 +491,7 @@ class AdminActionAuditE2ETest extends E2ETestBase {
     // no treasury key row persisted (rollback)
     Integer treasuryKeyCount =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM web3_treasury_keys WHERE wallet_alias = ?",
+            "SELECT COUNT(*) FROM web3_treasury_wallets WHERE wallet_alias = ?",
             Integer.class,
             walletAlias);
     // we may have had a row already (from a previous successful test); but in this test we did

@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerF
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter.TreasuryKeyCipher;
-import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryKeyEntity;
-import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryKeyJpaRepository;
+import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryWalletEntity;
+import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryWalletJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,7 +27,7 @@ class TreasuryKeyPersistenceAdapterTest {
       "4f3edf983ac636a65a842ce7c78d9aa706d3b113bce036f4edc6f6dc0d1e6f73";
   private static final String MATCHING_ADDRESS = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
 
-  @Mock private Web3TreasuryKeyJpaRepository repository;
+  @Mock private Web3TreasuryWalletJpaRepository repository;
   @Mock private TreasuryKeyCipher treasuryKeyCipher;
 
   private TreasuryKeyPersistenceAdapter adapter;
@@ -46,8 +46,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
   @Test
   void loadByAlias_decryptsAndMapsResult() {
-    Web3TreasuryKeyEntity entity =
-        Web3TreasuryKeyEntity.builder()
+    Web3TreasuryWalletEntity entity =
+        Web3TreasuryWalletEntity.builder()
             .walletAlias("reward-main")
             .treasuryAddress(MATCHING_ADDRESS)
             .treasuryPrivateKeyEncrypted("enc")
@@ -65,8 +65,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
   @Test
   void loadByAlias_returnsEmpty_whenDerivedAddressDoesNotMatchStoredAddress() {
-    Web3TreasuryKeyEntity entity =
-        Web3TreasuryKeyEntity.builder()
+    Web3TreasuryWalletEntity entity =
+        Web3TreasuryWalletEntity.builder()
             .walletAlias("reward-main")
             .treasuryAddress("0x" + "a".repeat(40))
             .treasuryPrivateKeyEncrypted("enc")
@@ -82,8 +82,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
   @Test
   void probe_returnsProvisionedStatus_whenKeyEncryptionKeyMissing() {
-    Web3TreasuryKeyEntity entity =
-        Web3TreasuryKeyEntity.builder()
+    Web3TreasuryWalletEntity entity =
+        Web3TreasuryWalletEntity.builder()
             .walletAlias("reward-main")
             .treasuryAddress("0x" + "a".repeat(40))
             .treasuryPrivateKeyEncrypted("enc")
@@ -100,8 +100,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
   @Test
   void probe_returnsProvisionedStatus_whenDecryptFails() {
-    Web3TreasuryKeyEntity entity =
-        Web3TreasuryKeyEntity.builder()
+    Web3TreasuryWalletEntity entity =
+        Web3TreasuryWalletEntity.builder()
             .walletAlias("reward-main")
             .treasuryAddress("0x" + "a".repeat(40))
             .treasuryPrivateKeyEncrypted("enc")
@@ -118,8 +118,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
   @Test
   void loadAddressByAlias_returnsStoredAddressProjection_whenPresent() {
-    Web3TreasuryKeyEntity entity =
-        Web3TreasuryKeyEntity.builder()
+    Web3TreasuryWalletEntity entity =
+        Web3TreasuryWalletEntity.builder()
             .walletAlias("reward-main")
             .treasuryAddress(MATCHING_ADDRESS)
             .treasuryPrivateKeyEncrypted("enc")
@@ -137,8 +137,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
     adapter.upsert("reward-main", "0x" + "a".repeat(40), "enc");
 
-    ArgumentCaptor<Web3TreasuryKeyEntity> captor =
-        ArgumentCaptor.forClass(Web3TreasuryKeyEntity.class);
+    ArgumentCaptor<Web3TreasuryWalletEntity> captor =
+        ArgumentCaptor.forClass(Web3TreasuryWalletEntity.class);
     verify(repository).save(captor.capture());
     assertThat(captor.getValue().getWalletAlias()).isEqualTo("reward-main");
     assertThat(captor.getValue().getTreasuryPrivateKeyEncrypted()).isEqualTo("enc");
@@ -146,8 +146,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
   @Test
   void upsert_updatesExistingEntity_whenAliasAlreadyExists() {
-    Web3TreasuryKeyEntity existing =
-        Web3TreasuryKeyEntity.builder()
+    Web3TreasuryWalletEntity existing =
+        Web3TreasuryWalletEntity.builder()
             .id(1L)
             .walletAlias("reward-main")
             .treasuryAddress("0x" + "a".repeat(40))
@@ -157,8 +157,8 @@ class TreasuryKeyPersistenceAdapterTest {
 
     adapter.upsert("reward-main", "0x" + "b".repeat(40), "new-enc");
 
-    ArgumentCaptor<Web3TreasuryKeyEntity> captor =
-        ArgumentCaptor.forClass(Web3TreasuryKeyEntity.class);
+    ArgumentCaptor<Web3TreasuryWalletEntity> captor =
+        ArgumentCaptor.forClass(Web3TreasuryWalletEntity.class);
     verify(repository).save(captor.capture());
     assertThat(captor.getValue().getId()).isEqualTo(1L);
     assertThat(captor.getValue().getWalletAlias()).isEqualTo("reward-main");

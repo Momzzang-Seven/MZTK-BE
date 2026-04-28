@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreas
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter.TreasuryKeyCipher;
-import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryKeyEntity;
-import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryKeyJpaRepository;
+import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryWalletEntity;
+import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryWalletJpaRepository;
 import org.springframework.stereotype.Component;
 import org.web3j.crypto.Credentials;
 
@@ -24,7 +24,7 @@ public class TreasuryKeyPersistenceAdapter
         ProbeExecutionSignerCapabilityPort,
         LoadTreasuryAddressProjectionPort {
 
-  private final Web3TreasuryKeyJpaRepository repository;
+  private final Web3TreasuryWalletJpaRepository repository;
   private final TreasuryKeyCipher treasuryKeyCipher;
 
   @Override
@@ -53,7 +53,7 @@ public class TreasuryKeyPersistenceAdapter
 
     return repository
         .findByWalletAlias(walletAlias)
-        .map(Web3TreasuryKeyEntity::getTreasuryAddress)
+        .map(Web3TreasuryWalletEntity::getTreasuryAddress)
         .filter(TreasuryKeyPersistenceAdapter::hasText);
   }
 
@@ -64,10 +64,10 @@ public class TreasuryKeyPersistenceAdapter
     requireNonBlank(treasuryAddress, "treasuryAddress");
     requireNonBlank(treasuryPrivateKeyEncrypted, "treasuryPrivateKeyEncrypted");
 
-    Web3TreasuryKeyEntity entity =
+    Web3TreasuryWalletEntity entity =
         repository
             .findByWalletAlias(walletAlias)
-            .orElseGet(() -> Web3TreasuryKeyEntity.builder().build());
+            .orElseGet(() -> Web3TreasuryWalletEntity.builder().build());
     entity.setWalletAlias(walletAlias);
     entity.setTreasuryAddress(treasuryAddress);
     entity.setTreasuryPrivateKeyEncrypted(treasuryPrivateKeyEncrypted);
@@ -81,7 +81,7 @@ public class TreasuryKeyPersistenceAdapter
   }
 
   private ExecutionSignerCapabilityView mapCapability(
-      Web3TreasuryKeyEntity entity, String keyEncryptionKeyB64) {
+      Web3TreasuryWalletEntity entity, String keyEncryptionKeyB64) {
     String walletAlias = entity.getWalletAlias();
     boolean hasAddress = hasText(entity.getTreasuryAddress());
     boolean hasEncryptedKey = hasText(entity.getTreasuryPrivateKeyEncrypted());
@@ -104,7 +104,7 @@ public class TreasuryKeyPersistenceAdapter
         walletAlias, resolution.failureReason());
   }
 
-  private boolean hasProvisionedSlotMaterial(Web3TreasuryKeyEntity entity) {
+  private boolean hasProvisionedSlotMaterial(Web3TreasuryWalletEntity entity) {
     return hasText(entity.getTreasuryAddress()) && hasText(entity.getTreasuryPrivateKeyEncrypted());
   }
 
@@ -113,7 +113,7 @@ public class TreasuryKeyPersistenceAdapter
   }
 
   private ProvisionedMaterialResolution resolveProvisionedMaterial(
-      Web3TreasuryKeyEntity entity, String keyEncryptionKeyB64) {
+      Web3TreasuryWalletEntity entity, String keyEncryptionKeyB64) {
     if (!hasText(keyEncryptionKeyB64)) {
       return ProvisionedMaterialResolution.failure(
           ExecutionSignerFailureReason.KEY_ENCRYPTION_KEY_MISSING);
