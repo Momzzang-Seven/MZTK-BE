@@ -7,9 +7,9 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefu
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminSettlementUseCase;
-import momzzangseven.mztkbe.modules.web3.token.application.service.ProvisionTreasuryKeyService;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.service.MarkTransactionSucceededService;
+import momzzangseven.mztkbe.modules.web3.treasury.application.service.ProvisionTreasuryKeyService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
