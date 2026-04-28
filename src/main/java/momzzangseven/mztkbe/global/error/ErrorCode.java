@@ -189,6 +189,10 @@ public enum ErrorCode {
       "WEB3_014", "Nonce stale; recreate execution intent", HttpStatus.CONFLICT),
   WEB3_INTERNAL_ISSUER_DISABLED(
       "WEB3_015", "Internal execution issuer is disabled", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEB3_SIGNATURE_RECOVERY_FAILED(
+      "WEB3_016",
+      "Failed to recover Ethereum address from KMS signature",
+      HttpStatus.INTERNAL_SERVER_ERROR),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
