@@ -1,13 +1,13 @@
--- Seed: web3_treasury_keys (DEV ONLY)
+-- Seed: web3_treasury_wallets (DEV ONLY)
 --
 -- [사용 방법]
---   이 파일을 복사하여 web3_treasury_keys.sql 을 생성한 뒤
+--   이 파일을 복사하여 web3_treasury_wallets.sql 을 생성한 뒤
 --   플레이스홀더(<...>)를 실제 dev 테스트넷 값으로 교체하세요.
 --
---   $ cp web3_treasury_keys.sql.example web3_treasury_keys.sql
+--   $ cp web3_treasury_wallets.sql.example web3_treasury_wallets.sql
 --
 -- [주의]
---   web3_treasury_keys.sql 은 .gitignore 에 등록되어 있습니다.
+--   web3_treasury_wallets.sql 은 .gitignore 에 등록되어 있습니다.
 --   절대 실제 값이 담긴 파일을 커밋하지 마세요.
 --
 -- [값 생성 방법]
@@ -17,7 +17,7 @@
 --       서버가 KEK로 암호화한 값을 DB에 직접 저장합니다.
 --       또는 로컬에서 ProvisionTreasuryKeyService 를 통해 생성된 암호문을 사용하세요.
 
-update web3_treasury_keys
+update web3_treasury_wallets
 set wallet_alias = 'reward-treasury',
     treasury_address = '<YOUR_DEV_TREASURY_ADDRESS>',
     treasury_private_key_encrypted = '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>',
@@ -27,7 +27,7 @@ where id = 1
   and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42
   and position('.' in '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>') > 1;
 
-insert into web3_treasury_keys (
+insert into web3_treasury_wallets (
     id,
     wallet_alias,
     treasury_address,
@@ -44,7 +44,7 @@ select
     current_timestamp
 where not exists (
     select 1
-    from web3_treasury_keys
+    from web3_treasury_wallets
     where id = 1
 )
   and '<YOUR_DEV_TREASURY_ADDRESS>' like '0x%'

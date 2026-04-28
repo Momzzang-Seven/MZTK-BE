@@ -5,11 +5,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
-class Web3TreasuryKeyEntityTest {
+class Web3TreasuryWalletEntityTest {
 
   @Test
   void onCreate_initializesMissingTimestamps() {
-    Web3TreasuryKeyEntity entity = Web3TreasuryKeyEntity.builder().build();
+    Web3TreasuryWalletEntity entity = Web3TreasuryWalletEntity.builder().build();
 
     entity.onCreate();
 
@@ -19,8 +19,8 @@ class Web3TreasuryKeyEntityTest {
 
   @Test
   void onUpdate_refreshesUpdatedAt() {
-    Web3TreasuryKeyEntity entity =
-        Web3TreasuryKeyEntity.builder()
+    Web3TreasuryWalletEntity entity =
+        Web3TreasuryWalletEntity.builder()
             .walletAlias("reward")
             .treasuryAddress("0x" + "a".repeat(40))
             .treasuryPrivateKeyEncrypted("enc")
