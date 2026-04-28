@@ -2,122 +2,187 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Set;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAliasPolicyPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryKeyPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.TreasuryKeyEncryptionPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.web3j.crypto.Credentials;
 
 @ExtendWith(MockitoExtension.class)
 class ProvisionTreasuryKeyServiceTest {
 
-  @Mock private TreasuryKeyEncryptionPort treasuryKeyEncryptionPort;
-  @Mock private SaveTreasuryKeyPort saveTreasuryKeyPort;
+  private static final String PRIVATE_KEY_HEX =
+      "4f3edf983ac636a65a842ce7c78d9aa706d3b113bce036f4edc6f6dc0d1e6f73";
+  private static final String DERIVED_ADDRESS =
+      Credentials.create(PRIVATE_KEY_HEX).getAddress().toLowerCase();
+
+  @Mock private LoadTreasuryWalletPort loadTreasuryWalletPort;
+  @Mock private SaveTreasuryWalletPort saveTreasuryWalletPort;
+  @Mock private KmsKeyLifecyclePort kmsKeyLifecyclePort;
+  @Mock private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
+  @Mock private SignDigestPort signDigestPort;
   @Mock private RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
-  @Mock private LoadTreasuryAliasPolicyPort loadTreasuryAliasPolicyPort;
 
   private ProvisionTreasuryKeyService service;
 
   @BeforeEach
   void setUp() {
+    Clock fixed = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
     service =
         new ProvisionTreasuryKeyService(
-            treasuryKeyEncryptionPort,
-            saveTreasuryKeyPort,
+            loadTreasuryWalletPort,
+            saveTreasuryWalletPort,
+            kmsKeyLifecyclePort,
+            kmsKeyMaterialWrapperPort,
+            signDigestPort,
             recordTreasuryProvisionAuditPort,
-            loadTreasuryAliasPolicyPort);
+            fixed);
   }
 
   @Test
-  void execute_throws_whenOperatorIdInvalid() {
-    assertThatThrownBy(() -> service.execute(0L, "reward-main", "f".repeat(64)))
+  void execute_throws_whenCommandNull() {
+    assertThatThrownBy(() -> service.execute(null))
         .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("operatorId must be positive");
+        .hasMessageContaining("command is required");
   }
 
   @Test
-  void execute_throws_whenAliasNotAllowlisted() {
-    when(loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias()).thenReturn("reward-main");
-    when(loadTreasuryAliasPolicyPort.allowedAliases()).thenReturn(Set.of("ops-main"));
+  void execute_throws_whenAddressMismatch() {
+    String wrongAddress = "0x" + "a".repeat(40);
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, wrongAddress);
 
-    assertThatThrownBy(() -> service.execute(1L, "reward-main", "f".repeat(64)))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("walletAlias must be configured");
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(TreasuryWalletAddressMismatchException.class);
+
+    verify(kmsKeyLifecyclePort, never()).createKey();
   }
 
   @Test
-  void execute_savesEncryptedKey_andRecordsSuccessAudit() {
-    when(loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias()).thenReturn("reward-main");
-    when(loadTreasuryAliasPolicyPort.allowedAliases()).thenReturn(Set.of("reward-main"));
-    when(treasuryKeyEncryptionPort.generateKeyB64()).thenReturn("kek-base64");
-    when(treasuryKeyEncryptionPort.encrypt(anyString(), eq("kek-base64")))
-        .thenReturn("encrypted-key");
+  void execute_throws_whenAlreadyProvisioned() {
+    when(loadTreasuryWalletPort.existsByAliasOrAddress("reward-treasury", DERIVED_ADDRESS))
+        .thenReturn(true);
 
-    ProvisionTreasuryKeyResult result = service.execute(1L, null, "f".repeat(64));
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(
+            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
 
-    assertThat(result.treasuryAddress()).startsWith("0x");
-    assertThat(result.treasuryPrivateKeyEncrypted()).isEqualTo("encrypted-key");
-    assertThat(result.treasuryKeyEncryptionKeyB64()).isEqualTo("kek-base64");
-    verify(saveTreasuryKeyPort)
-        .upsert(eq("reward-main"), eq(result.treasuryAddress()), eq("encrypted-key"));
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
 
-    ArgumentCaptor<RecordTreasuryProvisionAuditPort.AuditCommand> captor =
-        ArgumentCaptor.forClass(RecordTreasuryProvisionAuditPort.AuditCommand.class);
-    verify(recordTreasuryProvisionAuditPort).record(captor.capture());
-    assertThat(captor.getValue().operatorId()).isEqualTo(1L);
-    assertThat(captor.getValue().success()).isTrue();
+    verify(kmsKeyLifecyclePort, never()).createKey();
   }
 
   @Test
-  void execute_throws_whenPrivateKeyLengthInvalid() {
-    when(loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias()).thenReturn("reward-main");
-    when(loadTreasuryAliasPolicyPort.allowedAliases()).thenReturn(Set.of("reward-main"));
+  void execute_throws_whenPrivateKeyInvalid() {
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, "z".repeat(64), TreasuryRole.REWARD, DERIVED_ADDRESS);
 
-    assertThatThrownBy(() -> service.execute(1L, "reward-main", "abcd"))
-        .isInstanceOf(TreasuryPrivateKeyInvalidException.class)
-        .hasMessageContaining("treasuryPrivateKey must be 32-byte hex");
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(TreasuryPrivateKeyInvalidException.class);
   }
 
   @Test
-  void execute_throws_whenWalletAliasMissing() {
-    when(loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias()).thenReturn(" ");
+  void execute_drivesKmsLifecycleAndPersists_onSuccess() {
+    when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[]{1, 2, 3}, new byte[]{4, 5, 6}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[]{7, 8, 9});
+    when(signDigestPort.signDigest(eq("kms-key-id"), any(byte[].class), eq(DERIVED_ADDRESS)))
+        .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
+    when(saveTreasuryWalletPort.save(any(TreasuryWallet.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
 
-    assertThatThrownBy(() -> service.execute(1L, null, "f".repeat(64)))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("walletAlias is required");
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(
+            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    ProvisionTreasuryKeyResult result = service.execute(command);
+
+    assertThat(result.walletAlias()).isEqualTo("reward-treasury");
+    assertThat(result.kmsKeyId()).isEqualTo("kms-key-id");
+    assertThat(result.walletAddress()).isEqualTo(DERIVED_ADDRESS);
+    verify(kmsKeyLifecyclePort).importKeyMaterial(eq("kms-key-id"), any(byte[].class), any(byte[].class));
+    verify(kmsKeyLifecyclePort).createAlias("reward-treasury", "kms-key-id");
+    verify(saveTreasuryWalletPort).save(any(TreasuryWallet.class));
   }
 
   @Test
-  void execute_throws_whenPrivateKeyRequired() {
-    when(loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias()).thenReturn("reward-main");
-    when(loadTreasuryAliasPolicyPort.allowedAliases()).thenReturn(Set.of("reward-main"));
+  void execute_cleansUpKmsKey_whenSignDigestFails() {
+    when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[]{1}, new byte[]{2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[]{3});
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenThrow(new RuntimeException("kms unreachable"));
 
-    assertThatThrownBy(() -> service.execute(1L, "reward-main", " "))
-        .isInstanceOf(TreasuryPrivateKeyInvalidException.class)
-        .hasMessageContaining("treasuryPrivateKey is required");
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(
+            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(RuntimeException.class)
+        .hasMessageContaining("kms unreachable");
+
+    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+    verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+    verify(saveTreasuryWalletPort, never()).save(any(TreasuryWallet.class));
   }
 
   @Test
-  void execute_throws_whenPrivateKeyNotHex() {
-    when(loadTreasuryAliasPolicyPort.defaultRewardTreasuryAlias()).thenReturn("reward-main");
-    when(loadTreasuryAliasPolicyPort.allowedAliases()).thenReturn(Set.of("reward-main"));
+  void execute_recordsAudit_onSuccess() {
+    when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[]{1}, new byte[]{2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[]{3});
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
+    when(saveTreasuryWalletPort.save(any(TreasuryWallet.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
 
-    assertThatThrownBy(() -> service.execute(1L, "reward-main", "z".repeat(64)))
-        .isInstanceOf(TreasuryPrivateKeyInvalidException.class)
-        .hasMessageContaining("treasuryPrivateKey must be hex string");
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(
+            1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    service.execute(command);
+
+    verify(recordTreasuryProvisionAuditPort)
+        .record(
+            new RecordTreasuryProvisionAuditPort.AuditCommand(
+                1L, DERIVED_ADDRESS, true, null));
   }
+
 }

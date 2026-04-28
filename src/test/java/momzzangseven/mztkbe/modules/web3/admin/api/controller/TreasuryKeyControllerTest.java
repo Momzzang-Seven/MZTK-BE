@@ -7,10 +7,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;
@@ -53,12 +60,24 @@ class TreasuryKeyControllerTest {
       txSignedRecoveryWorker;
 
   @MockitoBean private ProvisionTreasuryKeyUseCase provisionTreasuryKeyUseCase;
+  @MockitoBean private LoadTreasuryWalletUseCase loadTreasuryWalletUseCase;
+  @MockitoBean private DisableTreasuryWalletUseCase disableTreasuryWalletUseCase;
+  @MockitoBean private ArchiveTreasuryWalletUseCase archiveTreasuryWalletUseCase;
 
   @Test
   @DisplayName("POST /admin/web3/treasury-keys/provision 성공")
   void provision_success() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
     given(provisionTreasuryKeyUseCase.execute(any(ProvisionTreasuryKeyCommand.class)))
-        .willReturn(new ProvisionTreasuryKeyResult("base64-enc-key"));
+        .willReturn(
+            new ProvisionTreasuryKeyResult(
+                "reward-treasury",
+                TreasuryRole.REWARD,
+                "kms-key-id",
+                address,
+                TreasuryWalletStatus.ACTIVE,
+                TreasuryKeyOrigin.IMPORTED,
+                LocalDateTime.parse("2026-01-01T00:00:00")));
 
     mockMvc
         .perform(
@@ -68,13 +87,16 @@ class TreasuryKeyControllerTest {
                 .content(
                     json(
                         Map.of(
-                            "treasuryPrivateKey",
+                            "rawPrivateKey",
                             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "walletAlias",
-                            "treasury-main"))))
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            address))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.treasuryKeyEncryptionKeyB64").value("base64-enc-key"));
+        .andExpect(jsonPath("$.data.kmsKeyId").value("kms-key-id"))
+        .andExpect(jsonPath("$.data.walletAddress").value(address));
   }
 
   @Test
@@ -85,7 +107,7 @@ class TreasuryKeyControllerTest {
             post("/admin/web3/treasury-keys/provision")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("treasuryPrivateKey", "0xabc"))))
+                .content(json(Map.of("rawPrivateKey", "0xabc", "role", "REWARD", "expectedAddress", "0xabc"))))
         .andExpect(status().isForbidden());
   }
 
@@ -105,7 +127,7 @@ class TreasuryKeyControllerTest {
             post("/admin/web3/treasury-keys/provision")
                 .with(adminPrincipal(9L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("treasuryPrivateKey", " "))))
+                .content(json(Map.of("rawPrivateKey", " ", "role", "REWARD", "expectedAddress", "0x" + "a".repeat(40)))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
   }
@@ -121,8 +143,12 @@ class TreasuryKeyControllerTest {
                 .content(
                     json(
                         Map.of(
-                            "treasuryPrivateKey",
-                            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))))
+                            "rawPrivateKey",
+                            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            "0x" + "a".repeat(40)))))
         .andExpect(status().isUnauthorized());
   }
 

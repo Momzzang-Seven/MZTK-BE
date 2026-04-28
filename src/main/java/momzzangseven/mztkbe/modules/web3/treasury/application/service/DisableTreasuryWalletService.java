@@ -17,9 +17,9 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Transitions a wallet ACTIVE → DISABLED, persists, then asks KMS to disable the backing key.
- * Audit entries are recorded in {@link Propagation#REQUIRES_NEW} so the audit trail survives a
- * failure of the KMS step.
+ * Transitions a wallet ACTIVE → DISABLED, persists, then asks KMS to disable the backing key. Audit
+ * entries are recorded in {@link Propagation#REQUIRES_NEW} so the audit trail survives a failure of
+ * the KMS step.
  */
 @Service
 @Slf4j

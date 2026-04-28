@@ -56,7 +56,9 @@ public class TreasuryWalletPersistenceAdapter
   @Override
   public Optional<TreasuryWallet> loadByAlias(String walletAlias) {
     requireNonBlank(walletAlias, "walletAlias");
-    return repository.findByWalletAlias(walletAlias).map(TreasuryWalletPersistenceAdapter::toDomain);
+    return repository
+        .findByWalletAlias(walletAlias)
+        .map(TreasuryWalletPersistenceAdapter::toDomain);
   }
 
   @Override

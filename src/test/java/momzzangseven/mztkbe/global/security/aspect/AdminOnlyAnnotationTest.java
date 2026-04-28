@@ -47,15 +47,18 @@ class AdminOnlyAnnotationTest {
       throws NoSuchMethodException {
     AdminOnly annotation =
         ProvisionTreasuryKeyService.class
-            .getMethod("execute", Long.class, String.class, String.class)
+            .getMethod(
+                "execute",
+                momzzangseven.mztkbe.modules.web3.treasury.application.dto
+                    .ProvisionTreasuryKeyCommand.class)
             .getAnnotation(AdminOnly.class);
 
     assertThat(annotation).isNotNull();
     assertThat(annotation.actionType()).isEqualTo("TREASURY_KEY_PROVISION");
     assertThat(annotation.targetType()).isEqualTo(AuditTargetType.TREASURY_KEY);
-    assertThat(annotation.operatorId()).isEqualTo("#operatorId");
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId()");
     assertThat(annotation.targetId())
-        .isEqualTo("#result != null ? #result.treasuryAddress() : null");
+        .isEqualTo("#result != null ? #result.walletAddress() : null");
   }
 
   @Test
