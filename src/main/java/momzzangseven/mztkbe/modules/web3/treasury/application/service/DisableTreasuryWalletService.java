@@ -3,23 +3,31 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 import java.time.Clock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Transitions a wallet ACTIVE → DISABLED, persists, then asks KMS to disable the backing key. Audit
- * entries are recorded in {@link Propagation#REQUIRES_NEW} so the audit trail survives a failure of
- * the KMS step.
+ * Transitions a wallet ACTIVE → DISABLED, persists, then asks KMS to disable the backing key.
+ *
+ * <p>Audit writes go through {@link TreasuryAuditRecorder} (separate bean) so they run in
+ * {@code REQUIRES_NEW} and survive a rollback of the outer transaction. An inline
+ * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP
+ * cannot intercept self-invocation, so the propagation hint would be silently dropped.
+ *
+ * <p><b>Save-first ordering</b> — DB save commits before the KMS {@code DisableKey} call. If KMS
+ * fails the row is already DISABLED and an operator can retry the KMS step or trigger manual
+ * cleanup; a KMS-first ordering would leave the DB unchanged and the KMS key invisibly disabled,
+ * which is harder to recover from.
  */
 @Service
 @Slf4j
@@ -29,11 +37,16 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final SaveTreasuryWalletPort saveTreasuryWalletPort;
   private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
-  private final RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
+  private final TreasuryAuditRecorder treasuryAuditRecorder;
   private final Clock clock;
 
   @Override
   @Transactional
+  @AdminOnly(
+      actionType = "TREASURY_KEY_DISABLE",
+      targetType = AuditTargetType.TREASURY_KEY,
+      operatorId = "#command.operatorUserId()",
+      targetId = "#result != null ? #result.walletAddress() : null")
   public TreasuryWalletView execute(DisableTreasuryWalletCommand command) {
     TreasuryWallet wallet =
         loadTreasuryWalletPort
@@ -48,26 +61,12 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
       TreasuryWallet disabled = wallet.disable(clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(disabled);
       kmsKeyLifecyclePort.disableKey(saved.getKmsKeyId());
-      recordAudit(command.operatorUserId(), walletAddress, true, null);
+      treasuryAuditRecorder.record(command.operatorUserId(), walletAddress, true, null);
       return TreasuryWalletView.from(saved);
     } catch (RuntimeException e) {
-      recordAudit(command.operatorUserId(), walletAddress, false, e.getClass().getSimpleName());
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), walletAddress, false, e.getClass().getSimpleName());
       throw e;
-    }
-  }
-
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
-  void recordAudit(Long operatorId, String walletAddress, boolean success, String failureReason) {
-    try {
-      recordTreasuryProvisionAuditPort.record(
-          new RecordTreasuryProvisionAuditPort.AuditCommand(
-              operatorId, walletAddress, success, failureReason));
-    } catch (Exception e) {
-      log.warn(
-          "Failed to record disable-treasury-wallet audit: operatorId={}, success={}",
-          operatorId,
-          success,
-          e);
     }
   }
 }

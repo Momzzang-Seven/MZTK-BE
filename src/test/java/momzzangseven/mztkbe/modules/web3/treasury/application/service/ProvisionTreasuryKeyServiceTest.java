@@ -23,7 +23,6 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreas
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.RecordTreasuryProvisionAuditPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
@@ -48,7 +47,7 @@ class ProvisionTreasuryKeyServiceTest {
   @Mock private KmsKeyLifecyclePort kmsKeyLifecyclePort;
   @Mock private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
   @Mock private SignDigestPort signDigestPort;
-  @Mock private RecordTreasuryProvisionAuditPort recordTreasuryProvisionAuditPort;
+  @Mock private TreasuryAuditRecorder treasuryAuditRecorder;
 
   private ProvisionTreasuryKeyService service;
 
@@ -62,7 +61,7 @@ class ProvisionTreasuryKeyServiceTest {
             kmsKeyLifecyclePort,
             kmsKeyMaterialWrapperPort,
             signDigestPort,
-            recordTreasuryProvisionAuditPort,
+            treasuryAuditRecorder,
             fixed);
   }
 
@@ -177,7 +176,6 @@ class ProvisionTreasuryKeyServiceTest {
 
     service.execute(command);
 
-    verify(recordTreasuryProvisionAuditPort)
-        .record(new RecordTreasuryProvisionAuditPort.AuditCommand(1L, DERIVED_ADDRESS, true, null));
+    verify(treasuryAuditRecorder).record(1L, DERIVED_ADDRESS, true, null);
   }
 }
