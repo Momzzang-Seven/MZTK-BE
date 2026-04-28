@@ -52,7 +52,6 @@ class ProvisionTreasuryKeyAdapterTest {
     assertThat(result.walletAddress()).isEqualTo(address);
     assertThat(result.status()).isEqualTo(TreasuryWalletStatus.ACTIVE);
     verify(provisionTreasuryKeyUseCase)
-        .execute(
-            new ProvisionTreasuryKeyCommand(1L, "f".repeat(64), TreasuryRole.REWARD, address));
+        .execute(new ProvisionTreasuryKeyCommand(1L, "f".repeat(64), TreasuryRole.REWARD, address));
   }
 }

@@ -57,8 +57,7 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.actionType()).isEqualTo("TREASURY_KEY_PROVISION");
     assertThat(annotation.targetType()).isEqualTo(AuditTargetType.TREASURY_KEY);
     assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId()");
-    assertThat(annotation.targetId())
-        .isEqualTo("#result != null ? #result.walletAddress() : null");
+    assertThat(annotation.targetId()).isEqualTo("#result != null ? #result.walletAddress() : null");
   }
 
   @Test

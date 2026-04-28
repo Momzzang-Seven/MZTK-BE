@@ -32,8 +32,8 @@ import org.web3j.crypto.Credentials;
  * KMS-backed treasury wallet provisioning. Replaces the legacy AES-GCM-encrypted private key flow.
  *
  * <p>The whole provisioning happens inside a single {@link Transactional} so the persisted row and
- * the KMS-side resources commit or roll back together. On failure the service best-effort cleans
- * up any KMS resources it allocated (disable + 7-day scheduled deletion) so a half-provisioned key
+ * the KMS-side resources commit or roll back together. On failure the service best-effort cleans up
+ * any KMS resources it allocated (disable + 7-day scheduled deletion) so a half-provisioned key
  * cannot accumulate.
  *
  * <p>Audit entries are recorded in {@link Propagation#REQUIRES_NEW} so they survive even when the
@@ -90,7 +90,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     byte[] wrappedKey = null;
     try {
       kmsKeyId = kmsKeyLifecyclePort.createKey();
-      KmsKeyLifecyclePort.ImportParams params = kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
+      KmsKeyLifecyclePort.ImportParams params =
+          kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
       wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
       kmsKeyLifecyclePort.importKeyMaterial(kmsKeyId, wrappedKey, params.importToken());
       kmsKeyLifecyclePort.createAlias(walletAlias, kmsKeyId);
@@ -125,7 +126,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     BigInteger value = new BigInteger(normalized, 16);
     byte[] padded = new byte[RAW_PRIVATE_KEY_BYTES];
     byte[] valueBytes = value.toByteArray();
-    int srcOffset = valueBytes.length > RAW_PRIVATE_KEY_BYTES ? valueBytes.length - RAW_PRIVATE_KEY_BYTES : 0;
+    int srcOffset =
+        valueBytes.length > RAW_PRIVATE_KEY_BYTES ? valueBytes.length - RAW_PRIVATE_KEY_BYTES : 0;
     int dstOffset = RAW_PRIVATE_KEY_BYTES - (valueBytes.length - srcOffset);
     System.arraycopy(valueBytes, srcOffset, padded, dstOffset, valueBytes.length - srcOffset);
     return padded;
