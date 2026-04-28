@@ -11,9 +11,9 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletSta
  *
  * <p>External callers (admin controller, transaction / execution caller modules) consume this DTO
  * rather than the aggregate so that domain mutators ({@code disable}, {@code archive}) cannot be
- * invoked outside the owning service. {@link #role()} is recovered from the persisted alias via
- * the static factory below; an unknown alias falls back to {@code null} so that legacy rows
- * (alias not yet bound to any {@link TreasuryRole}) remain renderable.
+ * invoked outside the owning service. {@link #role()} is recovered from the persisted alias via the
+ * static factory below; an unknown alias falls back to {@code null} so that legacy rows (alias not
+ * yet bound to any {@link TreasuryRole}) remain renderable.
  *
  * @param walletAlias canonical alias bound to the wallet
  * @param role functional role recovered from the alias, or {@code null} if unrecognised

@@ -6,7 +6,8 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.port.in;
  *
  * <ol>
  *   <li>{@code TreasuryWallet.assertSignable()} — wallet must be {@code ACTIVE}.
- *   <li>{@code DescribeKmsKeyPort.describe(kmsKeyId) == ENABLED} — the backing KMS key must be live.
+ *   <li>{@code DescribeKmsKeyPort.describe(kmsKeyId) == ENABLED} — the backing KMS key must be
+ *       live.
  * </ol>
  *
  * <p>Either failure throws a domain exception so the caller can record the audit and abort before

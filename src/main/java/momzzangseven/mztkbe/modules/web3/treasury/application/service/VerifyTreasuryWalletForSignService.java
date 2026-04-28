@@ -8,15 +8,15 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.VerifyTrea
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Pre-sign gate: combines aggregate state ({@link TreasuryWallet#assertSignable()}) with the live
  * KMS key state ({@link DescribeKmsKeyPort}). Throws {@link TreasuryWalletStateException} on either
  * failure so the caller never reaches the {@code SignDigestPort}.
- *
- * <p>Skeleton — not yet registered as a Spring bean. The {@code @Service} annotation lands in
- * commit 1-10 once the bridging adapter for {@code DescribeKmsKeyPort} exists.
  */
+@Service
 @RequiredArgsConstructor
 public class VerifyTreasuryWalletForSignService implements VerifyTreasuryWalletForSignUseCase {
 
@@ -24,6 +24,7 @@ public class VerifyTreasuryWalletForSignService implements VerifyTreasuryWalletF
   private final DescribeKmsKeyPort describeKmsKeyPort;
 
   @Override
+  @Transactional(readOnly = true)
   public void execute(String walletAlias) {
     if (walletAlias == null || walletAlias.isBlank()) {
       throw new Web3InvalidInputException("walletAlias is required");

@@ -8,4 +8,6 @@ public interface Web3TreasuryWalletJpaRepository
     extends JpaRepository<Web3TreasuryWalletEntity, Long> {
 
   Optional<Web3TreasuryWalletEntity> findByWalletAlias(String walletAlias);
+
+  boolean existsByWalletAliasOrTreasuryAddress(String walletAlias, String treasuryAddress);
 }
