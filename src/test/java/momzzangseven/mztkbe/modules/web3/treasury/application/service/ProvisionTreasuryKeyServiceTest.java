@@ -13,10 +13,12 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
@@ -156,6 +158,85 @@ class ProvisionTreasuryKeyServiceTest {
     verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
     verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
     verify(saveTreasuryWalletPort, never()).save(any(TreasuryWallet.class));
+    verify(kmsKeyLifecyclePort, never()).createAlias(anyString(), anyString());
+  }
+
+  @Test
+  void execute_cleansUpKmsKey_whenImportKeyMaterialFails() {
+    when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[] {3});
+    org.mockito.Mockito.doThrow(new RuntimeException("kms import refused"))
+        .when(kmsKeyLifecyclePort)
+        .importKeyMaterial(anyString(), any(byte[].class), any(byte[].class));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(RuntimeException.class)
+        .hasMessageContaining("kms import refused");
+
+    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+    verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+    verify(kmsKeyLifecyclePort, never()).createAlias(anyString(), anyString());
+    verify(saveTreasuryWalletPort, never()).save(any(TreasuryWallet.class));
+  }
+
+  @Test
+  void execute_recoversGhostAlias_byUpdatingToNewKeyWhenExistingTargetIsPendingDeletion() {
+    primeSuccessfulMocks();
+    org.mockito.Mockito.doThrow(new KmsAliasAlreadyExistsException("alias taken"))
+        .when(kmsKeyLifecyclePort)
+        .createAlias("reward-treasury", "kms-key-id");
+    when(kmsKeyLifecyclePort.describeAliasTarget("reward-treasury"))
+        .thenReturn(KmsKeyState.PENDING_DELETION);
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    ProvisionTreasuryKeyResult result = service.execute(command);
+
+    assertThat(result.kmsKeyId()).isEqualTo("kms-key-id");
+    verify(kmsKeyLifecyclePort).updateAlias("reward-treasury", "kms-key-id");
+    verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+    verify(treasuryAuditRecorder).record(1L, DERIVED_ADDRESS, true, null);
+  }
+
+  @Test
+  void execute_throwsAlreadyProvisioned_whenAliasPointsToActiveKey() {
+    primeSuccessfulMocks();
+    org.mockito.Mockito.doThrow(new KmsAliasAlreadyExistsException("alias taken"))
+        .when(kmsKeyLifecyclePort)
+        .createAlias("reward-treasury", "kms-key-id");
+    when(kmsKeyLifecyclePort.describeAliasTarget("reward-treasury"))
+        .thenReturn(KmsKeyState.ENABLED);
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(TreasuryWalletAlreadyProvisionedException.class);
+
+    verify(kmsKeyLifecyclePort, never()).updateAlias(anyString(), anyString());
+    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+    verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+  }
+
+  private void primeSuccessfulMocks() {
+    when(loadTreasuryWalletPort.existsByAliasOrAddress(anyString(), anyString())).thenReturn(false);
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[] {3});
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
+    when(saveTreasuryWalletPort.save(any(TreasuryWallet.class)))
+        .thenAnswer(inv -> inv.getArgument(0));
   }
 
   @Test

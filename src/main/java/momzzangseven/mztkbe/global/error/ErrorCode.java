@@ -214,6 +214,10 @@ public enum ErrorCode {
       "TREASURY_004",
       "A treasury wallet is already provisioned for the requested role",
       HttpStatus.CONFLICT),
+  KMS_ALIAS_ALREADY_EXISTS(
+      "TREASURY_005",
+      "KMS alias already exists for the requested role",
+      HttpStatus.INTERNAL_SERVER_ERROR),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)

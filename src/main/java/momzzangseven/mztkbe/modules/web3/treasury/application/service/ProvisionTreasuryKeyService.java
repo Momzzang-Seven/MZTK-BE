@@ -7,11 +7,13 @@ import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
+import momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProvisionTreasuryKeyUseCase;
@@ -34,12 +36,24 @@ import org.web3j.crypto.Credentials;
  * any KMS resources it allocated (disable + 7-day scheduled deletion) so a half-provisioned key
  * cannot accumulate.
  *
+ * <p><b>KMS step ordering</b> — {@code CreateAlias} runs <em>last</em>, after the sanity sign and
+ * the JPA save. With this ordering any failure in {@code CreateKey} → {@code ImportKeyMaterial} →
+ * sanity → save triggers the {@link Transactional} rollback while the alias has not been created
+ * yet, so the only artefact left to clean up is the freshly created KMS key. {@code CreateAlias}
+ * itself can still race with a stale alias from a prior failed run (AWS-side success + client-side
+ * failure); we recover idempotently by inspecting the existing alias target via {@link
+ * KmsKeyLifecyclePort#describeAliasTarget(String)} and re-pointing it to the new key with {@link
+ * KmsKeyLifecyclePort#updateAlias(String, String)} when the previous target is {@code
+ * PENDING_DELETION} / {@code DISABLED}.
+ *
  * <p>Audit entries are recorded via {@link TreasuryAuditRecorder} which runs them in {@code
  * REQUIRES_NEW} so they survive even when the outer transaction rolls back — the operator must
- * always see a row in {@code web3_treasury_provision_audits} regardless of outcome. Routing audit
- * writes through a separate bean (rather than a {@code @Transactional} method on this same class)
- * is required because Spring AOP cannot intercept a self-invocation, so an inline {@code
- * recordAudit} would silently lose its {@code REQUIRES_NEW} guarantee.
+ * always see a row in {@code web3_treasury_provision_audits} regardless of business-flow outcome.
+ * Bean-validation / null-command failures short-circuit before audit and are not recorded; the
+ * controller's {@code @Valid} chain is the source of truth for those cases. Routing audit writes
+ * through a separate bean (rather than a {@code @Transactional} method on this same class) is
+ * required because Spring AOP cannot intercept a self-invocation, so an inline {@code recordAudit}
+ * would silently lose its {@code REQUIRES_NEW} guarantee.
  */
 @Service
 @Slf4j
@@ -96,7 +110,6 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
           kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
       wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
       kmsKeyLifecyclePort.importKeyMaterial(kmsKeyId, wrappedKey, params.importToken());
-      kmsKeyLifecyclePort.createAlias(walletAlias, kmsKeyId);
 
       byte[] digest = new byte[SANITY_DIGEST_BYTES];
       secureRandom.nextBytes(digest);
@@ -105,6 +118,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       TreasuryWallet wallet =
           TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
+
+      bindAliasIdempotent(walletAlias, kmsKeyId);
 
       treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, true, null);
       return ProvisionTreasuryKeyResult.from(saved, role);
@@ -116,6 +131,37 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     } finally {
       zeroize(rawPrivateKey);
       zeroize(wrappedKey);
+    }
+  }
+
+  /**
+   * Bind {@code walletAlias} to {@code kmsKeyId}. If {@code CreateAlias} reports the alias is
+   * already taken, treat a {@code PENDING_DELETION} / {@code DISABLED} target as a recoverable
+   * ghost from a prior failed run and re-point the alias at the new key via {@code UpdateAlias};
+   * any other target is an out-of-band conflict and surfaces as {@code ALREADY_PROVISIONED}.
+   */
+  private void bindAliasIdempotent(String walletAlias, String kmsKeyId) {
+    try {
+      kmsKeyLifecyclePort.createAlias(walletAlias, kmsKeyId);
+    } catch (KmsAliasAlreadyExistsException ex) {
+      KmsKeyState existingTarget = kmsKeyLifecyclePort.describeAliasTarget(walletAlias);
+      if (existingTarget == KmsKeyState.PENDING_DELETION
+          || existingTarget == KmsKeyState.DISABLED) {
+        log.warn(
+            "Recovering ghost alias from a prior failed provision run "
+                + "(alias={}, previousState={}); rebinding to kmsKeyId={}",
+            walletAlias,
+            existingTarget,
+            kmsKeyId);
+        kmsKeyLifecyclePort.updateAlias(walletAlias, kmsKeyId);
+      } else {
+        throw new TreasuryWalletAlreadyProvisionedException(
+            "alias '"
+                + walletAlias
+                + "' is already bound to a KMS key in state "
+                + existingTarget
+                + " (out-of-band provisioning detected)");
+      }
     }
   }
 
