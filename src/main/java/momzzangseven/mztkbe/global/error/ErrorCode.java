@@ -209,7 +209,7 @@ public enum ErrorCode {
   TREASURY_WALLET_ADDRESS_MISMATCH(
       "TREASURY_003",
       "Recovered Ethereum address does not match the registered treasury wallet",
-      HttpStatus.INTERNAL_SERVER_ERROR),
+      HttpStatus.BAD_REQUEST),
   TREASURY_WALLET_ALREADY_PROVISIONED(
       "TREASURY_004",
       "A treasury wallet is already provisioned for the requested role",
