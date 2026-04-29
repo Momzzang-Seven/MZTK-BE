@@ -20,9 +20,9 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWallet
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryKeyOrigin;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;

@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.treasury.domain.model;
+package momzzangseven.mztkbe.modules.web3.treasury.domain.vo;
 
 /**
  * Provenance of the secp256k1 private key material backing a {@link TreasuryWallet}.

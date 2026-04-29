@@ -29,9 +29,9 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMat
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

@@ -1,10 +1,10 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.dto;
 
 import java.time.LocalDateTime;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryKeyOrigin;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 
 /**
  * Read-only projection of a {@link TreasuryWallet} surfaced across module boundaries.

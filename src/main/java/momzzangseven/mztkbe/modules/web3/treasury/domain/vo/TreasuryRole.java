@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.treasury.domain.model;
+package momzzangseven.mztkbe.modules.web3.treasury.domain.vo;
 
 /**
  * Functional role a {@link TreasuryWallet} fulfils on-chain.
