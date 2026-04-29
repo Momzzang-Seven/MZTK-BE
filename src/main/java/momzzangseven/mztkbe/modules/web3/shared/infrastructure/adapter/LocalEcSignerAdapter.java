@@ -11,7 +11,7 @@ import momzzangseven.mztkbe.modules.web3.shared.infrastructure.crypto.DerToVrsCo
 import org.bouncycastle.asn1.ASN1EncodableVector;
 import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.DERSequence;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.crypto.ECKeyPair;
 import org.web3j.crypto.Sign;
@@ -20,18 +20,20 @@ import org.web3j.crypto.Sign;
  * Non-production implementation of {@link KmsSignerPort} that performs secp256k1 signing locally
  * with BouncyCastle / web3j instead of calling AWS KMS.
  *
- * <p>This adapter is gated on the {@code !prod} Spring profile and is the bean wired in for local /
- * dev / test / integration / E2E environments — exactly mirroring the prod-only {@code KmsClient}
- * bean defined in {@code AwsConfig}. In production the equivalent role is filled by {@link
- * KmsSignerAdapter}, which delegates the same digest signing to a real AWS KMS HSM.
+ * <p>This adapter is gated on the absence of {@code web3.kms.enabled=true} (the inverse of {@link
+ * KmsSignerAdapter}) and is the bean wired in for environments that have not opted into real AWS
+ * KMS — typically local / dev / test / integration / E2E. In environments that opt in (prod, or any
+ * developer who has KMS access and sets {@code web3.kms.enabled=true}) the equivalent role is
+ * filled by {@link KmsSignerAdapter}, which delegates the same digest signing to a real AWS KMS
+ * HSM.
  *
  * <p><b>Plaintext private keys never leave this class.</b> The in-memory {@code kmsKeyId →
  * BigInteger} map is populated <em>exclusively</em> by tests via {@link #registerKey(String,
- * BigInteger)} and emptied by {@link #clear()}. Production code paths cannot reach this class
- * because the {@code @Profile("!prod")} gate excludes them at DI time. {@code SignDigestService}
- * receives the same {@link Vrs} contract regardless of which adapter signs, so the converter +
- * recovery-id logic in {@link DerToVrsConverter} is exercised end-to-end in non-prod just as in
- * prod.
+ * BigInteger)} and emptied by {@link #clear()}. Production-style code paths cannot reach this class
+ * when {@code web3.kms.enabled=true} because the {@code @ConditionalOnProperty} gate excludes it at
+ * DI time. {@code SignDigestService} receives the same {@link Vrs} contract regardless of which
+ * adapter signs, so the converter + recovery-id logic in {@link DerToVrsConverter} is exercised
+ * end-to-end in both modes.
  *
  * <p>Why route through {@link DerToVrsConverter} rather than returning {@code Sign.signMessage}'s
  * {@code (r, s, v)} directly? To guarantee that the EIP-2 low-s + recovery-id determination path is
@@ -39,7 +41,7 @@ import org.web3j.crypto.Sign;
  * as a DER signature so the converter performs the identical decode → low-s → ecRecover pipeline.
  */
 @Component
-@Profile("!prod")
+@ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "false", matchIfMissing = true)
 public class LocalEcSignerAdapter implements KmsSignerPort {
 
   /**
@@ -52,8 +54,8 @@ public class LocalEcSignerAdapter implements KmsSignerPort {
   /**
    * Register a logical {@code kmsKeyId} → raw private key mapping. Tests call this in
    * {@code @BeforeAll} (or equivalent) to bind a fixture key to the same alias used in production
-   * pathways. Never called from production code, since this bean is only present under
-   * {@code @Profile("!prod")}.
+   * pathways. Never called from production-style code, since this bean is only present when {@code
+   * web3.kms.enabled} is false / unset.
    *
    * @param kmsKeyId the logical key identifier passed by test fixtures (any non-blank string)
    * @param privateKey raw secp256k1 private key as a positive {@link BigInteger}

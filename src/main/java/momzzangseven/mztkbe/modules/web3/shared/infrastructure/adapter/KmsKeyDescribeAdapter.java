@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsKeyDescribePort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.DescribeKeyRequest;
@@ -21,15 +21,16 @@ import software.amazon.awssdk.services.kms.model.KmsException;
  * DescribeKmsKeyService} cache absorbs the per-sign latency, so each {@code
  * TransactionIssuerWorker} batch makes at most one call to this adapter per kmsKeyId per minute.
  *
- * <p>This adapter is gated on the {@code prod} Spring profile so that local / dev / test /
- * integration / E2E environments — which lack the prod-only {@code KmsClient} bean — instead
- * receive {@link LocalKmsKeyDescribeAdapter}, which always reports {@link KmsKeyState#ENABLED}.
+ * <p>This adapter is gated on the {@code web3.kms.enabled=true} property so that environments which
+ * have not opted into real AWS KMS — and therefore lack the {@code KmsClient} bean produced by
+ * {@code AwsKmsConfig} — instead receive {@link LocalKmsKeyDescribeAdapter}, which always reports
+ * {@link KmsKeyState#ENABLED}.
  *
  * <p><b>Logging hygiene</b> — Per design §8 we never log key material; only {@code kmsKeyId} (a
  * non-secret identifier) and the AWS error code are emitted on failure.
  */
 @Component
-@Profile("prod")
+@ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
