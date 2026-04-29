@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.RecordTrainerStrikePort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AutoCancelBatchItemProcessor {
 
+  private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
   private final RecordTrainerStrikePort recordTrainerStrikePort;
@@ -40,16 +42,47 @@ public class AutoCancelBatchItemProcessor {
   /**
    * Processes a single auto-cancel item in its own isolated transaction.
    *
-   * <p>Order: persist TIMEOUT_CANCELLED → submit adminRefund on-chain → update txHash → record
-   * TIMEOUT strike. On failure: the individual transaction rolls back; the caller catches and logs.
+   * <p>Re-fetches the reservation with a pessimistic write lock at the start of the REQUIRES_NEW
+   * transaction to guard against stale-read race conditions. Without this, a concurrent
+   * USER_CANCELLED transaction committed between the batch read and this process() call would not
+   * be visible — the stale PENDING status would bypass the guard and trigger a duplicate on-chain
+   * refund (double-compensation).
+   *
+   * <p>Order: re-fetch with lock → validate status → persist TIMEOUT_CANCELLED → submit adminRefund
+   * on-chain → update txHash → record TIMEOUT strike. On failure: the individual transaction rolls
+   * back; the caller catches and logs.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void process(Reservation reservation) {
+  public void process(Reservation staleReservation) {
+    // Re-fetch with pessimistic write lock to prevent concurrent state conflicts.
+    // A USER_CANCELLED committed between the batch read and here would be invisible
+    // in the stale object, causing a duplicate on-chain refund.
+    Reservation reservation =
+        loadReservationPort
+            .findByIdWithLock(staleReservation.getId())
+            .orElseThrow(
+                () -> {
+                  log.warn(
+                      "AutoCancel skipped: reservation {} no longer exists",
+                      staleReservation.getId());
+                  return new IllegalStateException(
+                      "Reservation not found: " + staleReservation.getId());
+                });
+
+    // Guard: re-validate status with the fresh locked row before any side-effect.
+    if (!reservation.getStatus().canTimeoutCancel()) {
+      log.info(
+          "AutoCancel skipped: reservation {} is no longer PENDING (status={})",
+          reservation.getId(),
+          reservation.getStatus());
+      return;
+    }
+
     // 1. Persist status first — DB is the source of truth.
     Reservation cancelled = reservation.timeoutCancel("ESCROW_DISPATCH_PENDING");
     saveReservationPort.save(cancelled);
 
-    // 2. Submit on-chain refund — after DB commit in REQUIRES_NEW, this is effectively post-commit.
+    // 2. Submit on-chain refund — after DB save in REQUIRES_NEW.
     String refundTxHash = submitEscrowTransactionPort.submitAdminRefund(reservation.getOrderId());
 
     // 3. Write back the real txHash.

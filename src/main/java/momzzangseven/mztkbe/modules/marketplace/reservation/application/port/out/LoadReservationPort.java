@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -27,9 +28,22 @@ public interface LoadReservationPort {
    */
   int countActiveReservationsBySlotId(Long slotId);
 
-  java.util.Map<Long, Integer> countActiveReservationsBySlotIds(java.util.List<Long> slotIds);
+  /**
+   * Count active reservations grouped by slot ID for a batch of slots in a single query.
+   *
+   * @param slotIds list of slot IDs to query
+   * @return map where each key is a slot ID and the value is its active reservation count
+   */
+  Map<Long, Integer> countActiveReservationsBySlotIds(List<Long> slotIds);
 
-  int countActiveReservationsBySlotIdAndDate(Long slotId, java.time.LocalDate date);
+  /**
+   * Count active reservations for a slot on a specific date.
+   *
+   * @param slotId slot ID
+   * @param date the session date to check
+   * @return count of active reservations on that date
+   */
+  int countActiveReservationsBySlotIdAndDate(Long slotId, LocalDate date);
 
   /**
    * Count active reservations for a slot with a pessimistic write lock (SELECT ... FOR UPDATE).
@@ -38,17 +52,23 @@ public interface LoadReservationPort {
    * prevent over-commit under concurrent reservation requests.
    *
    * @param slotId target slot ID
+   * @param date the session date to check
    * @return active reservation count (PENDING + APPROVED)
    */
-  int countActiveReservationsBySlotIdAndDateWithLock(Long slotId, java.time.LocalDate date);
+  int countActiveReservationsBySlotIdAndDateWithLock(Long slotId, LocalDate date);
 
   /**
-   * Count active reservations grouped by slot ID for a list of slots in a single query.
+   * Count active reservations grouped by date for a slot over a date range.
    *
-   * <p>Used by {@code GetClassReservationInfoService} to populate remaining capacity.
+   * <p>Used by {@code GetClassReservationInfoService} to populate remaining capacity per day.
+   *
+   * @param slotId slot ID
+   * @param startDate inclusive range start
+   * @param endDate inclusive range end
+   * @return map where each key is a date and the value is the active reservation count
    */
-  Map<java.time.LocalDate, Integer> countActiveReservationsBySlotIdAndDateRange(
-      Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate);
+  Map<LocalDate, Integer> countActiveReservationsBySlotIdAndDateRange(
+      Long slotId, LocalDate startDate, LocalDate endDate);
 
   /**
    * Fetch PENDING reservations eligible for auto-cancellation.

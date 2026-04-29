@@ -2,9 +2,11 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,17 +31,46 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AutoSettleBatchItemProcessor {
 
+  private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
   private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
 
   /**
    * Settles a single approved reservation in its own isolated transaction.
    *
-   * <p>Order: persist AUTO_SETTLED → submit adminSettle on-chain → update txHash. On failure: the
-   * individual transaction rolls back; the caller catches and logs.
+   * <p>Re-fetches the reservation with a pessimistic write lock at the start of the REQUIRES_NEW
+   * transaction to guard against stale-read race conditions. Without this, a concurrent state
+   * change (e.g. user cancellation) committed between the batch read and this process() call would
+   * not be visible, potentially triggering a duplicate on-chain settle.
+   *
+   * <p>Order: re-fetch with lock → validate status → persist AUTO_SETTLED → submit adminSettle
+   * on-chain → update txHash. On failure: the individual transaction rolls back; the caller catches
+   * and logs.
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void process(Reservation reservation) {
+  public void process(Reservation staleReservation) {
+    // Re-fetch with pessimistic write lock to prevent concurrent state conflicts.
+    Reservation reservation =
+        loadReservationPort
+            .findByIdWithLock(staleReservation.getId())
+            .orElseThrow(
+                () -> {
+                  log.warn(
+                      "AutoSettle skipped: reservation {} no longer exists",
+                      staleReservation.getId());
+                  return new IllegalStateException(
+                      "Reservation not found: " + staleReservation.getId());
+                });
+
+    // Guard: re-validate status with the fresh locked row before any side-effect.
+    if (!reservation.getStatus().canTransitionTo(ReservationStatus.AUTO_SETTLED)) {
+      log.info(
+          "AutoSettle skipped: reservation {} is no longer APPROVED (status={})",
+          reservation.getId(),
+          reservation.getStatus());
+      return;
+    }
+
     // 1. Persist status first.
     Reservation settled = reservation.autoSettle("ESCROW_DISPATCH_PENDING");
     saveReservationPort.save(settled);

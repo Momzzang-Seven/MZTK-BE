@@ -44,6 +44,17 @@ public enum ReservationStatus {
   }
 
   /**
+   * Returns true when this reservation is eligible for a timeout-cancel (PENDING only).
+   *
+   * <p>Used by {@code AutoCancelBatchItemProcessor} to re-validate status after acquiring a
+   * pessimistic write lock, preventing double-compensation when a concurrent USER_CANCELLED has
+   * already been committed.
+   */
+  public boolean canTimeoutCancel() {
+    return this == PENDING;
+  }
+
+  /**
    * Returns whether a transition from this status to {@code next} is permitted by business rules.
    *
    * @param next the target status

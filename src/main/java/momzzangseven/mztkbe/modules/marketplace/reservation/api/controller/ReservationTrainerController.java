@@ -5,8 +5,7 @@ import jakarta.validation.constraints.Positive;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ApproveReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationRequestDTO;
@@ -95,6 +94,6 @@ public class ReservationTrainerController {
   }
 
   private void requireTrainerId(Long trainerId) {
-    if (trainerId == null) throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+    if (trainerId == null) throw new UserNotAuthenticatedException();
   }
 }

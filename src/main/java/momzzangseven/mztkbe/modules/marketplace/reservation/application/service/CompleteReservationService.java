@@ -96,7 +96,7 @@ public class CompleteReservationService implements CompleteReservationUseCase {
     Reservation saved = saveReservationPort.save(completed);
 
     eventPublisher.publishEvent(
-        new EscrowDispatchEvent(saved.getId(), reservation.getOrderId(), EscrowAction.CONFIRM));
+        EscrowDispatchEvent.of(saved.getId(), reservation.getOrderId(), EscrowAction.CONFIRM));
 
     log.info("Reservation settled: id={}, userId={}", saved.getId(), command.userId());
     return new CompleteReservationResult(saved.getId(), saved.getStatus());

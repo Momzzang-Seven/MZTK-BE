@@ -81,7 +81,7 @@ public class RejectReservationService implements RejectReservationUseCase {
 
     // Publish events — both handled AFTER_COMMIT by their respective listeners.
     eventPublisher.publishEvent(
-        new EscrowDispatchEvent(saved.getId(), reservation.getOrderId(), EscrowAction.CANCEL));
+        EscrowDispatchEvent.of(saved.getId(), reservation.getOrderId(), EscrowAction.CANCEL));
     eventPublisher.publishEvent(
         new TrainerStrikeEvent(reservation.getTrainerId(), TrainerStrikeEvent.REASON_REJECT));
 

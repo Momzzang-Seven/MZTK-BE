@@ -21,8 +21,10 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,8 +39,16 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Price match (signed amount == class.priceAmount)
  *   <li>Trainer not suspended
  *   <li>Slot capacity check (active count &lt; capacity)
- *   <li>Generate orderId → submit purchaseClass on-chain → persist PENDING reservation
+ *   <li>Persist PENDING reservation first (DB commit) → dispatch EscrowDispatchEvent(PURCHASE)
+ *       AFTER_COMMIT → listener calls purchaseClass on-chain and writes back real txHash.
  * </ol>
+ *
+ * <p><b>DB-first ordering:</b><br>
+ * The reservation row is persisted with a sentinel {@code txHash} before any on-chain call. After
+ * the DB transaction commits, {@link EscrowDispatchEvent} (PURCHASE action) is handled AFTER_COMMIT
+ * by {@code EscrowDispatchEventListener}, which calls {@code purchaseClass} on-chain and writes
+ * back the real txHash. This ensures the DB row always exists before any on-chain side-effect,
+ * making reconciliation possible if the on-chain call fails.
  */
 @Slf4j
 @Service
@@ -50,7 +60,7 @@ public class CreateReservationService implements CreateReservationUseCase {
   private final CheckTrainerSanctionPort checkTrainerSanctionPort;
   private final LoadReservationPort loadReservationPort;
   private final SaveReservationPort saveReservationPort;
-  private final SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  private final ApplicationEventPublisher eventPublisher;
   private final Clock clock;
 
   @Override
@@ -141,13 +151,11 @@ public class CreateReservationService implements CreateReservationUseCase {
           "Slot " + slot.getId() + " is at full capacity (" + slot.getCapacity() + ")");
     }
 
-    // 7. Generate orderId and submit on-chain purchaseClass
+    // 7. Generate orderId and persist PENDING reservation with sentinel txHash BEFORE on-chain
+    // call.
+    //    DB row must exist first so that on-chain tx is always traceable via orderId even if the
+    //    subsequent escrow call or txHash write-back fails (reconciliation-friendly ordering).
     String orderId = UUID.randomUUID().toString();
-    String txHash =
-        submitEscrowTransactionPort.submitPurchase(
-            orderId, command.delegationSignature(), command.executionSignature(), expectedAmount);
-
-    // 8. Persist PENDING reservation
     Reservation reservation =
         Reservation.createPending(
             command.userId(),
@@ -158,11 +166,23 @@ public class CreateReservationService implements CreateReservationUseCase {
             cls.getDurationMinutes(),
             command.userRequest(),
             orderId,
-            txHash);
+            "ESCROW_DISPATCH_PENDING");
 
     Reservation saved = saveReservationPort.save(reservation);
+
+    // 8. Dispatch PURCHASE event AFTER_COMMIT — EscrowDispatchEventListener calls purchaseClass
+    //    on-chain and writes back the real txHash in a REQUIRES_NEW transaction.
+    eventPublisher.publishEvent(
+        new EscrowDispatchEvent(
+            saved.getId(),
+            orderId,
+            EscrowAction.PURCHASE,
+            command.delegationSignature(),
+            command.executionSignature(),
+            expectedAmount));
+
     log.info(
-        "Reservation created: id={}, userId={}, classId={}",
+        "Reservation created (escrow dispatch pending): id={}, userId={}, classId={}",
         saved.getId(),
         saved.getUserId(),
         command.classId());
