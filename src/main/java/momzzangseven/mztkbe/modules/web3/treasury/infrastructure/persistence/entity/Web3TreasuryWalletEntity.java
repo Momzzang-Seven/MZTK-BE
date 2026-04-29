@@ -2,8 +2,6 @@ package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.en
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -17,14 +15,17 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 
 /**
  * JPA mapping for {@code web3_treasury_wallets}. Mirrors the {@code TreasuryWallet} aggregate but
  * also retains the legacy {@code treasuryAddress} / {@code treasuryPrivateKeyEncrypted} columns
  * during the KMS migration window. The legacy private-key column is scheduled for removal in PR4
  * once all environments have switched to KMS-backed signing.
+ *
+ * <p>The {@code status} and {@code keyOrigin} columns are persisted as plain strings rather than
+ * {@code @Enumerated} domain enums; ARCHITECTURE.md requires the entity to stay free of domain
+ * imports, so the persistence adapter is responsible for round-tripping the column strings against
+ * the {@code TreasuryWalletStatus} / {@code TreasuryKeyOrigin} value objects.
  */
 @Entity
 @Table(name = "web3_treasury_wallets")
@@ -51,13 +52,11 @@ public class Web3TreasuryWalletEntity {
   @Column(name = "kms_key_id", length = 255)
   private String kmsKeyId;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "status", length = 32)
-  private TreasuryWalletStatus status;
+  private String status;
 
-  @Enumerated(EnumType.STRING)
   @Column(name = "key_origin", length = 32)
-  private TreasuryKeyOrigin keyOrigin;
+  private String keyOrigin;
 
   @Column(name = "disabled_at")
   private LocalDateTime disabledAt;

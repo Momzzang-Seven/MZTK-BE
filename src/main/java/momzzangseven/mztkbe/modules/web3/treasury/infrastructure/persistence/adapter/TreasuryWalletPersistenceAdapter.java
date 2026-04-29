@@ -13,6 +13,8 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreas
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter.TreasuryKeyCipher;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryWalletEntity;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryWalletJpaRepository;
@@ -151,8 +153,8 @@ public class TreasuryWalletPersistenceAdapter
         .walletAlias(entity.getWalletAlias())
         .kmsKeyId(entity.getKmsKeyId())
         .walletAddress(entity.getTreasuryAddress())
-        .status(entity.getStatus())
-        .keyOrigin(entity.getKeyOrigin())
+        .status(parseStatus(entity.getStatus()))
+        .keyOrigin(parseKeyOrigin(entity.getKeyOrigin()))
         .disabledAt(entity.getDisabledAt())
         .createdAt(entity.getCreatedAt())
         .updatedAt(entity.getUpdatedAt())
@@ -163,8 +165,8 @@ public class TreasuryWalletPersistenceAdapter
     entity.setWalletAlias(wallet.getWalletAlias());
     entity.setKmsKeyId(wallet.getKmsKeyId());
     entity.setTreasuryAddress(wallet.getWalletAddress());
-    entity.setStatus(wallet.getStatus());
-    entity.setKeyOrigin(wallet.getKeyOrigin());
+    entity.setStatus(wallet.getStatus() == null ? null : wallet.getStatus().name());
+    entity.setKeyOrigin(wallet.getKeyOrigin() == null ? null : wallet.getKeyOrigin().name());
     entity.setDisabledAt(wallet.getDisabledAt());
     if (wallet.getCreatedAt() != null) {
       entity.setCreatedAt(wallet.getCreatedAt());
@@ -172,6 +174,20 @@ public class TreasuryWalletPersistenceAdapter
     if (wallet.getUpdatedAt() != null) {
       entity.setUpdatedAt(wallet.getUpdatedAt());
     }
+  }
+
+  private static TreasuryWalletStatus parseStatus(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    return TreasuryWalletStatus.valueOf(value);
+  }
+
+  private static TreasuryKeyOrigin parseKeyOrigin(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+    return TreasuryKeyOrigin.valueOf(value);
   }
 
   private ExecutionSignerCapabilityView mapCapability(
