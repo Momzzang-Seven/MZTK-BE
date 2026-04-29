@@ -25,11 +25,12 @@ public class PostLikeV2Controller {
   public ResponseEntity<ApiResponse<GetMyLikedPostsV2Response>> getMyLikedPosts(
       @AuthenticationPrincipal Long userId,
       @RequestParam(required = false) PostType type,
+      @RequestParam(required = false) String search,
       @RequestParam(required = false) String cursor,
       @RequestParam(required = false) Integer size) {
     Long validatedUserId = requireUserId(userId);
     GetMyLikedPostsCursorCommand command =
-        new GetMyLikedPostsV2Request(type, cursor, size).toCommand(validatedUserId);
+        new GetMyLikedPostsV2Request(type, search, cursor, size).toCommand(validatedUserId);
     GetMyLikedPostsCursorResult result = getMyLikedPostsCursorUseCase.execute(command);
     return ResponseEntity.ok(ApiResponse.success(GetMyLikedPostsV2Response.from(result)));
   }

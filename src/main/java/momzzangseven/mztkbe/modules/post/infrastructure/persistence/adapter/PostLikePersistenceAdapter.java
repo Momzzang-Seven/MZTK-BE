@@ -1,5 +1,11 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
+import static momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.QPostEntity.postEntity;
+import static momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.QPostLikeEntity.postLikeEntity;
+
+import com.querydsl.core.Tuple;
+import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +15,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
+import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.post.application.port.out.LikedPostRow;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -20,12 +27,14 @@ import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostL
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostLikeJpaRepository;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostLikeJpaRepository.LikedPostProjection;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 @RequiredArgsConstructor
 public class PostLikePersistenceAdapter implements PostLikePersistencePort {
 
   private final PostLikeJpaRepository postLikeJpaRepository;
+  private final JPAQueryFactory queryFactory;
 
   @Override
   public boolean exists(PostLikeTargetType targetType, Long targetId, Long userId) {
@@ -91,7 +100,10 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
 
   @Override
   public List<LikedPostRow> findLikedPostsByCursor(
-      Long userId, PostType type, CursorPageRequest pageRequest) {
+      Long userId, PostType type, String search, CursorPageRequest pageRequest) {
+    if (hasLikedPostSearch(type, search)) {
+      return findLikedPostsBySearchCursor(userId, type, search, pageRequest);
+    }
     KeysetCursor cursor = pageRequest.cursor();
     List<LikedPostProjection> projections =
         cursor == null
@@ -100,6 +112,26 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
             : postLikeJpaRepository.findLikedPostsAfterCursorNative(
                 userId, type.name(), cursor.createdAt(), cursor.id(), pageRequest.limitWithProbe());
     return projections.stream().map(this::toLikedPostRow).toList();
+  }
+
+  private List<LikedPostRow> findLikedPostsBySearchCursor(
+      Long userId, PostType type, String search, CursorPageRequest pageRequest) {
+    return queryFactory
+        .select(postLikeEntity, postEntity)
+        .from(postLikeEntity, postEntity)
+        .where(
+            postLikeEntity.userId.eq(userId),
+            postLikeEntity.targetType.eq(PostLikeTargetType.POST),
+            postLikeEntity.targetId.eq(postEntity.id),
+            postEntity.type.eq(type),
+            likedSearchPredicate(type, search),
+            likedCursorBefore(pageRequest))
+        .orderBy(postLikeEntity.createdAt.desc(), postLikeEntity.id.desc())
+        .limit(pageRequest.limitWithProbe())
+        .fetch()
+        .stream()
+        .map(this::toLikedPostRow)
+        .toList();
   }
 
   private PostLikeEntity toEntity(PostLike postLike) {
@@ -136,5 +168,33 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
             .updatedAt(projection.getPostUpdatedAt())
             .build();
     return new LikedPostRow(post, projection.getLikeId(), projection.getLikedAt());
+  }
+
+  private LikedPostRow toLikedPostRow(Tuple tuple) {
+    PostLikeEntity likeEntity = tuple.get(postLikeEntity);
+    Post post = tuple.get(postEntity).toDomain();
+    return new LikedPostRow(post, likeEntity.getId(), likeEntity.getCreatedAt());
+  }
+
+  private BooleanExpression likedCursorBefore(CursorPageRequest pageRequest) {
+    if (!pageRequest.hasCursor()) {
+      return null;
+    }
+    KeysetCursor cursor = pageRequest.cursor();
+    return postLikeEntity
+        .createdAt
+        .lt(cursor.createdAt())
+        .or(postLikeEntity.createdAt.eq(cursor.createdAt()).and(postLikeEntity.id.lt(cursor.id())));
+  }
+
+  private boolean hasLikedPostSearch(PostType type, String search) {
+    return type != PostType.FREE && StringUtils.hasText(search);
+  }
+
+  private BooleanExpression likedSearchPredicate(PostType type, String search) {
+    if (!hasLikedPostSearch(type, search)) {
+      return null;
+    }
+    return postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
   }
 }

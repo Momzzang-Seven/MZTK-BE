@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -143,6 +144,47 @@ class PostLikeV2IntegrationTest {
         .andExpect(jsonPath("$.data.posts[0].postId").value(question.getId()))
         .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"))
         .andExpect(jsonPath("$.data.posts[0].question.reward").value(100));
+  }
+
+  @Test
+  @DisplayName("GET /v2/users/me/liked-posts는 좋아요한 질문글 내부에서 제목 검색을 적용한다")
+  void getMyLikedPosts_realFlow_searchesWithinLikedPosts() throws Exception {
+    Long requesterId = persistUser("requester").getId();
+    Long writerId = persistUser("writer").getId();
+    Long otherUserId = persistUser("other").getId();
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
+
+    PostEntity matching =
+        persistPost(writerId, PostType.QUESTION, "100%_ form check", "matching content");
+    PostEntity wildcardExpandedWithoutEscape =
+        persistPost(writerId, PostType.QUESTION, "100ab form check", "wildcard content");
+    PostEntity notLikedMatching =
+        persistPost(writerId, PostType.QUESTION, "100%_ not liked", "not liked content");
+    PostEntity likedByOtherUser =
+        persistPost(writerId, PostType.QUESTION, "100%_ other liked", "other liked content");
+    persistLike(PostLikeTargetType.POST, matching.getId(), requesterId, base);
+    persistLike(
+        PostLikeTargetType.POST,
+        wildcardExpandedWithoutEscape.getId(),
+        requesterId,
+        base.minusMinutes(1));
+    persistLike(
+        PostLikeTargetType.POST, likedByOtherUser.getId(), otherUserId, base.minusMinutes(2));
+
+    mockMvc
+        .perform(
+            get("/v2/users/me/liked-posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("search", "100%_")
+                .with(userPrincipal(requesterId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(matching.getId()))
+        .andExpect(jsonPath("$.data.posts[0].content").value("matching content"))
+        .andExpect(jsonPath("$.data.posts.length()").value(1));
+
+    assertThat(notLikedMatching.getId()).isNotEqualTo(matching.getId());
   }
 
   private UserEntity persistUser(String nickname) {

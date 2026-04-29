@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.integration.e2e.post;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
@@ -12,10 +13,12 @@ import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleE
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -28,6 +31,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
     })
 @DisplayName("[E2E] GET /v2/users/me/liked-posts 테스트")
 class LikedPostsV2E2ETest extends E2ETestBase {
+
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -87,6 +92,66 @@ class LikedPostsV2E2ETest extends E2ETestBase {
     assertThat(questionPage.at("/data/posts/0/question/reward").asLong()).isEqualTo(100L);
     assertThat(questionPage.at("/data/posts/0/isLiked").asBoolean()).isTrue();
     assertThat(questionPage.at("/data/hasNext").asBoolean()).isFalse();
+  }
+
+  @Test
+  @DisplayName("[E-2] 좋아요한 질문글 검색 결과는 cursor로 3페이지까지 이어서 조회된다")
+  void getMyLikedPostsV2_withSearchAndCursor_returnsThreePages() throws Exception {
+    TestUser writer = signupAndLogin("liked-search-writer");
+    TestUser liker = signupAndLogin("liked-search-liker");
+    TestUser otherLiker = signupAndLogin("liked-search-other");
+    LocalDateTime base = LocalDateTime.of(2026, 4, 27, 12, 0);
+
+    Long olderPostId =
+        createQuestionPost(
+            writer.accessToken(), "FLOW-LIKED form older", "older liked content", 100L);
+    Long middlePostId =
+        createQuestionPost(
+            writer.accessToken(), "FLOW-LIKED form middle", "middle liked content", 100L);
+    Long newerPostId =
+        createQuestionPost(
+            writer.accessToken(), "FLOW-LIKED form newer", "newer liked content", 100L);
+    Long wrongSearchPostId =
+        createQuestionPost(
+            writer.accessToken(), "unmatched liked title", "wrong liked content", 100L);
+    Long otherUserOnlyPostId =
+        createQuestionPost(
+            writer.accessToken(), "FLOW-LIKED form other user", "other liked content", 100L);
+
+    likePost(olderPostId, liker.accessToken());
+    likePost(middlePostId, liker.accessToken());
+    likePost(newerPostId, liker.accessToken());
+    likePost(wrongSearchPostId, liker.accessToken());
+    likePost(otherUserOnlyPostId, otherLiker.accessToken());
+
+    setPostLikeCreatedAt(olderPostId, liker.userId(), base.minusMinutes(2));
+    setPostLikeCreatedAt(middlePostId, liker.userId(), base.minusMinutes(1));
+    setPostLikeCreatedAt(newerPostId, liker.userId(), base);
+    setPostLikeCreatedAt(wrongSearchPostId, liker.userId(), base.plusMinutes(1));
+    setPostLikeCreatedAt(otherUserOnlyPostId, otherLiker.userId(), base.plusMinutes(2));
+
+    JsonNode firstPage =
+        fetchLikedPosts(liker.accessToken(), "?type=QUESTION&search=FLOW-LIKED&size=1");
+
+    assertSingleLikedPostPage(firstPage, newerPostId, true);
+    String firstCursor = firstPage.at("/data/nextCursor").asText();
+    assertThat(firstCursor).isNotBlank();
+
+    JsonNode secondPage =
+        fetchLikedPosts(
+            liker.accessToken(), "?type=QUESTION&search=flow-liked&size=1&cursor=" + firstCursor);
+
+    assertSingleLikedPostPage(secondPage, middlePostId, true);
+    String secondCursor = secondPage.at("/data/nextCursor").asText();
+    assertThat(secondCursor).isNotBlank();
+    assertThat(secondCursor).isNotEqualTo(firstCursor);
+
+    JsonNode thirdPage =
+        fetchLikedPosts(
+            liker.accessToken(), "?type=QUESTION&search=Flow-Liked&size=1&cursor=" + secondCursor);
+
+    assertSingleLikedPostPage(thirdPage, olderPostId, false);
+    assertThat(thirdPage.at("/data/nextCursor").isNull()).isTrue();
   }
 
   private Long createFreePost(String accessToken, String content) throws Exception {
@@ -158,6 +223,26 @@ class LikedPostsV2E2ETest extends E2ETestBase {
             String.class);
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     return parse(response);
+  }
+
+  private void setPostLikeCreatedAt(Long postId, Long userId, LocalDateTime createdAt) {
+    jdbcTemplate.update(
+        "UPDATE post_like SET created_at = ? "
+            + "WHERE target_type = 'POST' AND target_id = ? AND user_id = ?",
+        createdAt,
+        postId,
+        userId);
+  }
+
+  private void assertSingleLikedPostPage(
+      JsonNode page, Long expectedPostId, boolean expectedHasNext) {
+    assertThat(page.at("/status").asText()).isEqualTo("SUCCESS");
+    assertThat(page.at("/data/posts").size()).isEqualTo(1);
+    assertThat(page.at("/data/posts/0/postId").asLong()).isEqualTo(expectedPostId);
+    assertThat(page.at("/data/posts/0/type").asText()).isEqualTo("QUESTION");
+    assertThat(page.at("/data/posts/0/writer/nickname").asText()).isEqualTo("liked-search-writer");
+    assertThat(page.at("/data/posts/0/isLiked").asBoolean()).isTrue();
+    assertThat(page.at("/data/hasNext").asBoolean()).isEqualTo(expectedHasNext);
   }
 
   private JsonNode parse(ResponseEntity<String> response) throws Exception {

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
+import java.util.Locale;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorScope;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -29,13 +30,13 @@ public record PostCursorSearchCondition(
     if (value == null || value.isBlank()) {
       return null;
     }
-    return value.trim().toLowerCase();
+    return value.trim().toLowerCase(Locale.ROOT);
   }
 
   private static String normalizeSearch(PostType type, String value) {
     if (value == null || value.isBlank() || type == PostType.FREE) {
       return null;
     }
-    return value.trim().toLowerCase();
+    return value.trim().toLowerCase(Locale.ROOT);
   }
 }

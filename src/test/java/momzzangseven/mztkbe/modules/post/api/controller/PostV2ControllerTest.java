@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetMyLikedPostsCursorUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.GetMyPostsCursorUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.LikePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.RecoverQuestionPostEscrowUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsCursorUseCase;
@@ -76,6 +77,7 @@ class PostV2ControllerTest {
   @MockitoBean private SearchPostsUseCase searchPostsUseCase;
   @MockitoBean private SearchPostsCursorUseCase searchPostsCursorUseCase;
   @MockitoBean private GetMyLikedPostsCursorUseCase getMyLikedPostsCursorUseCase;
+  @MockitoBean private GetMyPostsCursorUseCase getMyPostsCursorUseCase;
   @MockitoBean private AcceptAnswerUseCase acceptAnswerUseCase;
   @MockitoBean private LikePostUseCase likePostUseCase;
 
