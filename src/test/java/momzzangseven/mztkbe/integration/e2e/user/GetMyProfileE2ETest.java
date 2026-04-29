@@ -239,6 +239,20 @@ class GetMyProfileE2ETest extends E2ETestBase {
             userId);
     assertThat(updated).isGreaterThan(0);
 
+    // 레벨업 보상 dispatch 가 reward-treasury wallet 의 address 를 조회하므로
+    // (LevelRewardMztkAdapter#resolveTreasuryAddress) 빈 e2e DB 환경에서도 실패하지 않도록 seed.
+    // web3_treasury_wallets 는 DatabaseCleaner.EXCLUDED_TABLES 에 있으므로 ON CONFLICT 로 idempotent 유지.
+    jdbcTemplate.update(
+        "INSERT INTO web3_treasury_wallets ("
+            + "wallet_alias, treasury_address, kms_key_id, status, key_origin, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, NOW(), NOW()) "
+            + "ON CONFLICT (wallet_alias) DO NOTHING",
+        "reward-treasury",
+        "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "alias/reward-treasury-e2e",
+        "ACTIVE",
+        "IMPORTED");
+
     // 레벨업 시 ERC-20 토큰 전송에 지갑 주소 필요 — 테스트 지갑 삽입
     jdbcTemplate.update(
         "INSERT INTO user_wallets (created_at, registered_at, status, updated_at, user_id,"
