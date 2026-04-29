@@ -13,11 +13,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableTreasuryWalletCommand;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ArchiveTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletDisabledEvent;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
-class DisableTreasuryWalletServiceTest {
+class ArchiveTreasuryWalletServiceTest {
 
   private static final String ALIAS = TreasuryRole.REWARD.toAlias();
   private static final String KMS_KEY_ID = "kms-key-1";
@@ -41,13 +41,13 @@ class DisableTreasuryWalletServiceTest {
   @Mock private TreasuryAuditRecorder treasuryAuditRecorder;
   @Mock private ApplicationEventPublisher applicationEventPublisher;
 
-  private DisableTreasuryWalletService service;
+  private ArchiveTreasuryWalletService service;
 
   @BeforeEach
   void setUp() {
     Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
     service =
-        new DisableTreasuryWalletService(
+        new ArchiveTreasuryWalletService(
             loadTreasuryWalletPort,
             saveTreasuryWalletPort,
             treasuryAuditRecorder,
@@ -55,39 +55,39 @@ class DisableTreasuryWalletServiceTest {
             clock);
   }
 
-  private TreasuryWallet activeWallet() {
-    return TreasuryWallet.provision(
-        ALIAS,
-        KMS_KEY_ID,
-        ADDRESS,
-        TreasuryRole.REWARD,
-        Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC));
+  private TreasuryWallet disabledWallet() {
+    Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+    return TreasuryWallet.provision(ALIAS, KMS_KEY_ID, ADDRESS, TreasuryRole.REWARD, clock)
+        .disable(clock);
   }
 
   @Test
-  void execute_savesDisabledRowAndPublishesEvent() {
-    when(loadTreasuryWalletPort.loadByAlias(ALIAS)).thenReturn(Optional.of(activeWallet()));
+  void execute_savesArchivedRowAndPublishesEvent() {
+    when(loadTreasuryWalletPort.loadByAlias(ALIAS)).thenReturn(Optional.of(disabledWallet()));
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    TreasuryWalletView view = service.execute(new DisableTreasuryWalletCommand(ALIAS, OPERATOR_ID));
+    TreasuryWalletView view =
+        service.execute(new ArchiveTreasuryWalletCommand(ALIAS, OPERATOR_ID));
 
     assertThat(view.walletAddress()).isEqualTo(ADDRESS);
-    ArgumentCaptor<TreasuryWalletDisabledEvent> eventCaptor =
-        ArgumentCaptor.forClass(TreasuryWalletDisabledEvent.class);
-    verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
-    TreasuryWalletDisabledEvent event = eventCaptor.getValue();
+    ArgumentCaptor<TreasuryWalletArchivedEvent> captor =
+        ArgumentCaptor.forClass(TreasuryWalletArchivedEvent.class);
+    verify(applicationEventPublisher).publishEvent(captor.capture());
+    TreasuryWalletArchivedEvent event = captor.getValue();
     assertThat(event.walletAlias()).isEqualTo(ALIAS);
     assertThat(event.kmsKeyId()).isEqualTo(KMS_KEY_ID);
     assertThat(event.walletAddress()).isEqualTo(ADDRESS);
     assertThat(event.operatorUserId()).isEqualTo(OPERATOR_ID);
+    assertThat(event.pendingWindowDays())
+        .isEqualTo(ArchiveTreasuryWalletService.DEFAULT_KMS_PENDING_WINDOW_DAYS);
     verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
   }
 
   @Test
-  void execute_throws_andRecordsFailureAudit_whenWalletMissing() {
+  void execute_throws_andDoesNotPublishEvent_whenWalletMissing() {
     when(loadTreasuryWalletPort.loadByAlias(ALIAS)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.execute(new DisableTreasuryWalletCommand(ALIAS, OPERATOR_ID)))
+    assertThatThrownBy(() -> service.execute(new ArchiveTreasuryWalletCommand(ALIAS, OPERATOR_ID)))
         .isInstanceOf(TreasuryWalletStateException.class);
 
     verify(applicationEventPublisher, never()).publishEvent(any());

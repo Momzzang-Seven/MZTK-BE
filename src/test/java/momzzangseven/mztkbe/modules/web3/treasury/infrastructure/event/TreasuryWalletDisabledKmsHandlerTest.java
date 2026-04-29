@@ -34,7 +34,8 @@ class TreasuryWalletDisabledKmsHandlerTest {
 
     handler.onDisabled(event);
 
-    ArgumentCaptor<DisableKmsKeyCommand> captor = ArgumentCaptor.forClass(DisableKmsKeyCommand.class);
+    ArgumentCaptor<DisableKmsKeyCommand> captor =
+        ArgumentCaptor.forClass(DisableKmsKeyCommand.class);
     verify(disableKmsKeyUseCase).execute(captor.capture());
     DisableKmsKeyCommand cmd = captor.getValue();
     org.assertj.core.api.Assertions.assertThat(cmd.walletAlias()).isEqualTo("reward-treasury");
