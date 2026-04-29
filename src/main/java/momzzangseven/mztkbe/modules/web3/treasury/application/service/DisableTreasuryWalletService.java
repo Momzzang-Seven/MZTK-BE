@@ -24,10 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP cannot
  * intercept self-invocation, so the propagation hint would be silently dropped.
  *
- * <p><b>Save-first ordering</b> — DB save commits before the KMS {@code DisableKey} call. If KMS
- * fails the row is already DISABLED and an operator can retry the KMS step or trigger manual
- * cleanup; a KMS-first ordering would leave the DB unchanged and the KMS key invisibly disabled,
- * which is harder to recover from.
+ * <p><b>Save-first ordering</b> — both the DB save and the KMS {@code DisableKey} call run inside a
+ * single {@link Transactional}; the JPA flush precedes the KMS call and the actual COMMIT happens
+ * when the method returns. KMS failure rolls the transaction back, so DB and KMS stay consistent in
+ * the common path. The narrow inconsistent window is <em>KMS success → DB commit failure</em>
+ * (rare, e.g. connection drop after the KMS call): the row stays ACTIVE in the DB while the KMS key
+ * is already disabled. Recovery is manual re-disable against the same row, which is idempotent on
+ * both sides. We intentionally diverge from the design doc §4-4 KMS-first sequence because the
+ * inverse failure mode (DB unchanged + KMS invisibly disabled with no DB pointer) is harder to
+ * detect from operator-side dashboards.
  */
 @Service
 @Slf4j
