@@ -9,30 +9,30 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletDisabledEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Transitions a wallet ACTIVE → DISABLED, persists, then asks KMS to disable the backing key.
+ * Transitions a wallet ACTIVE → DISABLED and persists the row. KMS {@code DisableKey} is no
+ * longer invoked inside this method — instead a {@link TreasuryWalletDisabledEvent} is published
+ * and an AFTER_COMMIT handler invokes {@code DisableKmsKeyUseCase} so the KMS call only runs once
+ * the DB transaction has committed.
  *
- * <p>Audit writes go through {@link TreasuryAuditRecorder} (separate bean) so they run in {@code
- * REQUIRES_NEW} and survive a rollback of the outer transaction. An inline
- * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP cannot
- * intercept self-invocation, so the propagation hint would be silently dropped.
+ * <p><b>Why split the transaction.</b> When the DB save and the KMS call sat in the same
+ * {@code @Transactional}, a "KMS success → commit failure" race could leave KMS DISABLED while
+ * the DB silently rolled back to ACTIVE — invisible to anyone reading the DB. Splitting them so
+ * the DB commits first means the new failure mode is "DB DISABLED, KMS still ACTIVE", which is
+ * recorded as a row in {@code web3_treasury_kms_audits} for operator follow-up. The signing path
+ * already gates on the DB row's {@code status}, so the wallet is no longer usable the moment the
+ * DB commit lands; the KMS-side disable is defence-in-depth that operators can retry idempotently.
  *
- * <p><b>Save-first ordering</b> — both the DB save and the KMS {@code DisableKey} call run inside a
- * single {@link Transactional}; the JPA flush precedes the KMS call and the actual COMMIT happens
- * when the method returns. KMS failure rolls the transaction back, so DB and KMS stay consistent in
- * the common path. The narrow inconsistent window is <em>KMS success → DB commit failure</em>
- * (rare, e.g. connection drop after the KMS call): the row stays ACTIVE in the DB while the KMS key
- * is already disabled. Recovery is manual re-disable against the same row, which is idempotent on
- * both sides. We intentionally diverge from the design doc §4-4 KMS-first sequence because the
- * inverse failure mode (DB unchanged + KMS invisibly disabled with no DB pointer) is harder to
- * detect from operator-side dashboards.
+ * <p>Audit writes for the business-flow attempt itself still go through {@link
+ * TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback.
  */
 @Service
 @Slf4j
@@ -41,8 +41,8 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
 
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final SaveTreasuryWalletPort saveTreasuryWalletPort;
-  private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;
 
   @Override
@@ -65,7 +65,12 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
     try {
       TreasuryWallet disabled = wallet.disable(clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(disabled);
-      kmsKeyLifecyclePort.disableKey(saved.getKmsKeyId());
+      applicationEventPublisher.publishEvent(
+          new TreasuryWalletDisabledEvent(
+              saved.getWalletAlias(),
+              saved.getKmsKeyId(),
+              walletAddress,
+              command.operatorUserId()));
       treasuryAuditRecorder.record(command.operatorUserId(), walletAddress, true, null);
       return TreasuryWalletView.from(saved);
     } catch (RuntimeException e) {
