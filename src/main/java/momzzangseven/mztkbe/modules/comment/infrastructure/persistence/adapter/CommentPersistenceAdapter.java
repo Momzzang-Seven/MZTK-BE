@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
@@ -20,7 +21,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Component
 @RequiredArgsConstructor
@@ -118,7 +118,7 @@ public class CommentPersistenceAdapter
   public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
       FindCommentedPostRefsQuery query) {
     query.validate();
-    String searchPattern = escapeLikePattern(query.normalizedSearch());
+    String searchPattern = LikePatternEscaper.escape(query.normalizedSearch());
     List<CommentJpaRepository.CommentedPostRefProjection> refs =
         query.pageRequest().hasCursor()
             ? commentRepository.findCommentedPostRefsAfterCursor(
@@ -153,13 +153,6 @@ public class CommentPersistenceAdapter
   public List<Long> loadCommentIdsForDeletion(LocalDateTime cutoff, int batchSize) {
     return commentRepository.findIdsByIsDeletedTrueAndUpdatedAtBefore(
         cutoff, PageRequest.of(0, batchSize));
-  }
-
-  private String escapeLikePattern(String search) {
-    if (!StringUtils.hasText(search)) {
-      return null;
-    }
-    return search.replace("!", "!!").replace("%", "!%").replace("_", "!_");
   }
 
   // ========== DeleteCommentPort Implementation ==========

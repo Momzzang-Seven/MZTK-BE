@@ -1,9 +1,18 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
+import static momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.QPostEntity.postEntity;
+import static momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.QPostLikeEntity.postLikeEntity;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.querydsl.core.Tuple;
+import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Predicate;
+import com.querydsl.jpa.impl.JPAQuery;
+import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.global.pagination.CursorCodec;
@@ -29,6 +38,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PostLikePersistenceAdapterTest {
 
   @Mock private PostLikeJpaRepository postLikeJpaRepository;
+  @Mock private JPAQueryFactory queryFactory;
+  @Mock private JPAQuery<Tuple> jpaQuery;
 
   @InjectMocks private PostLikePersistenceAdapter postLikePersistenceAdapter;
 
@@ -56,7 +67,7 @@ class PostLikePersistenceAdapterTest {
         .thenReturn(List.of(projection));
 
     List<LikedPostRow> rows =
-        postLikePersistenceAdapter.findLikedPostsByCursor(7L, PostType.FREE, pageRequest);
+        postLikePersistenceAdapter.findLikedPostsByCursor(7L, PostType.FREE, null, pageRequest);
 
     assertThat(rows).hasSize(1);
     assertThat(rows.getFirst().likeId()).isEqualTo(100L);
@@ -78,11 +89,33 @@ class PostLikePersistenceAdapterTest {
         .thenReturn(List.of());
 
     List<LikedPostRow> rows =
-        postLikePersistenceAdapter.findLikedPostsByCursor(7L, PostType.QUESTION, pageRequest);
+        postLikePersistenceAdapter.findLikedPostsByCursor(7L, PostType.QUESTION, null, pageRequest);
 
     assertThat(rows).isEmpty();
     verify(postLikeJpaRepository)
         .findLikedPostsAfterCursorNative(7L, "QUESTION", cursorLikedAt, 100L, 6);
+  }
+
+  @Test
+  @DisplayName("findLikedPostsByCursor uses QueryDSL when search exists")
+  void findLikedPostsByCursor_searchUsesQueryDsl() {
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(null, 10, 10, 50, CursorScope.likedPosts(7L, "QUESTION", "form"));
+    when(queryFactory.select(postLikeEntity, postEntity)).thenReturn(jpaQuery);
+    when(jpaQuery.from(postLikeEntity, postEntity)).thenReturn(jpaQuery);
+    when(jpaQuery.where(any(Predicate[].class))).thenReturn(jpaQuery);
+    when(jpaQuery.orderBy(any(OrderSpecifier[].class))).thenReturn(jpaQuery);
+    when(jpaQuery.limit(11L)).thenReturn(jpaQuery);
+    when(jpaQuery.fetch()).thenReturn(List.of());
+
+    List<LikedPostRow> rows =
+        postLikePersistenceAdapter.findLikedPostsByCursor(
+            7L, PostType.QUESTION, "form", pageRequest);
+
+    assertThat(rows).isEmpty();
+    verify(queryFactory).select(postLikeEntity, postEntity);
+    verify(jpaQuery).where(any(Predicate[].class));
+    verifyNoInteractions(postLikeJpaRepository);
   }
 
   private LikedPostProjection projection(

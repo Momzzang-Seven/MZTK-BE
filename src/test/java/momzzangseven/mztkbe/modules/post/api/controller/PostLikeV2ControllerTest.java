@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.post.api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -14,6 +15,7 @@ import momzzangseven.mztkbe.global.error.post.InvalidLikedPostsQueryException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.in.CheckAdminAccountStatusUseCase;
+import momzzangseven.mztkbe.modules.post.application.dto.GetMyLikedPostsCursorCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.GetMyLikedPostsCursorResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.AcceptAnswerUseCase;
@@ -21,6 +23,7 @@ import momzzangseven.mztkbe.modules.post.application.port.in.CreatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.CreateQuestionPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetMyLikedPostsCursorUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.GetMyPostsCursorUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.LikePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.RecoverQuestionPostEscrowUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.SearchPostsCursorUseCase;
@@ -30,6 +33,7 @@ import momzzangseven.mztkbe.modules.post.application.service.GetPostService;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -78,6 +82,7 @@ class PostLikeV2ControllerTest {
   @MockitoBean private SearchPostsUseCase searchPostsUseCase;
   @MockitoBean private SearchPostsCursorUseCase searchPostsCursorUseCase;
   @MockitoBean private GetMyLikedPostsCursorUseCase getMyLikedPostsCursorUseCase;
+  @MockitoBean private GetMyPostsCursorUseCase getMyPostsCursorUseCase;
   @MockitoBean private AcceptAnswerUseCase acceptAnswerUseCase;
   @MockitoBean private LikePostUseCase likePostUseCase;
 
@@ -143,7 +148,9 @@ class PostLikeV2ControllerTest {
         .willReturn(new GetMyLikedPostsCursorResult(List.of(post), false, null));
 
     mockMvc
-        .perform(get("/v2/users/me/liked-posts?type=QUESTION&size=10").with(userPrincipal(1L)))
+        .perform(
+            get("/v2/users/me/liked-posts?type=QUESTION&search=Form&size=10")
+                .with(userPrincipal(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.hasNext").value(false))
@@ -151,6 +158,12 @@ class PostLikeV2ControllerTest {
         .andExpect(jsonPath("$.data.posts[0].postId").value(3))
         .andExpect(jsonPath("$.data.posts[0].type").value("QUESTION"))
         .andExpect(jsonPath("$.data.posts[0].question.reward").value(100));
+
+    ArgumentCaptor<GetMyLikedPostsCursorCommand> captor =
+        ArgumentCaptor.forClass(GetMyLikedPostsCursorCommand.class);
+    org.mockito.Mockito.verify(getMyLikedPostsCursorUseCase).execute(captor.capture());
+    assertThat(captor.getValue().search()).isEqualTo("Form");
+    assertThat(captor.getValue().effectiveSearch()).isEqualTo("form");
   }
 
   @Test

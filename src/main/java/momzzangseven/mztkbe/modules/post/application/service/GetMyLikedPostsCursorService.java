@@ -30,7 +30,7 @@ public class GetMyLikedPostsCursorService implements GetMyLikedPostsCursorUseCas
 
     List<LikedPostRow> rows =
         postLikePersistencePort.findLikedPostsByCursor(
-            command.requesterId(), command.type(), pageRequest);
+            command.requesterId(), command.type(), command.effectiveSearch(), pageRequest);
     boolean hasNext = rows.size() > pageRequest.size();
     List<LikedPostRow> pageRows = hasNext ? rows.subList(0, pageRequest.size()) : rows;
     if (pageRows.isEmpty()) {

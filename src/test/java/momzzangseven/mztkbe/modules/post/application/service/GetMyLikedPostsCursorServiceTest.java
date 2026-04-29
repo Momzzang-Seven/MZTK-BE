@@ -42,8 +42,9 @@ class GetMyLikedPostsCursorServiceTest {
   @DisplayName("execute returns empty result without enrichment when no liked rows")
   void execute_empty() {
     GetMyLikedPostsCursorCommand command =
-        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, null, 10);
-    when(postLikePersistencePort.findLikedPostsByCursor(7L, PostType.FREE, command.pageRequest()))
+        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, null, null, 10);
+    when(postLikePersistencePort.findLikedPostsByCursor(
+            7L, PostType.FREE, null, command.pageRequest()))
         .thenReturn(List.of());
 
     GetMyLikedPostsCursorResult result = service.execute(command);
@@ -57,7 +58,8 @@ class GetMyLikedPostsCursorServiceTest {
   @Test
   @DisplayName("execute validates command before persistence")
   void execute_invalidCommandDoesNotQueryPersistence() {
-    GetMyLikedPostsCursorCommand command = new GetMyLikedPostsCursorCommand(7L, null, null, 10);
+    GetMyLikedPostsCursorCommand command =
+        new GetMyLikedPostsCursorCommand(7L, null, null, null, 10);
 
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(InvalidLikedPostsQueryException.class);
@@ -70,7 +72,7 @@ class GetMyLikedPostsCursorServiceTest {
   @DisplayName("execute rejects invalid cursor before persistence")
   void execute_invalidCursorDoesNotQueryPersistence() {
     GetMyLikedPostsCursorCommand command =
-        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, "%%%", 10);
+        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, null, "%%%", 10);
 
     assertThatThrownBy(() -> service.execute(command)).isInstanceOf(InvalidCursorException.class);
 
@@ -83,7 +85,7 @@ class GetMyLikedPostsCursorServiceTest {
       "execute trims probe row, preserves order through enrichment, and builds next cursor")
   void execute_trimsProbeAndBuildsNextCursor() {
     GetMyLikedPostsCursorCommand command =
-        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, null, 2);
+        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, null, null, 2);
     LocalDateTime firstLikedAt = LocalDateTime.of(2026, 4, 26, 12, 0);
     LocalDateTime secondLikedAt = LocalDateTime.of(2026, 4, 26, 11, 0);
     LocalDateTime probeLikedAt = LocalDateTime.of(2026, 4, 26, 10, 0);
@@ -92,7 +94,8 @@ class GetMyLikedPostsCursorServiceTest {
     LikedPostRow probe = new LikedPostRow(post(3L), 99L, probeLikedAt);
     PostListResult firstResult = result(1L);
     PostListResult secondResult = result(2L);
-    when(postLikePersistencePort.findLikedPostsByCursor(7L, PostType.FREE, command.pageRequest()))
+    when(postLikePersistencePort.findLikedPostsByCursor(
+            7L, PostType.FREE, null, command.pageRequest()))
         .thenReturn(List.of(first, second, probe));
     when(postListEnricher.enrichAllLiked(any())).thenReturn(List.of(firstResult, secondResult));
 
@@ -116,12 +119,12 @@ class GetMyLikedPostsCursorServiceTest {
   @DisplayName("execute forwards QUESTION type and marks rows through liked-list enrichment")
   void execute_questionType() {
     GetMyLikedPostsCursorCommand command =
-        new GetMyLikedPostsCursorCommand(7L, PostType.QUESTION, null, 10);
+        new GetMyLikedPostsCursorCommand(7L, PostType.QUESTION, " Form ", null, 10);
     LikedPostRow question =
         new LikedPostRow(post(10L, PostType.QUESTION), 200L, LocalDateTime.of(2026, 4, 26, 12, 0));
     PostListResult questionResult = result(10L, PostType.QUESTION);
     when(postLikePersistencePort.findLikedPostsByCursor(
-            7L, PostType.QUESTION, command.pageRequest()))
+            7L, PostType.QUESTION, "form", command.pageRequest()))
         .thenReturn(List.of(question));
     when(postListEnricher.enrichAllLiked(any())).thenReturn(List.of(questionResult));
 
@@ -131,16 +134,17 @@ class GetMyLikedPostsCursorServiceTest {
     assertThat(result.posts().getFirst().type()).isEqualTo(PostType.QUESTION);
     assertThat(result.posts().getFirst().liked()).isTrue();
     verify(postLikePersistencePort)
-        .findLikedPostsByCursor(7L, PostType.QUESTION, command.pageRequest());
+        .findLikedPostsByCursor(7L, PostType.QUESTION, "form", command.pageRequest());
   }
 
   @Test
   @DisplayName("execute does not create next cursor for last page")
   void execute_lastPage() {
     GetMyLikedPostsCursorCommand command =
-        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, null, 10);
+        new GetMyLikedPostsCursorCommand(7L, PostType.FREE, "ignored", null, 10);
     LikedPostRow row = new LikedPostRow(post(1L), 101L, LocalDateTime.of(2026, 4, 26, 12, 0));
-    when(postLikePersistencePort.findLikedPostsByCursor(7L, PostType.FREE, command.pageRequest()))
+    when(postLikePersistencePort.findLikedPostsByCursor(
+            7L, PostType.FREE, null, command.pageRequest()))
         .thenReturn(List.of(row));
     when(postListEnricher.enrichAllLiked(any())).thenReturn(List.of(result(1L)));
 
@@ -148,7 +152,8 @@ class GetMyLikedPostsCursorServiceTest {
 
     assertThat(result.hasNext()).isFalse();
     assertThat(result.nextCursor()).isNull();
-    verify(postLikePersistencePort, never()).findLikedPostsByCursor(7L, PostType.QUESTION, null);
+    verify(postLikePersistencePort, never())
+        .findLikedPostsByCursor(7L, PostType.QUESTION, null, null);
   }
 
   private Post post(Long id) {
