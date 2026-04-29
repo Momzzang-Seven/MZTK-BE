@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnRewardTokenOrAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
@@ -52,6 +53,7 @@ public class Web3jErc20Adapter implements Web3ContractPort {
   private final TransactionRewardTokenProperties rewardTokenProperties;
   private final Web3CoreProperties web3CoreProperties;
   private final DefaultGasFeeCalculator gasFeeCalculator;
+  private final Eip1559TxSigningAdapter eip1559TxSigningAdapter;
 
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
@@ -151,7 +153,7 @@ public class Web3jErc20Adapter implements Web3ContractPort {
     }
 
     String transferData =
-        Eip1559TransferSigner.encodeTransferData(command.toAddress(), command.amountWei());
+        Erc20TransferCalldataEncoder.encodeTransferData(command.toAddress(), command.amountWei());
     Transaction estimateRequest =
         Transaction.createFunctionCallTransaction(
             command.fromAddress(),
@@ -215,7 +217,7 @@ public class Web3jErc20Adapter implements Web3ContractPort {
 
   @Override
   public SignedTransaction signTransfer(SignTransferCommand command) {
-    return Eip1559TransferSigner.signTransfer(command);
+    return eip1559TxSigningAdapter.signTransfer(command);
   }
 
   @Override

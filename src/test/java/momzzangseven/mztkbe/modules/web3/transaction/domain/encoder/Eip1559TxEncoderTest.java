@@ -8,10 +8,8 @@ import java.util.Arrays;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.SignedTx;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.Eip1559TransferSigner;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -27,7 +25,8 @@ import org.web3j.utils.Numeric;
 
 /**
  * Unit tests for {@link Eip1559TxEncoder} — covers Eip1559Fields validation, buildUnsigned, digest,
- * assembleSigned, and parity against the legacy Eip1559TransferSigner.
+ * assembleSigned, and parity asserted against web3j's RawTransaction +
+ * TransactionEncoder.signMessage path.
  *
  * <p>Covers test cases [M-1] .. [M-41] from docs/test/MOM-384/eip1559-tx-encoder.md.
  */
@@ -702,11 +701,11 @@ class Eip1559TxEncoderTest {
   }
 
   // =========================================================================
-  // Group 5 — Parity test against legacy Eip1559TransferSigner
+  // Group 5 — Parity test against direct web3j EIP-1559 signing path
   // =========================================================================
 
   @Nested
-  @DisplayName("5. 레거시 Eip1559TransferSigner와 parity 검증")
+  @DisplayName("5. web3j 표준 EIP-1559 서명 경로와 parity 검증")
   class ParityTest {
 
     /**
@@ -716,23 +715,25 @@ class Eip1559TxEncoderTest {
     private static final String PRIVATE_KEY_HEX = "0x" + "1".repeat(64);
 
     @Test
-    @DisplayName("[M-41] assembleSigned가 레거시 signer와 동일한 rawTx 및 txHash 생성")
-    void assembleSigned_producesIdenticalRawTxAndTxHashAsLegacySigner() {
-      // given — legacy path
-      Web3ContractPort.SignTransferCommand cmd =
-          new Web3ContractPort.SignTransferCommand(
-              PRIVATE_KEY_HEX,
-              TOKEN_CONTRACT,
-              RECIPIENT,
-              AMOUNT_WEI,
-              NONCE,
+    @DisplayName("[M-41] assembleSigned가 web3j 표준 EIP-1559 서명 경로와 동일한 rawTx/txHash 생성")
+    void assembleSigned_producesIdenticalRawTxAndTxHashAsWeb3jStandardPath() {
+      // given — web3j-standard path: RawTransaction + TransactionEncoder.signMessage(.., chainId)
+      String transferData = Erc20TransferCalldataEncoder.encodeTransferData(RECIPIENT, AMOUNT_WEI);
+      RawTransaction rawTransaction =
+          RawTransaction.createTransaction(
               CHAIN_ID,
+              BigInteger.valueOf(NONCE),
               GAS_LIMIT,
+              TOKEN_CONTRACT,
+              BigInteger.ZERO,
+              transferData,
               MAX_PRIORITY,
               MAX_FEE);
-      Web3ContractPort.SignedTransaction legacy = Eip1559TransferSigner.signTransfer(cmd);
-      String legacyRawTx = legacy.rawTx();
-      String legacyTxHash = legacy.txHash();
+      ECKeyPair keyPair = ECKeyPair.create(Numeric.toBigInt(PRIVATE_KEY_HEX));
+      org.web3j.crypto.Credentials credentials = org.web3j.crypto.Credentials.create(keyPair);
+      byte[] legacyBytes = TransactionEncoder.signMessage(rawTransaction, credentials);
+      String legacyRawTx = Numeric.toHexString(legacyBytes);
+      String legacyTxHash = Hash.sha3(legacyRawTx);
 
       // given — new encoder path
       Eip1559Fields fields = fixture();
@@ -740,7 +741,6 @@ class Eip1559TxEncoderTest {
       byte[] digestBytes = Eip1559TxEncoder.digest(unsignedBytes);
 
       // Sign the digest — false = already-hashed, do NOT double-hash
-      ECKeyPair keyPair = ECKeyPair.create(Numeric.toBigInt(PRIVATE_KEY_HEX));
       Sign.SignatureData sig = Sign.signMessage(digestBytes, keyPair, false);
 
       byte v = sig.getV()[0];
