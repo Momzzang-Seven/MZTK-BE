@@ -1,17 +1,22 @@
 package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
@@ -146,6 +151,62 @@ class TreasuryKeyControllerTest {
                             "0x" + "a".repeat(40)))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/treasury-keys/{alias} ADMIN 성공")
+  void get_success_returnsView() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
+    given(loadTreasuryWalletUseCase.execute(eq("reward-treasury"), anyLong()))
+        .willReturn(
+            Optional.of(
+                new TreasuryWalletView(
+                    "reward-treasury",
+                    TreasuryRole.REWARD,
+                    "kms-key-id",
+                    address,
+                    TreasuryWalletStatus.ACTIVE,
+                    TreasuryKeyOrigin.IMPORTED,
+                    LocalDateTime.parse("2026-01-01T00:00:00"),
+                    null)));
+
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/reward-treasury").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.kmsKeyId").value("kms-key-id"))
+        .andExpect(jsonPath("$.data.walletAddress").value(address));
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/treasury-keys/{alias} USER 권한이면 403")
+  void get_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/reward-treasury").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/treasury-keys/{alias} 인증 없으면 401")
+  void get_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/reward-treasury"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/treasury-keys/{alias}/disable USER 권한이면 403")
+  void disable_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/treasury-keys/{alias}/archive USER 권한이면 403")
+  void archive_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
   }
 
   @Test

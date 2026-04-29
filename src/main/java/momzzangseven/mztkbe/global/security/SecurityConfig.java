@@ -246,6 +246,14 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/admin/web3/treasury-keys/{walletAlias}")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST, "/admin/web3/treasury-keys/{walletAlias}/disable")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST, "/admin/web3/treasury-keys/{walletAlias}/archive")
+                    .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
                         HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
                     .hasAuthority("ROLE_ADMIN")

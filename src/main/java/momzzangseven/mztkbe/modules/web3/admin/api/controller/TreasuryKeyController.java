@@ -57,10 +57,10 @@ public class TreasuryKeyController {
   @GetMapping("/{walletAlias}")
   public ResponseEntity<ApiResponse<TreasuryWalletView>> get(
       @AuthenticationPrincipal Long operatorId, @PathVariable String walletAlias) {
-    requireOperatorId(operatorId);
+    Long resolvedOperatorId = requireOperatorId(operatorId);
     TreasuryWalletView view =
         loadTreasuryWalletUseCase
-            .execute(walletAlias)
+            .execute(walletAlias, resolvedOperatorId)
             .orElseThrow(
                 () ->
                     new TreasuryWalletStateException(
