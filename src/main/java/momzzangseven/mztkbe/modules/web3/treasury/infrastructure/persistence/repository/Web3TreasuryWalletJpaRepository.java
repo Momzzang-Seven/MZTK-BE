@@ -9,5 +9,5 @@ public interface Web3TreasuryWalletJpaRepository
 
   Optional<Web3TreasuryWalletEntity> findByWalletAlias(String walletAlias);
 
-  boolean existsByWalletAliasOrTreasuryAddress(String walletAlias, String treasuryAddress);
+  boolean existsByTreasuryAddressAndWalletAliasNot(String treasuryAddress, String walletAlias);
 }
