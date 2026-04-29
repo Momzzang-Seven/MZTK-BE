@@ -1,9 +1,10 @@
-package momzzangseven.mztkbe.modules.web3.shared.domain.crypto;
+package momzzangseven.mztkbe.modules.web3.shared.infrastructure.crypto;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.Locale;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.ASN1Sequence;
