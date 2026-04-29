@@ -8,6 +8,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 
 /**
  * Aggregate root representing a single KMS-backed treasury wallet.

@@ -3,7 +3,7 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.dto;
 import java.util.regex.Pattern;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 
 /**
  * Input for {@code ProvisionTreasuryKeyUseCase}. Drives the KMS-backed provisioning flow:

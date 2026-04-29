@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.admin.application.port.out;
 
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 
 public interface ProvisionTreasuryKeyPort {
 

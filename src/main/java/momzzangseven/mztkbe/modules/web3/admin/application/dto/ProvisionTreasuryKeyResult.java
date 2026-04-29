@@ -1,9 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.admin.application.dto;
 
 import java.time.LocalDateTime;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryKeyOrigin;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 
 public record ProvisionTreasuryKeyResult(
     String walletAlias,

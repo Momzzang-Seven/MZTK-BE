@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.treasury.domain.model;
+package momzzangseven.mztkbe.modules.web3.treasury.domain.vo;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

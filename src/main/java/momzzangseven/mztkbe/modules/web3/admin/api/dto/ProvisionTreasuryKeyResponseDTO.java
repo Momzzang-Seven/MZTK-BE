@@ -3,9 +3,9 @@ package momzzangseven.mztkbe.modules.web3.admin.api.dto;
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryKeyOrigin;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 
 public record ProvisionTreasuryKeyResponseDTO(
     String walletAlias,

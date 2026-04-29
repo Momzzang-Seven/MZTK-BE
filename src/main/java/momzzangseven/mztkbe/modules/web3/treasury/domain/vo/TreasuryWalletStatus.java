@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.treasury.domain.model;
+package momzzangseven.mztkbe.modules.web3.treasury.domain.vo;
 
 /**
  * Lifecycle status of a {@link TreasuryWallet}.

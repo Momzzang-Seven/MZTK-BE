@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.admin.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 
 public record ProvisionTreasuryKeyCommand(
     Long operatorId, String rawPrivateKey, TreasuryRole role, String expectedAddress) {
