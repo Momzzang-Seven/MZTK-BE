@@ -19,11 +19,14 @@ public interface LoadTreasuryWalletPort {
   Optional<TreasuryWallet> loadByAlias(String walletAlias);
 
   /**
-   * Idempotency / collision guard for provisioning: returns {@code true} if any row already binds
-   * the supplied alias <em>or</em> wallet address.
+   * Cross-row collision guard for provisioning: returns {@code true} if a wallet other than the one
+   * bound to {@code walletAlias} already owns {@code walletAddress}. The intent is to allow a
+   * caller to UPDATE the row matching {@code walletAlias} (backfill mode) without flagging the
+   * caller's own row as a conflict, while still detecting genuine address reuse across roles.
    *
-   * @param walletAlias canonical alias to check
+   * @param walletAlias canonical alias whose row is being provisioned / backfilled (excluded from
+   *     the conflict scan)
    * @param walletAddress {@code 0x}-prefixed Ethereum address recovered from the imported key
    */
-  boolean existsByAliasOrAddress(String walletAlias, String walletAddress);
+  boolean existsAddressOwnedByOther(String walletAlias, String walletAddress);
 }

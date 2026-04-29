@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Locale;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
@@ -94,11 +95,29 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       throw new TreasuryWalletAddressMismatchException(
           "derived address does not match expectedAddress");
     }
-    if (loadTreasuryWalletPort.existsByAliasOrAddress(walletAlias, derivedAddress)) {
+
+    Optional<TreasuryWallet> existing = loadTreasuryWalletPort.loadByAlias(walletAlias);
+    if (existing.isPresent() && existing.get().getKmsKeyId() != null) {
       treasuryAuditRecorder.record(
           command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
       throw new TreasuryWalletAlreadyProvisionedException(
           "treasury wallet already provisioned for alias '" + walletAlias + "'");
+    }
+    if (existing.isPresent()
+        && !derivedAddress.equalsIgnoreCase(existing.get().getWalletAddress())) {
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), derivedAddress, false, "ADDRESS_MISMATCH");
+      throw new TreasuryWalletAddressMismatchException(
+          "derived address does not match the existing legacy row's walletAddress for alias '"
+              + walletAlias
+              + "'");
+    }
+    if (existing.isEmpty()
+        && loadTreasuryWalletPort.existsAddressOwnedByOther(walletAlias, derivedAddress)) {
+      treasuryAuditRecorder.record(
+          command.operatorUserId(), derivedAddress, false, "ALREADY_PROVISIONED");
+      throw new TreasuryWalletAlreadyProvisionedException(
+          "wallet address '" + derivedAddress + "' is already bound to a different alias");
     }
 
     String kmsKeyId = null;
@@ -116,7 +135,9 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       signDigestPort.signDigest(kmsKeyId, digest, derivedAddress);
 
       TreasuryWallet wallet =
-          TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
+          existing.isPresent()
+              ? TreasuryWallet.backfill(existing.get(), kmsKeyId, clock)
+              : TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
 
       bindAliasIdempotent(walletAlias, kmsKeyId);

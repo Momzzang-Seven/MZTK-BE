@@ -62,10 +62,10 @@ public class TreasuryWalletPersistenceAdapter
   }
 
   @Override
-  public boolean existsByAliasOrAddress(String walletAlias, String walletAddress) {
+  public boolean existsAddressOwnedByOther(String walletAlias, String walletAddress) {
     requireNonBlank(walletAlias, "walletAlias");
     requireNonBlank(walletAddress, "walletAddress");
-    return repository.existsByWalletAliasOrTreasuryAddress(walletAlias, walletAddress);
+    return repository.existsByTreasuryAddressAndWalletAliasNot(walletAddress, walletAlias);
   }
 
   @Override

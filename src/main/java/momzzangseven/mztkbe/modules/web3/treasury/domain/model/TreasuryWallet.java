@@ -72,6 +72,47 @@ public class TreasuryWallet {
   }
 
   /**
+   * Factory used by the provisioning service when the supplied {@code walletAlias} already has a
+   * row in the legacy schema (V055 rename) but no {@code kms_key_id} yet. Preserves the row
+   * identity ({@code id}, {@code walletAddress}, {@code createdAt}) and only mutates the KMS-side
+   * fields ({@code kmsKeyId}, {@code status}, {@code keyOrigin}, {@code updatedAt}).
+   *
+   * <p>The address must already match because the legacy row's address was seeded from the same
+   * underlying private key the operator is now re-supplying — divergence indicates an operator
+   * mistake (wrong key) and is rejected by the caller before reaching this factory.
+   *
+   * @param existing the legacy row loaded by alias; must have {@code kmsKeyId == null} and a
+   *     non-null {@code walletAddress}
+   * @param kmsKeyId fresh KMS key id produced by the provisioning flow
+   * @param clock clock for {@code updatedAt}
+   * @return a wallet ready to be {@code save()}d as an UPDATE of the same row
+   */
+  public static TreasuryWallet backfill(TreasuryWallet existing, String kmsKeyId, Clock clock) {
+    Objects.requireNonNull(existing, "existing must not be null");
+    Objects.requireNonNull(kmsKeyId, "kmsKeyId must not be null");
+    Objects.requireNonNull(clock, "clock must not be null");
+    if (existing.kmsKeyId != null) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '"
+              + existing.walletAlias
+              + "' is already provisioned with kmsKeyId="
+              + existing.kmsKeyId);
+    }
+    if (existing.walletAddress == null || existing.walletAddress.isBlank()) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '"
+              + existing.walletAlias
+              + "' has no walletAddress on file — cannot backfill");
+    }
+    return existing.toBuilder()
+        .kmsKeyId(kmsKeyId)
+        .status(TreasuryWalletStatus.ACTIVE)
+        .keyOrigin(TreasuryKeyOrigin.IMPORTED)
+        .updatedAt(LocalDateTime.now(clock))
+        .build();
+  }
+
+  /**
    * Transition {@link TreasuryWalletStatus#ACTIVE} → {@link TreasuryWalletStatus#DISABLED} and
    * stamp {@code disabledAt}.
    *
