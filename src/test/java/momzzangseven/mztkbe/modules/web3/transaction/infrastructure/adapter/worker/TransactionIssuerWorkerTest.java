@@ -129,7 +129,7 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void processBatch_walletActiveButKmsKeyIdMissing_schedulesKmsKeyNotEnabledWithoutVerifying() {
+  void processBatch_walletActiveButKmsKeyIdMissing_schedulesTreasuryKeyMissingWithoutVerifying() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
@@ -139,9 +139,27 @@ class TransactionIssuerWorkerTest {
     worker.processBatch(2);
 
     verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), null);
+        .scheduleRetry(1L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
     verify(updateTransactionPort)
-        .scheduleRetry(2L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), null);
+        .scheduleRetry(2L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
+    verifyNoInteractions(verifyTreasuryWalletForSignPort, web3ContractPort, reserveNoncePort);
+  }
+
+  @Test
+  void
+      processBatch_walletActiveButWalletAddressMissing_schedulesTreasuryKeyMissingWithoutVerifying() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
+    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
+        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID, null)));
+
+    worker.processBatch(2);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
+    verify(updateTransactionPort)
+        .scheduleRetry(2L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
     verifyNoInteractions(verifyTreasuryWalletForSignPort, web3ContractPort, reserveNoncePort);
   }
 
@@ -338,7 +356,11 @@ class TransactionIssuerWorkerTest {
   }
 
   private TreasuryWalletInfo walletInfo(boolean active, String kmsKeyId) {
-    return new TreasuryWalletInfo(WALLET_ALIAS, kmsKeyId, TREASURY_ADDRESS, active);
+    return walletInfo(active, kmsKeyId, TREASURY_ADDRESS);
+  }
+
+  private TreasuryWalletInfo walletInfo(boolean active, String kmsKeyId, String walletAddress) {
+    return new TreasuryWalletInfo(WALLET_ALIAS, kmsKeyId, walletAddress, active);
   }
 
   private LoadTransactionWorkPort.TransactionWorkItem item(Long transactionId, Long nonce) {
