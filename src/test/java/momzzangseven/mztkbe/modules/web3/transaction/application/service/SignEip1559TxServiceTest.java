@@ -1,12 +1,14 @@
 package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SignDigestPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder;
@@ -70,5 +72,21 @@ class SignEip1559TxServiceTest {
     assertThat(out.rawTx()).isEqualTo(expected.rawTx());
     assertThat(out.txHash()).isEqualTo(expected.txHash());
     assertThat(out.rawTx()).startsWith("0x02");
+  }
+
+  @Test
+  @DisplayName("SignDigestPort 가 KmsSignFailedException 을 던지면 그대로 전파한다")
+  void sign_propagatesKmsSignFailedExceptionUnchanged() {
+    Eip1559Fields fields = fixture();
+    String kmsKeyId = "alias/reward-treasury";
+    String signerAddress = "0x3333333333333333333333333333333333333333";
+
+    KmsSignFailedException expected = new KmsSignFailedException("kms throttled");
+    when(signDigestPort.signDigest(eq(kmsKeyId), any(byte[].class), eq(signerAddress)))
+        .thenThrow(expected);
+
+    assertThatThrownBy(() -> service.sign(fields, kmsKeyId, signerAddress))
+        .isExactlyInstanceOf(KmsSignFailedException.class)
+        .isSameAs(expected);
   }
 }
