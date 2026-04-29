@@ -2,22 +2,20 @@ package momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter;
 
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsKeyDescribePort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Non-production adapter for {@link KmsKeyDescribePort} that always reports {@link
- * KmsKeyState#ENABLED}.
+ * Non-KMS adapter for {@link KmsKeyDescribePort} that always reports {@link KmsKeyState#ENABLED}.
  *
- * <p>The real KMS-backed describe adapter lives behind the prod-only {@code KmsClient} bean and is
- * delivered in MOM-340 Commit 1-4. For local / dev / test / integration / E2E profiles the
- * verification chain ({@code DescribeKmsKeyService} + treasury {@code
- * VerifyTreasuryWalletForSignService}) treats every key as available, which mirrors how the
- * non-prod {@code LocalEcSignerAdapter} stands in for the KMS sign call: domain logic is exercised
- * end-to-end without requiring real AWS resources.
+ * <p>Wired whenever {@code web3.kms.enabled} is false or unset (the inverse of {@link
+ * KmsKeyDescribeAdapter}). For environments that have not opted into real AWS KMS the verification
+ * chain ({@code DescribeKmsKeyService} + treasury {@code VerifyTreasuryWalletForSignService})
+ * treats every key as available, which mirrors how {@code LocalEcSignerAdapter} stands in for the
+ * KMS sign call: domain logic is exercised end-to-end without requiring real AWS resources.
  */
 @Component
-@Profile("!prod")
+@ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "false", matchIfMissing = true)
 public class LocalKmsKeyDescribeAdapter implements KmsKeyDescribePort {
 
   @Override

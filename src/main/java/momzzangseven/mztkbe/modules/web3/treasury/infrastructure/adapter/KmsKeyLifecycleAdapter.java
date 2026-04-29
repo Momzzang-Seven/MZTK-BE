@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.kms.KmsClient;
@@ -40,7 +40,7 @@ import software.amazon.awssdk.services.kms.model.WrappingKeySpec;
  * retires a wallet.
  */
 @Component
-@Profile("prod")
+@ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class KmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
