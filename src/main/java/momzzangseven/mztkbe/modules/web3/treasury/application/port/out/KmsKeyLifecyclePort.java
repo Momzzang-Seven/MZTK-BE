@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.treasury.application.port.out;
 
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
+
 /**
  * Out-port for KMS key lifecycle operations driven by treasury-side use cases (provision, disable,
  * archive). Wraps the AWS KMS control-plane API into a treasury-shaped interface so that the
@@ -8,7 +10,9 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.port.out;
  * <p>The provisioning flow consumes {@link #createKey()}, {@link #getParametersForImport(String)},
  * {@link #importKeyMaterial(String, byte[], byte[])}, and {@link #createAlias(String, String)} in
  * sequence. The retirement flow consumes {@link #disableKey(String)} (on {@code disable}) and
- * {@link #scheduleKeyDeletion(String, int)} (on {@code archive}).
+ * {@link #scheduleKeyDeletion(String, int)} (on {@code archive}). {@link #updateAlias(String,
+ * String)} and {@link #describeAliasTarget(String)} support idempotent recovery when {@code
+ * CreateAlias} encounters a stale alias from a prior failed provision run.
  */
 public interface KmsKeyLifecyclePort {
 
@@ -39,8 +43,28 @@ public interface KmsKeyLifecyclePort {
   /**
    * Bind the supplied {@code alias} ({@code TreasuryRole#toAlias()}) to {@code kmsKeyId}.
    * Implementations may require the alias to be globally unique within the AWS account.
+   *
+   * <p>Implementations must translate AWS {@code AlreadyExistsException} into {@link
+   * momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException} so the provisioning
+   * service can drive idempotent recovery via {@link #describeAliasTarget(String)} + {@link
+   * #updateAlias(String, String)} without depending on the AWS SDK.
    */
   void createAlias(String alias, String kmsKeyId);
+
+  /**
+   * Re-target the supplied {@code alias} to {@code newKmsKeyId}. Used by the provisioning service
+   * to recover a stale alias that a prior failed run left bound to a {@code PENDING_DELETION} /
+   * {@code DISABLED} key.
+   */
+  void updateAlias(String alias, String newKmsKeyId);
+
+  /**
+   * Inspect the {@link KmsKeyState} of the key currently bound to {@code alias}. Returns {@link
+   * KmsKeyState#UNAVAILABLE} when the alias does not exist; the caller treats {@link
+   * KmsKeyState#PENDING_DELETION} / {@link KmsKeyState#DISABLED} as recoverable ghosts and
+   * everything else as a hard conflict.
+   */
+  KmsKeyState describeAliasTarget(String alias);
 
   /** Disable the supplied key without scheduling deletion. Used by {@code disable()} flows. */
   void disableKey(String kmsKeyId);

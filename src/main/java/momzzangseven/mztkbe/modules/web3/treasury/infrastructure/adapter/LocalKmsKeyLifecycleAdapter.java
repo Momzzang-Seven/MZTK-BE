@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter;
 
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -34,6 +35,16 @@ public class LocalKmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
   @Override
   public void createAlias(String alias, String kmsKeyId) {
     throw unsupported("createAlias");
+  }
+
+  @Override
+  public void updateAlias(String alias, String newKmsKeyId) {
+    throw unsupported("updateAlias");
+  }
+
+  @Override
+  public KmsKeyState describeAliasTarget(String alias) {
+    throw unsupported("describeAliasTarget");
   }
 
   @Override
