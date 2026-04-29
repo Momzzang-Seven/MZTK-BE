@@ -29,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -37,8 +38,6 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class TransactionIssuerWorker extends AbstractWeb3Worker {
-
-  private static final String REWARD_WALLET_ALIAS = "reward-treasury";
 
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
@@ -88,7 +87,10 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
-    String walletAlias = REWARD_WALLET_ALIAS;
+    // TreasuryRole is the single source of truth for the reward-treasury alias.
+    // Reusing the enum (a vocabulary-only domain type) avoids the synchronization hazard of
+    // duplicating the literal here while keeping the dependency to the treasury module minimal.
+    String walletAlias = TreasuryRole.REWARD.toAlias();
 
     Optional<TreasuryWalletInfo> walletOpt = loadTreasuryWalletPort.loadByAlias(walletAlias);
     if (walletOpt.isEmpty()) {
@@ -101,8 +103,16 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       failBatch(items, Web3TxFailureReason.TREASURY_WALLET_INACTIVE.code());
       return;
     }
+    // Structural guards (cheap, local) precede the remote verify call so that incomplete wallet
+    // rows fail fast with TREASURY_KEY_MISSING instead of leaking into TreasurySigner's compact
+    // constructor (which would otherwise raise Web3InvalidInputException and abort the entire
+    // batch with no per-item audit trail).
     if (walletInfo.kmsKeyId() == null || walletInfo.kmsKeyId().isBlank()) {
-      failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      return;
+    }
+    if (walletInfo.walletAddress() == null || walletInfo.walletAddress().isBlank()) {
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
       return;
     }
 

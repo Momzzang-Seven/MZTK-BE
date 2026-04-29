@@ -65,6 +65,8 @@ public final class Eip1559TxEncoder {
     List<RlpType> unsignedFields = buildUnsignedFields(fields);
 
     int v = Byte.toUnsignedInt(sig.v());
+    // yParity = v - 27 by Vrs invariant (v ∈ {27,28}); zero-fork branch is defensive against
+    // producers that already pre-flatten v.
     int yParity = v >= 27 ? v - 27 : v;
 
     List<RlpType> signedFields = new ArrayList<>(unsignedFields);
