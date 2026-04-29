@@ -1,9 +1,9 @@
 package momzzangseven.mztkbe.global.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 
 /**
  * Flyway-JPA 순환 의존성 해결을 위한 설정
@@ -27,7 +27,7 @@ import org.springframework.context.annotation.Profile;
  * @since 1.0
  */
 @Configuration
-@Profile("prod") // prod 프로파일에서만 적용
+@ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true")
 public class FlywayConfiguration {
 
   /**
