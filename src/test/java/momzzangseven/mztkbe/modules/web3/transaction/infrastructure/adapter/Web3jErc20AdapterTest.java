@@ -68,7 +68,12 @@ class Web3jErc20AdapterTest {
     coreProperties.getRpc().setSub("http://localhost:8546");
 
     gasFeeStrategy = mock(DefaultGasFeeCalculator.class);
-    adapter = new Web3jErc20Adapter(rewardTokenProperties, coreProperties, gasFeeStrategy);
+    adapter =
+        new Web3jErc20Adapter(
+            rewardTokenProperties,
+            coreProperties,
+            gasFeeStrategy,
+            mock(Eip1559TxSigningAdapter.class));
 
     mainWeb3j = mock(Web3j.class, RETURNS_DEEP_STUBS);
     subWeb3j = mock(Web3j.class, RETURNS_DEEP_STUBS);

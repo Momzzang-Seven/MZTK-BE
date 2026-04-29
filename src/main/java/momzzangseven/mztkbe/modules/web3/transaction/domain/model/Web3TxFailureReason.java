@@ -10,6 +10,10 @@ public enum Web3TxFailureReason {
   PREVALIDATE_TRANSFER_FALSE(false),
   BROADCAST_FAILED(true),
   TREASURY_KEY_MISSING(false),
+  TREASURY_WALLET_INACTIVE(false),
+  KMS_KEY_NOT_ENABLED(false),
+  KMS_SIGN_FAILED(true),
+  SIGNATURE_INVALID(false),
   INVALID_SIGNED_TX(false),
   RECEIPT_TIMEOUT(false);
 
