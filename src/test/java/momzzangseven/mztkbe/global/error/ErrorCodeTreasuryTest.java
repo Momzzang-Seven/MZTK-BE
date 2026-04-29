@@ -49,14 +49,14 @@ class ErrorCodeTreasuryTest {
     }
 
     @Test
-    @DisplayName("[M-108] TREASURY_WALLET_ADDRESS_MISMATCH — 코드 'TREASURY_003', HTTP 500")
+    @DisplayName("[M-108] TREASURY_WALLET_ADDRESS_MISMATCH — 코드 'TREASURY_003', HTTP 400")
     void treasuryWalletAddressMismatch_hasCorrectCodeAndStatus() {
       // given
       ErrorCode entry = ErrorCode.TREASURY_WALLET_ADDRESS_MISMATCH;
 
       // then
       assertThat(entry.getCode()).isEqualTo("TREASURY_003");
-      assertThat(entry.getHttpStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+      assertThat(entry.getHttpStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
       assertThat(entry.getMessage()).isNotBlank();
     }
 
