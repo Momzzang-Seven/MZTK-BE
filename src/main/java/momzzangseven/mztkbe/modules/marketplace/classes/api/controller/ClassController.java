@@ -1,11 +1,13 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.api.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.GetClassDetailResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.GetClassReservationInfoResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.GetClassesResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.GetTrainerClassesResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.RegisterClassRequestDTO;
@@ -14,10 +16,12 @@ import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.ToggleClassStatu
 import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.UpdateClassRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.UpdateClassResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassDetailQuery;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassReservationInfoQuery;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassesQuery;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrainerClassesQuery;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ToggleClassStatusCommand;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassDetailUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassesUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetTrainerClassesUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.RegisterClassUseCase;
@@ -40,7 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * REST controller for marketplace class operations.
  *
- * <p>Exposes six endpoints:
+ * <p>Exposes seven endpoints:
  *
  * <ul>
  *   <li>{@code POST /marketplace/trainer/classes} — register a class (TRAINER role)
@@ -50,6 +54,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code GET /marketplace/trainer/classes} — trainer's own class list (TRAINER role)
  *   <li>{@code GET /marketplace/classes} — public class listing
  *   <li>{@code GET /marketplace/classes/{classId}} — public class detail
+ *   <li>{@code GET /marketplace/classes/{classId}/reservation-info} — 4-week availability (public)
  * </ul>
  *
  * <p>Each method strictly follows the three-step pattern: (1) build command/query, (2) call use
@@ -67,6 +72,7 @@ public class ClassController {
   private final GetClassesUseCase getClassesUseCase;
   private final GetClassDetailUseCase getClassDetailUseCase;
   private final GetTrainerClassesUseCase getTrainerClassesUseCase;
+  private final GetClassReservationInfoUseCase getClassReservationInfoUseCase;
 
   // ============================================
   // TRAINER endpoints
@@ -221,6 +227,26 @@ public class ClassController {
             getClassDetailUseCase.execute(new GetClassDetailQuery(classId)));
 
     return ResponseEntity.ok(ApiResponse.success(response));
+  }
+
+  /**
+   * Retrieve 4-week slot availability for a class (remaining capacity per day).
+   *
+   * <p>Moved from ClassReservationController here because this endpoint exclusively uses the
+   * classes module's UseCase and DTO, making ClassController the appropriate owner.
+   *
+   * @param classId class ID
+   * @return 200 OK with per-slot, per-date reservation availability
+   */
+  @GetMapping("/classes/{classId}/reservation-info")
+  public ResponseEntity<ApiResponse<GetClassReservationInfoResponseDTO>> getReservationInfo(
+      @PathVariable @Positive Long classId) {
+    log.debug("Get class reservation info: classId={}", classId);
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            GetClassReservationInfoResponseDTO.from(
+                getClassReservationInfoUseCase.execute(
+                    new GetClassReservationInfoQuery(classId)))));
   }
 
   // ============================================

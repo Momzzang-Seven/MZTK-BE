@@ -5,12 +5,8 @@ import jakarta.validation.constraints.Positive;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.marketplace.classes.api.dto.GetClassReservationInfoResponseDTO;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassReservationInfoQuery;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CancelPendingReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CompleteReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CreateReservationRequestDTO;
@@ -59,22 +55,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class ClassReservationController {
 
-  private final GetClassReservationInfoUseCase getClassReservationInfoUseCase;
   private final GetUserReservationsUseCase getUserReservationsUseCase;
   private final GetReservationDetailUseCase getReservationDetailUseCase;
   private final CreateReservationUseCase createReservationUseCase;
   private final CancelPendingReservationUseCase cancelPendingReservationUseCase;
   private final CompleteReservationUseCase completeReservationUseCase;
-
-  @GetMapping("/classes/{classId}/reservation-info")
-  public ResponseEntity<ApiResponse<GetClassReservationInfoResponseDTO>> getReservationInfo(
-      @PathVariable @Positive Long classId) {
-    return ResponseEntity.ok(
-        ApiResponse.success(
-            GetClassReservationInfoResponseDTO.from(
-                getClassReservationInfoUseCase.execute(
-                    new GetClassReservationInfoQuery(classId)))));
-  }
 
   @GetMapping("/me/reservations")
   public ResponseEntity<ApiResponse<List<ReservationSummaryResponseDTO>>> getMyReservations(
@@ -132,6 +117,6 @@ public class ClassReservationController {
   }
 
   private void requireUserId(Long userId) {
-    if (userId == null) throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+    if (userId == null) throw new UserNotAuthenticatedException();
   }
 }

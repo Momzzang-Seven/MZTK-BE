@@ -72,7 +72,7 @@ public class CancelPendingReservationService implements CancelPendingReservation
     Reservation saved = saveReservationPort.save(cancelled);
 
     eventPublisher.publishEvent(
-        new EscrowDispatchEvent(saved.getId(), reservation.getOrderId(), EscrowAction.CANCEL));
+        EscrowDispatchEvent.of(saved.getId(), reservation.getOrderId(), EscrowAction.CANCEL));
 
     log.info("Reservation user-cancelled: id={}, userId={}", saved.getId(), command.userId());
     return new CancelPendingReservationResult(saved.getId(), saved.getStatus());

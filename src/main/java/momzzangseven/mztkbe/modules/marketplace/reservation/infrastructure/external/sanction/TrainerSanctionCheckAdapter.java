@@ -1,52 +1,50 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.sanction;
 
-import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
-import org.springframework.beans.factory.annotation.Value;
+import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.in.CheckTrainerSanctionUseCase;
 import org.springframework.stereotype.Component;
 
 /**
- * Stub implementation of {@link CheckTrainerSanctionPort}.
+ * Cross-module adapter that delegates trainer sanction checks to the sanction module.
  *
- * <p>The real adapter should delegate to the sanction module's {@code LoadTrainerSanctionPort} once
- * cross-module wiring is complete. Until then this stub always reports no active sanction.
+ * <p>Implements {@link CheckTrainerSanctionPort} (owned by the reservation module) and calls {@link
+ * CheckTrainerSanctionUseCase} (the sanction module's input port). This is the only place in the
+ * reservation module that is allowed to import from the sanction module, and it may only reference
+ * the sanction module's {@code application/port/in/} layer.
  *
- * <p><b>Note:</b> A {@link PostConstruct} guard throws {@link IllegalStateException} on startup
- * when the active profile is {@code prod}, preventing silent stub usage in production. Replace with
- * the real implementation before deploying to production.
+ * <p>Following the Cross-Module dependency rule from {@code ARCHITECTURE.md}:
+ *
+ * <pre>
+ * reservation/application/service
+ *         │  uses
+ *         ▼
+ * reservation/application/port/out/CheckTrainerSanctionPort
+ *         │  implemented by
+ *         ▼
+ * reservation/infrastructure/external/sanction/TrainerSanctionCheckAdapter  ← this class
+ *         │  calls
+ *         ▼
+ * sanction/application/port/in/CheckTrainerSanctionUseCase
+ * </pre>
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class TrainerSanctionCheckAdapter implements CheckTrainerSanctionPort {
 
-  @Value("${spring.profiles.active:}")
-  private String activeProfiles;
-
-  @PostConstruct
-  void rejectIfProd() {
-    if (activeProfiles.contains("prod")) {
-      throw new IllegalStateException(
-          "[STUB] TrainerSanctionCheckAdapter is a stub and must not run in prod. "
-              + "Wire it to the real SanctionPersistenceAdapter before deploying.");
-    }
-    log.warn(
-        "[STUB] TrainerSanctionCheckAdapter is active (profiles={}). "
-            + "All sanction checks return false (no suspension).",
-        activeProfiles);
-  }
+  private final CheckTrainerSanctionUseCase checkTrainerSanctionUseCase;
 
   @Override
   public boolean hasActiveSanction(Long trainerId) {
-    // TODO: delegate to sanction module's LoadTrainerSanctionPort when available
-    return false;
+    return checkTrainerSanctionUseCase.hasActiveSanction(trainerId);
   }
 
   @Override
   public Optional<LocalDateTime> getSuspendedUntil(Long trainerId) {
-    // TODO: delegate to sanction module's LoadTrainerSanctionPort when available
-    return Optional.empty();
+    return checkTrainerSanctionUseCase.getSuspendedUntil(trainerId);
   }
 }

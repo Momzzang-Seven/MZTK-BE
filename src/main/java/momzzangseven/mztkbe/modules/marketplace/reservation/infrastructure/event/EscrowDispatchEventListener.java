@@ -74,6 +74,12 @@ public class EscrowDispatchEventListener {
 
   private String dispatch(EscrowDispatchEvent event) {
     return switch (event.action()) {
+      case PURCHASE ->
+          submitEscrowTransactionPort.submitPurchase(
+              event.orderId(),
+              event.delegationSignature(),
+              event.executionSignature(),
+              event.amount());
       case CANCEL -> submitEscrowTransactionPort.submitCancel(event.orderId());
       case CONFIRM -> submitEscrowTransactionPort.submitConfirm(event.orderId());
     };

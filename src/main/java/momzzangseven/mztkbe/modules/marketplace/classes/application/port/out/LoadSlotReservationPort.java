@@ -1,22 +1,27 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.application.port.out;
 
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Output port for querying reservation counts associated with a class slot.
  *
  * <p>Used by {@link
- * momzzangseven.mztkbe.modules.marketplace.application.service.UpdateClassService} to enforce two
- * business rules during slot modification:
+ * momzzangseven.mztkbe.modules.marketplace.classes.application.service.UpdateClassService} to
+ * enforce two business rules during slot modification:
  *
  * <ul>
  *   <li><b>Active reservation guard</b>: a slot that has at least one future/active reservation
- *       cannot be deactivated or deleted — {@link #countActiveReservations} is used for this check.
+ *       cannot be deactivated or deleted — {@link #countActiveReservations(Long)} is used for this
+ *       check.
  *   <li><b>Soft vs hard delete</b>: a slot with any historical reservation record must be
  *       soft-deleted ({@code active=false}) to preserve booking history; only slots with zero total
  *       reservations may be hard-deleted — {@link #hasAnyReservationHistory} is used for this.
  * </ul>
  *
- * <p>Until the reservation module is available, {@code SlotReservationAdapter} is a stub that
- * always returns {@code 0} / {@code false}, enabling safe slot hard-deletion for now.
+ * <p>Until the reservation module adapter is fully wired, the infrastructure implementation may
+ * return stub values ({@code 0} / {@code false}).
  */
 public interface LoadSlotReservationPort {
 
@@ -30,12 +35,35 @@ public interface LoadSlotReservationPort {
    */
   int countActiveReservations(Long slotId);
 
-  java.util.Map<Long, Integer> countActiveReservationsIn(java.util.List<Long> slotIds);
+  /**
+   * Returns a map of slotId → active reservation count for a batch of slots in a single query.
+   *
+   * @param slotIds list of slot IDs to query
+   * @return map where each key is a slot ID and the value is its active reservation count
+   */
+  Map<Long, Integer> countActiveReservationsIn(List<Long> slotIds);
 
-  int countActiveReservations(Long slotId, java.time.LocalDate date);
+  /**
+   * Returns the number of active reservations for a slot on a specific date.
+   *
+   * @param slotId slot ID
+   * @param date the session date to check
+   * @return count of active reservations on that date
+   */
+  int countActiveReservations(Long slotId, LocalDate date);
 
-  java.util.Map<java.time.LocalDate, Integer> countActiveReservationsForDateRange(
-      Long slotId, java.time.LocalDate startDate, java.time.LocalDate endDate);
+  /**
+   * Returns a map of date → active reservation count for a slot over a date range.
+   *
+   * <p>Used by {@code GetClassReservationInfoService} to populate remaining capacity per day.
+   *
+   * @param slotId slot ID
+   * @param startDate inclusive range start
+   * @param endDate inclusive range end
+   * @return map where each key is a date and the value is the active reservation count
+   */
+  Map<LocalDate, Integer> countActiveReservationsForDateRange(
+      Long slotId, LocalDate startDate, LocalDate endDate);
 
   /**
    * Returns true if the slot has any reservation record in history (active or past).
