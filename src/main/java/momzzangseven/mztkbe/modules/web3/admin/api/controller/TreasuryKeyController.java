@@ -7,7 +7,6 @@ import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyRequestDTO;
 import momzzangseven.mztkbe.modules.web3.admin.api.dto.ProvisionTreasuryKeyResponseDTO;
-import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ArchiveTreasuryWalletCommand;
@@ -44,13 +43,8 @@ public class TreasuryKeyController {
   public ResponseEntity<ApiResponse<ProvisionTreasuryKeyResponseDTO>> provision(
       @AuthenticationPrincipal Long operatorId,
       @Valid @RequestBody ProvisionTreasuryKeyRequestDTO request) {
-    ProvisionTreasuryKeyCommand command =
-        new ProvisionTreasuryKeyCommand(
-            requireOperatorId(operatorId),
-            request.rawPrivateKey(),
-            request.role(),
-            request.expectedAddress());
-    ProvisionTreasuryKeyResult result = provisionTreasuryKeyUseCase.execute(command);
+    ProvisionTreasuryKeyResult result =
+        provisionTreasuryKeyUseCase.execute(request.toCommand(requireOperatorId(operatorId)));
     return ResponseEntity.ok(ApiResponse.success(ProvisionTreasuryKeyResponseDTO.from(result)));
   }
 
