@@ -26,11 +26,15 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP cannot
  * intercept self-invocation, so the propagation hint would be silently dropped.
  *
- * <p><b>Save-first ordering</b> — DB save commits before the KMS {@code ScheduleKeyDeletion} call.
- * This intentionally diverges from the design doc §4-4 KMS-first sequence: save-first leaves a
- * recoverable state on KMS failure (ARCHIVED row + still-live KMS key, retryable), while KMS-first
- * would leave the DB unchanged and the KMS key invisibly scheduled for deletion, which is much
- * harder to recover from.
+ * <p><b>Save-first ordering</b> — both the DB save and the KMS {@code ScheduleKeyDeletion} call run
+ * inside a single {@link Transactional}; the JPA flush precedes the KMS call and the actual COMMIT
+ * happens when the method returns. KMS failure rolls the transaction back so DB and KMS stay
+ * consistent in the common path. The narrow inconsistent window is <em>KMS success → DB commit
+ * failure</em> (rare): the row stays DISABLED in the DB while the KMS key is already scheduled for
+ * deletion; recovery is operator-driven re-archive, which is idempotent for the DB and a no-op for
+ * KMS once the key is already in PendingDeletion. We intentionally diverge from the design doc §4-4
+ * KMS-first sequence because the inverse failure mode (DB unchanged + KMS invisibly scheduled for
+ * deletion) is much harder to recover from.
  */
 @Service
 @Slf4j
