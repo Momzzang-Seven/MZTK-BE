@@ -23,18 +23,21 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.Crea
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
-import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SubmitEscrowTransactionPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -46,7 +49,7 @@ class CreateReservationServiceTest {
   @Mock private CheckTrainerSanctionPort checkTrainerSanctionPort;
   @Mock private LoadReservationPort loadReservationPort;
   @Mock private SaveReservationPort saveReservationPort;
-  @Mock private SubmitEscrowTransactionPort submitEscrowTransactionPort;
+  @Mock private ApplicationEventPublisher eventPublisher;
 
   /**
    * Fixed clock: 2024-06-03T10:00:00 KST (UTC+9). MONDAY is set to 2024-06-10, which is after this
@@ -84,7 +87,7 @@ class CreateReservationServiceTest {
             checkTrainerSanctionPort,
             loadReservationPort,
             saveReservationPort,
-            submitEscrowTransactionPort,
+            eventPublisher,
             FIXED_CLOCK);
 
     slot =
@@ -125,7 +128,7 @@ class CreateReservationServiceTest {
   class 성공 {
 
     @Test
-    @DisplayName("[CR-01] 정상 예약 생성 시 PENDING 상태 반환")
+    @DisplayName("[CR-01] 정상 예약 생성 시 PENDING 상태 반환 및 EscrowDispatchEvent(PURCHASE) 발행")
     void 정상_예약_생성() {
       // given
       given(getClassSlotInfoUseCase.findByIdWithLock(SLOT_ID)).willReturn(Optional.of(slot));
@@ -133,19 +136,35 @@ class CreateReservationServiceTest {
       given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(SLOT_ID, MONDAY))
           .willReturn(0);
-      given(submitEscrowTransactionPort.submitPurchase(any(), any(), any(), any()))
-          .willReturn("0xTXHASH");
       Reservation saved =
           Reservation.createPending(
-              USER_ID, TRAINER_ID, SLOT_ID, MONDAY, START_TIME, 60, null, "order-1", "0xTXHASH");
+              USER_ID,
+              TRAINER_ID,
+              SLOT_ID,
+              MONDAY,
+              START_TIME,
+              60,
+              null,
+              "order-1",
+              "ESCROW_DISPATCH_PENDING");
       given(saveReservationPort.save(any())).willReturn(saved);
 
       // when
       CreateReservationResult result = sut.execute(command);
 
-      // then
+      // then: PENDING 상태 반환
       assertThat(result.status()).isEqualTo(ReservationStatus.PENDING);
       then(saveReservationPort).should().save(any());
+
+      // then: EscrowDispatchEvent(PURCHASE)가 발행되어야 함 (on-chain 호출은 AFTER_COMMIT 리스너가 담당)
+      ArgumentCaptor<EscrowDispatchEvent> captor =
+          ArgumentCaptor.forClass(EscrowDispatchEvent.class);
+      then(eventPublisher).should().publishEvent(captor.capture());
+      EscrowDispatchEvent event = captor.getValue();
+      assertThat(event.action()).isEqualTo(EscrowAction.PURCHASE);
+      assertThat(event.delegationSignature()).isEqualTo("0x" + "a".repeat(130));
+      assertThat(event.executionSignature()).isEqualTo("0x" + "b".repeat(130));
+      assertThat(event.amount()).isEqualTo(BigInteger.valueOf(PRICE));
     }
   }
 
