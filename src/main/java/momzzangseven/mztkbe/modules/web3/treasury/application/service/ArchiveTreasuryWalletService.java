@@ -9,32 +9,30 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ArchiveTreasuryWalletCommand;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Transitions DISABLED → ARCHIVED, persists, and schedules the backing KMS key for permanent
- * deletion. The default 30-day pending window matches the KMS minimum and gives operators a
- * recovery buffer before the key material is destroyed.
+ * Transitions DISABLED → ARCHIVED and persists the row. KMS {@code ScheduleKeyDeletion} is no
+ * longer invoked inside this method — instead a {@link TreasuryWalletArchivedEvent} is published
+ * and an AFTER_COMMIT handler invokes {@code ScheduleKmsKeyDeletionUseCase} so the KMS call only
+ * runs once the DB transaction has committed.
  *
- * <p>Audit writes go through {@link TreasuryAuditRecorder} (separate bean) so they run in {@code
- * REQUIRES_NEW} and survive a rollback of the outer transaction. An inline
- * {@code @Transactional(REQUIRES_NEW)} method on this same class would not work — Spring AOP cannot
- * intercept self-invocation, so the propagation hint would be silently dropped.
+ * <p><b>Why split the transaction.</b> Same rationale as
+ * {@link DisableTreasuryWalletService}: a single {@code @Transactional} would expose a
+ * "KMS scheduled-for-deletion → DB commit failed" race that left KMS irreversibly mutated while
+ * the DB silently rolled back to {@code DISABLED}. With the DB committing first, the residual
+ * failure mode is "DB ARCHIVED, KMS not scheduled" which is recorded in
+ * {@code web3_treasury_kms_audits} for operator follow-up; re-archiving the same row is
+ * idempotent for the DB and a no-op for KMS once the key is already pending deletion.
  *
- * <p><b>Save-first ordering</b> — both the DB save and the KMS {@code ScheduleKeyDeletion} call run
- * inside a single {@link Transactional}; the JPA flush precedes the KMS call and the actual COMMIT
- * happens when the method returns. KMS failure rolls the transaction back so DB and KMS stay
- * consistent in the common path. The narrow inconsistent window is <em>KMS success → DB commit
- * failure</em> (rare): the row stays DISABLED in the DB while the KMS key is already scheduled for
- * deletion; recovery is operator-driven re-archive, which is idempotent for the DB and a no-op for
- * KMS once the key is already in PendingDeletion. We intentionally diverge from the design doc §4-4
- * KMS-first sequence because the inverse failure mode (DB unchanged + KMS invisibly scheduled for
- * deletion) is much harder to recover from.
+ * <p>The default 30-day pending window matches the KMS minimum and gives operators a recovery
+ * buffer before key material is destroyed.
  */
 @Service
 @Slf4j
@@ -46,8 +44,8 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
 
   private final LoadTreasuryWalletPort loadTreasuryWalletPort;
   private final SaveTreasuryWalletPort saveTreasuryWalletPort;
-  private final KmsKeyLifecyclePort kmsKeyLifecyclePort;
   private final TreasuryAuditRecorder treasuryAuditRecorder;
+  private final ApplicationEventPublisher applicationEventPublisher;
   private final Clock clock;
 
   @Override
@@ -70,7 +68,13 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
     try {
       TreasuryWallet archived = wallet.archive(clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(archived);
-      kmsKeyLifecyclePort.scheduleKeyDeletion(saved.getKmsKeyId(), DEFAULT_KMS_PENDING_WINDOW_DAYS);
+      applicationEventPublisher.publishEvent(
+          new TreasuryWalletArchivedEvent(
+              saved.getWalletAlias(),
+              saved.getKmsKeyId(),
+              walletAddress,
+              command.operatorUserId(),
+              DEFAULT_KMS_PENDING_WINDOW_DAYS));
       treasuryAuditRecorder.record(command.operatorUserId(), walletAddress, true, null);
       return TreasuryWalletView.from(saved);
     } catch (RuntimeException e) {

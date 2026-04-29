@@ -15,11 +15,11 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * event-listener wiring is an infrastructure concern; the application-layer use case it delegates
  * to is unaware of how it is invoked.
  *
- * <p>Exceptions thrown from the use case are logged and swallowed here. The
- * {@code TransactionSynchronization.afterCommit} contract already swallows listener exceptions, so
- * letting them escape would only litter logs without giving the API caller anything actionable.
- * Operators see KMS failures via {@code web3_treasury_kms_audits} (written inside the use case
- * with {@code REQUIRES_NEW}).
+ * <p>Exceptions thrown from the use case are logged and swallowed here. The {@code
+ * TransactionSynchronization.afterCommit} contract already swallows listener exceptions, so letting
+ * them escape would only litter logs without giving the API caller anything actionable. Operators
+ * see KMS failures via {@code web3_treasury_kms_audits} (written inside the use case with {@code
+ * REQUIRES_NEW}).
  */
 @Component
 @Slf4j

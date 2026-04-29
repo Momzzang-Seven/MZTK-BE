@@ -18,18 +18,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Transitions a wallet ACTIVE → DISABLED and persists the row. KMS {@code DisableKey} is no
- * longer invoked inside this method — instead a {@link TreasuryWalletDisabledEvent} is published
- * and an AFTER_COMMIT handler invokes {@code DisableKmsKeyUseCase} so the KMS call only runs once
- * the DB transaction has committed.
+ * Transitions a wallet ACTIVE → DISABLED and persists the row. KMS {@code DisableKey} is no longer
+ * invoked inside this method — instead a {@link TreasuryWalletDisabledEvent} is published and an
+ * AFTER_COMMIT handler invokes {@code DisableKmsKeyUseCase} so the KMS call only runs once the DB
+ * transaction has committed.
  *
  * <p><b>Why split the transaction.</b> When the DB save and the KMS call sat in the same
- * {@code @Transactional}, a "KMS success → commit failure" race could leave KMS DISABLED while
- * the DB silently rolled back to ACTIVE — invisible to anyone reading the DB. Splitting them so
- * the DB commits first means the new failure mode is "DB DISABLED, KMS still ACTIVE", which is
- * recorded as a row in {@code web3_treasury_kms_audits} for operator follow-up. The signing path
- * already gates on the DB row's {@code status}, so the wallet is no longer usable the moment the
- * DB commit lands; the KMS-side disable is defence-in-depth that operators can retry idempotently.
+ * {@code @Transactional}, a "KMS success → commit failure" race could leave KMS DISABLED while the
+ * DB silently rolled back to ACTIVE — invisible to anyone reading the DB. Splitting them so the DB
+ * commits first means the new failure mode is "DB DISABLED, KMS still ACTIVE", which is recorded as
+ * a row in {@code web3_treasury_kms_audits} for operator follow-up. The signing path already gates
+ * on the DB row's {@code status}, so the wallet is no longer usable the moment the DB commit lands;
+ * the KMS-side disable is defence-in-depth that operators can retry idempotently.
  *
  * <p>Audit writes for the business-flow attempt itself still go through {@link
  * TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback.
