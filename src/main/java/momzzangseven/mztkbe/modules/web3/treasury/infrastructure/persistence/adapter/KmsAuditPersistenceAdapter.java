@@ -6,7 +6,6 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsAuditP
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryKmsAuditEntity;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryKmsAuditJpaRepository;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
@@ -16,7 +15,7 @@ public class KmsAuditPersistenceAdapter implements KmsAuditPort {
   private final Web3TreasuryKmsAuditJpaRepository repository;
 
   @Override
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  @Transactional
   public void record(AuditCommand command) {
     if (command == null) {
       throw new Web3InvalidInputException("command is required");

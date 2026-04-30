@@ -67,13 +67,7 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
     try {
       TreasuryWallet archived = wallet.archive(clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(archived);
-      applicationEventPublisher.publishEvent(
-          new TreasuryWalletArchivedEvent(
-              saved.getWalletAlias(),
-              saved.getKmsKeyId(),
-              walletAddress,
-              command.operatorUserId(),
-              DEFAULT_KMS_PENDING_WINDOW_DAYS));
+      publishTreasuryWalletArchivedEvent(command, saved, walletAddress);
       treasuryAuditRecorder.record(command.operatorUserId(), walletAddress, true, null);
       return TreasuryWalletView.from(saved);
     } catch (RuntimeException e) {
@@ -81,5 +75,16 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
           command.operatorUserId(), walletAddress, false, e.getClass().getSimpleName());
       throw e;
     }
+  }
+
+  private void publishTreasuryWalletArchivedEvent(
+      ArchiveTreasuryWalletCommand command, TreasuryWallet saved, String walletAddress) {
+    applicationEventPublisher.publishEvent(
+        new TreasuryWalletArchivedEvent(
+            saved.getWalletAlias(),
+            saved.getKmsKeyId(),
+            walletAddress,
+            command.operatorUserId(),
+            DEFAULT_KMS_PENDING_WINDOW_DAYS));
   }
 }
