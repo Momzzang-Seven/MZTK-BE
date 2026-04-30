@@ -58,9 +58,12 @@ import org.web3j.crypto.Credentials;
  * cleanup. An {@link AtomicBoolean} interlock guarantees the cleanup body executes at most once
  * even when both the catch path and the synchronization fire (in-method exception → tx rollback).
  *
- * <p>Audit entries for the business-flow attempt itself are recorded via {@link
- * TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback. Bean-validation
- * / null-command failures short-circuit before audit and are not recorded; the controller's
+ * <p>Failure audits (caught exceptions, address-mismatch, already-provisioned) are recorded inline
+ * via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback. The
+ * success audit is moved to an AFTER_COMMIT handler ({@code TreasuryAuditEventHandler}) so it only
+ * lands once the wallet row has actually committed; recording it inline let the audit row survive a
+ * proxy-boundary commit failure that silently rolled the wallet row back. Bean-validation /
+ * null-command failures short-circuit before audit and are not recorded; the controller's
  * {@code @Valid} chain is the source of truth for those cases.
  */
 @Service
@@ -147,11 +150,8 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
               : TreasuryWallet.provision(walletAlias, kmsKeyId, derivedAddress, role, clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(wallet);
 
-      applicationEventPublisher.publishEvent(
-          new TreasuryWalletProvisionedEvent(
-              walletAlias, kmsKeyId, derivedAddress, command.operatorUserId(), false));
+      publishTreasuryWalletProvisionedEvent(command, walletAlias, kmsKeyId, derivedAddress);
 
-      treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, true, null);
       return ProvisionTreasuryKeyResult.from(saved, role);
     } catch (RuntimeException e) {
       if (cleanupInvoked.compareAndSet(false, true)) {
@@ -164,6 +164,16 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       zeroize(rawPrivateKey);
       zeroize(wrappedKey);
     }
+  }
+
+  private void publishTreasuryWalletProvisionedEvent(
+      ProvisionTreasuryKeyCommand command,
+      String walletAlias,
+      String kmsKeyId,
+      String derivedAddress) {
+    applicationEventPublisher.publishEvent(
+        new TreasuryWalletProvisionedEvent(
+            walletAlias, kmsKeyId, derivedAddress, command.operatorUserId(), false));
   }
 
   /**
@@ -232,7 +242,6 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
             existing.getWalletAddress(),
             command.operatorUserId(),
             true));
-    treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, true, null);
     return ProvisionTreasuryKeyResult.from(existing, role);
   }
 
