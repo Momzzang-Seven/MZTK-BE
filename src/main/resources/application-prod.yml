@@ -79,6 +79,8 @@ web3:
         - 0x095ea7b3                # approve (예시)
 mztk:
   admin:
+    bootstrap:
+      enabled: true
     recovery:
       rate-limit:
         trust-forwarded-for: true

@@ -1,8 +1,10 @@
 package momzzangseven.mztkbe.integration.e2e.audit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigInteger;
@@ -18,7 +20,12 @@ import java.util.concurrent.TimeUnit;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyMaterialWrapperPort;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SignDigestPort;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,6 +79,36 @@ class AdminActionAuditE2ETest extends E2ETestBase {
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
   @MockitoBean private Web3ContractPort web3ContractPort;
+  @MockitoBean private KmsKeyLifecyclePort kmsKeyLifecyclePort;
+  @MockitoBean private KmsKeyMaterialWrapperPort kmsKeyMaterialWrapperPort;
+  @MockitoBean private SignDigestPort signDigestPort;
+
+  private static final String MOCK_KMS_KEY_ID = "audit-e2e-mock-kms-key-id";
+
+  /**
+   * {@code web3_treasury_wallets} is excluded from {@code DatabaseCleaner}, so the rows that E-4
+   * persists must be torn down explicitly. Idempotent — DELETE on a missing row is a no-op for
+   * tests (E-1 ~ E-3, E-5 ~ E-9) that never touch the table.
+   */
+  @AfterEach
+  void cleanTreasuryWalletRows() {
+    jdbcTemplate.update(
+        "DELETE FROM web3_treasury_wallets WHERE wallet_alias IN ('reward-treasury','sponsor-treasury')");
+  }
+
+  /**
+   * Stubs the KMS lifecycle / wrapper / signer ports for a successful provision flow. Mirrors
+   * {@code TreasuryKeyLifecycleE2ETest#stubSuccessfulProvision} so the two suites stay in sync.
+   */
+  private void stubSuccessfulProvision() {
+    when(kmsKeyLifecyclePort.createKey()).thenReturn(MOCK_KMS_KEY_ID);
+    when(kmsKeyLifecyclePort.getParametersForImport(MOCK_KMS_KEY_ID))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[] {3});
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
+  }
 
   // ============================================================
   // Helpers
@@ -200,8 +237,12 @@ class AdminActionAuditE2ETest extends E2ETestBase {
   }
 
   private ResponseEntity<String> provisionTreasury(
-      String accessToken, String privateKey, String walletAlias) {
-    Map<String, String> body = Map.of("treasuryPrivateKey", privateKey, "walletAlias", walletAlias);
+      String accessToken, String rawPrivateKey, String role, String expectedAddress) {
+    Map<String, String> body =
+        Map.of(
+            "rawPrivateKey", rawPrivateKey,
+            "role", role,
+            "expectedAddress", expectedAddress);
     return restTemplate.exchange(
         baseUrl() + "/admin/web3/treasury-keys/provision",
         HttpMethod.POST,
@@ -391,25 +432,25 @@ class AdminActionAuditE2ETest extends E2ETestBase {
   }
 
   // ============================================================
-  // E-4: ProvisionTreasuryKey success → audit + masking + treasury key persisted
+  // E-4: ProvisionTreasuryKey success → audit + masking + treasury wallet persisted
   // ============================================================
 
   @Test
   @DisplayName(
       "[E-4] ProvisionTreasuryKey 성공 → admin_action_audits target_type='TREASURY_KEY', "
-          + "rawPrivateKey 마스킹, web3_treasury_keys 저장")
+          + "rawPrivateKey 마스킹, web3_treasury_wallets 저장")
   void provisionTreasuryKey_success_recordsAuditAndMasksPrivateKey() throws Exception {
     AdminUser admin = createAdminAndLogin();
     String walletAlias = "reward-treasury";
-    // pre-clean any pre-existing alias row from a previous flaky test
-    jdbcTemplate.update("DELETE FROM web3_treasury_keys WHERE wallet_alias = ?", walletAlias);
+    stubSuccessfulProvision();
 
     ResponseEntity<String> response =
-        provisionTreasury(admin.accessToken(), VALID_TEST_PRIVATE_KEY, walletAlias);
+        provisionTreasury(
+            admin.accessToken(), VALID_TEST_PRIVATE_KEY, "REWARD", VALID_TEST_TREASURY_ADDRESS);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-    // audit row
+    // admin_action_audits row written by AdminOnlyAspect around the treasury service
     Map<String, Object> row =
         jdbcTemplate.queryForMap(
             "SELECT target_id, target_type, success, detail_json FROM admin_action_audits "
@@ -419,17 +460,20 @@ class AdminActionAuditE2ETest extends E2ETestBase {
             admin.userId());
     assertThat(row.get("success")).isEqualTo(true);
     assertThat(row.get("target_type")).isEqualTo(TARGET_TYPE_TREASURY_KEY);
-    assertThat((String) row.get("target_id")).isEqualTo(VALID_TEST_TREASURY_ADDRESS);
+    assertThat((String) row.get("target_id")).isEqualToIgnoringCase(VALID_TEST_TREASURY_ADDRESS);
 
+    // The treasury service signature is execute(ProvisionTreasuryKeyCommand command), so the
+    // aspect nests the sanitized record under arguments.command.
     JsonNode detail = objectMapper.readTree((String) row.get("detail_json"));
-    // The Long/String/String args sanitize into top-level entries (operatorId is dropped because
-    // it is also one of the synthetic fields the aspect filters from arguments).
-    JsonNode arguments = detail.at("/arguments");
-    assertThat(arguments.isMissingNode()).isFalse();
+    JsonNode commandNode = detail.at("/arguments/command");
+    assertThat(commandNode.isMissingNode()).isFalse();
     // rawPrivateKey contains "key" → masked by sanitizeValue
-    assertThat(arguments.at("/rawPrivateKey").asText()).isEqualTo("***");
+    assertThat(commandNode.at("/rawPrivateKey").asText()).isEqualTo("***");
+    assertThat(commandNode.at("/role").asText()).isEqualTo("REWARD");
+    assertThat(commandNode.at("/expectedAddress").asText())
+        .isEqualToIgnoringCase(VALID_TEST_TREASURY_ADDRESS);
 
-    // out-of-scope regression: web3_treasury_provision_audits success row exists
+    // out-of-scope regression: legacy web3_treasury_provision_audits success row also recorded
     Integer provisionAudits =
         jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM web3_treasury_provision_audits "
@@ -438,17 +482,20 @@ class AdminActionAuditE2ETest extends E2ETestBase {
             admin.userId());
     assertThat(provisionAudits).isEqualTo(1);
 
-    // treasury key row persisted
-    Integer treasuryKeyCount =
+    // treasury wallet row persisted
+    Integer treasuryWalletCount =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM web3_treasury_keys WHERE wallet_alias = ?",
+            "SELECT COUNT(*) FROM web3_treasury_wallets WHERE wallet_alias = ?",
             Integer.class,
             walletAlias);
-    assertThat(treasuryKeyCount).isEqualTo(1);
+    assertThat(treasuryWalletCount).isEqualTo(1);
   }
 
   // ============================================================
-  // E-5: invalid hex → audit success=false, target_id null, REQUIRES_NEW commit
+  // E-5: invalid hex → admin_action_audits success=false target_id=null
+  //     ProvisionTreasuryKeyCommand#validate() rejects non-hex inside the service body before any
+  //     KMS / persistence call, so AdminOnlyAspect records the failure but the legacy
+  //     TreasuryAuditRecorder is never reached and web3_treasury_provision_audits is untouched.
   // ============================================================
 
   @Test
@@ -462,7 +509,8 @@ class AdminActionAuditE2ETest extends E2ETestBase {
         "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"; // 64 chars, non-hex
 
     ResponseEntity<String> response =
-        provisionTreasury(admin.accessToken(), invalidPrivateKey, walletAlias);
+        provisionTreasury(
+            admin.accessToken(), invalidPrivateKey, "REWARD", VALID_TEST_TREASURY_ADDRESS);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
@@ -479,38 +527,42 @@ class AdminActionAuditE2ETest extends E2ETestBase {
     assertThat(detail.at("/failureReason").asText())
         .isEqualTo("TreasuryPrivateKeyInvalidException");
 
-    // out-of-scope regression: web3_treasury_provision_audits failure row also exists
+    // command.validate() runs before the service's try-catch, so the legacy provision audit
+    // recorder never fires for this code path.
     Integer provisionAudits =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM web3_treasury_provision_audits "
-                + "WHERE operator_id=? AND success = false",
+            "SELECT COUNT(*) FROM web3_treasury_provision_audits WHERE operator_id=?",
             Integer.class,
             admin.userId());
-    assertThat(provisionAudits).isEqualTo(1);
+    assertThat(provisionAudits).isZero();
 
-    // no treasury key row persisted (rollback)
-    Integer treasuryKeyCount =
+    // no treasury wallet row persisted (rollback)
+    Integer treasuryWalletCount =
         jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM web3_treasury_keys WHERE wallet_alias = ?",
+            "SELECT COUNT(*) FROM web3_treasury_wallets WHERE wallet_alias = ?",
             Integer.class,
             walletAlias);
-    // we may have had a row already (from a previous successful test); but in this test we did
-    // NOT create one — so if the table is otherwise empty for this alias, count should be 0.
-    // We assert <= 1 to keep this loose against test ordering.
-    assertThat(treasuryKeyCount).isLessThanOrEqualTo(1);
+    assertThat(treasuryWalletCount).isZero();
   }
 
   // ============================================================
-  // E-6: walletAlias not allowed → audit success=false target_id=null
+  // E-6: address mismatch → admin_action_audits success=false target_id=null
+  //     The previous "unknown alias" scenario is obsolete now that `role` is a TreasuryRole enum
+  //     and the alias is derived server-side. Address-mismatch is the closest replacement: the
+  //     service derives the address from rawPrivateKey, fails the equality check against
+  //     command.expectedAddress(), records both audit rows, and throws
+  //     TreasuryWalletAddressMismatchException → 400.
   // ============================================================
 
   @Test
-  @DisplayName("[E-6] ProvisionTreasuryKey 허용되지 않은 walletAlias → admin_action_audits success=false")
-  void provisionTreasuryKey_unknownAlias_recordsFailureAudit() throws Exception {
+  @DisplayName(
+      "[E-6] ProvisionTreasuryKey expectedAddress 불일치 → admin_action_audits success=false + provision audit 실패 row")
+  void provisionTreasuryKey_addressMismatch_recordsFailureAudit() throws Exception {
     AdminUser admin = createAdminAndLogin();
+    String mismatchedAddress = "0x000000000000000000000000000000000000dead";
 
     ResponseEntity<String> response =
-        provisionTreasury(admin.accessToken(), VALID_TEST_PRIVATE_KEY, "unknown-alias");
+        provisionTreasury(admin.accessToken(), VALID_TEST_PRIVATE_KEY, "REWARD", mismatchedAddress);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
@@ -524,7 +576,18 @@ class AdminActionAuditE2ETest extends E2ETestBase {
     assertThat(row.get("success")).isEqualTo(false);
     assertThat(row.get("target_id")).isNull();
     JsonNode detail = objectMapper.readTree((String) row.get("detail_json"));
-    assertThat(detail.at("/failureReason").asText()).isEqualTo("Web3InvalidInputException");
+    assertThat(detail.at("/failureReason").asText())
+        .isEqualTo("TreasuryWalletAddressMismatchException");
+
+    // service writes to TreasuryAuditRecorder before throwing for ADDRESS_MISMATCH, so the legacy
+    // provision audit table also has a failure row for this operator.
+    Integer provisionAudits =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_treasury_provision_audits "
+                + "WHERE operator_id=? AND success = false",
+            Integer.class,
+            admin.userId());
+    assertThat(provisionAudits).isEqualTo(1);
   }
 
   // ============================================================
