@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.tag.domain.model;
 
+import java.util.Locale;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -14,7 +15,7 @@ public class Tag {
       throw new IllegalArgumentException("태그 이름은 필수입니다.");
     }
     this.id = id;
-    this.name = name.trim().toLowerCase();
+    this.name = name.trim().toLowerCase(Locale.ROOT);
   }
 
   public static Tag create(String name) {
