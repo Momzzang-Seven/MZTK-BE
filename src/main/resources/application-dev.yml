@@ -60,5 +60,7 @@ web3:
 
 mztk:
   admin:
+    bootstrap:
+      enabled: false
     recovery:
       anchor: "anchor-only-for-dev"
