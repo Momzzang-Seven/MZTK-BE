@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.global.error;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -124,6 +125,26 @@ public class GlobalExceptionHandler {
     ex.getBindingResult()
         .getFieldErrors()
         .forEach(error -> fieldErrors.put(error.getField(), error.getDefaultMessage()));
+
+    ErrorCode errorCode = ErrorCode.INVALID_INPUT;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error("Validation failed", errorCode.getCode(), fieldErrors));
+  }
+
+  /**
+   * Handle validation failures from {@code @Validated} on path variables and request parameters.
+   */
+  @ExceptionHandler(ConstraintViolationException.class)
+  public ResponseEntity<ApiResponse<?>> handleConstraintViolationException(
+      ConstraintViolationException ex) {
+    Map<String, String> fieldErrors = new LinkedHashMap<>();
+    ex.getConstraintViolations()
+        .forEach(
+            violation -> {
+              String propertyPath = violation.getPropertyPath().toString();
+              String fieldName = propertyPath.substring(propertyPath.lastIndexOf('.') + 1);
+              fieldErrors.put(fieldName, violation.getMessage());
+            });
 
     ErrorCode errorCode = ErrorCode.INVALID_INPUT;
     return ResponseEntity.status(errorCode.getHttpStatus())

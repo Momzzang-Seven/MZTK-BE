@@ -11,4 +11,9 @@ public class TrainerSuspendedException extends BusinessException {
         ErrorCode.MARKETPLACE_TRAINER_SUSPENDED,
         "Trainer is suspended and cannot perform this action: trainerId=" + trainerId);
   }
+
+  /** Used when trainer ID context is not available at the throw site. */
+  public TrainerSuspendedException() {
+    super(ErrorCode.MARKETPLACE_TRAINER_SUSPENDED);
+  }
 }
