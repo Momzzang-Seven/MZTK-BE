@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassTim
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.RegisterClassCommand;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.RegisterClassResult;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.RegisterClassUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.ManageClassTagPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.SaveClassPort;
@@ -18,7 +19,6 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.Sav
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.UpdateClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RegisterClassService implements RegisterClassUseCase {
 
   private final LoadTrainerStorePort loadTrainerStorePort;
-  private final LoadTrainerSanctionPort loadTrainerSanctionPort;
+  private final CheckTrainerSanctionPort checkTrainerSanctionPort;
   private final SaveClassPort saveClassPort;
   private final SaveClassSlotPort saveClassSlotPort;
   private final UpdateClassImagesPort updateClassImagesPort;
@@ -59,7 +59,7 @@ public class RegisterClassService implements RegisterClassUseCase {
         .orElseThrow(() -> new StoreNotFoundException(command.trainerId()));
 
     // Step 2: Verify trainer is not suspended
-    if (loadTrainerSanctionPort.hasActiveSanction(command.trainerId())) {
+    if (checkTrainerSanctionPort.hasActiveSanction(command.trainerId())) {
       throw new TrainerSuspendedException(command.trainerId());
     }
 

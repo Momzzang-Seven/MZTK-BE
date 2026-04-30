@@ -8,10 +8,10 @@ import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ToggleClassStatusCommand;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ToggleClassStatusResult;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.ToggleClassStatusUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.SaveClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +29,7 @@ public class ToggleClassStatusService implements ToggleClassStatusUseCase {
 
   private final LoadClassPort loadClassPort;
   private final SaveClassPort saveClassPort;
-  private final LoadTrainerSanctionPort loadTrainerSanctionPort;
+  private final CheckTrainerSanctionPort checkTrainerSanctionPort;
 
   @Override
   public ToggleClassStatusResult execute(ToggleClassStatusCommand command) {
@@ -48,7 +48,7 @@ public class ToggleClassStatusService implements ToggleClassStatusUseCase {
 
     // Check suspension only when activating an inactive class
     if (!marketplaceClass.isActive()
-        && loadTrainerSanctionPort.hasActiveSanction(command.trainerId())) {
+        && checkTrainerSanctionPort.hasActiveSanction(command.trainerId())) {
       throw new TrainerSuspendedException(command.trainerId());
     }
 
