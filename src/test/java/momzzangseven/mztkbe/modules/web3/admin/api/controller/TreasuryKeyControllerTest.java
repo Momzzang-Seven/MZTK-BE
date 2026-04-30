@@ -210,6 +210,108 @@ class TreasuryKeyControllerTest {
   }
 
   @Test
+  @DisplayName("[M-142b] GET /{alias} — 지갑이 없으면 409 (TREASURY_001)")
+  void get_walletNotFound_returns409() throws Exception {
+    given(loadTreasuryWalletUseCase.execute(eq("missing-alias"), anyLong()))
+        .willReturn(Optional.empty());
+
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/missing-alias").with(adminPrincipal(9L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("TREASURY_001"));
+  }
+
+  @Test
+  @DisplayName("[M-143a] POST /{alias}/disable — happy path: 200 + DISABLED view")
+  void disable_happyPath_returnsDisabledView() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
+    given(disableTreasuryWalletUseCase.execute(any()))
+        .willReturn(
+            new TreasuryWalletView(
+                "reward-treasury",
+                TreasuryRole.REWARD,
+                "kms-key-id",
+                address,
+                TreasuryWalletStatus.DISABLED,
+                TreasuryKeyOrigin.IMPORTED,
+                LocalDateTime.parse("2026-01-01T00:00:00"),
+                LocalDateTime.parse("2026-01-02T00:00:00")));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("DISABLED"))
+        .andExpect(jsonPath("$.data.disabledAt").exists());
+  }
+
+  @Test
+  @DisplayName("[M-143b] POST /{alias}/disable — UseCase에서 TreasuryWalletStateException → 409")
+  void disable_useCaseThrowsState_returns409() throws Exception {
+    given(disableTreasuryWalletUseCase.execute(any()))
+        .willThrow(
+            new momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException(
+                "wallet not found"));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable").with(adminPrincipal(9L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("TREASURY_001"));
+  }
+
+  @Test
+  @DisplayName("[M-143c] POST /{alias}/disable — 인증 없으면 401")
+  void disable_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("[M-144a] POST /{alias}/archive — happy path: 200 + ARCHIVED view")
+  void archive_happyPath_returnsArchivedView() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
+    given(archiveTreasuryWalletUseCase.execute(any()))
+        .willReturn(
+            new TreasuryWalletView(
+                "reward-treasury",
+                TreasuryRole.REWARD,
+                "kms-key-id",
+                address,
+                TreasuryWalletStatus.ARCHIVED,
+                TreasuryKeyOrigin.IMPORTED,
+                LocalDateTime.parse("2026-01-01T00:00:00"),
+                LocalDateTime.parse("2026-01-02T00:00:00")));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
+  }
+
+  @Test
+  @DisplayName("[M-144b] POST /{alias}/archive — UseCase에서 TreasuryWalletStateException → 409")
+  void archive_useCaseThrowsState_returns409() throws Exception {
+    given(archiveTreasuryWalletUseCase.execute(any()))
+        .willThrow(
+            new momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException(
+                "must be DISABLED first"));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive").with(adminPrincipal(9L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("TREASURY_001"));
+  }
+
+  @Test
+  @DisplayName("[M-144c] POST /{alias}/archive — 인증 없으면 401")
+  void archive_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
   @DisplayName("POST /admin/web3/treasury-keys/provision principal이 null이면 401")
   void provision_nullPrincipal_returns401() throws Exception {
     mockMvc
