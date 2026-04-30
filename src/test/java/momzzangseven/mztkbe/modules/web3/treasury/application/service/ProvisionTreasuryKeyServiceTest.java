@@ -363,6 +363,60 @@ class ProvisionTreasuryKeyServiceTest {
   }
 
   @Test
+  void execute_synchronization_skipsCleanupAndRecordsAlertAudit_whenStatusUnknown() {
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      primeSuccessfulMocks(Optional.empty());
+
+      ProvisionTreasuryKeyCommand command =
+          new ProvisionTreasuryKeyCommand(
+              1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+      service.execute(command);
+
+      List<TransactionSynchronization> registered =
+          TransactionSynchronizationManager.getSynchronizations();
+      assertThat(registered).hasSize(1);
+
+      registered.get(0).afterCompletion(TransactionSynchronization.STATUS_UNKNOWN);
+
+      verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
+      verify(treasuryAuditRecorder)
+          .record(eq(1L), eq(DERIVED_ADDRESS), eq(false), eq("TX_STATUS_UNKNOWN"));
+    } finally {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
+  }
+
+  @Test
+  void execute_synchronization_skipsCleanupAndRecordsAlertAudit_whenStatusUnrecognized() {
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      primeSuccessfulMocks(Optional.empty());
+
+      ProvisionTreasuryKeyCommand command =
+          new ProvisionTreasuryKeyCommand(
+              1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+      service.execute(command);
+
+      List<TransactionSynchronization> registered =
+          TransactionSynchronizationManager.getSynchronizations();
+      assertThat(registered).hasSize(1);
+
+      registered.get(0).afterCompletion(99);
+
+      verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
+      verify(treasuryAuditRecorder)
+          .record(eq(1L), eq(DERIVED_ADDRESS), eq(false), eq("TX_STATUS_UNKNOWN"));
+    } finally {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
+  }
+
+  @Test
   void execute_synchronization_doesNotCleanup_whenCommitted() {
     TransactionSynchronizationManager.initSynchronization();
     try {
