@@ -37,13 +37,13 @@ import org.web3j.crypto.Credentials;
  * chain inside a single {@link Transactional}. {@code CreateAlias} no longer runs inside this
  * method — once the row commits, a {@link TreasuryWalletProvisionedEvent} is published and an
  * AFTER_COMMIT handler invokes {@code BindKmsAliasUseCase}. This closes the previous "createAlias
- * succeeded → outer commit failed" race that left an ENABLED key bound to an alias with no DB
- * row, where R-2's ghost-alias recovery could not fire because the body-level catch block does
- * not run when the failure happens at the proxy commit boundary.
+ * succeeded → outer commit failed" race that left an ENABLED key bound to an alias with no DB row,
+ * where R-2's ghost-alias recovery could not fire because the body-level catch block does not run
+ * when the failure happens at the proxy commit boundary.
  *
- * <p><b>Operator retry / alias repair.</b> When an existing row already carries a
- * {@code kms_key_id} but the KMS alias is missing or stale (the post-commit handler failed or the
- * alias was reaped externally), re-running {@code POST /provision} with the same input enters
+ * <p><b>Operator retry / alias repair.</b> When an existing row already carries a {@code
+ * kms_key_id} but the KMS alias is missing or stale (the post-commit handler failed or the alias
+ * was reaped externally), re-running {@code POST /provision} with the same input enters
  * <em>alias-repair mode</em>: the service skips {@code CreateKey}/{@code ImportKeyMaterial} and
  * just re-publishes the event so the handler can rebind the alias idempotently.
  *
@@ -51,10 +51,10 @@ import org.web3j.crypto.Credentials;
  * {@code cleanupKmsKey} (disable + 7-day scheduled deletion) ensures a half-provisioned KMS key
  * cannot accumulate.
  *
- * <p>Audit entries for the business-flow attempt itself are recorded via
- * {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback.
- * Bean-validation / null-command failures short-circuit before audit and are not recorded; the
- * controller's {@code @Valid} chain is the source of truth for those cases.
+ * <p>Audit entries for the business-flow attempt itself are recorded via {@link
+ * TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback. Bean-validation
+ * / null-command failures short-circuit before audit and are not recorded; the controller's
+ * {@code @Valid} chain is the source of truth for those cases.
  */
 @Service
 @Slf4j
