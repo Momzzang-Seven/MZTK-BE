@@ -65,12 +65,7 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
     try {
       TreasuryWallet disabled = wallet.disable(clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(disabled);
-      applicationEventPublisher.publishEvent(
-          new TreasuryWalletDisabledEvent(
-              saved.getWalletAlias(),
-              saved.getKmsKeyId(),
-              walletAddress,
-              command.operatorUserId()));
+      publishTreasuryWalletDisabledEvent(command, saved, walletAddress);
       treasuryAuditRecorder.record(command.operatorUserId(), walletAddress, true, null);
       return TreasuryWalletView.from(saved);
     } catch (RuntimeException e) {
@@ -78,5 +73,12 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
           command.operatorUserId(), walletAddress, false, e.getClass().getSimpleName());
       throw e;
     }
+  }
+
+  private void publishTreasuryWalletDisabledEvent(
+      DisableTreasuryWalletCommand command, TreasuryWallet saved, String walletAddress) {
+    applicationEventPublisher.publishEvent(
+        new TreasuryWalletDisabledEvent(
+            saved.getWalletAlias(), saved.getKmsKeyId(), walletAddress, command.operatorUserId()));
   }
 }
