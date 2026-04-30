@@ -31,8 +31,11 @@ import org.springframework.transaction.annotation.Transactional;
  * on the DB row's {@code status}, so the wallet is no longer usable the moment the DB commit lands;
  * the KMS-side disable is defence-in-depth that operators can retry idempotently.
  *
- * <p>Audit writes for the business-flow attempt itself still go through {@link
- * TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback.
+ * <p>Failure audit writes still happen inline via {@link TreasuryAuditRecorder} ({@code
+ * REQUIRES_NEW}) so a caught exception leaves a record even when the outer transaction rolls back.
+ * The success audit is moved to an AFTER_COMMIT handler ({@code TreasuryAuditEventHandler}) so it
+ * only lands once the wallet state transition has actually committed; recording it inline let the
+ * audit row survive a proxy-boundary commit failure that silently rolled the wallet row back.
  */
 @Service
 @Slf4j
@@ -66,7 +69,6 @@ public class DisableTreasuryWalletService implements DisableTreasuryWalletUseCas
       TreasuryWallet disabled = wallet.disable(clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(disabled);
       publishTreasuryWalletDisabledEvent(command, saved, walletAddress);
-      treasuryAuditRecorder.record(command.operatorUserId(), walletAddress, true, null);
       return TreasuryWalletView.from(saved);
     } catch (RuntimeException e) {
       treasuryAuditRecorder.record(

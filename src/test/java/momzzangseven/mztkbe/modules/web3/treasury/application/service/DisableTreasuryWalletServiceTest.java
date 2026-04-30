@@ -80,7 +80,7 @@ class DisableTreasuryWalletServiceTest {
     assertThat(event.kmsKeyId()).isEqualTo(KMS_KEY_ID);
     assertThat(event.walletAddress()).isEqualTo(ADDRESS);
     assertThat(event.operatorUserId()).isEqualTo(OPERATOR_ID);
-    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
+    verify(treasuryAuditRecorder, never()).record(eq(OPERATOR_ID), any(), eq(true), any());
   }
 
   @Test

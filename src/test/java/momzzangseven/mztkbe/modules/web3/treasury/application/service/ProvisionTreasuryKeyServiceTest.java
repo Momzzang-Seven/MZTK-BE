@@ -138,7 +138,7 @@ class ProvisionTreasuryKeyServiceTest {
     assertThat(event.kmsKeyId()).isEqualTo("existing-kms-id");
     verify(kmsKeyLifecyclePort, never()).createKey();
     verify(saveTreasuryWalletPort, never()).save(any());
-    verify(treasuryAuditRecorder).record(1L, DERIVED_ADDRESS, true, null);
+    verify(treasuryAuditRecorder, never()).record(eq(1L), any(), eq(true), any());
   }
 
   @Test
@@ -298,7 +298,7 @@ class ProvisionTreasuryKeyServiceTest {
   }
 
   @Test
-  void execute_recordsAudit_onSuccess() {
+  void execute_doesNotRecordSuccessAudit_inline() {
     primeSuccessfulMocks(Optional.empty());
 
     ProvisionTreasuryKeyCommand command =
@@ -306,7 +306,7 @@ class ProvisionTreasuryKeyServiceTest {
 
     service.execute(command);
 
-    verify(treasuryAuditRecorder).record(1L, DERIVED_ADDRESS, true, null);
+    verify(treasuryAuditRecorder, never()).record(eq(1L), any(), eq(true), any());
   }
 
   @Test

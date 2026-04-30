@@ -79,7 +79,7 @@ class ArchiveTreasuryWalletServiceTest {
     assertThat(event.operatorUserId()).isEqualTo(OPERATOR_ID);
     assertThat(event.pendingWindowDays())
         .isEqualTo(ArchiveTreasuryWalletService.DEFAULT_KMS_PENDING_WINDOW_DAYS);
-    verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
+    verify(treasuryAuditRecorder, never()).record(eq(OPERATOR_ID), any(), eq(true), any());
   }
 
   @Test

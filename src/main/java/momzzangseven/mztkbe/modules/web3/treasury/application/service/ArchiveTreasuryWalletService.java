@@ -32,6 +32,11 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>The default 30-day pending window matches the KMS minimum and gives operators a recovery
  * buffer before key material is destroyed.
+ *
+ * <p>Failure audit writes still happen inline via {@link TreasuryAuditRecorder} ({@code
+ * REQUIRES_NEW}) so a caught exception leaves a record even when the outer transaction rolls back.
+ * The success audit is moved to an AFTER_COMMIT handler ({@code TreasuryAuditEventHandler}) so it
+ * only lands once the wallet state transition has actually committed.
  */
 @Service
 @Slf4j
@@ -68,7 +73,6 @@ public class ArchiveTreasuryWalletService implements ArchiveTreasuryWalletUseCas
       TreasuryWallet archived = wallet.archive(clock);
       TreasuryWallet saved = saveTreasuryWalletPort.save(archived);
       publishTreasuryWalletArchivedEvent(command, saved, walletAddress);
-      treasuryAuditRecorder.record(command.operatorUserId(), walletAddress, true, null);
       return TreasuryWalletView.from(saved);
     } catch (RuntimeException e) {
       treasuryAuditRecorder.record(
