@@ -10,12 +10,11 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * AFTER_COMMIT handler that drives the KMS {@code ScheduleKeyDeletion} side effect once the DB
- * row has transitioned to {@code ARCHIVED}. Lives in {@code infrastructure/event} because the
- * Spring event-listener wiring is an infrastructure concern.
+ * AFTER_COMMIT handler that drives the KMS {@code ScheduleKeyDeletion} side effect once the DB row
+ * has transitioned to {@code ARCHIVED}. Lives in {@code infrastructure/event} because the Spring
+ * event-listener wiring is an infrastructure concern.
  *
- * <p>Exceptions are swallowed; operator visibility comes from
- * {@code web3_treasury_kms_audits}.
+ * <p>Exceptions are swallowed; operator visibility comes from {@code web3_treasury_kms_audits}.
  */
 @Component
 @Slf4j
