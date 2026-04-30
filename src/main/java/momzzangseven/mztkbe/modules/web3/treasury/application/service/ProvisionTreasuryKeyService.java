@@ -5,6 +5,7 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
@@ -28,6 +29,8 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.web3j.crypto.Credentials;
 
 /**
@@ -49,7 +52,11 @@ import org.web3j.crypto.Credentials;
  *
  * <p>On any failure inside the transactional body the {@link Transactional} rollback together with
  * {@code cleanupKmsKey} (disable + 7-day scheduled deletion) ensures a half-provisioned KMS key
- * cannot accumulate.
+ * cannot accumulate. As a safety net for the proxy-commit boundary — where a body-level catch
+ * cannot run — a {@link TransactionSynchronization} is registered immediately after {@code
+ * createKey()} succeeds; its {@code afterCompletion(STATUS_ROLLED_BACK)} hook runs the same
+ * cleanup. An {@link AtomicBoolean} interlock guarantees the cleanup body executes at most once
+ * even when both the catch path and the synchronization fire (in-method exception → tx rollback).
  *
  * <p>Audit entries for the business-flow attempt itself are recorded via {@link
  * TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback. Bean-validation
@@ -121,8 +128,10 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     String kmsKeyId = null;
     byte[] rawPrivateKey = decodePrivateKey(command.rawPrivateKey());
     byte[] wrappedKey = null;
+    AtomicBoolean cleanupInvoked = new AtomicBoolean(false);
     try {
       kmsKeyId = kmsKeyLifecyclePort.createKey();
+      registerCleanupOnRollback(kmsKeyId, cleanupInvoked);
       KmsKeyLifecyclePort.ImportParams params =
           kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
       wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
@@ -145,7 +154,9 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       treasuryAuditRecorder.record(command.operatorUserId(), derivedAddress, true, null);
       return ProvisionTreasuryKeyResult.from(saved, role);
     } catch (RuntimeException e) {
-      cleanupKmsKey(kmsKeyId);
+      if (cleanupInvoked.compareAndSet(false, true)) {
+        cleanupKmsKey(kmsKeyId);
+      }
       treasuryAuditRecorder.record(
           command.operatorUserId(), derivedAddress, false, e.getClass().getSimpleName());
       throw e;
@@ -153,6 +164,38 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
       zeroize(rawPrivateKey);
       zeroize(wrappedKey);
     }
+  }
+
+  /**
+   * Register a {@link TransactionSynchronization} on the current transaction so that {@code
+   * cleanupKmsKey} runs even when the failure happens at the proxy-commit boundary (where the
+   * body-level catch cannot fire). The {@code cleanupInvoked} interlock is shared with the catch
+   * block, guaranteeing single execution even when both paths fire on an in-method exception.
+   *
+   * <p>Guarded by {@link TransactionSynchronizationManager#isSynchronizationActive()} so unit tests
+   * that exercise the service without a Spring transaction context (Mockito direct invocation) do
+   * not blow up at registration time.
+   */
+  private void registerCleanupOnRollback(String createdKmsKeyId, AtomicBoolean cleanupInvoked) {
+    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+      return;
+    }
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCompletion(int status) {
+            if (status == STATUS_COMMITTED) {
+              return;
+            }
+            if (cleanupInvoked.compareAndSet(false, true)) {
+              log.warn(
+                  "Outer transaction did not commit (status={}); cleaning up KMS key={}",
+                  status,
+                  createdKmsKeyId);
+              cleanupKmsKey(createdKmsKeyId);
+            }
+          }
+        });
   }
 
   /**

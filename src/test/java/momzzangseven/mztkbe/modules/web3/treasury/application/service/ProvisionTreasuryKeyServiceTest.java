@@ -14,9 +14,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
@@ -40,6 +42,8 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.web3j.crypto.Credentials;
 
 @ExtendWith(MockitoExtension.class)
@@ -303,6 +307,117 @@ class ProvisionTreasuryKeyServiceTest {
     service.execute(command);
 
     verify(treasuryAuditRecorder).record(1L, DERIVED_ADDRESS, true, null);
+  }
+
+  @Test
+  void execute_throws_whenLegacyRowDisabled_andCleansUpKmsKey() {
+    TreasuryWallet disabledLegacy =
+        legacyRow(DERIVED_ADDRESS).toBuilder().status(TreasuryWalletStatus.DISABLED).build();
+    when(loadTreasuryWalletPort.loadByAlias("reward-treasury"))
+        .thenReturn(Optional.of(disabledLegacy));
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[] {3});
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenReturn(new Vrs(new byte[32], new byte[32], (byte) 27));
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(TreasuryWalletStateException.class)
+        .hasMessageContaining("DISABLED");
+
+    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+    verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+    verify(saveTreasuryWalletPort, never()).save(any(TreasuryWallet.class));
+    verify(applicationEventPublisher, never()).publishEvent(any());
+  }
+
+  @Test
+  void execute_registersSynchronization_andCleansUpOnRollback() {
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      primeSuccessfulMocks(Optional.empty());
+
+      ProvisionTreasuryKeyCommand command =
+          new ProvisionTreasuryKeyCommand(
+              1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+      service.execute(command);
+
+      List<TransactionSynchronization> registered =
+          TransactionSynchronizationManager.getSynchronizations();
+      assertThat(registered).hasSize(1);
+      verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+
+      registered.get(0).afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+      verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+      verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+    } finally {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
+  }
+
+  @Test
+  void execute_synchronization_doesNotCleanup_whenCommitted() {
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      primeSuccessfulMocks(Optional.empty());
+
+      ProvisionTreasuryKeyCommand command =
+          new ProvisionTreasuryKeyCommand(
+              1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+      service.execute(command);
+
+      List<TransactionSynchronization> registered =
+          TransactionSynchronizationManager.getSynchronizations();
+      assertThat(registered).hasSize(1);
+
+      registered.get(0).afterCompletion(TransactionSynchronization.STATUS_COMMITTED);
+
+      verify(kmsKeyLifecyclePort, never()).disableKey(anyString());
+      verify(kmsKeyLifecyclePort, never()).scheduleKeyDeletion(anyString(), anyInt());
+    } finally {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
+  }
+
+  @Test
+  void execute_inMethodFailure_invokesCleanupOnce_evenWhenSynchronizationFiresAfterRollback() {
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
+      when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
+          .thenReturn(false);
+      when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+      when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+          .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+      when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+          .thenReturn(new byte[] {3});
+      when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+          .thenThrow(new RuntimeException("kms unreachable"));
+
+      ProvisionTreasuryKeyCommand command =
+          new ProvisionTreasuryKeyCommand(
+              1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+      assertThatThrownBy(() -> service.execute(command)).isInstanceOf(RuntimeException.class);
+
+      List<TransactionSynchronization> registered =
+          TransactionSynchronizationManager.getSynchronizations();
+      assertThat(registered).hasSize(1);
+      registered.get(0).afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+      verify(kmsKeyLifecyclePort, Mockito.times(1)).disableKey("kms-key-id");
+      verify(kmsKeyLifecyclePort, Mockito.times(1)).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+    } finally {
+      TransactionSynchronizationManager.clearSynchronization();
+    }
   }
 
   private void primeSuccessfulMocks(Optional<TreasuryWallet> existing) {
