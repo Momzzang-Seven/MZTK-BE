@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.event;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.treasury.application.service.TreasuryAuditRecorder;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletArchivedEvent;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.event.TreasuryWalletDisabledEvent;
@@ -23,8 +24,16 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * wallet state transition has actually committed. Failure audits stay inside the service catch
  * blocks (still {@code REQUIRES_NEW}) so they survive an outer rollback, which is the intended
  * behaviour for "we tried and it blew up" records.
+ *
+ * <p>Each handler wraps the recorder call in {@code try/catch + log.warn} so an audit-side failure
+ * cannot propagate up out of {@code afterCommit}. Spring invokes registered AFTER_COMMIT
+ * synchronizations in a simple loop without per-listener exception isolation: an exception here
+ * would surface as a 500 to the caller despite the wallet row already being committed, and would
+ * skip subsequent AFTER_COMMIT listeners on the same event (e.g. KMS alias bind), leaving the
+ * system in an unrecoverable half-bound state. Mirrors {@code TreasuryWalletProvisionedKmsHandler}.
  */
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class TreasuryAuditEventHandler {
 
@@ -32,16 +41,43 @@ public class TreasuryAuditEventHandler {
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onProvisioned(TreasuryWalletProvisionedEvent event) {
-    treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    try {
+      treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    } catch (RuntimeException ex) {
+      log.warn(
+          "Success audit failed post-commit for provisioned wallet (alias={}, operator={});"
+              + " wallet row already committed, downstream AFTER_COMMIT handlers must still run",
+          event.walletAlias(),
+          event.operatorUserId(),
+          ex);
+    }
   }
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onDisabled(TreasuryWalletDisabledEvent event) {
-    treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    try {
+      treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    } catch (RuntimeException ex) {
+      log.warn(
+          "Success audit failed post-commit for disabled wallet (alias={}, operator={});"
+              + " wallet row already committed, downstream AFTER_COMMIT handlers must still run",
+          event.walletAlias(),
+          event.operatorUserId(),
+          ex);
+    }
   }
 
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
   public void onArchived(TreasuryWalletArchivedEvent event) {
-    treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    try {
+      treasuryAuditRecorder.record(event.operatorUserId(), event.walletAddress(), true, null);
+    } catch (RuntimeException ex) {
+      log.warn(
+          "Success audit failed post-commit for archived wallet (alias={}, operator={});"
+              + " wallet row already committed, downstream AFTER_COMMIT handlers must still run",
+          event.walletAlias(),
+          event.operatorUserId(),
+          ex);
+    }
   }
 }

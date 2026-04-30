@@ -1,5 +1,10 @@
 package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.event;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
@@ -63,5 +68,45 @@ class TreasuryAuditEventHandlerTest {
 
     verify(treasuryAuditRecorder).record(OPERATOR_ID, ADDRESS, true, null);
     verifyNoMoreInteractions(treasuryAuditRecorder);
+  }
+
+  @Test
+  void onProvisioned_swallowsRecorderException() {
+    doThrow(new RuntimeException("audit insert failed"))
+        .when(treasuryAuditRecorder)
+        .record(anyLong(), any(), anyBoolean(), any());
+
+    assertThatCode(
+            () ->
+                handler.onProvisioned(
+                    new TreasuryWalletProvisionedEvent(
+                        ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, false)))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void onDisabled_swallowsRecorderException() {
+    doThrow(new RuntimeException("audit insert failed"))
+        .when(treasuryAuditRecorder)
+        .record(anyLong(), any(), anyBoolean(), any());
+
+    assertThatCode(
+            () ->
+                handler.onDisabled(
+                    new TreasuryWalletDisabledEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID)))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void onArchived_swallowsRecorderException() {
+    doThrow(new RuntimeException("audit insert failed"))
+        .when(treasuryAuditRecorder)
+        .record(anyLong(), any(), anyBoolean(), any());
+
+    assertThatCode(
+            () ->
+                handler.onArchived(
+                    new TreasuryWalletArchivedEvent(ALIAS, KMS_KEY_ID, ADDRESS, OPERATOR_ID, 30)))
+        .doesNotThrowAnyException();
   }
 }

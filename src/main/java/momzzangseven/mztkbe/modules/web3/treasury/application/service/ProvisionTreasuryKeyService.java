@@ -54,9 +54,12 @@ import org.web3j.crypto.Credentials;
  * {@code cleanupKmsKey} (disable + 7-day scheduled deletion) ensures a half-provisioned KMS key
  * cannot accumulate. As a safety net for the proxy-commit boundary — where a body-level catch
  * cannot run — a {@link TransactionSynchronization} is registered immediately after {@code
- * createKey()} succeeds; its {@code afterCompletion(STATUS_ROLLED_BACK)} hook runs the same
- * cleanup. An {@link AtomicBoolean} interlock guarantees the cleanup body executes at most once
- * even when both the catch path and the synchronization fire (in-method exception → tx rollback).
+ * createKey()} succeeds. Its {@code afterCompletion} hook only runs cleanup on confirmed {@code
+ * STATUS_ROLLED_BACK}; on {@code STATUS_UNKNOWN} (or any unrecognised status) it skips cleanup and
+ * records an alert audit row instead, because the DB commit may actually have succeeded and tearing
+ * down the KMS key would orphan an ACTIVE wallet row pointing at a disabled/pending-deletion key.
+ * An {@link AtomicBoolean} interlock guarantees the cleanup body executes at most once even when
+ * both the catch path and the synchronization fire (in-method exception → tx rollback).
  *
  * <p>Failure audits (caught exceptions, address-mismatch, already-provisioned) are recorded inline
  * via {@link TreasuryAuditRecorder} ({@code REQUIRES_NEW}) so they survive an outer rollback. The
@@ -134,7 +137,7 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
     AtomicBoolean cleanupInvoked = new AtomicBoolean(false);
     try {
       kmsKeyId = kmsKeyLifecyclePort.createKey();
-      registerCleanupOnRollback(kmsKeyId, cleanupInvoked);
+      registerCleanupOnRollback(kmsKeyId, cleanupInvoked, command.operatorUserId(), derivedAddress);
       KmsKeyLifecyclePort.ImportParams params =
           kmsKeyLifecyclePort.getParametersForImport(kmsKeyId);
       wrappedKey = kmsKeyMaterialWrapperPort.wrap(rawPrivateKey, params.wrappingPublicKey());
@@ -182,11 +185,20 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
    * body-level catch cannot fire). The {@code cleanupInvoked} interlock is shared with the catch
    * block, guaranteeing single execution even when both paths fire on an in-method exception.
    *
+   * <p>Only {@code STATUS_ROLLED_BACK} triggers cleanup. {@code STATUS_UNKNOWN} (and any
+   * unrecognised future status) is treated conservatively: the DB commit may actually have
+   * succeeded, so we skip KMS teardown and record a {@code TX_STATUS_UNKNOWN} alert audit row
+   * instead of risking an ACTIVE wallet row pointing at a disabled/pending-deletion key.
+   *
    * <p>Guarded by {@link TransactionSynchronizationManager#isSynchronizationActive()} so unit tests
    * that exercise the service without a Spring transaction context (Mockito direct invocation) do
    * not blow up at registration time.
    */
-  private void registerCleanupOnRollback(String createdKmsKeyId, AtomicBoolean cleanupInvoked) {
+  private void registerCleanupOnRollback(
+      String createdKmsKeyId,
+      AtomicBoolean cleanupInvoked,
+      Long operatorUserId,
+      String derivedAddress) {
     if (!TransactionSynchronizationManager.isSynchronizationActive()) {
       return;
     }
@@ -194,15 +206,26 @@ public class ProvisionTreasuryKeyService implements ProvisionTreasuryKeyUseCase 
         new TransactionSynchronization() {
           @Override
           public void afterCompletion(int status) {
-            if (status == STATUS_COMMITTED) {
-              return;
-            }
-            if (cleanupInvoked.compareAndSet(false, true)) {
-              log.warn(
-                  "Outer transaction did not commit (status={}); cleaning up KMS key={}",
-                  status,
-                  createdKmsKeyId);
-              cleanupKmsKey(createdKmsKeyId);
+            switch (status) {
+              case STATUS_COMMITTED:
+                return;
+              case STATUS_ROLLED_BACK:
+                if (cleanupInvoked.compareAndSet(false, true)) {
+                  log.warn(
+                      "Outer transaction rolled back; cleaning up KMS key={}", createdKmsKeyId);
+                  cleanupKmsKey(createdKmsKeyId);
+                }
+                return;
+              case STATUS_UNKNOWN:
+              default:
+                log.error(
+                    "Outer transaction status={} is not COMMITTED/ROLLED_BACK; skipping KMS"
+                        + " cleanup to avoid orphaning a possibly-committed wallet row."
+                        + " Operator must verify kmsKeyId={} state.",
+                    status,
+                    createdKmsKeyId);
+                treasuryAuditRecorder.record(
+                    operatorUserId, derivedAddress, false, "TX_STATUS_UNKNOWN");
             }
           }
         });
