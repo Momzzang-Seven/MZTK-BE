@@ -11,11 +11,11 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ToggleClassStatusCommand;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ToggleClassStatusResult;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.SaveClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class ToggleClassStatusServiceTest {
 
   @Mock private LoadClassPort loadClassPort;
   @Mock private SaveClassPort saveClassPort;
-  @Mock private LoadTrainerSanctionPort loadTrainerSanctionPort;
+  @Mock private CheckTrainerSanctionPort checkTrainerSanctionPort;
 
   @InjectMocks private ToggleClassStatusService toggleClassStatusService;
 
@@ -89,7 +89,7 @@ class ToggleClassStatusServiceTest {
       // then
       assertThat(result.active()).isFalse();
       // 비활성화 시 제재 체크를 하지 않아야 한다 (불필요한 외부 호출 방지)
-      verify(loadTrainerSanctionPort, never()).hasActiveSanction(any());
+      verify(checkTrainerSanctionPort, never()).hasActiveSanction(any());
     }
   }
 
@@ -106,7 +106,7 @@ class ToggleClassStatusServiceTest {
     void execute_ReactivateSuspendedTrainer_ThrowsTrainerSuspendedException() {
       // given
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(inactiveClass()));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
 
       // when & then
       assertThatThrownBy(
@@ -123,7 +123,7 @@ class ToggleClassStatusServiceTest {
     void execute_ReactivateNonSuspendedTrainer_Succeeds() {
       // given
       given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(inactiveClass()));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(saveClassPort.save(any())).willReturn(activeClass());
 
       // when

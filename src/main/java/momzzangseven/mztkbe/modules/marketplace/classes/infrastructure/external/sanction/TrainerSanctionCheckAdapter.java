@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
  * sanction module's {@code application/port/in/} layer.
  */
 @Slf4j
-@Component
+@Component("classesTrainerSanctionCheckAdapter")
 @RequiredArgsConstructor
 public class TrainerSanctionCheckAdapter implements CheckTrainerSanctionPort {
 

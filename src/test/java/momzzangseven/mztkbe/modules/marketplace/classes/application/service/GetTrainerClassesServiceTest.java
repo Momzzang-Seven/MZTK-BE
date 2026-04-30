@@ -15,11 +15,11 @@ import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrainerClassesQuery;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrainerClassesResult;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -37,7 +37,7 @@ class GetTrainerClassesServiceTest {
 
   @Mock private LoadClassPort loadClassPort;
   @Mock private LoadClassImagesPort loadClassImagesPort;
-  @Mock private LoadTrainerSanctionPort loadTrainerSanctionPort;
+  @Mock private CheckTrainerSanctionPort checkTrainerSanctionPort;
 
   @InjectMocks private GetTrainerClassesService getTrainerClassesService;
 
@@ -76,7 +76,7 @@ class GetTrainerClassesServiceTest {
     @DisplayName("[GT-01] 제재 없는 트레이너 → isSuspended=false, suspendedUntil=null")
     void execute_NotSuspended_ReturnsFalseAndNullUntil() {
       // given
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadClassPort.findByTrainerId(eq(TRAINER_ID), any(Pageable.class)))
           .willReturn(new PageImpl<>(List.of()));
 
@@ -87,7 +87,7 @@ class GetTrainerClassesServiceTest {
       assertThat(result.isSuspended()).isFalse();
       assertThat(result.suspendedUntil()).isNull();
       // 제재 없을 때는 getSuspendedUntil 호출 안 해야 함
-      verify(loadTrainerSanctionPort, never()).getSuspendedUntil(TRAINER_ID);
+      verify(checkTrainerSanctionPort, never()).getSuspendedUntil(TRAINER_ID);
     }
 
     @Test
@@ -95,8 +95,8 @@ class GetTrainerClassesServiceTest {
     void execute_Suspended_ReturnsTrueAndSuspendedUntil() {
       // given
       LocalDateTime until = LocalDateTime.of(2025, 12, 31, 23, 59);
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
-      given(loadTrainerSanctionPort.getSuspendedUntil(TRAINER_ID)).willReturn(Optional.of(until));
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
+      given(checkTrainerSanctionPort.getSuspendedUntil(TRAINER_ID)).willReturn(Optional.of(until));
       given(loadClassPort.findByTrainerId(eq(TRAINER_ID), any(Pageable.class)))
           .willReturn(new PageImpl<>(List.of()));
 
@@ -112,8 +112,8 @@ class GetTrainerClassesServiceTest {
     @DisplayName("[GT-03] 제재 중이나 getSuspendedUntil이 empty → suspendedUntil=null")
     void execute_SuspendedButNoUntilDate_ReturnsNull() {
       // given
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
-      given(loadTrainerSanctionPort.getSuspendedUntil(TRAINER_ID)).willReturn(Optional.empty());
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
+      given(checkTrainerSanctionPort.getSuspendedUntil(TRAINER_ID)).willReturn(Optional.empty());
       given(loadClassPort.findByTrainerId(eq(TRAINER_ID), any(Pageable.class)))
           .willReturn(new PageImpl<>(List.of()));
 
@@ -138,7 +138,7 @@ class GetTrainerClassesServiceTest {
     @DisplayName("[GT-04] 클래스 없는 트레이너 → 빈 items, 썸네일 조회 미호출")
     void execute_NoClasses_EmptyItemsAndNoThumbnailCall() {
       // given
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadClassPort.findByTrainerId(eq(TRAINER_ID), any(Pageable.class)))
           .willReturn(new PageImpl<>(List.of()));
 
@@ -156,7 +156,7 @@ class GetTrainerClassesServiceTest {
       // given
       MarketplaceClass c1 = stubClass(1L, true);
       MarketplaceClass c2 = stubClass(2L, false);
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadClassPort.findByTrainerId(eq(TRAINER_ID), any(Pageable.class)))
           .willReturn(new PageImpl<>(List.of(c1, c2)));
       given(loadClassImagesPort.loadThumbnailKeys(anyList()))
@@ -176,7 +176,7 @@ class GetTrainerClassesServiceTest {
       // given
       MarketplaceClass c1 = stubClass(1L, true); // active
       MarketplaceClass c2 = stubClass(2L, false); // inactive
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(loadClassPort.findByTrainerId(eq(TRAINER_ID), any(Pageable.class)))
           .willReturn(new PageImpl<>(List.of(c1, c2)));
       given(loadClassImagesPort.loadThumbnailKeys(anyList()))
@@ -201,7 +201,7 @@ class GetTrainerClassesServiceTest {
     @DisplayName("[GT-07] 페이지 메타 정보 정확히 반환")
     void execute_PageMetadata_PassedThrough() {
       // given
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       Page<MarketplaceClass> page =
           new PageImpl<>(
               List.of(stubClass(1L, true)),

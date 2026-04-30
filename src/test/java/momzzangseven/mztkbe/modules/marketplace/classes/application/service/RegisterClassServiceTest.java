@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassTimeCommand;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.RegisterClassCommand;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.RegisterClassResult;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.ManageClassTagPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.SaveClassPort;
@@ -26,7 +27,6 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.Sav
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.UpdateClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.store.domain.model.TrainerStore;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,7 +41,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RegisterClassServiceTest {
 
   @Mock private LoadTrainerStorePort loadTrainerStorePort;
-  @Mock private LoadTrainerSanctionPort loadTrainerSanctionPort;
+  @Mock private CheckTrainerSanctionPort checkTrainerSanctionPort;
   @Mock private SaveClassPort saveClassPort;
   @Mock private SaveClassSlotPort saveClassSlotPort;
   @Mock private UpdateClassImagesPort updateClassImagesPort;
@@ -112,7 +112,7 @@ class RegisterClassServiceTest {
     void execute_ValidCommand_SavesClassAndSlots() {
       // given
       given(loadTrainerStorePort.findByTrainerId(TRAINER_ID)).willReturn(Optional.of(mockStore()));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
       given(saveClassPort.save(any())).willReturn(savedClass());
 
       // when
@@ -151,7 +151,7 @@ class RegisterClassServiceTest {
     void execute_TrainerSuspended_ThrowsTrainerSuspendedException() {
       // given
       given(loadTrainerStorePort.findByTrainerId(TRAINER_ID)).willReturn(Optional.of(mockStore()));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(true);
 
       // when & then
       assertThatThrownBy(() -> registerClassService.execute(validCommand()))
@@ -164,7 +164,7 @@ class RegisterClassServiceTest {
     void execute_SlotTimeConflict_ThrowsSlotTimeConflictException() {
       // given
       given(loadTrainerStorePort.findByTrainerId(TRAINER_ID)).willReturn(Optional.of(mockStore()));
-      given(loadTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
+      given(checkTrainerSanctionPort.hasActiveSanction(TRAINER_ID)).willReturn(false);
 
       // 동일 요일, 겹치는 시간 슬롯 2개 (10:00 + 10:30, duration=60 → 겹침)
       RegisterClassCommand conflictCommand =
