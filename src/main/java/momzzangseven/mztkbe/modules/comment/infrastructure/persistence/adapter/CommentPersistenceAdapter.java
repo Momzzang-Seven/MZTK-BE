@@ -6,6 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
+import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
@@ -63,6 +67,28 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public List<Comment> loadRootCommentsByCursor(Long postId, CursorPageRequest pageRequest) {
+    Pageable pageable = PageRequest.of(0, pageRequest.limitWithProbe());
+    List<CommentEntity> entities =
+        pageRequest.hasCursor()
+            ? commentRepository.findRootCommentsByPostIdAfterCursor(
+                postId, pageRequest.cursor().createdAt(), pageRequest.cursor().id(), pageable)
+            : commentRepository.findRootCommentsByPostIdFirstPage(postId, pageable);
+    return entities.stream().map(CommentEntity::toDomain).toList();
+  }
+
+  @Override
+  public List<Comment> loadRepliesByCursor(Long parentId, CursorPageRequest pageRequest) {
+    Pageable pageable = PageRequest.of(0, pageRequest.limitWithProbe());
+    List<CommentEntity> entities =
+        pageRequest.hasCursor()
+            ? commentRepository.findRepliesByParentIdAfterCursor(
+                parentId, pageRequest.cursor().createdAt(), pageRequest.cursor().id(), pageable)
+            : commentRepository.findRepliesByParentIdFirstPage(parentId, pageable);
+    return entities.stream().map(CommentEntity::toDomain).toList();
+  }
+
+  @Override
   public Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds) {
     if (parentIds == null || parentIds.isEmpty()) {
       return Map.of();
@@ -73,6 +99,54 @@ public class CommentPersistenceAdapter
             Collectors.toMap(
                 CommentJpaRepository.DirectReplyCount::getParentId,
                 CommentJpaRepository.DirectReplyCount::getReplyCount));
+  }
+
+  @Override
+  public Map<Long, Long> countCommentsByPostIds(List<Long> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countCommentsByPostIds(postIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.PostCommentCount::getPostId,
+                CommentJpaRepository.PostCommentCount::getCommentCount));
+  }
+
+  @Override
+  public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
+      FindCommentedPostRefsQuery query) {
+    query.validate();
+    String searchPattern = LikePatternEscaper.escape(query.normalizedSearch());
+    List<CommentJpaRepository.CommentedPostRefProjection> refs =
+        query.pageRequest().hasCursor()
+            ? commentRepository.findCommentedPostRefsAfterCursor(
+                query.requesterId(),
+                query.normalizedPostType(),
+                searchPattern,
+                query.pageRequest().cursor().createdAt(),
+                query.pageRequest().cursor().id(),
+                query.pageRequest().limitWithProbe())
+            : commentRepository.findCommentedPostRefsFirstPage(
+                query.requesterId(),
+                query.normalizedPostType(),
+                searchPattern,
+                query.pageRequest().limitWithProbe());
+    return refs.stream()
+        .map(
+            ref ->
+                new LatestCommentedPostRef(
+                    ref.getPostId(), ref.getLatestCommentId(), ref.getLatestCommentedAt()))
+        .toList();
+  }
+
+  @Override
+  public long countCommentsByPostId(Long postId) {
+    if (postId == null) {
+      return 0L;
+    }
+    return commentRepository.countByPostId(postId);
   }
 
   @Override

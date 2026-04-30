@@ -29,11 +29,14 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminLocalQuesti
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminOnchainAnswerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminOnchainQuestionView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRefundReviewResult;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementReviewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAutoAcceptConfigurationValidator;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -107,7 +110,7 @@ class QnaAdminEscrowControllerTest {
         .andExpect(jsonPath("$.data.answerId").value(201))
         .andExpect(jsonPath("$.data.processable").value(true))
         .andExpect(
-            jsonPath("$.data.authority.currentServerSignerAddress")
+            jsonPath("$.data.authority.serverSigner.signerAddress")
                 .value("0x1111111111111111111111111111111111111111"))
         .andExpect(jsonPath("$.data.authority.requiresUserSignature").value(false))
         .andExpect(jsonPath("$.data.authority.authorityModel").value("SERVER_RELAYER_ONLY"));
@@ -233,7 +236,9 @@ class QnaAdminEscrowControllerTest {
         true,
         false,
         false,
-        List.of(new QnaAdminReviewValidationItem("RELAYER_NOT_REGISTERED", true, false, "ok")));
+        List.of(
+            new QnaAdminReviewValidationItem(
+                QnaAdminReviewValidationCode.RELAYER_NOT_REGISTERED, true, false, "ok")));
   }
 
   private QnaAdminRefundReviewResult sampleRefundReview() {
@@ -248,7 +253,7 @@ class QnaAdminEscrowControllerTest {
         false,
         List.of(
             new QnaAdminReviewValidationItem(
-                "ONCHAIN_QUESTION_HAS_ANSWERS",
+                QnaAdminReviewValidationCode.ONCHAIN_QUESTION_HAS_ANSWERS,
                 true,
                 true,
                 "refund will move the question to DELETED_WITH_ANSWERS")));
@@ -267,7 +272,12 @@ class QnaAdminEscrowControllerTest {
 
   private QnaAdminExecutionAuthorityView authority() {
     return new QnaAdminExecutionAuthorityView(
-        "0x1111111111111111111111111111111111111111", true, false, "SERVER_RELAYER_ONLY");
+        ExecutionSignerCapabilityView.ready(
+            "sponsor-treasury", "0x1111111111111111111111111111111111111111"),
+        true,
+        QnaAdminRelayerRegistrationStatus.REGISTERED,
+        false,
+        "SERVER_RELAYER_ONLY");
   }
 
   private RequestPostProcessor adminPrincipal(Long userId) {

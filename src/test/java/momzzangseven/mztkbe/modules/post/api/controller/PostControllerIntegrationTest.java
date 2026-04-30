@@ -154,7 +154,7 @@ class PostControllerIntegrationTest {
   }
 
   @Test
-  @DisplayName("PATCH/DELETE /posts/{id} → DB 수정/삭제 반영")
+  @DisplayName("PATCH/DELETE /posts/{id} → FREE content 수정과 삭제가 DB에 반영")
   void updateAndDelete_realFlow_updatesAndDeletesInH2() throws Exception {
     MvcResult createResult =
         mockMvc
@@ -172,13 +172,13 @@ class PostControllerIntegrationTest {
             patch("/posts/" + postId)
                 .with(userPrincipal(202L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("title", "수정 제목", "content", "수정 본문"))))
+                .content(json(Map.of("content", "수정 본문"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postId").value(postId));
 
     PostEntity updated = postJpaRepository.findById(postId).orElseThrow();
-    assertThat(updated.getTitle()).isEqualTo("수정 제목");
+    assertThat(updated.getTitle()).isNull();
     assertThat(updated.getContent()).isEqualTo("수정 본문");
     org.mockito.Mockito.verifyNoInteractions(imageModuleAdapter);
 
@@ -189,6 +189,96 @@ class PostControllerIntegrationTest {
         .andExpect(jsonPath("$.data.postId").value(postId));
 
     assertThat(postJpaRepository.findById(postId)).isEmpty();
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{id} FREE with title returns 400 and does not save title")
+  void updateFreePost_withTitle_returns400() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(203L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "초기 본문"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+    Long postId = extractPostId(createResult);
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(203L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "수정 제목"))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
+
+    PostEntity updated = postJpaRepository.findById(postId).orElseThrow();
+    assertThat(updated.getTitle()).isNull();
+    assertThat(updated.getContent()).isEqualTo("초기 본문");
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{id} QUESTION with title returns 200 and saves title")
+  void updateQuestionPost_withTitle_returns200() throws Exception {
+    Long postId = createQuestionPost(204L, "기존 질문 제목", "질문 본문", 100L, List.of());
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(204L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", "수정 질문 제목"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(postId));
+
+    PostEntity updated = postJpaRepository.findById(postId).orElseThrow();
+    assertThat(updated.getTitle()).isEqualTo("수정 질문 제목");
+    assertThat(updated.getContent()).isEqualTo("질문 본문");
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{id} FREE with blank title returns 400")
+  void updateFreePost_withBlankTitle_returns400() throws Exception {
+    MvcResult createResult =
+        mockMvc
+            .perform(
+                post("/posts/free")
+                    .with(userPrincipal(205L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "초기 본문"))))
+            .andExpect(status().isCreated())
+            .andReturn();
+    Long postId = extractPostId(createResult);
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(205L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", " "))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{id} QUESTION with blank title returns 400")
+  void updateQuestionPost_withBlankTitle_returns400() throws Exception {
+    Long postId = createQuestionPost(208L, "기존 질문 제목", "질문 본문", 100L, List.of());
+
+    mockMvc
+        .perform(
+            patch("/posts/" + postId)
+                .with(userPrincipal(208L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("title", " "))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("POST_003"));
   }
 
   @Test

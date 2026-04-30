@@ -88,7 +88,6 @@ web3:
     treasury:
       wallet-alias: reward-treasury
       key-encryption-key-b64: "dGVzdC1rZXktZW5jcnlwdGlvbi1rZXktcGxhY2Vob2xkZXI=" #gitleaks:allow
-      treasury-address: "0x0000000000000000000000000000000000000000"
   escrow:
     marketplace-contract-address: "0x0000000000000000000000000000000000000000"
     qna-contract-address: "0x0000000000000000000000000000000000000000"

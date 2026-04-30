@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.token.application.port.out.LoadTreasuryKeyPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasurySignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
@@ -35,6 +36,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private final ReserveNoncePort reserveNoncePort;
   private final Web3ContractPort web3ContractPort;
   private final Web3CoreProperties web3CoreProperties;
+  private final LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort;
 
   private final String workerId = "issuer-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -46,6 +48,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       ReserveNoncePort reserveNoncePort,
       Web3ContractPort web3ContractPort,
       TransactionRewardTokenProperties rewardTokenProperties,
+      LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort,
       RetryStrategy retryStrategy,
       Web3CoreProperties web3CoreProperties) {
     super(
@@ -57,6 +60,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.loadTreasuryKeyPort = loadTreasuryKeyPort;
     this.reserveNoncePort = reserveNoncePort;
     this.web3ContractPort = web3ContractPort;
+    this.loadRewardTreasurySignerConfigPort = loadRewardTreasurySignerConfigPort;
     this.web3CoreProperties = web3CoreProperties;
   }
 
@@ -76,11 +80,12 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
+    var rewardTreasurySignerConfig = loadRewardTreasurySignerConfigPort.load();
     var treasuryKey =
         loadTreasuryKeyPort
             .loadByAlias(
-                rewardTokenProperties.getTreasury().getWalletAlias(),
-                rewardTokenProperties.getTreasury().getKeyEncryptionKeyB64())
+                rewardTreasurySignerConfig.walletAlias(),
+                rewardTreasurySignerConfig.keyEncryptionKeyB64())
             .orElse(null);
     if (treasuryKey == null) {
       items.forEach(

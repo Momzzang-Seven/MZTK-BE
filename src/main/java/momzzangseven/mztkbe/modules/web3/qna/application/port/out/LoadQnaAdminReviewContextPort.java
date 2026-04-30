@@ -2,8 +2,10 @@ package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
 
 public interface LoadQnaAdminReviewContextPort {
 
@@ -34,7 +36,10 @@ public interface LoadQnaAdminReviewContextPort {
     }
   }
 
-  record ExecutionAuthority(String signerAddress, boolean relayerRegistered) {}
+  record ExecutionAuthority(
+      ExecutionSignerCapabilityView serverSigner,
+      boolean relayerRegistered,
+      QnaAdminRelayerRegistrationStatus relayerRegistrationStatus) {}
 
   record LocalQuestion(
       Long postId,

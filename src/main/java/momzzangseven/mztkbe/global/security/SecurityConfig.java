@@ -118,6 +118,8 @@ public class SecurityConfig {
                     .authenticated()
 
                     // --- User & Me Endpoints ---
+                    .requestMatchers(HttpMethod.GET, "/users/leaderboard")
+                    .permitAll()
                     .requestMatchers(HttpMethod.GET, "/users/me")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/auth/withdrawal")
@@ -182,6 +184,18 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/posts/free")
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/users/me/commented-posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/posts/{postId}/comments")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/comments/{commentId}/replies")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/users/me/liked-posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/users/me/posts")
                     .authenticated()
                     // Public detail read supports optional JWT. Missing/invalid tokens fall back to
                     // anonymous access in JwtAuthenticationFilter, while withdrawn-user tokens are

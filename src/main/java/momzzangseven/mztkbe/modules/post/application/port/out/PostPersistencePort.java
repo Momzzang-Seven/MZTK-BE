@@ -2,8 +2,11 @@ package momzzangseven.mztkbe.modules.post.application.port.out;
 
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public interface PostPersistencePort {
 
@@ -18,7 +21,14 @@ public interface PostPersistencePort {
 
   boolean existsPost(Long postId);
 
+  List<Post> loadPostsByIdsPreservingOrder(List<Long> postIds);
+
   List<Post> findPostsByCondition(PostSearchCondition condition, List<Long> filteredPostIds);
+
+  List<Post> findPostsByCursorCondition(PostCursorSearchCondition condition, Long tagId);
+
+  List<Post> findPostsByAuthorCursor(
+      Long authorId, PostType type, Long tagId, String search, CursorPageRequest pageRequest);
 
   int markQuestionPostSolved(Long postId);
 }

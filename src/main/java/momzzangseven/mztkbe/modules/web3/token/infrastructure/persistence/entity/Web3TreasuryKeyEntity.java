@@ -32,10 +32,10 @@ public class Web3TreasuryKeyEntity {
   @Column(name = "wallet_alias", nullable = false, unique = true, length = 64)
   private String walletAlias;
 
-  @Column(name = "treasury_address", nullable = false, length = 42)
+  @Column(name = "treasury_address", length = 42)
   private String treasuryAddress;
 
-  @Column(name = "treasury_private_key_encrypted", nullable = false, columnDefinition = "TEXT")
+  @Column(name = "treasury_private_key_encrypted", columnDefinition = "TEXT")
   private String treasuryPrivateKeyEncrypted;
 
   @Column(name = "created_at", nullable = false)

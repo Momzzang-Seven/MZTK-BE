@@ -41,6 +41,7 @@ class PostListResultTest {
         PostListResult.fromDomain(
             post,
             2L,
+            5L,
             true,
             nickname,
             profileImageUrl,
@@ -52,6 +53,7 @@ class PostListResultTest {
     assertThat(result.title()).isEqualTo("title");
     assertThat(result.content()).isEqualTo("content");
     assertThat(result.likeCount()).isEqualTo(2L);
+    assertThat(result.commentCount()).isEqualTo(5L);
     assertThat(result.liked()).isTrue();
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isFalse();
@@ -80,7 +82,7 @@ class PostListResultTest {
             .build();
 
     PostListResult result =
-        PostListResult.fromDomain(post, 1L, false, "writer", "profile", List.of());
+        PostListResult.fromDomain(post, 1L, 0L, false, "writer", "profile", List.of());
 
     assertThat(result.isSolved()).isTrue();
   }
@@ -101,7 +103,7 @@ class PostListResultTest {
             .build();
 
     PostListResult result =
-        PostListResult.fromDomain(post, 1L, false, "writer", "profile", List.of());
+        PostListResult.fromDomain(post, 1L, 0L, false, "writer", "profile", List.of());
 
     assertThat(result.isSolved()).isTrue();
   }
@@ -121,7 +123,7 @@ class PostListResultTest {
             .build();
 
     PostListResult result =
-        PostListResult.fromDomain(post, 1L, false, "writer", "profile", List.of());
+        PostListResult.fromDomain(post, 1L, 0L, false, "writer", "profile", List.of());
 
     assertThat(result.isSolved()).isTrue();
   }
@@ -149,6 +151,7 @@ class PostListResultTest {
           PostListResult.fromDomain(
               basePost(1L),
               2L,
+              3L,
               true,
               "n",
               "p",
@@ -165,7 +168,8 @@ class PostListResultTest {
     @Test
     @DisplayName("[M-2] fromDomain coerces null images to empty list")
     void fromDomain_withNullImages_returnsEmptyList() {
-      PostListResult result = PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", null);
+      PostListResult result =
+          PostListResult.fromDomain(basePost(1L), 0L, 0L, false, "n", "p", null);
 
       assertThat(result.images()).isNotNull().isEmpty();
     }
@@ -174,7 +178,7 @@ class PostListResultTest {
     @DisplayName("[M-3] fromDomain preserves empty images list")
     void fromDomain_withEmptyImages_preservesEmpty() {
       PostListResult result =
-          PostListResult.fromDomain(basePost(1L), 0L, false, "n", "p", List.of());
+          PostListResult.fromDomain(basePost(1L), 0L, 0L, false, "n", "p", List.of());
 
       assertThat(result.images()).isNotNull().isEmpty();
     }

@@ -6,7 +6,9 @@ import static momzzangseven.mztkbe.modules.tag.infrastructure.persistence.entity
 import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
@@ -29,8 +31,22 @@ public class PostTagLinkAdapter implements LoadTagPort, LinkTagPort {
 
   // 2. 태그 이름으로 게시글 ID 찾기 (검색용)
   @Override
+  public Optional<Long> findTagIdByName(String tagName) {
+    if (tagName == null || tagName.isBlank()) {
+      return Optional.empty();
+    }
+    String searchTagName = tagName.trim().toLowerCase(Locale.ROOT);
+    return Optional.ofNullable(
+        queryFactory
+            .select(tagEntity.id)
+            .from(tagEntity)
+            .where(tagEntity.name.eq(searchTagName))
+            .fetchOne());
+  }
+
+  @Override
   public List<Long> findPostIdsByTagName(String tagName) {
-    String searchTagName = tagName.trim().toLowerCase();
+    String searchTagName = tagName.trim().toLowerCase(Locale.ROOT);
     return queryFactory
         .select(postTagEntity.postId)
         .from(tagEntity)

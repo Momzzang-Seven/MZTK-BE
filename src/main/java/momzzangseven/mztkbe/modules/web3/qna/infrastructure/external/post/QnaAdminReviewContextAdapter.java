@@ -5,26 +5,33 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminSignerAddressPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadExecutionSignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@Slf4j
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminEnabled
+@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
 public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPort {
 
   private final GetPostContextUseCase getPostContextUseCase;
@@ -33,7 +40,7 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
   private final LoadQnaAnswerIdsPort loadQnaAnswerIdsPort;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
-  private final LoadQnaAdminSignerAddressPort loadQnaAdminSignerAddressPort;
+  private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
   private final QnaContractCallSupport qnaContractCallSupport;
   private final LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
   private final QnaEscrowProperties qnaEscrowProperties;
@@ -112,11 +119,28 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
   }
 
   private ExecutionAuthority loadAuthority() {
-    String signerAddress = loadQnaAdminSignerAddressPort.loadSignerAddress();
-    boolean relayerRegistered =
-        qnaContractCallSupport.isRelayerRegistered(
-            qnaEscrowProperties.getQnaContractAddress(), signerAddress);
-    return new ExecutionAuthority(signerAddress, relayerRegistered);
+    var serverSigner = probeExecutionSignerCapabilityUseCase.execute();
+    boolean relayerRegistered = false;
+    QnaAdminRelayerRegistrationStatus relayerRegistrationStatus =
+        QnaAdminRelayerRegistrationStatus.UNCHECKED;
+    if (serverSigner.signable() && serverSigner.signerAddress() != null) {
+      try {
+        relayerRegistered =
+            qnaContractCallSupport.isRelayerRegistered(
+                qnaEscrowProperties.getQnaContractAddress(), serverSigner.signerAddress());
+        relayerRegistrationStatus =
+            relayerRegistered
+                ? QnaAdminRelayerRegistrationStatus.REGISTERED
+                : QnaAdminRelayerRegistrationStatus.NOT_REGISTERED;
+      } catch (RuntimeException e) {
+        relayerRegistrationStatus = QnaAdminRelayerRegistrationStatus.CHECK_FAILED;
+        log.warn(
+            "Failed to validate QnA admin relayer registration during review context load: signerAddress={}",
+            serverSigner.signerAddress(),
+            e);
+      }
+    }
+    return new ExecutionAuthority(serverSigner, relayerRegistered, relayerRegistrationStatus);
   }
 
   private List<String> loadRefundAnswerResourceIds(Long postId, boolean forUpdate) {

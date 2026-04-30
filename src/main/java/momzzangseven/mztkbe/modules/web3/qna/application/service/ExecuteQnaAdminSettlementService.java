@@ -5,6 +5,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.ExecuteQnaAdminSettlementUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaAdminSettlementUseCase;
@@ -53,10 +54,10 @@ public class ExecuteQnaAdminSettlementService implements ExecuteQnaAdminSettleme
             localAnswer.content()));
   }
 
-  private void throwValidationFailure(String blockingReason) {
+  private void throwValidationFailure(QnaAdminReviewValidationCode blockingReason) {
     if (QnaAdminReviewDecider.isBadRequestCode(blockingReason)) {
-      throw new Web3InvalidInputException(blockingReason);
+      throw new Web3InvalidInputException(blockingReason.name());
     }
-    throw new Web3TransactionStateInvalidException(blockingReason);
+    throw new Web3TransactionStateInvalidException(blockingReason.name());
   }
 }
