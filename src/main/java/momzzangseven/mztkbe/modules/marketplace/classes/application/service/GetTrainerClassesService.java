@@ -10,10 +10,10 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrain
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrainerClassesResult;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetTrainerClassesResult.TrainerClassItem;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetTrainerClassesUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.CheckTrainerSanctionPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
-import momzzangseven.mztkbe.modules.marketplace.sanction.application.port.out.LoadTrainerSanctionPort;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Returns both active and inactive classes. Thumbnail keys are batch-loaded from the image
  * module. The trainer's current sanction status ({@code isSuspended} / {@code suspendedUntil}) is
- * loaded via {@link LoadTrainerSanctionPort} and included in the result so the front-end can
+ * loaded via {@link CheckTrainerSanctionPort} and included in the result so the front-end can
  * display a suspension notice without a separate round-trip.
  */
 @Slf4j
@@ -35,17 +35,17 @@ public class GetTrainerClassesService implements GetTrainerClassesUseCase {
 
   private final LoadClassPort loadClassPort;
   private final LoadClassImagesPort loadClassImagesPort;
-  private final LoadTrainerSanctionPort loadTrainerSanctionPort;
+  private final CheckTrainerSanctionPort checkTrainerSanctionPort;
 
   @Override
   public GetTrainerClassesResult execute(GetTrainerClassesQuery query) {
     log.debug("Fetching trainer classes: trainerId={}, page={}", query.trainerId(), query.page());
 
     // Sanction status — queried upfront so the banner is always visible alongside the list
-    boolean isSuspended = loadTrainerSanctionPort.hasActiveSanction(query.trainerId());
+    boolean isSuspended = checkTrainerSanctionPort.hasActiveSanction(query.trainerId());
     LocalDateTime suspendedUntil =
         isSuspended
-            ? loadTrainerSanctionPort.getSuspendedUntil(query.trainerId()).orElse(null)
+            ? checkTrainerSanctionPort.getSuspendedUntil(query.trainerId()).orElse(null)
             : null;
 
     PageRequest pageable =
