@@ -20,13 +20,14 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassDet
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassItem;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassTagPort;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.SaveClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.MarketplaceClassEntity;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.QClassSlotEntity;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.repository.MarketplaceClassJpaRepository;
-import momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.entity.TrainerStoreEntity;
+import momzzangseven.mztkbe.modules.marketplace.store.domain.model.TrainerStore;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -67,6 +68,7 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
 
   private final MarketplaceClassJpaRepository classJpaRepository;
   private final LoadClassTagPort loadClassTagPort;
+  private final LoadTrainerStorePort loadTrainerStorePort;
   private final JPAQueryFactory queryFactory;
   private final EntityManager entityManager;
 
@@ -284,21 +286,22 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
   /**
    * {@inheritDoc}
    *
-   * <p>Uses a single JPQL LEFT JOIN to load the class and its trainer's store in one round-trip,
-   * eliminating the N+1 query pattern.
+   * <p>Loads the class entity and then fetches trainer store information via {@link
+   * LoadTrainerStorePort} in a separate query. This replaces the previous JPQL LEFT JOIN on {@code
+   * TrainerStoreEntity}, which violated the cross-module boundary rule (infrastructure entities
+   * from the {@code store} module must not be referenced here).
    */
   @Override
   public Optional<ClassDetailInfo> findClassDetailById(Long classId) {
     log.debug("Loading class detail by id: {}", classId);
 
-    List<Object[]> rows = classJpaRepository.findClassWithStore(classId);
-    if (rows.isEmpty()) {
+    MarketplaceClassEntity entity = classJpaRepository.findByIdAndActiveTrue(classId).orElse(null);
+    if (entity == null) {
       return Optional.empty();
     }
 
-    Object[] row = rows.get(0);
-    MarketplaceClassEntity entity = (MarketplaceClassEntity) row[0];
-    TrainerStoreEntity store = (TrainerStoreEntity) row[1]; // null when trainer has no store
+    // Fetch store via port — respects cross-module boundary (no TrainerStoreEntity import)
+    TrainerStore store = loadTrainerStorePort.findByTrainerId(entity.getTrainerId()).orElse(null);
 
     List<String> tags = loadClassTagPort.findTagNamesByClassId(classId);
     // Decode features via toDomainWithTags (avoids duplicating the decode() logic)
