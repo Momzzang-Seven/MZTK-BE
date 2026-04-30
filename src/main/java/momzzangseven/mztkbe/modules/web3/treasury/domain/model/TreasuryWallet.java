@@ -107,6 +107,14 @@ public class TreasuryWallet {
               + existing.walletAlias
               + "' has no walletAddress on file — cannot backfill");
     }
+    if (existing.status != null && existing.status != TreasuryWalletStatus.ACTIVE) {
+      throw new TreasuryWalletStateException(
+          "Treasury wallet '"
+              + existing.walletAlias
+              + "' has status="
+              + existing.status
+              + " — only legacy rows with null/ACTIVE status can be backfilled");
+    }
     return existing.toBuilder()
         .kmsKeyId(kmsKeyId)
         .status(TreasuryWalletStatus.ACTIVE)

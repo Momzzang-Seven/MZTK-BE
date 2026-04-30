@@ -300,6 +300,47 @@ class TreasuryWalletTest {
           .isInstanceOf(NullPointerException.class)
           .hasMessage("clock must not be null");
     }
+
+    @Test
+    @DisplayName("[M-46a] backfill — ACTIVE 상태 (V056 백필 후) 행은 정상적으로 backfill 가능")
+    void backfill_existingActive_succeeds() {
+      TreasuryWallet activeLegacy =
+          legacyRow().toBuilder().status(TreasuryWalletStatus.ACTIVE).build();
+
+      TreasuryWallet result = TreasuryWallet.backfill(activeLegacy, "fresh-kms-id", LATER_CLOCK);
+
+      assertThat(result.getKmsKeyId()).isEqualTo("fresh-kms-id");
+      assertThat(result.getStatus()).isEqualTo(TreasuryWalletStatus.ACTIVE);
+      assertThat(result.getKeyOrigin()).isEqualTo(TreasuryKeyOrigin.IMPORTED);
+    }
+
+    @Test
+    @DisplayName("[M-46b] backfill — DISABLED 상태 행은 TreasuryWalletStateException — ACTIVE 우회 차단")
+    void backfill_existingDisabled_throwsState() {
+      TreasuryWallet disabledLegacy =
+          legacyRow().toBuilder().status(TreasuryWalletStatus.DISABLED).build();
+
+      assertThatThrownBy(() -> TreasuryWallet.backfill(disabledLegacy, "fresh-kms-id", LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .satisfies(
+              ex -> {
+                TreasuryWalletStateException twse = (TreasuryWalletStateException) ex;
+                assertThat(twse.getCode()).isEqualTo("TREASURY_001");
+                assertThat(twse.getHttpStatus()).isEqualTo(HttpStatus.CONFLICT);
+                assertThat(twse.getMessage()).contains("DISABLED").contains(REWARD_ALIAS);
+              });
+    }
+
+    @Test
+    @DisplayName("[M-46c] backfill — ARCHIVED 상태 행은 TreasuryWalletStateException")
+    void backfill_existingArchived_throwsState() {
+      TreasuryWallet archivedLegacy =
+          legacyRow().toBuilder().status(TreasuryWalletStatus.ARCHIVED).build();
+
+      assertThatThrownBy(() -> TreasuryWallet.backfill(archivedLegacy, "fresh-kms-id", LATER_CLOCK))
+          .isInstanceOf(TreasuryWalletStateException.class)
+          .hasMessageContaining("ARCHIVED");
+    }
   }
 
   // =========================================================================
