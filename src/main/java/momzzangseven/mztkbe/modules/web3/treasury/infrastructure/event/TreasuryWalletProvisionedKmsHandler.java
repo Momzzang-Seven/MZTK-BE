@@ -14,8 +14,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * recovery) once the {@code kms_key_id} has been persisted. Lives in {@code infrastructure/event}
  * so the application layer remains unaware of Spring's event-listener wiring.
  *
- * <p>Exceptions are swallowed; operator visibility comes from
- * {@code web3_treasury_kms_audits}.
+ * <p>Exceptions are swallowed; operator visibility comes from {@code web3_treasury_kms_audits}.
  */
 @Component
 @Slf4j

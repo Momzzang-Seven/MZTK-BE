@@ -55,8 +55,7 @@ class BindKmsAliasServiceTest {
     doThrow(new KmsAliasAlreadyExistsException("alias taken"))
         .when(kmsKeyLifecyclePort)
         .createAlias(ALIAS, KMS_KEY_ID);
-    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS))
-        .thenReturn(KmsKeyState.PENDING_DELETION);
+    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS)).thenReturn(KmsKeyState.PENDING_DELETION);
 
     service.execute(cmd());
 
@@ -123,8 +122,7 @@ class BindKmsAliasServiceTest {
     doThrow(new KmsAliasAlreadyExistsException("alias taken"))
         .when(kmsKeyLifecyclePort)
         .createAlias(ALIAS, KMS_KEY_ID);
-    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS))
-        .thenReturn(KmsKeyState.PENDING_DELETION);
+    when(kmsKeyLifecyclePort.describeAliasTarget(ALIAS)).thenReturn(KmsKeyState.PENDING_DELETION);
     RuntimeException updateFailure = new IllegalStateException("KMS update down");
     doThrow(updateFailure).when(kmsKeyLifecyclePort).updateAlias(ALIAS, KMS_KEY_ID);
 
