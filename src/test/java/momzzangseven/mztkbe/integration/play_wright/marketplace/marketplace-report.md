@@ -1,6 +1,6 @@
 # 마켓플레이스 API Playwright E2E 테스트 보고서
 
-> **최종 실행 결과**: ✅ 36 passed / 0 failed (8.9s)
+> **최종 실행 결과**: ✅ 48 passed / 0 failed (16.8s)
 > **실행 명령**: `npx playwright test marketplace.spec.ts`
 > **실행 환경**: `http://127.0.0.1:8080`
 
@@ -312,15 +312,45 @@
 
 ---
 
-## 3. 알려진 이슈
+## 3. 예약 (Reservation) API 테스트 결과
 
-| 이슈 | 내용 | TC |
-|------|------|----|
-| 카테고리 필터 불완전 | `?category=PT` 쿼리 파라미터가 서버에서 완전히 필터링되지 않아 다른 카테고리 항목이 포함됨 | TC-CL-26 |
+### 사전 조건
+
+- 각 테스트는 `setupClassWithSlot()` 헬퍼로 전용 클래스+슬롯을 생성합니다.
+- `getNextWeekday(day)` 함수는 **로컬 시간 기준** 다음 해당 요일 날짜를 반환합니다 (UTC/KST 시차 보정 적용).
+- 예약 생성 시 `slotId`는 클래스 상세 응답의 `classTimes[0].timeId` 값을 사용합니다.
 
 ---
 
-## 4. 테스트 검증 종합 결과
+### TC-RV-01~12 결과 요약
+
+| TC | 검증 항목 | 기대 코드 | 결과 |
+|----|---------|---------|------|
+| TC-RV-01 | 유효한 예약 생성 → PENDING | 200 | ✅ PASS |
+| TC-RV-02 | 트레이너 승인 → APPROVED | 200 | ✅ PASS |
+| TC-RV-03 | 트레이너 반려 → REJECTED | 200 | ✅ PASS |
+| TC-RV-04 | 유저 취소 → USER_CANCELLED | 200 | ✅ PASS |
+| TC-RV-05 | 4주 스케줄 조회 → availableDates | 200 | ✅ PASS |
+| TC-RV-06 | 서명 금액 불일치 방어 | 400 `MARKETPLACE_020` | ✅ PASS |
+| TC-RV-07 | 슬롯 정원 초과 방어 | 409 `MARKETPLACE_017` | ✅ PASS |
+| TC-RV-08 | 타인 취소 차단 | 403 | ✅ PASS |
+| TC-RV-09 | 타 트레이너 승인 차단 | 403 | ✅ PASS |
+| TC-RV-10 | 미인증 예약 생성 차단 | 401 | ✅ PASS |
+| TC-RV-11 | PENDING 상태에서 완료 차단 | 409 `MARKETPLACE_018` | ✅ PASS |
+| TC-RV-12 | APPROVED 후 반려 차단 (상태 전이 방어) | 409 `MARKETPLACE_018` | ✅ PASS |
+
+---
+
+## 4. 알려진 이슈
+
+| 이슈 | 내용 | TC |
+|------|------|-----|
+| 카테고리 필터 불완전 | `?category=PT` 파라미터가 서버에서 완전히 필터링되지 않아 타 카테고리 항목이 포함됨 | TC-CL-26 |
+| SETTLED 플로우 미커버 | 예약 완료(`/complete`)는 세션 날짜가 과거여야 해서 DB 조작 필요 — Java E2E에서 커버 | TC-RV |
+
+---
+
+## 5. 테스트 검증 종합 결과
 
 ### 상점 (Store) 모듈
 
@@ -350,4 +380,21 @@
 | 카테고리 필터 (부분 통과) | ⚠️ PASS (서버 필터 불완전) |
 | 전체 라이프사이클 흐름 (7-Step) | ✅ PASS |
 
-**총 36개 테스트 전부 통과 (36 passed / 0 failed)**
+### 예약 (Reservation) 모듈
+
+| 항목 | 결과 |
+|------|------|
+| 예약 생성 (200 + PENDING) | ✅ PASS |
+| 트레이너 승인 (APPROVED) | ✅ PASS |
+| 트레이너 반려 (REJECTED) | ✅ PASS |
+| 유저 취소 (USER_CANCELLED) | ✅ PASS |
+| 4주 스케줄 조회 (availableDates) | ✅ PASS |
+| 가격 불일치 방어 (400 MARKETPLACE_020) | ✅ PASS |
+| 슬롯 정원 초과 방어 (409 MARKETPLACE_017) | ✅ PASS |
+| 타인 취소 차단 (403) | ✅ PASS |
+| 타 트레이너 승인 차단 (403) | ✅ PASS |
+| 미인증 예약 차단 (401) | ✅ PASS |
+| 상태 전이 방어 — PENDING 완료 차단 (409 MARKETPLACE_018) | ✅ PASS |
+| 상태 전이 방어 — APPROVED 반려 차단 (409 MARKETPLACE_018) | ✅ PASS |
+
+**총 48개 테스트 전부 통과 (48 passed / 0 failed, 16.8s)**

@@ -3,10 +3,12 @@ package momzzangseven.mztkbe.modules.web3.admin.infrastructure.external.transact
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.MarkTransactionSucceededResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.MarkTransactionSucceededPort;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class MarkTransactionSucceededAdapter implements MarkTransactionSucceededPort {
 
   private final momzzangseven.mztkbe.modules.web3.transaction.application.port.in

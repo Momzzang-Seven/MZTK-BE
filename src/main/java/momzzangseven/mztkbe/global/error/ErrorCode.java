@@ -470,6 +470,16 @@ public enum ErrorCode {
       "Cannot complete a reservation before the class starts",
       HttpStatus.BAD_REQUEST),
 
+  MARKETPLACE_CLASS_INACTIVE(
+      "MARKETPLACE_032",
+      "Class is not currently active and cannot accept reservations",
+      HttpStatus.CONFLICT),
+
+  MARKETPLACE_RESERVATION_PAST_TIME(
+      "MARKETPLACE_031",
+      "Cannot book a session whose start time is already in the past",
+      HttpStatus.BAD_REQUEST),
+
   // ========================================
   // Verification Errors (VERIFICATION_xxx)
   // ========================================
