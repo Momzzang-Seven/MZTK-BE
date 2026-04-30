@@ -23,12 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
  * and an AFTER_COMMIT handler invokes {@code ScheduleKmsKeyDeletionUseCase} so the KMS call only
  * runs once the DB transaction has committed.
  *
- * <p><b>Why split the transaction.</b> Same rationale as
- * {@link DisableTreasuryWalletService}: a single {@code @Transactional} would expose a
- * "KMS scheduled-for-deletion → DB commit failed" race that left KMS irreversibly mutated while
- * the DB silently rolled back to {@code DISABLED}. With the DB committing first, the residual
- * failure mode is "DB ARCHIVED, KMS not scheduled" which is recorded in
- * {@code web3_treasury_kms_audits} for operator follow-up; re-archiving the same row is
+ * <p><b>Why split the transaction.</b> Same rationale as {@link DisableTreasuryWalletService}: a
+ * single {@code @Transactional} would expose a "KMS scheduled-for-deletion → DB commit failed" race
+ * that left KMS irreversibly mutated while the DB silently rolled back to {@code DISABLED}. With
+ * the DB committing first, the residual failure mode is "DB ARCHIVED, KMS not scheduled" which is
+ * recorded in {@code web3_treasury_kms_audits} for operator follow-up; re-archiving the same row is
  * idempotent for the DB and a no-op for KMS once the key is already pending deletion.
  *
  * <p>The default 30-day pending window matches the KMS minimum and gives operators a recovery

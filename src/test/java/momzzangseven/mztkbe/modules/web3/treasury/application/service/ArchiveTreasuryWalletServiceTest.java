@@ -66,8 +66,7 @@ class ArchiveTreasuryWalletServiceTest {
     when(loadTreasuryWalletPort.loadByAlias(ALIAS)).thenReturn(Optional.of(disabledWallet()));
     when(saveTreasuryWalletPort.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-    TreasuryWalletView view =
-        service.execute(new ArchiveTreasuryWalletCommand(ALIAS, OPERATOR_ID));
+    TreasuryWalletView view = service.execute(new ArchiveTreasuryWalletCommand(ALIAS, OPERATOR_ID));
 
     assertThat(view.walletAddress()).isEqualTo(ADDRESS);
     ArgumentCaptor<TreasuryWalletArchivedEvent> captor =
