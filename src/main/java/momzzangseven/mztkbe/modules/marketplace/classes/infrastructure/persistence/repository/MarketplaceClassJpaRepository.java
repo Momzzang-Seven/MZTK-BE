@@ -1,12 +1,10 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.repository;
 
-import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.MarketplaceClassEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -14,6 +12,10 @@ import org.springframework.stereotype.Repository;
  *
  * <p>Used exclusively by {@code ClassPersistenceAdapter}. Dynamic queries (with filtering and
  * sorting) are handled via QueryDSL in the adapter.
+ *
+ * <p>Cross-module data (e.g. trainer store info) is fetched separately via output ports ({@link
+ * momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort}), not
+ * via JOIN in this repository, to respect hexagonal architecture module boundaries.
  */
 @Repository
 public interface MarketplaceClassJpaRepository extends JpaRepository<MarketplaceClassEntity, Long> {
@@ -40,27 +42,14 @@ public interface MarketplaceClassJpaRepository extends JpaRepository<Marketplace
       Long trainerId, Pageable pageable);
 
   /**
-   * Load a single class together with the trainer's store in one query (LEFT JOIN).
+   * Find a single active class by its ID.
    *
-   * <p>Returns an {@code Object[2]} array where {@code [0]} is the {@link MarketplaceClassEntity}
-   * and {@code [1]} is the {@link TrainerStoreEntity} (may be {@code null} when the trainer has no
-   * store registered yet).
-   *
-   * <p><b>Note on {@code active = true}</b>: this query is used exclusively by the public class
-   * detail endpoint, which must only expose active classes. Inactive-class detail (e.g., a
-   * trainer's own preview including inactive listings) is not yet implemented. If that requirement
-   * arises, add a separate query or remove this filter.
+   * <p>Used by the public class detail endpoint. Store information is loaded separately via {@code
+   * LoadTrainerStorePort} in the adapter to respect cross-module boundaries — {@code
+   * TrainerStoreEntity} must not be referenced in this repository's queries.
    *
    * @param classId class ID
-   * @return list containing the joined projection, or empty list if the class does not exist
+   * @return Optional containing the entity if found and active
    */
-  @Query(
-      """
-      SELECT mc, ts
-      FROM MarketplaceClassEntity mc
-      LEFT JOIN TrainerStoreEntity ts ON ts.trainerId = mc.trainerId
-      WHERE mc.id = :classId
-        AND mc.active = true
-      """)
-  List<Object[]> findClassWithStore(@Param("classId") Long classId);
+  Optional<MarketplaceClassEntity> findByIdAndActiveTrue(Long classId);
 }
