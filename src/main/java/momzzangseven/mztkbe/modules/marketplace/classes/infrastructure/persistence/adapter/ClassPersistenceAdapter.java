@@ -41,9 +41,11 @@ import org.springframework.stereotype.Component;
  *   <li><b>Filter</b>: {@code active = true}, optional {@code category} / {@code trainerId}.
  *       Time-range filter ({@code startTime} / {@code endTime}) uses a correlated EXISTS sub-query
  *       against {@code class_slots} so only classes with at least one matching slot are returned.
- *   <li><b>Distance sort</b>: PostGIS {@code ST_Distance(location::geography,
- *       ST_MakePoint(lng,lat)::geography)} injected via {@code Expressions.numberTemplate} (metres
- *       → km). When lat/lng are absent but DISTANCE sort was requested, falls back to RATING.
+ *   <li><b>Distance sort</b>: Delegates to {@link #findActiveClassesByDistance} which uses a native
+ *       PostGIS SQL query with {@code ST_Distance(CAST(location AS geography),
+ *       CAST(ST_MakePoint(lng,lat) AS geography))} because JPQL cannot parse the PostgreSQL {@code
+ *       ::} cast operator. When lat/lng are absent but DISTANCE sort was requested, falls back to
+ *       RATING.
  *   <li><b>RATING sort</b>: placeholder ORDER BY {@code id DESC} — replace with an actual rating
  *       column once the review module is available.
  *   <li><b>Count query</b>: separated from the content fetch for pagination correctness and
@@ -110,7 +112,8 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
 
     String effectiveSort = resolveEffectiveSort(sort, lat, lng);
 
-    // DISTANCE sort uses PostGIS ::geography — must use native SQL; JPQL cannot parse ::.
+    // DISTANCE sort uses PostGIS geography functions — must use native SQL because
+    // JPQL cannot parse the PostgreSQL :: cast operator (e.g. ::geography).
     if (SORT_DISTANCE.equals(effectiveSort)) {
       return findActiveClassesByDistance(
           lat, lng, category, trainerId, startTime, endTime, pageable);
@@ -143,12 +146,16 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
   /**
    * Native SQL implementation for DISTANCE sort.
    *
-   * <p>Uses PostGIS {@code ST_Distance(location::geography, ST_MakePoint(lng,lat)::geography)} for
-   * metre-accurate distance ordering. The {@code ::geography} cast is PostgreSQL-specific and
-   * cannot be expressed in JPQL, hence the use of a native query.
+   * <p>Uses PostGIS {@code ST_Distance(CAST(location AS geography), CAST(ST_MakePoint(lng,lat) AS
+   * geography))} for metre-accurate distance ordering. The equivalent {@code ::geography}
+   * PostgreSQL cast cannot be expressed in JPQL because Hibernate's native-query parser confuses
+   * {@code ::} with named-parameter prefixes.
    *
    * <p>Filters mirror those of the JPQL path: {@code active = true}, optional category, trainerId,
    * and time-range (EXISTS on class_slots).
+   *
+   * <p><b>Warning</b>: if new filters are added to {@link #buildWhereClause}, they must also be
+   * mirrored here to maintain consistent behaviour across sort modes.
    */
   @SuppressWarnings("unchecked")
   private Page<ClassItem> findActiveClassesByDistance(
@@ -168,7 +175,7 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
     if (trainerId != null) {
       where.append(" AND mc.trainer_id = :trainerId");
     }
-    if (startTime != null || endTime != null) {
+    if ((startTime != null && !startTime.isBlank()) || (endTime != null && !endTime.isBlank())) {
       where.append(
           " AND EXISTS ("
               + "SELECT 1 FROM class_slots cs "
@@ -185,7 +192,7 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
     // lat/lng are double primitives — safe to embed as SQL literals (no injection risk).
     // This completely avoids Hibernate's named-parameter parser, which treats every ':'
     // as a parameter prefix and fails to recognise ':lat'/':lng' when the SQL string
-    // also contains CAST() expressions with parentheses or is repeated in ORDER BY.
+    // also contains CAST() expressions or is repeated in ORDER BY.
     String distanceExpr =
         "ST_Distance("
             + "CAST(ts.location AS geography), "
@@ -194,7 +201,8 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
             + ", "
             + lat
             + ") AS geography)"
-            + ") / 1000.0";
+            + ") / "
+            + METRES_PER_KM;
 
     String contentSql =
         "SELECT mc.id, mc.title, mc.category, mc.price_amount, mc.duration_minutes, "
@@ -237,7 +245,19 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
       }
     }
 
-    List<Object[]> rows = contentQuery.getResultList();
+    @SuppressWarnings("rawtypes")
+    List rawRows = contentQuery.getResultList();
+    // Native queries with multiple SELECTed columns always return List<Object[]>.
+    // Wrap in a helper to guard against single-column or single-row edge cases.
+    List<Object[]> rows =
+        rawRows.stream()
+            .map(
+                r -> {
+                  if (r instanceof Object[] arr) return arr;
+                  // Single-column fallback (should not happen with 6 columns, but defensive)
+                  return new Object[] {r};
+                })
+            .toList();
     Number countResult = (Number) countQuery.getSingleResult();
     long total = countResult.longValue();
 
@@ -370,7 +390,7 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
       where.and(marketplaceClassEntity.trainerId.eq(trainerId));
     }
 
-    if (startTime != null || endTime != null) {
+    if ((startTime != null && !startTime.isBlank()) || (endTime != null && !endTime.isBlank())) {
       where.and(buildTimeRangeSubQuery(startTime, endTime));
     }
 
