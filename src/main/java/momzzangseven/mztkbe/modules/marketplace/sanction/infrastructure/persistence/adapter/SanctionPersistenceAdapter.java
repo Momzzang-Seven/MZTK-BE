@@ -27,7 +27,7 @@ public class SanctionPersistenceAdapter
   public RecordStrikeResult recordStrike(Long trainerId, String reason) {
     TrainerSanctionEntity sanction =
         sanctionRepository
-            .findById(trainerId)
+            .findByIdWithLock(trainerId)
             .orElseGet(() -> TrainerSanctionEntity.builder().trainerId(trainerId).build());
 
     LocalDateTime now = LocalDateTime.now(clock);
