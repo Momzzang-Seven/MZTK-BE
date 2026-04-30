@@ -471,7 +471,7 @@ public enum ErrorCode {
       HttpStatus.BAD_REQUEST),
 
   MARKETPLACE_CLASS_INACTIVE(
-      "MARKETPLACE_024",
+      "MARKETPLACE_032",
       "Class is not currently active and cannot accept reservations",
       HttpStatus.CONFLICT),
 
