@@ -221,6 +221,31 @@ class QuestionEscrowExecutionServiceTest {
   }
 
   @Test
+  @DisplayName(
+      "recoverQuestionCreate rejects recovery while the latest create intent is still active")
+  void recoverQuestionCreate_rejectsWhenLatestCreateIntentIsActive() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.empty());
+    given(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
+        .willReturn(
+            Optional.of(
+                new QnaExecutionIntentStateView(
+                    "intent-active",
+                    QnaExecutionActionType.QNA_QUESTION_CREATE,
+                    ExecutionIntentStatus.AWAITING_SIGNATURE)));
+
+    assertThatThrownBy(
+            () ->
+                service.recoverQuestionCreate(
+                    new PrepareQuestionCreateCommand(101L, 7L, "질문 본문", 50L)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("question create recovery is not available");
+
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+  }
+
+  @Test
   @DisplayName("prepareQuestionUpdate blocks when onchain projection still has answers")
   void prepareQuestionUpdate_blocksWhenProjectionHasAnswers() {
     given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
