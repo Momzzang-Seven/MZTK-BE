@@ -32,12 +32,9 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEvent
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import org.springframework.transaction.annotation.Transactional;
-import org.web3j.utils.Numeric;
 
 @Slf4j
 @RequiredArgsConstructor
-@Transactional
 /**
  * Executes a previously created execution intent.
  *
@@ -67,7 +64,6 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
    * new transaction.
    */
   @Override
-  @Transactional(noRollbackFor = ExecutionIntentTerminalException.class)
   public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
     ExecutionIntent intent =
         executionIntentPersistencePort
@@ -151,9 +147,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             .map(
                 call ->
                     new ExecutionEip7702GatewayPort.BatchCall(
-                        call.toAddress(),
-                        call.valueWei(),
-                        Numeric.hexStringToByteArray(call.data())))
+                        call.toAddress(), call.valueWei(), call.data()))
             .toList();
     String callDataHash = executionEip7702GatewayPort.hashCalls(calls);
 
@@ -202,8 +196,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     }
 
     String executeCalldata =
-        executionEip7702GatewayPort.encodeExecute(
-            calls, Numeric.hexStringToByteArray(command.submitSignature()));
+        executionEip7702GatewayPort.encodeExecute(calls, command.submitSignature());
 
     BigInteger estimatedGas =
         executionEip7702GatewayPort.estimateGasWithAuthorization(
