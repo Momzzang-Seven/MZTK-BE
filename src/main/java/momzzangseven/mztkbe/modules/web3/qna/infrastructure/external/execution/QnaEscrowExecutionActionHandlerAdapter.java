@@ -83,8 +83,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   public void afterExecutionFailedOnchain(
       ExecutionIntent intent, ExecutionActionPlan actionPlan, String failureReason) {
     // Failed-onchain specific handling is intentionally empty.
-    // MarkExecutionIntentFailedOnchainService invokes afterExecutionTerminated immediately after
-    // this hook, and rollback belongs to that terminal callback.
+    // The termination hook runner invokes afterExecutionTerminated immediately after this hook,
+    // and rollback belongs to that terminal callback.
   }
 
   @Override

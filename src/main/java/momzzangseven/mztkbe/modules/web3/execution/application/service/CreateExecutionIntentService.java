@@ -17,8 +17,10 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -49,10 +51,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private final BuildExecutionDigestPort buildExecutionDigestPort;
   private final ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
   private final ExecutionModeSelector executionModeSelector;
-  private final java.util.List<
-          momzzangseven.mztkbe.modules.web3.execution.application.port.out
-              .ExecutionActionHandlerPort>
-      executionActionHandlerPorts;
+  private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final Clock appClock;
 
   /**
@@ -130,8 +129,10 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
       ExecutionIntent existing, CreateExecutionIntentCommand command, LocalDateTime now) {
     if (existing.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
         && existing.getExpiresAt().isBefore(now)) {
-      executionIntentPersistencePort.update(
-          existing.expire(ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage(), now));
+      ExecutionIntent expired =
+          executionIntentPersistencePort.update(
+              existing.expire(
+                  ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage(), now));
       if (existing.getMode() == ExecutionMode.EIP7702
           && existing.getReservedSponsorCostWei().signum() > 0) {
         releaseSponsorExposure(
@@ -139,18 +140,16 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
             existing.resolveSponsorUsageDateKst(),
             existing.getReservedSponsorCostWei());
       }
-      notifyTerminated(
-          existing.expire(ErrorCode.AUTH_EXPIRED.name(), ErrorCode.AUTH_EXPIRED.getMessage(), now),
-          ExecutionIntentStatus.EXPIRED,
-          ErrorCode.AUTH_EXPIRED.name());
+      publishTerminated(expired, ExecutionIntentStatus.EXPIRED, ErrorCode.AUTH_EXPIRED.name());
       return null;
     }
 
     if (!existing.hasSamePayload(command.draft().payloadHash())) {
       if (existing.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE) {
-        executionIntentPersistencePort.update(
-            existing.cancel(
-                ErrorCode.IDEMPOTENCY_CONFLICT.name(), "superseded by new payload", now));
+        ExecutionIntent canceled =
+            executionIntentPersistencePort.update(
+                existing.cancel(
+                    ErrorCode.IDEMPOTENCY_CONFLICT.name(), "superseded by new payload", now));
         if (existing.getMode() == ExecutionMode.EIP7702
             && existing.getReservedSponsorCostWei().signum() > 0) {
           releaseSponsorExposure(
@@ -158,11 +157,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
               existing.resolveSponsorUsageDateKst(),
               existing.getReservedSponsorCostWei());
         }
-        notifyTerminated(
-            existing.cancel(
-                ErrorCode.IDEMPOTENCY_CONFLICT.name(), "superseded by new payload", now),
-            ExecutionIntentStatus.CANCELED,
-            ErrorCode.IDEMPOTENCY_CONFLICT.name());
+        publishTerminated(
+            canceled, ExecutionIntentStatus.CANCELED, ErrorCode.IDEMPOTENCY_CONFLICT.name());
         return null;
       }
       if (existing.getStatus().isInFlight()
@@ -255,15 +251,10 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     sponsorDailyUsagePersistencePort.update(usage.release(reservedCostWei));
   }
 
-  private void notifyTerminated(
+  private void publishTerminated(
       ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
-    executionActionHandlerPorts.stream()
-        .filter(handler -> handler.supports(intent.getActionType()))
-        .findFirst()
-        .ifPresent(
-            handler ->
-                handler.afterExecutionTerminated(
-                    intent, handler.buildActionPlan(intent), terminalStatus, failureReason));
+    publishExecutionIntentTerminatedPort.publish(
+        new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 
   private String hashDraftCalls(CreateExecutionIntentCommand command) {
