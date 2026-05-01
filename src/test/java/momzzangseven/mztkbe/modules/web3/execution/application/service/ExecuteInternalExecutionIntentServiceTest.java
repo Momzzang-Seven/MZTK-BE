@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -63,6 +63,7 @@ class ExecuteInternalExecutionIntentServiceTest {
   @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
+  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private ExecuteInternalExecutionIntentService service;
 
@@ -78,6 +79,7 @@ class ExecuteInternalExecutionIntentServiceTest {
             eip1559TransactionCodecPort,
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
+            publishExecutionIntentTerminatedPort,
             FIXED_CLOCK);
 
     lenient()
@@ -226,19 +228,21 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-admin-settle")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
     verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
 
   @Test
-  void execute_keepsCanceledTransitionWhenTerminationHookThrowsDuringQuarantine() {
+  void execute_publishesTerminationEventDuringQuarantine() {
     ExecutionIntent intent = internalIntentWithSigner("0x" + "5".repeat(40));
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    doThrow(new IllegalStateException("rollback failed"))
-        .when(executionActionHandlerPort)
-        .afterExecutionTerminated(any(), any(), any(), any());
 
     ExecuteInternalExecutionIntentResult result =
         service.execute(
@@ -249,6 +253,12 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
     verify(executionIntentPersistencePort).update(any());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-admin-settle")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
     verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
   }
 
@@ -271,7 +281,12 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-admin-settle")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
     verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
   }
@@ -294,7 +309,12 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-admin-settle")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }

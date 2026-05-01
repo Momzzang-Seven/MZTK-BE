@@ -23,7 +23,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -55,6 +57,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   private final LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
+  private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final Clock appClock;
 
   /**
@@ -96,7 +99,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             expired.resolveSponsorUsageDateKst(),
             expired.getReservedSponsorCostWei());
       }
-      safeAfterExecutionTerminated(
+      publishTerminated(
           expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
       throw new ExecutionIntentTerminalException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
     }
@@ -175,12 +178,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             staleIntent.resolveSponsorUsageDateKst(),
             staleIntent.getReservedSponsorCostWei());
       }
-      safeAfterExecutionTerminated(
-          actionHandler,
-          staleIntent,
-          actionPlan,
-          ExecutionIntentStatus.NONCE_STALE,
-          ErrorCode.AUTH_NONCE_MISMATCH.name());
+      publishTerminated(
+          staleIntent, ExecutionIntentStatus.NONCE_STALE, ErrorCode.AUTH_NONCE_MISMATCH.name());
       throw new ExecutionIntentTerminalException(ErrorCode.AUTH_NONCE_MISMATCH, false);
     }
 
@@ -324,10 +323,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
                   LocalDateTime.now(appClock)));
-      safeAfterExecutionTerminated(
-          actionHandler,
+      publishTerminated(
           staleIntent,
-          actionPlan,
           ExecutionIntentStatus.NONCE_STALE,
           ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name());
       throw new ExecutionIntentTerminalException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
@@ -482,47 +479,9 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                     "no execution action handler for actionType=" + intent.getActionType()));
   }
 
-  private ExecutionActionHandlerPort actionHandlerFor(ExecutionIntent intent) {
-    return resolveActionHandler(intent);
-  }
-
-  private void safeAfterExecutionTerminated(
+  private void publishTerminated(
       ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
-    try {
-      ExecutionActionHandlerPort actionHandler = actionHandlerFor(intent);
-      safeAfterExecutionTerminated(
-          actionHandler,
-          intent,
-          actionHandler.buildActionPlan(intent),
-          terminalStatus,
-          failureReason);
-    } catch (RuntimeException e) {
-      log.error(
-          "execution intent termination hook setup failed: executionIntentId={}, actionType={}, terminalStatus={}, failureReason={}",
-          intent.getPublicId(),
-          intent.getActionType(),
-          terminalStatus,
-          failureReason,
-          e);
-    }
-  }
-
-  private void safeAfterExecutionTerminated(
-      ExecutionActionHandlerPort actionHandler,
-      ExecutionIntent intent,
-      ExecutionActionPlan actionPlan,
-      ExecutionIntentStatus terminalStatus,
-      String failureReason) {
-    try {
-      actionHandler.afterExecutionTerminated(intent, actionPlan, terminalStatus, failureReason);
-    } catch (RuntimeException e) {
-      log.error(
-          "execution intent termination hook failed: executionIntentId={}, actionType={}, terminalStatus={}, failureReason={}",
-          intent.getPublicId(),
-          intent.getActionType(),
-          terminalStatus,
-          failureReason,
-          e);
-    }
+    publishExecutionIntentTerminatedPort.publish(
+        new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 }

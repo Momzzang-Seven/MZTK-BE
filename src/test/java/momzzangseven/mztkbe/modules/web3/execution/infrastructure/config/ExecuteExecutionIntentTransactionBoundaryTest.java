@@ -18,8 +18,6 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
@@ -30,6 +28,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -37,7 +36,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -68,6 +66,7 @@ class ExecuteExecutionIntentTransactionBoundaryTest {
   @Mock private LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
+  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   @Test
   @DisplayName("terminal 예외는 상태 변경을 커밋한 뒤 클라이언트 예외로 다시 던진다")
@@ -82,8 +81,6 @@ class ExecuteExecutionIntentTransactionBoundaryTest {
         .thenReturn(Optional.of(expiredIntent));
     when(executionIntentPersistencePort.update(any()))
         .thenAnswer(invocation -> invocation.getArgument(0));
-    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
-    when(executionActionHandlerPort.buildActionPlan(any())).thenReturn(actionPlan());
 
     // when & then
     assertThatThrownBy(
@@ -96,6 +93,12 @@ class ExecuteExecutionIntentTransactionBoundaryTest {
     assertThat(transactionManager.rollbacks).isZero();
     verify(executionIntentPersistencePort)
         .update(argThat(intent -> intent.getStatus() == ExecutionIntentStatus.EXPIRED));
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-1")
+                        && event.terminalStatus() == ExecutionIntentStatus.EXPIRED));
   }
 
   @Test
@@ -134,16 +137,10 @@ class ExecuteExecutionIntentTransactionBoundaryTest {
             loadExecutionSponsorWalletConfigPort,
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
+            publishExecutionIntentTerminatedPort,
             FIXED_CLOCK);
     return new ExecutionIntentServiceConfig()
         .executeExecutionIntentUseCase(delegate, transactionManager);
-  }
-
-  private ExecutionActionPlan actionPlan() {
-    return new ExecutionActionPlan(
-        BigInteger.valueOf(100),
-        ExecutionReferenceType.USER_TO_USER,
-        List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234")));
   }
 
   private ExecutionIntent existingEip1559Intent() {

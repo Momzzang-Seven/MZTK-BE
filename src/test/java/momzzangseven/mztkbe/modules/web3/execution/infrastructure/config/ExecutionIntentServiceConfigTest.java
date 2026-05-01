@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.Eip1559TtlAdapter;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.ExecutionDraftPolicyValidatorAdapter;
@@ -33,6 +34,9 @@ class ExecutionIntentServiceConfigTest {
           .withBean(
               ExecutionIntentPersistencePort.class,
               () -> mock(ExecutionIntentPersistencePort.class))
+          .withBean(
+              PublishExecutionIntentTerminatedPort.class,
+              () -> mock(PublishExecutionIntentTerminatedPort.class))
           .withBean(LoadExecutionChainIdPort.class, () -> mock(LoadExecutionChainIdPort.class))
           .withBean(Clock.class, Clock::systemUTC)
           .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
