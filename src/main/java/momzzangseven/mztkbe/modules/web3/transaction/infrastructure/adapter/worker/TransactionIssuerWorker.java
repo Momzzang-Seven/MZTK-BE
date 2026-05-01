@@ -12,8 +12,8 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -29,7 +29,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -39,7 +38,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "web3.reward-token", name = "enabled", havingValue = "true")
 public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
-  private final LoadTreasuryWalletPort loadTreasuryWalletPort;
+  private final LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   private final ReserveNoncePort reserveNoncePort;
   private final Web3ContractPort web3ContractPort;
@@ -51,7 +50,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       LoadTransactionWorkPort loadTransactionWorkPort,
       UpdateTransactionPort updateTransactionPort,
       RecordTransactionAuditPort recordTransactionAuditPort,
-      LoadTreasuryWalletPort loadTreasuryWalletPort,
+      LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort,
       VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort,
       ReserveNoncePort reserveNoncePort,
       Web3ContractPort web3ContractPort,
@@ -64,7 +63,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         recordTransactionAuditPort,
         rewardTokenProperties,
         retryStrategy);
-    this.loadTreasuryWalletPort = loadTreasuryWalletPort;
+    this.loadRewardTreasuryWalletPort = loadRewardTreasuryWalletPort;
     this.verifyTreasuryWalletForSignPort = verifyTreasuryWalletForSignPort;
     this.reserveNoncePort = reserveNoncePort;
     this.web3ContractPort = web3ContractPort;
@@ -87,13 +86,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
-    // TreasuryRole is the single source of truth for the reward-treasury alias.
-    // Reusing the enum (a vocabulary-only domain type) avoids the synchronization hazard of
-    // duplicating the literal here while keeping the dependency to the treasury module minimal.
-    String walletAlias = TreasuryRole.REWARD.toAlias();
-
-    Optional<TreasuryWalletInfo> walletOpt =
-        loadTreasuryWalletPort.loadByAlias(walletAlias, workerId);
+    Optional<TreasuryWalletInfo> walletOpt = loadRewardTreasuryWalletPort.load();
     if (walletOpt.isEmpty()) {
       failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
       return;
@@ -118,9 +111,12 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     }
 
     try {
-      verifyTreasuryWalletForSignPort.verify(walletAlias);
+      verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
     } catch (TreasuryWalletStateException e) {
-      log.warn("Treasury wallet '{}' verify-for-sign failed: {}", walletAlias, e.getMessage());
+      log.warn(
+          "Treasury wallet '{}' verify-for-sign failed: {}",
+          walletInfo.walletAlias(),
+          e.getMessage());
       failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code());
       return;
     }

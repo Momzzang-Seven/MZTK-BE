@@ -7,11 +7,12 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryKeyOrigin;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletByRoleUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -20,24 +21,25 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("LoadTreasuryWalletAdapter")
-class LoadTreasuryWalletAdapterTest {
+@DisplayName("LoadRewardTreasuryWalletAdapter")
+class LoadRewardTreasuryWalletAdapterTest {
 
   private static final String WALLET_ALIAS = "reward-treasury";
   private static final String KMS_KEY_ID = "alias/reward-treasury";
   private static final String WALLET_ADDRESS = "0x" + "c".repeat(40);
 
-  @Mock private LoadTreasuryWalletUseCase loadTreasuryWalletUseCase;
+  @Mock private LoadTreasuryWalletByRoleUseCase loadTreasuryWalletByRoleUseCase;
 
-  @InjectMocks private LoadTreasuryWalletAdapter adapter;
+  @InjectMocks private LoadRewardTreasuryWalletAdapter adapter;
 
   @ParameterizedTest(name = "status={0} -> active={1}")
   @CsvSource({"ACTIVE,true", "DISABLED,false", "ARCHIVED,false"})
   @DisplayName("status 가 ACTIVE 일 때만 active=true 로 매핑된다")
-  void loadByAlias_mapsStatusToActiveFlag(TreasuryWalletStatus status, boolean expectedActive) {
-    when(loadTreasuryWalletUseCase.execute(WALLET_ALIAS)).thenReturn(Optional.of(view(status)));
+  void load_mapsStatusToActiveFlag(TreasuryWalletStatus status, boolean expectedActive) {
+    when(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.REWARD))
+        .thenReturn(Optional.of(view(status)));
 
-    Optional<TreasuryWalletInfo> result = adapter.loadByAlias(WALLET_ALIAS);
+    Optional<TreasuryWalletInfo> result = adapter.load();
 
     assertThat(result).isPresent();
     TreasuryWalletInfo info = result.get();
@@ -47,12 +49,12 @@ class LoadTreasuryWalletAdapterTest {
     assertThat(info.walletAddress()).isEqualTo(WALLET_ADDRESS);
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   @DisplayName("upstream 이 비어 있으면 어댑터도 빈 Optional 을 반환한다")
-  void loadByAlias_emptyUpstream_returnsEmpty() {
-    when(loadTreasuryWalletUseCase.execute(WALLET_ALIAS)).thenReturn(Optional.empty());
+  void load_emptyUpstream_returnsEmpty() {
+    when(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.REWARD)).thenReturn(Optional.empty());
 
-    Optional<TreasuryWalletInfo> result = adapter.loadByAlias(WALLET_ALIAS);
+    Optional<TreasuryWalletInfo> result = adapter.load();
 
     assertThat(result).isEmpty();
   }
