@@ -3,8 +3,11 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.config;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
@@ -43,6 +46,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -192,7 +196,7 @@ public class ExecutionIntentServiceConfig {
 
   @Bean
   @ConditionalOnUserExecutionEnabled
-  ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
+  ExecuteExecutionIntentService executeExecutionIntentService(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
       ExecutionTransactionGatewayPort executionTransactionGatewayPort,
@@ -216,6 +220,15 @@ public class ExecutionIntentServiceConfig {
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         appClock);
+  }
+
+  @Bean
+  @Primary
+  @ConditionalOnUserExecutionEnabled
+  ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
+      ExecuteExecutionIntentService delegate, PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    return new TransactionalExecuteExecutionIntentUseCase(delegate, transactionTemplate);
   }
 
   @Bean
@@ -262,5 +275,33 @@ public class ExecutionIntentServiceConfig {
     public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
       return transactionTemplate.execute(status -> delegate.execute(command));
     }
+  }
+
+  private record TransactionalExecuteExecutionIntentUseCase(
+      ExecuteExecutionIntentService delegate, TransactionTemplate transactionTemplate)
+      implements ExecuteExecutionIntentUseCase {
+
+    @Override
+    public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
+      TerminalExceptionHolder terminalExceptionHolder = new TerminalExceptionHolder();
+      ExecuteExecutionIntentResult result =
+          transactionTemplate.execute(
+              status -> {
+                try {
+                  return delegate.execute(command);
+                } catch (ExecutionIntentTerminalException e) {
+                  terminalExceptionHolder.exception = e;
+                  return null;
+                }
+              });
+      if (terminalExceptionHolder.exception != null) {
+        throw terminalExceptionHolder.exception;
+      }
+      return result;
+    }
+  }
+
+  private static class TerminalExceptionHolder {
+    private ExecutionIntentTerminalException exception;
   }
 }

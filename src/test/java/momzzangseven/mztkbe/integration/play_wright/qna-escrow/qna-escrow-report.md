@@ -32,6 +32,7 @@
 | `TC-QNA-C-01` | 질문 생성 후 GET intent 조회 | `200`, create 응답과 동일한 execution contract |
 | `TC-QNA-C-02` | 존재하지 않는 intent 조회 | `4xx` |
 | `TC-QNA-D-01` | question execute | `202`, `PENDING_ONCHAIN` 또는 `CONFIRMED` |
+| `TC-QNA-D-02` | 만료된 question-create intent execute 후 recover-create | execute `409`/`WEB3_013`, intent `EXPIRED` 저장, 새 create intent `AWAITING_SIGNATURE` |
 | `TC-QNA-E-01` | confirmed question 후 answer create | `201`, `QNA_ANSWER_SUBMIT`, `AWAITING_SIGNATURE` |
 | `TC-QNA-F-01` | confirmed question update | execute 후 `CONFIRMED`, post detail content 갱신 |
 | `TC-QNA-F-02` | confirmed question delete | execute 후 `CONFIRMED`, post detail 제거 |
@@ -42,7 +43,8 @@
 
 ## 최신 검증 결과
 
-- 개별 실행 기준 최신 결과: `14 passed`
+- 기존 개별 실행 기준 최신 결과: `14 passed` (`TC-QNA-D-02` 추가 전)
+- `TC-QNA-D-02`: 스펙 추가 후 아직 실외부 API 기준 재실행하지 않음
 - 검증 환경:
   - 실제 백엔드 서버
   - 실제 PostgreSQL

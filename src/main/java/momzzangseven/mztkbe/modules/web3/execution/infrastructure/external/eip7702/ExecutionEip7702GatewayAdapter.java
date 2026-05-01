@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.ManageExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.stereotype.Component;
+import org.web3j.utils.Numeric;
 
 @Component
 @RequiredArgsConstructor
@@ -79,17 +80,23 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
   public String hashCalls(List<BatchCall> calls) {
     return manageExecutionEip7702UseCase.hashCalls(
         calls.stream()
-            .map(call -> new Eip7702ExecutionBatchCall(call.to(), call.value(), call.data()))
+            .map(
+                call ->
+                    new Eip7702ExecutionBatchCall(
+                        call.to(), call.value(), Numeric.hexStringToByteArray(call.data())))
             .toList());
   }
 
   @Override
-  public String encodeExecute(List<BatchCall> calls, byte[] executionSignature) {
+  public String encodeExecute(List<BatchCall> calls, String executionSignatureHex) {
     return manageExecutionEip7702UseCase.encodeExecute(
         calls.stream()
-            .map(call -> new Eip7702ExecutionBatchCall(call.to(), call.value(), call.data()))
+            .map(
+                call ->
+                    new Eip7702ExecutionBatchCall(
+                        call.to(), call.value(), Numeric.hexStringToByteArray(call.data())))
             .toList(),
-        executionSignature);
+        Numeric.hexStringToByteArray(executionSignatureHex));
   }
 
   @Override
