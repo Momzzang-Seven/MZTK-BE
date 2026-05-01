@@ -1,20 +1,18 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.adapter;
 
 import static momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.QMarketplaceClassEntity.marketplaceClassEntity;
-import static momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.entity.QTrainerStoreEntity.trainerStoreEntity;
 
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
-import com.querydsl.core.types.dsl.Expressions;
-import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.MarketplacePaginationConstants;
@@ -22,13 +20,14 @@ import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassDet
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassItem;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassTagPort;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.SaveClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.MarketplaceClassEntity;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.QClassSlotEntity;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.repository.MarketplaceClassJpaRepository;
-import momzzangseven.mztkbe.modules.marketplace.store.infrastructure.persistence.entity.TrainerStoreEntity;
+import momzzangseven.mztkbe.modules.marketplace.store.domain.model.TrainerStore;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -43,9 +42,11 @@ import org.springframework.stereotype.Component;
  *   <li><b>Filter</b>: {@code active = true}, optional {@code category} / {@code trainerId}.
  *       Time-range filter ({@code startTime} / {@code endTime}) uses a correlated EXISTS sub-query
  *       against {@code class_slots} so only classes with at least one matching slot are returned.
- *   <li><b>Distance sort</b>: PostGIS {@code ST_Distance(location::geography,
- *       ST_MakePoint(lng,lat)::geography)} injected via {@code Expressions.numberTemplate} (metres
- *       → km). When lat/lng are absent but DISTANCE sort was requested, falls back to RATING.
+ *   <li><b>Distance sort</b>: Delegates to {@link #findActiveClassesByDistance} which uses a native
+ *       PostGIS SQL query with {@code ST_Distance(CAST(location AS geography),
+ *       CAST(ST_MakePoint(lng,lat) AS geography))} because JPQL cannot parse the PostgreSQL {@code
+ *       ::} cast operator. When lat/lng are absent but DISTANCE sort was requested, falls back to
+ *       RATING.
  *   <li><b>RATING sort</b>: placeholder ORDER BY {@code id DESC} — replace with an actual rating
  *       column once the review module is available.
  *   <li><b>Count query</b>: separated from the content fetch for pagination correctness and
@@ -67,7 +68,9 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
 
   private final MarketplaceClassJpaRepository classJpaRepository;
   private final LoadClassTagPort loadClassTagPort;
+  private final LoadTrainerStorePort loadTrainerStorePort;
   private final JPAQueryFactory queryFactory;
+  private final EntityManager entityManager;
 
   // ========== LoadClassPort ==========
 
@@ -86,9 +89,9 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
   /**
    * {@inheritDoc}
    *
-   * <p>Full QueryDSL implementation: applies all filter predicates and sort specifiers. The
-   * time-range filter uses a correlated EXISTS sub-query so the {@code class_slot_days} join table
-   * is never pulled into the outer query.
+   * <p>When sort is {@code DISTANCE}, delegates to a native PostGIS SQL query because JPQL does not
+   * support the PostgreSQL {@code ::} cast operator required by PostGIS geography functions. All
+   * other sort modes use QueryDSL JPQL.
    */
   @Override
   public Page<ClassItem> findActiveClasses(
@@ -109,37 +112,27 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
         startTime,
         endTime);
 
-    // Resolve effective sort first — determines whether a distance JOIN is needed
     String effectiveSort = resolveEffectiveSort(sort, lat, lng);
-    boolean needsDistanceJoin = SORT_DISTANCE.equals(effectiveSort);
 
-    // Distance expression — null when location data is absent
-    NumberExpression<Double> distanceKmExpr = buildDistanceExpression(lat, lng);
-
-    BooleanBuilder where = buildWhereClause(category, trainerId, startTime, endTime);
-
-    List<OrderSpecifier<?>> orders = buildOrderSpecifiers(effectiveSort, distanceKmExpr);
-
-    // ── Content fetch ──────────────────────────────────────────────────────
-    // When sorting by DISTANCE the ORDER BY clause references trainerStoreEntity.location;
-    // we must LEFT JOIN trainer_stores so QueryDSL/Hibernate can resolve that path.
-    var contentQuery = queryFactory.selectFrom(marketplaceClassEntity).where(where);
-
-    if (needsDistanceJoin) {
-      contentQuery =
-          contentQuery
-              .leftJoin(trainerStoreEntity)
-              .on(trainerStoreEntity.trainerId.eq(marketplaceClassEntity.trainerId));
+    // DISTANCE sort uses PostGIS geography functions — must use native SQL because
+    // JPQL cannot parse the PostgreSQL :: cast operator (e.g. ::geography).
+    if (SORT_DISTANCE.equals(effectiveSort)) {
+      return findActiveClassesByDistance(
+          lat, lng, category, trainerId, startTime, endTime, pageable);
     }
 
+    BooleanBuilder where = buildWhereClause(category, trainerId, startTime, endTime);
+    List<OrderSpecifier<?>> orders = buildOrderSpecifiers(effectiveSort);
+
     List<MarketplaceClassEntity> entities =
-        contentQuery
+        queryFactory
+            .selectFrom(marketplaceClassEntity)
+            .where(where)
             .orderBy(orders.toArray(new OrderSpecifier[0]))
             .offset(pageable.getOffset())
             .limit(pageable.getPageSize())
             .fetch();
 
-    // ── Count query (separated for performance) ────────────────────────────
     Long total =
         queryFactory
             .select(marketplaceClassEntity.count())
@@ -148,29 +141,167 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
             .fetchOne();
     long totalCount = total != null ? total : 0L;
 
-    List<ClassItem> items = toClassItems(entities, distanceKmExpr);
-
+    List<ClassItem> items = toClassItems(entities);
     return new PageImpl<>(items, pageable, totalCount);
+  }
+
+  /**
+   * Native SQL implementation for DISTANCE sort.
+   *
+   * <p>Uses PostGIS {@code ST_Distance(CAST(location AS geography), CAST(ST_MakePoint(lng,lat) AS
+   * geography))} for metre-accurate distance ordering. The equivalent {@code ::geography}
+   * PostgreSQL cast cannot be expressed in JPQL because Hibernate's native-query parser confuses
+   * {@code ::} with named-parameter prefixes.
+   *
+   * <p>Filters mirror those of the JPQL path: {@code active = true}, optional category, trainerId,
+   * and time-range (EXISTS on class_slots).
+   *
+   * <p><b>Warning</b>: if new filters are added to {@link #buildWhereClause}, they must also be
+   * mirrored here to maintain consistent behaviour across sort modes.
+   */
+  @SuppressWarnings("unchecked")
+  private Page<ClassItem> findActiveClassesByDistance(
+      double lat,
+      double lng,
+      String category,
+      Long trainerId,
+      String startTime,
+      String endTime,
+      Pageable pageable) {
+
+    // ── Build dynamic WHERE fragments ─────────────────────────────────────
+    StringBuilder where = new StringBuilder("mc.active = true");
+    if (category != null && !category.isBlank()) {
+      where.append(" AND mc.category = :category");
+    }
+    if (trainerId != null) {
+      where.append(" AND mc.trainer_id = :trainerId");
+    }
+    if ((startTime != null && !startTime.isBlank()) || (endTime != null && !endTime.isBlank())) {
+      where.append(
+          " AND EXISTS ("
+              + "SELECT 1 FROM class_slots cs "
+              + "WHERE cs.class_id = mc.id AND cs.active = true");
+      if (startTime != null && !startTime.isBlank()) {
+        where.append(" AND cs.start_time >= :startTime");
+      }
+      if (endTime != null && !endTime.isBlank()) {
+        where.append(" AND cs.start_time < :endTime");
+      }
+      where.append(")");
+    }
+
+    // lat/lng are double primitives — safe to embed as SQL literals (no injection risk).
+    // This completely avoids Hibernate's named-parameter parser, which treats every ':'
+    // as a parameter prefix and fails to recognise ':lat'/':lng' when the SQL string
+    // also contains CAST() expressions or is repeated in ORDER BY.
+    String distanceExpr =
+        "ST_Distance("
+            + "CAST(ts.location AS geography), "
+            + "CAST(ST_MakePoint("
+            + lng
+            + ", "
+            + lat
+            + ") AS geography)"
+            + ") / "
+            + METRES_PER_KM;
+
+    String contentSql =
+        "SELECT mc.id, mc.title, mc.category, mc.price_amount, mc.duration_minutes, "
+            + distanceExpr
+            + " AS distance_km "
+            + "FROM marketplace_classes mc "
+            + "LEFT JOIN trainer_stores ts ON ts.user_id = mc.trainer_id "
+            + "WHERE "
+            + where
+            + " ORDER BY "
+            + distanceExpr
+            + " ASC, mc.created_at DESC"
+            + " LIMIT "
+            + pageable.getPageSize()
+            + " OFFSET "
+            + pageable.getOffset();
+
+    String countSql =
+        "SELECT COUNT(*) FROM marketplace_classes mc "
+            + "LEFT JOIN trainer_stores ts ON ts.user_id = mc.trainer_id "
+            + "WHERE "
+            + where;
+
+    Query contentQuery = entityManager.createNativeQuery(contentSql);
+    Query countQuery = entityManager.createNativeQuery(countSql);
+
+    // Bind only the string/id parameters that cannot be inlined safely
+    for (Query q : List.of(contentQuery, countQuery)) {
+      if (category != null && !category.isBlank()) {
+        q.setParameter("category", category.toUpperCase());
+      }
+      if (trainerId != null) {
+        q.setParameter("trainerId", trainerId);
+      }
+      if (startTime != null && !startTime.isBlank()) {
+        q.setParameter("startTime", startTime);
+      }
+      if (endTime != null && !endTime.isBlank()) {
+        q.setParameter("endTime", endTime);
+      }
+    }
+
+    @SuppressWarnings("rawtypes")
+    List rawRows = contentQuery.getResultList();
+    // Native queries with multiple SELECTed columns always return List<Object[]>.
+    // Wrap in a helper to guard against single-column or single-row edge cases.
+    List<Object[]> rows =
+        rawRows.stream()
+            .map(
+                r -> {
+                  if (r instanceof Object[] arr) return arr;
+                  // Single-column fallback (should not happen with 6 columns, but defensive)
+                  return new Object[] {r};
+                })
+            .toList();
+    Number countResult = (Number) countQuery.getSingleResult();
+    long total = countResult.longValue();
+
+    List<ClassItem> items =
+        rows.stream()
+            .map(
+                row -> {
+                  Long id = ((Number) row[0]).longValue();
+                  String title = (String) row[1];
+                  String categoryStr = (String) row[2];
+                  ClassCategory cat =
+                      categoryStr != null ? ClassCategory.valueOf(categoryStr) : null;
+                  Integer priceAmount = row[3] != null ? ((Number) row[3]).intValue() : null;
+                  Integer durationMinutes = row[4] != null ? ((Number) row[4]).intValue() : null;
+                  Double distanceKm = row[5] != null ? ((Number) row[5]).doubleValue() : null;
+                  return new ClassItem(
+                      id, title, cat, priceAmount, durationMinutes, null, List.of(), distanceKm);
+                })
+            .toList();
+
+    return new PageImpl<>(items, pageable, total);
   }
 
   /**
    * {@inheritDoc}
    *
-   * <p>Uses a single JPQL LEFT JOIN to load the class and its trainer's store in one round-trip,
-   * eliminating the N+1 query pattern.
+   * <p>Loads the class entity and then fetches trainer store information via {@link
+   * LoadTrainerStorePort} in a separate query. This replaces the previous JPQL LEFT JOIN on {@code
+   * TrainerStoreEntity}, which violated the cross-module boundary rule (infrastructure entities
+   * from the {@code store} module must not be referenced here).
    */
   @Override
   public Optional<ClassDetailInfo> findClassDetailById(Long classId) {
     log.debug("Loading class detail by id: {}", classId);
 
-    List<Object[]> rows = classJpaRepository.findClassWithStore(classId);
-    if (rows.isEmpty()) {
+    MarketplaceClassEntity entity = classJpaRepository.findByIdAndActiveTrue(classId).orElse(null);
+    if (entity == null) {
       return Optional.empty();
     }
 
-    Object[] row = rows.get(0);
-    MarketplaceClassEntity entity = (MarketplaceClassEntity) row[0];
-    TrainerStoreEntity store = (TrainerStoreEntity) row[1]; // null when trainer has no store
+    // Fetch store via port — respects cross-module boundary (no TrainerStoreEntity import)
+    TrainerStore store = loadTrainerStorePort.findByTrainerId(entity.getTrainerId()).orElse(null);
 
     List<String> tags = loadClassTagPort.findTagNamesByClassId(classId);
     // Decode features via toDomainWithTags (avoids duplicating the decode() logic)
@@ -232,30 +363,8 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
   // Private helpers — query building
   // ============================================
 
-  /**
-   * Builds a PostGIS distance expression (in km) for ordering by proximity.
-   *
-   * <p>SQL generated: {@code ST_Distance(ts.location::geography, ST_MakePoint(lng,lat)::geography)
-   * / 1000}
-   *
-   * @return distance expression, or {@code null} when lat/lng are not provided
-   */
-  private NumberExpression<Double> buildDistanceExpression(Double lat, Double lng) {
-    if (lat == null || lng == null) {
-      return null;
-    }
-    // trainer_stores.location is geometry(Point,4326); cast to geography for metre output
-    return Expressions.numberTemplate(
-            Double.class,
-            "ST_Distance("
-                + "({0}).location ::geography, "
-                + "ST_MakePoint({1}, {2}) ::geography"
-                + ")",
-            trainerStoreEntity,
-            lng,
-            lat)
-        .divide(METRES_PER_KM);
-  }
+  // buildDistanceExpression removed: DISTANCE sort now uses native SQL via
+  // findActiveClassesByDistance() — JPQL cannot parse the PostgreSQL ::geography cast operator.
 
   /**
    * Assembles the WHERE predicate.
@@ -284,7 +393,7 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
       where.and(marketplaceClassEntity.trainerId.eq(trainerId));
     }
 
-    if (startTime != null || endTime != null) {
+    if ((startTime != null && !startTime.isBlank()) || (endTime != null && !endTime.isBlank())) {
       where.and(buildTimeRangeSubQuery(startTime, endTime));
     }
 
@@ -319,33 +428,25 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
   /**
    * Builds ORDER BY specifiers from a pre-resolved sort string.
    *
-   * <p>The caller must invoke {@link #resolveEffectiveSort} before calling this method so that
-   * fallback logic (DISTANCE without lat/lng → RATING) is applied exactly once.
+   * <p>DISTANCE sort is handled by the native SQL path ({@link #findActiveClassesByDistance}); this
+   * method is never called with {@code SORT_DISTANCE}.
    *
    * <table>
    *   <tr><th>effectiveSort value</th><th>ORDER BY</th></tr>
-   *   <tr><td>DISTANCE</td><td>ST_Distance ASC, created_at DESC</td></tr>
    *   <tr><td>RATING</td><td>id DESC (placeholder until review module exists)</td></tr>
    *   <tr><td>LATEST</td><td>created_at DESC</td></tr>
    *   <tr><td>PRICE_ASC</td><td>price_amount ASC</td></tr>
    *   <tr><td>PRICE_DESC</td><td>price_amount DESC</td></tr>
-   *   <tr><td>unknown/null</td><td>LATEST fallback (unreachable in normal flow; resolveEffectiveSort
-   *       normalises to {@link MarketplacePaginationConstants#DEFAULT_SORT} first)</td></tr>
+   *   <tr><td>unknown/null</td><td>LATEST fallback</td></tr>
    * </table>
    *
-   * @param effectiveSort already-resolved sort key (never null/blank)
-   * @param distanceKmExpr PostGIS distance expression; non-null only when lat/lng present
+   * @param effectiveSort already-resolved sort key (never DISTANCE/null/blank in this path)
    */
-  private List<OrderSpecifier<?>> buildOrderSpecifiers(
-      String effectiveSort, NumberExpression<Double> distanceKmExpr) {
+  private List<OrderSpecifier<?>> buildOrderSpecifiers(String effectiveSort) {
 
     List<OrderSpecifier<?>> specifiers = new ArrayList<>();
 
     switch (effectiveSort) {
-      case SORT_DISTANCE -> {
-        specifiers.add(distanceKmExpr.asc());
-        specifiers.add(marketplaceClassEntity.createdAt.desc());
-      }
       case SORT_PRICE_ASC -> specifiers.add(marketplaceClassEntity.priceAmount.asc());
       case SORT_PRICE_DESC -> specifiers.add(marketplaceClassEntity.priceAmount.desc());
       case SORT_RATING ->
@@ -386,38 +487,14 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
   }
 
   /**
-   * Converts entity list to {@link ClassItem} projections.
+   * Converts entity list to {@link ClassItem} projections (non-DISTANCE sort path).
    *
-   * <p>When location data is available, re-runs a BatchJoin query against {@code trainer_stores} to
-   * fetch the distance for every class in the page (one query for the whole page, not N queries).
-   * Thumbnail keys and tags are populated upstream by {@link
+   * <p>Distance is always {@code null} here; when DISTANCE sort is active the native SQL path
+   * ({@link #findActiveClassesByDistance}) builds {@link ClassItem} objects directly with the
+   * computed distance. Thumbnail keys and tags are populated upstream by {@link
    * momzzangseven.mztkbe.modules.marketplace.application.service.GetClassesService}.
    */
-  private List<ClassItem> toClassItems(
-      List<MarketplaceClassEntity> entities, NumberExpression<Double> distanceKmExpr) {
-
-    Map<Long, Double> distanceMap = Map.of();
-
-    if (distanceKmExpr != null && !entities.isEmpty()) {
-      List<Long> entityIds = entities.stream().map(MarketplaceClassEntity::getId).toList();
-      distanceMap =
-          queryFactory
-              .select(marketplaceClassEntity.id, distanceKmExpr)
-              .from(marketplaceClassEntity)
-              .leftJoin(trainerStoreEntity)
-              .on(trainerStoreEntity.trainerId.eq(marketplaceClassEntity.trainerId))
-              .where(marketplaceClassEntity.id.in(entityIds))
-              .fetch()
-              .stream()
-              .filter(t -> t.get(0, Long.class) != null)
-              .collect(
-                  Collectors.toMap(
-                      t -> t.get(0, Long.class),
-                      t -> t.get(1, Double.class), // may be null when store has no location
-                      (a, b) -> a));
-    }
-
-    final Map<Long, Double> dm = distanceMap;
+  private List<ClassItem> toClassItems(List<MarketplaceClassEntity> entities) {
     return entities.stream()
         .map(
             entity ->
@@ -429,7 +506,7 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
                     entity.getDurationMinutes(),
                     null, // thumbnail: populated later by GetClassesService
                     List.of(), // tags: populated later by GetClassesService
-                    dm.get(entity.getId())))
+                    null)) // distance: populated by native SQL path only
         .toList();
   }
 }
