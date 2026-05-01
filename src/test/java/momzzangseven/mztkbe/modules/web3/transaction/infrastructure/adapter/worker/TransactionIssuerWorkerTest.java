@@ -163,6 +163,23 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
+  void processBatch_walletAddressMalformed_schedulesTreasuryKeyMissingWithoutVerifying() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
+    when(loadRewardTreasuryWalletPort.load())
+        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID, "0xnot-a-real-address")));
+
+    worker.processBatch(2);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
+    verify(updateTransactionPort)
+        .scheduleRetry(2L, Web3TxFailureReason.TREASURY_KEY_MISSING.code(), null);
+    verifyNoInteractions(verifyTreasuryWalletForSignPort, web3ContractPort, reserveNoncePort);
+  }
+
+  @Test
   void processBatch_verifyForSignThrows_schedulesKmsKeyNotEnabledForEachItem() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
@@ -238,6 +255,32 @@ class TransactionIssuerWorkerTest {
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED.code(), retryAt);
     verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+  }
+
+  @Test
+  void processBatch_signTransferThrowsKmsSignFailed_auditDetailsDoNotLeakKmsKeyId() {
+    LocalDateTime retryAt = LocalDateTime.now().plusSeconds(45);
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenThrow(new KmsSignFailedException("kms throttled"));
+    when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
+        .thenReturn(retryAt);
+
+    worker.processBatch(1);
+
+    ArgumentCaptor<RecordTransactionAuditPort.AuditCommand> auditCaptor =
+        ArgumentCaptor.forClass(RecordTransactionAuditPort.AuditCommand.class);
+    verify(recordTransactionAuditPort, atLeastOnce()).record(auditCaptor.capture());
+    for (RecordTransactionAuditPort.AuditCommand cmd : auditCaptor.getAllValues()) {
+      Map<String, Object> detail = cmd.detail();
+      assertThat(detail).doesNotContainKey("kmsKeyId");
+      detail.values().forEach(v -> assertThat(String.valueOf(v)).doesNotContain(KMS_KEY_ID));
+    }
   }
 
   @Test
