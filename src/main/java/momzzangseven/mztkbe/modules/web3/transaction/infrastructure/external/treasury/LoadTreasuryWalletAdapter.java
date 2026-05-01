@@ -6,7 +6,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWal
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWalletStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,8 +21,10 @@ public class LoadTreasuryWalletAdapter implements LoadTreasuryWalletPort {
   private final LoadTreasuryWalletUseCase loadTreasuryWalletUseCase;
 
   @Override
-  public Optional<TreasuryWalletInfo> loadByAlias(String walletAlias) {
-    return loadTreasuryWalletUseCase.execute(walletAlias).map(LoadTreasuryWalletAdapter::toInfo);
+  public Optional<TreasuryWalletInfo> loadByAlias(String walletAlias, String workerId) {
+    return loadTreasuryWalletUseCase
+        .execute(walletAlias, Long.parseLong(workerId))
+        .map(LoadTreasuryWalletAdapter::toInfo);
   }
 
   private static TreasuryWalletInfo toInfo(TreasuryWalletView view) {
