@@ -490,6 +490,26 @@ async function recoverQuestionCreate(
   };
 }
 
+async function expireExecutionIntentForTest(intentId: string): Promise<void> {
+  const result = await db.query(
+    `update web3_execution_intents
+        set expires_at = now() - interval '1 minute',
+            updated_at = now()
+      where public_id = $1`,
+    [intentId]
+  );
+  expect(result.rowCount).toBe(1);
+}
+
+async function loadExecutionIntentStatus(intentId: string): Promise<string> {
+  const result = await db.query<{ status: string }>(
+    "select status from web3_execution_intents where public_id = $1",
+    [intentId]
+  );
+  expect(result.rowCount).toBe(1);
+  return result.rows[0].status;
+}
+
 async function updateAnswer(
   request: APIRequestContext,
   accessToken: string,
@@ -1011,6 +1031,60 @@ test.describe("Suite D — 질문 intent execute 검증", () => {
       );
       expect(pending.transaction?.id).toBeTruthy();
       expect(pending.transaction?.txHash).toBeTruthy();
+    }
+  );
+
+  test(
+    "TC-QNA-D-02: expired question-create execute persists EXPIRED and recover-create succeeds",
+    { tag: ["@requires-escrow-infra", "@requires-rpc", "@requires-funded-wallet"] },
+    async ({ request }) => {
+      test.skip(
+        !hasQuestionInfra(),
+        "RPC / QnA contract / reward token / funded asker wallet env is required"
+      );
+
+      const reward = 10;
+      const { accessToken } = await signUpAndLogin(request, "d02");
+      await registerWallet(request, accessToken, ENV.QNA_TEST_ASKER_PRIVATE_KEY);
+      await ensureRewardAllowance(ENV.QNA_TEST_ASKER_PRIVATE_KEY, reward);
+
+      const created = await createQuestion(
+        request,
+        accessToken,
+        "만료 intent recovery 테스트 질문",
+        "expired execution intent recovery contract",
+        reward
+      );
+
+      await expireExecutionIntentForTest(created.web3.executionIntent.id);
+
+      const executeRes = await request.post(
+        `${ENV.BACKEND_URL}/users/me/web3/execution-intents/${created.web3.executionIntent.id}/execute`,
+        {
+          headers: authHeaders(accessToken),
+          data: { signedRawTransaction: "0xexpired-test" },
+        }
+      );
+      const executeBody = await executeRes.json();
+
+      expect(
+        executeRes.status(),
+        `expired execute response: ${JSON.stringify(executeBody)}`
+      ).toBe(409);
+      expect(executeBody.status).toBe("FAIL");
+      expect(executeBody.code).toBe("WEB3_013");
+      expect(executeBody.retryable).toBe(false);
+      expect(await loadExecutionIntentStatus(created.web3.executionIntent.id)).toBe(
+        "EXPIRED"
+      );
+
+      const recovered = await recoverQuestionCreate(request, accessToken, created.postId);
+
+      expect(recovered.web3.actionType).toBe("QNA_QUESTION_CREATE");
+      expect(recovered.web3.executionIntent.id).not.toBe(
+        created.web3.executionIntent.id
+      );
+      expect(recovered.web3.executionIntent.status).toBe("AWAITING_SIGNATURE");
     }
   );
 });

@@ -8,8 +8,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -67,6 +67,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
    * new transaction.
    */
   @Override
+  @Transactional(noRollbackFor = ExecutionIntentTerminalException.class)
   public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
     ExecutionIntent intent =
         executionIntentPersistencePort
@@ -99,13 +100,9 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             expired.resolveSponsorUsageDateKst(),
             expired.getReservedSponsorCostWei());
       }
-      actionHandlerFor(expired)
-          .afterExecutionTerminated(
-              expired,
-              actionHandlerFor(expired).buildActionPlan(expired),
-              ExecutionIntentStatus.EXPIRED,
-              ErrorCode.EXECUTION_INTENT_EXPIRED.name());
-      throw new Web3TransferException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
+      safeAfterExecutionTerminated(
+          expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
+      throw new ExecutionIntentTerminalException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
     }
 
     if (!intent.getStatus().isSignable()) {
@@ -184,12 +181,13 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
             staleIntent.resolveSponsorUsageDateKst(),
             staleIntent.getReservedSponsorCostWei());
       }
-      actionHandler.afterExecutionTerminated(
+      safeAfterExecutionTerminated(
+          actionHandler,
           staleIntent,
           actionPlan,
           ExecutionIntentStatus.NONCE_STALE,
           ErrorCode.AUTH_NONCE_MISMATCH.name());
-      throw new Web3TransferException(ErrorCode.AUTH_NONCE_MISMATCH, false);
+      throw new ExecutionIntentTerminalException(ErrorCode.AUTH_NONCE_MISMATCH, false);
     }
 
     BigInteger deadlineEpochSeconds =
@@ -333,12 +331,13 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
                   LocalDateTime.now(appClock)));
-      actionHandler.afterExecutionTerminated(
+      safeAfterExecutionTerminated(
+          actionHandler,
           staleIntent,
           actionPlan,
           ExecutionIntentStatus.NONCE_STALE,
           ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name());
-      throw new Web3TransferException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
+      throw new ExecutionIntentTerminalException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
     }
 
     ExecutionTransactionGatewayPort.TransactionRecord created =
@@ -492,5 +491,45 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
 
   private ExecutionActionHandlerPort actionHandlerFor(ExecutionIntent intent) {
     return resolveActionHandler(intent);
+  }
+
+  private void safeAfterExecutionTerminated(
+      ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
+    try {
+      ExecutionActionHandlerPort actionHandler = actionHandlerFor(intent);
+      safeAfterExecutionTerminated(
+          actionHandler,
+          intent,
+          actionHandler.buildActionPlan(intent),
+          terminalStatus,
+          failureReason);
+    } catch (RuntimeException e) {
+      log.error(
+          "execution intent termination hook setup failed: executionIntentId={}, actionType={}, terminalStatus={}, failureReason={}",
+          intent.getPublicId(),
+          intent.getActionType(),
+          terminalStatus,
+          failureReason,
+          e);
+    }
+  }
+
+  private void safeAfterExecutionTerminated(
+      ExecutionActionHandlerPort actionHandler,
+      ExecutionIntent intent,
+      ExecutionActionPlan actionPlan,
+      ExecutionIntentStatus terminalStatus,
+      String failureReason) {
+    try {
+      actionHandler.afterExecutionTerminated(intent, actionPlan, terminalStatus, failureReason);
+    } catch (RuntimeException e) {
+      log.error(
+          "execution intent termination hook failed: executionIntentId={}, actionType={}, terminalStatus={}, failureReason={}",
+          intent.getPublicId(),
+          intent.getActionType(),
+          terminalStatus,
+          failureReason,
+          e);
+    }
   }
 }
