@@ -29,7 +29,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -92,7 +92,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     // duplicating the literal here while keeping the dependency to the treasury module minimal.
     String walletAlias = TreasuryRole.REWARD.toAlias();
 
-    Optional<TreasuryWalletInfo> walletOpt = loadTreasuryWalletPort.loadByAlias(walletAlias);
+    Optional<TreasuryWalletInfo> walletOpt =
+        loadTreasuryWalletPort.loadByAlias(walletAlias, workerId);
     if (walletOpt.isEmpty()) {
       failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
       return;
