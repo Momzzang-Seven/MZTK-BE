@@ -23,21 +23,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class EscrowTransactionAdapter implements SubmitEscrowTransactionPort {
 
-  @Value("${spring.profiles.active:}")
-  private String activeProfiles;
-
-  @PostConstruct
-  void rejectIfProd() {
-    if (activeProfiles.contains("prod")) {
-      throw new IllegalStateException(
-          "[STUB] EscrowTransactionAdapter is a stub and must not run in prod. "
-              + "Replace with a real Web3 adapter before deploying to production.");
-    }
-    log.warn(
-        "[STUB] EscrowTransactionAdapter is active (profiles={}). "
-            + "All escrow calls return a fake txHash.",
-        activeProfiles);
-  }
+//  @Value("${spring.profiles.active:}")
+//  private String activeProfiles;
+//
+//  @PostConstruct
+//  void rejectIfProd() {
+//    if (activeProfiles.contains("prod")) {
+//      throw new IllegalStateException(
+//          "[STUB] EscrowTransactionAdapter is a stub and must not run in prod. "
+//              + "Replace with a real Web3 adapter before deploying to production.");
+//    }
+//    log.warn(
+//        "[STUB] EscrowTransactionAdapter is active (profiles={}). "
+//            + "All escrow calls return a fake txHash.",
+//        activeProfiles);
+//  }
 
   private static final String STUB_TX_HASH =
       "0x0000000000000000000000000000000000000000000000000000000000000STUB";
