@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
+import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SignDigestPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder;
@@ -87,6 +88,22 @@ class SignEip1559TxServiceTest {
 
     assertThatThrownBy(() -> service.sign(fields, kmsKeyId, signerAddress))
         .isExactlyInstanceOf(KmsSignFailedException.class)
+        .isSameAs(expected);
+  }
+
+  @Test
+  @DisplayName("[M-112] SignDigestPort 가 SignatureRecoveryException 을 던지면 그대로 전파한다")
+  void sign_propagatesSignatureRecoveryExceptionUnchanged() {
+    Eip1559Fields fields = fixture();
+    String kmsKeyId = "alias/reward-treasury";
+    String signerAddress = "0x3333333333333333333333333333333333333333";
+
+    SignatureRecoveryException expected = new SignatureRecoveryException("recover mismatch");
+    when(signDigestPort.signDigest(eq(kmsKeyId), any(byte[].class), eq(signerAddress)))
+        .thenThrow(expected);
+
+    assertThatThrownBy(() -> service.sign(fields, kmsKeyId, signerAddress))
+        .isExactlyInstanceOf(SignatureRecoveryException.class)
         .isSameAs(expected);
   }
 }

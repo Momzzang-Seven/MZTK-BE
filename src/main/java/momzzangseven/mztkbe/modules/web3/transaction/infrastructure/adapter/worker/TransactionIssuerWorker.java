@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
@@ -100,12 +101,24 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     // Structural guards (cheap, local) precede the remote verify call so that incomplete wallet
     // rows fail fast with TREASURY_KEY_MISSING instead of leaking into TreasurySigner's compact
     // constructor (which would otherwise raise Web3InvalidInputException and abort the entire
-    // batch with no per-item audit trail).
+    // batch with no per-item audit trail). The address is checked for both blank AND format —
+    // a malformed-but-non-blank address would otherwise pass these guards and reach
+    // EvmAddress.of() inside TreasurySigner, propagating outside forEachItem's per-item catch.
     if (walletInfo.kmsKeyId() == null || walletInfo.kmsKeyId().isBlank()) {
       failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
       return;
     }
     if (walletInfo.walletAddress() == null || walletInfo.walletAddress().isBlank()) {
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      return;
+    }
+    try {
+      EvmAddress.of(walletInfo.walletAddress());
+    } catch (Web3InvalidInputException e) {
+      log.warn(
+          "Treasury wallet '{}' has malformed walletAddress: {}",
+          walletInfo.walletAlias(),
+          e.getMessage());
       failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
       return;
     }

@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.treasury.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("LoadTreasuryWalletByRoleService 단위 테스트")
@@ -54,5 +56,16 @@ class LoadTreasuryWalletByRoleServiceTest {
     Optional<TreasuryWalletView> result = service.execute(TreasuryRole.SPONSOR);
 
     assertThat(result).isEmpty();
+  }
+
+  @Test
+  @DisplayName("[M-180] execute — @Transactional(readOnly = true) 가 메서드에 선언되어 있다")
+  void execute_isAnnotatedWithReadOnlyTransactional() throws NoSuchMethodException {
+    Method execute = LoadTreasuryWalletByRoleService.class.getMethod("execute", TreasuryRole.class);
+
+    Transactional annotation = execute.getAnnotation(Transactional.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.readOnly()).isTrue();
   }
 }
