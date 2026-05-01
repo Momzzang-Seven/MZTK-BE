@@ -6,7 +6,7 @@ import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsSignerPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.crypto.DerToVrsConverter;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.kms.KmsClient;
@@ -25,10 +25,9 @@ import software.amazon.awssdk.services.kms.model.SigningAlgorithmSpec;
  * plaintext form (only as the in-memory request payload to AWS) and the private key never leaves
  * the AWS HSM.
  *
- * <p>This adapter is gated on the {@code prod} Spring profile so that local / dev / test /
- * integration / E2E environments — which lack the prod-only {@code KmsClient} bean — instead
- * receive {@link LocalEcSignerAdapter}. Exactly one bean of {@link KmsSignerPort} is wired per
- * environment.
+ * <p>This adapter is gated on {@code web3.kms.enabled=true} so that environments without the real
+ * KMS path (where {@code KmsClient} bean from {@code AwsKmsConfig} is absent) instead receive
+ * {@link LocalEcSignerAdapter}. Exactly one bean of {@link KmsSignerPort} is wired per environment.
  *
  * <p><b>Logging hygiene</b> — Per design §8 we never log the digest, DER signature, or recovered
  * {@code (r, s, v)}. Only {@code kmsKeyId} (a non-secret identifier) and high-level outcome are
@@ -42,7 +41,7 @@ import software.amazon.awssdk.services.kms.model.SigningAlgorithmSpec;
  * exponential-backoff strategy.
  */
 @Component
-@Profile("prod")
+@ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class KmsSignerAdapter implements KmsSignerPort {
