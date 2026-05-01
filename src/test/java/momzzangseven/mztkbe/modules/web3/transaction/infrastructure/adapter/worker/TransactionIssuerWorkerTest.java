@@ -21,8 +21,8 @@ import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.RecordTransactionAuditPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.ReserveNoncePort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
@@ -51,7 +51,7 @@ class TransactionIssuerWorkerTest {
   @Mock private LoadTransactionWorkPort loadTransactionWorkPort;
   @Mock private UpdateTransactionPort updateTransactionPort;
   @Mock private RecordTransactionAuditPort recordTransactionAuditPort;
-  @Mock private LoadTreasuryWalletPort loadTreasuryWalletPort;
+  @Mock private LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   @Mock private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @Mock private ReserveNoncePort reserveNoncePort;
   @Mock private Web3ContractPort web3ContractPort;
@@ -75,7 +75,7 @@ class TransactionIssuerWorkerTest {
             loadTransactionWorkPort,
             updateTransactionPort,
             recordTransactionAuditPort,
-            loadTreasuryWalletPort,
+            loadRewardTreasuryWalletPort,
             verifyTreasuryWalletForSignPort,
             reserveNoncePort,
             web3ContractPort,
@@ -100,7 +100,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS)).thenReturn(Optional.empty());
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.empty());
 
     worker.processBatch(2);
 
@@ -116,7 +116,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
+    when(loadRewardTreasuryWalletPort.load())
         .thenReturn(Optional.of(walletInfo(false, KMS_KEY_ID)));
 
     worker.processBatch(2);
@@ -133,8 +133,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, null)));
 
     worker.processBatch(2);
 
@@ -151,7 +150,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
+    when(loadRewardTreasuryWalletPort.load())
         .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID, null)));
 
     worker.processBatch(2);
@@ -168,8 +167,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     doThrow(new TreasuryWalletStateException("KMS key disabled"))
         .when(verifyTreasuryWalletForSignPort)
         .verify(WALLET_ALIAS);
@@ -190,8 +188,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(
             new Web3ContractPort.PrevalidateResult(
@@ -210,8 +207,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(
             new Web3ContractPort.PrevalidateResult(
@@ -229,8 +225,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
@@ -250,8 +245,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
@@ -271,8 +265,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
@@ -296,8 +289,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
     when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(33L);
@@ -327,8 +319,7 @@ class TransactionIssuerWorkerTest {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
-    when(loadTreasuryWalletPort.loadByAlias(WALLET_ALIAS))
-        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
     when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
         .thenReturn(prevalidateOk());
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
