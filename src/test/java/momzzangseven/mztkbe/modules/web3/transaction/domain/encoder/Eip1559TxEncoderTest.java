@@ -398,6 +398,42 @@ class Eip1559TxEncoderTest {
           .isInstanceOf(Web3InvalidInputException.class)
           .hasMessageContaining("data");
     }
+
+    @Test
+    @DisplayName("[M-22a] data = '0x' + 비 hex 문자 → Web3InvalidInputException (RLP 진입 전)")
+    void constructor_dataWithNonHexChars_throwsWithDataMessage() {
+      assertThatThrownBy(
+              () ->
+                  new Eip1559Fields(
+                      CHAIN_ID,
+                      NONCE,
+                      MAX_PRIORITY,
+                      MAX_FEE,
+                      GAS_LIMIT,
+                      TOKEN_CONTRACT,
+                      VALUE,
+                      "0xZZ"))
+          .isInstanceOf(Web3InvalidInputException.class)
+          .hasMessageContaining("data");
+    }
+
+    @Test
+    @DisplayName("[M-22b] data = '0x' + 홀수 hex 길이 → Web3InvalidInputException")
+    void constructor_dataWithOddHexLength_throwsWithDataMessage() {
+      assertThatThrownBy(
+              () ->
+                  new Eip1559Fields(
+                      CHAIN_ID,
+                      NONCE,
+                      MAX_PRIORITY,
+                      MAX_FEE,
+                      GAS_LIMIT,
+                      TOKEN_CONTRACT,
+                      VALUE,
+                      "0xabc"))
+          .isInstanceOf(Web3InvalidInputException.class)
+          .hasMessageContaining("data");
+    }
   }
 
   // =========================================================================
@@ -603,6 +639,26 @@ class Eip1559TxEncoderTest {
       // then — field index 9 = yParity
       RlpString yParityField = (RlpString) fields.getValues().get(9);
       assertThat(yParityField.asPositiveBigInteger()).isEqualTo(BigInteger.ONE);
+    }
+
+    @Test
+    @DisplayName("[M-101] v < 27 (이미 평탄화된 yParity) → yParity = v 그대로 (방어 분기)")
+    void assembleSigned_vBelow27_yParityEqualsVAsIs() {
+      // given — Vrs(r, s, v=0): 이미 0/1 로 평탄화돼 들어온 케이스를 방어 분기가 음수 없이 통과시키는지 검증
+      byte[] r = new byte[32];
+      byte[] s = new byte[32];
+      Arrays.fill(r, (byte) 0x01);
+      Arrays.fill(s, (byte) 0x01);
+      Vrs vrsFlat = new Vrs(r, s, (byte) 0);
+
+      // when
+      SignedTx result = Eip1559TxEncoder.assembleSigned(fixture(), vrsFlat);
+      RlpList fields = decodeSignedHex(result.rawTx());
+
+      // then — field index 9 = yParity, must equal v (0) not (0 - 27)
+      RlpString yParityField = (RlpString) fields.getValues().get(9);
+      assertThat(yParityField.asPositiveBigInteger()).isEqualTo(BigInteger.ZERO);
+      assertThat(result.rawTx()).startsWith("0x02");
     }
 
     @Test

@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
@@ -34,6 +35,9 @@ import org.web3j.utils.Numeric;
 public final class Eip1559TxEncoder {
 
   public static final byte TX_TYPE = 0x02;
+
+  // 0x-prefixed hex with an even number of hex chars; "0x" alone permitted for empty calldata.
+  private static final Pattern HEX_DATA_PATTERN = Pattern.compile("^0x([0-9a-fA-F]{2})*$");
 
   private Eip1559TxEncoder() {}
 
@@ -148,7 +152,7 @@ public final class Eip1559TxEncoder {
       if (value == null || value.signum() < 0) {
         throw new Web3InvalidInputException("value must be >= 0");
       }
-      if (data == null || !data.startsWith("0x")) {
+      if (data == null || !HEX_DATA_PATTERN.matcher(data).matches()) {
         throw new Web3InvalidInputException("data must be 0x-prefixed hex");
       }
     }

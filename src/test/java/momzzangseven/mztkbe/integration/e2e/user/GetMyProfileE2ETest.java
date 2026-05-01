@@ -303,6 +303,65 @@ class GetMyProfileE2ETest extends E2ETestBase {
   }
 
   @Test
+  @DisplayName("[E-101] 레벨업 후 web3_treasury_wallets 의 kms_key_id / status / key_origin 컬럼이 보존된다")
+  void levelUp_doesNotMutateRewardTreasuryWalletKmsColumns() throws Exception {
+    // given: reward-treasury seed (E-7 와 동일 패턴) — DatabaseCleaner.EXCLUDED_TABLES 이므로 idempotent.
+    jdbcTemplate.update(
+        "INSERT INTO web3_treasury_wallets ("
+            + "wallet_alias, treasury_address, kms_key_id, status, key_origin, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, NOW(), NOW()) "
+            + "ON CONFLICT (wallet_alias) DO UPDATE SET "
+            + "kms_key_id = EXCLUDED.kms_key_id,"
+            + " status = EXCLUDED.status,"
+            + " key_origin = EXCLUDED.key_origin",
+        "reward-treasury",
+        "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "alias/reward-treasury-e2e",
+        "ACTIVE",
+        "IMPORTED");
+
+    // 레벨업 사전 작업
+    ResponseEntity<String> attendanceRes =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/attendance",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(attendanceRes.getStatusCode().is2xxSuccessful()).isTrue();
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE user_progress SET available_xp = 400, lifetime_xp = 400 WHERE user_id = ?",
+            userId);
+    assertThat(updated).isGreaterThan(0);
+    jdbcTemplate.update(
+        "INSERT INTO user_wallets (created_at, registered_at, status, updated_at, user_id,"
+            + " wallet_address) VALUES (NOW(), NOW(), 'ACTIVE', NOW(), ?, ?)",
+        userId,
+        "0xdeadbeef1234567890abcdef1234567890abcdef");
+
+    // when: 레벨업 요청
+    ResponseEntity<String> levelUpRes =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/level-ups",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(levelUpRes.getStatusCode().is2xxSuccessful()).isTrue();
+    JsonNode body = objectMapper.readTree(levelUpRes.getBody());
+    assertThat(body.at("/status").asText()).isEqualTo("SUCCESS");
+
+    // then: KMS 컬럼이 그대로 유지되는지 확인 (level-up 흐름이 wallet row 를 mutate 하지 않음)
+    Map<String, Object> walletRow =
+        jdbcTemplate.queryForMap(
+            "SELECT kms_key_id, status, key_origin FROM web3_treasury_wallets"
+                + " WHERE wallet_alias = ?",
+            "reward-treasury");
+    assertThat(walletRow.get("kms_key_id")).isEqualTo("alias/reward-treasury-e2e");
+    assertThat(String.valueOf(walletRow.get("status"))).isEqualTo("ACTIVE");
+    assertThat(String.valueOf(walletRow.get("key_origin"))).isEqualTo("IMPORTED");
+  }
+
+  @Test
   @DisplayName("[E-9] GET /users/me는 readOnly — DB에 write가 발생하지 않는다")
   void getMyProfile_isReadOnly_causesNoDbWrites() {
     // given: 첫 호출 전 행 수 기록
