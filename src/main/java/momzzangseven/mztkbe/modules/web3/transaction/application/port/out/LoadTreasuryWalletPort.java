@@ -14,5 +14,5 @@ public interface LoadTreasuryWalletPort {
    * @param walletAlias canonical alias to look up
    * @return projection of the wallet bound to the alias, or empty if no row exists
    */
-  Optional<TreasuryWalletInfo> loadByAlias(String walletAlias);
+  Optional<TreasuryWalletInfo> loadByAlias(String walletAlias, String workerId);
 }
