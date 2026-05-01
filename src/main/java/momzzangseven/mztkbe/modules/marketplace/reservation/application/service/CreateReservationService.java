@@ -1,0 +1,192 @@
+package momzzangseven.mztkbe.modules.marketplace.reservation.application.service;
+
+import java.math.BigInteger;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.marketplace.ClassNotFoundException;
+import momzzangseven.mztkbe.global.error.marketplace.ReservationInvalidSlotDateException;
+import momzzangseven.mztkbe.global.error.marketplace.TrainerSuspendedException;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
+import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationCommand;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CreateReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.CreateReservationUseCase;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.CheckTrainerSanctionPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent;
+import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.EscrowDispatchEvent.EscrowAction;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Service that creates a new reservation via EIP-7702 escrow.
+ *
+ * <p>Validation checklist:
+ *
+ * <ol>
+ *   <li>Slot x date x time cross-validation (pessimistic lock on slot)
+ *   <li>Class is active
+ *   <li>Price match (signed amount == class.priceAmount)
+ *   <li>Trainer not suspended
+ *   <li>Slot capacity check (active count &lt; capacity)
+ *   <li>Persist PENDING reservation first (DB commit) → dispatch EscrowDispatchEvent(PURCHASE)
+ *       AFTER_COMMIT → listener calls purchaseClass on-chain and writes back real txHash.
+ * </ol>
+ *
+ * <p><b>DB-first ordering:</b><br>
+ * The reservation row is persisted with a sentinel {@code txHash} before any on-chain call. After
+ * the DB transaction commits, {@link EscrowDispatchEvent} (PURCHASE action) is handled AFTER_COMMIT
+ * by {@code EscrowDispatchEventListener}, which calls {@code purchaseClass} on-chain and writes
+ * back the real txHash. This ensures the DB row always exists before any on-chain side-effect,
+ * making reconciliation possible if the on-chain call fails.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class CreateReservationService implements CreateReservationUseCase {
+
+  private final GetClassSlotInfoUseCase getClassSlotInfoUseCase;
+  private final GetClassInfoUseCase getClassInfoUseCase;
+  private final CheckTrainerSanctionPort checkTrainerSanctionPort;
+  private final LoadReservationPort loadReservationPort;
+  private final SaveReservationPort saveReservationPort;
+  private final ApplicationEventPublisher eventPublisher;
+  private final Clock clock;
+
+  @Override
+  @Transactional
+  public CreateReservationResult execute(CreateReservationCommand command) {
+    command.validate();
+    log.debug(
+        "CreateReservation: userId={}, classId={}, slotId={}",
+        command.userId(),
+        command.classId(),
+        command.slotId());
+
+    // 1. Load the target slot with pessimistic write lock — prevents over-commit under concurrency
+    ClassSlot slot =
+        getClassSlotInfoUseCase
+            .findByIdWithLock(command.slotId())
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
+                        "Slot not found: classId="
+                            + command.classId()
+                            + " slotId="
+                            + command.slotId()));
+
+    // 1-a. Verify the slot belongs to the requested class (tamper guard)
+    if (!slot.getClassId().equals(command.classId())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
+          "Slot " + command.slotId() + " does not belong to class " + command.classId());
+    }
+
+    // 1-b. Guard against booking a soft-deleted slot
+    if (!slot.isActive()) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_INVALID_SLOT_DATE,
+          "Slot " + command.slotId() + " is inactive and cannot be booked");
+    }
+
+    // 2. Validate date/time against slot schedule
+    if (!slot.getDaysOfWeek().contains(command.reservationDate().getDayOfWeek())) {
+      throw new ReservationInvalidSlotDateException(slot.getId());
+    }
+    if (!slot.getStartTime().equals(command.reservationTime())) {
+      throw new ReservationInvalidSlotDateException(slot.getId());
+    }
+
+    // 2-a. 요청한 세션 시작 시각이 현재 시각보다 미래인지 확인
+    LocalDateTime requestedSessionStart =
+        LocalDateTime.of(command.reservationDate(), command.reservationTime());
+    if (requestedSessionStart.isBefore(LocalDateTime.now(clock))) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_PAST_TIME,
+          "Cannot book a session in the past: " + requestedSessionStart);
+    }
+
+    // 3. Load class and validate active status
+    MarketplaceClass cls =
+        getClassInfoUseCase
+            .findById(command.classId())
+            .orElseThrow(() -> new ClassNotFoundException(command.classId()));
+
+    if (!cls.isActive()) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_CLASS_INACTIVE, "Class is not active: " + command.classId());
+    }
+
+    // 4. Price mismatch guard
+    BigInteger expectedAmount = BigInteger.valueOf(cls.getPriceAmount());
+    if (!expectedAmount.equals(command.signedAmount())) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_PRICE_MISMATCH,
+          "Signed amount " + command.signedAmount() + " != class price " + cls.getPriceAmount());
+    }
+
+    // 5. Trainer sanction check
+    if (checkTrainerSanctionPort.hasActiveSanction(cls.getTrainerId())) {
+      throw new TrainerSuspendedException();
+    }
+
+    // 6. Capacity check with pessimistic write lock — prevents over-commit under concurrency
+    int activeCount =
+        loadReservationPort.countActiveReservationsBySlotIdAndDateWithLock(
+            slot.getId(), command.reservationDate());
+    if (activeCount >= slot.getCapacity()) {
+      throw new BusinessException(
+          ErrorCode.MARKETPLACE_RESERVATION_SLOT_FULL,
+          "Slot " + slot.getId() + " is at full capacity (" + slot.getCapacity() + ")");
+    }
+
+    // 7. Generate orderId and persist PENDING reservation with sentinel txHash BEFORE on-chain
+    // call.
+    //    DB row must exist first so that on-chain tx is always traceable via orderId even if the
+    //    subsequent escrow call or txHash write-back fails (reconciliation-friendly ordering).
+    String orderId = UUID.randomUUID().toString();
+    Reservation reservation =
+        Reservation.createPending(
+            command.userId(),
+            cls.getTrainerId(),
+            slot.getId(),
+            command.reservationDate(),
+            command.reservationTime(),
+            cls.getDurationMinutes(),
+            command.userRequest(),
+            orderId,
+            "ESCROW_DISPATCH_PENDING");
+
+    Reservation saved = saveReservationPort.save(reservation);
+
+    // 8. Dispatch PURCHASE event AFTER_COMMIT — EscrowDispatchEventListener calls purchaseClass
+    //    on-chain and writes back the real txHash in a REQUIRES_NEW transaction.
+    eventPublisher.publishEvent(
+        new EscrowDispatchEvent(
+            saved.getId(),
+            orderId,
+            EscrowAction.PURCHASE,
+            command.delegationSignature(),
+            command.executionSignature(),
+            expectedAmount));
+
+    log.info(
+        "Reservation created (escrow dispatch pending): id={}, userId={}, classId={}",
+        saved.getId(),
+        saved.getUserId(),
+        command.classId());
+
+    return new CreateReservationResult(saved.getId(), saved.getStatus());
+  }
+}

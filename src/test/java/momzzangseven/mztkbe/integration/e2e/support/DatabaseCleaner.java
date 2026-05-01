@@ -29,7 +29,7 @@ public class DatabaseCleaner {
 
   /** Tables whose contents must be preserved across tests. */
   private static final Set<String> EXCLUDED_TABLES =
-      Set.of("flyway_schema_history", "level_policies", "xp_policies", "web3_treasury_keys");
+      Set.of("flyway_schema_history", "level_policies", "xp_policies", "web3_treasury_wallets");
 
   @PersistenceContext private EntityManager entityManager;
 

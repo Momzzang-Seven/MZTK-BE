@@ -1,15 +1,25 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.adapter;
 
+import static momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.QPostEntity.postEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Predicate;
+import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.pagination.CursorScope;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
+import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -31,6 +41,7 @@ class PostPersistenceAdapterTest {
 
   @Mock private PostJpaRepository postJpaRepository;
   @Mock private JPAQueryFactory queryFactory;
+  @Mock private JPAQuery<PostEntity> jpaQuery;
 
   @InjectMocks private PostPersistenceAdapter postPersistenceAdapter;
 
@@ -193,6 +204,36 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("loadPostsByIdsPreservingOrder maps existing posts in requested order")
+  void loadPostsByIdsPreservingOrder_mapsInRequestedOrder() {
+    PostEntity first =
+        PostEntity.builder()
+            .id(1L)
+            .userId(4L)
+            .type(PostType.FREE)
+            .title(null)
+            .content("first")
+            .reward(0L)
+            .status(PostStatus.OPEN)
+            .build();
+    PostEntity second =
+        PostEntity.builder()
+            .id(2L)
+            .userId(5L)
+            .type(PostType.FREE)
+            .title(null)
+            .content("second")
+            .reward(0L)
+            .status(PostStatus.OPEN)
+            .build();
+    when(postJpaRepository.findAllById(List.of(2L, 999L, 1L))).thenReturn(List.of(first, second));
+
+    List<Post> posts = postPersistenceAdapter.loadPostsByIdsPreservingOrder(List.of(2L, 999L, 1L));
+
+    assertThat(posts).extracting(Post::getId).containsExactly(2L, 1L);
+  }
+
+  @Test
   @DisplayName("markQuestionPostSolved performs status-only conditional resolve update")
   void markQuestionPostSolvedDelegates() {
     when(postJpaRepository.markResolvedByIdIfType(
@@ -204,6 +245,115 @@ class PostPersistenceAdapterTest {
     assertThat(updated).isEqualTo(1);
     verify(postJpaRepository)
         .markResolvedByIdIfType(9L, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
+  }
+
+  @Test
+  @DisplayName("cursor tag first page delegates to native query with normalized FREE search")
+  void findPostsByCursorConditionWithTagFirstPageDelegates() {
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.FREE, "Java", "ignored", null, 10);
+    when(postJpaRepository.findPostsByConditionWithTagFirstPageNative("FREE", null, 7L, 11))
+        .thenReturn(List.of());
+
+    List<Post> result = postPersistenceAdapter.findPostsByCursorCondition(condition, 7L);
+
+    assertThat(result).isEmpty();
+    verify(postJpaRepository).findPostsByConditionWithTagFirstPageNative("FREE", null, 7L, 11);
+  }
+
+  @Test
+  @DisplayName("cursor tag next page delegates to native query with keyset cursor")
+  void findPostsByCursorConditionWithTagAfterCursorDelegates() {
+    LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 4, 24, 12, 0);
+    String scope = CursorScope.posts("QUESTION", "java", "form");
+    String cursor = CursorCodec.encode(new KeysetCursor(cursorCreatedAt, 15L, scope));
+    PostCursorSearchCondition condition =
+        PostCursorSearchCondition.of(PostType.QUESTION, "Java", "FoRm", cursor, 10);
+    when(postJpaRepository.findPostsByConditionWithTagAfterCursorNative(
+            "QUESTION", "form", 7L, cursorCreatedAt, 15L, 11))
+        .thenReturn(List.of());
+
+    List<Post> result = postPersistenceAdapter.findPostsByCursorCondition(condition, 7L);
+
+    assertThat(result).isEmpty();
+    verify(postJpaRepository)
+        .findPostsByConditionWithTagAfterCursorNative(
+            "QUESTION", "form", 7L, cursorCreatedAt, 15L, 11);
+  }
+
+  @Test
+  @DisplayName("my posts first page without search delegates to authored native query")
+  void findPostsByAuthorCursorFirstPageDelegates() {
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(
+            null, 10, 10, 50, CursorScope.myPosts(7L, PostType.QUESTION.name(), null, null));
+    when(postJpaRepository.findPostsByAuthorFirstPageNative(7L, "QUESTION", 11))
+        .thenReturn(List.of());
+
+    List<Post> result =
+        postPersistenceAdapter.findPostsByAuthorCursor(
+            7L, PostType.QUESTION, null, null, pageRequest);
+
+    assertThat(result).isEmpty();
+    verify(postJpaRepository).findPostsByAuthorFirstPageNative(7L, "QUESTION", 11);
+  }
+
+  @Test
+  @DisplayName("my posts next page delegates to authored native query with keyset cursor")
+  void findPostsByAuthorCursorAfterCursorDelegates() {
+    LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 4, 27, 12, 0);
+    String scope = CursorScope.myPosts(7L, PostType.FREE.name(), null, null);
+    String cursor = CursorCodec.encode(new KeysetCursor(cursorCreatedAt, 15L, scope));
+    CursorPageRequest pageRequest = CursorPageRequest.of(cursor, 10, 10, 50, scope);
+    when(postJpaRepository.findPostsByAuthorAfterCursorNative(7L, "FREE", cursorCreatedAt, 15L, 11))
+        .thenReturn(List.of());
+
+    List<Post> result =
+        postPersistenceAdapter.findPostsByAuthorCursor(7L, PostType.FREE, null, null, pageRequest);
+
+    assertThat(result).isEmpty();
+    verify(postJpaRepository)
+        .findPostsByAuthorAfterCursorNative(7L, "FREE", cursorCreatedAt, 15L, 11);
+  }
+
+  @Test
+  @DisplayName("my posts with tag and without search delegates to authored tag native query")
+  void findPostsByAuthorCursorWithTagDelegates() {
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(
+            null, 10, 10, 50, CursorScope.myPosts(7L, PostType.QUESTION.name(), "squat", null));
+    when(postJpaRepository.findPostsByAuthorWithTagFirstPageNative(7L, "QUESTION", 99L, 11))
+        .thenReturn(List.of());
+
+    List<Post> result =
+        postPersistenceAdapter.findPostsByAuthorCursor(
+            7L, PostType.QUESTION, 99L, null, pageRequest);
+
+    assertThat(result).isEmpty();
+    verify(postJpaRepository).findPostsByAuthorWithTagFirstPageNative(7L, "QUESTION", 99L, 11);
+  }
+
+  @Test
+  @DisplayName("my posts search uses QueryDSL instead of authored native query")
+  void findPostsByAuthorCursorWithSearchUsesQueryDsl() {
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(
+            null, 10, 10, 50, CursorScope.myPosts(7L, PostType.QUESTION.name(), "squat", "100%_!"));
+    when(queryFactory.selectFrom(postEntity)).thenReturn(jpaQuery);
+    when(jpaQuery.where(any(Predicate[].class))).thenReturn(jpaQuery);
+    when(jpaQuery.orderBy(any(OrderSpecifier[].class))).thenReturn(jpaQuery);
+    when(jpaQuery.limit(11L)).thenReturn(jpaQuery);
+    when(jpaQuery.fetch()).thenReturn(List.of());
+
+    List<Post> result =
+        postPersistenceAdapter.findPostsByAuthorCursor(
+            7L, PostType.QUESTION, 99L, "100%_!", pageRequest);
+
+    assertThat(result).isEmpty();
+    verify(queryFactory).selectFrom(postEntity);
+    verify(jpaQuery).where(any(Predicate[].class));
+    verify(jpaQuery).limit(11L);
+    verifyNoInteractions(postJpaRepository);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -285,6 +435,38 @@ class PostPersistenceAdapterTest {
     void searchWithNullType_returnsBooleanExpression() throws Exception {
       Object result = containsSearch.invoke(postPersistenceAdapter, null, "spring");
       assertThat(result).isNotNull();
+    }
+  }
+
+  @Nested
+  @DisplayName("containsCursorSearch() - v2 커서 검색어 필터 분기")
+  class ContainsCursorSearchBranch {
+
+    private java.lang.reflect.Method containsCursorSearch;
+
+    @BeforeEach
+    void setUp() throws Exception {
+      containsCursorSearch =
+          PostPersistenceAdapter.class.getDeclaredMethod(
+              "containsCursorSearch", PostType.class, String.class);
+      containsCursorSearch.setAccessible(true);
+    }
+
+    @Test
+    @DisplayName("search=text, type=QUESTION → 대소문자 무시 제목 포함 표현식 반환")
+    void searchWithNonFreeType_returnsIgnoreCaseBooleanExpression() throws Exception {
+      Object result =
+          containsCursorSearch.invoke(postPersistenceAdapter, PostType.QUESTION, "form");
+
+      assertThat(result).isNotNull();
+    }
+
+    @Test
+    @DisplayName("search=text, type=FREE → null 반환")
+    void searchWithFreeType_returnsNull() throws Exception {
+      Object result = containsCursorSearch.invoke(postPersistenceAdapter, PostType.FREE, "form");
+
+      assertThat(result).isNull();
     }
   }
 

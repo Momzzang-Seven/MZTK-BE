@@ -347,6 +347,8 @@ lambda:
 
 mztk:
   admin:
+    bootstrap:
+      enabled: true
     seed:
       seed-count: 2
       delivery-target: mztk/admin/bootstrap-delivery

@@ -5,10 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.out.ProvisionTreasuryKeyPort;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,16 +40,25 @@ class ProvisionTreasuryKeyServiceTest {
 
   @Test
   void execute_delegatesToPort_whenValid() {
+    String address = "0x" + "a".repeat(40);
     ProvisionTreasuryKeyCommand command =
-        new ProvisionTreasuryKeyCommand(1L, "f".repeat(64), "reward-main");
-    ProvisionTreasuryKeyResult expected = new ProvisionTreasuryKeyResult("kek-base64");
+        new ProvisionTreasuryKeyCommand(1L, "f".repeat(64), TreasuryRole.REWARD, address);
+    ProvisionTreasuryKeyResult expected =
+        new ProvisionTreasuryKeyResult(
+            "reward-treasury",
+            TreasuryRole.REWARD,
+            "kms-key-id",
+            address,
+            TreasuryWalletStatus.ACTIVE,
+            TreasuryKeyOrigin.IMPORTED,
+            LocalDateTime.now());
 
-    when(provisionTreasuryKeyPort.provision(1L, "reward-main", "f".repeat(64)))
+    when(provisionTreasuryKeyPort.provision(1L, "f".repeat(64), TreasuryRole.REWARD, address))
         .thenReturn(expected);
 
     ProvisionTreasuryKeyResult result = service.execute(command);
 
     assertThat(result).isEqualTo(expected);
-    verify(provisionTreasuryKeyPort).provision(1L, "reward-main", "f".repeat(64));
+    verify(provisionTreasuryKeyPort).provision(1L, "f".repeat(64), TreasuryRole.REWARD, address);
   }
 }

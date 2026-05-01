@@ -22,6 +22,7 @@ class PostListResponseTest {
         "title",
         "content",
         1L,
+        4L,
         false,
         7L,
         "writer",
@@ -58,6 +59,7 @@ class PostListResponseTest {
       assertThat(response.tags()).containsExactly("tag");
       assertThat(response.writer().userId()).isEqualTo(7L);
       assertThat(response.writer().nickname()).isEqualTo("writer");
+      assertThat(response.commentCount()).isEqualTo(4L);
       assertThat(response.question()).isNull();
     }
 

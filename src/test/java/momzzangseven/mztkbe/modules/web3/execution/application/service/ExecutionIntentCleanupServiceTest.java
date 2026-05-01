@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -31,6 +33,7 @@ class ExecutionIntentCleanupServiceTest {
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   @Mock private LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
+  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private ExecutionIntentCleanupService service;
 
@@ -41,7 +44,7 @@ class ExecutionIntentCleanupServiceTest {
             executionIntentPersistencePort,
             sponsorDailyUsagePersistencePort,
             loadExecutionCleanupPolicyPort,
-            List.of());
+            publishExecutionIntentTerminatedPort);
   }
 
   @Test
@@ -110,6 +113,12 @@ class ExecutionIntentCleanupServiceTest {
     assertThat(result.totalDeleted()).isEqualTo(4);
     verify(executionIntentPersistencePort).deleteByIds(List.of(11L, 12L));
     verify(sponsorDailyUsagePersistencePort).deleteByIdIn(List.of(1L));
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-10")
+                        && event.terminalStatus() == ExecutionIntentStatus.EXPIRED));
   }
 
   private ExecutionIntent expiredIntent() {

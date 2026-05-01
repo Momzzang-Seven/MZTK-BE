@@ -118,6 +118,8 @@ public class SecurityConfig {
                     .authenticated()
 
                     // --- User & Me Endpoints ---
+                    .requestMatchers(HttpMethod.GET, "/users/leaderboard")
+                    .permitAll()
                     .requestMatchers(HttpMethod.GET, "/users/me")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/auth/withdrawal")
@@ -183,6 +185,18 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/posts")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/users/me/commented-posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/posts/{postId}/comments")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/comments/{commentId}/replies")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/users/me/liked-posts")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/v2/users/me/posts")
+                    .authenticated()
                     // Public detail read supports optional JWT. Missing/invalid tokens fall back to
                     // anonymous access in JwtAuthenticationFilter, while withdrawn-user tokens are
                     // still blocked there before authorization rules run.
@@ -234,6 +248,14 @@ public class SecurityConfig {
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/admin/web3/treasury-keys/provision")
                     .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/admin/web3/treasury-keys/{walletAlias}")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST, "/admin/web3/treasury-keys/{walletAlias}/disable")
+                    .hasAuthority("ROLE_ADMIN")
+                    .requestMatchers(
+                        HttpMethod.POST, "/admin/web3/treasury-keys/{walletAlias}/archive")
+                    .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(
                         HttpMethod.POST, "/admin/web3/transactions/{txId}/mark-succeeded")
                     .hasAuthority("ROLE_ADMIN")
@@ -283,6 +305,32 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/marketplace/classes/*")
                     .permitAll()
+                    // Class availability read
+                    .requestMatchers(HttpMethod.GET, "/marketplace/classes/*/reservation-info")
+                    .permitAll()
+
+                    // Reservation — user actions
+                    .requestMatchers(HttpMethod.POST, "/marketplace/classes/*/reservations")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/me/reservations")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/marketplace/me/reservations/*")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/complete")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/me/reservations/*/cancel")
+                    .authenticated()
+
+                    // Reservation — trainer-only actions
+                    .requestMatchers(HttpMethod.GET, "/marketplace/trainer/reservations")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.GET, "/marketplace/trainer/reservations/*")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(
+                        HttpMethod.PATCH, "/marketplace/trainer/reservations/*/approve")
+                    .hasAuthority("ROLE_TRAINER")
+                    .requestMatchers(HttpMethod.PATCH, "/marketplace/trainer/reservations/*/reject")
+                    .hasAuthority("ROLE_TRAINER")
 
                     // --- Internal Endpoints ---
 

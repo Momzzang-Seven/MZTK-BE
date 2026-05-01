@@ -7,9 +7,13 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefu
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminSettlementUseCase;
-import momzzangseven.mztkbe.modules.web3.token.application.service.ProvisionTreasuryKeyService;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.MarkTransactionSucceededCommand;
 import momzzangseven.mztkbe.modules.web3.transaction.application.service.MarkTransactionSucceededService;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ArchiveTreasuryWalletCommand;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.DisableTreasuryWalletCommand;
+import momzzangseven.mztkbe.modules.web3.treasury.application.service.ArchiveTreasuryWalletService;
+import momzzangseven.mztkbe.modules.web3.treasury.application.service.DisableTreasuryWalletService;
+import momzzangseven.mztkbe.modules.web3.treasury.application.service.ProvisionTreasuryKeyService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -47,15 +51,53 @@ class AdminOnlyAnnotationTest {
       throws NoSuchMethodException {
     AdminOnly annotation =
         ProvisionTreasuryKeyService.class
-            .getMethod("execute", Long.class, String.class, String.class)
+            .getMethod(
+                "execute",
+                momzzangseven.mztkbe.modules.web3.treasury.application.dto
+                    .ProvisionTreasuryKeyCommand.class)
             .getAnnotation(AdminOnly.class);
 
     assertThat(annotation).isNotNull();
     assertThat(annotation.actionType()).isEqualTo("TREASURY_KEY_PROVISION");
     assertThat(annotation.targetType()).isEqualTo(AuditTargetType.TREASURY_KEY);
-    assertThat(annotation.operatorId()).isEqualTo("#operatorId");
-    assertThat(annotation.targetId())
-        .isEqualTo("#result != null ? #result.treasuryAddress() : null");
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId()");
+    assertThat(annotation.targetId()).isEqualTo("#result != null ? #result.walletAddress() : null");
+  }
+
+  @Test
+  @DisplayName(
+      "DisableTreasuryWalletService.execute 를 리플렉션으로 조회하면, "
+          + "@AdminOnly(actionType=TREASURY_KEY_DISABLE) 메타데이터가 그대로 부착되어 있다")
+  void disableTreasuryWalletService_isAnnotatedWithTreasuryKeyTargetType()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        DisableTreasuryWalletService.class
+            .getMethod("execute", DisableTreasuryWalletCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("TREASURY_KEY_DISABLE");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.TREASURY_KEY);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId()");
+    assertThat(annotation.targetId()).isEqualTo("#result != null ? #result.walletAddress() : null");
+  }
+
+  @Test
+  @DisplayName(
+      "ArchiveTreasuryWalletService.execute 를 리플렉션으로 조회하면, "
+          + "@AdminOnly(actionType=TREASURY_KEY_ARCHIVE) 메타데이터가 그대로 부착되어 있다")
+  void archiveTreasuryWalletService_isAnnotatedWithTreasuryKeyTargetType()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ArchiveTreasuryWalletService.class
+            .getMethod("execute", ArchiveTreasuryWalletCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("TREASURY_KEY_ARCHIVE");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.TREASURY_KEY);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId()");
+    assertThat(annotation.targetId()).isEqualTo("#result != null ? #result.walletAddress() : null");
   }
 
   @Test

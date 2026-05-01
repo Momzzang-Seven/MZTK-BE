@@ -24,6 +24,7 @@ class PostDetailResponseTest {
         "title",
         "content",
         3L,
+        6L,
         true,
         7L,
         "writer",
@@ -55,6 +56,7 @@ class PostDetailResponseTest {
     assertThat(response.question().isSolved()).isTrue();
     assertThat(response.question().web3Execution()).isNotNull();
     assertThat(response.question().web3Execution().actionType()).isEqualTo("QNA_ANSWER_ACCEPT");
+    assertThat(response.commentCount()).isEqualTo(6L);
   }
 
   @Nested

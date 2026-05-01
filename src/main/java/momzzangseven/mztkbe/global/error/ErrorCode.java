@@ -189,6 +189,35 @@ public enum ErrorCode {
       "WEB3_014", "Nonce stale; recreate execution intent", HttpStatus.CONFLICT),
   WEB3_INTERNAL_ISSUER_DISABLED(
       "WEB3_015", "Internal execution issuer is disabled", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEB3_SIGNATURE_RECOVERY_FAILED(
+      "WEB3_016",
+      "Failed to recover Ethereum address from KMS signature",
+      HttpStatus.INTERNAL_SERVER_ERROR),
+  WEB3_KMS_SIGN_FAILED("WEB3_017", "KMS sign operation failed", HttpStatus.INTERNAL_SERVER_ERROR),
+  WEB3_KMS_KEY_DESCRIBE_FAILED(
+      "WEB3_018", "KMS DescribeKey operation failed", HttpStatus.INTERNAL_SERVER_ERROR),
+
+  // ========================================
+  // Treasury Errors (TREASURY_xxx)
+  // ========================================
+  TREASURY_WALLET_INVALID_STATE(
+      "TREASURY_001",
+      "Treasury wallet is not in a state that allows the requested transition",
+      HttpStatus.CONFLICT),
+  TREASURY_KEY_PRIVATE_KEY_INVALID(
+      "TREASURY_002", "Treasury private key material is invalid", HttpStatus.BAD_REQUEST),
+  TREASURY_WALLET_ADDRESS_MISMATCH(
+      "TREASURY_003",
+      "Recovered Ethereum address does not match the registered treasury wallet",
+      HttpStatus.BAD_REQUEST),
+  TREASURY_WALLET_ALREADY_PROVISIONED(
+      "TREASURY_004",
+      "A treasury wallet is already provisioned for the requested role",
+      HttpStatus.CONFLICT),
+  KMS_ALIAS_ALREADY_EXISTS(
+      "TREASURY_005",
+      "KMS alias already exists for the requested role",
+      HttpStatus.INTERNAL_SERVER_ERROR),
 
   // ========================================
   // Challenge Errors (CHALLENGE_xxx)
@@ -468,6 +497,16 @@ public enum ErrorCode {
   MARKETPLACE_RESERVATION_EARLY_COMPLETE(
       "MARKETPLACE_023",
       "Cannot complete a reservation before the class starts",
+      HttpStatus.BAD_REQUEST),
+
+  MARKETPLACE_CLASS_INACTIVE(
+      "MARKETPLACE_032",
+      "Class is not currently active and cannot accept reservations",
+      HttpStatus.CONFLICT),
+
+  MARKETPLACE_RESERVATION_PAST_TIME(
+      "MARKETPLACE_031",
+      "Cannot book a session whose start time is already in the past",
       HttpStatus.BAD_REQUEST),
 
   // ========================================

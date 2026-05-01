@@ -1,16 +1,28 @@
 package momzzangseven.mztkbe.modules.web3.admin.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyCommand;
 import momzzangseven.mztkbe.modules.web3.admin.application.dto.ProvisionTreasuryKeyResult;
 import momzzangseven.mztkbe.modules.web3.admin.application.port.in.ProvisionTreasuryKeyUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.TreasuryWalletView;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ArchiveTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.DisableTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.LoadTreasuryWalletUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.TestPropertySource;
@@ -53,12 +65,24 @@ class TreasuryKeyControllerTest {
       txSignedRecoveryWorker;
 
   @MockitoBean private ProvisionTreasuryKeyUseCase provisionTreasuryKeyUseCase;
+  @MockitoBean private LoadTreasuryWalletUseCase loadTreasuryWalletUseCase;
+  @MockitoBean private DisableTreasuryWalletUseCase disableTreasuryWalletUseCase;
+  @MockitoBean private ArchiveTreasuryWalletUseCase archiveTreasuryWalletUseCase;
 
   @Test
   @DisplayName("POST /admin/web3/treasury-keys/provision 성공")
   void provision_success() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
     given(provisionTreasuryKeyUseCase.execute(any(ProvisionTreasuryKeyCommand.class)))
-        .willReturn(new ProvisionTreasuryKeyResult("base64-enc-key"));
+        .willReturn(
+            new ProvisionTreasuryKeyResult(
+                "reward-treasury",
+                TreasuryRole.REWARD,
+                "kms-key-id",
+                address,
+                TreasuryWalletStatus.ACTIVE,
+                TreasuryKeyOrigin.IMPORTED,
+                LocalDateTime.parse("2026-01-01T00:00:00")));
 
     mockMvc
         .perform(
@@ -68,13 +92,16 @@ class TreasuryKeyControllerTest {
                 .content(
                     json(
                         Map.of(
-                            "treasuryPrivateKey",
+                            "rawPrivateKey",
                             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                            "walletAlias",
-                            "treasury-main"))))
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            address))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.treasuryKeyEncryptionKeyB64").value("base64-enc-key"));
+        .andExpect(jsonPath("$.data.kmsKeyId").value("kms-key-id"))
+        .andExpect(jsonPath("$.data.walletAddress").value(address));
   }
 
   @Test
@@ -85,7 +112,15 @@ class TreasuryKeyControllerTest {
             post("/admin/web3/treasury-keys/provision")
                 .with(userPrincipal(1L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("treasuryPrivateKey", "0xabc"))))
+                .content(
+                    json(
+                        Map.of(
+                            "rawPrivateKey",
+                            "0xabc",
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            "0xabc"))))
         .andExpect(status().isForbidden());
   }
 
@@ -105,9 +140,175 @@ class TreasuryKeyControllerTest {
             post("/admin/web3/treasury-keys/provision")
                 .with(adminPrincipal(9L))
                 .contentType(APPLICATION_JSON)
-                .content(json(Map.of("treasuryPrivateKey", " "))))
+                .content(
+                    json(
+                        Map.of(
+                            "rawPrivateKey",
+                            " ",
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            "0x" + "a".repeat(40)))))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("FAIL"));
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/treasury-keys/{alias} ADMIN 성공")
+  void get_success_returnsView() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
+    given(loadTreasuryWalletUseCase.execute(eq("reward-treasury"), anyLong()))
+        .willReturn(
+            Optional.of(
+                new TreasuryWalletView(
+                    "reward-treasury",
+                    TreasuryRole.REWARD,
+                    "kms-key-id",
+                    address,
+                    TreasuryWalletStatus.ACTIVE,
+                    TreasuryKeyOrigin.IMPORTED,
+                    LocalDateTime.parse("2026-01-01T00:00:00"),
+                    null)));
+
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/reward-treasury").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.kmsKeyId").value("kms-key-id"))
+        .andExpect(jsonPath("$.data.walletAddress").value(address));
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/treasury-keys/{alias} USER 권한이면 403")
+  void get_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/reward-treasury").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("GET /admin/web3/treasury-keys/{alias} 인증 없으면 401")
+  void get_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/reward-treasury"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/treasury-keys/{alias}/disable USER 권한이면 403")
+  void disable_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("POST /admin/web3/treasury-keys/{alias}/archive USER 권한이면 403")
+  void archive_forbiddenForUser_returns403() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive").with(userPrincipal(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("[M-142b] GET /{alias} — 지갑이 없으면 409 (TREASURY_001)")
+  void get_walletNotFound_returns409() throws Exception {
+    given(loadTreasuryWalletUseCase.execute(eq("missing-alias"), anyLong()))
+        .willReturn(Optional.empty());
+
+    mockMvc
+        .perform(get("/admin/web3/treasury-keys/missing-alias").with(adminPrincipal(9L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("TREASURY_001"));
+  }
+
+  @Test
+  @DisplayName("[M-143a] POST /{alias}/disable — happy path: 200 + DISABLED view")
+  void disable_happyPath_returnsDisabledView() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
+    given(disableTreasuryWalletUseCase.execute(any()))
+        .willReturn(
+            new TreasuryWalletView(
+                "reward-treasury",
+                TreasuryRole.REWARD,
+                "kms-key-id",
+                address,
+                TreasuryWalletStatus.DISABLED,
+                TreasuryKeyOrigin.IMPORTED,
+                LocalDateTime.parse("2026-01-01T00:00:00"),
+                LocalDateTime.parse("2026-01-02T00:00:00")));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("DISABLED"))
+        .andExpect(jsonPath("$.data.disabledAt").exists());
+  }
+
+  @Test
+  @DisplayName("[M-143b] POST /{alias}/disable — UseCase에서 TreasuryWalletStateException → 409")
+  void disable_useCaseThrowsState_returns409() throws Exception {
+    given(disableTreasuryWalletUseCase.execute(any()))
+        .willThrow(
+            new momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException(
+                "wallet not found"));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable").with(adminPrincipal(9L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("TREASURY_001"));
+  }
+
+  @Test
+  @DisplayName("[M-143c] POST /{alias}/disable — 인증 없으면 401")
+  void disable_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/disable"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("[M-144a] POST /{alias}/archive — happy path: 200 + ARCHIVED view")
+  void archive_happyPath_returnsArchivedView() throws Exception {
+    String address = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
+    given(archiveTreasuryWalletUseCase.execute(any()))
+        .willReturn(
+            new TreasuryWalletView(
+                "reward-treasury",
+                TreasuryRole.REWARD,
+                "kms-key-id",
+                address,
+                TreasuryWalletStatus.ARCHIVED,
+                TreasuryKeyOrigin.IMPORTED,
+                LocalDateTime.parse("2026-01-01T00:00:00"),
+                LocalDateTime.parse("2026-01-02T00:00:00")));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
+  }
+
+  @Test
+  @DisplayName("[M-144b] POST /{alias}/archive — UseCase에서 TreasuryWalletStateException → 409")
+  void archive_useCaseThrowsState_returns409() throws Exception {
+    given(archiveTreasuryWalletUseCase.execute(any()))
+        .willThrow(
+            new momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException(
+                "must be DISABLED first"));
+
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive").with(adminPrincipal(9L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("TREASURY_001"));
+  }
+
+  @Test
+  @DisplayName("[M-144c] POST /{alias}/archive — 인증 없으면 401")
+  void archive_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(post("/admin/web3/treasury-keys/reward-treasury/archive"))
+        .andExpect(status().isUnauthorized());
   }
 
   @Test
@@ -121,8 +322,12 @@ class TreasuryKeyControllerTest {
                 .content(
                     json(
                         Map.of(
-                            "treasuryPrivateKey",
-                            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))))
+                            "rawPrivateKey",
+                            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                            "role",
+                            "REWARD",
+                            "expectedAddress",
+                            "0x" + "a".repeat(40)))))
         .andExpect(status().isUnauthorized());
   }
 

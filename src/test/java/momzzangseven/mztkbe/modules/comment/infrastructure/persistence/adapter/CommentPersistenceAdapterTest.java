@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
+import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
@@ -114,6 +118,40 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName(
+      "countCommentsByPostId() delegates to repository count query including soft-deleted rows")
+  void countCommentsByPostId_delegatesToRepository() {
+    given(commentRepository.countByPostId(10L)).willReturn(4L);
+
+    long result = adapter.countCommentsByPostId(10L);
+
+    assertThat(result).isEqualTo(4L);
+    verify(commentRepository).countByPostId(10L);
+  }
+
+  @Test
+  @DisplayName("countCommentsByPostIds() maps repository projections including soft-deleted rows")
+  void countCommentsByPostIds_mapsProjection() {
+    CommentJpaRepository.PostCommentCount first = postCommentCount(10L, 3L);
+    CommentJpaRepository.PostCommentCount second = postCommentCount(11L, 1L);
+    given(commentRepository.countCommentsByPostIds(List.of(10L, 11L)))
+        .willReturn(List.of(first, second));
+
+    Map<Long, Long> result = adapter.countCommentsByPostIds(List.of(10L, 11L));
+
+    assertThat(result).containsEntry(10L, 3L).containsEntry(11L, 1L);
+  }
+
+  @Test
+  @DisplayName("countCommentsByPostIds() no-ops for null or empty list")
+  void countCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
+    assertThat(adapter.countCommentsByPostIds(null)).isEmpty();
+    assertThat(adapter.countCommentsByPostIds(List.of())).isEmpty();
+
+    verifyNoInteractions(commentRepository);
+  }
+
+  @Test
   @DisplayName("countDirectRepliesByParentIds() maps repository projections")
   void countDirectRepliesByParentIds_mapsProjection() {
     CommentJpaRepository.DirectReplyCount first = directReplyCount(10L, 2L);
@@ -133,6 +171,55 @@ class CommentPersistenceAdapterTest {
     assertThat(adapter.countDirectRepliesByParentIds(List.of())).isEmpty();
 
     verifyNoInteractions(commentRepository);
+  }
+
+  @Test
+  @DisplayName("findCommentedPostRefsByUserCursor() uses first-page query when cursor is absent")
+  void findCommentedPostRefsByUserCursor_firstPage() {
+    CursorPageRequest pageRequest = new CursorPageRequest(null, 2, "scope");
+    FindCommentedPostRefsQuery query =
+        new FindCommentedPostRefsQuery(10L, "free", null, pageRequest);
+    LocalDateTime latest = LocalDateTime.of(2026, 4, 26, 12, 0);
+    given(commentRepository.findCommentedPostRefsFirstPage(10L, "FREE", null, 3))
+        .willReturn(List.of(commentedPostRef(100L, 1000L, latest)));
+
+    List<LatestCommentedPostRef> refs = adapter.findCommentedPostRefsByUserCursor(query);
+
+    assertThat(refs).containsExactly(new LatestCommentedPostRef(100L, 1000L, latest));
+    verify(commentRepository).findCommentedPostRefsFirstPage(10L, "FREE", null, 3);
+  }
+
+  @Test
+  @DisplayName("findCommentedPostRefsByUserCursor() uses cursor query when cursor is present")
+  void findCommentedPostRefsByUserCursor_afterCursor() {
+    LocalDateTime cursorCreatedAt = LocalDateTime.of(2026, 4, 26, 11, 0);
+    CursorPageRequest pageRequest =
+        new CursorPageRequest(new KeysetCursor(cursorCreatedAt, 900L, "scope"), 2, "scope");
+    FindCommentedPostRefsQuery query =
+        new FindCommentedPostRefsQuery(10L, "QUESTION", null, pageRequest);
+    given(
+            commentRepository.findCommentedPostRefsAfterCursor(
+                10L, "QUESTION", null, cursorCreatedAt, 900L, 3))
+        .willReturn(List.of());
+
+    adapter.findCommentedPostRefsByUserCursor(query);
+
+    verify(commentRepository)
+        .findCommentedPostRefsAfterCursor(10L, "QUESTION", null, cursorCreatedAt, 900L, 3);
+  }
+
+  @Test
+  @DisplayName("findCommentedPostRefsByUserCursor() escapes LIKE wildcards in title search")
+  void findCommentedPostRefsByUserCursor_escapesSearchPattern() {
+    CursorPageRequest pageRequest = new CursorPageRequest(null, 2, "scope");
+    FindCommentedPostRefsQuery query =
+        new FindCommentedPostRefsQuery(10L, "QUESTION", "  100%_! Form  ", pageRequest);
+    given(commentRepository.findCommentedPostRefsFirstPage(10L, "QUESTION", "100!%!_!! form", 3))
+        .willReturn(List.of());
+
+    adapter.findCommentedPostRefsByUserCursor(query);
+
+    verify(commentRepository).findCommentedPostRefsFirstPage(10L, "QUESTION", "100!%!_!! form", 3);
   }
 
   @Test
@@ -187,6 +274,40 @@ class CommentPersistenceAdapterTest {
       @Override
       public Long getReplyCount() {
         return replyCount;
+      }
+    };
+  }
+
+  private CommentJpaRepository.PostCommentCount postCommentCount(Long postId, Long commentCount) {
+    return new CommentJpaRepository.PostCommentCount() {
+      @Override
+      public Long getPostId() {
+        return postId;
+      }
+
+      @Override
+      public Long getCommentCount() {
+        return commentCount;
+      }
+    };
+  }
+
+  private CommentJpaRepository.CommentedPostRefProjection commentedPostRef(
+      Long postId, Long latestCommentId, LocalDateTime latestCommentedAt) {
+    return new CommentJpaRepository.CommentedPostRefProjection() {
+      @Override
+      public Long getPostId() {
+        return postId;
+      }
+
+      @Override
+      public Long getLatestCommentId() {
+        return latestCommentId;
+      }
+
+      @Override
+      public LocalDateTime getLatestCommentedAt() {
+        return latestCommentedAt;
       }
     };
   }
