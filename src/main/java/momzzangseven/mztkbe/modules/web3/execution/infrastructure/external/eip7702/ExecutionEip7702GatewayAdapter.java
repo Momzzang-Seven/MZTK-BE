@@ -83,7 +83,7 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
             .map(
                 call ->
                     new Eip7702ExecutionBatchCall(
-                        call.to(), call.value(), Numeric.hexStringToByteArray(call.data())))
+                        call.to(), call.value(), Numeric.hexStringToByteArray(call.dataHex())))
             .toList());
   }
 
@@ -94,7 +94,7 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
             .map(
                 call ->
                     new Eip7702ExecutionBatchCall(
-                        call.to(), call.value(), Numeric.hexStringToByteArray(call.data())))
+                        call.to(), call.value(), Numeric.hexStringToByteArray(call.dataHex())))
             .toList(),
         Numeric.hexStringToByteArray(executionSignatureHex));
   }

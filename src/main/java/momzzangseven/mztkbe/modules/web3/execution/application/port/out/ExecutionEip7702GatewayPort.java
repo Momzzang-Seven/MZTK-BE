@@ -48,7 +48,7 @@ public interface ExecutionEip7702GatewayPort {
 
   record FeePlan(BigInteger maxPriorityFeePerGas, BigInteger maxFeePerGas) {}
 
-  record BatchCall(String to, BigInteger value, String data) {}
+  record BatchCall(String to, BigInteger value, String dataHex) {}
 
   record SignCommand(
       long chainId,
