@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,6 +34,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -70,6 +72,7 @@ class ExecuteExecutionIntentServiceTest {
   @Mock private LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
+  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private ExecuteExecutionIntentService service;
 
@@ -87,6 +90,7 @@ class ExecuteExecutionIntentServiceTest {
             loadExecutionSponsorWalletConfigPort,
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
+            publishExecutionIntentTerminatedPort,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
@@ -155,6 +159,16 @@ class ExecuteExecutionIntentServiceTest {
         .isInstanceOf(Web3TransferException.class)
         .extracting(ex -> ((Web3TransferException) ex).getCode())
         .isEqualTo(ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getCode());
+
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-1")
+                        && event.terminalStatus() == ExecutionIntentStatus.NONCE_STALE
+                        && event
+                            .failureReason()
+                            .equals(ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name())));
   }
 
   @Test
@@ -172,6 +186,7 @@ class ExecuteExecutionIntentServiceTest {
         .hasMessageContaining("signedRawTransaction is required");
 
     verify(executionIntentPersistencePort, never()).update(any());
+    verify(publishExecutionIntentTerminatedPort, never()).publish(any());
   }
 
   @Test
@@ -230,6 +245,15 @@ class ExecuteExecutionIntentServiceTest {
         .isEqualTo(ErrorCode.EXECUTION_INTENT_EXPIRED.getCode());
 
     verify(executionIntentPersistencePort).update(any());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-1")
+                        && event.terminalStatus() == ExecutionIntentStatus.EXPIRED
+                        && event
+                            .failureReason()
+                            .equals(ErrorCode.EXECUTION_INTENT_EXPIRED.name())));
   }
 
   @Test
@@ -271,6 +295,13 @@ class ExecuteExecutionIntentServiceTest {
         .isEqualTo(ErrorCode.AUTH_NONCE_MISMATCH.getCode());
 
     verify(executionIntentPersistencePort).update(any());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-7702")
+                        && event.terminalStatus() == ExecutionIntentStatus.NONCE_STALE
+                        && event.failureReason().equals(ErrorCode.AUTH_NONCE_MISMATCH.name())));
   }
 
   private ExecutionIntent existingEip1559Intent() throws Exception {
