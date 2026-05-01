@@ -1,11 +1,13 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.event;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
+import java.lang.reflect.Method;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecutionTerminationHookUseCase;
@@ -16,6 +18,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.domain.event.Web3Transactio
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.UnexpectedRollbackException;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 class ExecutionIntentEventHandlersTest {
 
@@ -87,5 +93,21 @@ class ExecutionIntentEventHandlersTest {
                     command.executionIntentId().equals("intent-1")
                         && command.terminalStatus() == ExecutionIntentStatus.EXPIRED
                         && command.failureReason().equals("EXECUTION_INTENT_EXPIRED")));
+  }
+
+  @Test
+  void terminatedHandler_keepsAfterCommitRequiresNewBoundary() throws Exception {
+    Method handleMethod =
+        ExecutionIntentTerminatedEventHandler.class.getDeclaredMethod(
+            "handle", ExecutionIntentTerminatedEvent.class);
+
+    TransactionalEventListener eventListener =
+        handleMethod.getAnnotation(TransactionalEventListener.class);
+    Transactional transactional = handleMethod.getAnnotation(Transactional.class);
+
+    assertThat(eventListener).isNotNull();
+    assertThat(eventListener.phase()).isEqualTo(TransactionPhase.AFTER_COMMIT);
+    assertThat(transactional).isNotNull();
+    assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
   }
 }
