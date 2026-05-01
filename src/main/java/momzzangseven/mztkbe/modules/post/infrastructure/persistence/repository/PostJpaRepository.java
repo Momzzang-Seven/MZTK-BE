@@ -39,7 +39,6 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
           WHERE (:type IS NULL OR p.type = :type)
             AND (
               :search IS NULL
-              OR p.type = 'FREE'
               OR (
                 p.type = 'QUESTION'
                 AND LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!'
@@ -69,7 +68,6 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
           WHERE (:type IS NULL OR p.type = :type)
             AND (
               :search IS NULL
-              OR p.type = 'FREE'
               OR (
                 p.type = 'QUESTION'
                 AND LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!'

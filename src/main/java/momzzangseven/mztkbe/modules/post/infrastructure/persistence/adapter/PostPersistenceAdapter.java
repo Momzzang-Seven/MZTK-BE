@@ -173,10 +173,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
     BooleanExpression questionTitleMatches =
         postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
     if (type == null) {
-      return postEntity
-          .type
-          .eq(PostType.FREE)
-          .or(postEntity.type.eq(PostType.QUESTION).and(questionTitleMatches));
+      return postEntity.type.eq(PostType.QUESTION).and(questionTitleMatches);
     }
     return questionTitleMatches;
   }
