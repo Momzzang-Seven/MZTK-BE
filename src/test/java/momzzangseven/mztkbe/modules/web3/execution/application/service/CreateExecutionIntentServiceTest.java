@@ -30,10 +30,12 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
@@ -65,6 +67,7 @@ class CreateExecutionIntentServiceTest {
   @Mock private LoadEip1559TtlPort loadEip1559TtlPort;
   @Mock private BuildExecutionDigestPort buildExecutionDigestPort;
   @Mock private ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
+  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private CreateExecutionIntentService service;
   private ExecutionModeSelector executionModeSelector;
@@ -84,7 +87,7 @@ class CreateExecutionIntentServiceTest {
             buildExecutionDigestPort,
             validateExecutionDraftPolicyPort,
             executionModeSelector,
-            List.of(),
+            publishExecutionIntentTerminatedPort,
             FIXED_CLOCK);
   }
 
@@ -199,6 +202,58 @@ class CreateExecutionIntentServiceTest {
   }
 
   @Test
+  void execute_expiresExistingAwaitingSignatureIntentAndPublishesTermination_whenExistingExpired() {
+    ExecutionIntent existing =
+        withId(existingTransferIntent("intent-expired", FIXED_NOW.minusSeconds(1)), 77L);
+
+    when(executionIntentPersistencePort.findLatestByRootIdempotencyKeyForUpdate("root-transfer-1"))
+        .thenReturn(Optional.of(existing));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubEip1559Creation();
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(transferDraft(false)));
+
+    assertThat(result.existing()).isFalse();
+    verify(executionIntentPersistencePort)
+        .update(argThat(intent -> intent.getStatus() == ExecutionIntentStatus.EXPIRED));
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-expired")
+                        && event.terminalStatus() == ExecutionIntentStatus.EXPIRED
+                        && event.failureReason().equals(ErrorCode.AUTH_EXPIRED.name())));
+  }
+
+  @Test
+  void execute_cancelsExistingAwaitingSignatureIntentAndPublishesTermination_whenPayloadDiffers() {
+    ExecutionIntent existing =
+        withId(existingTransferIntent("intent-conflict", FIXED_NOW.plusSeconds(60)), 77L);
+
+    when(executionIntentPersistencePort.findLatestByRootIdempotencyKeyForUpdate("root-transfer-1"))
+        .thenReturn(Optional.of(existing));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    stubEip1559Creation();
+
+    CreateExecutionIntentResult result =
+        service.execute(new CreateExecutionIntentCommand(transferDraft(true)));
+
+    assertThat(result.existing()).isFalse();
+    verify(executionIntentPersistencePort)
+        .update(argThat(intent -> intent.getStatus() == ExecutionIntentStatus.CANCELED));
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-conflict")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED
+                        && event.failureReason().equals(ErrorCode.IDEMPOTENCY_CONFLICT.name())));
+  }
+
+  @Test
   void execute_createsDirectEip1559Intent_forInternalAdminSettleDraft() {
     when(executionIntentPersistencePort.create(any()))
         .thenAnswer(invocation -> withId(invocation.getArgument(0), 91L));
@@ -253,6 +308,42 @@ class CreateExecutionIntentServiceTest {
         unsignedTxSnapshot(),
         "0x" + "b".repeat(64),
         FIXED_NOW.plusSeconds(300));
+  }
+
+  private ExecutionIntent existingTransferIntent(String publicId, LocalDateTime expiresAt) {
+    return ExecutionIntent.create(
+        publicId,
+        "root-transfer-1",
+        1,
+        ExecutionResourceType.TRANSFER,
+        "web3:TRANSFER_SEND:7:req-1",
+        ExecutionActionType.TRANSFER_SEND,
+        7L,
+        8L,
+        ExecutionMode.EIP1559,
+        "0x" + "a".repeat(64),
+        "{\"payload\":true}",
+        null,
+        null,
+        null,
+        expiresAt,
+        null,
+        null,
+        unsignedTxSnapshot(),
+        "0x" + "b".repeat(64),
+        BigInteger.ZERO,
+        FIXED_DATE,
+        FIXED_NOW);
+  }
+
+  private void stubEip1559Creation() {
+    when(loadSponsorPolicyPort.loadSponsorPolicy())
+        .thenReturn(
+            new SponsorPolicy(
+                false, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
+    when(loadEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 88L));
   }
 
   private UnsignedTxSnapshot unsignedTxSnapshot() {

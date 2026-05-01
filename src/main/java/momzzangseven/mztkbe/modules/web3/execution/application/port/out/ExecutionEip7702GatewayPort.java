@@ -27,7 +27,7 @@ public interface ExecutionEip7702GatewayPort {
 
   String hashCalls(List<BatchCall> calls);
 
-  String encodeExecute(List<BatchCall> calls, byte[] executionSignature);
+  String encodeExecute(List<BatchCall> calls, String executionSignatureHex);
 
   SignedPayload signAndEncode(SignCommand command);
 
@@ -48,7 +48,7 @@ public interface ExecutionEip7702GatewayPort {
 
   record FeePlan(BigInteger maxPriorityFeePerGas, BigInteger maxFeePerGas) {}
 
-  record BatchCall(String to, BigInteger value, byte[] data) {}
+  record BatchCall(String to, BigInteger value, String dataHex) {}
 
   record SignCommand(
       long chainId,
