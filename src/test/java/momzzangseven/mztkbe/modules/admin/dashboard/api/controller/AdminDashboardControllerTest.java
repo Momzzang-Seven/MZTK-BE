@@ -6,7 +6,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.Map;
+import momzzangseven.mztkbe.modules.admin.dashboard.application.dto.AdminBoardStatsResult;
 import momzzangseven.mztkbe.modules.admin.dashboard.application.dto.AdminUserStatsResult;
+import momzzangseven.mztkbe.modules.admin.dashboard.application.port.in.GetAdminBoardStatsUseCase;
 import momzzangseven.mztkbe.modules.admin.dashboard.application.port.in.GetAdminUserStatsUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,7 @@ class AdminDashboardControllerTest {
       txSignedRecoveryWorker;
 
   @MockitoBean private GetAdminUserStatsUseCase getAdminUserStatsUseCase;
+  @MockitoBean private GetAdminBoardStatsUseCase getAdminBoardStatsUseCase;
 
   @Test
   @DisplayName("GET /admin/dashboard/user-stats ADMIN 이면 200과 응답 필드를 반환한다")
@@ -76,6 +79,25 @@ class AdminDashboardControllerTest {
   @DisplayName("GET /admin/dashboard/user-stats 인증 없으면 401")
   void getUserStats_unauthenticated_returns401() throws Exception {
     mockMvc.perform(get("/admin/dashboard/user-stats")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  @DisplayName("GET /admin/dashboard/post-stats ADMIN 이면 게시판 제재 통계를 반환한다")
+  void getPostStats_admin_returns200() throws Exception {
+    given(getAdminBoardStatsUseCase.execute(9L))
+        .willReturn(
+            new AdminBoardStatsResult(
+                Map.of("SPAM", 2L, "OTHER", 0L),
+                Map.of("FREE", 2L, "QUESTION", 0L),
+                Map.of("POST", 0L, "COMMENT", 2L)));
+
+    mockMvc
+        .perform(get("/admin/dashboard/post-stats").with(adminPrincipal(9L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postRemovalReasonStats.SPAM").value(2))
+        .andExpect(jsonPath("$.data.boardTypeSplit.FREE").value(2))
+        .andExpect(jsonPath("$.data.targetTypeStats.COMMENT").value(2));
   }
 
   private RequestPostProcessor adminPrincipal(Long userId) {
