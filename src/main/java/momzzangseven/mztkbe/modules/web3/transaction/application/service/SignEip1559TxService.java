@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.application.service;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.SignEip1559TxUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.SignDigestPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 @RequiredArgsConstructor
-public class SignEip1559TxService {
+public class SignEip1559TxService implements SignEip1559TxUseCase {
 
   private final SignDigestPort signDigestPort;
 
@@ -31,6 +32,7 @@ public class SignEip1559TxService {
    *     determination on the shared side)
    * @return signed transaction envelope ready for broadcast
    */
+  @Override
   public SignedTx sign(Eip1559Fields fields, String kmsKeyId, String signerAddress) {
     byte[] unsigned = Eip1559TxEncoder.buildUnsigned(fields);
     byte[] digest = Eip1559TxEncoder.digest(unsigned);
