@@ -139,7 +139,8 @@ public class TransactionalExecuteExecutionIntentDelegate {
     TreasurySigner sponsorSigner = gate.signer();
     String sponsorAddress = gate.walletInfo().walletAddress();
 
-    // Build authorizationTuple using client given authorizationSignature, interacting with eip7702 module.
+    // Build authorizationTuple using client given authorizationSignature, interacting with eip7702
+    // module.
     ExecutionEip7702GatewayPort.AuthorizationTuple authTuple =
         executionEip7702GatewayPort.toAuthorizationTuple(
             loadExecutionChainIdPort.loadChainId(),
