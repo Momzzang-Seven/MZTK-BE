@@ -24,10 +24,31 @@ class PostTest {
     assertThat(post.getReward()).isZero();
     assertThat(post.getTitle()).isNull();
     assertThat(post.getStatus()).isEqualTo(PostStatus.OPEN);
+    assertThat(post.getPublicationStatus()).isEqualTo(PostPublicationStatus.VISIBLE);
+    assertThat(post.getModerationStatus()).isEqualTo(PostModerationStatus.NORMAL);
+    assertThat(post.isPubliclyVisible()).isTrue();
     assertThat(post.isResolved()).isFalse();
     assertThat(post.getTags()).isEmpty();
     assertThat(post.getCreatedAt()).isNotNull();
     assertThat(post.getUpdatedAt()).isNotNull();
+  }
+
+  @Test
+  @DisplayName("publication and moderation state transitions are independent")
+  void publicationAndModerationTransitions() {
+    Post post = baseQuestionPost();
+
+    Post pending = post.markPublicationPending();
+    Post failed = pending.markPublicationFailed();
+    Post blocked = failed.block();
+    Post visibleButBlocked = blocked.markPublicationVisible();
+
+    assertThat(pending.getPublicationStatus()).isEqualTo(PostPublicationStatus.PENDING);
+    assertThat(failed.getPublicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(blocked.getModerationStatus()).isEqualTo(PostModerationStatus.BLOCKED);
+    assertThat(visibleButBlocked.getPublicationStatus()).isEqualTo(PostPublicationStatus.VISIBLE);
+    assertThat(visibleButBlocked.isPubliclyVisible()).isFalse();
+    assertThat(visibleButBlocked.unblock().isPubliclyVisible()).isTrue();
   }
 
   @Test

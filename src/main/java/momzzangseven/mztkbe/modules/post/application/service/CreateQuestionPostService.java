@@ -85,6 +85,9 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
             command.content(),
             command.reward(),
             command.tags());
+    if (questionLifecycleExecutionPort.managesQuestionCreateLifecycle()) {
+      post = post.markPublicationPending();
+    }
 
     Post savedPost = postPersistencePort.savePost(post);
 

@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public interface PostPersistencePort {
@@ -29,6 +30,11 @@ public interface PostPersistencePort {
 
   List<Post> findPostsByAuthorCursor(
       Long authorId, PostType type, Long tagId, String search, CursorPageRequest pageRequest);
+
+  List<Post> findQuestionPostsForPublicationReconciliation(Long afterPostId, int limit);
+
+  int updateQuestionPublicationStatusIfCurrent(
+      Long postId, PostPublicationStatus currentStatus, PostPublicationStatus targetStatus);
 
   int markQuestionPostSolved(Long postId);
 }

@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -31,15 +32,31 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("openStatus") PostStatus openStatus,
       @Param("resolvedStatus") PostStatus resolvedStatus);
 
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "update PostEntity p set p.publicationStatus = :targetStatus"
+          + " where p.id = :postId"
+          + " and p.type = :postType"
+          + " and p.publicationStatus = :currentStatus")
+  int updatePublicationStatusByIdIfCurrent(
+      @Param("postId") Long postId,
+      @Param("postType") PostType postType,
+      @Param("currentStatus") PostPublicationStatus currentStatus,
+      @Param("targetStatus") PostPublicationStatus targetStatus);
+
+  // Keep both v2 tag cursor native queries aligned with
+  // PostPersistenceAdapter#containsCursorSearch: when search is present,
+  // exclude FREE posts and match QUESTION titles only.
   @Query(
       value =
           """
           SELECT p.*
           FROM posts p
           WHERE (:type IS NULL OR p.type = :type)
+            AND p.publication_status = 'VISIBLE'
+            AND p.moderation_status = 'NORMAL'
             AND (
               :search IS NULL
-              OR p.type = 'FREE'
               OR (
                 p.type = 'QUESTION'
                 AND LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!'
@@ -61,15 +78,17 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("tagId") Long tagId,
       @Param("limit") int limit);
 
+  // Keep the same v2 search policy as the first-page tag cursor query.
   @Query(
       value =
           """
           SELECT p.*
           FROM posts p
           WHERE (:type IS NULL OR p.type = :type)
+            AND p.publication_status = 'VISIBLE'
+            AND p.moderation_status = 'NORMAL'
             AND (
               :search IS NULL
-              OR p.type = 'FREE'
               OR (
                 p.type = 'QUESTION'
                 AND LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!'
