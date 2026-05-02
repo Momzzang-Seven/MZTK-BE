@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.admin.user.api.controller;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -9,7 +10,10 @@ import java.time.Instant;
 import java.util.List;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserListItemResult;
+import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusCommand;
+import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusResult;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.GetAdminUsersCommand;
+import momzzangseven.mztkbe.modules.admin.user.application.port.in.ChangeAdminUserStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.user.application.port.in.GetAdminUsersUseCase;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -51,6 +56,7 @@ class AdminUserControllerTest {
       txSignedRecoveryWorker;
 
   @MockitoBean private GetAdminUsersUseCase getAdminUsersUseCase;
+  @MockitoBean private ChangeAdminUserStatusUseCase changeAdminUserStatusUseCase;
 
   @Test
   @DisplayName("GET /admin/users ADMIN 이면 200과 페이지 응답을 반환한다")
@@ -111,6 +117,38 @@ class AdminUserControllerTest {
   @DisplayName("GET /admin/users USER 권한이면 403")
   void getUsers_userForbidden_returns403() throws Exception {
     mockMvc.perform(get("/admin/users").with(userPrincipal(1L))).andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("PATCH /admin/users/{userId}/status ADMIN 이면 상태 변경 결과를 반환한다")
+  void changeStatus_admin_returns200() throws Exception {
+    given(
+            changeAdminUserStatusUseCase.execute(
+                org.mockito.ArgumentMatchers.any(ChangeAdminUserStatusCommand.class)))
+        .willReturn(new ChangeAdminUserStatusResult(21L, AccountStatus.BLOCKED));
+
+    mockMvc
+        .perform(
+            patch("/admin/users/{userId}/status", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"BLOCKED\",\"reason\":\"spam\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.userId").value(21))
+        .andExpect(jsonPath("$.data.status").value("BLOCKED"));
+  }
+
+  @Test
+  @DisplayName("PATCH /admin/users/{userId}/status 허용되지 않은 status 이면 400")
+  void changeStatus_invalidStatus_returns400() throws Exception {
+    mockMvc
+        .perform(
+            patch("/admin/users/{userId}/status", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"DELETED\",\"reason\":\"invalid\"}"))
+        .andExpect(status().isBadRequest());
   }
 
   private RequestPostProcessor adminPrincipal(Long userId) {
