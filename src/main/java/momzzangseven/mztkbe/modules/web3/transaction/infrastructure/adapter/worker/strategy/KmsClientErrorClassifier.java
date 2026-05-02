@@ -11,9 +11,9 @@ import software.amazon.awssdk.services.kms.model.KmsException;
  *
  * <p>Background: before this classifier, every KMS sign failure routed through {@code retry()},
  * which left rows with {@code KMS_SIGN_FAILED} eligible for re-claim every worker tick. AWS-side
- * "won't ever succeed" conditions (IAM deny, disabled key, invalid key usage, ...) therefore
- * looped forever, billing every retry to KMS. Surface those as terminal so they exit the queue
- * after one log line.
+ * "won't ever succeed" conditions (IAM deny, disabled key, invalid key usage, ...) therefore looped
+ * forever, billing every retry to KMS. Surface those as terminal so they exit the queue after one
+ * log line.
  *
  * <p>Non-terminal cases (network timeout, 5xx, throttling, unknown cause) keep the previous retry
  * behavior — the heavier {@code attempt_count}-based cap is tracked as a follow-up (F-2).

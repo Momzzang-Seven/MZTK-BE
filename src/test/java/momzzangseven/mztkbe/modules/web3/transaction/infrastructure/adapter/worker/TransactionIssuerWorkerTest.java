@@ -334,7 +334,8 @@ class TransactionIssuerWorkerTest {
         .thenThrow(
             new KmsSignFailedException(
                 "network",
-                software.amazon.awssdk.core.exception.SdkClientException.create("connect timeout")));
+                software.amazon.awssdk.core.exception.SdkClientException.create(
+                    "connect timeout")));
     when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
         .thenReturn(retryAt);
 
