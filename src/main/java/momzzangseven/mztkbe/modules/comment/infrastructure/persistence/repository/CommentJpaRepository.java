@@ -14,6 +14,8 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   long countByPostId(Long postId);
 
+  Page<CommentEntity> findByPostId(Long postId, Pageable pageable);
+
   @Query(
       "SELECT c.writerId AS userId, COUNT(c.id) AS commentCount "
           + "FROM CommentEntity c "
