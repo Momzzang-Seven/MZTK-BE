@@ -2,17 +2,27 @@ package momzzangseven.mztkbe.modules.admin.board.api.controller;
 
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardCommentResult;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardModerationResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPostResult;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardCommentUseCase;
+import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardPostUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostsUseCase;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -56,6 +67,8 @@ class AdminBoardControllerTest {
 
   @MockitoBean private GetAdminBoardPostsUseCase getAdminBoardPostsUseCase;
   @MockitoBean private GetAdminBoardPostCommentsUseCase getAdminBoardPostCommentsUseCase;
+  @MockitoBean private BanAdminBoardPostUseCase banAdminBoardPostUseCase;
+  @MockitoBean private BanAdminBoardCommentUseCase banAdminBoardCommentUseCase;
 
   @Test
   @DisplayName("GET /admin/boards/posts ADMIN 이면 페이지 응답을 반환한다")
@@ -135,6 +148,74 @@ class AdminBoardControllerTest {
     mockMvc
         .perform(get("/admin/boards/posts").with(userPrincipal(1L)))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/comments/{commentId}/ban ADMIN 이면 제재 결과를 반환한다")
+  void banComment_admin_returns200() throws Exception {
+    given(
+            banAdminBoardCommentUseCase.execute(
+                org.mockito.ArgumentMatchers.any(BanAdminBoardCommentCommand.class)))
+        .willReturn(
+            new AdminBoardModerationResult(
+                31L,
+                AdminBoardModerationTargetType.COMMENT,
+                AdminBoardModerationReasonCode.SPAM,
+                true));
+
+    mockMvc
+        .perform(
+            post("/admin/boards/comments/{commentId}/ban", 31L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"SPAM\",\"reasonDetail\":\"ad\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.targetId").value(31))
+        .andExpect(jsonPath("$.data.targetType").value("COMMENT"))
+        .andExpect(jsonPath("$.data.reasonCode").value("SPAM"))
+        .andExpect(jsonPath("$.data.moderated").value(true));
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/comments/{commentId}/ban reasonCode 가 enum 밖이면 400")
+  void banComment_invalidReasonCode_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/comments/{commentId}/ban", 31L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"BAD\",\"reasonDetail\":\"ad\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/comments/{commentId}/ban reasonDetail 이 500자를 초과하면 400")
+  void banComment_tooLongReasonDetail_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/comments/{commentId}/ban", 31L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"SPAM\",\"reasonDetail\":\"" + "a".repeat(501) + "\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/posts/{postId}/ban 정책 미확정이면 409")
+  void banPost_policyUnconfirmed_returns409() throws Exception {
+    given(
+            banAdminBoardPostUseCase.execute(
+                org.mockito.ArgumentMatchers.any(BanAdminBoardPostCommand.class)))
+        .willThrow(new BusinessException(ErrorCode.ADMIN_BOARD_POST_BAN_POLICY_UNCONFIRMED));
+
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/ban", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isConflict());
   }
 
   private RequestPostProcessor adminPrincipal(Long userId) {

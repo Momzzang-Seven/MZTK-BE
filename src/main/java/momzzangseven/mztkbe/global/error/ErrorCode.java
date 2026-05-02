@@ -544,6 +544,8 @@ public enum ErrorCode {
   RECOVERY_DELIVERY_FAILED(
       "ADMIN_008", "Failed to deliver recovery credentials", HttpStatus.INTERNAL_SERVER_ERROR),
   RATE_LIMITED("ADMIN_009", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
+  ADMIN_BOARD_POST_BAN_POLICY_UNCONFIRMED(
+      "ADMIN_010", "Admin post ban policy is not confirmed", HttpStatus.CONFLICT),
   ;
 
   private final String code;
