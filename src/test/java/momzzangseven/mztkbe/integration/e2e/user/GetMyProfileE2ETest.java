@@ -34,6 +34,7 @@ import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAna
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -73,6 +74,14 @@ class GetMyProfileE2ETest extends E2ETestBase {
     TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "E2Etester");
     userId = user.userId();
     accessToken = user.accessToken();
+  }
+
+  // web3_treasury_wallets 는 DatabaseCleaner.EXCLUDED_TABLES 라 자동 정리되지 않으므로,
+  // E-7 / E-101 시드 행이 다른 테스트 클래스로 누설되어 alias 충돌을 일으키지 않도록 명시적으로 삭제.
+  @AfterEach
+  void cleanRewardTreasuryWalletSeed() {
+    jdbcTemplate.update(
+        "DELETE FROM web3_treasury_wallets WHERE wallet_alias = ?", "reward-treasury");
   }
 
   // ============================================================
