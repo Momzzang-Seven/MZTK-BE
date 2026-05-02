@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
@@ -180,7 +181,8 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void processBatch_verifyForSignThrows_schedulesKmsKeyNotEnabledForEachItem() {
+  void processBatch_verifyForSignThrowsTreasuryState_schedulesKmsKeyNotEnabledRetryWithBackoff() {
+    LocalDateTime retryAt = LocalDateTime.now().plusSeconds(60);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
@@ -188,13 +190,43 @@ class TransactionIssuerWorkerTest {
     doThrow(new TreasuryWalletStateException("KMS key disabled"))
         .when(verifyTreasuryWalletForSignPort)
         .verify(WALLET_ALIAS);
+    when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
+        .thenReturn(retryAt);
 
     worker.processBatch(2);
 
+    // KMS_KEY_NOT_ENABLED is retryable; failBatch must route through the backoff path so
+    // processing_until is non-null. A null processing_until would let the SQL claim filter
+    // re-pick the same rows on the next worker tick (every second), causing a hot loop that
+    // hammers KMS while the operator restores the key.
     verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), null);
+        .scheduleRetry(1L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
     verify(updateTransactionPort)
-        .scheduleRetry(2L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), null);
+        .scheduleRetry(2L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
+    verifyNoInteractions(web3ContractPort, reserveNoncePort);
+  }
+
+  @Test
+  void processBatch_verifyForSignThrowsKmsKeyDescribeFailed_schedulesKmsKeyNotEnabledRetry() {
+    LocalDateTime retryAt = LocalDateTime.now().plusSeconds(60);
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    doThrow(new KmsKeyDescribeFailedException("describe throttled"))
+        .when(verifyTreasuryWalletForSignPort)
+        .verify(WALLET_ALIAS);
+    when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
+        .thenReturn(retryAt);
+
+    worker.processBatch(2);
+
+    // DescribeKey throttling/IAM/timeout must not propagate past processBatchItems — otherwise
+    // the batch aborts without per-row audit and worker tick keeps retrying immediately.
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
+    verify(updateTransactionPort)
+        .scheduleRetry(2L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
     verifyNoInteractions(web3ContractPort, reserveNoncePort);
   }
 
