@@ -13,6 +13,7 @@ public enum Web3TxFailureReason {
   TREASURY_WALLET_INACTIVE(false),
   KMS_KEY_NOT_ENABLED(true),
   KMS_SIGN_FAILED(true),
+  KMS_SIGN_FAILED_TERMINAL(false),
   SIGNATURE_INVALID(false),
   INVALID_SIGNED_TX(false),
   RECEIPT_TIMEOUT(false),

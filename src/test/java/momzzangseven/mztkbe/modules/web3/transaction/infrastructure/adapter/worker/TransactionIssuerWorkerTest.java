@@ -291,6 +291,61 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
+  void processBatch_signTransferThrowsKmsTerminal_marksTerminalAndReleasesNonce() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(99L);
+
+    software.amazon.awssdk.services.kms.model.KmsException kmsDenied =
+        (software.amazon.awssdk.services.kms.model.KmsException)
+            software.amazon.awssdk.services.kms.model.KmsException.builder()
+                .awsErrorDetails(
+                    software.amazon.awssdk.awscore.exception.AwsErrorDetails.builder()
+                        .errorCode("AccessDeniedException")
+                        .build())
+                .build();
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenThrow(new KmsSignFailedException("kms denied", kmsDenied));
+    when(reserveNoncePort.releaseNonce(TREASURY_ADDRESS, 99L)).thenReturn(true);
+
+    worker.processBatch(1);
+
+    verify(reserveNoncePort).releaseNonce(TREASURY_ADDRESS, 99L);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
+    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+  }
+
+  @Test
+  void processBatch_signTransferThrowsKmsTransient_schedulesRetryWithoutReleasingNonce() {
+    LocalDateTime retryAt = LocalDateTime.now().plusSeconds(45);
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(99L);
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenThrow(
+            new KmsSignFailedException(
+                "network",
+                software.amazon.awssdk.core.exception.SdkClientException.create("connect timeout")));
+    when(retryStrategy.nextRetryAt(any(TransactionRewardTokenProperties.class), any()))
+        .thenReturn(retryAt);
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED.code(), retryAt);
+    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
+  }
+
+  @Test
   void processBatch_signTransferThrowsKmsSignFailed_auditDetailsDoNotLeakKmsKeyId() {
     LocalDateTime retryAt = LocalDateTime.now().plusSeconds(45);
     when(loadTransactionWorkPort.claimByStatus(

@@ -28,6 +28,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.PrevalidateAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.SignAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.KmsClientErrorClassifier;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
@@ -210,7 +211,16 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
                   prevalidateResult.maxFeePerGas()));
     } catch (KmsSignFailedException e) {
       log.warn("KMS sign failed for txId={}: {}", item.transactionId(), e.getMessage());
-      retry(item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED.code(), item);
+      if (KmsClientErrorClassifier.isTerminal(e)) {
+        // unrecoverable AWS condition (IAM deny, disabled key, ...) — release the reserved nonce
+        // and terminal-fail. Without the release, the gap reproduces #2 even though the worker
+        // never broadcast.
+        releaseReservedNonceQuietly(item, signer.walletAddress(), nonce);
+        failPrevalidate(
+            item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), false);
+      } else {
+        retry(item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED.code(), item);
+      }
       return;
     } catch (SignatureRecoveryException e) {
       log.warn("Signature recovery failed for txId={}: {}", item.transactionId(), e.getMessage());
