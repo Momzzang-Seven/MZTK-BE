@@ -10,8 +10,8 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
  * <p>Implementation isolates web3j (RLP, keccak, hex) inside {@code
  * web3/shared/infrastructure/adapter/}, keeping the application-layer signing service framework-
  * free at the type level. Cross-module callers must not depend on this port — they go through
- * {@link
- * momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignEip1559TxUseCase} instead.
+ * {@link momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignEip1559TxUseCase}
+ * instead.
  */
 public interface Eip1559TxCodecPort {
 

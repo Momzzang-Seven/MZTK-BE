@@ -101,8 +101,7 @@ class SignEip1559TxServiceTest {
     when(signDigestUseCase.execute(any(SignDigestCommand.class))).thenThrow(expected);
 
     assertThatThrownBy(
-            () ->
-                service.sign(new SignEip1559TxCommand(fields, KMS_KEY_ID, SIGNER_ADDRESS)))
+            () -> service.sign(new SignEip1559TxCommand(fields, KMS_KEY_ID, SIGNER_ADDRESS)))
         .isExactlyInstanceOf(KmsSignFailedException.class)
         .isSameAs(expected);
   }
@@ -117,8 +116,7 @@ class SignEip1559TxServiceTest {
     when(signDigestUseCase.execute(any(SignDigestCommand.class))).thenThrow(expected);
 
     assertThatThrownBy(
-            () ->
-                service.sign(new SignEip1559TxCommand(fields, KMS_KEY_ID, SIGNER_ADDRESS)))
+            () -> service.sign(new SignEip1559TxCommand(fields, KMS_KEY_ID, SIGNER_ADDRESS)))
         .isExactlyInstanceOf(SignatureRecoveryException.class)
         .isSameAs(expected);
   }

@@ -6,8 +6,8 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 /**
- * Validated EIP-1559 (Type-2) field set carried as a wire-format DTO between callers and the
- * {@link momzzangseven.mztkbe.modules.web3.shared.application.port.out.Eip1559TxCodecPort} codec.
+ * Validated EIP-1559 (Type-2) field set carried as a wire-format DTO between callers and the {@link
+ * momzzangseven.mztkbe.modules.web3.shared.application.port.out.Eip1559TxCodecPort} codec.
  *
  * <p>Lives under {@code web3/shared/application/dto/} so sibling modules (transaction, execution,
  * ...) can compose this without importing a sub-module-private encoder type.

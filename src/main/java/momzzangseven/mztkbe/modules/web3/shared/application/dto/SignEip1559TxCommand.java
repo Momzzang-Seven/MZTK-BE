@@ -7,8 +7,8 @@ import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
  * momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignEip1559TxUseCase#sign}.
  *
  * <p>Captures the entire input set required to build, digest, sign, and assemble an EIP-1559
- * transaction in one round-trip — keeping the cross-module signature stable as the underlying
- * codec / signing layer evolves.
+ * transaction in one round-trip — keeping the cross-module signature stable as the underlying codec
+ * / signing layer evolves.
  *
  * @param fields validated EIP-1559 field set
  * @param kmsKeyId AWS KMS key identifier (alias ARN or key id) bound to the signer

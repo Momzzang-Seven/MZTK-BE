@@ -22,8 +22,8 @@ import org.web3j.utils.Numeric;
  *
  * <p>Confines web3j primitives ({@link RlpEncoder}, {@link Hash}, {@link Numeric}, {@link Bytes})
  * to the infrastructure layer, so the {@code SignEip1559TxService} orchestrator stays at the
- * application boundary. Signature bytes are supplied externally via {@link Vrs}; this adapter
- * never touches private-key material.
+ * application boundary. Signature bytes are supplied externally via {@link Vrs}; this adapter never
+ * touches private-key material.
  */
 @Component
 public class EIP1559CodecAdapter implements Eip1559TxCodecPort {
