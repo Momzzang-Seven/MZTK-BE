@@ -8,9 +8,9 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.Erc20TransferCalldataEncoder;
 import momzzangseven.mztkbe.modules.web3.transaction.application.service.SignEip1559TxService;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.SignedTx;
 import org.junit.jupiter.api.DisplayName;
@@ -37,7 +37,7 @@ class Eip1559TxSigningAdapterTest {
   private static final BigInteger MAX_FEE = BigInteger.valueOf(2_000_000_000L);
   private static final BigInteger AMOUNT_WEI = BigInteger.valueOf(1_000L);
 
-  @Mock private SignEip1559TxService signEip1559TxService;
+  @Mock private SignEip1559TxUseCase signEip1559TxService;
 
   @InjectMocks private Eip1559TxSigningAdapter adapter;
 

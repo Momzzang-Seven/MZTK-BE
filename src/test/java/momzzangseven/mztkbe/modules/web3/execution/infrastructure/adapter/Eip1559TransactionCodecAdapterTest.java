@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigInteger;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.Erc20TransferCalldataEncoder;
 import org.junit.jupiter.api.Test;
 import org.web3j.crypto.Credentials;
 import org.web3j.crypto.ECKeyPair;

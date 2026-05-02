@@ -2,7 +2,7 @@ package momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.adapter;
 
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.Erc20TransferCalldataEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
