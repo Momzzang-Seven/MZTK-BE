@@ -6,17 +6,21 @@ import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.post.application.dto.GetManagedBoardPostsQuery;
+import momzzangseven.mztkbe.modules.post.application.dto.ManagedBoardPostTargetView;
 import momzzangseven.mztkbe.modules.post.application.dto.ManagedBoardPostView;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadManagedBoardPostPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadManagedBoardPostsPort;
 import org.springframework.stereotype.Component;
 
 /** QueryDSL-backed adapter for admin board post rows using only post-owned data. */
 @Component
 @RequiredArgsConstructor
-public class ManagedBoardPostQueryPersistenceAdapter implements LoadManagedBoardPostsPort {
+public class ManagedBoardPostQueryPersistenceAdapter
+    implements LoadManagedBoardPostsPort, LoadManagedBoardPostPort {
 
   private final JPAQueryFactory queryFactory;
 
@@ -36,6 +40,22 @@ public class ManagedBoardPostQueryPersistenceAdapter implements LoadManagedBoard
         .from(postEntity)
         .where(buildWhere(query))
         .fetch();
+  }
+
+  @Override
+  public Optional<ManagedBoardPostTargetView> load(Long postId) {
+    ManagedBoardPostTargetView view =
+        queryFactory
+            .select(
+                Projections.constructor(
+                    ManagedBoardPostTargetView.class,
+                    postEntity.id,
+                    postEntity.type,
+                    postEntity.status))
+            .from(postEntity)
+            .where(postEntity.id.eq(postId))
+            .fetchOne();
+    return Optional.ofNullable(view);
   }
 
   private BooleanBuilder buildWhere(GetManagedBoardPostsQuery query) {
