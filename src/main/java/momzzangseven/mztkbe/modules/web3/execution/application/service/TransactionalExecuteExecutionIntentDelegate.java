@@ -8,8 +8,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -21,7 +21,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -31,7 +33,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactio
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.springframework.transaction.annotation.Transactional;
-import org.web3j.utils.Numeric;
 
 /**
  * Transactional delegate for {@link ExecuteExecutionIntentService}.
@@ -43,7 +44,7 @@ import org.web3j.utils.Numeric;
  */
 @Slf4j
 @RequiredArgsConstructor
-@Transactional
+@Transactional(noRollbackFor = ExecutionIntentTerminalException.class)
 public class TransactionalExecuteExecutionIntentDelegate {
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
@@ -56,6 +57,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
+  private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final Clock appClock;
 
   /**
@@ -98,13 +100,9 @@ public class TransactionalExecuteExecutionIntentDelegate {
             expired.resolveSponsorUsageDateKst(),
             expired.getReservedSponsorCostWei());
       }
-      actionHandlerFor(expired)
-          .afterExecutionTerminated(
-              expired,
-              actionHandlerFor(expired).buildActionPlan(expired),
-              ExecutionIntentStatus.EXPIRED,
-              ErrorCode.EXECUTION_INTENT_EXPIRED.name());
-      throw new Web3TransferException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
+      publishTerminated(
+          expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
+      throw new ExecutionIntentTerminalException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
     }
 
     if (!intent.getStatus().isSignable()) {
@@ -153,9 +151,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
             .map(
                 call ->
                     new ExecutionEip7702GatewayPort.BatchCall(
-                        call.toAddress(),
-                        call.valueWei(),
-                        Numeric.hexStringToByteArray(call.data())))
+                        call.toAddress(), call.valueWei(), call.data()))
             .toList();
     String callDataHash = executionEip7702GatewayPort.hashCalls(calls);
 
@@ -185,12 +181,9 @@ public class TransactionalExecuteExecutionIntentDelegate {
             staleIntent.resolveSponsorUsageDateKst(),
             staleIntent.getReservedSponsorCostWei());
       }
-      actionHandler.afterExecutionTerminated(
-          staleIntent,
-          actionPlan,
-          ExecutionIntentStatus.NONCE_STALE,
-          ErrorCode.AUTH_NONCE_MISMATCH.name());
-      throw new Web3TransferException(ErrorCode.AUTH_NONCE_MISMATCH, false);
+      publishTerminated(
+          staleIntent, ExecutionIntentStatus.NONCE_STALE, ErrorCode.AUTH_NONCE_MISMATCH.name());
+      throw new ExecutionIntentTerminalException(ErrorCode.AUTH_NONCE_MISMATCH, false);
     }
 
     // Verify Execution(Submit) Signature
@@ -207,8 +200,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
 
     // Encode Execution(Submit) Signature
     String executeCallData =
-        executionEip7702GatewayPort.encodeExecute(
-            calls, Numeric.hexStringToByteArray(command.submitSignature()));
+        executionEip7702GatewayPort.encodeExecute(calls, command.submitSignature());
 
     // Estimate gas, load fee plan via eip7702 module
     BigInteger estimatedGas =
@@ -340,12 +332,11 @@ public class TransactionalExecuteExecutionIntentDelegate {
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
                   ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
                   LocalDateTime.now(appClock)));
-      actionHandler.afterExecutionTerminated(
+      publishTerminated(
           staleIntent,
-          actionPlan,
           ExecutionIntentStatus.NONCE_STALE,
           ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name());
-      throw new Web3TransferException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
+      throw new ExecutionIntentTerminalException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
     }
 
     ExecutionTransactionGatewayPort.TransactionRecord created =
@@ -497,7 +488,9 @@ public class TransactionalExecuteExecutionIntentDelegate {
                     "no execution action handler for actionType=" + intent.getActionType()));
   }
 
-  private ExecutionActionHandlerPort actionHandlerFor(ExecutionIntent intent) {
-    return resolveActionHandler(intent);
+  private void publishTerminated(
+      ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
+    publishExecutionIntentTerminatedPort.publish(
+        new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 }

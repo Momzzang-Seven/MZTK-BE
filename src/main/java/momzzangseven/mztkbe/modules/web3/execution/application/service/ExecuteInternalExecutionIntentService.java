@@ -22,7 +22,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -55,6 +57,7 @@ public class ExecuteInternalExecutionIntentService
   private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
+  private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
   private final Clock appClock;
 
   @Override
@@ -94,12 +97,8 @@ public class ExecuteInternalExecutionIntentService
                   ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
                   ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
                   now));
-      safeAfterExecutionTerminated(
-          actionHandler,
-          expired,
-          actionPlan,
-          ExecutionIntentStatus.EXPIRED,
-          ErrorCode.EXECUTION_INTENT_EXPIRED.name());
+      publishTerminated(
+          expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
       return new ExecuteInternalExecutionIntentResult(
           true, false, expired.getPublicId(), expired.getStatus(), null, null, null);
     }
@@ -350,12 +349,7 @@ public class ExecuteInternalExecutionIntentService
                     : failureReason,
                 now));
     if (actionHandler != null && actionPlan != null) {
-      safeAfterExecutionTerminated(
-          actionHandler,
-          canceled,
-          actionPlan,
-          ExecutionIntentStatus.CANCELED,
-          INTERNAL_ISSUER_INVALID_INTENT);
+      publishTerminated(canceled, ExecutionIntentStatus.CANCELED, INTERNAL_ISSUER_INVALID_INTENT);
     }
     log.error(
         "internal execution issuer quarantined invalid intent: executionIntentId={}, actionType={}, reason={}",
@@ -376,22 +370,9 @@ public class ExecuteInternalExecutionIntentService
     return detail;
   }
 
-  private void safeAfterExecutionTerminated(
-      ExecutionActionHandlerPort actionHandler,
-      ExecutionIntent intent,
-      ExecutionActionPlan actionPlan,
-      ExecutionIntentStatus terminalStatus,
-      String failureReason) {
-    try {
-      actionHandler.afterExecutionTerminated(intent, actionPlan, terminalStatus, failureReason);
-    } catch (RuntimeException e) {
-      log.error(
-          "internal execution issuer termination hook failed: executionIntentId={}, actionType={}, terminalStatus={}, failureReason={}",
-          intent.getPublicId(),
-          intent.getActionType(),
-          terminalStatus,
-          failureReason,
-          e);
-    }
+  private void publishTerminated(
+      ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
+    publishExecutionIntentTerminatedPort.publish(
+        new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 }

@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActi
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -44,6 +45,7 @@ class MarkExecutionIntentOutcomeServiceTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
+  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private MarkExecutionIntentSucceededService succeededService;
   private MarkExecutionIntentFailedOnchainService failedOnchainService;
@@ -55,7 +57,7 @@ class MarkExecutionIntentOutcomeServiceTest {
             executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
     failedOnchainService =
         new MarkExecutionIntentFailedOnchainService(
-            executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
+            executionIntentPersistencePort, publishExecutionIntentTerminatedPort, FIXED_CLOCK);
   }
 
   @Test
@@ -103,13 +105,6 @@ class MarkExecutionIntentOutcomeServiceTest {
 
   @Test
   void markFailedOnchain_marksPendingIntentFailed() {
-    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
-    when(executionActionHandlerPort.buildActionPlan(any()))
-        .thenReturn(
-            new ExecutionActionPlan(
-                BigInteger.ZERO,
-                ExecutionReferenceType.USER_TO_SERVER,
-                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
@@ -128,22 +123,17 @@ class MarkExecutionIntentOutcomeServiceTest {
                                 .ExecutionIntentStatus.FAILED_ONCHAIN
                         && "FAILED_ONCHAIN".equals(updated.getLastErrorCode())
                         && "RECEIPT_STATUS_0".equals(updated.getLastErrorReason())));
-    verify(executionActionHandlerPort)
-        .afterExecutionFailedOnchain(
-            argThat(updated -> updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN),
-            any(),
-            org.mockito.ArgumentMatchers.eq("RECEIPT_STATUS_0"));
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-1")
+                        && event.terminalStatus() == ExecutionIntentStatus.FAILED_ONCHAIN
+                        && event.failureReason().equals("RECEIPT_STATUS_0")));
   }
 
   @Test
   void markFailedOnchain_preservesNullReasonForHandler() {
-    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
-    when(executionActionHandlerPort.buildActionPlan(any()))
-        .thenReturn(
-            new ExecutionActionPlan(
-                BigInteger.ZERO,
-                ExecutionReferenceType.USER_TO_SERVER,
-                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
@@ -160,11 +150,13 @@ class MarkExecutionIntentOutcomeServiceTest {
                     updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN
                         && "FAILED_ONCHAIN".equals(updated.getLastErrorCode())
                         && "FAILED_ONCHAIN".equals(updated.getLastErrorReason())));
-    verify(executionActionHandlerPort)
-        .afterExecutionFailedOnchain(
-            argThat(updated -> updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN),
-            any(),
-            org.mockito.ArgumentMatchers.isNull());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-1")
+                        && event.terminalStatus() == ExecutionIntentStatus.FAILED_ONCHAIN
+                        && event.failureReason() == null));
   }
 
   @Test
@@ -209,18 +201,8 @@ class MarkExecutionIntentOutcomeServiceTest {
   }
 
   @Test
-  @DisplayName("failed-onchain handler 예외가 발생해도 FAILED_ONCHAIN 상태는 먼저 저장된다")
-  void markFailedOnchain_handlerThrows_stillPersistsFailedState() {
-    when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
-    when(executionActionHandlerPort.buildActionPlan(any()))
-        .thenReturn(
-            new ExecutionActionPlan(
-                BigInteger.ZERO,
-                ExecutionReferenceType.USER_TO_SERVER,
-                List.of(new ExecutionDraftCall("0x" + "1".repeat(40), BigInteger.ZERO, "0x1234"))));
-    doThrow(new IllegalStateException("projection sync failed"))
-        .when(executionActionHandlerPort)
-        .afterExecutionFailedOnchain(any(), any(), any());
+  @DisplayName("FAILED_ONCHAIN 상태 저장 후 terminal hook 이벤트를 발행한다")
+  void markFailedOnchain_publishesTerminationEventAfterPersistingFailedState() {
     ExecutionIntent pendingIntent = pendingEip1559Intent();
     when(executionIntentPersistencePort.findBySubmittedTxIdForUpdate(12L))
         .thenReturn(Optional.of(pendingIntent));
@@ -236,6 +218,13 @@ class MarkExecutionIntentOutcomeServiceTest {
                 updated ->
                     updated.getStatus() == ExecutionIntentStatus.FAILED_ONCHAIN
                         && updated.getSubmittedTxId().equals(12L)));
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-1")
+                        && event.terminalStatus() == ExecutionIntentStatus.FAILED_ONCHAIN
+                        && event.failureReason().equals("RECEIPT_STATUS_0")));
   }
 
   private ExecutionIntent pendingEip1559Intent() {

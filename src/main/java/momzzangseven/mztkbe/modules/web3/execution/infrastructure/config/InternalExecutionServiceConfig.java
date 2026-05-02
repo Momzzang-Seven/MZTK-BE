@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
@@ -52,6 +53,7 @@ public class InternalExecutionServiceConfig {
       Eip1559TransactionCodecPort eip1559TransactionCodecPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       Clock appClock) {
     return new ExecuteInternalExecutionIntentService(
         executionIntentPersistencePort,
@@ -62,6 +64,7 @@ public class InternalExecutionServiceConfig {
         eip1559TransactionCodecPort,
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
+        publishExecutionIntentTerminatedPort,
         appClock);
   }
 

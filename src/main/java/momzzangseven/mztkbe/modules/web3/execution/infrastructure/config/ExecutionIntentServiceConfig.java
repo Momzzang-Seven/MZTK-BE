@@ -24,6 +24,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
@@ -35,6 +36,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.GetLatest
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentFailedOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
@@ -159,7 +161,7 @@ public class ExecutionIntentServiceConfig {
       BuildExecutionDigestPort buildExecutionDigestPort,
       ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort,
       ExecutionModeSelector executionModeSelector,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       Clock appClock) {
     return new CreateExecutionIntentService(
         executionIntentPersistencePort,
@@ -170,7 +172,7 @@ public class ExecutionIntentServiceConfig {
         buildExecutionDigestPort,
         validateExecutionDraftPolicyPort,
         executionModeSelector,
-        executionActionHandlerPorts,
+        publishExecutionIntentTerminatedPort,
         appClock);
   }
 
@@ -202,6 +204,7 @@ public class ExecutionIntentServiceConfig {
       LoadExecutionChainIdPort loadExecutionChainIdPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       Clock appClock) {
     return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -212,6 +215,7 @@ public class ExecutionIntentServiceConfig {
         loadExecutionChainIdPort,
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
+        publishExecutionIntentTerminatedPort,
         appClock);
   }
 
@@ -257,10 +261,18 @@ public class ExecutionIntentServiceConfig {
   @Bean
   MarkExecutionIntentFailedOnchainUseCase markExecutionIntentFailedOnchainUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       Clock appClock) {
     return new MarkExecutionIntentFailedOnchainService(
-        executionIntentPersistencePort, executionActionHandlerPorts, appClock);
+        executionIntentPersistencePort, publishExecutionIntentTerminatedPort, appClock);
+  }
+
+  @Bean
+  RunExecutionTerminationHookService runExecutionTerminationHookService(
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
+    return new RunExecutionTerminationHookService(
+        executionIntentPersistencePort, executionActionHandlerPorts);
   }
 
   private record TransactionalCreateExecutionIntentUseCase(

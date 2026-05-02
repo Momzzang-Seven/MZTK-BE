@@ -7,10 +7,11 @@ import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionCleanupPolicy;
@@ -30,7 +31,7 @@ public class ExecutionIntentCleanupService {
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
-  private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
+  private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   /**
    * Runs one cleanup batch using configured retention policy.
@@ -91,7 +92,7 @@ public class ExecutionIntentCleanupService {
               ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
               expiredNow);
       executionIntentPersistencePort.update(expired);
-      notifyTerminated(
+      publishTerminated(
           expired, ExecutionIntentStatus.EXPIRED, ErrorCode.EXECUTION_INTENT_EXPIRED.name());
       updatedCount++;
     }
@@ -111,15 +112,10 @@ public class ExecutionIntentCleanupService {
                     usage.release(intent.getReservedSponsorCostWei())));
   }
 
-  private void notifyTerminated(
+  private void publishTerminated(
       ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
-    executionActionHandlerPorts.stream()
-        .filter(handler -> handler.supports(intent.getActionType()))
-        .findFirst()
-        .ifPresent(
-            handler ->
-                handler.afterExecutionTerminated(
-                    intent, handler.buildActionPlan(intent), terminalStatus, failureReason));
+    publishExecutionIntentTerminatedPort.publish(
+        new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 
   /** Batch counters returned by cleanup run. */

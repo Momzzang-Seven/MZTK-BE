@@ -17,7 +17,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.ErrorCode;
-import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
+import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -31,6 +31,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -75,6 +76,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
+  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private TransactionalExecuteExecutionIntentDelegate delegate;
 
@@ -90,6 +92,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
             loadExecutionChainIdPort,
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
+            publishExecutionIntentTerminatedPort,
             FIXED_CLOCK);
     lenient()
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
@@ -161,8 +164,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                 delegate.execute(
                     new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
                     sponsorGate()))
-        .isInstanceOf(Web3TransferException.class)
-        .extracting(ex -> ((Web3TransferException) ex).getCode())
+        .isInstanceOf(ExecutionIntentTerminalException.class)
+        .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getCode());
   }
 
@@ -220,8 +223,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                 delegate.execute(
                     new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
                     sponsorGate()))
-        .isInstanceOf(Web3TransferException.class)
-        .extracting(ex -> ((Web3TransferException) ex).getCode())
+        .isInstanceOf(ExecutionIntentTerminalException.class)
+        .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.EXECUTION_INTENT_EXPIRED.getCode());
 
     verify(executionIntentPersistencePort).update(any());
@@ -257,8 +260,8 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                     new ExecuteExecutionIntentCommand(
                         7L, "intent-7702", "0xauth", "0xsubmit", null),
                     sponsorGate()))
-        .isInstanceOf(Web3TransferException.class)
-        .extracting(ex -> ((Web3TransferException) ex).getCode())
+        .isInstanceOf(ExecutionIntentTerminalException.class)
+        .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
         .isEqualTo(ErrorCode.AUTH_NONCE_MISMATCH.getCode());
 
     verify(executionIntentPersistencePort).update(any());
