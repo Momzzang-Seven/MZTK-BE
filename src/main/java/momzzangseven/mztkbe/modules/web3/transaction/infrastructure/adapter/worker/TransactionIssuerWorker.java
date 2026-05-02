@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -89,13 +90,13 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
     Optional<TreasuryWalletInfo> walletOpt = loadRewardTreasuryWalletPort.load();
     if (walletOpt.isEmpty()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
     TreasuryWalletInfo walletInfo = walletOpt.get();
 
     if (!walletInfo.active()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_WALLET_INACTIVE.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_WALLET_INACTIVE);
       return;
     }
     // Structural guards (cheap, local) precede the remote verify call so that incomplete wallet
@@ -105,11 +106,11 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     // a malformed-but-non-blank address would otherwise pass these guards and reach
     // EvmAddress.of() inside TreasurySigner, propagating outside forEachItem's per-item catch.
     if (walletInfo.kmsKeyId() == null || walletInfo.kmsKeyId().isBlank()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
     if (walletInfo.walletAddress() == null || walletInfo.walletAddress().isBlank()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
     try {
@@ -119,18 +120,18 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           "Treasury wallet '{}' has malformed walletAddress: {}",
           walletInfo.walletAlias(),
           e.getMessage());
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
 
     try {
       verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
-    } catch (TreasuryWalletStateException e) {
+    } catch (TreasuryWalletStateException | KmsKeyDescribeFailedException e) {
       log.warn(
           "Treasury wallet '{}' verify-for-sign failed: {}",
           walletInfo.walletAlias(),
           e.getMessage());
-      failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code());
+      failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED);
       return;
     }
 
@@ -142,8 +143,17 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         items, item -> processItem(item, signer), Web3TxFailureReason.RPC_UNAVAILABLE.code());
   }
 
-  private void failBatch(List<LoadTransactionWorkPort.TransactionWorkItem> items, String code) {
-    items.forEach(item -> failPrevalidate(item.transactionId(), code, false));
+  // Routes batch-wide failures through retry/terminal based on the failure reason's retryable flag.
+  // Critical for retryable reasons (e.g. KMS_KEY_NOT_ENABLED) — a terminal write would leave
+  // processing_until=null while the SQL claim filter only excludes non-retryable reasons,
+  // letting the same rows be re-claimed every worker tick and hammer KMS until manual intervention.
+  private void failBatch(
+      List<LoadTransactionWorkPort.TransactionWorkItem> items, Web3TxFailureReason reason) {
+    if (reason.isRetryable()) {
+      items.forEach(item -> retry(item.transactionId(), reason.code(), item));
+    } else {
+      items.forEach(item -> failPrevalidate(item.transactionId(), reason.code(), false));
+    }
   }
 
   private void processItem(
