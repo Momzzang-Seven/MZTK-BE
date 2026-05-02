@@ -201,19 +201,31 @@ class QnaEscrowE2ETest extends E2ETestBase {
 
   @Test
   @Order(4)
-  @DisplayName("GET /posts/{postId} — 익명 공개 조회로 question web3Execution summary 를 반환한다")
-  void getQuestionDetail_anonymous_returnsQuestionWeb3ExecutionSummary() throws Exception {
-    ResponseEntity<String> createResponse = createQuestionPost("공개 조회 질문", "공개 조회 본문", 40L);
+  @DisplayName("GET /posts/{postId} — PENDING 질문은 작성자만 web3Execution summary 를 조회한다")
+  void getQuestionDetail_pendingQuestion_ownerOnlyReturnsQuestionWeb3ExecutionSummary()
+      throws Exception {
+    ResponseEntity<String> createResponse = createQuestionPost("작성자 조회 질문", "작성자 조회 본문", 40L);
     assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     Long postId =
         objectMapper.readTree(createResponse.getBody()).path("data").path("postId").asLong();
 
-    ResponseEntity<String> getResponse =
+    ResponseEntity<String> anonymousResponse =
         restTemplate.exchange(baseUrl() + "/posts/" + postId, HttpMethod.GET, null, String.class);
 
-    assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-    JsonNode data = objectMapper.readTree(getResponse.getBody()).path("data");
+    assertThat(anonymousResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+    ResponseEntity<String> ownerResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.GET,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(ownerResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(ownerResponse.getBody()).path("data");
     assertThat(data.path("type").asText()).isEqualTo("QUESTION");
+    assertThat(data.path("publicationStatus").asText()).isEqualTo("PENDING");
+    assertThat(data.path("moderationStatus").asText()).isEqualTo("NORMAL");
     assertThat(data.path("question").path("reward").asLong()).isEqualTo(40L);
     assertThat(data.path("question").path("web3Execution").path("actionType").asText())
         .isEqualTo("QNA_QUESTION_CREATE");

@@ -39,6 +39,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   private final UpdatePostImagesPort updatePostImagesPort;
   private final CountAnswersPort countAnswersPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  private final PostVisibilityPolicy postVisibilityPolicy;
 
   /**
    * Updates a post and prepares question escrow work only when question content actually changed.
@@ -49,16 +50,19 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
+    postVisibilityPolicy.validateOwnerMutationAllowed(post);
+    validateQuestionPublicationMutationAllowed(post);
     long activeAnswerCount = countActiveAnswers(post);
     validatePostImagesIfPresent(currentUserId, postId, post.getType(), command.imageIds());
 
     boolean contentChanged =
         command.content() != null && !command.content().equals(post.getContent());
+    boolean failedQuestion = isFailedQuestion(post);
 
     Post updatedPost =
         post.update(command.title(), command.content(), command.tags(), activeAnswerCount);
     PostMutationResult preparedResult = null;
-    if (PostType.QUESTION.equals(post.getType()) && command.content() != null) {
+    if (PostType.QUESTION.equals(post.getType()) && command.content() != null && !failedQuestion) {
       var web3 =
           contentChanged
               ? questionLifecycleExecutionPort.prepareQuestionUpdate(
@@ -94,7 +98,15 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   public PostMutationResult deletePost(Long currentUserId, Long postId) {
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
+    postVisibilityPolicy.validateOwnerMutationAllowed(post);
+    validateQuestionPublicationMutationAllowed(post);
     post.validateDeletable(countActiveAnswers(post));
+
+    if (isFailedQuestion(post)) {
+      postPersistencePort.deletePost(post);
+      eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
+      return new PostMutationResult(postId, null);
+    }
 
     if (PostType.QUESTION.equals(post.getType())) {
       var web3 =
@@ -118,6 +130,25 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
       return 0L;
     }
     return countAnswersPort.countAnswers(post.getId());
+  }
+
+  private void validateQuestionPublicationMutationAllowed(Post post) {
+    if (!PostType.QUESTION.equals(post.getType())) {
+      return;
+    }
+    if (post.isPublicationPending()) {
+      throw new PostInvalidInputException(
+          "Question create flow is pending; wait for completion or recovery state.");
+    }
+    if (post.isPublicationFailed()
+        && questionLifecycleExecutionPort.hasActiveQuestionIntent(post.getId())) {
+      throw new PostInvalidInputException(
+          "Question has pending onchain mutation; wait for completion or recover first.");
+    }
+  }
+
+  private boolean isFailedQuestion(Post post) {
+    return PostType.QUESTION.equals(post.getType()) && post.isPublicationFailed();
   }
 
   private void validatePostImagesIfPresent(

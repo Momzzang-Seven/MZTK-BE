@@ -22,6 +22,7 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
 
   private final PostPersistencePort postPersistencePort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  private final PostVisibilityPolicy postVisibilityPolicy;
 
   @Override
   public PostMutationResult recoverQuestionCreate(RecoverQuestionPostEscrowCommand command) {
@@ -30,9 +31,18 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     Post post =
         postPersistencePort.loadPost(command.postId()).orElseThrow(PostNotFoundException::new);
     post.validateOwnership(command.requesterId());
+    postVisibilityPolicy.validateOwnerMutationAllowed(post);
     if (post.getType() != PostType.QUESTION) {
       throw new momzzangseven.mztkbe.global.error.post.PostInvalidInputException(
           "Only question posts support escrow recovery.");
+    }
+    if (!post.isPublicationFailed()) {
+      throw new momzzangseven.mztkbe.global.error.post.PostInvalidInputException(
+          "Only failed question posts support create recovery.");
+    }
+
+    if (questionLifecycleExecutionPort.managesQuestionCreateLifecycle()) {
+      postPersistencePort.savePost(post.markPublicationPending());
     }
 
     return new PostMutationResult(

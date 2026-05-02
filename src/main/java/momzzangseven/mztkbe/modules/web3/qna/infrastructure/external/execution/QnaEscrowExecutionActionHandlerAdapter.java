@@ -14,12 +14,15 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionPublicationSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
@@ -46,6 +49,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
   private final QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
+  private final QnaQuestionPublicationSyncPort qnaQuestionPublicationSyncPort;
+  private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   private final momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort
       qnaLocalDeleteSyncPort;
 
@@ -94,6 +99,13 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       ExecutionIntentStatus terminalStatus,
       String failureReason) {
     QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
+    if (payload.actionType() == QnaExecutionActionType.QNA_QUESTION_CREATE) {
+      if (shouldFailQuestionCreate(intent, payload)) {
+        qnaQuestionPublicationSyncPort.failQuestionCreate(
+            payload.postId(), intent.getPublicId(), terminalStatus, failureReason);
+      }
+      return;
+    }
     if (!shouldRollbackPendingState(terminalStatus, failureReason)) {
       return;
     }
@@ -158,6 +170,24 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
             payload.tokenAddress(),
             payload.amountWei(),
             payload.questionHash()));
+    qnaQuestionPublicationSyncPort.confirmQuestionCreated(payload.postId(), intent.getPublicId());
+  }
+
+  private boolean shouldFailQuestionCreate(
+      ExecutionIntent intent, QnaEscrowExecutionPayload payload) {
+    if (qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(payload.postId()).isPresent()) {
+      return false;
+    }
+    String rootIdempotencyKey =
+        QnaEscrowIdempotencyKeyFactory.create(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            intent.getRequesterUserId(),
+            payload.postId(),
+            null);
+    return loadQnaExecutionIntentStatePort
+        .loadLatestByRootIdempotencyKey(rootIdempotencyKey)
+        .map(latest -> intent.getPublicId().equals(latest.executionIntentId()))
+        .orElse(true);
   }
 
   private void applyQuestionUpdate(QnaEscrowExecutionPayload payload) {

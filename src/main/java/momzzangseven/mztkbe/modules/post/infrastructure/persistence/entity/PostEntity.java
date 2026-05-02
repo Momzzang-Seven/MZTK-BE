@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Objects;
 import lombok.*;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.data.annotation.CreatedDate;
@@ -45,6 +47,22 @@ public class PostEntity {
   @Column(nullable = false)
   private PostStatus status;
 
+  @Enumerated(EnumType.STRING)
+  @Column(
+      name = "publication_status",
+      nullable = false,
+      length = 20,
+      columnDefinition = "varchar(20) default 'VISIBLE'")
+  private PostPublicationStatus publicationStatus;
+
+  @Enumerated(EnumType.STRING)
+  @Column(
+      name = "moderation_status",
+      nullable = false,
+      length = 20,
+      columnDefinition = "varchar(20) default 'NORMAL'")
+  private PostModerationStatus moderationStatus;
+
   @CreatedDate
   @Column(updatable = false)
   private LocalDateTime createdAt;
@@ -62,7 +80,9 @@ public class PostEntity {
       String content,
       Long reward,
       Long acceptedAnswerId,
-      PostStatus status) {
+      PostStatus status,
+      PostPublicationStatus publicationStatus,
+      PostModerationStatus moderationStatus) {
     this.id = id;
     this.userId = userId;
     this.type = type;
@@ -71,6 +91,10 @@ public class PostEntity {
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
     this.status = Objects.requireNonNull(status, "status must not be null");
+    this.publicationStatus =
+        publicationStatus == null ? PostPublicationStatus.VISIBLE : publicationStatus;
+    this.moderationStatus =
+        moderationStatus == null ? PostModerationStatus.NORMAL : moderationStatus;
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -83,6 +107,8 @@ public class PostEntity {
         .reward(post.getReward())
         .acceptedAnswerId(post.getAcceptedAnswerId())
         .status(post.getStatus())
+        .publicationStatus(post.getPublicationStatus())
+        .moderationStatus(post.getModerationStatus())
         .build();
   }
 
@@ -96,6 +122,8 @@ public class PostEntity {
         .reward(this.reward)
         .acceptedAnswerId(this.acceptedAnswerId)
         .status(this.status)
+        .publicationStatus(this.publicationStatus)
+        .moderationStatus(this.moderationStatus)
         .tags(tags)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)

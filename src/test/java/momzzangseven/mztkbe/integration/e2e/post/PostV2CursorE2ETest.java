@@ -186,25 +186,23 @@ class PostV2CursorE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-5] type 생략 검색은 FREE를 유지하고 QUESTION 제목에만 search를 적용한다")
-  void getPostsV2_withoutTypeAndSearch_keepsFreeAndFiltersQuestionTitle() throws Exception {
-    Long nonMatchingQuestionId = createQuestionPost("other nulltypea question", List.of());
+  @DisplayName("[E-5] type 생략 검색은 QUESTION 제목에만 search를 적용하고 FREE는 제외한다")
+  void getPostsV2_withoutTypeAndSearch_filtersQuestionTitleOnly() throws Exception {
+    Long nonMatchingQuestionId = createQuestionPost("other topic question", List.of());
     Long matchingQuestionId = createQuestionPost("NULLTYPEA question match", List.of());
     Long freePostId = createFreePost("nulltypea free content", List.of());
 
     JsonNode response = fetchPosts("?search=nulltypea&size=50");
 
-    assertThat(postIds(response))
-        .contains(freePostId, matchingQuestionId)
-        .doesNotContain(nonMatchingQuestionId);
+    assertThat(postIds(response)).contains(matchingQuestionId);
+    assertThat(postIds(response)).doesNotContain(freePostId, nonMatchingQuestionId);
   }
 
   @Test
-  @DisplayName("[E-6] type 생략 태그 검색은 FREE를 유지하고 QUESTION 제목에만 search를 적용한다")
-  void getPostsV2_withTagWithoutTypeAndSearch_keepsTaggedFreeAndFiltersQuestionTitle()
-      throws Exception {
+  @DisplayName("[E-6] type 생략 태그 검색은 QUESTION 제목에만 search를 적용하고 FREE는 제외한다")
+  void getPostsV2_withTagWithoutTypeAndSearch_filtersQuestionTitleOnly() throws Exception {
     String tag = "nulltype-tag";
-    Long nonMatchingQuestionId = createQuestionPost("other nulltypeb question", List.of(tag));
+    Long nonMatchingQuestionId = createQuestionPost("other topic tagged question", List.of(tag));
     Long matchingQuestionId = createQuestionPost("NULLTYPEB question match", List.of(tag));
     Long otherTagQuestionId =
         createQuestionPost("NULLTYPEB other tag question", List.of("other-tag"));
@@ -212,8 +210,8 @@ class PostV2CursorE2ETest extends E2ETestBase {
 
     JsonNode response = fetchPosts("?tag=" + tag + "&search=nulltypeb&size=50");
 
+    assertThat(postIds(response)).contains(matchingQuestionId);
     assertThat(postIds(response))
-        .contains(freePostId, matchingQuestionId)
-        .doesNotContain(nonMatchingQuestionId, otherTagQuestionId);
+        .doesNotContain(freePostId, nonMatchingQuestionId, otherTagQuestionId);
   }
 }

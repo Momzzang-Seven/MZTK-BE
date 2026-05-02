@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -22,6 +23,8 @@ import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPo
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -44,6 +48,7 @@ class PostProcessServiceTest {
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private CountAnswersPort countAnswersPort;
   @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  @Spy private PostVisibilityPolicy postVisibilityPolicy = new PostVisibilityPolicy();
 
   @InjectMocks private PostProcessService postProcessService;
 
@@ -344,6 +349,73 @@ class PostProcessServiceTest {
     verify(postPersistencePort).deletePost(post);
     verify(questionLifecycleExecutionPort).prepareQuestionDelete(postId, ownerId, "질문 내용", 50L);
     verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  @Test
+  @DisplayName("FAILED question content update stays local and keeps failed publication")
+  void updateFailedQuestionDoesNotPrepareWeb3Update() {
+    Long ownerId = 7L;
+    Long postId = 77L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+    UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.updatePost(ownerId, postId, command);
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort).savePost(postCaptor.capture());
+    assertThat(postCaptor.getValue().getContent()).isEqualTo("수정된 질문 내용");
+    assertThat(postCaptor.getValue().getPublicationStatus())
+        .isEqualTo(PostPublicationStatus.FAILED);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionUpdate(org.mockito.ArgumentMatchers.any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("FAILED question delete removes local row without on-chain delete")
+  void deleteFailedQuestionDeletesLocallyWithoutWeb3() {
+    Long ownerId = 7L;
+    Long postId = 78L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.deletePost(ownerId, postId);
+
+    verify(postPersistencePort).deletePost(post);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionDelete(org.mockito.ArgumentMatchers.any(), any(), any(), any());
+    verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  @Test
+  @DisplayName("BLOCKED post cannot be updated by owner")
+  void updateBlockedPostRejected() {
+    Long ownerId = 7L;
+    Long postId = 79L;
+    Post post =
+        ownedPost(ownerId, postId).toBuilder()
+            .moderationStatus(PostModerationStatus.BLOCKED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(
+            () ->
+                postProcessService.updatePost(
+                    ownerId, postId, UpdatePostCommand.of(null, "blocked edit", null, null)))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Blocked posts");
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
   }
 
   private Post questionPost(Long ownerId, Long postId) {

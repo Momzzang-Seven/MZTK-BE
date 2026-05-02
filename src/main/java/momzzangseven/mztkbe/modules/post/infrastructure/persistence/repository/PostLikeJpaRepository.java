@@ -81,6 +81,8 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
               p.reward AS reward,
               p.accepted_answer_id AS acceptedAnswerId,
               p.status AS status,
+              p.publication_status AS publicationStatus,
+              p.moderation_status AS moderationStatus,
               p.created_at AS postCreatedAt,
               p.updated_at AS postUpdatedAt
           FROM post_like pl
@@ -88,6 +90,10 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
           WHERE pl.user_id = :userId
             AND pl.target_type = 'POST'
             AND p.type = :type
+            AND (
+              (p.publication_status = 'VISIBLE' AND p.moderation_status = 'NORMAL')
+              OR p.user_id = :userId
+            )
           ORDER BY pl.created_at DESC, pl.id DESC
           LIMIT :limit
           """,
@@ -109,6 +115,8 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
               p.reward AS reward,
               p.accepted_answer_id AS acceptedAnswerId,
               p.status AS status,
+              p.publication_status AS publicationStatus,
+              p.moderation_status AS moderationStatus,
               p.created_at AS postCreatedAt,
               p.updated_at AS postUpdatedAt
           FROM post_like pl
@@ -116,6 +124,10 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
           WHERE pl.user_id = :userId
             AND pl.target_type = 'POST'
             AND p.type = :type
+            AND (
+              (p.publication_status = 'VISIBLE' AND p.moderation_status = 'NORMAL')
+              OR p.user_id = :userId
+            )
             AND (
               pl.created_at < :cursorLikedAt
               OR (pl.created_at = :cursorLikedAt AND pl.id < :cursorLikeId)
@@ -157,6 +169,10 @@ public interface PostLikeJpaRepository extends JpaRepository<PostLikeEntity, Lon
     Long getAcceptedAnswerId();
 
     String getStatus();
+
+    String getPublicationStatus();
+
+    String getModerationStatus();
 
     LocalDateTime getPostCreatedAt();
 

@@ -26,6 +26,11 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   }
 
   @Override
+  public boolean managesQuestionCreateLifecycle() {
+    return true;
+  }
+
+  @Override
   public boolean hasActiveQuestionIntent(Long postId) {
     return questionEscrowExecutionUseCase.hasActiveQuestionIntent(postId);
   }
