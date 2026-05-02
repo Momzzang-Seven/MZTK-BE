@@ -7,12 +7,12 @@ import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.SignedTx;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
+import org.springframework.stereotype.Service;
 
 /**
  * Orchestrates the EIP-7702 build → digest → sign → assemble pipeline via {@link SignDigestPort}.
  */
-// @Service is deferred to commit 3-3 along with the matching SignDigestAdapter; registering this
-// bean now would fail context startup because no SignDigestPort implementation exists yet.
+@Service
 @RequiredArgsConstructor
 public final class SignEip7702TxService {
 

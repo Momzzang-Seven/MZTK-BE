@@ -216,6 +216,10 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     ExecutionEip7702GatewayPort.FeePlan feePlan = executionEip7702GatewayPort.loadSponsorFeePlan();
     long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
 
+    // Transitional shim: KMS sponsor signing rewiring lands in commit 3-4. The downstream gateway
+    // adapter no longer accepts a plaintext sponsor private key; until 3-4 lands, any test or
+    // runtime path reaching this construction site fails loudly via the gateway adapter throw
+    // rather than silently falling back to the removed legacy flow.
     ExecutionEip7702GatewayPort.SignedPayload signedPayload =
         executionEip7702GatewayPort.signAndEncode(
             new ExecutionEip7702GatewayPort.SignCommand(

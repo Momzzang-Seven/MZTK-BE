@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.web3.eip7702.application.port.out;
 
 import java.math.BigInteger;
 import java.util.List;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 
 public interface Eip7702TransactionCodecPort {
 
@@ -25,7 +27,14 @@ public interface Eip7702TransactionCodecPort {
       BigInteger value,
       String data,
       List<Eip7702ChainPort.AuthorizationTuple> authorizationList,
-      String sponsorPrivateKeyHex) {}
+      TreasurySigner sponsorSigner) {
+
+    public SignCommand {
+      if (sponsorSigner == null) {
+        throw new Web3InvalidInputException("sponsorSigner is required");
+      }
+    }
+  }
 
   record SignedPayload(String rawTx, String txHash) {}
 }

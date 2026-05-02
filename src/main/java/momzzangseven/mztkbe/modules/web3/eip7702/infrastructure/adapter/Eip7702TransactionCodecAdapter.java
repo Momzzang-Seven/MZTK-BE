@@ -1,15 +1,37 @@
 package momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.adapter;
 
+import java.math.BigInteger;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.service.SignEip7702TxService;
+import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder;
+import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.AuthorizationTuple;
+import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.Eip7702Fields;
+import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.SignedTx;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
 import org.springframework.stereotype.Component;
+import org.web3j.utils.Numeric;
 
+/**
+ * Thin adapter that bridges {@link Eip7702TransactionCodecPort.SignCommand} into the pure {@link
+ * Eip7702TxEncoder} + {@link SignEip7702TxService} pipeline.
+ *
+ * <p>Converts the infra-level {@link Eip7702ChainPort.AuthorizationTuple} (BigInteger r/s) into the
+ * domain-level {@link AuthorizationTuple} (32-byte big-endian arrays) and delegates digest signing
+ * to {@link SignEip7702TxService}.
+ */
 @Component
+@RequiredArgsConstructor
 public class Eip7702TransactionCodecAdapter implements Eip7702TransactionCodecPort {
 
+  private static final int SCALAR_BYTE_LENGTH = 32;
+
+  private final SignEip7702TxService signEip7702TxService;
+
   @Override
-  public String encodeTransferData(String toAddress, java.math.BigInteger amountWei) {
+  public String encodeTransferData(String toAddress, BigInteger amountWei) {
     return Erc20TransferCalldataEncoder.encodeTransferData(toAddress, amountWei);
   }
 
@@ -33,8 +55,8 @@ public class Eip7702TransactionCodecAdapter implements Eip7702TransactionCodecPo
 
   @Override
   public SignedPayload signAndEncode(SignCommand command) {
-    Eip7702TransactionEncoder.SignedPayload payload =
-        Eip7702TransactionEncoder.signAndEncode(
+    Eip7702Fields fields =
+        new Eip7702Fields(
             command.chainId(),
             command.nonce(),
             command.maxPriorityFeePerGas(),
@@ -43,8 +65,18 @@ public class Eip7702TransactionCodecAdapter implements Eip7702TransactionCodecPo
             command.to(),
             command.value(),
             command.data(),
-            command.authorizationList(),
-            command.sponsorPrivateKeyHex());
-    return new SignedPayload(payload.rawTx(), payload.txHash());
+            command.authorizationList().stream().map(this::toDomainAuthTuple).toList());
+
+    SignedTx signed = signEip7702TxService.sign(fields, command.sponsorSigner());
+    return new SignedPayload(signed.rawTx(), signed.txHash());
+  }
+
+  // Convert infra BigInteger r/s into 32-byte big-endian arrays the domain encoder expects.
+  private AuthorizationTuple toDomainAuthTuple(Eip7702ChainPort.AuthorizationTuple tuple) {
+    long chainId = tuple.chainId().longValueExact();
+    byte yParity = (byte) tuple.yParity().intValueExact();
+    byte[] r = Numeric.toBytesPadded(tuple.r(), SCALAR_BYTE_LENGTH);
+    byte[] s = Numeric.toBytesPadded(tuple.s(), SCALAR_BYTE_LENGTH);
+    return new AuthorizationTuple(chainId, tuple.address(), tuple.nonce(), yParity, r, s);
   }
 }
