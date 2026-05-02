@@ -38,7 +38,8 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
    * Executes the target intent and returns latest intent/transaction summary.
    *
    * <p>Sponsor preflight runs unconditionally; the verify result is Caffeine-cached (60s) so the
-   * warm-path cost is negligible. Behavior change vs the pre-refactor service: when the sponsor
+   * warm-path cost is negligible.
+   * Behavior change vs the pre-refactor service: when the sponsor
    * wallet is missing/disabled, even already-submitted intents will now surface the "sponsor signer
    * key is missing" error here instead of returning the cached transaction. Race window between
    * preflight verify and the sign-time KMS call is bounded (~ms); KMS sign-time errors already map

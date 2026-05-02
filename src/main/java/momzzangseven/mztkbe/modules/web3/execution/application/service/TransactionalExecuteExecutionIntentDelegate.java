@@ -127,6 +127,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
       ExecutionActionHandlerPort actionHandler,
       ExecutionActionPlan actionPlan,
       SponsorWalletGate gate) {
+    //  Validate command, client given signatures.
     if (command.authorizationSignature() == null || command.authorizationSignature().isBlank()) {
       throw new Web3InvalidInputException("authorizationSignature is required");
     }
@@ -138,6 +139,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
     TreasurySigner sponsorSigner = gate.signer();
     String sponsorAddress = gate.walletInfo().walletAddress();
 
+    // Build authorizationTuple using client given authorizationSignature, interacting with eip7702 module.
     ExecutionEip7702GatewayPort.AuthorizationTuple authTuple =
         executionEip7702GatewayPort.toAuthorizationTuple(
             loadExecutionChainIdPort.loadChainId(),
@@ -156,6 +158,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
             .toList();
     String callDataHash = executionEip7702GatewayPort.hashCalls(calls);
 
+    // Verify authorizationSignature signer
     if (!executionEip7702GatewayPort.verifyAuthorizationSigner(
         loadExecutionChainIdPort.loadChainId(),
         intent.getDelegateTarget(),
@@ -165,6 +168,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
       throw new Web3InvalidInputException("authorizationSignature does not match authority");
     }
 
+    // Resolve nonce
     BigInteger currentAuthorityNonce =
         executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress());
     if (currentAuthorityNonce.longValueExact() != intent.getAuthorityNonce()) {
@@ -188,6 +192,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
       throw new Web3TransferException(ErrorCode.AUTH_NONCE_MISMATCH, false);
     }
 
+    // Verify Execution(Submit) Signature
     BigInteger deadlineEpochSeconds =
         BigInteger.valueOf(intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC));
     if (!executionEip7702GatewayPort.verifyExecutionSignature(
@@ -199,19 +204,24 @@ public class TransactionalExecuteExecutionIntentDelegate {
       throw new Web3InvalidInputException("submitSignature does not match authority");
     }
 
-    String executeCalldata =
+    // Encode Execution(Submit) Signature
+    String executeCallData =
         executionEip7702GatewayPort.encodeExecute(
             calls, Numeric.hexStringToByteArray(command.submitSignature()));
 
+    // Estimate gas, load fee plan via eip7702 module
     BigInteger estimatedGas =
         executionEip7702GatewayPort.estimateGasWithAuthorization(
             sponsorAddress,
             intent.getAuthorityAddress(),
-            executeCalldata,
+            executeCallData,
             java.util.List.of(authTuple));
     ExecutionEip7702GatewayPort.FeePlan feePlan = executionEip7702GatewayPort.loadSponsorFeePlan();
+
+    // Reserve next nonce(persistence + JSON-RPC)
     long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
 
+    // Make the signature
     ExecutionEip7702GatewayPort.SignedPayload signedPayload =
         executionEip7702GatewayPort.signAndEncode(
             new ExecutionEip7702GatewayPort.SignCommand(
@@ -222,7 +232,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
                 estimatedGas,
                 intent.getAuthorityAddress(),
                 BigInteger.ZERO,
-                executeCalldata,
+                executeCallData,
                 java.util.List.of(authTuple),
                 sponsorSigner));
 
