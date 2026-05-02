@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.wor
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -331,6 +332,49 @@ class TransactionIssuerWorkerTest {
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
     verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+    // re-entry case (item already has nonce) — worker did not reserve, must not release.
+    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
+  }
+
+  @Test
+  void
+      processBatch_signTransferThrowsSignatureRecovery_releasesReservedNonce_whenItemNonceMissing() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(42L);
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenThrow(new SignatureRecoveryException("recover mismatch"));
+    when(reserveNoncePort.releaseNonce(TREASURY_ADDRESS, 42L)).thenReturn(true);
+
+    worker.processBatch(1);
+
+    verify(reserveNoncePort).releaseNonce(TREASURY_ADDRESS, 42L);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
+  }
+
+  @Test
+  void processBatch_signatureRecoveryReleaseCasMisses_logsErrorButStillTerminals() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, null)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(42L);
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenThrow(new SignatureRecoveryException("recover mismatch"));
+    when(reserveNoncePort.releaseNonce(TREASURY_ADDRESS, 42L)).thenReturn(false);
+
+    worker.processBatch(1);
+
+    verify(reserveNoncePort).releaseNonce(TREASURY_ADDRESS, 42L);
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
   }
 
   @Test
