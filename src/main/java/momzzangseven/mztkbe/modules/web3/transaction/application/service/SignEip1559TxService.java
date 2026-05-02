@@ -32,8 +32,14 @@ public class SignEip1559TxService {
    * @return signed transaction envelope ready for broadcast
    */
   public SignedTx sign(Eip1559Fields fields, String kmsKeyId, String signerAddress) {
+
+    // build RLP encoded(serialized) byte
     byte[] unsigned = Eip1559TxEncoder.buildUnsigned(fields);
+
+    // Hashing the encoded(serialized) byte
     byte[] digest = Eip1559TxEncoder.digest(unsigned);
+
+    // Make signature from KMS
     Vrs sig = signDigestPort.signDigest(kmsKeyId, digest, signerAddress);
     return Eip1559TxEncoder.assembleSigned(fields, sig);
   }

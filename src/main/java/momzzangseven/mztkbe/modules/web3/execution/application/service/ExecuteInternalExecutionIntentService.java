@@ -49,6 +49,7 @@ public class ExecuteInternalExecutionIntentService
   @Override
   public ExecuteInternalExecutionIntentResult execute(
       ExecuteInternalExecutionIntentCommand command) {
+    // intent validation
     ExecutionIntent intent =
         executionIntentPersistencePort
             .claimNextInternalExecutableForUpdate(command.actionTypes())
@@ -114,6 +115,7 @@ public class ExecuteInternalExecutionIntentService
           "internal executable intent requires unsigned tx snapshot");
     }
 
+    // get signer
     ExecutionSponsorWalletConfig sponsorWalletConfig =
         loadInternalExecutionSignerConfigPort.loadSignerConfig();
     LoadExecutionSponsorKeyPort.ExecutionSponsorKey sponsorKey =

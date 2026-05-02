@@ -87,6 +87,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
+    // get reward treasury wallet & validate
     Optional<TreasuryWalletInfo> walletOpt = loadRewardTreasuryWalletPort.load();
     if (walletOpt.isEmpty()) {
       failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
@@ -134,6 +135,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
+    // get signer: shared DTO injecting treasury wallet information.
     TreasurySigner signer =
         new TreasurySigner(
             walletInfo.walletAlias(), walletInfo.kmsKeyId(), walletInfo.walletAddress());
@@ -148,6 +150,8 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
   private void processItem(
       LoadTransactionWorkPort.TransactionWorkItem item, TreasurySigner signer) {
+
+    // prevalidate
     Web3ContractPort.PrevalidateResult prevalidateResult =
         web3ContractPort.prevalidate(
             new Web3ContractPort.PrevalidateCommand(
@@ -167,7 +171,10 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
+    // resolve nonce
     long nonce = resolveNonce(item, signer.walletAddress());
+
+    // sign the item
     Web3ContractPort.SignedTransaction signed;
     try {
       signed =
@@ -192,6 +199,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
+    // mark signed
     updateTransactionPort.markSigned(item.transactionId(), nonce, signed.rawTx(), signed.txHash());
     Map<String, Object> signDetail = new SignAuditDetail(nonce, signed.txHash()).toMap();
     audit(item.transactionId(), Web3TransactionAuditEventType.SIGN, null, signDetail);

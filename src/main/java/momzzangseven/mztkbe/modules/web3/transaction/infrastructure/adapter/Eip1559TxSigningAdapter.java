@@ -34,8 +34,11 @@ public class Eip1559TxSigningAdapter {
   public Web3ContractPort.SignedTransaction signTransfer(
       Web3ContractPort.SignTransferCommand command) {
     TreasurySigner signer = command.treasurySigner();
+    // encode(serialize) the transfer calldata
     String calldata =
         Erc20TransferCalldataEncoder.encodeTransferData(command.toAddress(), command.amountWei());
+
+    // fill in EIP-1559 fields
     Eip1559Fields fields =
         new Eip1559Fields(
             command.chainId(),
@@ -46,6 +49,8 @@ public class Eip1559TxSigningAdapter {
             command.tokenContractAddress(),
             BigInteger.ZERO,
             calldata);
+
+    // RLP encode + Keccak256 hash + Sign digest(KMS)
     SignedTx signed = signEip1559TxService.sign(fields, signer.kmsKeyId(), signer.walletAddress());
     return new Web3ContractPort.SignedTransaction(signed.rawTx(), signed.txHash());
   }
