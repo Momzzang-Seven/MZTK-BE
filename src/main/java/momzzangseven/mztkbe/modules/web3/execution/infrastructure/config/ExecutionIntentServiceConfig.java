@@ -35,6 +35,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.GetLatest
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentFailedOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
@@ -192,30 +193,38 @@ public class ExecutionIntentServiceConfig {
 
   @Bean
   @ConditionalOnUserExecutionEnabled
-  ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
+  TransactionalExecuteExecutionIntentDelegate transactionalExecuteExecutionIntentDelegate(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
       ExecutionTransactionGatewayPort executionTransactionGatewayPort,
-      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort,
-      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort,
       ExecutionEip7702GatewayPort executionEip7702GatewayPort,
       Eip1559TransactionCodecPort eip1559TransactionCodecPort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       Clock appClock) {
-    return new ExecuteExecutionIntentService(
+    return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
         sponsorDailyUsagePersistencePort,
         executionTransactionGatewayPort,
-        loadSponsorTreasuryWalletPort,
-        verifyTreasuryWalletForSignPort,
         executionEip7702GatewayPort,
         eip1559TransactionCodecPort,
         loadExecutionChainIdPort,
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         appClock);
+  }
+
+  @Bean
+  @ConditionalOnUserExecutionEnabled
+  ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
+      TransactionalExecuteExecutionIntentDelegate transactionalExecuteExecutionIntentDelegate,
+      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort,
+      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort) {
+    return new ExecuteExecutionIntentService(
+        transactionalExecuteExecutionIntentDelegate,
+        loadSponsorTreasuryWalletPort,
+        verifyTreasuryWalletForSignPort);
   }
 
   @Bean

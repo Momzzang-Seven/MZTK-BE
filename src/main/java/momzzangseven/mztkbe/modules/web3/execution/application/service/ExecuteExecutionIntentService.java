@@ -1,519 +1,84 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
-import java.math.BigInteger;
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEventType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import org.springframework.transaction.annotation.Transactional;
-import org.web3j.utils.Numeric;
 
+/**
+ * Thin orchestrator for the user-facing execute-intent HTTP entry point.
+ *
+ * <p>Performs sponsor-wallet preflight (load + structural fail-fast + KMS DescribeKey verify)
+ * BEFORE delegating to the {@link TransactionalExecuteExecutionIntentDelegate}. This ensures the
+ * external KMS round-trip — which can stall under throttle / 5xx — never holds a JDBC connection
+ * from the pool while the FOR UPDATE intent lock is open.
+ *
+ * <p>The delegate's {@code @Transactional} boundary covers the FOR UPDATE select + atomic write
+ * semantics that prevent double-execute of the same intent.
+ */
 @Slf4j
 @RequiredArgsConstructor
-@Transactional
-/**
- * Executes a previously created execution intent.
- *
- * <p>This service validates caller ownership, enforces expiration and idempotent execute semantics,
- * then delegates mode-specific signing/broadcast flow for EIP-7702 and EIP-1559.
- */
 public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseCase {
 
-  private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
+  private static final String SPONSOR_WALLET_MISSING = "sponsor signer key is missing";
 
-  private final ExecutionIntentPersistencePort executionIntentPersistencePort;
-  private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
-  private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
+  private final TransactionalExecuteExecutionIntentDelegate delegate;
   private final LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
   private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
-  private final ExecutionEip7702GatewayPort executionEip7702GatewayPort;
-  private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
-  private final LoadExecutionChainIdPort loadExecutionChainIdPort;
-  private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
-  private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
-  private final Clock appClock;
 
   /**
    * Executes the target intent and returns latest intent/transaction summary.
    *
-   * <p>Repeated execute calls for already-submitted intents return current state without creating a
-   * new transaction.
+   * <p>Sponsor preflight runs unconditionally; the verify result is Caffeine-cached (60s) so the
+   * warm-path cost is negligible. Behavior change vs the pre-refactor service: when the sponsor
+   * wallet is missing/disabled, even already-submitted intents will now surface the "sponsor signer
+   * key is missing" error here instead of returning the cached transaction. Race window between
+   * preflight verify and the sign-time KMS call is bounded (~ms); KMS sign-time errors already map
+   * to {@code KmsSignFailedException} retryable, so preflight staleness is acceptable.
    */
   @Override
   public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
-    ExecutionIntent intent =
-        executionIntentPersistencePort
-            .findByPublicIdForUpdate(command.executionIntentId())
-            .orElseThrow(
-                () ->
-                    new Web3InvalidInputException(
-                        "executionIntentId not found: " + command.executionIntentId()));
-
-    if (!intent.getRequesterUserId().equals(command.requesterUserId())) {
-      throw new Web3InvalidInputException("execution intent owner mismatch");
-    }
-
-    if (intent.getSubmittedTxId() != null) {
-      return toResult(intent, loadTransaction(intent.getSubmittedTxId()));
-    }
-
-    LocalDateTime now = LocalDateTime.now(appClock);
-    if (intent.getExpiresAt().isBefore(now)) {
-      ExecutionIntent expired =
-          executionIntentPersistencePort.update(
-              intent.expire(
-                  ErrorCode.EXECUTION_INTENT_EXPIRED.name(),
-                  ErrorCode.EXECUTION_INTENT_EXPIRED.getMessage(),
-                  now));
-      if (expired.getMode() == ExecutionMode.EIP7702
-          && expired.getReservedSponsorCostWei().signum() > 0) {
-        releaseSponsorExposure(
-            expired.getRequesterUserId(),
-            expired.resolveSponsorUsageDateKst(),
-            expired.getReservedSponsorCostWei());
-      }
-      actionHandlerFor(expired)
-          .afterExecutionTerminated(
-              expired,
-              actionHandlerFor(expired).buildActionPlan(expired),
-              ExecutionIntentStatus.EXPIRED,
-              ErrorCode.EXECUTION_INTENT_EXPIRED.name());
-      throw new Web3TransferException(ErrorCode.EXECUTION_INTENT_EXPIRED, false);
-    }
-
-    if (!intent.getStatus().isSignable()) {
-      return toResult(intent, null);
-    }
-
-    ExecutionActionHandlerPort actionHandler = resolveActionHandler(intent);
-    ExecutionActionPlan actionPlan = actionHandler.buildActionPlan(intent);
-    actionHandler.beforeExecute(intent, actionPlan);
-
-    return switch (intent.getMode()) {
-      case EIP7702 -> executeEip7702(command, intent, actionHandler, actionPlan);
-      case EIP1559 -> executeEip1559(command, intent, actionHandler, actionPlan);
-    };
+    SponsorWalletGate gate = preflightSponsorWallet();
+    return delegate.execute(command, gate);
   }
 
-  private ExecuteExecutionIntentResult executeEip7702(
-      ExecuteExecutionIntentCommand command,
-      ExecutionIntent intent,
-      ExecutionActionHandlerPort actionHandler,
-      ExecutionActionPlan actionPlan) {
-    if (command.authorizationSignature() == null || command.authorizationSignature().isBlank()) {
-      throw new Web3InvalidInputException("authorizationSignature is required");
-    }
-    if (command.submitSignature() == null || command.submitSignature().isBlank()) {
-      throw new Web3InvalidInputException("submitSignature is required");
-    }
-
-    // Load sponsor wallet snapshot via the role-bound bridging port (no plaintext key material).
+  /**
+   * Loads sponsor wallet + applies structural fail-fast + invokes KMS DescribeKey verify.
+   *
+   * <p>Runs OUTSIDE any transaction so KMS latency cannot pin a JDBC connection. Throws {@link
+   * Web3InvalidInputException} with the canonical {@code "sponsor signer key is missing"} message
+   * for any structural defect (existing tests pin this message). Verify failures propagate as
+   * {@code TreasuryWalletStateException}.
+   */
+  private SponsorWalletGate preflightSponsorWallet() {
     TreasuryWalletInfo walletInfo =
         loadSponsorTreasuryWalletPort
             .load()
-            .orElseThrow(() -> new Web3InvalidInputException("sponsor signer key is missing"));
-
-    // Structural fail-fast: incomplete wallet rows (legacy / mid-backfill) surface as
-    // TREASURY_KEY_MISSING-equivalent input errors before reaching TreasurySigner's compact
-    // constructor or the remote verify call.
+            .orElseThrow(() -> new Web3InvalidInputException(SPONSOR_WALLET_MISSING));
     if (!walletInfo.active()) {
-      throw new Web3InvalidInputException("sponsor signer key is missing");
+      throw new Web3InvalidInputException(SPONSOR_WALLET_MISSING);
     }
     if (walletInfo.kmsKeyId() == null || walletInfo.kmsKeyId().isBlank()) {
-      throw new Web3InvalidInputException("sponsor signer key is missing");
+      throw new Web3InvalidInputException(SPONSOR_WALLET_MISSING);
     }
     if (walletInfo.walletAddress() == null || walletInfo.walletAddress().isBlank()) {
-      throw new Web3InvalidInputException("sponsor signer key is missing");
+      throw new Web3InvalidInputException(SPONSOR_WALLET_MISSING);
     }
-
-    String sponsorAddress = EvmAddress.of(walletInfo.walletAddress()).value();
-
-    // Pre-sign verification gate: propagates TreasuryWalletStateException on KMS DescribeKey
-    // / lifecycle mismatch. Performed before any DB write below so that a non-signable wallet
-    // aborts the flow without leaving a partial transaction record.
+    // Validates EVM address shape; any malformed address throws Web3InvalidInputException.
+    EvmAddress.of(walletInfo.walletAddress());
+    // Pre-sign verification gate. Caffeine-cached (60s) inside the adapter, so warm-path is ~µs.
     verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
-
-    TreasurySigner sponsorSigner =
+    TreasurySigner signer =
         new TreasurySigner(
             walletInfo.walletAlias(), walletInfo.kmsKeyId(), walletInfo.walletAddress());
-    ExecutionEip7702GatewayPort.AuthorizationTuple authTuple =
-        executionEip7702GatewayPort.toAuthorizationTuple(
-            loadExecutionChainIdPort.loadChainId(),
-            intent.getDelegateTarget(),
-            BigInteger.valueOf(intent.getAuthorityNonce()),
-            command.authorizationSignature());
-
-    List<ExecutionEip7702GatewayPort.BatchCall> calls =
-        actionPlan.calls().stream()
-            .map(
-                call ->
-                    new ExecutionEip7702GatewayPort.BatchCall(
-                        call.toAddress(),
-                        call.valueWei(),
-                        Numeric.hexStringToByteArray(call.data())))
-            .toList();
-    String callDataHash = executionEip7702GatewayPort.hashCalls(calls);
-
-    if (!executionEip7702GatewayPort.verifyAuthorizationSigner(
-        loadExecutionChainIdPort.loadChainId(),
-        intent.getDelegateTarget(),
-        BigInteger.valueOf(intent.getAuthorityNonce()),
-        command.authorizationSignature(),
-        intent.getAuthorityAddress())) {
-      throw new Web3InvalidInputException("authorizationSignature does not match authority");
-    }
-
-    BigInteger currentAuthorityNonce =
-        executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress());
-    if (currentAuthorityNonce.longValueExact() != intent.getAuthorityNonce()) {
-      ExecutionIntent staleIntent =
-          executionIntentPersistencePort.update(
-              intent.markNonceStale(
-                  ErrorCode.AUTH_NONCE_MISMATCH.name(),
-                  ErrorCode.AUTH_NONCE_MISMATCH.getMessage(),
-                  LocalDateTime.now(appClock)));
-      if (staleIntent.getReservedSponsorCostWei().signum() > 0) {
-        releaseSponsorExposure(
-            staleIntent.getRequesterUserId(),
-            staleIntent.resolveSponsorUsageDateKst(),
-            staleIntent.getReservedSponsorCostWei());
-      }
-      actionHandler.afterExecutionTerminated(
-          staleIntent,
-          actionPlan,
-          ExecutionIntentStatus.NONCE_STALE,
-          ErrorCode.AUTH_NONCE_MISMATCH.name());
-      throw new Web3TransferException(ErrorCode.AUTH_NONCE_MISMATCH, false);
-    }
-
-    BigInteger deadlineEpochSeconds =
-        BigInteger.valueOf(intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC));
-    if (!executionEip7702GatewayPort.verifyExecutionSignature(
-        intent.getAuthorityAddress(),
-        intent.getPublicId(),
-        callDataHash,
-        deadlineEpochSeconds,
-        command.submitSignature())) {
-      throw new Web3InvalidInputException("submitSignature does not match authority");
-    }
-
-    String executeCalldata =
-        executionEip7702GatewayPort.encodeExecute(
-            calls, Numeric.hexStringToByteArray(command.submitSignature()));
-
-    BigInteger estimatedGas =
-        executionEip7702GatewayPort.estimateGasWithAuthorization(
-            sponsorAddress,
-            intent.getAuthorityAddress(),
-            executeCalldata,
-            java.util.List.of(authTuple));
-    ExecutionEip7702GatewayPort.FeePlan feePlan = executionEip7702GatewayPort.loadSponsorFeePlan();
-    long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
-
-    ExecutionEip7702GatewayPort.SignedPayload signedPayload =
-        executionEip7702GatewayPort.signAndEncode(
-            new ExecutionEip7702GatewayPort.SignCommand(
-                loadExecutionChainIdPort.loadChainId(),
-                BigInteger.valueOf(sponsorNonce),
-                feePlan.maxPriorityFeePerGas(),
-                feePlan.maxFeePerGas(),
-                estimatedGas,
-                intent.getAuthorityAddress(),
-                BigInteger.ZERO,
-                executeCalldata,
-                java.util.List.of(authTuple),
-                sponsorSigner));
-
-    ExecutionTransactionGatewayPort.TransactionRecord created =
-        executionTransactionGatewayPort.createAndFlush(
-            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
-                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
-                actionPlan.referenceType(),
-                intent.getResourceId(),
-                intent.getRequesterUserId(),
-                intent.getCounterpartyUserId(),
-                sponsorAddress,
-                intent.getAuthorityAddress(),
-                actionPlan.amountWei(),
-                null,
-                ExecutionTransactionStatus.CREATED,
-                ExecutionTransactionType.EIP7702,
-                intent.getAuthorityAddress(),
-                intent.getAuthorityNonce(),
-                intent.getDelegateTarget(),
-                intent.getExpiresAt()));
-
-    executionTransactionGatewayPort.markSigned(
-        created.transactionId(), sponsorNonce, signedPayload.rawTx(), signedPayload.txHash());
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.AUTHORIZATION,
-        null,
-        java.util.Map.of("mode", intent.getMode().name()));
-
-    ExecutionTransactionGatewayPort.BroadcastResult broadcast =
-        executionTransactionGatewayPort.broadcast(signedPayload.rawTx());
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.BROADCAST,
-        broadcast.rpcAlias(),
-        broadcastDetail(broadcast));
-
-    if (broadcast.success()) {
-      String txHash =
-          broadcast.txHash() == null || broadcast.txHash().isBlank()
-              ? signedPayload.txHash()
-              : broadcast.txHash();
-      executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
-      executionIntentPersistencePort.update(
-          intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
-      moveReservedSponsorExposureToConsumed(
-          intent.getRequesterUserId(),
-          intent.resolveSponsorUsageDateKst(),
-          intent.getReservedSponsorCostWei());
-      actionHandler.afterTransactionSubmitted(
-          intent, actionPlan, ExecutionTransactionStatus.PENDING);
-      return new ExecuteExecutionIntentResult(
-          intent.getPublicId(),
-          ExecutionIntentStatus.PENDING_ONCHAIN,
-          created.transactionId(),
-          ExecutionTransactionStatus.PENDING,
-          txHash);
-    }
-
-    String reason =
-        broadcast.failureReason() == null || broadcast.failureReason().isBlank()
-            ? BROADCAST_FAILED
-            : broadcast.failureReason();
-    executionTransactionGatewayPort.scheduleRetry(
-        created.transactionId(),
-        reason,
-        LocalDateTime.now(appClock)
-            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, ExecutionTransactionStatus.SIGNED);
-    return new ExecuteExecutionIntentResult(
-        intent.getPublicId(),
-        ExecutionIntentStatus.SIGNED,
-        created.transactionId(),
-        ExecutionTransactionStatus.SIGNED,
-        signedPayload.txHash());
-  }
-
-  private ExecuteExecutionIntentResult executeEip1559(
-      ExecuteExecutionIntentCommand command,
-      ExecutionIntent intent,
-      ExecutionActionHandlerPort actionHandler,
-      ExecutionActionPlan actionPlan) {
-    if (command.signedRawTransaction() == null || command.signedRawTransaction().isBlank()) {
-      throw new Web3InvalidInputException("signedRawTransaction is required");
-    }
-
-    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
-        eip1559TransactionCodecPort.decodeAndVerify(
-            command.signedRawTransaction(),
-            intent.getUnsignedTxSnapshot(),
-            intent.getUnsignedTxFingerprint());
-
-    BigInteger currentPendingNonce =
-        executionEip7702GatewayPort.loadPendingAccountNonce(decoded.signerAddress());
-    if (currentPendingNonce.longValueExact() != intent.getUnsignedTxSnapshot().expectedNonce()) {
-      ExecutionIntent staleIntent =
-          executionIntentPersistencePort.update(
-              intent.markNonceStale(
-                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name(),
-                  ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getMessage(),
-                  LocalDateTime.now(appClock)));
-      actionHandler.afterExecutionTerminated(
-          staleIntent,
-          actionPlan,
-          ExecutionIntentStatus.NONCE_STALE,
-          ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name());
-      throw new Web3TransferException(ErrorCode.NONCE_STALE_RECREATE_REQUIRED, false);
-    }
-
-    ExecutionTransactionGatewayPort.TransactionRecord created =
-        executionTransactionGatewayPort.createAndFlush(
-            new ExecutionTransactionGatewayPort.CreateTransactionCommand(
-                intent.getRootIdempotencyKey() + ":" + intent.getAttemptNo(),
-                actionPlan.referenceType(),
-                intent.getResourceId(),
-                intent.getRequesterUserId(),
-                intent.getCounterpartyUserId(),
-                decoded.signerAddress(),
-                intent.getUnsignedTxSnapshot().toAddress(),
-                actionPlan.amountWei(),
-                intent.getUnsignedTxSnapshot().expectedNonce(),
-                ExecutionTransactionStatus.CREATED,
-                ExecutionTransactionType.EIP1559,
-                null,
-                null,
-                null,
-                null));
-
-    executionTransactionGatewayPort.markSigned(
-        created.transactionId(),
-        intent.getUnsignedTxSnapshot().expectedNonce(),
-        decoded.rawTransaction(),
-        decoded.txHash());
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.SIGN,
-        null,
-        java.util.Map.of("mode", intent.getMode().name()));
-
-    ExecutionTransactionGatewayPort.BroadcastResult broadcast =
-        executionTransactionGatewayPort.broadcast(decoded.rawTransaction());
-    audit(
-        created.transactionId(),
-        ExecutionAuditEventType.BROADCAST,
-        broadcast.rpcAlias(),
-        broadcastDetail(broadcast));
-
-    if (broadcast.success()) {
-      String txHash =
-          broadcast.txHash() == null || broadcast.txHash().isBlank()
-              ? decoded.txHash()
-              : broadcast.txHash();
-      executionTransactionGatewayPort.markPending(created.transactionId(), txHash);
-      executionIntentPersistencePort.update(
-          intent.markPendingOnchain(created.transactionId(), LocalDateTime.now(appClock)));
-      actionHandler.afterTransactionSubmitted(
-          intent, actionPlan, ExecutionTransactionStatus.PENDING);
-      return new ExecuteExecutionIntentResult(
-          intent.getPublicId(),
-          ExecutionIntentStatus.PENDING_ONCHAIN,
-          created.transactionId(),
-          ExecutionTransactionStatus.PENDING,
-          txHash);
-    }
-
-    String reason =
-        broadcast.failureReason() == null || broadcast.failureReason().isBlank()
-            ? BROADCAST_FAILED
-            : broadcast.failureReason();
-    executionTransactionGatewayPort.scheduleRetry(
-        created.transactionId(),
-        reason,
-        LocalDateTime.now(appClock)
-            .plusSeconds(loadExecutionRetryPolicyPort.loadRetryPolicy().retryBackoffSeconds()));
-    executionIntentPersistencePort.update(
-        intent.markSigned(created.transactionId(), LocalDateTime.now(appClock)));
-    actionHandler.afterTransactionSubmitted(intent, actionPlan, ExecutionTransactionStatus.SIGNED);
-    return new ExecuteExecutionIntentResult(
-        intent.getPublicId(),
-        ExecutionIntentStatus.SIGNED,
-        created.transactionId(),
-        ExecutionTransactionStatus.SIGNED,
-        decoded.txHash());
-  }
-
-  private void releaseSponsorExposure(
-      Long userId, java.time.LocalDate usageDateKst, BigInteger amountWei) {
-    if (amountWei == null || amountWei.signum() <= 0) {
-      return;
-    }
-    SponsorDailyUsage usage =
-        sponsorDailyUsagePersistencePort.getOrCreateForUpdate(userId, usageDateKst);
-    sponsorDailyUsagePersistencePort.update(usage.release(amountWei));
-  }
-
-  private void moveReservedSponsorExposureToConsumed(
-      Long userId, java.time.LocalDate usageDateKst, BigInteger amountWei) {
-    if (amountWei == null || amountWei.signum() <= 0) {
-      return;
-    }
-    SponsorDailyUsage usage =
-        sponsorDailyUsagePersistencePort.getOrCreateForUpdate(userId, usageDateKst);
-    sponsorDailyUsagePersistencePort.update(usage.release(amountWei).consume(amountWei));
-  }
-
-  private ExecutionTransactionGatewayPort.TransactionRecord loadTransaction(Long transactionId) {
-    return executionTransactionGatewayPort
-        .findById(transactionId)
-        .orElseThrow(
-            () -> new Web3InvalidInputException("transaction not found: " + transactionId));
-  }
-
-  private ExecuteExecutionIntentResult toResult(
-      ExecutionIntent intent, ExecutionTransactionGatewayPort.TransactionRecord transaction) {
-    return new ExecuteExecutionIntentResult(
-        intent.getPublicId(),
-        intent.getStatus(),
-        transaction == null ? intent.getSubmittedTxId() : transaction.transactionId(),
-        transaction == null ? null : transaction.status(),
-        transaction == null ? null : transaction.txHash());
-  }
-
-  private void audit(
-      Long transactionId,
-      ExecutionAuditEventType eventType,
-      String rpcAlias,
-      java.util.Map<String, Object> detail) {
-    try {
-      executionTransactionGatewayPort.recordAudit(
-          new ExecutionTransactionGatewayPort.AuditCommand(
-              transactionId, eventType, rpcAlias, detail));
-    } catch (Exception e) {
-      log.warn(
-          "failed to record transaction audit: txId={}, eventType={}", transactionId, eventType, e);
-    }
-  }
-
-  private java.util.Map<String, Object> broadcastDetail(
-      ExecutionTransactionGatewayPort.BroadcastResult broadcast) {
-    java.util.Map<String, Object> detail = new java.util.LinkedHashMap<>();
-    detail.put("success", broadcast.success());
-    detail.put("txHash", broadcast.txHash());
-    detail.put("failureReason", broadcast.failureReason());
-    return detail;
-  }
-
-  private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {
-    return executionActionHandlerPorts.stream()
-        .filter(handler -> handler.supports(intent.getActionType()))
-        .findFirst()
-        .orElseThrow(
-            () ->
-                new IllegalStateException(
-                    "no execution action handler for actionType=" + intent.getActionType()));
-  }
-
-  private ExecutionActionHandlerPort actionHandlerFor(ExecutionIntent intent) {
-    return resolveActionHandler(intent);
+    return new SponsorWalletGate(walletInfo, signer);
   }
 }
