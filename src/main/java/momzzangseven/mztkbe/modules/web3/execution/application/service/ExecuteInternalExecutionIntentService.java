@@ -6,10 +6,14 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
+import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
@@ -17,15 +21,15 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEventType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 @Slf4j
@@ -35,11 +39,18 @@ public class ExecuteInternalExecutionIntentService
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
   private static final String INTERNAL_ISSUER_INVALID_INTENT = "INTERNAL_ISSUER_INVALID_INTENT";
+  private static final String SPONSOR_WALLET_MISSING = "sponsor signer key is missing";
+  private static final String SPONSOR_WALLET_INACTIVE = "sponsor wallet inactive";
+  private static final String SPONSOR_KMS_KEY_BLANK = "sponsor kms key id missing";
+  private static final String SPONSOR_WALLET_ADDRESS_BLANK = "sponsor wallet address missing";
+  private static final String SPONSOR_KMS_KEY_NOT_ENABLED = "sponsor kms key not enabled";
+  private static final String SPONSOR_KMS_SIGN_FAILED = "sponsor kms sign failed";
+  private static final String SPONSOR_SIGNATURE_INVALID = "sponsor signature invalid";
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  private final LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
-  private final LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  private final LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
+  private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   private final ExecutionEip1559SigningPort executionEip1559SigningPort;
   private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
@@ -115,22 +126,25 @@ public class ExecuteInternalExecutionIntentService
           "internal executable intent requires unsigned tx snapshot");
     }
 
-    // get signer
-    ExecutionSponsorWalletConfig sponsorWalletConfig =
-        loadInternalExecutionSignerConfigPort.loadSignerConfig();
-    LoadExecutionSponsorKeyPort.ExecutionSponsorKey sponsorKey =
-        loadExecutionSponsorKeyPort
-            .loadByAlias(
-                sponsorWalletConfig.walletAlias(), sponsorWalletConfig.keyEncryptionKeyB64())
-            .orElse(null);
-    if (sponsorKey == null) {
+    // get sponsor treasury wallet via KMS-backed bridging port
+    TreasuryWalletInfo walletInfo = loadSponsorTreasuryWalletPort.load().orElse(null);
+    if (walletInfo == null) {
+      return quarantineInvalidIntent(intent, actionHandler, actionPlan, SPONSOR_WALLET_MISSING);
+    }
+    if (!walletInfo.active()) {
+      return quarantineInvalidIntent(intent, actionHandler, actionPlan, SPONSOR_WALLET_INACTIVE);
+    }
+    if (walletInfo.kmsKeyId() == null || walletInfo.kmsKeyId().isBlank()) {
+      return quarantineInvalidIntent(intent, actionHandler, actionPlan, SPONSOR_KMS_KEY_BLANK);
+    }
+    if (walletInfo.walletAddress() == null || walletInfo.walletAddress().isBlank()) {
       return quarantineInvalidIntent(
-          intent, actionHandler, actionPlan, "sponsor signer key is missing");
+          intent, actionHandler, actionPlan, SPONSOR_WALLET_ADDRESS_BLANK);
     }
 
     String expectedSigner;
     try {
-      expectedSigner = EvmAddress.of(sponsorKey.address()).value();
+      expectedSigner = EvmAddress.of(walletInfo.walletAddress()).value();
     } catch (Web3InvalidInputException e) {
       return quarantineInvalidIntent(intent, actionHandler, actionPlan, e.getMessage());
     }
@@ -140,6 +154,27 @@ public class ExecuteInternalExecutionIntentService
           actionHandler,
           actionPlan,
           "internal intent signer does not match sponsor signer");
+    }
+
+    // pre-sign verification gate (KMS key ENABLED + wallet ACTIVE)
+    try {
+      verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
+    } catch (TreasuryWalletStateException e) {
+      log.warn(
+          "internal sponsor wallet '{}' verify-for-sign failed: {}",
+          walletInfo.walletAlias(),
+          e.getMessage());
+      return quarantineInvalidIntent(
+          intent, actionHandler, actionPlan, SPONSOR_KMS_KEY_NOT_ENABLED);
+    }
+
+    TreasurySigner signer;
+    try {
+      signer =
+          new TreasurySigner(
+              walletInfo.walletAlias(), walletInfo.kmsKeyId(), walletInfo.walletAddress());
+    } catch (Web3InvalidInputException e) {
+      return quarantineInvalidIntent(intent, actionHandler, actionPlan, e.getMessage());
     }
 
     long reservedNonce = executionTransactionGatewayPort.reserveNextNonce(expectedSigner);
@@ -158,7 +193,19 @@ public class ExecuteInternalExecutionIntentService
                   signableIntent.getUnsignedTxSnapshot().data(),
                   signableIntent.getUnsignedTxSnapshot().maxPriorityFeePerGas(),
                   signableIntent.getUnsignedTxSnapshot().maxFeePerGas(),
-                  sponsorKey.privateKeyHex()));
+                  signer));
+    } catch (KmsSignFailedException e) {
+      log.warn(
+          "internal sponsor KMS sign failed for intent={}: {}",
+          intent.getPublicId(),
+          e.getMessage());
+      return quarantineInvalidIntent(intent, actionHandler, actionPlan, SPONSOR_KMS_SIGN_FAILED);
+    } catch (SignatureRecoveryException e) {
+      log.warn(
+          "internal sponsor signature recovery failed for intent={}: {}",
+          intent.getPublicId(),
+          e.getMessage());
+      return quarantineInvalidIntent(intent, actionHandler, actionPlan, SPONSOR_SIGNATURE_INVALID);
     } catch (Web3InvalidInputException e) {
       return quarantineInvalidIntent(intent, actionHandler, actionPlan, e.getMessage());
     }

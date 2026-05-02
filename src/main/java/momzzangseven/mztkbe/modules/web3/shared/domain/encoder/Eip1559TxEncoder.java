@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transaction.domain.encoder;
+package momzzangseven.mztkbe.modules.web3.shared.domain.encoder;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;

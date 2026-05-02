@@ -19,11 +19,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
@@ -92,18 +94,20 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
 
   @MockitoBean private QnaContractCallSupport qnaContractCallSupport;
-  @MockitoBean private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  @MockitoBean private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
+  @MockitoBean private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
   @MockitoBean private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
 
   @BeforeEach
   void setUp() {
     seedExecutionSignerSlot();
-    BDDMockito.given(loadExecutionSponsorKeyPort.loadByAlias(any(), any()))
+    BDDMockito.given(loadSponsorTreasuryWalletPort.load())
         .willReturn(
             Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    SIGNER_ADDRESS, PRIVATE_KEY_HEX)));
+                new TreasuryWalletInfo(
+                    "test-sponsor", "alias/test-sponsor", SIGNER_ADDRESS, true)));
+    BDDMockito.willDoNothing().given(verifyTreasuryWalletForSignPort).verify(anyString());
     BDDMockito.given(qnaContractCallSupport.isRelayerRegistered(anyString(), anyString()))
         .willReturn(true);
     BDDMockito.willDoNothing()

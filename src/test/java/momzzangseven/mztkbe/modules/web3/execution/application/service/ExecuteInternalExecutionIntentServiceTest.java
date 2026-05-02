@@ -17,19 +17,23 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
+import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -37,7 +41,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,10 +58,14 @@ class ExecuteInternalExecutionIntentServiceTest {
   private static final LocalDateTime FIXED_NOW =
       LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
 
+  private static final String SPONSOR_ALIAS = "test-sponsor";
+  private static final String SPONSOR_KMS_KEY = "alias/test-sponsor";
+  private static final String SPONSOR_ADDRESS = "0x" + "4".repeat(40);
+
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  @Mock private LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
-  @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  @Mock private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
+  @Mock private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @Mock private ExecutionEip1559SigningPort executionEip1559SigningPort;
   @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
@@ -72,8 +79,8 @@ class ExecuteInternalExecutionIntentServiceTest {
         new ExecuteInternalExecutionIntentService(
             executionIntentPersistencePort,
             executionTransactionGatewayPort,
-            loadInternalExecutionSignerConfigPort,
-            loadExecutionSponsorKeyPort,
+            loadSponsorTreasuryWalletPort,
+            verifyTreasuryWalletForSignPort,
             executionEip1559SigningPort,
             eip1559TransactionCodecPort,
             loadExecutionRetryPolicyPort,
@@ -91,14 +98,10 @@ class ExecuteInternalExecutionIntentServiceTest {
                 ExecutionReferenceType.USER_TO_USER,
                 List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234"))));
     lenient()
-        .when(loadInternalExecutionSignerConfigPort.loadSignerConfig())
-        .thenReturn(new ExecutionSponsorWalletConfig("alias", "kek"));
-    lenient()
-        .when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
+        .when(loadSponsorTreasuryWalletPort.load())
         .thenReturn(
             Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    "0x" + "4".repeat(40), "0x" + "9".repeat(64))));
+                new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS, true)));
     lenient()
         .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
         .thenReturn(new ExecutionRetryPolicy(30));
@@ -129,7 +132,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40))).thenReturn(13L);
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS)).thenReturn(13L);
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
     when(executionTransactionGatewayPort.createAndFlush(any()))
@@ -148,6 +151,8 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
     verify(executionEip1559SigningPort).sign(argThat(command -> command.nonce() == 13L));
+    verify(executionEip1559SigningPort)
+        .sign(argThat(command -> SPONSOR_KMS_KEY.equals(command.signer().kmsKeyId())));
     verify(executionTransactionGatewayPort)
         .createAndFlush(argThat(command -> command.nonce().equals(13L)));
   }
@@ -157,7 +162,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
@@ -180,6 +185,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
     assertThat(result.txHash()).isEqualTo("0xhash");
     verify(executionTransactionGatewayPort).markPending(77L, "0xhash");
+    verify(verifyTreasuryWalletForSignPort).verify(SPONSOR_ALIAS);
   }
 
   @Test
@@ -187,7 +193,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
@@ -253,27 +259,154 @@ class ExecuteInternalExecutionIntentServiceTest {
   }
 
   @Test
-  void execute_quarantinesIntentWhenSponsorSignerAddressIsMalformed() {
+  void execute_quarantinesIntentWhenSponsorWalletMissing() {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
-        .thenReturn(
-            Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    "not-an-address", "0x" + "9".repeat(64))));
+    when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.empty());
 
     ExecuteInternalExecutionIntentResult result =
         service.execute(
             new ExecuteInternalExecutionIntentCommand(
                 List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
 
-    assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionActionHandlerPort).afterExecutionTerminated(any(), any(), any(), any());
     verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
     verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenSponsorWalletInactive() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load())
+        .thenReturn(
+            Optional.of(
+                new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS, false)));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenKmsKeyIdBlank() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load())
+        .thenReturn(Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, "", SPONSOR_ADDRESS, true)));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.quarantined()).isTrue();
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenWalletAddressBlank() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load())
+        .thenReturn(Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, "", true)));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.quarantined()).isTrue();
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenSponsorAddressIsMalformed() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load())
+        .thenReturn(
+            Optional.of(
+                new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, "not-an-address", true)));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.quarantined()).isTrue();
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenVerifyForSignThrows() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    doThrow(new TreasuryWalletStateException("kms key not enabled"))
+        .when(verifyTreasuryWalletForSignPort)
+        .verify(SPONSOR_ALIAS);
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenKmsSignFails() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
+        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
+    when(executionEip1559SigningPort.sign(any()))
+        .thenThrow(new KmsSignFailedException("kms unavailable"));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
+    verify(executionTransactionGatewayPort, never()).broadcast(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenSignatureRecoveryFails() {
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
+        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
+    when(executionEip1559SigningPort.sign(any()))
+        .thenThrow(new SignatureRecoveryException("recovery failed"));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
   }
 
   @Test
@@ -281,7 +414,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
         .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new Web3InvalidInputException("invalid EVM address: broken"));
@@ -300,7 +433,7 @@ class ExecuteInternalExecutionIntentServiceTest {
   }
 
   private ExecutionIntent internalIntent() {
-    return internalIntentWithSigner("0x" + "4".repeat(40));
+    return internalIntentWithSigner(SPONSOR_ADDRESS);
   }
 
   private ExecutionIntent internalIntentWithSigner(String fromAddress) {

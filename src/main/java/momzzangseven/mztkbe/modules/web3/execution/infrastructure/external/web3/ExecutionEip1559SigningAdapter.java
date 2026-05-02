@@ -1,73 +1,55 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.web3;
 
 import java.math.BigInteger;
+import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SignDigestPort;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
+import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder;
+import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
+import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.SignedTx;
 import org.springframework.stereotype.Component;
-import org.web3j.crypto.Credentials;
-import org.web3j.crypto.Hash;
-import org.web3j.crypto.RawTransaction;
-import org.web3j.crypto.TransactionEncoder;
-import org.web3j.utils.Numeric;
 
+/**
+ * Adapter that bridges {@link ExecutionEip1559SigningPort.SignCommand} into the pure {@link
+ * Eip1559TxEncoder} pipeline plus a KMS-backed digest signature obtained through the
+ * execution-local {@link SignDigestPort}.
+ *
+ * <p>No plaintext key material is referenced; the signing capability is fully expressed by the
+ * {@link TreasurySigner} embedded in the {@link ExecutionEip1559SigningPort.SignCommand}. The
+ * adapter never imports the shared {@code SignDigestUseCase} directly per ARCHITECTURE.md.
+ */
 @Component
+@RequiredArgsConstructor
 public class ExecutionEip1559SigningAdapter implements ExecutionEip1559SigningPort {
+
+  private final SignDigestPort signDigestPort;
 
   @Override
   public SignedTransaction sign(SignCommand command) {
-    validate(command);
-
-    RawTransaction rawTransaction =
-        RawTransaction.createTransaction(
-            command.chainId(),
-            BigInteger.valueOf(command.nonce()),
-            command.gasLimit(),
-            command.toAddress(),
-            nullSafe(command.valueWei()),
-            normalizeData(command.data()),
-            command.maxPriorityFeePerGas(),
-            command.maxFeePerGas());
-
-    Credentials credentials = Credentials.create(command.signerPrivateKeyHex());
-    byte[] signedBytes = TransactionEncoder.signMessage(rawTransaction, credentials);
-    String rawTx = Numeric.toHexString(signedBytes);
-    return new SignedTransaction(rawTx, Hash.sha3(rawTx));
-  }
-
-  private void validate(SignCommand command) {
     if (command == null) {
       throw new Web3InvalidInputException("command is required");
     }
-    if (command.chainId() <= 0) {
-      throw new Web3InvalidInputException("chainId must be positive");
-    }
-    if (command.nonce() < 0) {
-      throw new Web3InvalidInputException("nonce must be >= 0");
-    }
-    EvmAddress.of(command.toAddress());
-    if (command.gasLimit() == null || command.gasLimit().signum() <= 0) {
-      throw new Web3InvalidInputException("gasLimit must be positive");
-    }
-    if (command.maxPriorityFeePerGas() == null || command.maxPriorityFeePerGas().signum() <= 0) {
-      throw new Web3InvalidInputException("maxPriorityFeePerGas must be positive");
-    }
-    if (command.maxFeePerGas() == null || command.maxFeePerGas().signum() <= 0) {
-      throw new Web3InvalidInputException("maxFeePerGas must be positive");
-    }
-    if (command.maxFeePerGas().compareTo(command.maxPriorityFeePerGas()) < 0) {
-      throw new Web3InvalidInputException("maxFeePerGas must be >= maxPriorityFeePerGas");
-    }
-    if (command.signerPrivateKeyHex() == null || command.signerPrivateKeyHex().isBlank()) {
-      throw new Web3InvalidInputException("signerPrivateKeyHex is required");
-    }
-  }
+    TreasurySigner signer = command.signer();
 
-  private String normalizeData(String data) {
-    if (data == null || data.isBlank()) {
-      return "0x";
-    }
-    return Numeric.prependHexPrefix(Numeric.cleanHexPrefix(data));
+    Eip1559Fields fields =
+        new Eip1559Fields(
+            command.chainId(),
+            command.nonce(),
+            command.maxPriorityFeePerGas(),
+            command.maxFeePerGas(),
+            command.gasLimit(),
+            command.toAddress(),
+            nullSafe(command.valueWei()),
+            command.data());
+
+    byte[] unsigned = Eip1559TxEncoder.buildUnsigned(fields);
+    byte[] digest = Eip1559TxEncoder.digest(unsigned);
+    Vrs vrs = signDigestPort.signDigest(signer.kmsKeyId(), digest, signer.walletAddress());
+    SignedTx signed = Eip1559TxEncoder.assembleSigned(fields, vrs);
+    return new SignedTransaction(signed.rawTx(), signed.txHash());
   }
 
   private BigInteger nullSafe(BigInteger value) {

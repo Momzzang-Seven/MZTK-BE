@@ -8,11 +8,11 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
+import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.SignedTx;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.service.SignEip1559TxService;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.SignedTx;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

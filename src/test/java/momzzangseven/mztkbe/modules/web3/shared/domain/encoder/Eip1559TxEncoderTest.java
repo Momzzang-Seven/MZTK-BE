@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.transaction.domain.encoder;
+package momzzangseven.mztkbe.modules.web3.shared.domain.encoder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -7,9 +7,9 @@ import java.math.BigInteger;
 import java.util.Arrays;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
+import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
+import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.SignedTx;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.SignedTx;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

@@ -21,13 +21,15 @@ import java.util.concurrent.TimeUnit;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
@@ -90,15 +92,19 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
   @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
   @MockitoBean private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
   @MockitoBean private ExecutionEip7702GatewayPort executionEip7702GatewayPort;
-  @MockitoBean private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  @MockitoBean private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
+  @MockitoBean private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
 
   @BeforeEach
   void setUp() {
-    org.mockito.BDDMockito.given(loadExecutionSponsorKeyPort.loadByAlias(any(), any()))
+    org.mockito.BDDMockito.given(loadSponsorTreasuryWalletPort.load())
         .willReturn(
             Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    SPONSOR_ADDRESS, "0x" + "9".repeat(64))));
+                new TreasuryWalletInfo(
+                    "test-sponsor", "alias/test-sponsor", SPONSOR_ADDRESS, true)));
+    org.mockito.BDDMockito.willDoNothing()
+        .given(verifyTreasuryWalletForSignPort)
+        .verify(org.mockito.ArgumentMatchers.anyString());
     org.mockito.BDDMockito.given(
             executionEip7702GatewayPort.loadPendingAccountNonce(SPONSOR_ADDRESS))
         .willReturn(BigInteger.valueOf(21L));

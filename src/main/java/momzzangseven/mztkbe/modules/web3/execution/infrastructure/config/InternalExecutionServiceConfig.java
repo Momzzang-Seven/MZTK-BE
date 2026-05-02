@@ -12,10 +12,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
@@ -47,8 +46,8 @@ public class InternalExecutionServiceConfig {
   ExecuteInternalExecutionIntentService executeInternalExecutionIntentService(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       ExecutionTransactionGatewayPort executionTransactionGatewayPort,
-      LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort,
-      LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort,
+      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort,
+      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort,
       ExecutionEip1559SigningPort executionEip1559SigningPort,
       Eip1559TransactionCodecPort eip1559TransactionCodecPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
@@ -57,8 +56,8 @@ public class InternalExecutionServiceConfig {
     return new ExecuteInternalExecutionIntentService(
         executionIntentPersistencePort,
         executionTransactionGatewayPort,
-        loadInternalExecutionSignerConfigPort,
-        loadExecutionSponsorKeyPort,
+        loadSponsorTreasuryWalletPort,
+        verifyTreasuryWalletForSignPort,
         executionEip1559SigningPort,
         eip1559TransactionCodecPort,
         loadExecutionRetryPolicyPort,
