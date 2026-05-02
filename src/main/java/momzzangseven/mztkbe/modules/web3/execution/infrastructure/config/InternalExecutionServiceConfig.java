@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
@@ -32,10 +33,8 @@ public class InternalExecutionServiceConfig {
 
   @Bean
   GetExecutionSponsorWalletAddressUseCase getExecutionSponsorWalletAddressUseCase(
-      LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort,
-      LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort) {
-    return new GetExecutionSponsorWalletAddressService(
-        loadInternalExecutionSignerConfigPort, loadExecutionSponsorKeyPort);
+      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort) {
+    return new GetExecutionSponsorWalletAddressService(loadSponsorTreasuryWalletPort);
   }
 
   @Bean
