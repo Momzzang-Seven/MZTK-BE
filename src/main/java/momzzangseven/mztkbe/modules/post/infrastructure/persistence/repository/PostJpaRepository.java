@@ -32,9 +32,8 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("openStatus") PostStatus openStatus,
       @Param("resolvedStatus") PostStatus resolvedStatus);
 
-  // Keep both v2 tag cursor native queries aligned with
-  // PostPersistenceAdapter#containsCursorSearch: when search is present,
-  // exclude FREE posts and match QUESTION titles only.
+  // Used by admin/manual reconciliation to update only the publication status while guarding
+  // against stale reads.
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
       "update PostEntity p set p.publicationStatus = :targetStatus"
