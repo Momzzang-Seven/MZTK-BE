@@ -170,6 +170,8 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
     if (type == PostType.FREE) {
       return null;
     }
+    // v2 cursor search policy: when search is present, exclude FREE posts and
+    // match QUESTION titles only. Keep this aligned with PostJpaRepository tag cursor queries.
     BooleanExpression questionTitleMatches =
         postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
     if (type == null) {

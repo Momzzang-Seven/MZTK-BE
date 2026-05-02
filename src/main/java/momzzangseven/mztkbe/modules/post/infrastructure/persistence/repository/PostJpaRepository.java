@@ -31,6 +31,9 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("openStatus") PostStatus openStatus,
       @Param("resolvedStatus") PostStatus resolvedStatus);
 
+  // Keep both v2 tag cursor native queries aligned with
+  // PostPersistenceAdapter#containsCursorSearch: when search is present,
+  // exclude FREE posts and match QUESTION titles only.
   @Query(
       value =
           """
@@ -60,6 +63,7 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("tagId") Long tagId,
       @Param("limit") int limit);
 
+  // Keep the same v2 search policy as the first-page tag cursor query.
   @Query(
       value =
           """
