@@ -9,6 +9,7 @@ import momzzangseven.mztkbe.modules.web3.shared.infrastructure.crypto.DerToVrsCo
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.KmsException;
 import software.amazon.awssdk.services.kms.model.MessageType;
@@ -35,9 +36,10 @@ import software.amazon.awssdk.services.kms.model.SigningAlgorithmSpec;
  * the HSM boundary.
  *
  * <p><b>Throttle / retry</b> — Per design §9 this adapter does not retry internally. Any {@link
- * KmsException} (throttling, 5xx, IAM denial, key state errors) is wrapped into {@link
- * KmsSignFailedException} and propagated; the upstream caller (e.g. {@code TransactionIssuerWorker}
- * via {@code Web3TxFailureReason.KMS_SIGN_FAILED}) decides whether to retry under its existing
+ * SdkException} (KMS service errors — throttling, 5xx, IAM denial, key state — and client-side
+ * failures — network, credential provider, timeout) is wrapped into {@link KmsSignFailedException}
+ * and propagated; the upstream caller (e.g. {@code TransactionIssuerWorker} via {@code
+ * Web3TxFailureReason.KMS_SIGN_FAILED}) decides whether to retry under its existing
  * exponential-backoff strategy.
  */
 @Component
@@ -71,14 +73,22 @@ public class KmsSignerAdapter implements KmsSignerPort {
     final SignResponse response;
     try {
       response = kmsClient.sign(request);
-    } catch (KmsException ex) {
+    } catch (SdkException ex) {
       log.warn(
-          "AWS KMS Sign failed (kmsKeyId={}, awsErrorCode={})",
+          "AWS KMS Sign failed (kmsKeyId={}, awsErrorCode={}, exception={})",
           kmsKeyId,
-          ex.awsErrorDetails() == null ? "n/a" : ex.awsErrorDetails().errorCode());
+          awsErrorCodeOrNa(ex),
+          ex.getClass().getSimpleName());
       throw new KmsSignFailedException("KMS Sign API failed", ex);
     }
 
     return DerToVrsConverter.convert(response.signature().asByteArray(), digest, expectedAddress);
+  }
+
+  private static String awsErrorCodeOrNa(SdkException ex) {
+    if (ex instanceof KmsException kex && kex.awsErrorDetails() != null) {
+      return kex.awsErrorDetails().errorCode();
+    }
+    return "n/a";
   }
 }
