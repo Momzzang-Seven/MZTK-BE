@@ -21,12 +21,12 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.CreateExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecutionModeSelector;
@@ -196,11 +196,11 @@ public class ExecutionIntentServiceConfig {
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
       ExecutionTransactionGatewayPort executionTransactionGatewayPort,
-      LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort,
+      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort,
+      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort,
       ExecutionEip7702GatewayPort executionEip7702GatewayPort,
       Eip1559TransactionCodecPort eip1559TransactionCodecPort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
-      LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       Clock appClock) {
@@ -208,11 +208,11 @@ public class ExecutionIntentServiceConfig {
         executionIntentPersistencePort,
         sponsorDailyUsagePersistencePort,
         executionTransactionGatewayPort,
-        loadExecutionSponsorKeyPort,
+        loadSponsorTreasuryWalletPort,
+        verifyTreasuryWalletForSignPort,
         executionEip7702GatewayPort,
         eip1559TransactionCodecPort,
         loadExecutionChainIdPort,
-        loadExecutionSponsorWalletConfigPort,
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         appClock);

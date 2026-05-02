@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
@@ -21,9 +22,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -31,6 +32,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsag
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import org.springframework.transaction.annotation.Transactional;
 import org.web3j.utils.Numeric;
@@ -51,11 +53,11 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  private final LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  private final LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
+  private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   private final ExecutionEip7702GatewayPort executionEip7702GatewayPort;
   private final Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
-  private final LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
   private final LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   private final List<ExecutionActionHandlerPort> executionActionHandlerPorts;
   private final Clock appClock;
@@ -134,14 +136,35 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       throw new Web3InvalidInputException("submitSignature is required");
     }
 
-    var sponsorWalletConfig = loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig();
-    LoadExecutionSponsorKeyPort.ExecutionSponsorKey sponsorKey =
-        loadExecutionSponsorKeyPort
-            .loadByAlias(
-                sponsorWalletConfig.walletAlias(), sponsorWalletConfig.keyEncryptionKeyB64())
+    // Load sponsor wallet snapshot via the role-bound bridging port (no plaintext key material).
+    TreasuryWalletInfo walletInfo =
+        loadSponsorTreasuryWalletPort
+            .load()
             .orElseThrow(() -> new Web3InvalidInputException("sponsor signer key is missing"));
 
-    String sponsorAddress = EvmAddress.of(sponsorKey.address()).value();
+    // Structural fail-fast: incomplete wallet rows (legacy / mid-backfill) surface as
+    // TREASURY_KEY_MISSING-equivalent input errors before reaching TreasurySigner's compact
+    // constructor or the remote verify call.
+    if (!walletInfo.active()) {
+      throw new Web3InvalidInputException("sponsor signer key is missing");
+    }
+    if (walletInfo.kmsKeyId() == null || walletInfo.kmsKeyId().isBlank()) {
+      throw new Web3InvalidInputException("sponsor signer key is missing");
+    }
+    if (walletInfo.walletAddress() == null || walletInfo.walletAddress().isBlank()) {
+      throw new Web3InvalidInputException("sponsor signer key is missing");
+    }
+
+    String sponsorAddress = EvmAddress.of(walletInfo.walletAddress()).value();
+
+    // Pre-sign verification gate: propagates TreasuryWalletStateException on KMS DescribeKey
+    // / lifecycle mismatch. Performed before any DB write below so that a non-signable wallet
+    // aborts the flow without leaving a partial transaction record.
+    verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
+
+    TreasurySigner sponsorSigner =
+        new TreasurySigner(
+            walletInfo.walletAlias(), walletInfo.kmsKeyId(), walletInfo.walletAddress());
     ExecutionEip7702GatewayPort.AuthorizationTuple authTuple =
         executionEip7702GatewayPort.toAuthorizationTuple(
             loadExecutionChainIdPort.loadChainId(),
@@ -216,10 +239,6 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     ExecutionEip7702GatewayPort.FeePlan feePlan = executionEip7702GatewayPort.loadSponsorFeePlan();
     long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
 
-    // Transitional shim: KMS sponsor signing rewiring lands in commit 3-4. The downstream gateway
-    // adapter no longer accepts a plaintext sponsor private key; until 3-4 lands, any test or
-    // runtime path reaching this construction site fails loudly via the gateway adapter throw
-    // rather than silently falling back to the removed legacy flow.
     ExecutionEip7702GatewayPort.SignedPayload signedPayload =
         executionEip7702GatewayPort.signAndEncode(
             new ExecutionEip7702GatewayPort.SignCommand(
@@ -232,7 +251,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
                 BigInteger.ZERO,
                 executeCalldata,
                 java.util.List.of(authTuple),
-                sponsorKey.privateKeyHex()));
+                sponsorSigner));
 
     ExecutionTransactionGatewayPort.TransactionRecord created =
         executionTransactionGatewayPort.createAndFlush(

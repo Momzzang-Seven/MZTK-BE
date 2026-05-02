@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.Eip7702ExecutionAuthorizationTuple;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.Eip7702ExecutionBatchCall;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.Eip7702ExecutionFeePlan;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.Eip7702ExecutionSignCommand;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.dto.Eip7702ExecutionSignedPayload;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.ManageExecutionEip7702UseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
@@ -92,14 +94,30 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
 
   @Override
   public SignedPayload signAndEncode(SignCommand command) {
-    // Transitional shim: 3-3 swapped Eip7702ExecutionSignCommand to TreasurySigner-based signing,
-    // but the execution-side SignCommand still carries sponsorPrivateKeyHex until commit 3-4 wires
-    // a TreasurySigner through ExecuteExecutionIntentService. Fail loudly rather than fabricate a
-    // bogus TreasurySigner from the legacy private-key string.
-    throw new UnsupportedOperationException(
-        "KMS sponsor signing rewiring lands in commit 3-4; ExecutionEip7702GatewayPort.SignCommand"
-            + " must carry a TreasurySigner before this adapter can construct"
-            + " Eip7702ExecutionSignCommand");
+    Eip7702ExecutionSignCommand inner =
+        new Eip7702ExecutionSignCommand(
+            command.chainId(),
+            command.nonce(),
+            command.maxPriorityFeePerGas(),
+            command.maxFeePerGas(),
+            command.gasLimit(),
+            command.to(),
+            command.value(),
+            command.data(),
+            command.authorizationList().stream()
+                .map(
+                    tuple ->
+                        new Eip7702ExecutionAuthorizationTuple(
+                            tuple.chainId(),
+                            tuple.address(),
+                            tuple.nonce(),
+                            tuple.yParity(),
+                            tuple.r(),
+                            tuple.s()))
+                .toList(),
+            command.sponsorSigner());
+    Eip7702ExecutionSignedPayload signed = manageExecutionEip7702UseCase.signAndEncode(inner);
+    return new SignedPayload(signed.rawTx(), signed.txHash());
   }
 
   @Override

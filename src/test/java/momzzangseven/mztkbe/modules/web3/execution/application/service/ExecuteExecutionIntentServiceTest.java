@@ -17,11 +17,14 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
@@ -29,9 +32,9 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -39,7 +42,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
@@ -58,14 +60,18 @@ class ExecuteExecutionIntentServiceTest {
   private static final LocalDateTime FIXED_NOW =
       LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
 
+  private static final String SPONSOR_ALIAS = "sponsor-treasury";
+  private static final String SPONSOR_KMS_KEY_ID = "alias/sponsor-treasury";
+  private static final String SPONSOR_ADDRESS = "0x" + "6".repeat(40);
+
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  @Mock private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
+  @Mock private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @Mock private ExecutionEip7702GatewayPort executionEip7702GatewayPort;
   @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
-  @Mock private LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
   @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
 
@@ -78,11 +84,11 @@ class ExecuteExecutionIntentServiceTest {
             executionIntentPersistencePort,
             sponsorDailyUsagePersistencePort,
             executionTransactionGatewayPort,
-            loadExecutionSponsorKeyPort,
+            loadSponsorTreasuryWalletPort,
+            verifyTreasuryWalletForSignPort,
             executionEip7702GatewayPort,
             eip1559TransactionCodecPort,
             loadExecutionChainIdPort,
-            loadExecutionSponsorWalletConfigPort,
             loadExecutionRetryPolicyPort,
             List.of(executionActionHandlerPort),
             FIXED_CLOCK);
@@ -100,9 +106,10 @@ class ExecuteExecutionIntentServiceTest {
         .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
         .thenReturn(new ExecutionRetryPolicy(30));
     lenient().when(loadExecutionChainIdPort.loadChainId()).thenReturn(11155111L);
-    lenient()
-        .when(loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig())
-        .thenReturn(new ExecutionSponsorWalletConfig("alias", "kek"));
+  }
+
+  private TreasuryWalletInfo activeSponsorWalletInfo() {
+    return new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, true);
   }
 
   @Test
@@ -219,11 +226,7 @@ class ExecuteExecutionIntentServiceTest {
 
     when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
         .thenReturn(Optional.of(intent));
-    when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
-        .thenReturn(
-            Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    "0x" + "6".repeat(40), "0x" + "7".repeat(64))));
+    when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.of(activeSponsorWalletInfo()));
     when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
         .thenReturn(
             new ExecutionEip7702GatewayPort.AuthorizationTuple(
@@ -252,6 +255,101 @@ class ExecuteExecutionIntentServiceTest {
         .isEqualTo(ErrorCode.AUTH_NONCE_MISMATCH.getCode());
 
     verify(executionIntentPersistencePort).update(any());
+  }
+
+  @Test
+  void executeEip7702_throwsSponsorMissing_whenSponsorTreasuryWalletNotRegistered()
+      throws Exception {
+    ExecutionIntent intent = existingEip7702Intent();
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessage("sponsor signer key is missing");
+  }
+
+  @Test
+  void executeEip7702_throwsSponsorMissing_whenSponsorWalletNotActive() throws Exception {
+    ExecutionIntent intent = existingEip7702Intent();
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load())
+        .thenReturn(
+            Optional.of(
+                new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, false)));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessage("sponsor signer key is missing");
+  }
+
+  @Test
+  void executeEip7702_throwsSponsorMissing_whenKmsKeyIdBlank() throws Exception {
+    ExecutionIntent intent = existingEip7702Intent();
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load())
+        .thenReturn(Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, "", SPONSOR_ADDRESS, true)));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessage("sponsor signer key is missing");
+  }
+
+  @Test
+  void executeEip7702_throwsSponsorMissing_whenWalletAddressBlank() throws Exception {
+    ExecutionIntent intent = existingEip7702Intent();
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load())
+        .thenReturn(
+            Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, "", true)));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null)))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessage("sponsor signer key is missing");
+  }
+
+  @Test
+  void executeEip7702_propagates_whenVerifyForSignFails() throws Exception {
+    ExecutionIntent intent = existingEip7702Intent();
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+        .thenReturn(Optional.of(intent));
+    when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.of(activeSponsorWalletInfo()));
+    org.mockito.Mockito.doThrow(new TreasuryWalletStateException("KMS key disabled"))
+        .when(verifyTreasuryWalletForSignPort)
+        .verify(SPONSOR_ALIAS);
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null)))
+        .isInstanceOf(TreasuryWalletStateException.class)
+        .hasMessageContaining("KMS key disabled");
   }
 
   private ExecutionIntent existingEip1559Intent() throws Exception {
