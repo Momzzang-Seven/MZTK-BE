@@ -2,10 +2,13 @@ package momzzangseven.mztkbe.modules.account.infrastructure.persistence.adapter;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.account.application.port.out.DeleteUserAccountPort;
+import momzzangseven.mztkbe.modules.account.application.port.out.LoadManagedUserAccountStatusesPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.SaveUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
@@ -22,7 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @RequiredArgsConstructor
 public class UserAccountPersistenceAdapter
-    implements LoadUserAccountPort, SaveUserAccountPort, DeleteUserAccountPort {
+    implements LoadUserAccountPort,
+        SaveUserAccountPort,
+        DeleteUserAccountPort,
+        LoadManagedUserAccountStatusesPort {
 
   private final UserAccountJpaRepository userAccountJpaRepository;
 
@@ -128,6 +134,34 @@ public class UserAccountPersistenceAdapter
   public void deleteByUserIdIn(List<Long> userIds) {
     log.debug("Hard-deleting accounts for {} users", userIds.size());
     userAccountJpaRepository.deleteByUserIdIn(userIds);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Map<Long, AccountStatus> load(List<Long> userIds, AccountStatus statusFilter) {
+    if (userIds != null && userIds.isEmpty()) {
+      return Map.of();
+    }
+    if (statusFilter != null && userIds == null) {
+      return userAccountJpaRepository.findManagedUserAccountStatusesByStatus(statusFilter).stream()
+          .collect(
+              Collectors.toMap(
+                  UserAccountJpaRepository.ManagedUserAccountStatusProjection::getUserId,
+                  UserAccountJpaRepository.ManagedUserAccountStatusProjection::getStatus));
+    }
+
+    Map<Long, AccountStatus> statuses =
+        userAccountJpaRepository.findManagedUserAccountStatusesByUserIds(userIds).stream()
+            .collect(
+                Collectors.toMap(
+                    UserAccountJpaRepository.ManagedUserAccountStatusProjection::getUserId,
+                    UserAccountJpaRepository.ManagedUserAccountStatusProjection::getStatus));
+    if (statusFilter == null) {
+      return statuses;
+    }
+    return statuses.entrySet().stream()
+        .filter(entry -> entry.getValue() == statusFilter)
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
   }
 
   // ========== Mapping ==========

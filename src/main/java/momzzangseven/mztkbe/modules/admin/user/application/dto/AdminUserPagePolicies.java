@@ -12,5 +12,6 @@ public final class AdminUserPagePolicies {
           0,
           20,
           100,
+          100,
           Set.of("joinedAt", "userId", "nickname", "role", "status", "postCount", "commentCount"));
 }

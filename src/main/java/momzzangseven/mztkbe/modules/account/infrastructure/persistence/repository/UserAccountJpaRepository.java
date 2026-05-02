@@ -47,6 +47,20 @@ public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntit
   List<Long> findUserIdsByStatusAndDeletedAtBefore(
       @Param("status") AccountStatus status, @Param("cutoff") Instant cutoff, Pageable pageable);
 
+  @Query(
+      "SELECT ua.userId AS userId, ua.status AS status "
+          + "FROM UserAccountEntity ua "
+          + "WHERE ua.userId IN :userIds")
+  List<ManagedUserAccountStatusProjection> findManagedUserAccountStatusesByUserIds(
+      @Param("userIds") List<Long> userIds);
+
+  @Query(
+      "SELECT ua.userId AS userId, ua.status AS status "
+          + "FROM UserAccountEntity ua "
+          + "WHERE ua.status = :status")
+  List<ManagedUserAccountStatusProjection> findManagedUserAccountStatusesByStatus(
+      @Param("status") AccountStatus status);
+
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM UserAccountEntity ua WHERE ua.userId = :userId")
   void deleteByUserId(@Param("userId") Long userId);
@@ -54,4 +68,10 @@ public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntit
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM UserAccountEntity ua WHERE ua.userId IN :userIds")
   void deleteByUserIdIn(@Param("userIds") List<Long> userIds);
+
+  interface ManagedUserAccountStatusProjection {
+    Long getUserId();
+
+    AccountStatus getStatus();
+  }
 }
