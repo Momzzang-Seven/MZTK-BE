@@ -158,6 +158,22 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
   private void processItem(
       LoadTransactionWorkPort.TransactionWorkItem item, TreasurySigner signer) {
+    // Treasury rotation guard: a CREATED row carries the from_address it was minted with.
+    // After a treasury rotation, the active signer can be a different wallet — proceeding would
+    // sign with a wallet that does not match item.fromAddress() and the broadcast would silently
+    // fail on-chain (or worse, drift state). Cheaper than prevalidate's RPC round-trip, so this
+    // guard runs first.
+    if (!isFromAddressMatch(item.fromAddress(), signer.walletAddress())) {
+      log.warn(
+          "fromAddress mismatch: txId={}, expected={}, signer={}",
+          item.transactionId(),
+          item.fromAddress(),
+          signer.walletAddress());
+      failPrevalidate(
+          item.transactionId(), Web3TxFailureReason.FROM_ADDRESS_MISMATCH.code(), false);
+      return;
+    }
+
     Web3ContractPort.PrevalidateResult prevalidateResult =
         web3ContractPort.prevalidate(
             new Web3ContractPort.PrevalidateCommand(
@@ -250,6 +266,13 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         Web3TransactionAuditEventType.STATE_CHANGE,
         null,
         new StateChangeAuditDetail(from, to).toMap());
+  }
+
+  private static boolean isFromAddressMatch(String itemFromAddress, String signerAddress) {
+    if (itemFromAddress == null || signerAddress == null) {
+      return false;
+    }
+    return itemFromAddress.trim().toLowerCase().equals(signerAddress.trim().toLowerCase());
   }
 
   private long resolveNonce(
