@@ -73,6 +73,8 @@ public enum ErrorCode {
 
   USER_WITHDRAWN("USER_004", "User account is withdrawn", HttpStatus.CONFLICT),
 
+  USER_BLOCKED("USER_006", "User account is blocked", HttpStatus.FORBIDDEN),
+
   ACCOUNT_NOT_DELETED(
       "USER_005",
       "Account is not in a deleted state and cannot be reactivated",
