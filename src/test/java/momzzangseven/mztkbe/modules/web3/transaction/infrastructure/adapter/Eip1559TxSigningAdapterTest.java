@@ -2,17 +2,18 @@ package momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.Eip1559Fields;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignEip1559TxCommand;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignEip1559TxResult;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignedTx;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignEip1559TxUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.Erc20TransferCalldataEncoder;
-import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.SignEip1559TxUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.SignedTx;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,15 +60,17 @@ class Eip1559TxSigningAdapterTest {
   @DisplayName("Eip1559Fields 의 to 는 토큰 컨트랙트 주소이고 value 는 0, data 는 ERC-20 transfer 칼데이터다")
   void signTransfer_buildsErc20TransferFieldsAndDelegatesToService() {
     SignedTx canned = new SignedTx("0xdeadbeef", "0x" + "d".repeat(64));
-    when(signEip1559TxUseCase.sign(any(Eip1559Fields.class), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS)))
-        .thenReturn(canned);
+    when(signEip1559TxUseCase.sign(any(SignEip1559TxCommand.class)))
+        .thenReturn(new SignEip1559TxResult(canned));
 
     Web3ContractPort.SignedTransaction result = adapter.signTransfer(command());
 
-    ArgumentCaptor<Eip1559Fields> fieldsCaptor = ArgumentCaptor.forClass(Eip1559Fields.class);
-    verify(signEip1559TxUseCase).sign(fieldsCaptor.capture(), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS));
+    ArgumentCaptor<SignEip1559TxCommand> commandCaptor =
+        ArgumentCaptor.forClass(SignEip1559TxCommand.class);
+    verify(signEip1559TxUseCase).sign(commandCaptor.capture());
 
-    Eip1559Fields fields = fieldsCaptor.getValue();
+    SignEip1559TxCommand captured = commandCaptor.getValue();
+    Eip1559Fields fields = captured.fields();
     // The most regressable invariant: the EIP-1559 envelope `to` MUST be the ERC-20 token contract,
     // not the recipient EOA. The recipient is encoded inside the transfer calldata.
     assertThat(fields.to()).isEqualTo(TOKEN_CONTRACT);
@@ -80,6 +83,9 @@ class Eip1559TxSigningAdapterTest {
     assertThat(fields.data())
         .isEqualTo(Erc20TransferCalldataEncoder.encodeTransferData(RECIPIENT, AMOUNT_WEI));
 
+    assertThat(captured.kmsKeyId()).isEqualTo(KMS_KEY_ID);
+    assertThat(captured.expectedSignerAddress()).isEqualTo(TREASURY_ADDRESS);
+
     assertThat(result.rawTx()).isEqualTo(canned.rawTx());
     assertThat(result.txHash()).isEqualTo(canned.txHash());
   }
@@ -87,15 +93,16 @@ class Eip1559TxSigningAdapterTest {
   @Test
   @DisplayName("calldata 디코드 시 함수 selector 는 transfer(address,uint256) 의 0xa9059cbb 다")
   void signTransfer_calldataStartsWithErc20TransferSelector() {
-    when(signEip1559TxUseCase.sign(any(Eip1559Fields.class), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS)))
-        .thenReturn(new SignedTx("0xdeadbeef", "0x" + "d".repeat(64)));
+    when(signEip1559TxUseCase.sign(any(SignEip1559TxCommand.class)))
+        .thenReturn(new SignEip1559TxResult(new SignedTx("0xdeadbeef", "0x" + "d".repeat(64))));
 
     adapter.signTransfer(command());
 
-    ArgumentCaptor<Eip1559Fields> fieldsCaptor = ArgumentCaptor.forClass(Eip1559Fields.class);
-    verify(signEip1559TxUseCase).sign(fieldsCaptor.capture(), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS));
+    ArgumentCaptor<SignEip1559TxCommand> commandCaptor =
+        ArgumentCaptor.forClass(SignEip1559TxCommand.class);
+    verify(signEip1559TxUseCase).sign(commandCaptor.capture());
 
-    String data = fieldsCaptor.getValue().data();
+    String data = commandCaptor.getValue().fields().data();
     assertThat(data).startsWith("0xa9059cbb");
     // address (20 bytes left-padded to 32) + uint256 (32 bytes) = 64 bytes = 128 hex chars,
     // plus the 4-byte selector (8 hex chars) and the "0x" prefix = 138 chars total.

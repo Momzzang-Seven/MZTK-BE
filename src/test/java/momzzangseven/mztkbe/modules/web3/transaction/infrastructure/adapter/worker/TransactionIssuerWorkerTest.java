@@ -379,7 +379,8 @@ class TransactionIssuerWorkerTest {
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
     when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
-        .thenReturn(new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "main"));
+        .thenReturn(
+            new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "main"));
 
     worker.processBatch(1);
 
