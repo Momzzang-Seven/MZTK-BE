@@ -198,6 +198,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     } catch (SignatureRecoveryException e) {
       log.warn("Signature recovery failed for txId={}: {}", item.transactionId(), e.getMessage());
+      releaseReservedNonceQuietly(item, signer.walletAddress(), nonce);
       failPrevalidate(item.transactionId(), Web3TxFailureReason.SIGNATURE_INVALID.code(), false);
       return;
     }
@@ -260,6 +261,31 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     long reservedNonce = reserveNoncePort.reserveNextNonce(treasuryAddress);
     updateTransactionPort.assignNonce(item.transactionId(), reservedNonce);
     return reservedNonce;
+  }
+
+  // Best-effort CAS rollback of a nonce that this worker just reserved but cannot broadcast.
+  // Skipped on re-entry (item.nonce() != null) because resolveNonce did not advance the cursor.
+  // A failed CAS means another reserver advanced past nonce+1 — the gap survives, so we surface
+  // it as ERROR for ops triage instead of trying further compensations that could double-release.
+  private void releaseReservedNonceQuietly(
+      LoadTransactionWorkPort.TransactionWorkItem item, String fromAddress, long nonce) {
+    if (item.nonce() != null) {
+      return;
+    }
+    try {
+      boolean released = reserveNoncePort.releaseNonce(fromAddress, nonce);
+      if (!released) {
+        log.error(
+            "NONCE_GAP_DETECTED: txId={}, fromAddress={}, abandonedNonce={} "
+                + "— another reservation advanced the cursor before release",
+            item.transactionId(),
+            fromAddress,
+            nonce);
+      }
+    } catch (Exception ex) {
+      log.error(
+          "Nonce release failed (best-effort): txId={}, nonce={}", item.transactionId(), nonce, ex);
+    }
   }
 
   @Override
