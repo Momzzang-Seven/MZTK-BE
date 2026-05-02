@@ -12,4 +12,7 @@ public interface CheckAccountStatusUseCase {
 
   /** Returns {@code true} if the account associated with the given user is DELETED (withdrawn). */
   boolean isDeleted(Long userId);
+
+  /** Returns {@code true} if the account associated with the given user is BLOCKED. */
+  boolean isBlocked(Long userId);
 }
