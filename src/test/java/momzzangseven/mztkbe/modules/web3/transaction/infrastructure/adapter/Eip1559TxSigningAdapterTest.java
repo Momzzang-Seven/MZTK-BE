@@ -9,7 +9,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigInteger;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.Erc20TransferCalldataEncoder;
-import momzzangseven.mztkbe.modules.web3.transaction.application.service.SignEip1559TxService;
+import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.SignEip1559TxUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.encoder.Eip1559TxEncoder.SignedTx;
@@ -37,7 +37,7 @@ class Eip1559TxSigningAdapterTest {
   private static final BigInteger MAX_FEE = BigInteger.valueOf(2_000_000_000L);
   private static final BigInteger AMOUNT_WEI = BigInteger.valueOf(1_000L);
 
-  @Mock private SignEip1559TxUseCase signEip1559TxService;
+  @Mock private SignEip1559TxUseCase signEip1559TxUseCase;
 
   @InjectMocks private Eip1559TxSigningAdapter adapter;
 
@@ -59,13 +59,13 @@ class Eip1559TxSigningAdapterTest {
   @DisplayName("Eip1559Fields 의 to 는 토큰 컨트랙트 주소이고 value 는 0, data 는 ERC-20 transfer 칼데이터다")
   void signTransfer_buildsErc20TransferFieldsAndDelegatesToService() {
     SignedTx canned = new SignedTx("0xdeadbeef", "0x" + "d".repeat(64));
-    when(signEip1559TxService.sign(any(Eip1559Fields.class), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS)))
+    when(signEip1559TxUseCase.sign(any(Eip1559Fields.class), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS)))
         .thenReturn(canned);
 
     Web3ContractPort.SignedTransaction result = adapter.signTransfer(command());
 
     ArgumentCaptor<Eip1559Fields> fieldsCaptor = ArgumentCaptor.forClass(Eip1559Fields.class);
-    verify(signEip1559TxService).sign(fieldsCaptor.capture(), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS));
+    verify(signEip1559TxUseCase).sign(fieldsCaptor.capture(), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS));
 
     Eip1559Fields fields = fieldsCaptor.getValue();
     // The most regressable invariant: the EIP-1559 envelope `to` MUST be the ERC-20 token contract,
@@ -87,13 +87,13 @@ class Eip1559TxSigningAdapterTest {
   @Test
   @DisplayName("calldata 디코드 시 함수 selector 는 transfer(address,uint256) 의 0xa9059cbb 다")
   void signTransfer_calldataStartsWithErc20TransferSelector() {
-    when(signEip1559TxService.sign(any(Eip1559Fields.class), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS)))
+    when(signEip1559TxUseCase.sign(any(Eip1559Fields.class), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS)))
         .thenReturn(new SignedTx("0xdeadbeef", "0x" + "d".repeat(64)));
 
     adapter.signTransfer(command());
 
     ArgumentCaptor<Eip1559Fields> fieldsCaptor = ArgumentCaptor.forClass(Eip1559Fields.class);
-    verify(signEip1559TxService).sign(fieldsCaptor.capture(), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS));
+    verify(signEip1559TxUseCase).sign(fieldsCaptor.capture(), eq(KMS_KEY_ID), eq(TREASURY_ADDRESS));
 
     String data = fieldsCaptor.getValue().data();
     assertThat(data).startsWith("0xa9059cbb");
