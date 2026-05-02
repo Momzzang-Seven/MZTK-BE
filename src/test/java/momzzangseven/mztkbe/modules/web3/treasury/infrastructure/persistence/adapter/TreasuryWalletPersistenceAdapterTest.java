@@ -1,7 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -9,7 +8,6 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerFailureReason;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter.TreasuryKeyCipher;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryWalletEntity;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryWalletJpaRepository;
@@ -23,8 +21,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class TreasuryWalletPersistenceAdapterTest {
 
-  private static final String MATCHING_PRIVATE_KEY_HEX =
-      "4f3edf983ac636a65a842ce7c78d9aa706d3b113bce036f4edc6f6dc0d1e6f73";
   private static final String MATCHING_ADDRESS = "0xaec2962556aa2c9c3b3e873121cb4c61ae5f1823";
 
   @Mock private Web3TreasuryWalletJpaRepository repository;
@@ -35,49 +31,6 @@ class TreasuryWalletPersistenceAdapterTest {
   @BeforeEach
   void setUp() {
     adapter = new TreasuryWalletPersistenceAdapter(repository, treasuryKeyCipher);
-  }
-
-  @Test
-  void loadByAlias_throws_whenAliasBlank() {
-    assertThatThrownBy(() -> adapter.loadByAlias(" ", "kek"))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("walletAlias is required");
-  }
-
-  @Test
-  void loadByAlias_decryptsAndMapsResult() {
-    Web3TreasuryWalletEntity entity =
-        Web3TreasuryWalletEntity.builder()
-            .walletAlias("reward-main")
-            .treasuryAddress(MATCHING_ADDRESS)
-            .treasuryPrivateKeyEncrypted("enc")
-            .build();
-    when(repository.findByWalletAlias("reward-main")).thenReturn(Optional.of(entity));
-    when(treasuryKeyCipher.decrypt("enc", "kek")).thenReturn(MATCHING_PRIVATE_KEY_HEX);
-
-    Optional<LoadTreasuryKeyPort.TreasuryKeyMaterial> result =
-        adapter.loadByAlias("reward-main", "kek");
-
-    assertThat(result).isPresent();
-    assertThat(result.get().treasuryAddress()).isEqualTo(MATCHING_ADDRESS);
-    assertThat(result.get().privateKeyHex()).isEqualTo(MATCHING_PRIVATE_KEY_HEX);
-  }
-
-  @Test
-  void loadByAlias_returnsEmpty_whenDerivedAddressDoesNotMatchStoredAddress() {
-    Web3TreasuryWalletEntity entity =
-        Web3TreasuryWalletEntity.builder()
-            .walletAlias("reward-main")
-            .treasuryAddress("0x" + "a".repeat(40))
-            .treasuryPrivateKeyEncrypted("enc")
-            .build();
-    when(repository.findByWalletAlias("reward-main")).thenReturn(Optional.of(entity));
-    when(treasuryKeyCipher.decrypt("enc", "kek")).thenReturn("f".repeat(64));
-
-    Optional<LoadTreasuryKeyPort.TreasuryKeyMaterial> result =
-        adapter.loadByAlias("reward-main", "kek");
-
-    assertThat(result).isEmpty();
   }
 
   @Test

@@ -8,7 +8,6 @@ import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerF
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAddressProjectionPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
@@ -30,10 +29,8 @@ import org.web3j.crypto.Credentials;
  *   <li><b>New (KMS-backed)</b> — {@link LoadTreasuryWalletPort} / {@link SaveTreasuryWalletPort}
  *       project the {@code TreasuryWallet} aggregate, reading {@code kms_key_id} and the new
  *       lifecycle columns added in V056.
- *   <li><b>Legacy (cipher-backed)</b> — {@link LoadTreasuryKeyPort} / {@link SaveTreasuryKeyPort}
- *       continue to drive the historical encrypted-private-key path so {@code transaction} (until
- *       PR2) and {@code eip7702} / {@code execution} (until PR3) can still issue signatures while
- *       the new KMS path is being adopted.
+ *   <li><b>Legacy (cipher-backed)</b> — {@link SaveTreasuryKeyPort} continues to back the
+ *       historical encrypted-private-key column until V063 drops it in PR4.
  * </ul>
  *
  * <p>Both port families share the same JPA repository / entity; rows that have only legacy columns
@@ -45,7 +42,6 @@ import org.web3j.crypto.Credentials;
 public class TreasuryWalletPersistenceAdapter
     implements LoadTreasuryWalletPort,
         SaveTreasuryWalletPort,
-        LoadTreasuryKeyPort,
         SaveTreasuryKeyPort,
         ProbeExecutionSignerCapabilityPort,
         LoadTreasuryAddressProjectionPort {
@@ -82,18 +78,6 @@ public class TreasuryWalletPersistenceAdapter
     applyDomain(entity, wallet);
     Web3TreasuryWalletEntity saved = repository.save(entity);
     return toDomain(saved);
-  }
-
-  // ----- LoadTreasuryKeyPort (legacy cipher path, retained until PR2/PR4) -----
-
-  @Override
-  public Optional<TreasuryKeyMaterial> loadByAlias(String walletAlias, String kekB64) {
-    requireNonBlank(walletAlias, "walletAlias");
-    requireNonBlank(kekB64, "kekB64");
-    return repository
-        .findByWalletAlias(walletAlias)
-        .filter(this::hasProvisionedSlotMaterial)
-        .flatMap(entity -> resolveProvisionedMaterial(entity, kekB64).material());
   }
 
   // ----- ProbeExecutionSignerCapabilityPort (legacy probe) -----
@@ -207,15 +191,11 @@ public class TreasuryWalletPersistenceAdapter
     }
     ProvisionedMaterialResolution resolution =
         resolveProvisionedMaterial(entity, keyEncryptionKeyB64);
-    if (resolution.material().isPresent()) {
+    if (resolution.signable()) {
       return ExecutionSignerCapabilityView.ready(walletAlias, entity.getTreasuryAddress());
     }
     return ExecutionSignerCapabilityView.provisionedUnavailable(
         walletAlias, resolution.failureReason());
-  }
-
-  private boolean hasProvisionedSlotMaterial(Web3TreasuryWalletEntity entity) {
-    return hasText(entity.getTreasuryAddress()) && hasText(entity.getTreasuryPrivateKeyEncrypted());
   }
 
   private static boolean hasText(String value) {
@@ -236,24 +216,22 @@ public class TreasuryWalletPersistenceAdapter
       if (!derivedAddress.equalsIgnoreCase(entity.getTreasuryAddress())) {
         return ProvisionedMaterialResolution.failure(ExecutionSignerFailureReason.ADDRESS_MISMATCH);
       }
-      return ProvisionedMaterialResolution.success(
-          TreasuryKeyMaterial.of(entity.getTreasuryAddress(), privateKeyHex));
+      return ProvisionedMaterialResolution.success();
     } catch (RuntimeException e) {
       return ProvisionedMaterialResolution.failure(ExecutionSignerFailureReason.DECRYPT_FAILED);
     }
   }
 
   private record ProvisionedMaterialResolution(
-      Optional<TreasuryKeyMaterial> material, ExecutionSignerFailureReason failureReason) {
+      boolean signable, ExecutionSignerFailureReason failureReason) {
 
-    private static ProvisionedMaterialResolution success(TreasuryKeyMaterial material) {
-      return new ProvisionedMaterialResolution(
-          Optional.of(material), ExecutionSignerFailureReason.NONE);
+    private static ProvisionedMaterialResolution success() {
+      return new ProvisionedMaterialResolution(true, ExecutionSignerFailureReason.NONE);
     }
 
     private static ProvisionedMaterialResolution failure(
         ExecutionSignerFailureReason failureReason) {
-      return new ProvisionedMaterialResolution(Optional.empty(), failureReason);
+      return new ProvisionedMaterialResolution(false, failureReason);
     }
   }
 }
