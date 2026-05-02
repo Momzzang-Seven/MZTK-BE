@@ -15,6 +15,13 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
   long countByPostId(Long postId);
 
   @Query(
+      "SELECT c.writerId AS userId, COUNT(c.id) AS commentCount "
+          + "FROM CommentEntity c "
+          + "WHERE c.writerId IN :userIds AND c.isDeleted = false "
+          + "GROUP BY c.writerId")
+  List<UserCommentCount> countCommentsByUserIds(@Param("userIds") List<Long> userIds);
+
+  @Query(
       "SELECT c.postId AS postId, COUNT(c.id) AS commentCount "
           + "FROM CommentEntity c "
           + "WHERE c.postId IN :postIds "
@@ -173,6 +180,12 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   interface PostCommentCount {
     Long getPostId();
+
+    Long getCommentCount();
+  }
+
+  interface UserCommentCount {
+    Long getUserId();
 
     Long getCommentCount();
   }

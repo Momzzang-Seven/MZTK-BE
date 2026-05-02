@@ -22,6 +22,8 @@ public interface LoadCommentPort {
 
   List<Comment> loadRepliesByCursor(Long parentId, CursorPageRequest pageRequest);
 
+  Map<Long, Long> countCommentsByUserIds(List<Long> userIds);
+
   long countCommentsByPostId(Long postId);
 
   Map<Long, Long> countCommentsByPostIds(List<Long> postIds);

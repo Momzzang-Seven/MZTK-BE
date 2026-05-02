@@ -184,4 +184,17 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
       @Param("cursorId") Long cursorId,
       @Param("limit") int limit);
+
+  @Query(
+      "SELECT p.userId AS userId, COUNT(p.id) AS postCount "
+          + "FROM PostEntity p "
+          + "WHERE p.userId IN :userIds "
+          + "GROUP BY p.userId")
+  List<UserPostCount> countPostsByUserIds(@Param("userIds") List<Long> userIds);
+
+  interface UserPostCount {
+    Long getUserId();
+
+    Long getPostCount();
+  }
 }

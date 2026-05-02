@@ -9,8 +9,8 @@ public final class AdminBoardPagePolicies {
 
   public static final AdminPagePolicy POSTS =
       new AdminPagePolicy(
-          0, 20, 100, Set.of("createdAt", "postId", "status", "type", "commentCount"));
+          0, 20, 100, 100, Set.of("createdAt", "postId", "status", "type", "commentCount"));
 
   public static final AdminPagePolicy POST_COMMENTS =
-      new AdminPagePolicy(0, 20, 100, Set.of("createdAt", "commentId"));
+      new AdminPagePolicy(0, 20, 100, 100, Set.of("createdAt", "commentId"));
 }

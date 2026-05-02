@@ -20,16 +20,20 @@ public final class AdminPageQueryNormalizer {
       throw new IllegalArgumentException("size must be between 1 and " + policy.maxSize());
     }
 
-    String normalizedSearch = normalizeSearch(search);
+    String normalizedSearch = normalizeSearch(search, policy);
     String normalizedSort = normalizeSort(sort, policy);
     return new AdminPageQuery(normalizedPage, normalizedSize, normalizedSearch, normalizedSort);
   }
 
-  public static String normalizeSearch(String search) {
+  public static String normalizeSearch(String search, AdminPagePolicy policy) {
     if (search == null) {
       return null;
     }
     String trimmed = search.trim();
+    if (trimmed.length() > policy.maxSearchLength()) {
+      throw new IllegalArgumentException(
+          "search must be " + policy.maxSearchLength() + " characters or fewer");
+    }
     return trimmed.isBlank() ? null : trimmed;
   }
 

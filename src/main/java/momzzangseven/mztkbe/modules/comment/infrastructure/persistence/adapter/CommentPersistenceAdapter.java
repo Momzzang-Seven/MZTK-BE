@@ -115,6 +115,19 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public Map<Long, Long> countCommentsByUserIds(List<Long> userIds) {
+    if (userIds == null || userIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countCommentsByUserIds(userIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.UserCommentCount::getUserId,
+                CommentJpaRepository.UserCommentCount::getCommentCount));
+  }
+
+  @Override
   public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
       FindCommentedPostRefsQuery query) {
     query.validate();

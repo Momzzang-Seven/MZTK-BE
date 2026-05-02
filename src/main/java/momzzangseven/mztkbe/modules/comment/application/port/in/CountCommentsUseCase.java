@@ -5,6 +5,8 @@ import java.util.Map;
 
 public interface CountCommentsUseCase {
 
+  Map<Long, Long> countCommentsByUserIds(List<Long> userIds);
+
   Map<Long, Long> countCommentsByPostIds(List<Long> postIds);
 
   long countCommentsByPostId(Long postId);

@@ -8,5 +8,5 @@ public final class AdminDashboardPagePolicies {
   private AdminDashboardPagePolicies() {}
 
   public static final AdminPagePolicy POST_STATS =
-      new AdminPagePolicy(0, 20, 100, Set.of("createdAt"));
+      new AdminPagePolicy(0, 20, 100, 100, Set.of("createdAt"));
 }
