@@ -15,7 +15,8 @@ public enum Web3TxFailureReason {
   KMS_SIGN_FAILED(true),
   SIGNATURE_INVALID(false),
   INVALID_SIGNED_TX(false),
-  RECEIPT_TIMEOUT(false);
+  RECEIPT_TIMEOUT(false),
+  FROM_ADDRESS_MISMATCH(false);
 
   private final boolean retryable;
 

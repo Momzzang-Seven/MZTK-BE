@@ -317,6 +317,78 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
+  void processBatch_fromAddressMismatch_marksTerminalAndSkipsPrevalidate() {
+    String mintedFromAddress = "0x" + "f".repeat(40);
+    String currentSignerAddress = "0x" + "a".repeat(40);
+    LoadTransactionWorkPort.TransactionWorkItem item =
+        new LoadTransactionWorkPort.TransactionWorkItem(
+            1L,
+            "idem-1",
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            "101",
+            1L,
+            2L,
+            mintedFromAddress, // minted under the old treasury
+            "0x" + "d".repeat(40),
+            BigInteger.ONE,
+            null,
+            "0x" + "f".repeat(64),
+            null,
+            null,
+            LocalDateTime.now());
+
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item));
+    when(loadRewardTreasuryWalletPort.load())
+        .thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID, currentSignerAddress)));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.FROM_ADDRESS_MISMATCH.code(), null);
+    verifyNoInteractions(web3ContractPort);
+    verify(reserveNoncePort, never()).reserveNextNonce(anyString());
+  }
+
+  @Test
+  void processBatch_fromAddressDifferentCase_normalizesAndProceeds() {
+    LoadTransactionWorkPort.TransactionWorkItem item =
+        new LoadTransactionWorkPort.TransactionWorkItem(
+            1L,
+            "idem-1",
+            Web3ReferenceType.LEVEL_UP_REWARD,
+            "101",
+            1L,
+            2L,
+            TREASURY_ADDRESS.toUpperCase(), // mixed-case minted address
+            "0x" + "d".repeat(40),
+            BigInteger.ONE,
+            7L,
+            "0x" + "f".repeat(64),
+            null,
+            null,
+            LocalDateTime.now());
+
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenReturn(new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64)));
+    when(web3ContractPort.broadcast(any(Web3ContractPort.BroadcastCommand.class)))
+        .thenReturn(new Web3ContractPort.BroadcastResult(true, "0x" + "e".repeat(64), null, "main"));
+
+    worker.processBatch(1);
+
+    verify(updateTransactionPort).markPending(1L, "0x" + "e".repeat(64));
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.FROM_ADDRESS_MISMATCH.code()), any());
+  }
+
+  @Test
   void processBatch_signTransferThrowsSignatureRecovery_marksSignatureInvalidNonRetryable() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
