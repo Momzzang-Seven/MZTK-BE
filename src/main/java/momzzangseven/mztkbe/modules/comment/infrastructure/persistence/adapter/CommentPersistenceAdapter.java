@@ -62,6 +62,12 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  @Transactional
+  public Optional<Comment> loadCommentForUpdate(Long commentId) {
+    return commentRepository.findByIdForUpdate(commentId).map(CommentEntity::toDomain);
+  }
+
+  @Override
   public Page<Comment> loadRootComments(Long postId, Pageable pageable) {
     return commentRepository
         .findRootCommentsByPostId(postId, pageable)

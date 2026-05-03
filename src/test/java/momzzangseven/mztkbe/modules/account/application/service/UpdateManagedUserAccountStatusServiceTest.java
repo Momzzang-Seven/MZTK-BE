@@ -35,7 +35,7 @@ class UpdateManagedUserAccountStatusServiceTest {
   @DisplayName("ACTIVE 계정을 BLOCKED 로 변경한다")
   void execute_activeToBlocked() {
     UserAccount active = account(AccountStatus.ACTIVE);
-    given(loadUserAccountPort.findByUserId(21L)).willReturn(Optional.of(active));
+    given(loadUserAccountPort.findByUserIdForUpdate(21L)).willReturn(Optional.of(active));
     given(saveUserAccountPort.save(org.mockito.ArgumentMatchers.any(UserAccount.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -53,7 +53,7 @@ class UpdateManagedUserAccountStatusServiceTest {
   @DisplayName("BLOCKED 계정을 ACTIVE 로 변경한다")
   void execute_blockedToActive() {
     UserAccount blocked = account(AccountStatus.BLOCKED);
-    given(loadUserAccountPort.findByUserId(21L)).willReturn(Optional.of(blocked));
+    given(loadUserAccountPort.findByUserIdForUpdate(21L)).willReturn(Optional.of(blocked));
     given(saveUserAccountPort.save(org.mockito.ArgumentMatchers.any(UserAccount.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -68,7 +68,7 @@ class UpdateManagedUserAccountStatusServiceTest {
   @DisplayName("이미 같은 status 이면 idempotent 성공하고 저장하지 않는다")
   void execute_sameStatus_isIdempotent() {
     UserAccount blocked = account(AccountStatus.BLOCKED);
-    given(loadUserAccountPort.findByUserId(21L)).willReturn(Optional.of(blocked));
+    given(loadUserAccountPort.findByUserIdForUpdate(21L)).willReturn(Optional.of(blocked));
 
     var result =
         service.execute(new UpdateManagedUserAccountStatusCommand(21L, AccountStatus.BLOCKED));
@@ -82,7 +82,7 @@ class UpdateManagedUserAccountStatusServiceTest {
   @DisplayName("DELETED 계정은 관리자 정지/해제 대상으로 변경하지 않는다")
   void execute_deletedAccount_throws() {
     UserAccount deleted = account(AccountStatus.DELETED);
-    given(loadUserAccountPort.findByUserId(21L)).willReturn(Optional.of(deleted));
+    given(loadUserAccountPort.findByUserIdForUpdate(21L)).willReturn(Optional.of(deleted));
 
     assertThatThrownBy(
             () ->

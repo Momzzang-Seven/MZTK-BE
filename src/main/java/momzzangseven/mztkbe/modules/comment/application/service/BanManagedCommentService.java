@@ -24,7 +24,9 @@ public class BanManagedCommentService implements BanManagedCommentUseCase {
   public BanManagedCommentResult execute(BanManagedCommentCommand command) {
     command.validate();
     Comment comment =
-        loadCommentPort.loadComment(command.commentId()).orElseThrow(CommentNotFoundException::new);
+        loadCommentPort
+            .loadCommentForUpdate(command.commentId())
+            .orElseThrow(CommentNotFoundException::new);
     if (comment.isDeleted()) {
       return new BanManagedCommentResult(comment.getId(), comment.getPostId(), false);
     }

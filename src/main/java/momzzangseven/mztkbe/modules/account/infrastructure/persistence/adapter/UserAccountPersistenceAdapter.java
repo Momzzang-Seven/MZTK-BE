@@ -42,6 +42,13 @@ public class UserAccountPersistenceAdapter
   }
 
   @Override
+  @Transactional
+  public Optional<UserAccount> findByUserIdForUpdate(Long userId) {
+    log.debug("Loading account by userId for update: {}", userId);
+    return userAccountJpaRepository.findByUserIdForUpdate(userId).map(this::toDomain);
+  }
+
+  @Override
   @Transactional(readOnly = true)
   public Optional<UserAccount> findByProviderAndProviderUserId(
       AuthProvider provider, String providerUserId) {

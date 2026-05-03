@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 public interface LoadCommentPort {
   Optional<Comment> loadComment(Long commentId);
 
+  Optional<Comment> loadCommentForUpdate(Long commentId);
+
   Page<Comment> loadRootComments(Long postId, Pageable pageable);
 
   Page<Comment> loadReplies(Long parentId, Pageable pageable);
