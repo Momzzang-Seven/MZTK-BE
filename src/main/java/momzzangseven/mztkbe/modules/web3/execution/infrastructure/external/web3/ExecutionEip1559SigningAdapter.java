@@ -4,28 +4,28 @@ import java.math.BigInteger;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SignDigestPort;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.Eip1559Fields;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignEip1559TxCommand;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignEip1559TxResult;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignedTx;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
-import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
-import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder;
-import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
-import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.SignedTx;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignEip1559TxUseCase;
 import org.springframework.stereotype.Component;
 
 /**
- * Adapter that bridges {@link ExecutionEip1559SigningPort.SignCommand} into the pure {@link
- * Eip1559TxEncoder} pipeline plus a KMS-backed digest signature obtained through the
- * execution-local {@link SignDigestPort}.
+ * Adapter that bridges {@link ExecutionEip1559SigningPort.SignCommand} into the shared {@link
+ * SignEip1559TxUseCase} pipeline.
  *
  * <p>No plaintext key material is referenced; the signing capability is fully expressed by the
- * {@link TreasurySigner} embedded in the {@link ExecutionEip1559SigningPort.SignCommand}. The
- * adapter never imports the shared {@code SignDigestUseCase} directly per ARCHITECTURE.md.
+ * {@link TreasurySigner} embedded in the {@link ExecutionEip1559SigningPort.SignCommand}. Per
+ * ARCHITECTURE.md, infrastructure depends on application via port/in or port/out — never on a
+ * concrete service class, and never on another module's infrastructure.
  */
 @Component
 @RequiredArgsConstructor
 public class ExecutionEip1559SigningAdapter implements ExecutionEip1559SigningPort {
 
-  private final SignDigestPort signDigestPort;
+  private final SignEip1559TxUseCase signEip1559TxUseCase;
 
   @Override
   public SignedTransaction sign(SignCommand command) {
@@ -45,10 +45,10 @@ public class ExecutionEip1559SigningAdapter implements ExecutionEip1559SigningPo
             nullSafe(command.valueWei()),
             command.data());
 
-    byte[] unsigned = Eip1559TxEncoder.buildUnsigned(fields);
-    byte[] digest = Eip1559TxEncoder.digest(unsigned);
-    Vrs vrs = signDigestPort.signDigest(signer.kmsKeyId(), digest, signer.walletAddress());
-    SignedTx signed = Eip1559TxEncoder.assembleSigned(fields, vrs);
+    SignEip1559TxResult result =
+        signEip1559TxUseCase.sign(
+            new SignEip1559TxCommand(fields, signer.kmsKeyId(), signer.walletAddress()));
+    SignedTx signed = result.signedTx();
     return new SignedTransaction(signed.rawTx(), signed.txHash());
   }
 

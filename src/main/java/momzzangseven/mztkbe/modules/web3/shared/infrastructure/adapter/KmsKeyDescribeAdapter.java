@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsKeyDescr
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.DescribeKeyRequest;
 import software.amazon.awssdk.services.kms.model.DescribeKeyResponse;
@@ -54,11 +55,12 @@ public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
     final DescribeKeyResponse response;
     try {
       response = kmsClient.describeKey(request);
-    } catch (KmsException ex) {
+    } catch (SdkException ex) {
       log.warn(
-          "AWS KMS DescribeKey failed (kmsKeyId={}, awsErrorCode={})",
+          "AWS KMS DescribeKey failed (kmsKeyId={}, awsErrorCode={}, exception={})",
           kmsKeyId,
-          ex.awsErrorDetails() == null ? "n/a" : ex.awsErrorDetails().errorCode());
+          awsErrorCodeOrNa(ex),
+          ex.getClass().getSimpleName());
       throw new KmsKeyDescribeFailedException("KMS DescribeKey failed", ex);
     }
 
@@ -85,5 +87,12 @@ public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
       case PENDING_IMPORT -> KmsKeyState.PENDING_IMPORT;
       default -> KmsKeyState.UNAVAILABLE;
     };
+  }
+
+  private static String awsErrorCodeOrNa(SdkException ex) {
+    if (ex instanceof KmsException kex && kex.awsErrorDetails() != null) {
+      return kex.awsErrorDetails().errorCode();
+    }
+    return "n/a";
   }
 }

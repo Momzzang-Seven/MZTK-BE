@@ -10,7 +10,7 @@ import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.AuthorizationTuple;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.Eip7702Fields;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.SignedTx;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.Erc20TransferCalldataEncoder;
 import org.springframework.stereotype.Component;
 import org.web3j.utils.Numeric;
 

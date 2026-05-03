@@ -11,7 +11,8 @@ public interface ExecutionEip1559SigningPort {
   /**
    * EIP-1559 sign command. The trailing {@link TreasurySigner} replaces the historical {@code
    * signerPrivateKeyHex} so plaintext key material never crosses module boundaries; the adapter
-   * resolves the KMS-backed signature via the execution-local {@code SignDigestPort}.
+   * resolves the KMS-backed signature via the shared {@link
+   * momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignEip1559TxUseCase}.
    */
   record SignCommand(
       long chainId,

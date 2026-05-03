@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -20,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Reserv
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.ReservedNonceCompensator;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -27,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.PrevalidateAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.SignAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
+import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.KmsClientErrorClassifier;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
@@ -42,6 +45,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private final LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   private final ReserveNoncePort reserveNoncePort;
+  private final ReservedNonceCompensator reservedNonceCompensator;
   private final Web3ContractPort web3ContractPort;
   private final Web3CoreProperties web3CoreProperties;
 
@@ -54,6 +58,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort,
       VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort,
       ReserveNoncePort reserveNoncePort,
+      ReservedNonceCompensator reservedNonceCompensator,
       Web3ContractPort web3ContractPort,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
@@ -67,6 +72,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.loadRewardTreasuryWalletPort = loadRewardTreasuryWalletPort;
     this.verifyTreasuryWalletForSignPort = verifyTreasuryWalletForSignPort;
     this.reserveNoncePort = reserveNoncePort;
+    this.reservedNonceCompensator = reservedNonceCompensator;
     this.web3ContractPort = web3ContractPort;
     this.web3CoreProperties = web3CoreProperties;
   }
@@ -87,16 +93,15 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   }
 
   void processBatchItems(List<LoadTransactionWorkPort.TransactionWorkItem> items) {
-    // get reward treasury wallet & validate
     Optional<TreasuryWalletInfo> walletOpt = loadRewardTreasuryWalletPort.load();
     if (walletOpt.isEmpty()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
     TreasuryWalletInfo walletInfo = walletOpt.get();
 
     if (!walletInfo.active()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_WALLET_INACTIVE.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_WALLET_INACTIVE);
       return;
     }
     // Structural guards (cheap, local) precede the remote verify call so that incomplete wallet
@@ -106,11 +111,11 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     // a malformed-but-non-blank address would otherwise pass these guards and reach
     // EvmAddress.of() inside TreasurySigner, propagating outside forEachItem's per-item catch.
     if (walletInfo.kmsKeyId() == null || walletInfo.kmsKeyId().isBlank()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
     if (walletInfo.walletAddress() == null || walletInfo.walletAddress().isBlank()) {
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
     try {
@@ -120,22 +125,21 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
           "Treasury wallet '{}' has malformed walletAddress: {}",
           walletInfo.walletAlias(),
           e.getMessage());
-      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING.code());
+      failBatch(items, Web3TxFailureReason.TREASURY_KEY_MISSING);
       return;
     }
 
     try {
       verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
-    } catch (TreasuryWalletStateException e) {
+    } catch (TreasuryWalletStateException | KmsKeyDescribeFailedException e) {
       log.warn(
           "Treasury wallet '{}' verify-for-sign failed: {}",
           walletInfo.walletAlias(),
           e.getMessage());
-      failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code());
+      failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED);
       return;
     }
 
-    // get signer: shared DTO injecting treasury wallet information.
     TreasurySigner signer =
         new TreasurySigner(
             walletInfo.walletAlias(), walletInfo.kmsKeyId(), walletInfo.walletAddress());
@@ -144,14 +148,37 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         items, item -> processItem(item, signer), Web3TxFailureReason.RPC_UNAVAILABLE.code());
   }
 
-  private void failBatch(List<LoadTransactionWorkPort.TransactionWorkItem> items, String code) {
-    items.forEach(item -> failPrevalidate(item.transactionId(), code, false));
+  // Routes batch-wide failures through retry/terminal based on the failure reason's retryable flag.
+  // Critical for retryable reasons (e.g. KMS_KEY_NOT_ENABLED) — a terminal write would leave
+  // processing_until=null while the SQL claim filter only excludes non-retryable reasons,
+  // letting the same rows be re-claimed every worker tick and hammer KMS until manual intervention.
+  private void failBatch(
+      List<LoadTransactionWorkPort.TransactionWorkItem> items, Web3TxFailureReason reason) {
+    if (reason.isRetryable()) {
+      items.forEach(item -> retry(item.transactionId(), reason.code(), item));
+    } else {
+      items.forEach(item -> failPrevalidate(item.transactionId(), reason.code(), false));
+    }
   }
 
   private void processItem(
       LoadTransactionWorkPort.TransactionWorkItem item, TreasurySigner signer) {
+    // Treasury rotation guard: a CREATED row carries the from_address it was minted with.
+    // After a treasury rotation, the active signer can be a different wallet — proceeding would
+    // sign with a wallet that does not match item.fromAddress() and the broadcast would silently
+    // fail on-chain (or worse, drift state). Cheaper than prevalidate's RPC round-trip, so this
+    // guard runs first.
+    if (!isFromAddressMatch(item.fromAddress(), signer.walletAddress())) {
+      log.warn(
+          "fromAddress mismatch: txId={}, expected={}, signer={}",
+          item.transactionId(),
+          item.fromAddress(),
+          signer.walletAddress());
+      failPrevalidate(
+          item.transactionId(), Web3TxFailureReason.FROM_ADDRESS_MISMATCH.code(), false);
+      return;
+    }
 
-    // prevalidate
     Web3ContractPort.PrevalidateResult prevalidateResult =
         web3ContractPort.prevalidate(
             new Web3ContractPort.PrevalidateCommand(
@@ -171,10 +198,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       return;
     }
 
-    // resolve nonce
     long nonce = resolveNonce(item, signer.walletAddress());
-
-    // sign the item
     Web3ContractPort.SignedTransaction signed;
     try {
       signed =
@@ -191,15 +215,20 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
                   prevalidateResult.maxFeePerGas()));
     } catch (KmsSignFailedException e) {
       log.warn("KMS sign failed for txId={}: {}", item.transactionId(), e.getMessage());
-      retry(item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED.code(), item);
+      if (KmsClientErrorClassifier.isTerminal(e)) {
+        terminalFailWithCompensation(
+            item, signer.walletAddress(), nonce, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+      } else {
+        retry(item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED.code(), item);
+      }
       return;
     } catch (SignatureRecoveryException e) {
       log.warn("Signature recovery failed for txId={}: {}", item.transactionId(), e.getMessage());
-      failPrevalidate(item.transactionId(), Web3TxFailureReason.SIGNATURE_INVALID.code(), false);
+      terminalFailWithCompensation(
+          item, signer.walletAddress(), nonce, Web3TxFailureReason.SIGNATURE_INVALID);
       return;
     }
 
-    // mark signed
     updateTransactionPort.markSigned(item.transactionId(), nonce, signed.rawTx(), signed.txHash());
     Map<String, Object> signDetail = new SignAuditDetail(nonce, signed.txHash()).toMap();
     audit(item.transactionId(), Web3TransactionAuditEventType.SIGN, null, signDetail);
@@ -249,6 +278,13 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
         new StateChangeAuditDetail(from, to).toMap());
   }
 
+  private static boolean isFromAddressMatch(String itemFromAddress, String signerAddress) {
+    if (itemFromAddress == null || signerAddress == null) {
+      return false;
+    }
+    return itemFromAddress.trim().toLowerCase().equals(signerAddress.trim().toLowerCase());
+  }
+
   private long resolveNonce(
       LoadTransactionWorkPort.TransactionWorkItem item, String treasuryAddress) {
     if (item.nonce() != null) {
@@ -258,6 +294,19 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     long reservedNonce = reserveNoncePort.reserveNextNonce(treasuryAddress);
     updateTransactionPort.assignNonce(item.transactionId(), reservedNonce);
     return reservedNonce;
+  }
+
+  // Always run the atomic compensator on terminal-after-resolveNonce paths. Re-entry from a prior
+  // transient retry leaves the cursor advanced and row.nonce assigned; clearing both here is safe
+  // because (a) the compensator clears the row's nonce idempotently before any other write, and
+  // (b) once committed, the non-retryable failure_reason permanently excludes the row from
+  // claimByStatus's SQL, so this code path cannot run twice on the same row.
+  private void terminalFailWithCompensation(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      long nonce,
+      Web3TxFailureReason terminalReason) {
+    reservedNonceCompensator.compensate(item.transactionId(), fromAddress, nonce, terminalReason);
   }
 
   @Override
