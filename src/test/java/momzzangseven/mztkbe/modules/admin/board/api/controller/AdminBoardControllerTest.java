@@ -190,6 +190,18 @@ class AdminBoardControllerTest {
   }
 
   @Test
+  @DisplayName("POST /admin/boards/comments/{commentId}/ban reasonCode 가 null 이면 400")
+  void banComment_nullReasonCode_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/comments/{commentId}/ban", 31L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":null,\"reasonDetail\":\"ad\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   @DisplayName("POST /admin/boards/comments/{commentId}/ban reasonDetail 이 500자를 초과하면 400")
   void banComment_tooLongReasonDetail_returns400() throws Exception {
     mockMvc
@@ -216,6 +228,18 @@ class AdminBoardControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
         .andExpect(status().isConflict());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/posts/{postId}/ban reasonCode 가 null 이면 400")
+  void banPost_nullReasonCode_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/ban", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":null,\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isBadRequest());
   }
 
   private RequestPostProcessor adminPrincipal(Long userId) {

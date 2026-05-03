@@ -1,12 +1,17 @@
 package momzzangseven.mztkbe.modules.admin.board.infrastructure.persistence.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 import java.util.List;
+import momzzangseven.mztkbe.modules.admin.board.domain.model.AdminBoardModerationAction;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationExecutionMode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetFlowType;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardType;
+import momzzangseven.mztkbe.modules.admin.board.infrastructure.persistence.entity.AdminBoardModerationActionEntity;
 import momzzangseven.mztkbe.modules.admin.board.infrastructure.persistence.repository.AdminBoardModerationActionJpaRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +27,47 @@ class AdminBoardModerationActionPersistenceAdapterTest {
   @Mock private AdminBoardModerationActionJpaRepository repository;
 
   @InjectMocks private AdminBoardModerationActionPersistenceAdapter adapter;
+
+  @Test
+  @DisplayName("save()는 adapter 내부 mapper로 domain/entity 변환을 수행한다")
+  void save_mapsDomainAndEntityInAdapter() {
+    AdminBoardModerationAction action =
+        AdminBoardModerationAction.create(
+            9L,
+            AdminBoardModerationTargetType.COMMENT,
+            31L,
+            21L,
+            AdminBoardType.FREE,
+            AdminBoardModerationReasonCode.SPAM,
+            "ad",
+            AdminBoardModerationTargetFlowType.STANDARD,
+            AdminBoardModerationExecutionMode.SOFT_DELETE);
+    given(repository.save(any(AdminBoardModerationActionEntity.class)))
+        .willAnswer(
+            invocation -> {
+              AdminBoardModerationActionEntity entity = invocation.getArgument(0);
+              return AdminBoardModerationActionEntity.builder()
+                  .id(100L)
+                  .operatorId(entity.getOperatorId())
+                  .targetType(entity.getTargetType())
+                  .targetId(entity.getTargetId())
+                  .postId(entity.getPostId())
+                  .boardType(entity.getBoardType())
+                  .reasonCode(entity.getReasonCode())
+                  .reasonDetail(entity.getReasonDetail())
+                  .targetFlowType(entity.getTargetFlowType())
+                  .executionMode(entity.getExecutionMode())
+                  .createdAt(entity.getCreatedAt())
+                  .build();
+            });
+
+    AdminBoardModerationAction saved = adapter.save(action);
+
+    assertThat(saved.getId()).isEqualTo(100L);
+    assertThat(saved.getOperatorId()).isEqualTo(9L);
+    assertThat(saved.getTargetType()).isEqualTo(AdminBoardModerationTargetType.COMMENT);
+    assertThat(saved.getReasonCode()).isEqualTo(AdminBoardModerationReasonCode.SPAM);
+  }
 
   @Test
   @DisplayName("admin_board_moderation_actions 집계 projection을 dashboard stats view로 변환한다")

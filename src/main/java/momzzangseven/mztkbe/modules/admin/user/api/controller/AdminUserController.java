@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.admin.user.api.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
@@ -51,7 +52,7 @@ public class AdminUserController {
   public ResponseEntity<ApiResponse<AdminUserStatusChangeResponseDTO>> changeStatus(
       @AuthenticationPrincipal Long operatorUserId,
       @PathVariable Long userId,
-      @RequestBody AdminUserStatusChangeRequestDTO request) {
+      @Valid @RequestBody AdminUserStatusChangeRequestDTO request) {
     Long validatedOperatorUserId = requireUserId(operatorUserId);
     ChangeAdminUserStatusCommand command = request.toCommand(validatedOperatorUserId, userId);
     ChangeAdminUserStatusResult result = changeAdminUserStatusUseCase.execute(command);

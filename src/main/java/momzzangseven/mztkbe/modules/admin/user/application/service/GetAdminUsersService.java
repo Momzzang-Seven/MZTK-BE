@@ -40,6 +40,9 @@ public class GetAdminUsersService implements GetAdminUsersUseCase {
     if (candidateUserIds != null && candidateUserIds.isEmpty()) {
       return emptyPage(command.page(), command.size());
     }
+    if (supportsProfilePagedSort(command.sortKey())) {
+      return executeProfilePaged(command, candidateUserIds);
+    }
 
     java.util.List<LoadAdminUsersPort.AdminUserProfileView> profiles =
         loadAdminUsersPort.load(
@@ -81,11 +84,62 @@ public class GetAdminUsersService implements GetAdminUsersUseCase {
         combined.size());
   }
 
+  private Page<AdminUserListItemResult> executeProfilePaged(
+      GetAdminUsersCommand command, java.util.Set<Long> candidateUserIds) {
+    Page<LoadAdminUsersPort.AdminUserProfileView> profilePage =
+        loadAdminUsersPort.loadPage(
+            new LoadAdminUsersPort.AdminUserProfilePageQuery(
+                command.search(),
+                command.role(),
+                candidateUserIds,
+                command.page(),
+                command.size(),
+                command.sortKey()));
+    if (profilePage.isEmpty()) {
+      return emptyPage(command.page(), command.size());
+    }
+
+    java.util.List<Long> userIds =
+        profilePage.getContent().stream()
+            .map(LoadAdminUsersPort.AdminUserProfileView::userId)
+            .toList();
+    java.util.Map<Long, AccountStatus> statusByUserId =
+        loadAdminUserStatusesPort.load(userIds, command.status());
+    java.util.Map<Long, Long> postCounts = loadAdminUserPostCountsPort.load(userIds);
+    java.util.Map<Long, Long> commentCounts = loadAdminUserCommentCountsPort.load(userIds);
+
+    java.util.List<AdminUserListItemResult> items =
+        profilePage.getContent().stream()
+            .map(
+                profile ->
+                    new AdminUserListItemResult(
+                        profile.userId(),
+                        profile.nickname(),
+                        profile.role(),
+                        profile.email(),
+                        profile.joinedAt(),
+                        statusByUserId.get(profile.userId()),
+                        postCounts.getOrDefault(profile.userId(), 0L),
+                        commentCounts.getOrDefault(profile.userId(), 0L)))
+            .filter(item -> item.status() != null)
+            .toList();
+
+    return new PageImpl<>(
+        items, PageRequest.of(command.page(), command.size()), profilePage.getTotalElements());
+  }
+
   private java.util.Set<Long> resolveCandidateUserIds(AccountStatus status) {
     if (status == null) {
       return null;
     }
     return loadAdminUserStatusesPort.load(null, status).keySet();
+  }
+
+  private boolean supportsProfilePagedSort(AdminUserSortKey sortKey) {
+    return sortKey == AdminUserSortKey.JOINED_AT
+        || sortKey == AdminUserSortKey.USER_ID
+        || sortKey == AdminUserSortKey.NICKNAME
+        || sortKey == AdminUserSortKey.ROLE;
   }
 
   private java.util.Comparator<AdminUserListItemResult> buildComparator(AdminUserSortKey sortKey) {
