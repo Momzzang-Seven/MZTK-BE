@@ -82,6 +82,56 @@ class NonceCompensationE2ETest extends E2ETestBase {
     assertThat(siblingNonce).isEqualTo(RESERVED_NONCE);
   }
 
+  /**
+   * Re-entry path the if-branch removal in {@code
+   * TransactionIssuerWorker.terminalFailWithCompensation} unlocked: a prior transient retry left
+   * {@code failure_reason='KMS_SIGN_FAILED'} (retryable), the cursor sat at {@code next_nonce = N +
+   * 2} because a sibling worker already advanced past this row, and now a terminal KMS failure runs
+   * the compensator. The CAS predicate misses, so the cursor stays where it is (operations must
+   * reconcile the gap), but the row itself is fully cleared and stamped non-retryable so it cannot
+   * be re-claimed.
+   */
+  @Test
+  @DisplayName(
+      "compensate on multi-worker race: row is cleared + terminal-stamped even when CAS-release"
+          + " misses the advanced cursor")
+  void compensate_casMiss_clearsRowAndStampsTerminal_butLeavesCursorAdvanced() {
+    long failedTxId =
+        insertCreatedTransactionWithFailureReason(
+            "idem-cas-miss",
+            "ref-cas-miss",
+            RESERVED_NONCE,
+            Web3TxFailureReason.KMS_SIGN_FAILED.code());
+    long advancedNextNonce = RESERVED_NONCE + 2;
+    insertNonceState(advancedNextNonce);
+
+    compensator.compensate(
+        failedTxId, FROM_ADDRESS, RESERVED_NONCE, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+
+    Long failedRowNonce =
+        jdbcTemplate.queryForObject(
+            "SELECT nonce FROM web3_transactions WHERE id = ?", Long.class, failedTxId);
+    String failedRowFailureReason =
+        jdbcTemplate.queryForObject(
+            "SELECT failure_reason FROM web3_transactions WHERE id = ?", String.class, failedTxId);
+    Object failedRowProcessingUntil =
+        jdbcTemplate.queryForObject(
+            "SELECT processing_until FROM web3_transactions WHERE id = ?",
+            Object.class,
+            failedTxId);
+    Long stuckNextNonce =
+        jdbcTemplate.queryForObject(
+            "SELECT next_nonce FROM web3_nonce_state WHERE from_address = ?",
+            Long.class,
+            FROM_ADDRESS);
+
+    assertThat(failedRowNonce).isNull();
+    assertThat(failedRowFailureReason)
+        .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code());
+    assertThat(failedRowProcessingUntil).isNull();
+    assertThat(stuckNextNonce).isEqualTo(advancedNextNonce);
+  }
+
   private long insertCreatedTransaction(String idempotencyKey, String referenceId, Long nonce) {
     return jdbcTemplate.queryForObject(
         "INSERT INTO web3_transactions"
@@ -94,6 +144,22 @@ class NonceCompensationE2ETest extends E2ETestBase {
         FROM_ADDRESS,
         TO_ADDRESS,
         nonce);
+  }
+
+  private long insertCreatedTransactionWithFailureReason(
+      String idempotencyKey, String referenceId, Long nonce, String failureReason) {
+    return jdbcTemplate.queryForObject(
+        "INSERT INTO web3_transactions"
+            + " (idempotency_key, reference_type, reference_id, from_address, to_address,"
+            + " amount_wei, nonce, status, failure_reason)"
+            + " VALUES (?, 'LEVEL_UP_REWARD', ?, ?, ?, 1, ?, 'CREATED', ?) RETURNING id",
+        Long.class,
+        idempotencyKey,
+        referenceId,
+        FROM_ADDRESS,
+        TO_ADDRESS,
+        nonce,
+        failureReason);
   }
 
   private void insertNonceState(long nextNonce) {
