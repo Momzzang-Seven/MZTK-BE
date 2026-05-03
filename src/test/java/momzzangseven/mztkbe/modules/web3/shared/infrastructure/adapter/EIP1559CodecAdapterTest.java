@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:src/test/java/momzzangseven/mztkbe/modules/web3/shared/domain/encoder/Eip1559TxEncoderTest.java
-package momzzangseven.mztkbe.modules.web3.shared.domain.encoder;
-========
 package momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter;
->>>>>>>> origin/develop:src/test/java/momzzangseven/mztkbe/modules/web3/shared/infrastructure/adapter/EIP1559CodecAdapterTest.java
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,12 +10,6 @@ import momzzangseven.mztkbe.modules.web3.shared.application.dto.Eip1559Fields;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignedTx;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.Erc20TransferCalldataEncoder;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
-<<<<<<<< HEAD:src/test/java/momzzangseven/mztkbe/modules/web3/shared/domain/encoder/Eip1559TxEncoderTest.java
-import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.Eip1559Fields;
-import momzzangseven.mztkbe.modules.web3.shared.domain.encoder.Eip1559TxEncoder.SignedTx;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter.Erc20TransferCalldataEncoder;
-========
->>>>>>>> origin/develop:src/test/java/momzzangseven/mztkbe/modules/web3/shared/infrastructure/adapter/EIP1559CodecAdapterTest.java
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
