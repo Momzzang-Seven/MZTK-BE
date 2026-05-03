@@ -32,6 +32,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEvent
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 @Slf4j
@@ -46,7 +47,8 @@ public class ExecuteInternalExecutionIntentService
   private static final String SPONSOR_KMS_KEY_BLANK = "sponsor kms key id missing";
   private static final String SPONSOR_WALLET_ADDRESS_BLANK = "sponsor wallet address missing";
   private static final String SPONSOR_KMS_KEY_NOT_ENABLED = "sponsor kms key not enabled";
-  private static final String SPONSOR_KMS_SIGN_FAILED = "sponsor kms sign failed";
+  private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
+      "sponsor kms sign failed (terminal)";
   private static final String SPONSOR_SIGNATURE_INVALID = "sponsor signature invalid";
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
@@ -198,14 +200,26 @@ public class ExecuteInternalExecutionIntentService
           "internal sponsor KMS sign failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
-      return quarantineInvalidIntent(intent, actionHandler, actionPlan, SPONSOR_KMS_SIGN_FAILED);
+      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
+      if (KmsClientErrorClassifier.isTerminal(e)) {
+        return quarantineInvalidIntent(
+            intent, actionHandler, actionPlan, SPONSOR_KMS_SIGN_FAILED_TERMINAL);
+      }
+      // Transient: leave intent in AWAITING_SIGNATURE so the next scheduler tick re-claims it via
+      // claimNextInternalExecutableForUpdate. Do NOT cancel and do NOT publish the terminated
+      // event — the QnA escrow refund cascade (afterExecutionTerminated → escrow refund) must not
+      // fire on a recoverable AWS hiccup.
+      return ExecuteInternalExecutionIntentResult.transientRetry(
+          intent.getPublicId(), intent.getStatus());
     } catch (SignatureRecoveryException e) {
       log.warn(
           "internal sponsor signature recovery failed for intent={}: {}",
           intent.getPublicId(),
           e.getMessage());
+      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
       return quarantineInvalidIntent(intent, actionHandler, actionPlan, SPONSOR_SIGNATURE_INVALID);
     } catch (Web3InvalidInputException e) {
+      releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
       return quarantineInvalidIntent(intent, actionHandler, actionPlan, e.getMessage());
     }
 
@@ -374,5 +388,24 @@ public class ExecuteInternalExecutionIntentService
       ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
     publishExecutionIntentTerminatedPort.publish(
         new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
+  }
+
+  /**
+   * Releases the reserved nonce on {@code web3_nonce_state} and logs {@code NONCE_GAP_DETECTED}
+   * with a fixed prefix when the CAS misses (another reservation advanced the cursor between
+   * reserve and release). The single log shape concentrates the PR #150 follow-up F-1 surface (a
+   * future {@code web3_nonce_gap_incidents} recorder) at one address.
+   */
+  private void releaseAndLogIfGap(String fromAddress, long reservedNonce, String intentPublicId) {
+    boolean released =
+        executionTransactionGatewayPort.releaseReservedNonce(fromAddress, reservedNonce);
+    if (!released) {
+      log.error(
+          "NONCE_GAP_DETECTED: intentId={}, fromAddress={}, abandonedNonce={} "
+              + "— another reservation advanced the cursor before release",
+          intentPublicId,
+          fromAddress,
+          reservedNonce);
+    }
   }
 }

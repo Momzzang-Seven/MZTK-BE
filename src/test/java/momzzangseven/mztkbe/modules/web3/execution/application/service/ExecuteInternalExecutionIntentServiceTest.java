@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -49,6 +50,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.kms.model.KmsException;
 
 @ExtendWith(MockitoExtension.class)
 class ExecuteInternalExecutionIntentServiceTest {
@@ -189,6 +192,8 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.txHash()).isEqualTo("0xhash");
     verify(executionTransactionGatewayPort).markPending(77L, "0xhash");
     verify(verifyTreasuryWalletForSignPort).verify(SPONSOR_ALIAS);
+    // Happy-path regression: nonce stays consumed; release must NOT be called.
+    verify(executionTransactionGatewayPort, never()).releaseReservedNonce(any(), anyLong());
   }
 
   @Test
@@ -386,14 +391,17 @@ class ExecuteInternalExecutionIntentServiceTest {
   }
 
   @Test
-  void execute_quarantinesIntentWhenKmsSignFails() {
+  void execute_quarantinesIntentWhenKmsSignFailsWithTerminalAwsError() {
     ExecutionIntent intent = internalIntent();
+    long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
     when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
+        .thenReturn(expectedNonce);
+    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
+        .thenReturn(true);
     when(executionEip1559SigningPort.sign(any()))
-        .thenThrow(new KmsSignFailedException("kms unavailable"));
+        .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
 
     ExecuteInternalExecutionIntentResult result =
         service.execute(
@@ -402,17 +410,82 @@ class ExecuteInternalExecutionIntentServiceTest {
 
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            argThat(
+                event ->
+                    event.executionIntentId().equals("intent-admin-settle")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
 
   @Test
-  void execute_quarantinesIntentWhenSignatureRecoveryFails() {
+  void execute_returnsTransientRetryWhenKmsSignFailsTransiently() {
     ExecutionIntent intent = internalIntent();
+    long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
     when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
+        .thenReturn(expectedNonce);
+    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
+        .thenReturn(true);
+    // No AWS error code → classifier returns false → transient.
+    when(executionEip1559SigningPort.sign(any()))
+        .thenThrow(new KmsSignFailedException("kms throttled"));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.quarantined()).isFalse();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
+    // Critical invariant: transient path must NOT cancel intent and must NOT publish the
+    // terminated event — the QnA escrow refund cascade must not fire on a recoverable hiccup.
+    verify(executionIntentPersistencePort, never()).update(any());
+    verify(publishExecutionIntentTerminatedPort, never()).publish(any());
+    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
+    verify(executionTransactionGatewayPort, never()).broadcast(any());
+  }
+
+  @Test
+  void execute_logsNonceGapButContinuesWhenReleaseReservedNonceReturnsFalse() {
+    ExecutionIntent intent = internalIntent();
+    long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
+        .thenReturn(expectedNonce);
+    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
+        .thenReturn(false); // simulate cursor advanced past abandoned nonce
+    when(executionEip1559SigningPort.sign(any()))
+        .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
+
+    ExecuteInternalExecutionIntentResult result =
+        service.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+
+    // Gap is logged as ERROR but the terminal cancellation flow still completes.
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenSignatureRecoveryFails() {
+    ExecutionIntent intent = internalIntent();
+    long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
+        .thenReturn(expectedNonce);
+    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
+        .thenReturn(true);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new SignatureRecoveryException("recovery failed"));
 
@@ -423,16 +496,20 @@ class ExecuteInternalExecutionIntentServiceTest {
 
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
   }
 
   @Test
   void execute_quarantinesIntentWhenSigningInputIsInvalid() {
     ExecutionIntent intent = internalIntent();
+    long expectedNonce = intent.getUnsignedTxSnapshot().expectedNonce();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
         .thenReturn(Optional.of(intent));
     when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
+        .thenReturn(expectedNonce);
+    when(executionTransactionGatewayPort.releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce))
+        .thenReturn(true);
     when(executionEip1559SigningPort.sign(any()))
         .thenThrow(new Web3InvalidInputException("invalid EVM address: broken"));
 
@@ -444,6 +521,7 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.executed()).isTrue();
     assertThat(result.quarantined()).isTrue();
     assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, expectedNonce);
     verify(publishExecutionIntentTerminatedPort)
         .publish(
             argThat(
@@ -452,6 +530,13 @@ class ExecuteInternalExecutionIntentServiceTest {
                         && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
+  }
+
+  private static KmsException terminalAwsKmsCause() {
+    return (KmsException)
+        KmsException.builder()
+            .awsErrorDetails(AwsErrorDetails.builder().errorCode("AccessDeniedException").build())
+            .build();
   }
 
   private ExecutionIntent internalIntent() {
