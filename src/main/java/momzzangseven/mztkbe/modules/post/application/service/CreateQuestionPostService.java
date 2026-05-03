@@ -14,8 +14,11 @@ import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPo
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Creates question-board posts while preserving the legacy XP response contract.
@@ -34,17 +37,23 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  private TransactionOperations transactionOperations;
+
+  @Autowired
+  void setTransactionManager(PlatformTransactionManager transactionManager) {
+    this.transactionOperations = new TransactionTemplate(transactionManager);
+  }
 
   /** Creates a question post and optionally prepares the initial escrow execution intent. */
   @Override
-  @Transactional
   public CreateQuestionPostResult execute(CreatePostCommand command) {
     validateQuestionCommand(command);
     command.validate();
     validatePostImagesIfPresent(command);
     questionLifecycleExecutionPort.precheckQuestionCreate(command.userId(), command.reward());
 
-    Post savedPost = savePost(command);
+    boolean managesQuestionCreate = questionLifecycleExecutionPort.managesQuestionCreateLifecycle();
+    Post savedPost = runInTransaction(() -> savePost(command, managesQuestionCreate));
     QuestionExecutionWriteView web3 =
         questionLifecycleExecutionPort
             .prepareQuestionCreate(
@@ -53,6 +62,7 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
                 savedPost.getContent(),
                 savedPost.getReward())
             .orElse(null);
+    recordPreparedCreateIntentIfPresent(managesQuestionCreate, savedPost.getId(), web3);
 
     XpGrantResult xpResult = grantCreateXp(command.userId(), savedPost.getId());
 
@@ -74,7 +84,7 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
         command.userId(), null, command.type(), command.imageIds());
   }
 
-  private Post savePost(CreatePostCommand command) {
+  private Post savePost(CreatePostCommand command, boolean managesQuestionCreate) {
     // Question creation still uses the same persistence flow as free posts; only the outward
     // contract and escrow preparation differ.
     Post post =
@@ -85,7 +95,7 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
             command.content(),
             command.reward(),
             command.tags());
-    if (questionLifecycleExecutionPort.managesQuestionCreateLifecycle()) {
+    if (managesQuestionCreate) {
       post = post.markPublicationPending();
     }
 
@@ -103,6 +113,26 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
     return savedPost;
   }
 
+  private void recordPreparedCreateIntentIfPresent(
+      boolean managesQuestionCreate, Long postId, QuestionExecutionWriteView web3) {
+    if (!managesQuestionCreate
+        || web3 == null
+        || web3.executionIntent() == null
+        || web3.executionIntent().id() == null
+        || web3.executionIntent().id().isBlank()) {
+      return;
+    }
+    runInTransaction(
+        () -> {
+          postPersistencePort
+              .loadPostForUpdate(postId)
+              .filter(post -> post.getType() == PostType.QUESTION)
+              .map(post -> post.markPublicationPending(web3.executionIntent().id()))
+              .ifPresent(postPersistencePort::savePost);
+          return null;
+        });
+  }
+
   private XpGrantResult grantCreateXp(Long userId, Long postId) {
     Long grantedXp = 0L;
     boolean isXpGranted = false;
@@ -118,6 +148,13 @@ public class CreateQuestionPostService implements CreateQuestionPostUseCase {
 
     String message = isXpGranted ? "게시글 작성 완료! (+" + grantedXp + " XP)" : "게시글 작성 완료";
     return new XpGrantResult(isXpGranted, grantedXp, message);
+  }
+
+  private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
+    if (transactionOperations == null) {
+      return supplier.get();
+    }
+    return transactionOperations.execute(status -> supplier.get());
   }
 
   private record XpGrantResult(boolean isXpGranted, Long grantedXp, String message) {}

@@ -72,6 +72,36 @@ class SyncQuestionPublicationStateServiceTest {
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
   }
 
+  @Test
+  @DisplayName("stale create confirmation is ignored when current intent differs")
+  void staleCreateConfirmationIsIgnored() {
+    Post post =
+        questionPost(PostPublicationStatus.PENDING).toBuilder()
+            .currentCreateExecutionIntentId("intent-2")
+            .build();
+    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
+
+    service.confirmQuestionCreated(
+        new SyncQuestionPublicationStateCommand(10L, "intent-1", null, null));
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+  }
+
+  @Test
+  @DisplayName("stale create failure is ignored when current intent differs")
+  void staleCreateFailureIsIgnored() {
+    Post post =
+        questionPost(PostPublicationStatus.PENDING).toBuilder()
+            .currentCreateExecutionIntentId("intent-2")
+            .build();
+    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
+
+    service.failQuestionCreate(
+        new SyncQuestionPublicationStateCommand(10L, "intent-1", "EXPIRED", "expired"));
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+  }
+
   private Post questionPost(PostPublicationStatus publicationStatus) {
     LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
     return Post.builder()
@@ -83,6 +113,8 @@ class SyncQuestionPublicationStateServiceTest {
         .reward(100L)
         .status(PostStatus.OPEN)
         .publicationStatus(publicationStatus)
+        .currentCreateExecutionIntentId(
+            publicationStatus == PostPublicationStatus.PENDING ? "intent-1" : null)
         .createdAt(now)
         .updatedAt(now)
         .build();

@@ -25,6 +25,7 @@ public class SyncQuestionPublicationStateService
     postPersistencePort
         .loadPostForUpdate(command.postId())
         .filter(this::isQuestionPost)
+        .filter(post -> post.matchesCurrentCreateExecutionIntent(command.executionIntentId()))
         .map(Post::markPublicationVisible)
         .ifPresent(postPersistencePort::savePost);
   }
@@ -37,7 +38,8 @@ public class SyncQuestionPublicationStateService
         .loadPostForUpdate(command.postId())
         .filter(this::isQuestionPost)
         .filter(post -> post.getPublicationStatus() != PostPublicationStatus.VISIBLE)
-        .map(Post::markPublicationFailed)
+        .filter(post -> post.matchesCurrentCreateExecutionIntent(command.executionIntentId()))
+        .map(post -> post.markPublicationFailed(command.terminalStatus(), command.failureReason()))
         .ifPresent(postPersistencePort::savePost);
   }
 

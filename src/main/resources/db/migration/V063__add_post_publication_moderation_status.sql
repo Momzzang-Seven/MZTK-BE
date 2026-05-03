@@ -1,6 +1,9 @@
 ALTER TABLE posts
     ADD COLUMN IF NOT EXISTS publication_status VARCHAR(20),
-    ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20);
+    ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS current_create_execution_intent_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS publication_failure_terminal_status VARCHAR(40),
+    ADD COLUMN IF NOT EXISTS publication_failure_reason VARCHAR(500);
 
 ALTER TABLE posts
     ALTER COLUMN publication_status SET DEFAULT 'VISIBLE',
@@ -41,3 +44,6 @@ CREATE INDEX IF NOT EXISTS idx_posts_public_cursor_created_id
 
 CREATE INDEX IF NOT EXISTS idx_posts_public_type_cursor_created_id
     ON posts (publication_status, moderation_status, type, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_posts_current_create_execution_intent
+    ON posts (current_create_execution_intent_id);

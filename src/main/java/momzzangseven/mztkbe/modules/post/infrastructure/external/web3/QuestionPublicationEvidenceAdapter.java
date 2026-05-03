@@ -24,8 +24,10 @@ public class QuestionPublicationEvidenceAdapter implements LoadQuestionPublicati
     return new QuestionPublicationEvidence(
         true,
         result.projectionExists(),
+        result.projectionState(),
         result.activeCreateIntentExists(),
         result.terminalCreateIntentExists(),
-        result.latestCreateIntentStatus());
+        result.latestCreateIntentStatus(),
+        result.latestCreateExecutionIntentId());
   }
 }

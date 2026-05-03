@@ -1,16 +1,14 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.post.application.dto.PostPublicationReconciliationRowResult;
 import momzzangseven.mztkbe.modules.post.application.dto.RunPostPublicationReconciliationCommand;
-import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
+import momzzangseven.mztkbe.modules.post.application.port.in.ReconcilePostPublicationRowUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicationEvidence;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
@@ -27,70 +25,55 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PostPublicationReconciliationServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
-  @Mock private LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
+  @Mock private ReconcilePostPublicationRowUseCase reconcilePostPublicationRowUseCase;
 
   @InjectMocks private PostPublicationReconciliationService service;
 
   @Test
-  @DisplayName("projection evidence marks question visible")
-  void projectionEvidenceMarksVisible() {
+  @DisplayName("row changed to visible is counted")
+  void rowChangedToVisibleIsCounted() {
     Post pending = questionPost(10L, PostPublicationStatus.PENDING);
     when(postPersistencePort.findQuestionPostsForPublicationReconciliation(null, 100))
         .thenReturn(List.of(pending));
-    when(loadQuestionPublicationEvidencePort.loadEvidence(10L, 1L))
-        .thenReturn(new QuestionPublicationEvidence(true, true, false, false, null));
-    when(postPersistencePort.updateQuestionPublicationStatusIfCurrent(
-            10L, PostPublicationStatus.PENDING, PostPublicationStatus.VISIBLE))
-        .thenReturn(1);
+    when(reconcilePostPublicationRowUseCase.reconcile(pending, false))
+        .thenReturn(
+            PostPublicationReconciliationRowResult.changed(10L, PostPublicationStatus.VISIBLE));
 
     var result = service.run(new RunPostPublicationReconciliationCommand(null, null, false));
 
-    verify(postPersistencePort)
-        .updateQuestionPublicationStatusIfCurrent(
-            10L, PostPublicationStatus.PENDING, PostPublicationStatus.VISIBLE);
     assertThat(result.changedToVisibleCount()).isEqualTo(1);
     assertThat(result.staleSkippedCount()).isZero();
   }
 
   @Test
-  @DisplayName("missing projection without active create intent marks question failed")
-  void missingProjectionWithoutActiveIntentMarksFailed() {
+  @DisplayName("row changed to failed is counted")
+  void rowChangedToFailedIsCounted() {
     Post pending = questionPost(11L, PostPublicationStatus.PENDING);
     when(postPersistencePort.findQuestionPostsForPublicationReconciliation(null, 10))
         .thenReturn(List.of(pending));
-    when(loadQuestionPublicationEvidencePort.loadEvidence(11L, 1L))
-        .thenReturn(new QuestionPublicationEvidence(true, false, false, true, "EXPIRED"));
-    when(postPersistencePort.updateQuestionPublicationStatusIfCurrent(
-            11L, PostPublicationStatus.PENDING, PostPublicationStatus.FAILED))
-        .thenReturn(1);
+    when(reconcilePostPublicationRowUseCase.reconcile(pending, false))
+        .thenReturn(
+            PostPublicationReconciliationRowResult.changed(11L, PostPublicationStatus.FAILED));
 
     var result = service.run(new RunPostPublicationReconciliationCommand(null, 10, false));
 
-    verify(postPersistencePort)
-        .updateQuestionPublicationStatusIfCurrent(
-            11L, PostPublicationStatus.PENDING, PostPublicationStatus.FAILED);
     assertThat(result.changedToFailedCount()).isEqualTo(1);
     assertThat(result.staleSkippedCount()).isZero();
   }
 
   @Test
-  @DisplayName("visible question without projection is reported as needs-review without downgrade")
-  void visibleQuestionWithoutProjectionNeedsReview() {
+  @DisplayName("needs-review row is counted without stopping batch")
+  void needsReviewRowIsCounted() {
     Post visible = questionPost(13L, PostPublicationStatus.VISIBLE);
     when(postPersistencePort.findQuestionPostsForPublicationReconciliation(null, 10))
         .thenReturn(List.of(visible));
-    when(loadQuestionPublicationEvidencePort.loadEvidence(13L, 1L))
-        .thenReturn(new QuestionPublicationEvidence(true, false, false, false, null));
+    when(reconcilePostPublicationRowUseCase.reconcile(visible, false))
+        .thenReturn(PostPublicationReconciliationRowResult.needsReview(13L));
 
     var result = service.run(new RunPostPublicationReconciliationCommand(null, 10, false));
 
     assertThat(result.needsReviewCount()).isEqualTo(1);
     assertThat(result.staleSkippedCount()).isZero();
-    verify(postPersistencePort, never())
-        .updateQuestionPublicationStatusIfCurrent(
-            org.mockito.ArgumentMatchers.anyLong(),
-            org.mockito.ArgumentMatchers.any(PostPublicationStatus.class),
-            org.mockito.ArgumentMatchers.any(PostPublicationStatus.class));
   }
 
   @Test
@@ -99,33 +82,25 @@ class PostPublicationReconciliationServiceTest {
     Post pending = questionPost(12L, PostPublicationStatus.PENDING);
     when(postPersistencePort.findQuestionPostsForPublicationReconciliation(9L, 1))
         .thenReturn(List.of(pending));
-    when(loadQuestionPublicationEvidencePort.loadEvidence(12L, 1L))
-        .thenReturn(new QuestionPublicationEvidence(false, false, false, false, null));
+    when(reconcilePostPublicationRowUseCase.reconcile(pending, true))
+        .thenReturn(
+            PostPublicationReconciliationRowResult.changed(12L, PostPublicationStatus.VISIBLE));
 
     var result = service.run(new RunPostPublicationReconciliationCommand(9L, 1, true));
 
     assertThat(result.changedToVisibleCount()).isEqualTo(1);
     assertThat(result.staleSkippedCount()).isZero();
     assertThat(result.lastScannedPostId()).isEqualTo(12L);
-    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
-    verify(postPersistencePort, never())
-        .updateQuestionPublicationStatusIfCurrent(
-            org.mockito.ArgumentMatchers.anyLong(),
-            org.mockito.ArgumentMatchers.any(PostPublicationStatus.class),
-            org.mockito.ArgumentMatchers.any(PostPublicationStatus.class));
   }
 
   @Test
-  @DisplayName("conditional update miss is reported as stale skipped without changed count")
-  void staleConditionalUpdateIsSkippedWithoutChangedCount() {
+  @DisplayName("stale row is counted without changed count")
+  void staleRowIsSkippedWithoutChangedCount() {
     Post pending = questionPost(14L, PostPublicationStatus.PENDING);
     when(postPersistencePort.findQuestionPostsForPublicationReconciliation(null, 10))
         .thenReturn(List.of(pending));
-    when(loadQuestionPublicationEvidencePort.loadEvidence(14L, 1L))
-        .thenReturn(new QuestionPublicationEvidence(true, true, false, false, null));
-    when(postPersistencePort.updateQuestionPublicationStatusIfCurrent(
-            14L, PostPublicationStatus.PENDING, PostPublicationStatus.VISIBLE))
-        .thenReturn(0);
+    when(reconcilePostPublicationRowUseCase.reconcile(pending, false))
+        .thenReturn(PostPublicationReconciliationRowResult.staleSkipped(14L));
 
     var result = service.run(new RunPostPublicationReconciliationCommand(null, 10, false));
 
@@ -133,6 +108,26 @@ class PostPublicationReconciliationServiceTest {
     assertThat(result.changedToPendingCount()).isZero();
     assertThat(result.changedToFailedCount()).isZero();
     assertThat(result.staleSkippedCount()).isEqualTo(1);
+  }
+
+  @Test
+  @DisplayName("row exception is isolated and counted as needs-review")
+  void rowExceptionIsIsolated() {
+    Post first = questionPost(14L, PostPublicationStatus.PENDING);
+    Post second = questionPost(15L, PostPublicationStatus.PENDING);
+    when(postPersistencePort.findQuestionPostsForPublicationReconciliation(null, 10))
+        .thenReturn(List.of(first, second));
+    when(reconcilePostPublicationRowUseCase.reconcile(first, false))
+        .thenThrow(new IllegalStateException("row failed"));
+    when(reconcilePostPublicationRowUseCase.reconcile(second, false))
+        .thenReturn(
+            PostPublicationReconciliationRowResult.changed(15L, PostPublicationStatus.VISIBLE));
+
+    var result = service.run(new RunPostPublicationReconciliationCommand(null, 10, false));
+
+    assertThat(result.needsReviewCount()).isEqualTo(1);
+    assertThat(result.changedToVisibleCount()).isEqualTo(1);
+    assertThat(result.lastScannedPostId()).isEqualTo(15L);
   }
 
   private Post questionPost(Long postId, PostPublicationStatus publicationStatus) {
