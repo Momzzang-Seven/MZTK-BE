@@ -2,19 +2,19 @@ package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter;
 
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Non-production stand-in for {@link KmsKeyLifecyclePort}. Treasury provisioning / disable /
- * archive flows require a real KMS key, so this adapter is intentionally inert: every method throws
- * {@link UnsupportedOperationException}, which surfaces as HTTP 500 if a non-prod call ever reaches
- * it. Its sole purpose is to satisfy bean wiring for {@code DisableTreasuryWalletService} / {@code
- * ArchiveTreasuryWalletService} / {@code ProvisionTreasuryKeyService} so the Spring context starts
- * cleanly in local / dev / test / E2E.
+ * Non-KMS stand-in for {@link KmsKeyLifecyclePort}. Treasury provisioning / disable / archive flows
+ * require a real KMS key, so this adapter is intentionally inert: every method throws {@link
+ * UnsupportedOperationException}, which surfaces as HTTP 500 if a call ever reaches it while {@code
+ * web3.kms.enabled} is false / unset. Its sole purpose is to satisfy bean wiring for {@code
+ * DisableTreasuryWalletService} / {@code ArchiveTreasuryWalletService} / {@code
+ * ProvisionTreasuryKeyService} so the Spring context starts cleanly when KMS is opted out.
  */
 @Component
-@Profile("!prod")
+@ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "false", matchIfMissing = true)
 public class LocalKmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
 
   @Override

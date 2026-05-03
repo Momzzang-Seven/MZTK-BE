@@ -164,6 +164,40 @@ class TransactionWorkPersistenceAdapterTest {
   }
 
   @Test
+  void clearNonce_throws_whenTransactionIdInvalid() {
+    assertThatThrownBy(() -> adapter.clearNonce(0L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("transactionId must be positive");
+  }
+
+  @Test
+  void clearNonce_throws_whenTransactionIdNull() {
+    assertThatThrownBy(() -> adapter.clearNonce(null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("transactionId must be positive");
+  }
+
+  @Test
+  void clearNonce_clearsAssignedNonceAndStampsUpdatedAt() {
+    Web3TransactionEntity entity = baseEntity(1L, Web3TxStatus.CREATED);
+    entity.setNonce(77L);
+    when(repository.findById(1L)).thenReturn(Optional.of(entity));
+
+    adapter.clearNonce(1L);
+
+    assertThat(entity.getNonce()).isNull();
+    assertThat(entity.getUpdatedAt()).isEqualTo(FIXED_NOW);
+  }
+
+  @Test
+  void clearNonce_throwsWhenTransactionMissing() {
+    when(repository.findById(123L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> adapter.clearNonce(123L))
+        .isInstanceOf(Web3TransactionNotFoundException.class);
+  }
+
+  @Test
   void loadById_throws_whenTransactionIdInvalid() {
     assertThatThrownBy(() -> adapter.loadById(0L))
         .isInstanceOf(Web3InvalidInputException.class)
