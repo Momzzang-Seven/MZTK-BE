@@ -86,6 +86,37 @@ class CreateQuestionPostServiceTest {
   }
 
   @Test
+  @DisplayName("records prepared create intent id after managed web3 prepare succeeds")
+  void executeRecordsPreparedCreateIntentId() {
+    CreatePostCommand command =
+        CreatePostCommand.of(3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, null, null);
+    Post savedPost =
+        Post.builder()
+            .id(21L)
+            .userId(3L)
+            .type(PostType.QUESTION)
+            .title("질문 제목")
+            .content("질문 내용")
+            .reward(50L)
+            .status(PostStatus.OPEN)
+            .publicationStatus(PostPublicationStatus.PENDING)
+            .build();
+
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
+    when(postPersistencePort.loadPostForUpdate(21L)).thenReturn(Optional.of(savedPost));
+    when(questionLifecycleExecutionPort.prepareQuestionCreate(21L, 3L, "질문 내용", 50L))
+        .thenReturn(Optional.of(web3("intent-1")));
+
+    createQuestionPostService.execute(command);
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort, org.mockito.Mockito.times(2)).savePost(postCaptor.capture());
+    assertThat(postCaptor.getAllValues().get(1).getCurrentCreateExecutionIntentId())
+        .isEqualTo("intent-1");
+  }
+
+  @Test
   @DisplayName(
       "creates question post, performs precheck, prepares web3 execution, and preserves XP fields")
   void executeSuccessWithQuestionPost() {
@@ -146,5 +177,17 @@ class CreateQuestionPostServiceTest {
         validatePostImagesPort,
         updatePostImagesPort,
         questionLifecycleExecutionPort);
+  }
+
+  private momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView web3(
+      String executionIntentId) {
+    return new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView(
+        null,
+        "QNA_QUESTION_CREATE",
+        new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView
+            .ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null),
+        null,
+        null,
+        false);
   }
 }

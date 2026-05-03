@@ -63,6 +63,15 @@ public class PostEntity {
       columnDefinition = "varchar(20) default 'NORMAL'")
   private PostModerationStatus moderationStatus;
 
+  @Column(name = "current_create_execution_intent_id", length = 100)
+  private String currentCreateExecutionIntentId;
+
+  @Column(name = "publication_failure_terminal_status", length = 40)
+  private String publicationFailureTerminalStatus;
+
+  @Column(name = "publication_failure_reason", length = 500)
+  private String publicationFailureReason;
+
   @CreatedDate
   @Column(updatable = false)
   private LocalDateTime createdAt;
@@ -82,7 +91,10 @@ public class PostEntity {
       Long acceptedAnswerId,
       PostStatus status,
       PostPublicationStatus publicationStatus,
-      PostModerationStatus moderationStatus) {
+      PostModerationStatus moderationStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason) {
     this.id = id;
     this.userId = userId;
     this.type = type;
@@ -95,6 +107,9 @@ public class PostEntity {
         publicationStatus == null ? PostPublicationStatus.VISIBLE : publicationStatus;
     this.moderationStatus =
         moderationStatus == null ? PostModerationStatus.NORMAL : moderationStatus;
+    this.currentCreateExecutionIntentId = currentCreateExecutionIntentId;
+    this.publicationFailureTerminalStatus = publicationFailureTerminalStatus;
+    this.publicationFailureReason = publicationFailureReason;
   }
 
   public static PostEntity fromDomain(Post post) {
@@ -109,6 +124,9 @@ public class PostEntity {
         .status(post.getStatus())
         .publicationStatus(post.getPublicationStatus())
         .moderationStatus(post.getModerationStatus())
+        .currentCreateExecutionIntentId(post.getCurrentCreateExecutionIntentId())
+        .publicationFailureTerminalStatus(post.getPublicationFailureTerminalStatus())
+        .publicationFailureReason(post.getPublicationFailureReason())
         .build();
   }
 
@@ -124,6 +142,9 @@ public class PostEntity {
         .status(this.status)
         .publicationStatus(this.publicationStatus)
         .moderationStatus(this.moderationStatus)
+        .currentCreateExecutionIntentId(this.currentCreateExecutionIntentId)
+        .publicationFailureTerminalStatus(this.publicationFailureTerminalStatus)
+        .publicationFailureReason(this.publicationFailureReason)
         .tags(tags)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)

@@ -2,27 +2,27 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.post.application.dto.PostPublicationReconciliationRowResult;
 import momzzangseven.mztkbe.modules.post.application.dto.RunPostPublicationReconciliationCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.RunPostPublicationReconciliationResult;
+import momzzangseven.mztkbe.modules.post.application.port.in.ReconcilePostPublicationRowUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.RunPostPublicationReconciliationUseCase;
-import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicationEvidence;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PostPublicationReconciliationService
     implements RunPostPublicationReconciliationUseCase {
 
   private final PostPersistencePort postPersistencePort;
-  private final LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
+  private final ReconcilePostPublicationRowUseCase reconcilePostPublicationRowUseCase;
 
   @Override
-  @Transactional
   public RunPostPublicationReconciliationResult run(
       RunPostPublicationReconciliationCommand command) {
     int batchSize = command.effectiveBatchSize();
@@ -40,25 +40,26 @@ public class PostPublicationReconciliationService
 
     for (Post post : posts) {
       lastScannedPostId = post.getId();
-      ReconciliationDecision decision = resolveDecision(post);
-      if (decision.needsReview()) {
+      PostPublicationReconciliationRowResult rowResult;
+      try {
+        rowResult = reconcilePostPublicationRowUseCase.reconcile(post, command.dryRun());
+      } catch (RuntimeException e) {
+        log.warn("failed to reconcile post publication row: postId={}", post.getId(), e);
         needsReview++;
         continue;
       }
-      PostPublicationStatus target = decision.targetStatus();
-      if (post.getPublicationStatus() == target) {
-        unchanged++;
-        continue;
-      }
-      if (!command.dryRun()
-          && !markPublicationStatusChanged(post.getId(), post.getPublicationStatus(), target)) {
-        staleSkipped++;
-        continue;
-      }
-      switch (target) {
-        case PENDING -> pending++;
-        case VISIBLE -> visible++;
-        case FAILED -> failed++;
+      switch (rowResult.outcome()) {
+        case UNCHANGED -> unchanged++;
+        case NEEDS_REVIEW -> needsReview++;
+        case STALE_SKIPPED -> staleSkipped++;
+        case CHANGED -> {
+          PostPublicationStatus target = rowResult.targetStatus();
+          switch (target) {
+            case PENDING -> pending++;
+            case VISIBLE -> visible++;
+            case FAILED -> failed++;
+          }
+        }
       }
     }
 
@@ -72,48 +73,5 @@ public class PostPublicationReconciliationService
         staleSkipped,
         lastScannedPostId,
         command.dryRun());
-  }
-
-  private boolean markPublicationStatusChanged(
-      Long postId, PostPublicationStatus currentStatus, PostPublicationStatus targetStatus) {
-    int updatedRows =
-        postPersistencePort.updateQuestionPublicationStatusIfCurrent(
-            postId, currentStatus, targetStatus);
-    if (updatedRows == 1) {
-      return true;
-    }
-    if (updatedRows == 0) {
-      return false;
-    }
-    throw new IllegalStateException(
-        "Unexpected post publication status update row count: " + updatedRows);
-  }
-
-  private ReconciliationDecision resolveDecision(Post post) {
-    QuestionPublicationEvidence evidence =
-        loadQuestionPublicationEvidencePort.loadEvidence(post.getId(), post.getUserId());
-    if (post.getPublicationStatus() == PostPublicationStatus.VISIBLE
-        && evidence.lifecycleManaged()
-        && !evidence.projectionExists()) {
-      return ReconciliationDecision.needsReviewDecision();
-    }
-    if (!evidence.lifecycleManaged() || evidence.projectionExists()) {
-      return ReconciliationDecision.target(PostPublicationStatus.VISIBLE);
-    }
-    if (evidence.activeCreateIntentExists()) {
-      return ReconciliationDecision.target(PostPublicationStatus.PENDING);
-    }
-    return ReconciliationDecision.target(PostPublicationStatus.FAILED);
-  }
-
-  private record ReconciliationDecision(PostPublicationStatus targetStatus, boolean needsReview) {
-
-    private static ReconciliationDecision target(PostPublicationStatus targetStatus) {
-      return new ReconciliationDecision(targetStatus, false);
-    }
-
-    private static ReconciliationDecision needsReviewDecision() {
-      return new ReconciliationDecision(null, true);
-    }
   }
 }

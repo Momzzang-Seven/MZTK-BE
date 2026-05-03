@@ -23,6 +23,9 @@ public class Post {
   private final PostStatus status;
   private final PostPublicationStatus publicationStatus;
   private final PostModerationStatus moderationStatus;
+  private final String currentCreateExecutionIntentId;
+  private final String publicationFailureTerminalStatus;
+  private final String publicationFailureReason;
   private final List<String> tags;
 
   private final LocalDateTime createdAt;
@@ -40,6 +43,9 @@ public class Post {
       PostStatus status,
       PostPublicationStatus publicationStatus,
       PostModerationStatus moderationStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason,
       List<String> tags,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
@@ -55,6 +61,9 @@ public class Post {
         publicationStatus == null ? PostPublicationStatus.VISIBLE : publicationStatus;
     this.moderationStatus =
         moderationStatus == null ? PostModerationStatus.NORMAL : moderationStatus;
+    this.currentCreateExecutionIntentId = normalizeBlank(currentCreateExecutionIntentId);
+    this.publicationFailureTerminalStatus = normalizeBlank(publicationFailureTerminalStatus);
+    this.publicationFailureReason = normalizeBlank(publicationFailureReason);
     this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
@@ -131,36 +140,74 @@ public class Post {
     return this.publicationStatus == PostPublicationStatus.FAILED;
   }
 
+  public boolean matchesCurrentCreateExecutionIntent(String executionIntentId) {
+    return executionIntentId != null
+        && !executionIntentId.isBlank()
+        && executionIntentId.equals(currentCreateExecutionIntentId);
+  }
+
   public boolean isModerationBlocked() {
     return this.moderationStatus == PostModerationStatus.BLOCKED;
   }
 
   public Post markPublicationPending() {
+    return markPublicationPending(null);
+  }
+
+  public Post markPublicationPending(String executionIntentId) {
+    String normalizedIntentId = normalizeBlank(executionIntentId);
     if (publicationStatus == PostPublicationStatus.PENDING) {
-      return this;
+      if (Objects.equals(currentCreateExecutionIntentId, normalizedIntentId)
+          && publicationFailureTerminalStatus == null
+          && publicationFailureReason == null) {
+        return this;
+      }
     }
     return this.toBuilder()
         .publicationStatus(PostPublicationStatus.PENDING)
+        .currentCreateExecutionIntentId(normalizedIntentId)
+        .publicationFailureTerminalStatus(null)
+        .publicationFailureReason(null)
         .updatedAt(LocalDateTime.now())
         .build();
   }
 
   public Post markPublicationVisible() {
     if (publicationStatus == PostPublicationStatus.VISIBLE) {
-      return this;
+      if (currentCreateExecutionIntentId == null
+          && publicationFailureTerminalStatus == null
+          && publicationFailureReason == null) {
+        return this;
+      }
     }
     return this.toBuilder()
         .publicationStatus(PostPublicationStatus.VISIBLE)
+        .currentCreateExecutionIntentId(null)
+        .publicationFailureTerminalStatus(null)
+        .publicationFailureReason(null)
         .updatedAt(LocalDateTime.now())
         .build();
   }
 
   public Post markPublicationFailed() {
+    return markPublicationFailed(null, null);
+  }
+
+  public Post markPublicationFailed(String terminalStatus, String failureReason) {
+    String normalizedTerminalStatus = normalizeBlank(terminalStatus);
+    String normalizedFailureReason = normalizeBlank(failureReason);
     if (publicationStatus == PostPublicationStatus.FAILED) {
-      return this;
+      if (currentCreateExecutionIntentId == null
+          && Objects.equals(publicationFailureTerminalStatus, normalizedTerminalStatus)
+          && Objects.equals(publicationFailureReason, normalizedFailureReason)) {
+        return this;
+      }
     }
     return this.toBuilder()
         .publicationStatus(PostPublicationStatus.FAILED)
+        .currentCreateExecutionIntentId(null)
+        .publicationFailureTerminalStatus(normalizedTerminalStatus)
+        .publicationFailureReason(normalizedFailureReason)
         .updatedAt(LocalDateTime.now())
         .build();
   }
@@ -354,6 +401,10 @@ public class Post {
           "PENDING_ADMIN_REFUND question posts cannot have acceptedAnswerId.");
     }
     return status;
+  }
+
+  private static String normalizeBlank(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private void validateAcceptTarget(Long answerId) {

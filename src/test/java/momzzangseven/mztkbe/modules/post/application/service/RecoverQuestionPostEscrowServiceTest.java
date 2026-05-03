@@ -79,6 +79,30 @@ class RecoverQuestionPostEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("managed recovery records new create intent id after web3 recovery succeeds")
+  void managedRecoveryRecordsPreparedCreateIntentId() {
+    Long ownerId = 7L;
+    Long postId = 90L;
+    Post post = failedQuestion(ownerId, postId);
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId);
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(new QuestionPublicationEvidence(true, false, false, true, "EXPIRED"));
+    when(questionLifecycleExecutionPort.recoverQuestionCreate(postId, ownerId, "질문 내용", 50L))
+        .thenReturn(Optional.of(web3("intent-2")));
+
+    service.recoverQuestionCreate(command);
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort, org.mockito.Mockito.times(2)).savePost(postCaptor.capture());
+    assertThat(postCaptor.getAllValues().get(1).getCurrentCreateExecutionIntentId())
+        .isEqualTo("intent-2");
+  }
+
+  @Test
   @DisplayName("managed edit recovery saves edited pending post and syncs explicit tags and images")
   void managedEditRecoverySavesEditedPendingPostAndSyncsTagsAndImages() {
     Long ownerId = 7L;
@@ -401,5 +425,17 @@ class RecoverQuestionPostEscrowServiceTest {
         .createdAt(updatedAt.minusHours(1))
         .updatedAt(updatedAt)
         .build();
+  }
+
+  private momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView web3(
+      String executionIntentId) {
+    return new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView(
+        null,
+        "QNA_QUESTION_CREATE",
+        new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView
+            .ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null),
+        null,
+        null,
+        false);
   }
 }

@@ -39,14 +39,19 @@ class PostTest {
     Post post = baseQuestionPost();
 
     Post pending = post.markPublicationPending();
-    Post failed = pending.markPublicationFailed();
+    Post pendingWithIntent = pending.markPublicationPending("intent-1");
+    Post failed = pendingWithIntent.markPublicationFailed("EXPIRED", "expired");
     Post blocked = failed.block();
     Post visibleButBlocked = blocked.markPublicationVisible();
 
     assertThat(pending.getPublicationStatus()).isEqualTo(PostPublicationStatus.PENDING);
+    assertThat(pendingWithIntent.getCurrentCreateExecutionIntentId()).isEqualTo("intent-1");
     assertThat(failed.getPublicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(failed.getCurrentCreateExecutionIntentId()).isNull();
+    assertThat(failed.getPublicationFailureTerminalStatus()).isEqualTo("EXPIRED");
     assertThat(blocked.getModerationStatus()).isEqualTo(PostModerationStatus.BLOCKED);
     assertThat(visibleButBlocked.getPublicationStatus()).isEqualTo(PostPublicationStatus.VISIBLE);
+    assertThat(visibleButBlocked.getPublicationFailureTerminalStatus()).isNull();
     assertThat(visibleButBlocked.isPubliclyVisible()).isFalse();
     assertThat(visibleButBlocked.unblock().isPubliclyVisible()).isTrue();
   }

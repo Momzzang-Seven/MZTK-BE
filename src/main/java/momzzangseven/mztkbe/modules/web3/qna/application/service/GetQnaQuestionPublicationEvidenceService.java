@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaQuestionP
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 
@@ -20,8 +21,8 @@ public class GetQnaQuestionPublicationEvidenceService
   @Override
   public QnaQuestionPublicationEvidenceResult execute(
       GetQnaQuestionPublicationEvidenceQuery query) {
-    boolean projectionExists =
-        qnaProjectionPersistencePort.findQuestionByPostId(query.postId()).isPresent();
+    QnaQuestionProjection projection =
+        qnaProjectionPersistencePort.findQuestionByPostId(query.postId()).orElse(null);
     String rootIdempotencyKey =
         QnaEscrowIdempotencyKeyFactory.create(
             QnaExecutionActionType.QNA_QUESTION_CREATE,
@@ -34,9 +35,11 @@ public class GetQnaQuestionPublicationEvidenceService
             .orElse(null);
 
     return new QnaQuestionPublicationEvidenceResult(
-        projectionExists,
+        projection != null,
+        projection == null ? null : projection.getState().name(),
         latestCreate != null && latestCreate.isActive(),
         latestCreate != null && latestCreate.isTerminal(),
-        latestCreate == null ? null : latestCreate.status().name());
+        latestCreate == null ? null : latestCreate.status().name(),
+        latestCreate == null ? null : latestCreate.executionIntentId());
   }
 }
