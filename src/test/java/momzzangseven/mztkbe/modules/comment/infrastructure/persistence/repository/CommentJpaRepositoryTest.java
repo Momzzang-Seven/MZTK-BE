@@ -108,8 +108,8 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
-  @DisplayName("countCommentsByPostIds() groups counts by post id including soft-deleted comments")
-  void countCommentsByPostIds_groupsCountsIncludingSoftDeletedComments() {
+  @DisplayName("countCommentsByPostIds() groups counts by post id excluding soft-deleted comments")
+  void countCommentsByPostIds_groupsCountsExcludingSoftDeletedComments() {
     LocalDateTime base = LocalDateTime.of(2026, 3, 2, 12, 0);
     CommentEntity root = persistRoot(800L, 41L, "root", base);
     persistReply(800L, 42L, "reply", root, base.plusMinutes(1));
@@ -124,7 +124,7 @@ class CommentJpaRepositoryTest {
                     CommentJpaRepository.PostCommentCount::getPostId,
                     CommentJpaRepository.PostCommentCount::getCommentCount));
 
-    assertThat(counts).containsEntry(800L, 3L).containsEntry(801L, 1L).doesNotContainKey(802L);
+    assertThat(counts).containsEntry(800L, 2L).containsEntry(801L, 1L).doesNotContainKey(802L);
   }
 
   @Test

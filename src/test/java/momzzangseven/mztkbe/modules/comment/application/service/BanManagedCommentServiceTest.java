@@ -32,7 +32,7 @@ class BanManagedCommentServiceTest {
   @DisplayName("삭제되지 않은 댓글은 soft delete 처리한다")
   void execute_activeComment_softDeletes() {
     Comment comment = comment(false);
-    given(loadCommentPort.loadComment(31L)).willReturn(Optional.of(comment));
+    given(loadCommentPort.loadCommentForUpdate(31L)).willReturn(Optional.of(comment));
     given(saveCommentPort.saveComment(org.mockito.Mockito.any(Comment.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
 
@@ -51,7 +51,7 @@ class BanManagedCommentServiceTest {
   @Test
   @DisplayName("이미 삭제된 댓글은 idempotent 성공으로 처리하고 재저장하지 않는다")
   void execute_deletedComment_idempotentSuccess() {
-    given(loadCommentPort.loadComment(31L)).willReturn(Optional.of(comment(true)));
+    given(loadCommentPort.loadCommentForUpdate(31L)).willReturn(Optional.of(comment(true)));
 
     var result = service.execute(new BanManagedCommentCommand(31L));
 

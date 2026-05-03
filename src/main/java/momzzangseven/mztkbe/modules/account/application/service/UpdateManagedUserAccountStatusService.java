@@ -28,7 +28,7 @@ public class UpdateManagedUserAccountStatusService
 
     UserAccount account =
         loadUserAccountPort
-            .findByUserId(command.userId())
+            .findByUserIdForUpdate(command.userId())
             .orElseThrow(() -> new UserNotFoundException(command.userId()));
     UserAccount changed = account.changeManagedStatus(command.status());
     UserAccount persisted = changed == account ? account : saveUserAccountPort.save(changed);

@@ -22,6 +22,10 @@ CREATE TABLE admin_board_moderation_actions (
         CHECK (execution_mode IN ('HARD_DELETE', 'SOFT_DELETE', 'UNKNOWN'))
 );
 
+ALTER TABLE admin_board_moderation_actions
+    ADD CONSTRAINT uk_admin_board_moderation_actions_target
+        UNIQUE (target_type, target_id);
+
 CREATE INDEX idx_admin_board_moderation_actions_target
     ON admin_board_moderation_actions(target_type, target_id, created_at DESC);
 
