@@ -20,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecut
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -115,7 +116,8 @@ class QnaEscrowE2ETest extends E2ETestBase {
                   req.actionType(),
                   req.requesterUserId(),
                   req.counterpartyUserId(),
-                  "root-" + req.resourceType() + "-" + req.resourceId() + "-" + req.actionType(),
+                  QnaEscrowIdempotencyKeyFactory.create(
+                      req.actionType(), req.requesterUserId(), req.postId(), req.answerId()),
                   "0x" + "a".repeat(64),
                   "{}",
                   List.of(
