@@ -128,6 +128,20 @@ public class TransactionWorkPersistenceAdapter
 
   @Override
   @Transactional
+  public void clearNonce(Long transactionId) {
+    if (transactionId == null || transactionId <= 0) {
+      throw new Web3InvalidInputException("transactionId must be positive");
+    }
+
+    Web3TransactionEntity entity = load(transactionId);
+    Web3Transaction transaction = toDomain(entity);
+    transaction.clearNonce();
+    apply(entity, transaction);
+    entity.setUpdatedAt(LocalDateTime.now(appClock));
+  }
+
+  @Override
+  @Transactional
   public void markSigned(Long transactionId, long nonce, String signedRawTx, String txHash) {
     if (signedRawTx == null || signedRawTx.isBlank()) {
       throw new Web3InvalidInputException("signedRawTx is required");

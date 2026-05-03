@@ -30,6 +30,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Reserv
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.ReservedNonceCompensator;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -56,6 +57,7 @@ class TransactionIssuerWorkerTest {
   @Mock private LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   @Mock private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @Mock private ReserveNoncePort reserveNoncePort;
+  @Mock private ReservedNonceCompensator reservedNonceCompensator;
   @Mock private Web3ContractPort web3ContractPort;
   @Mock private RetryStrategy retryStrategy;
 
@@ -80,6 +82,7 @@ class TransactionIssuerWorkerTest {
             loadRewardTreasuryWalletPort,
             verifyTreasuryWalletForSignPort,
             reserveNoncePort,
+            reservedNonceCompensator,
             web3ContractPort,
             rewardProperties,
             retryStrategy,
@@ -291,7 +294,8 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void processBatch_signTransferThrowsKmsTerminal_marksTerminalAndReleasesNonce() {
+  void
+      processBatch_signTransferThrowsKmsTerminal_delegatesToCompensator_whenNonceReservedThisTurn() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, null)));
@@ -310,14 +314,42 @@ class TransactionIssuerWorkerTest {
                 .build();
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenThrow(new KmsSignFailedException("kms denied", kmsDenied));
-    when(reserveNoncePort.releaseNonce(TREASURY_ADDRESS, 99L)).thenReturn(true);
 
     worker.processBatch(1);
 
-    verify(reserveNoncePort).releaseNonce(TREASURY_ADDRESS, 99L);
+    verify(reservedNonceCompensator)
+        .compensate(1L, TREASURY_ADDRESS, 99L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code()), any());
+    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
+  }
+
+  @Test
+  void processBatch_signTransferThrowsKmsTerminal_skipsCompensator_whenItemAlreadyHasNonce() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 12L)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
+        .thenReturn(prevalidateOk());
+
+    software.amazon.awssdk.services.kms.model.KmsException kmsDenied =
+        (software.amazon.awssdk.services.kms.model.KmsException)
+            software.amazon.awssdk.services.kms.model.KmsException.builder()
+                .awsErrorDetails(
+                    software.amazon.awssdk.awscore.exception.AwsErrorDetails.builder()
+                        .errorCode("AccessDeniedException")
+                        .build())
+                .build();
+    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
+        .thenThrow(new KmsSignFailedException("kms denied", kmsDenied));
+
+    worker.processBatch(1);
+
+    verifyNoInteractions(reservedNonceCompensator);
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
-    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
   }
 
   @Test
@@ -446,7 +478,7 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void processBatch_signTransferThrowsSignatureRecovery_marksSignatureInvalidNonRetryable() {
+  void processBatch_signTransferThrowsSignatureRecovery_skipsCompensator_whenItemAlreadyHasNonce() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
@@ -461,13 +493,13 @@ class TransactionIssuerWorkerTest {
     verify(updateTransactionPort)
         .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
     verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
-    // re-entry case (item already has nonce) — worker did not reserve, must not release.
+    verifyNoInteractions(reservedNonceCompensator);
     verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
   }
 
   @Test
   void
-      processBatch_signTransferThrowsSignatureRecovery_releasesReservedNonce_whenItemNonceMissing() {
+      processBatch_signTransferThrowsSignatureRecovery_delegatesToCompensator_whenNonceReservedThisTurn() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, null)));
@@ -477,33 +509,14 @@ class TransactionIssuerWorkerTest {
     when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(42L);
     when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
         .thenThrow(new SignatureRecoveryException("recover mismatch"));
-    when(reserveNoncePort.releaseNonce(TREASURY_ADDRESS, 42L)).thenReturn(true);
 
     worker.processBatch(1);
 
-    verify(reserveNoncePort).releaseNonce(TREASURY_ADDRESS, 42L);
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
-  }
-
-  @Test
-  void processBatch_signatureRecoveryReleaseCasMisses_logsErrorButStillTerminals() {
-    when(loadTransactionWorkPort.claimByStatus(
-            eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
-        .thenReturn(List.of(item(1L, null)));
-    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
-    when(web3ContractPort.prevalidate(any(Web3ContractPort.PrevalidateCommand.class)))
-        .thenReturn(prevalidateOk());
-    when(reserveNoncePort.reserveNextNonce(TREASURY_ADDRESS)).thenReturn(42L);
-    when(web3ContractPort.signTransfer(any(Web3ContractPort.SignTransferCommand.class)))
-        .thenThrow(new SignatureRecoveryException("recover mismatch"));
-    when(reserveNoncePort.releaseNonce(TREASURY_ADDRESS, 42L)).thenReturn(false);
-
-    worker.processBatch(1);
-
-    verify(reserveNoncePort).releaseNonce(TREASURY_ADDRESS, 42L);
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
+    verify(reservedNonceCompensator)
+        .compensate(1L, TREASURY_ADDRESS, 42L, Web3TxFailureReason.SIGNATURE_INVALID);
+    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.SIGNATURE_INVALID.code()), any());
   }
 
   @Test

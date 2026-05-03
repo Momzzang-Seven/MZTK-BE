@@ -335,6 +335,129 @@ class Web3TransactionTest {
   }
 
   @Test
+  void clearNonce_clearsAssignedNonce_whenCreated() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            1L,
+            "idem-clear",
+            Web3ReferenceType.USER_TO_USER,
+            "ref-clear",
+            1L,
+            2L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            5L,
+            Web3TxStatus.CREATED,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            now,
+            now);
+
+    tx.clearNonce();
+
+    assertThat(tx.getNonce()).isNull();
+  }
+
+  @Test
+  void clearNonce_isNoop_whenNonceAlreadyNull() {
+    Web3Transaction tx =
+        Web3Transaction.createIntent(
+            "idem-clear-noop",
+            Web3ReferenceType.USER_TO_USER,
+            "ref-clear-noop",
+            1L,
+            2L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            LocalDateTime.now());
+
+    tx.clearNonce();
+
+    assertThat(tx.getNonce()).isNull();
+    assertThat(tx.getStatus()).isEqualTo(Web3TxStatus.CREATED);
+  }
+
+  @Test
+  void clearNonce_isNoop_whenNonceNullEvenInNonCreatedStatus() {
+    LocalDateTime now = LocalDateTime.now();
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            1L,
+            "idem-clear-null-signed",
+            Web3ReferenceType.USER_TO_USER,
+            "ref-clear-null-signed",
+            1L,
+            2L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            null,
+            Web3TxStatus.SIGNED,
+            null,
+            now,
+            null,
+            null,
+            "0xraw",
+            null,
+            null,
+            null,
+            now,
+            now);
+
+    tx.clearNonce();
+
+    assertThat(tx.getNonce()).isNull();
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.EnumSource(
+      value = Web3TxStatus.class,
+      names = {"SIGNED", "PENDING", "UNCONFIRMED", "SUCCEEDED", "FAILED_ONCHAIN"})
+  void clearNonce_throws_whenStatusIsNotCreatedAndNonceSet(Web3TxStatus status) {
+    LocalDateTime now = LocalDateTime.now();
+    String txHash = "0x" + "c".repeat(64);
+    LocalDateTime confirmedAt =
+        (status == Web3TxStatus.SUCCEEDED || status == Web3TxStatus.FAILED_ONCHAIN) ? now : null;
+    String failureReason = status == Web3TxStatus.FAILED_ONCHAIN ? "onchain failed" : null;
+    Web3Transaction tx =
+        Web3Transaction.reconstitute(
+            1L,
+            "idem-clear-bad-status",
+            Web3ReferenceType.USER_TO_USER,
+            "ref-clear-bad-status",
+            1L,
+            2L,
+            "0x" + "a".repeat(40),
+            "0x" + "b".repeat(40),
+            BigInteger.ONE,
+            5L,
+            status,
+            txHash,
+            now.minusMinutes(2),
+            now.minusMinutes(1),
+            confirmedAt,
+            "0xraw",
+            failureReason,
+            null,
+            null,
+            now,
+            now);
+
+    assertThatThrownBy(tx::clearNonce)
+        .isInstanceOf(Web3TransactionStateInvalidException.class)
+        .hasMessageContaining("nonce can only be cleared in CREATED status");
+  }
+
+  @Test
   void scheduleRetry_setsFieldsForNonFinalStatus() {
     LocalDateTime now = LocalDateTime.now();
     LocalDateTime until = now.plusMinutes(3);

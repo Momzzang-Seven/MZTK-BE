@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Reserv
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
+import momzzangseven.mztkbe.modules.web3.transaction.application.service.ReservedNonceCompensator;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TransactionAuditEventType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -44,6 +45,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
   private final LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort;
   private final VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   private final ReserveNoncePort reserveNoncePort;
+  private final ReservedNonceCompensator reservedNonceCompensator;
   private final Web3ContractPort web3ContractPort;
   private final Web3CoreProperties web3CoreProperties;
 
@@ -56,6 +58,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
       LoadRewardTreasuryWalletPort loadRewardTreasuryWalletPort,
       VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort,
       ReserveNoncePort reserveNoncePort,
+      ReservedNonceCompensator reservedNonceCompensator,
       Web3ContractPort web3ContractPort,
       TransactionRewardTokenProperties rewardTokenProperties,
       RetryStrategy retryStrategy,
@@ -69,6 +72,7 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     this.loadRewardTreasuryWalletPort = loadRewardTreasuryWalletPort;
     this.verifyTreasuryWalletForSignPort = verifyTreasuryWalletForSignPort;
     this.reserveNoncePort = reserveNoncePort;
+    this.reservedNonceCompensator = reservedNonceCompensator;
     this.web3ContractPort = web3ContractPort;
     this.web3CoreProperties = web3CoreProperties;
   }
@@ -212,20 +216,16 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     } catch (KmsSignFailedException e) {
       log.warn("KMS sign failed for txId={}: {}", item.transactionId(), e.getMessage());
       if (KmsClientErrorClassifier.isTerminal(e)) {
-        // unrecoverable AWS condition (IAM deny, disabled key, ...) — release the reserved nonce
-        // and terminal-fail. Without the release, the gap reproduces #2 even though the worker
-        // never broadcast.
-        releaseReservedNonceQuietly(item, signer.walletAddress(), nonce);
-        failPrevalidate(
-            item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), false);
+        terminalFailWithCompensation(
+            item, signer.walletAddress(), nonce, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
       } else {
         retry(item.transactionId(), Web3TxFailureReason.KMS_SIGN_FAILED.code(), item);
       }
       return;
     } catch (SignatureRecoveryException e) {
       log.warn("Signature recovery failed for txId={}: {}", item.transactionId(), e.getMessage());
-      releaseReservedNonceQuietly(item, signer.walletAddress(), nonce);
-      failPrevalidate(item.transactionId(), Web3TxFailureReason.SIGNATURE_INVALID.code(), false);
+      terminalFailWithCompensation(
+          item, signer.walletAddress(), nonce, Web3TxFailureReason.SIGNATURE_INVALID);
       return;
     }
 
@@ -296,28 +296,20 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     return reservedNonce;
   }
 
-  // Best-effort CAS rollback of a nonce that this worker just reserved but cannot broadcast.
-  // Skipped on re-entry (item.nonce() != null) because resolveNonce did not advance the cursor.
-  // A failed CAS means another reserver advanced past nonce+1 — the gap survives, so we surface
-  // it as ERROR for ops triage instead of trying further compensations that could double-release.
-  private void releaseReservedNonceQuietly(
-      LoadTransactionWorkPort.TransactionWorkItem item, String fromAddress, long nonce) {
-    if (item.nonce() != null) {
-      return;
-    }
-    try {
-      boolean released = reserveNoncePort.releaseNonce(fromAddress, nonce);
-      if (!released) {
-        log.error(
-            "NONCE_GAP_DETECTED: txId={}, fromAddress={}, abandonedNonce={} "
-                + "— another reservation advanced the cursor before release",
-            item.transactionId(),
-            fromAddress,
-            nonce);
-      }
-    } catch (Exception ex) {
-      log.error(
-          "Nonce release failed (best-effort): txId={}, nonce={}", item.transactionId(), nonce, ex);
+  // Routes terminal-fail-after-resolveNonce branches to the atomic compensator only when the
+  // current claim actually reserved the nonce. On re-entry (item.nonce() != null, claim TTL
+  // expired on a previously reserved row) this turn did not advance the cursor and must not
+  // double-release; the compensator's row-clear would also break invariants for the prior
+  // reservation, so we only schedule the terminal failure for that case.
+  private void terminalFailWithCompensation(
+      LoadTransactionWorkPort.TransactionWorkItem item,
+      String fromAddress,
+      long nonce,
+      Web3TxFailureReason terminalReason) {
+    if (item.nonce() == null) {
+      reservedNonceCompensator.compensate(item.transactionId(), fromAddress, nonce, terminalReason);
+    } else {
+      failPrevalidate(item.transactionId(), terminalReason.code(), false);
     }
   }
 
