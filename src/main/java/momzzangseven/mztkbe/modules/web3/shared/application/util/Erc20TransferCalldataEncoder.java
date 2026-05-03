@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.shared.infrastructure.adapter;
+package momzzangseven.mztkbe.modules.web3.shared.application.util;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -9,6 +9,15 @@ import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.generated.Uint256;
 
+/**
+ * Stateless ERC-20 {@code transfer(address,uint256)} ABI calldata encoder.
+ *
+ * <p>Lives under {@code web3/shared/application/util/} — a cross-cutting helper allowed for sibling
+ * web3 modules per ARCHITECTURE.md's shared-kernel exception, alongside {@code domain/vo/}, {@code
+ * domain/crypto/}, and {@code application/dto/}. Keeping it out of {@code
+ * web3/shared/infrastructure/} preserves the rule that infrastructure of one module is not imported
+ * by another.
+ */
 public final class Erc20TransferCalldataEncoder {
 
   private Erc20TransferCalldataEncoder() {}

@@ -35,6 +35,7 @@ import org.web3j.crypto.Keys;
 import org.web3j.crypto.Sign;
 import org.web3j.utils.Numeric;
 import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.KmsInvalidStateException;
 import software.amazon.awssdk.services.kms.model.MessageType;
@@ -185,6 +186,23 @@ class KmsSignerAdapterTest {
                 assertThat(signEx.getCause()).isSameAs(kmsEx);
                 assertThat(signEx.getCode()).isEqualTo("WEB3_017");
               });
+    }
+
+    @Test
+    @DisplayName(
+        "signDigest — SdkClientException(network/timeout/credential) → KmsSignFailedException")
+    void signDigest_sdkClientException_wrapsInKmsSignFailedException() {
+      // given — client-side failure (no awsErrorDetails); without SdkException catch, this would
+      // escape past the worker's KMS_SIGN_FAILED retry sentinel.
+      var clientEx = SdkClientException.create("Unable to execute HTTP request: connect timeout");
+      when(kmsClient.sign(any(SignRequest.class))).thenThrow(clientEx);
+      KmsSignerAdapter adapter = new KmsSignerAdapter(kmsClient);
+
+      // when / then
+      assertThatThrownBy(() -> adapter.signDigest(KMS_KEY_ID, new byte[32], "0x" + "a".repeat(40)))
+          .isInstanceOf(KmsSignFailedException.class)
+          .hasMessageContaining("KMS Sign API failed")
+          .satisfies(ex -> assertThat(((KmsSignFailedException) ex).getCause()).isSameAs(clientEx));
     }
 
     @Test

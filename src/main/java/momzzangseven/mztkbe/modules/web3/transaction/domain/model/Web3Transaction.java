@@ -138,6 +138,17 @@ public class Web3Transaction {
     nonce = assignedNonce;
   }
 
+  public void clearNonce() {
+    if (nonce == null) {
+      return;
+    }
+    if (status != Web3TxStatus.CREATED) {
+      throw new Web3TransactionStateInvalidException(
+          "nonce can only be cleared in CREATED status: current=" + status);
+    }
+    nonce = null;
+  }
+
   public void markSigned(long signedNonce, String rawTx, String hash, LocalDateTime now) {
     requireCurrentStatus(Web3TxStatus.CREATED, "markSigned");
     assertTransitionAllowed(Web3TxStatus.SIGNED);
