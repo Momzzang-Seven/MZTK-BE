@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.admin.board.api.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
@@ -70,7 +71,7 @@ public class AdminBoardController {
   public ResponseEntity<ApiResponse<AdminBoardModerationResponseDTO>> banPost(
       @AuthenticationPrincipal Long operatorUserId,
       @PathVariable Long postId,
-      @RequestBody AdminBoardBanRequestDTO request) {
+      @Valid @RequestBody AdminBoardBanRequestDTO request) {
     Long validatedOperatorUserId = requireUserId(operatorUserId);
     BanAdminBoardPostCommand command = request.toPostCommand(validatedOperatorUserId, postId);
     AdminBoardModerationResult result = banAdminBoardPostUseCase.execute(command);
@@ -82,7 +83,7 @@ public class AdminBoardController {
   public ResponseEntity<ApiResponse<AdminBoardModerationResponseDTO>> banComment(
       @AuthenticationPrincipal Long operatorUserId,
       @PathVariable Long commentId,
-      @RequestBody AdminBoardBanRequestDTO request) {
+      @Valid @RequestBody AdminBoardBanRequestDTO request) {
     Long validatedOperatorUserId = requireUserId(operatorUserId);
     BanAdminBoardCommentCommand command =
         request.toCommentCommand(validatedOperatorUserId, commentId);

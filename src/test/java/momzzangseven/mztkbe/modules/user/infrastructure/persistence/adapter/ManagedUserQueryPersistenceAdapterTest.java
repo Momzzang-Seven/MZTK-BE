@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.Instant;
 import java.util.List;
+import momzzangseven.mztkbe.modules.user.application.dto.GetManagedUsersPageQuery;
 import momzzangseven.mztkbe.modules.user.application.dto.GetManagedUsersQuery;
 import momzzangseven.mztkbe.modules.user.application.dto.ManagedUserView;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
@@ -73,6 +74,28 @@ class ManagedUserQueryPersistenceAdapterTest {
     assertThat(items).hasSize(1);
     assertThat(items.get(0).userId()).isEqualTo(trainerId);
     assertThat(items.get(0).role()).isEqualTo(UserRole.TRAINER);
+  }
+
+  @Test
+  @DisplayName("paged 조회는 프로필 기반 sort, limit, offset 을 DB query 로 적용한다")
+  void loadPage_appliesSortLimitAndOffset() {
+    ManagedUserQueryPersistenceAdapter adapter =
+        new ManagedUserQueryPersistenceAdapter(new JPAQueryFactory(em.getEntityManager()));
+
+    persistUser("a@test.com", "alpha", UserRole.USER, Instant.parse("2025-01-10T10:00:00Z"));
+    Long betaId =
+        persistUser("b@test.com", "beta", UserRole.USER, Instant.parse("2025-01-12T10:00:00Z"));
+    Long gammaId =
+        persistUser("g@test.com", "gamma", UserRole.TRAINER, Instant.parse("2025-01-11T10:00:00Z"));
+    persistUser(
+        "admin@test.com", "admin", UserRole.ADMIN_GENERATED, Instant.parse("2025-01-13T10:00:00Z"));
+
+    var page = adapter.loadPage(new GetManagedUsersPageQuery(null, null, null, 0, 2, "JOINED_AT"));
+
+    assertThat(page.getTotalElements()).isEqualTo(3L);
+    assertThat(page.getContent())
+        .extracting(ManagedUserView::userId)
+        .containsExactly(betaId, gammaId);
   }
 
   private Long persistUser(String email, String nickname, UserRole role, Instant joinedAt) {

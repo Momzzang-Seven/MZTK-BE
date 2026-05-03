@@ -151,6 +151,30 @@ class AdminUserControllerTest {
         .andExpect(status().isBadRequest());
   }
 
+  @Test
+  @DisplayName("PATCH /admin/users/{userId}/status status 가 null 이면 400")
+  void changeStatus_nullStatus_returns400() throws Exception {
+    mockMvc
+        .perform(
+            patch("/admin/users/{userId}/status", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":null,\"reason\":\"missing\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("PATCH /admin/users/{userId}/status reason 이 500자를 초과하면 400")
+  void changeStatus_tooLongReason_returns400() throws Exception {
+    mockMvc
+        .perform(
+            patch("/admin/users/{userId}/status", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"BLOCKED\",\"reason\":\"" + "a".repeat(501) + "\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
   private RequestPostProcessor adminPrincipal(Long userId) {
     return SecurityMockMvcRequestPostProcessors.authentication(
         new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(

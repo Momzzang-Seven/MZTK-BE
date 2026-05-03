@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.modules.admin.user.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
 import java.util.List;
@@ -22,6 +24,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GetAdminUsersService 단위 테스트")
@@ -79,5 +83,35 @@ class GetAdminUsersServiceTest {
     assertThat(result.getContent()).extracting(item -> item.userId()).containsExactly(11L, 10L);
     assertThat(result.getContent().get(0).postCount()).isEqualTo(7L);
     assertThat(result.getContent().get(0).commentCount()).isEqualTo(2L);
+  }
+
+  @Test
+  @DisplayName("프로필 기반 sort 는 DB paging 결과의 userIds 에 대해서만 status/count 를 병합한다")
+  void execute_profileSort_usesPagedProfileQuery() {
+    GetAdminUsersCommand command =
+        new GetAdminUsersCommand(9L, null, null, null, 1, 2, AdminUserSortKey.JOINED_AT);
+    var first =
+        new LoadAdminUsersPort.AdminUserProfileView(
+            12L, "beta", UserRole.TRAINER, "beta@test.com", Instant.parse("2025-01-12T00:00:00Z"));
+    var second =
+        new LoadAdminUsersPort.AdminUserProfileView(
+            11L, "alpha", UserRole.USER, "alpha@test.com", Instant.parse("2025-01-11T00:00:00Z"));
+    given(
+            loadAdminUsersPort.loadPage(
+                new LoadAdminUsersPort.AdminUserProfilePageQuery(
+                    null, null, null, 1, 2, AdminUserSortKey.JOINED_AT)))
+        .willReturn(new PageImpl<>(List.of(first, second), PageRequest.of(1, 2), 5));
+    given(loadAdminUserStatusesPort.load(List.of(12L, 11L), null))
+        .willReturn(Map.of(12L, AccountStatus.ACTIVE, 11L, AccountStatus.BLOCKED));
+    given(loadAdminUserPostCountsPort.load(List.of(12L, 11L))).willReturn(Map.of(12L, 1L));
+    given(loadAdminUserCommentCountsPort.load(List.of(12L, 11L))).willReturn(Map.of(11L, 4L));
+
+    var result = service.execute(command);
+
+    assertThat(result.getTotalElements()).isEqualTo(5L);
+    assertThat(result.getContent()).extracting(item -> item.userId()).containsExactly(12L, 11L);
+    assertThat(result.getContent().get(0).postCount()).isEqualTo(1L);
+    assertThat(result.getContent().get(1).commentCount()).isEqualTo(4L);
+    verify(loadAdminUsersPort, never()).load(org.mockito.ArgumentMatchers.any());
   }
 }

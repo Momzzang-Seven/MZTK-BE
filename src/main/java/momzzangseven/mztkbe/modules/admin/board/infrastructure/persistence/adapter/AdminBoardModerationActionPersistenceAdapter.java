@@ -24,9 +24,8 @@ public class AdminBoardModerationActionPersistenceAdapter
   @Override
   @Transactional
   public AdminBoardModerationAction save(AdminBoardModerationAction action) {
-    AdminBoardModerationActionEntity saved =
-        repository.save(AdminBoardModerationActionEntity.from(action));
-    return saved.toDomain();
+    AdminBoardModerationActionEntity saved = repository.save(toEntity(action));
+    return toDomain(saved);
   }
 
   @Override
@@ -58,5 +57,37 @@ public class AdminBoardModerationActionPersistenceAdapter
             Collectors.toMap(
                 AdminBoardModerationActionJpaRepository.TargetTypeCount::getTargetType,
                 AdminBoardModerationActionJpaRepository.TargetTypeCount::getActionCount));
+  }
+
+  private AdminBoardModerationActionEntity toEntity(AdminBoardModerationAction action) {
+    return AdminBoardModerationActionEntity.builder()
+        .id(action.getId())
+        .operatorId(action.getOperatorId())
+        .targetType(action.getTargetType())
+        .targetId(action.getTargetId())
+        .postId(action.getPostId())
+        .boardType(action.getBoardType())
+        .reasonCode(action.getReasonCode())
+        .reasonDetail(action.getReasonDetail())
+        .targetFlowType(action.getTargetFlowType())
+        .executionMode(action.getExecutionMode())
+        .createdAt(action.getCreatedAt())
+        .build();
+  }
+
+  private AdminBoardModerationAction toDomain(AdminBoardModerationActionEntity entity) {
+    return AdminBoardModerationAction.builder()
+        .id(entity.getId())
+        .operatorId(entity.getOperatorId())
+        .targetType(entity.getTargetType())
+        .targetId(entity.getTargetId())
+        .postId(entity.getPostId())
+        .boardType(entity.getBoardType())
+        .reasonCode(entity.getReasonCode())
+        .reasonDetail(entity.getReasonDetail())
+        .targetFlowType(entity.getTargetFlowType())
+        .executionMode(entity.getExecutionMode())
+        .createdAt(entity.getCreatedAt())
+        .build();
   }
 }

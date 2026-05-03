@@ -14,7 +14,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import momzzangseven.mztkbe.modules.admin.board.domain.model.AdminBoardModerationAction;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationExecutionMode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetFlowType;
@@ -67,36 +66,4 @@ public class AdminBoardModerationActionEntity {
 
   @Column(name = "created_at", nullable = false)
   private LocalDateTime createdAt;
-
-  public static AdminBoardModerationActionEntity from(AdminBoardModerationAction action) {
-    return AdminBoardModerationActionEntity.builder()
-        .id(action.getId())
-        .operatorId(action.getOperatorId())
-        .targetType(action.getTargetType())
-        .targetId(action.getTargetId())
-        .postId(action.getPostId())
-        .boardType(action.getBoardType())
-        .reasonCode(action.getReasonCode())
-        .reasonDetail(action.getReasonDetail())
-        .targetFlowType(action.getTargetFlowType())
-        .executionMode(action.getExecutionMode())
-        .createdAt(action.getCreatedAt())
-        .build();
-  }
-
-  public AdminBoardModerationAction toDomain() {
-    return AdminBoardModerationAction.builder()
-        .id(id)
-        .operatorId(operatorId)
-        .targetType(targetType)
-        .targetId(targetId)
-        .postId(postId)
-        .boardType(boardType)
-        .reasonCode(reasonCode)
-        .reasonDetail(reasonDetail)
-        .targetFlowType(targetFlowType)
-        .executionMode(executionMode)
-        .createdAt(createdAt)
-        .build();
-  }
 }
