@@ -2,16 +2,20 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
+import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicationEvidence;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
@@ -39,6 +43,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   private final UpdatePostImagesPort updatePostImagesPort;
   private final CountAnswersPort countAnswersPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  private final LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
   private final PostVisibilityPolicy postVisibilityPolicy;
 
   /**
@@ -51,7 +56,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
-    validateQuestionPublicationMutationAllowed(post);
+    validateQuestionUpdatePublicationAllowed(post);
     long activeAnswerCount = countActiveAnswers(post);
     validatePostImagesIfPresent(currentUserId, postId, post.getType(), command.imageIds());
 
@@ -99,7 +104,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     Post post = loadPostOrThrow(postId);
     post.validateOwnership(currentUserId);
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
-    validateQuestionPublicationMutationAllowed(post);
+    validateQuestionDeletePublicationAllowed(post, currentUserId);
     post.validateDeletable(countActiveAnswers(post));
 
     if (isFailedQuestion(post)) {
@@ -132,18 +137,39 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     return countAnswersPort.countAnswers(post.getId());
   }
 
-  private void validateQuestionPublicationMutationAllowed(Post post) {
+  private void validateQuestionUpdatePublicationAllowed(Post post) {
     if (!PostType.QUESTION.equals(post.getType())) {
       return;
     }
     if (post.isPublicationPending()) {
-      throw new PostInvalidInputException(
-          "Question create flow is pending; wait for completion or recovery state.");
+      throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_PENDING);
     }
-    if (post.isPublicationFailed()
-        && questionLifecycleExecutionPort.hasActiveQuestionIntent(post.getId())) {
-      throw new PostInvalidInputException(
-          "Question has pending onchain mutation; wait for completion or recover first.");
+    if (post.isPublicationFailed()) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_CREATE_RECOVERY_REQUIRED);
+    }
+  }
+
+  private void validateQuestionDeletePublicationAllowed(Post post, Long requesterUserId) {
+    if (!PostType.QUESTION.equals(post.getType())) {
+      return;
+    }
+    if (post.isPublicationPending()) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_PENDING);
+    }
+    if (!post.isPublicationFailed()) {
+      return;
+    }
+    if (!questionLifecycleExecutionPort.managesQuestionCreateLifecycle()) {
+      return;
+    }
+
+    QuestionPublicationEvidence evidence =
+        loadQuestionPublicationEvidencePort.loadEvidence(post.getId(), requesterUserId);
+    if (evidence.projectionExists()) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT);
+    }
+    if (evidence.activeCreateIntentExists()) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_PENDING);
     }
   }
 
