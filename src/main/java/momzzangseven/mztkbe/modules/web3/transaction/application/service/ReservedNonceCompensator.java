@@ -44,6 +44,12 @@ public class ReservedNonceCompensator {
     updateTransactionPort.scheduleRetry(transactionId, terminalReason.code(), null);
     boolean released = reserveNoncePort.releaseNonce(fromAddress, reservedNonce);
     if (!released) {
+      // TODO(F-1): replace this log line with a `web3_nonce_gap_incidents` recorder so each gap
+      // leaves a permanent, queryable record reusable across transaction / execution / eip7702
+      // modules. See PR #150 review thread.
+      // TODO(F-2): consider serializing reserve→sign→broadcast/compensate per fromAddress via
+      // pg_try_advisory_xact_lock to remove the multi-worker race window that produces this gap
+      // in the first place. See PR #150 review thread.
       log.error(
           "NONCE_GAP_DETECTED: txId={}, fromAddress={}, abandonedNonce={} "
               + "— another reservation advanced the cursor before release",

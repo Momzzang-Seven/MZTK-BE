@@ -296,21 +296,17 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
     return reservedNonce;
   }
 
-  // Routes terminal-fail-after-resolveNonce branches to the atomic compensator only when the
-  // current claim actually reserved the nonce. On re-entry (item.nonce() != null, claim TTL
-  // expired on a previously reserved row) this turn did not advance the cursor and must not
-  // double-release; the compensator's row-clear would also break invariants for the prior
-  // reservation, so we only schedule the terminal failure for that case.
+  // Always run the atomic compensator on terminal-after-resolveNonce paths. Re-entry from a prior
+  // transient retry leaves the cursor advanced and row.nonce assigned; clearing both here is safe
+  // because (a) the compensator clears the row's nonce idempotently before any other write, and
+  // (b) once committed, the non-retryable failure_reason permanently excludes the row from
+  // claimByStatus's SQL, so this code path cannot run twice on the same row.
   private void terminalFailWithCompensation(
       LoadTransactionWorkPort.TransactionWorkItem item,
       String fromAddress,
       long nonce,
       Web3TxFailureReason terminalReason) {
-    if (item.nonce() == null) {
-      reservedNonceCompensator.compensate(item.transactionId(), fromAddress, nonce, terminalReason);
-    } else {
-      failPrevalidate(item.transactionId(), terminalReason.code(), false);
-    }
+    reservedNonceCompensator.compensate(item.transactionId(), fromAddress, nonce, terminalReason);
   }
 
   @Override

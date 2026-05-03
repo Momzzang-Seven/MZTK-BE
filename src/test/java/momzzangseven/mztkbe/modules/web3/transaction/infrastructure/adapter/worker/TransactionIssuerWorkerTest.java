@@ -326,7 +326,7 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void processBatch_signTransferThrowsKmsTerminal_skipsCompensator_whenItemAlreadyHasNonce() {
+  void processBatch_signTransferThrowsKmsTerminal_invokesCompensator_whenItemAlreadyHasNonce() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 12L)));
@@ -347,9 +347,12 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verifyNoInteractions(reservedNonceCompensator);
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code(), null);
+    verify(reservedNonceCompensator)
+        .compensate(1L, TREASURY_ADDRESS, 12L, Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+    verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.code()), any());
+    verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
   }
 
   @Test
@@ -478,7 +481,8 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void processBatch_signTransferThrowsSignatureRecovery_skipsCompensator_whenItemAlreadyHasNonce() {
+  void
+      processBatch_signTransferThrowsSignatureRecovery_invokesCompensator_whenItemAlreadyHasNonce() {
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(1), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L)));
@@ -490,10 +494,11 @@ class TransactionIssuerWorkerTest {
 
     worker.processBatch(1);
 
-    verify(updateTransactionPort)
-        .scheduleRetry(1L, Web3TxFailureReason.SIGNATURE_INVALID.code(), null);
+    verify(reservedNonceCompensator)
+        .compensate(1L, TREASURY_ADDRESS, 5L, Web3TxFailureReason.SIGNATURE_INVALID);
     verify(updateTransactionPort, never()).markSigned(any(), any(Long.class), any(), any());
-    verifyNoInteractions(reservedNonceCompensator);
+    verify(updateTransactionPort, never())
+        .scheduleRetry(eq(1L), eq(Web3TxFailureReason.SIGNATURE_INVALID.code()), any());
     verify(reserveNoncePort, never()).releaseNonce(anyString(), anyLong());
   }
 
