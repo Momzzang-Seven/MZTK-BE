@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.integration.e2e.web3;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
@@ -59,7 +61,9 @@ import org.web3j.utils.Numeric;
       "web3.reward-token.enabled=true",
       "web3.qna.admin.enabled=true",
       "web3.execution.internal.signer.wallet-alias=sponsor-treasury",
+      "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA==",
       "web3.eip7702.sponsor.wallet-alias=sponsor-treasury",
+      "web3.eip7702.sponsor.key-encryption-key-b64=dGVzdA==",
     })
 @Tag("e2e")
 @DisplayName("[E2E] Sponsor KMS Signing — LocalEcSigner golden path + inactive-wallet quarantine")
@@ -84,6 +88,8 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
   @Autowired private RunInternalExecutionBatchUseCase runInternalExecutionBatchUseCase;
   @Autowired private ExecuteExecutionIntentUseCase executeExecutionIntentUseCase;
   @Autowired private ObjectMapper objectMapper;
+
+  private final AtomicLong nextTxId = new AtomicLong(900_000L);
 
   // mock OAuth ports — not relevant to signing flow but required by context
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
@@ -115,7 +121,7 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
         "INSERT INTO web3_treasury_wallets"
             + " (wallet_alias, treasury_address, kms_key_id, status, key_origin,"
             + "  created_at, updated_at)"
-            + " VALUES (?, ?, ?, 'ACTIVE', 'KMS', NOW(), NOW())"
+            + " VALUES (?, ?, ?, 'ACTIVE', 'IMPORTED', NOW(), NOW())"
             + " ON CONFLICT (wallet_alias) DO UPDATE"
             + "   SET treasury_address = EXCLUDED.treasury_address,"
             + "       kms_key_id       = EXCLUDED.kms_key_id,"
@@ -133,16 +139,15 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
               var cmd =
                   inv.getArgument(
                       0, ExecutionTransactionGatewayPort.CreateTransactionCommand.class);
-              long txId = 90000L + (long) (Math.random() * 9000);
-              return new ExecutionTransactionGatewayPort.TransactionRecord(
-                  txId, ExecutionTransactionStatus.CREATED, null);
+              long txId = nextTxId.getAndIncrement();
+              return seedTransactionRecord(txId, cmd);
             });
     BDDMockito.given(executionTransactionGatewayPort.broadcast(anyString()))
         .willReturn(
             new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xmockhash", null, "main"));
     BDDMockito.willDoNothing()
         .given(executionTransactionGatewayPort)
-        .markSigned(any(), any(), any(), any());
+        .markSigned(any(), anyLong(), anyString(), anyString());
     BDDMockito.willDoNothing().given(executionTransactionGatewayPort).markPending(any(), any());
     BDDMockito.willDoNothing().given(executionTransactionGatewayPort).recordAudit(any());
 
@@ -278,7 +283,8 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
       "internalBatch_eip1559_sponsorPath_signsViaLocalEcSigner_whenKmsDisabled:"
           + " signed rawTx is 0x02-prefix and signer recovers to sponsor address")
   void internalBatch_eip1559_sponsorPath_signsViaLocalEcSigner_whenKmsDisabled() throws Exception {
-    seedEip1559Intent(/* sponsorAddress= */ SPONSOR_ADDRESS);
+    TestUser requester = signupAndLogin("eip1559-batch-requester");
+    seedEip1559Intent(/* sponsorAddress= */ SPONSOR_ADDRESS, requester.userId());
 
     var batchResult = runInternalExecutionBatchUseCase.runBatch(Instant.now());
 
@@ -318,21 +324,21 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
         "UPDATE web3_treasury_wallets SET status = 'DISABLED' WHERE wallet_alias = ?",
         SPONSOR_ALIAS);
 
-    seedEip1559Intent(/* sponsorAddress= */ SPONSOR_ADDRESS);
+    TestUser requester = signupAndLogin("eip1559-disabled-requester");
+    seedEip1559Intent(/* sponsorAddress= */ SPONSOR_ADDRESS, requester.userId());
 
     var batchResult = runInternalExecutionBatchUseCase.runBatch(Instant.now());
 
-    // service quarantines instead of throwing — executed=1, quarantined=1
-    assertThat(batchResult.executedCount()).isEqualTo(1);
-    assertThat(batchResult.quarantinedCount()).isEqualTo(1);
-
-    // confirm last_error_reason stored in DB reflects the inactive-wallet quarantine path
-    String errorReason =
+    // [MOM-351] preflight runs OUTSIDE @Transactional and returns preflightSkipped() when the
+    // sponsor wallet is inactive — the intent is NOT claimed, so executed/quarantined are both 0
+    // and the intent stays in AWAITING_SIGNATURE for the next scheduler tick.
+    assertThat(batchResult.executedCount()).isZero();
+    assertThat(batchResult.quarantinedCount()).isZero();
+    String intentStatus =
         jdbcTemplate.queryForObject(
-            "SELECT last_error_reason FROM web3_execution_intents"
-                + " WHERE status = 'CANCELED' ORDER BY created_at DESC LIMIT 1",
+            "SELECT status FROM web3_execution_intents ORDER BY created_at DESC LIMIT 1",
             String.class);
-    assertThat(errorReason).isEqualTo("sponsor wallet inactive");
+    assertThat(intentStatus).isEqualTo("AWAITING_SIGNATURE");
   }
 
   // ===================================================================
@@ -376,7 +382,7 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
 
   // Seed a minimal EIP-1559 execution intent in AWAITING_SIGNATURE status with unsigned tx
   // snapshot.
-  private ExecutionIntent seedEip1559Intent(String fromAddress) {
+  private ExecutionIntent seedEip1559Intent(String fromAddress, Long requesterUserId) {
     UnsignedTxSnapshot snapshot =
         new UnsignedTxSnapshot(
             CHAIN_ID,
@@ -405,7 +411,7 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
             + "  expires_at, unsigned_tx_snapshot, unsigned_tx_fingerprint,"
             + "  reserved_sponsor_cost_wei, sponsor_usage_date_kst,"
             + "  created_at, updated_at)"
-            + " VALUES (?, ?, 1, 'QUESTION', ?, 'QNA_ADMIN_SETTLE', 1, 'EIP1559',"
+            + " VALUES (?, ?, 1, 'QUESTION', ?, 'QNA_ADMIN_SETTLE', ?, 'EIP1559',"
             + "  'AWAITING_SIGNATURE', '0x' || repeat('a', 64),"
             + "  ?, ?::jsonb, ?,"
             + "  0, CURRENT_DATE,"
@@ -413,6 +419,7 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
         publicId,
         rootKey,
         publicId, // resource_id
+        requesterUserId,
         Timestamp.valueOf(expiresAt),
         snapshotJson,
         fingerprint,
@@ -423,6 +430,35 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
         .findByPublicId(publicId)
         .orElseThrow(
             () -> new IllegalStateException("failed to seed EIP-1559 intent: " + publicId));
+  }
+
+  // INSERT a real row into web3_transactions so the FK from web3_execution_intents.submitted_tx_id
+  // is satisfied when the production code persists the intent post-broadcast.
+  private ExecutionTransactionGatewayPort.TransactionRecord seedTransactionRecord(
+      long transactionId, ExecutionTransactionGatewayPort.CreateTransactionCommand command) {
+    LocalDateTime now = LocalDateTime.now().minusSeconds(1);
+    jdbcTemplate.update(
+        "INSERT INTO web3_transactions ("
+            + "id, idempotency_key, reference_type, reference_id, from_user_id, to_user_id,"
+            + " from_address, to_address, amount_wei, nonce, tx_type, status,"
+            + " created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        transactionId,
+        command.idempotencyKey() + "-" + UUID.randomUUID(),
+        command.referenceType().name(),
+        command.referenceId(),
+        command.fromUserId(),
+        command.toUserId(),
+        command.fromAddress(),
+        command.toAddress(),
+        command.amountWei(),
+        command.nonce(),
+        command.txType().name(),
+        command.status().name(),
+        Timestamp.valueOf(now),
+        Timestamp.valueOf(now));
+    return new ExecutionTransactionGatewayPort.TransactionRecord(
+        transactionId, ExecutionTransactionStatus.CREATED, null);
   }
 
   // Compute the canonical EIP-1559 fingerprint that Eip1559TransactionCodecAdapter uses.
