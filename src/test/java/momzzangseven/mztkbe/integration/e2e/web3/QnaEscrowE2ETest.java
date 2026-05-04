@@ -355,10 +355,15 @@ class QnaEscrowE2ETest extends E2ETestBase {
     JsonNode data = objectMapper.readTree(response.getBody()).path("data");
     assertThat(data.path("postId").asLong()).isEqualTo(postId);
     assertThat(data.path("web3").path("actionType").asText()).isEqualTo("QNA_QUESTION_CREATE");
+    String recoveredExecutionIntentId =
+        data.path("web3").path("executionIntent").path("id").asText();
     assertThat(data.path("web3").path("executionIntent").path("status").asText())
         .isEqualTo("AWAITING_SIGNATURE");
     assertThat(getPostContent(postId)).isEqualTo("복구 후 본문");
     assertThat(getPostPublicationStatus(postId)).isEqualTo("PENDING");
+    assertThat(getPostCurrentCreateExecutionIntentId(postId)).isEqualTo(recoveredExecutionIntentId);
+    assertThat(getPostPublicationFailureTerminalStatus(postId)).isNull();
+    assertThat(getPostPublicationFailureReason(postId)).isNull();
     assertThat(getLatestQuestionCreateIntentStatus(postId)).isEqualTo("AWAITING_SIGNATURE");
     assertThat(countQuestionCreateIntents(postId)).isEqualTo(2);
   }
@@ -533,6 +538,21 @@ class QnaEscrowE2ETest extends E2ETestBase {
   private String getPostPublicationStatus(Long postId) {
     return jdbcTemplate.queryForObject(
         "SELECT publication_status FROM posts WHERE id = ?", String.class, postId);
+  }
+
+  private String getPostCurrentCreateExecutionIntentId(Long postId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT current_create_execution_intent_id FROM posts WHERE id = ?", String.class, postId);
+  }
+
+  private String getPostPublicationFailureTerminalStatus(Long postId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT publication_failure_terminal_status FROM posts WHERE id = ?", String.class, postId);
+  }
+
+  private String getPostPublicationFailureReason(Long postId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT publication_failure_reason FROM posts WHERE id = ?", String.class, postId);
   }
 
   private boolean postExists(Long postId) {

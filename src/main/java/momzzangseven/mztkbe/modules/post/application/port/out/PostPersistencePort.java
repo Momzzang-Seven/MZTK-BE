@@ -44,5 +44,16 @@ public interface PostPersistencePort {
       String publicationFailureTerminalStatus,
       String publicationFailureReason);
 
+  int updateQuestionPublicationStateIfExpected(
+      Long postId,
+      PostPublicationStatus expectedStatus,
+      String expectedCurrentCreateExecutionIntentId,
+      String expectedPublicationFailureTerminalStatus,
+      String expectedPublicationFailureReason,
+      PostPublicationStatus targetStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason);
+
   int markQuestionPostSolved(Long postId);
 }

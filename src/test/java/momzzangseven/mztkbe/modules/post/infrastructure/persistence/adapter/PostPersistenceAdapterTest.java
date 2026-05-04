@@ -270,6 +270,50 @@ class PostPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName(
+      "updateQuestionPublicationStateIfExpected delegates recovery-specific expected metadata")
+  void updateQuestionPublicationStateIfExpectedDelegates() {
+    when(postJpaRepository.updatePublicationStateByIdIfExpected(
+            9L,
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation",
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null))
+        .thenReturn(1);
+
+    int updated =
+        postPersistenceAdapter.updateQuestionPublicationStateIfExpected(
+            9L,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation",
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+
+    assertThat(updated).isEqualTo(1);
+    verify(postJpaRepository)
+        .updatePublicationStateByIdIfExpected(
+            9L,
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation",
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+  }
+
+  @Test
   @DisplayName("markQuestionPostSolved performs status-only conditional resolve update")
   void markQuestionPostSolvedDelegates() {
     when(postJpaRepository.markResolvedByIdIfType(

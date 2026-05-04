@@ -37,7 +37,7 @@ class ModeratePostServiceTest {
     when(postPersistencePort.savePost(org.mockito.ArgumentMatchers.any(Post.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
-    service.blockPost(new ModeratePostCommand(10L));
+    service.blockPost(new ModeratePostCommand(99L, 10L));
 
     ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
     verify(postPersistencePort).savePost(postCaptor.capture());
@@ -55,7 +55,7 @@ class ModeratePostServiceTest {
     when(postPersistencePort.savePost(org.mockito.ArgumentMatchers.any(Post.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
-    service.unblockPost(new ModeratePostCommand(10L));
+    service.unblockPost(new ModeratePostCommand(99L, 10L));
 
     ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
     verify(postPersistencePort).savePost(postCaptor.capture());
