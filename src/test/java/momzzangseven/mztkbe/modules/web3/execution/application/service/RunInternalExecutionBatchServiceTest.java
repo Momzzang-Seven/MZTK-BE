@@ -100,4 +100,37 @@ class RunInternalExecutionBatchServiceTest {
     assertThat(result.quarantinedCount()).isZero();
     assertThat(result.failedCount()).isEqualTo(1);
   }
+
+  @Test
+  void runBatch_breaksAfterTransientRetryWithoutCountingExecution() {
+    // Hot-loop regression: a transient KMS failure on the oldest AWAITING intent must NOT
+    // re-fire the inner use-case batchSize times within one tick. The transient flag flips
+    // executed=false → batch loop exits after the first iteration.
+    when(executeInternalExecutionIntentUseCase.execute(any()))
+        .thenReturn(
+            ExecuteInternalExecutionIntentResult.transientRetry(
+                "intent-throttled", ExecutionIntentStatus.AWAITING_SIGNATURE));
+
+    var result = service.runBatch(NOW);
+
+    assertThat(result.executedCount()).isZero();
+    assertThat(result.pendingCount()).isZero();
+    assertThat(result.signedCount()).isZero();
+    assertThat(result.quarantinedCount()).isZero();
+    assertThat(result.failedCount()).isZero();
+  }
+
+  @Test
+  void runBatch_breaksAfterPreflightSkippedWithoutClaimingAnyIntent() {
+    when(executeInternalExecutionIntentUseCase.execute(any()))
+        .thenReturn(ExecuteInternalExecutionIntentResult.preflightSkipped());
+
+    var result = service.runBatch(NOW);
+
+    assertThat(result.executedCount()).isZero();
+    assertThat(result.pendingCount()).isZero();
+    assertThat(result.signedCount()).isZero();
+    assertThat(result.quarantinedCount()).isZero();
+    assertThat(result.failedCount()).isZero();
+  }
 }
