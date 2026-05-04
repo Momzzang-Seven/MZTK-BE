@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenM
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenValidator;
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenCommand;
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenResult;
+import momzzangseven.mztkbe.modules.account.application.port.out.CheckAdminRefreshSubjectPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.model.RefreshToken;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
@@ -39,6 +40,7 @@ class ReissueTokenServiceTest {
   @Mock private RefreshTokenManager refreshTokenManager;
   @Mock private JwtTokenProvider jwtTokenProvider;
   @Mock private LoadUserAccountPort loadUserAccountPort;
+  @Mock private CheckAdminRefreshSubjectPort checkAdminRefreshSubjectPort;
 
   @InjectMocks private ReissueTokenService reissueTokenService;
 
@@ -87,7 +89,12 @@ class ReissueTokenServiceTest {
         .isInstanceOf(RefreshTokenNotFoundException.class)
         .hasMessage("Refresh token not found: Refresh token is required");
 
-    verifyNoInteractions(validator, refreshTokenManager, jwtTokenProvider, loadUserAccountPort);
+    verifyNoInteractions(
+        validator,
+        refreshTokenManager,
+        jwtTokenProvider,
+        loadUserAccountPort,
+        checkAdminRefreshSubjectPort);
   }
 
   @Test
@@ -138,6 +145,7 @@ class ReissueTokenServiceTest {
 
     given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(8L);
     given(loadUserAccountPort.findByUserId(8L)).willReturn(Optional.empty());
+    given(checkAdminRefreshSubjectPort.isActiveAdmin(8L)).willReturn(false);
 
     assertThatThrownBy(() -> reissueTokenService.execute(command))
         .isInstanceOf(UserNotFoundException.class)
@@ -149,6 +157,38 @@ class ReissueTokenServiceTest {
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
     verify(refreshTokenManager, never())
         .rotateTokens(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  @DisplayName("execute() reissues token for active LOCAL_ADMIN subject without users_account row")
+  void execute_activeAdminWithoutUserAccount_reissuesToken() {
+    String incomingRefreshToken = "refresh-token-admin";
+    ReissueTokenCommand command = new ReissueTokenCommand(incomingRefreshToken);
+    Instant now = Instant.now();
+    RefreshToken dbToken =
+        RefreshToken.builder()
+            .id(10L)
+            .userId(99L)
+            .tokenValue(incomingRefreshToken)
+            .expiresAt(now.plus(Duration.ofDays(1)))
+            .createdAt(now)
+            .build();
+
+    given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(99L);
+    given(loadUserAccountPort.findByUserId(99L)).willReturn(Optional.empty());
+    given(checkAdminRefreshSubjectPort.isActiveAdmin(99L)).willReturn(true);
+    given(validator.inspectSecurityFlaw(incomingRefreshToken, 99L)).willReturn(dbToken);
+    given(refreshTokenManager.rotateTokens(99L, dbToken))
+        .willReturn(new RefreshTokenManager.TokenPair("new-admin-access", "new-admin-refresh"));
+    given(jwtTokenProvider.getAccessTokenExpiresIn()).willReturn(900L);
+    given(jwtTokenProvider.getRefreshTokenExpiresIn()).willReturn(3600L);
+
+    ReissueTokenResult result = reissueTokenService.execute(command);
+
+    assertThat(result.accessToken()).isEqualTo("new-admin-access");
+    assertThat(result.refreshToken()).isEqualTo("new-admin-refresh");
+    verify(validator).inspectSecurityFlaw(incomingRefreshToken, 99L);
+    verify(refreshTokenManager).rotateTokens(99L, dbToken);
   }
 
   private UserAccount activeAccount(Long userId) {
