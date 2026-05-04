@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
@@ -18,6 +21,8 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
+import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
+import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
@@ -38,6 +43,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
@@ -49,6 +55,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.kms.model.KmsException;
 
 /**
  * Tests the per-mode signing logic that lives inside the @Transactional delegate. The sponsor
@@ -314,6 +322,10 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   private ExecutionIntent existingEip7702Intent() {
+    return existingEip7702Intent(BigInteger.ZERO);
+  }
+
+  private ExecutionIntent existingEip7702Intent(BigInteger reservedSponsorCostWei) {
     return ExecutionIntent.create(
         "intent-7702",
         "root-7702",
@@ -334,8 +346,240 @@ class TransactionalExecuteExecutionIntentDelegateTest {
         "0x" + "4".repeat(64),
         null,
         null,
-        BigInteger.ZERO,
+        reservedSponsorCostWei,
         LocalDate.of(2026, 4, 6),
         FIXED_NOW);
+  }
+
+  /**
+   * Stub every port call up to {@code executionEip7702GatewayPort.signAndEncode(...)} so each KMS
+   * test only needs to override the sign stub. {@code reserveNextNonce} returns the supplied
+   * sponsor nonce so verification of {@code releaseReservedNonce} can match exactly.
+   */
+  private void stubEip7702HappyUntilSign(ExecutionIntent intent, long sponsorNonce) {
+    when(executionIntentPersistencePort.findByPublicIdForUpdate(intent.getPublicId()))
+        .thenReturn(Optional.of(intent));
+    when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
+        .thenReturn(
+            new ExecutionEip7702GatewayPort.AuthorizationTuple(
+                BigInteger.valueOf(11155111L),
+                "0x" + "2".repeat(40),
+                BigInteger.valueOf(12L),
+                BigInteger.ZERO,
+                BigInteger.ONE,
+                BigInteger.TWO));
+    when(executionEip7702GatewayPort.hashCalls(any())).thenReturn("0x" + "9".repeat(64));
+    when(executionEip7702GatewayPort.verifyAuthorizationSigner(
+            anyLong(), any(), any(), any(), any()))
+        .thenReturn(true);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getAuthorityNonce()));
+    when(executionEip7702GatewayPort.verifyExecutionSignature(any(), any(), any(), any(), any()))
+        .thenReturn(true);
+    when(executionEip7702GatewayPort.encodeExecute(any(), any())).thenReturn("0xexec");
+    when(executionEip7702GatewayPort.estimateGasWithAuthorization(any(), any(), any(), any()))
+        .thenReturn(BigInteger.valueOf(120_000));
+    when(executionEip7702GatewayPort.loadSponsorFeePlan())
+        .thenReturn(
+            new ExecutionEip7702GatewayPort.FeePlan(
+                BigInteger.valueOf(2_000_000_000L), BigInteger.valueOf(50_000_000_000L)));
+    when(executionTransactionGatewayPort.reserveNextNonce(SPONSOR_ADDRESS))
+        .thenReturn(sponsorNonce);
+  }
+
+  private static KmsException terminalAwsKmsCause() {
+    return (KmsException)
+        KmsException.builder()
+            .awsErrorDetails(AwsErrorDetails.builder().errorCode("AccessDeniedException").build())
+            .build();
+  }
+
+  @Test
+  void executeEip7702_kmsTerminalError_cancelsIntentAndPublishesTerminatedEvent() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isInstanceOf(ExecutionIntentTerminalException.class)
+        .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
+        .isEqualTo(ErrorCode.WEB3_KMS_SIGN_FAILED.getCode());
+
+    verify(executionIntentPersistencePort).update(any());
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            org.mockito.ArgumentMatchers.argThat(
+                event ->
+                    event.executionIntentId().equals("intent-7702")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED
+                        && event.failureReason().equals(ErrorCode.WEB3_KMS_SIGN_FAILED.name())));
+    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
+    verify(executionTransactionGatewayPort, never()).broadcast(any());
+  }
+
+  @Test
+  void executeEip7702_kmsTerminalError_releasesReservedNonce() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isInstanceOf(ExecutionIntentTerminalException.class);
+
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+  }
+
+  @Test
+  void executeEip7702_kmsTerminalError_releasesSponsorExposureWhenReservedCostPositive() {
+    BigInteger reservedCost = BigInteger.valueOf(12_345L);
+    ExecutionIntent intent = existingEip7702Intent(reservedCost);
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenThrow(new KmsSignFailedException("kms denied", terminalAwsKmsCause()));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+    SponsorDailyUsage usage = mock(SponsorDailyUsage.class);
+    when(usage.release(any())).thenReturn(usage);
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(anyLong(), any())).thenReturn(usage);
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isInstanceOf(ExecutionIntentTerminalException.class);
+
+    verify(sponsorDailyUsagePersistencePort)
+        .getOrCreateForUpdate(intent.getRequesterUserId(), intent.resolveSponsorUsageDateKst());
+    verify(usage).release(reservedCost);
+    verify(sponsorDailyUsagePersistencePort).update(usage);
+  }
+
+  @Test
+  void executeEip7702_signatureRecoveryError_cancelsIntentAndPublishesTerminatedEvent() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenThrow(new SignatureRecoveryException("v=27/28 mismatch"));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isInstanceOf(ExecutionIntentTerminalException.class)
+        .extracting(ex -> ((ExecutionIntentTerminalException) ex).getCode())
+        .isEqualTo(ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.getCode());
+
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
+    verify(publishExecutionIntentTerminatedPort)
+        .publish(
+            org.mockito.ArgumentMatchers.argThat(
+                event ->
+                    event.executionIntentId().equals("intent-7702")
+                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED
+                        && event
+                            .failureReason()
+                            .equals(ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.name())));
+  }
+
+  @Test
+  void executeEip7702_kmsTransientError_leavesIntentInAwaitingSignature() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    // No AWS cause → classifier returns non-terminal (transient).
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenThrow(new KmsSignFailedException("kms throttled"));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isInstanceOf(KmsSignFailedException.class);
+
+    // No cancel/intent state-change update should have been issued.
+    verify(executionIntentPersistencePort, never()).update(any());
+  }
+
+  @Test
+  void executeEip7702_kmsTransientError_doesNotPublishCascadeEvent() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenThrow(new KmsSignFailedException("kms throttled"));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isInstanceOf(KmsSignFailedException.class);
+
+    verifyNoInteractions(publishExecutionIntentTerminatedPort);
+  }
+
+  @Test
+  void executeEip7702_kmsTransientError_rethrowsOriginalException() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    KmsSignFailedException original = new KmsSignFailedException("kms throttled");
+    when(executionEip7702GatewayPort.signAndEncode(any())).thenThrow(original);
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isSameAs(original);
+  }
+
+  @Test
+  void executeEip7702_kmsTransientError_callsReleaseReservedNonce() {
+    ExecutionIntent intent = existingEip7702Intent();
+    long sponsorNonce = 42L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenThrow(new KmsSignFailedException("kms throttled"));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    sponsorGate()))
+        .isInstanceOf(KmsSignFailedException.class);
+
+    verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
   }
 }

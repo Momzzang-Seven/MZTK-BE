@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
+import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
+import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
@@ -33,6 +35,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionAuditEvent
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -50,6 +53,9 @@ public class TransactionalExecuteExecutionIntentDelegate
     implements ExecuteTransactionalExecutionIntentDelegatePort {
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
+  private static final String SPONSOR_KMS_SIGN_FAILED_TERMINAL =
+      "sponsor kms sign failed (terminal)";
+  private static final String SPONSOR_SIGNATURE_INVALID = "sponsor signature invalid";
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
@@ -217,20 +223,57 @@ public class TransactionalExecuteExecutionIntentDelegate
     // Reserve next nonce(persistence + JSON-RPC)
     long sponsorNonce = executionTransactionGatewayPort.reserveNextNonce(sponsorAddress);
 
-    // Make the signature
-    ExecutionEip7702GatewayPort.SignedPayload signedPayload =
-        executionEip7702GatewayPort.signAndEncode(
-            new ExecutionEip7702GatewayPort.SignCommand(
-                loadExecutionChainIdPort.loadChainId(),
-                BigInteger.valueOf(sponsorNonce),
-                feePlan.maxPriorityFeePerGas(),
-                feePlan.maxFeePerGas(),
-                estimatedGas,
-                intent.getAuthorityAddress(),
-                BigInteger.ZERO,
-                executeCallData,
-                java.util.List.of(authTuple),
-                sponsorSigner));
+    // Make the signature. KMS sign errors are split into transient (rollback for user retry)
+    // vs terminal (cancel + cascade event for QnA escrow refund), mirroring the EIP-1559
+    // internal-issuer delegate. SignatureRecoveryException is treated as terminal — a recovered
+    // address mismatch indicates corrupted DER / digest / key-pairing, all non-recoverable.
+    ExecutionEip7702GatewayPort.SignedPayload signedPayload;
+    try {
+      signedPayload =
+          executionEip7702GatewayPort.signAndEncode(
+              new ExecutionEip7702GatewayPort.SignCommand(
+                  loadExecutionChainIdPort.loadChainId(),
+                  BigInteger.valueOf(sponsorNonce),
+                  feePlan.maxPriorityFeePerGas(),
+                  feePlan.maxFeePerGas(),
+                  estimatedGas,
+                  intent.getAuthorityAddress(),
+                  BigInteger.ZERO,
+                  executeCallData,
+                  java.util.List.of(authTuple),
+                  sponsorSigner));
+    } catch (KmsSignFailedException e) {
+      log.warn(
+          "eip7702 sponsor KMS sign failed for intent={}: {}",
+          intent.getPublicId(),
+          e.getMessage());
+      // Always release explicitly — mirrors the internal delegate's catch shape.
+      // Terminal: cleanup commits via noRollbackFor(ExecutionIntentTerminalException), so an
+      // explicit release is required to roll the cursor back.
+      // Transient: @Transactional default rollback also reverts both the reserveNextNonce and
+      // this release UPDATE (net zero on web3_nonce_state). Calling it unconditionally keeps
+      // the NONCE_GAP_DETECTED log entry symmetric across delegates.
+      releaseAndLogIfGap(sponsorAddress, sponsorNonce, intent.getPublicId());
+      if (KmsClientErrorClassifier.isTerminal(e)) {
+        cancelEip7702IntentAndCascade(
+            intent, ErrorCode.WEB3_KMS_SIGN_FAILED, SPONSOR_KMS_SIGN_FAILED_TERMINAL);
+        // unreachable; cancelEip7702IntentAndCascade always throws
+      }
+      // Transient: rethrow original; @Transactional default rollback keeps the intent in
+      // AWAITING_SIGNATURE for the next user retry. No cascade event published — QnA escrow
+      // refund must not fire on a recoverable AWS hiccup.
+      throw e;
+    } catch (SignatureRecoveryException e) {
+      log.warn(
+          "eip7702 sponsor signature recovery failed for intent={}: {}",
+          intent.getPublicId(),
+          e.getMessage());
+      releaseAndLogIfGap(sponsorAddress, sponsorNonce, intent.getPublicId());
+      cancelEip7702IntentAndCascade(
+          intent, ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED, SPONSOR_SIGNATURE_INVALID);
+      // unreachable; cancelEip7702IntentAndCascade always throws
+      throw e;
+    }
 
     ExecutionTransactionGatewayPort.TransactionRecord created =
         executionTransactionGatewayPort.createAndFlush(
@@ -495,5 +538,49 @@ public class TransactionalExecuteExecutionIntentDelegate
       ExecutionIntent intent, ExecutionIntentStatus terminalStatus, String failureReason) {
     publishExecutionIntentTerminatedPort.publish(
         new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
+  }
+
+  /**
+   * Releases the reserved nonce on {@code web3_nonce_state} and logs {@code NONCE_GAP_DETECTED}
+   * with a fixed prefix when the CAS misses (another reservation advanced the cursor between
+   * reserve and release). Mirrors the internal-issuer delegate so both modules emit the same log
+   * shape — the PR #150 follow-up F-1 surface (a future {@code web3_nonce_gap_incidents} recorder)
+   * has a single grep target.
+   */
+  private void releaseAndLogIfGap(String fromAddress, long reservedNonce, String intentPublicId) {
+    boolean released =
+        executionTransactionGatewayPort.releaseReservedNonce(fromAddress, reservedNonce);
+    if (!released) {
+      log.error(
+          "NONCE_GAP_DETECTED: intentId={}, fromAddress={}, abandonedNonce={}"
+              + " — another reservation advanced the cursor before release",
+          intentPublicId,
+          fromAddress,
+          reservedNonce);
+    }
+  }
+
+  /**
+   * Terminal cleanup-then-throw for EIP-7702 sponsor signing failures (KMS terminal or signature
+   * recovery). Mirrors the existing {@code expire} / {@code markNonceStale} pattern (see lines
+   * 92-108 / 174-189): writes commit because {@link ExecutionIntentTerminalException} is in {@code
+   * noRollbackFor}.
+   *
+   * <p>Always throws; the {@code throw new IllegalStateException()} after the call sites is dead
+   * code that satisfies definite-assignment for {@code signedPayload}.
+   */
+  private void cancelEip7702IntentAndCascade(
+      ExecutionIntent intent, ErrorCode errorCode, String failureReason) {
+    LocalDateTime now = LocalDateTime.now(appClock);
+    ExecutionIntent canceled =
+        executionIntentPersistencePort.update(intent.cancel(errorCode.name(), failureReason, now));
+    if (canceled.getReservedSponsorCostWei().signum() > 0) {
+      releaseSponsorExposure(
+          canceled.getRequesterUserId(),
+          canceled.resolveSponsorUsageDateKst(),
+          canceled.getReservedSponsorCostWei());
+    }
+    publishTerminated(canceled, ExecutionIntentStatus.CANCELED, errorCode.name());
+    throw new ExecutionIntentTerminalException(errorCode, false);
   }
 }
