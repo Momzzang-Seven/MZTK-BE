@@ -38,6 +38,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
@@ -217,6 +218,14 @@ public class ExecutionIntentServiceConfig {
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
         appClock);
+  }
+
+  @Bean
+  SponsorWalletPreflight sponsorWalletPreflight(
+      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort,
+      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort) {
+    return new SponsorWalletPreflight(
+        loadSponsorTreasuryWalletPort, verifyTreasuryWalletForSignPort);
   }
 
   @Bean
