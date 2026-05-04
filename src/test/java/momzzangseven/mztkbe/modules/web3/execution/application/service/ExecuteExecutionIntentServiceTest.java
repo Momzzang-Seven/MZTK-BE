@@ -8,27 +8,28 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Optional;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Tests the orchestrator-level preflight + delegate dispatch contract. Per-mode signing logic lives
- * in {@link TransactionalExecuteExecutionIntentDelegateTest}.
+ * Tests the orchestrator-level preflight + delegate dispatch contract.
+ *
+ * <p>Per-mode signing logic lives in {@link TransactionalExecuteExecutionIntentDelegateTest}.
+ * Sponsor-wallet structural fail-fast cases live in {@code SponsorWalletPreflightTest}.
  */
 @ExtendWith(MockitoExtension.class)
 class ExecuteExecutionIntentServiceTest {
@@ -37,21 +38,20 @@ class ExecuteExecutionIntentServiceTest {
   private static final String SPONSOR_KMS_KEY_ID = "alias/sponsor-treasury";
   private static final String SPONSOR_ADDRESS = "0x" + "6".repeat(40);
 
-  @Mock private TransactionalExecuteExecutionIntentDelegate delegate;
-  @Mock private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
-  @Mock private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
+  @Mock private ExecuteTransactionalExecutionIntentDelegatePort delegate;
+  @Mock private SponsorWalletPreflight sponsorWalletPreflight;
 
   private ExecuteExecutionIntentService service;
 
   @BeforeEach
   void setUp() {
-    service =
-        new ExecuteExecutionIntentService(
-            delegate, loadSponsorTreasuryWalletPort, verifyTreasuryWalletForSignPort);
+    service = new ExecuteExecutionIntentService(delegate, sponsorWalletPreflight);
   }
 
-  private TreasuryWalletInfo activeSponsorWalletInfo() {
-    return new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, true);
+  private SponsorWalletGate activeGate() {
+    return new SponsorWalletGate(
+        new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, true),
+        new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS));
   }
 
   private ExecuteExecutionIntentCommand command() {
@@ -59,8 +59,9 @@ class ExecuteExecutionIntentServiceTest {
   }
 
   @Test
-  void execute_throwsSponsorMissing_whenSponsorTreasuryWalletNotRegistered() {
-    when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.empty());
+  void execute_propagatesPreflightWeb3InvalidInput_withoutCallingDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new Web3InvalidInputException("sponsor signer key is missing"));
 
     assertThatThrownBy(() -> service.execute(command()))
         .isInstanceOf(Web3InvalidInputException.class)
@@ -69,71 +70,9 @@ class ExecuteExecutionIntentServiceTest {
   }
 
   @Test
-  void execute_throwsSponsorMissing_whenSponsorWalletNotActive() {
-    when(loadSponsorTreasuryWalletPort.load())
-        .thenReturn(
-            Optional.of(
-                new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, false)));
-
-    assertThatThrownBy(() -> service.execute(command()))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessage("sponsor signer key is missing");
-    verify(delegate, never()).execute(any(), any());
-  }
-
-  @Test
-  void execute_throwsSponsorMissing_whenKmsKeyIdNull() {
-    when(loadSponsorTreasuryWalletPort.load())
-        .thenReturn(
-            Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, null, SPONSOR_ADDRESS, true)));
-
-    assertThatThrownBy(() -> service.execute(command()))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessage("sponsor signer key is missing");
-    verify(delegate, never()).execute(any(), any());
-  }
-
-  @Test
-  void execute_throwsSponsorMissing_whenKmsKeyIdBlank() {
-    when(loadSponsorTreasuryWalletPort.load())
-        .thenReturn(Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, "", SPONSOR_ADDRESS, true)));
-
-    assertThatThrownBy(() -> service.execute(command()))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessage("sponsor signer key is missing");
-    verify(delegate, never()).execute(any(), any());
-  }
-
-  @Test
-  void execute_throwsSponsorMissing_whenWalletAddressNull() {
-    when(loadSponsorTreasuryWalletPort.load())
-        .thenReturn(
-            Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, null, true)));
-
-    assertThatThrownBy(() -> service.execute(command()))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessage("sponsor signer key is missing");
-    verify(delegate, never()).execute(any(), any());
-  }
-
-  @Test
-  void execute_throwsSponsorMissing_whenWalletAddressBlank() {
-    when(loadSponsorTreasuryWalletPort.load())
-        .thenReturn(
-            Optional.of(new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, "", true)));
-
-    assertThatThrownBy(() -> service.execute(command()))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessage("sponsor signer key is missing");
-    verify(delegate, never()).execute(any(), any());
-  }
-
-  @Test
-  void execute_propagatesVerifyForSignFailure_withoutCallingDelegate() {
-    when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.of(activeSponsorWalletInfo()));
-    org.mockito.Mockito.doThrow(new TreasuryWalletStateException("KMS key disabled"))
-        .when(verifyTreasuryWalletForSignPort)
-        .verify(SPONSOR_ALIAS);
+  void execute_propagatesTreasuryWalletStateException_withoutCallingDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new TreasuryWalletStateException("KMS key disabled"));
 
     assertThatThrownBy(() -> service.execute(command()))
         .isInstanceOf(TreasuryWalletStateException.class)
@@ -143,7 +82,8 @@ class ExecuteExecutionIntentServiceTest {
 
   @Test
   void execute_invokesDelegateWithSponsorWalletGate_whenPreflightPasses() {
-    when(loadSponsorTreasuryWalletPort.load()).thenReturn(Optional.of(activeSponsorWalletInfo()));
+    SponsorWalletGate gate = activeGate();
+    when(sponsorWalletPreflight.preflight()).thenReturn(gate);
     ExecuteExecutionIntentResult expected =
         new ExecuteExecutionIntentResult(
             "intent-1",
@@ -152,17 +92,11 @@ class ExecuteExecutionIntentServiceTest {
             ExecutionTransactionStatus.PENDING,
             "0xhash");
     ExecuteExecutionIntentCommand command = command();
-    ArgumentCaptor<SponsorWalletGate> gateCaptor = ArgumentCaptor.forClass(SponsorWalletGate.class);
-    when(delegate.execute(eq(command), gateCaptor.capture())).thenReturn(expected);
+    when(delegate.execute(eq(command), eq(gate))).thenReturn(expected);
 
     ExecuteExecutionIntentResult actual = service.execute(command);
 
     assertThat(actual).isSameAs(expected);
-    verify(verifyTreasuryWalletForSignPort).verify(SPONSOR_ALIAS);
-    SponsorWalletGate gate = gateCaptor.getValue();
-    assertThat(gate.walletInfo().walletAlias()).isEqualTo(SPONSOR_ALIAS);
-    assertThat(gate.signer().walletAlias()).isEqualTo(SPONSOR_ALIAS);
-    assertThat(gate.signer().kmsKeyId()).isEqualTo(SPONSOR_KMS_KEY_ID);
-    assertThat(gate.signer().walletAddress()).isEqualTo(SPONSOR_ADDRESS);
+    verify(delegate).execute(command, gate);
   }
 }

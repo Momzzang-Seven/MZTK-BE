@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
@@ -45,7 +46,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @RequiredArgsConstructor
 @Transactional(noRollbackFor = ExecutionIntentTerminalException.class)
-public class TransactionalExecuteExecutionIntentDelegate {
+public class TransactionalExecuteExecutionIntentDelegate
+    implements ExecuteTransactionalExecutionIntentDelegatePort {
 
   private static final String BROADCAST_FAILED = "BROADCAST_FAILED";
 
@@ -67,6 +69,7 @@ public class TransactionalExecuteExecutionIntentDelegate {
    * inside the EIP-7702 path. Repeated calls for already-submitted intents return current state
    * without creating a new transaction.
    */
+  @Override
   public ExecuteExecutionIntentResult execute(
       ExecuteExecutionIntentCommand command, SponsorWalletGate gate) {
     ExecutionIntent intent =

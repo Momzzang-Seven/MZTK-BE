@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
@@ -231,13 +232,11 @@ public class ExecutionIntentServiceConfig {
   @Bean
   @ConditionalOnUserExecutionEnabled
   ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
-      TransactionalExecuteExecutionIntentDelegate transactionalExecuteExecutionIntentDelegate,
-      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort,
-      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort) {
+      ExecuteTransactionalExecutionIntentDelegatePort
+          executeTransactionalExecutionIntentDelegatePort,
+      SponsorWalletPreflight sponsorWalletPreflight) {
     return new ExecuteExecutionIntentService(
-        transactionalExecuteExecutionIntentDelegate,
-        loadSponsorTreasuryWalletPort,
-        verifyTreasuryWalletForSignPort);
+        executeTransactionalExecutionIntentDelegatePort, sponsorWalletPreflight);
   }
 
   @Bean
