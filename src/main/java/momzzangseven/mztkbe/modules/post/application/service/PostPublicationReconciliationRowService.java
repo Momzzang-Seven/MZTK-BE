@@ -37,20 +37,39 @@ public class PostPublicationReconciliationRowService implements ReconcilePostPub
       return PostPublicationReconciliationRowResult.unchanged(post.getId());
     }
     if (!dryRun) {
-      postPersistencePort.savePost(applyTargetStatus(post, target, decision.evidence()));
+      int updatedRows = updatePublicationState(post, target, decision.evidence());
+      if (updatedRows == 0) {
+        return PostPublicationReconciliationRowResult.staleSkipped(post.getId());
+      }
     }
     return PostPublicationReconciliationRowResult.changed(post.getId(), target);
   }
 
-  private Post applyTargetStatus(
+  private int updatePublicationState(
       Post post, PostPublicationStatus target, QuestionPublicationEvidence evidence) {
-    return switch (target) {
-      case PENDING -> post.markPublicationPending(evidence.latestCreateExecutionIntentId());
-      case VISIBLE -> post.markPublicationVisible();
-      case FAILED ->
-          post.markPublicationFailed(
-              evidence.latestCreateIntentStatus(), "publication reconciliation");
-    };
+    return postPersistencePort.updateQuestionPublicationStateIfCurrent(
+        post.getId(),
+        post.getPublicationStatus(),
+        target,
+        currentCreateExecutionIntentId(target, evidence),
+        publicationFailureTerminalStatus(target, evidence),
+        publicationFailureReason(target));
+  }
+
+  private String currentCreateExecutionIntentId(
+      PostPublicationStatus target, QuestionPublicationEvidence evidence) {
+    return target == PostPublicationStatus.PENDING
+        ? evidence.latestCreateExecutionIntentId()
+        : null;
+  }
+
+  private String publicationFailureTerminalStatus(
+      PostPublicationStatus target, QuestionPublicationEvidence evidence) {
+    return target == PostPublicationStatus.FAILED ? evidence.latestCreateIntentStatus() : null;
+  }
+
+  private String publicationFailureReason(PostPublicationStatus target) {
+    return target == PostPublicationStatus.FAILED ? "publication reconciliation" : null;
   }
 
   private ReconciliationDecision resolveDecision(Post post) {

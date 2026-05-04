@@ -93,6 +93,7 @@ public class CommentService
   @Transactional
   public void deleteComment(DeleteCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
+    validatePostWritable(comment.getPostId());
     comment.validateWriter(command.userId());
 
     comment.delete();

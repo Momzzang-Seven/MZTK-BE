@@ -169,6 +169,24 @@ public class PostPersistenceAdapter implements PostPersistencePort {
   }
 
   @Override
+  public int updateQuestionPublicationStateIfCurrent(
+      Long postId,
+      PostPublicationStatus currentStatus,
+      PostPublicationStatus targetStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason) {
+    return postJpaRepository.updatePublicationStateByIdIfCurrent(
+        postId,
+        PostType.QUESTION,
+        currentStatus,
+        targetStatus,
+        currentCreateExecutionIntentId,
+        publicationFailureTerminalStatus,
+        publicationFailureReason);
+  }
+
+  @Override
   public int markQuestionPostSolved(Long postId) {
     return postJpaRepository.markResolvedByIdIfType(
         postId, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);

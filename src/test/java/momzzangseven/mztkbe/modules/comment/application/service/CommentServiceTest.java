@@ -531,16 +531,33 @@ class CommentServiceTest {
   }
 
   @Test
-  @DisplayName("deleteComment() allows writer deletion without parent post visibility check")
-  void deleteComment_hiddenParentPost_allowsWriterDeletion() {
+  @DisplayName("deleteComment() soft-deletes writer comment when parent post is writable")
+  void deleteComment_visibleParentPost_deletesWriterComment() {
     LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
     Comment comment = comment(31L, 100L, 200L, null, "comment", false, now);
     given(loadCommentPort.loadComment(31L)).willReturn(Optional.of(comment));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
 
     commentService.deleteComment(new DeleteCommentCommand(31L, 200L));
 
-    verify(loadPostPort, never()).loadPostVisibilityContext(any(Long.class));
+    verify(loadPostPort).loadPostVisibilityContext(100L);
     verify(saveCommentPort).saveComment(org.mockito.ArgumentMatchers.argThat(Comment::isDeleted));
+  }
+
+  @Test
+  @DisplayName("deleteComment() throws when parent post is not publicly writable")
+  void deleteComment_hiddenParentPost_throwsBusinessException() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = comment(32L, 100L, 200L, null, "comment", false, now);
+    given(loadCommentPort.loadComment(32L)).willReturn(Optional.of(comment));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(hiddenPostContext(100L, 200L)));
+
+    assertThatThrownBy(() -> commentService.deleteComment(new DeleteCommentCommand(32L, 200L)))
+        .isInstanceOf(BusinessException.class);
+
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
   }
 
   private Comment comment(
