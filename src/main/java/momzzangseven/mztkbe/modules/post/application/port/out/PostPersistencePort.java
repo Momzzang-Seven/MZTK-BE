@@ -36,5 +36,13 @@ public interface PostPersistencePort {
   int updateQuestionPublicationStatusIfCurrent(
       Long postId, PostPublicationStatus currentStatus, PostPublicationStatus targetStatus);
 
+  int updateQuestionPublicationStateIfCurrent(
+      Long postId,
+      PostPublicationStatus currentStatus,
+      PostPublicationStatus targetStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason);
+
   int markQuestionPostSolved(Long postId);
 }

@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -18,7 +19,6 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -40,16 +40,18 @@ class PostPublicationReconciliationRowServiceTest {
     when(loadQuestionPublicationEvidencePort.loadEvidence(10L, 1L))
         .thenReturn(
             new QuestionPublicationEvidence(true, true, "CREATED", false, false, null, "intent-1"));
+    when(postPersistencePort.updateQuestionPublicationStateIfCurrent(
+            10L, PostPublicationStatus.PENDING, PostPublicationStatus.VISIBLE, null, null, null))
+        .thenReturn(1);
 
     var result = service.reconcile(pending, false);
 
-    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
-    verify(postPersistencePort).savePost(postCaptor.capture());
     assertThat(result.outcome()).isEqualTo(PostPublicationReconciliationRowResult.Outcome.CHANGED);
     assertThat(result.targetStatus()).isEqualTo(PostPublicationStatus.VISIBLE);
-    assertThat(postCaptor.getValue().getPublicationStatus())
-        .isEqualTo(PostPublicationStatus.VISIBLE);
-    assertThat(postCaptor.getValue().getCurrentCreateExecutionIntentId()).isNull();
+    verify(postPersistencePort)
+        .updateQuestionPublicationStateIfCurrent(
+            10L, PostPublicationStatus.PENDING, PostPublicationStatus.VISIBLE, null, null, null);
+    verify(postPersistencePort, never()).savePost(any(Post.class));
   }
 
   @Test
@@ -60,15 +62,27 @@ class PostPublicationReconciliationRowServiceTest {
     when(loadQuestionPublicationEvidencePort.loadEvidence(11L, 1L))
         .thenReturn(
             new QuestionPublicationEvidence(true, false, null, false, true, "EXPIRED", "intent-1"));
+    when(postPersistencePort.updateQuestionPublicationStateIfCurrent(
+            11L,
+            PostPublicationStatus.PENDING,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation"))
+        .thenReturn(1);
 
     var result = service.reconcile(pending, false);
 
-    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
-    verify(postPersistencePort).savePost(postCaptor.capture());
     assertThat(result.targetStatus()).isEqualTo(PostPublicationStatus.FAILED);
-    assertThat(postCaptor.getValue().getPublicationStatus())
-        .isEqualTo(PostPublicationStatus.FAILED);
-    assertThat(postCaptor.getValue().getPublicationFailureTerminalStatus()).isEqualTo("EXPIRED");
+    verify(postPersistencePort)
+        .updateQuestionPublicationStateIfCurrent(
+            11L,
+            PostPublicationStatus.PENDING,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation");
+    verify(postPersistencePort, never()).savePost(any(Post.class));
   }
 
   @Test
@@ -79,13 +93,27 @@ class PostPublicationReconciliationRowServiceTest {
     when(loadQuestionPublicationEvidencePort.loadEvidence(12L, 1L))
         .thenReturn(
             new QuestionPublicationEvidence(true, false, null, true, false, "SIGNED", "intent-2"));
+    when(postPersistencePort.updateQuestionPublicationStateIfCurrent(
+            12L,
+            PostPublicationStatus.FAILED,
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null))
+        .thenReturn(1);
 
     var result = service.reconcile(failed, false);
 
-    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
-    verify(postPersistencePort).savePost(postCaptor.capture());
     assertThat(result.targetStatus()).isEqualTo(PostPublicationStatus.PENDING);
-    assertThat(postCaptor.getValue().getCurrentCreateExecutionIntentId()).isEqualTo("intent-2");
+    verify(postPersistencePort)
+        .updateQuestionPublicationStateIfCurrent(
+            12L,
+            PostPublicationStatus.FAILED,
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+    verify(postPersistencePort, never()).savePost(any(Post.class));
   }
 
   @Test
@@ -102,7 +130,9 @@ class PostPublicationReconciliationRowServiceTest {
 
     assertThat(result.outcome())
         .isEqualTo(PostPublicationReconciliationRowResult.Outcome.UNCHANGED);
-    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never())
+        .updateQuestionPublicationStateIfCurrent(any(), any(), any(), any(), any(), any());
+    verify(postPersistencePort, never()).savePost(any(Post.class));
   }
 
   @Test
@@ -119,7 +149,9 @@ class PostPublicationReconciliationRowServiceTest {
 
     assertThat(result.outcome())
         .isEqualTo(PostPublicationReconciliationRowResult.Outcome.NEEDS_REVIEW);
-    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never())
+        .updateQuestionPublicationStateIfCurrent(any(), any(), any(), any(), any(), any());
+    verify(postPersistencePort, never()).savePost(any(Post.class));
   }
 
   @Test
@@ -133,7 +165,28 @@ class PostPublicationReconciliationRowServiceTest {
 
     assertThat(result.outcome())
         .isEqualTo(PostPublicationReconciliationRowResult.Outcome.STALE_SKIPPED);
-    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verify(postPersistencePort, never())
+        .updateQuestionPublicationStateIfCurrent(any(), any(), any(), any(), any(), any());
+    verify(postPersistencePort, never()).savePost(any(Post.class));
+  }
+
+  @Test
+  @DisplayName("conditional update miss is reported as stale skipped")
+  void conditionalUpdateMissIsStaleSkipped() {
+    Post pending = questionPost(16L, PostPublicationStatus.PENDING);
+    when(postPersistencePort.loadPostForUpdate(16L)).thenReturn(Optional.of(pending));
+    when(loadQuestionPublicationEvidencePort.loadEvidence(16L, 1L))
+        .thenReturn(
+            new QuestionPublicationEvidence(true, true, "CREATED", false, false, null, "intent-1"));
+    when(postPersistencePort.updateQuestionPublicationStateIfCurrent(
+            16L, PostPublicationStatus.PENDING, PostPublicationStatus.VISIBLE, null, null, null))
+        .thenReturn(0);
+
+    var result = service.reconcile(pending, false);
+
+    assertThat(result.outcome())
+        .isEqualTo(PostPublicationReconciliationRowResult.Outcome.STALE_SKIPPED);
+    verify(postPersistencePort, never()).savePost(any(Post.class));
   }
 
   private Post questionPost(Long postId, PostPublicationStatus publicationStatus) {

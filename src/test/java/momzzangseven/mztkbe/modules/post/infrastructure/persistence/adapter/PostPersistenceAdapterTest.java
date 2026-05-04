@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.global.pagination.CursorScope;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -231,6 +232,41 @@ class PostPersistenceAdapterTest {
     List<Post> posts = postPersistenceAdapter.loadPostsByIdsPreservingOrder(List.of(2L, 999L, 1L));
 
     assertThat(posts).extracting(Post::getId).containsExactly(2L, 1L);
+  }
+
+  @Test
+  @DisplayName(
+      "updateQuestionPublicationStateIfCurrent performs explicit conditional lifecycle update")
+  void updateQuestionPublicationStateIfCurrentDelegates() {
+    when(postJpaRepository.updatePublicationStateByIdIfCurrent(
+            9L,
+            PostType.QUESTION,
+            PostPublicationStatus.PENDING,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation"))
+        .thenReturn(1);
+
+    int updated =
+        postPersistenceAdapter.updateQuestionPublicationStateIfCurrent(
+            9L,
+            PostPublicationStatus.PENDING,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation");
+
+    assertThat(updated).isEqualTo(1);
+    verify(postJpaRepository)
+        .updatePublicationStateByIdIfCurrent(
+            9L,
+            PostType.QUESTION,
+            PostPublicationStatus.PENDING,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation");
   }
 
   @Test

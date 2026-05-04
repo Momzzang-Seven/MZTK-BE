@@ -46,6 +46,27 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("currentStatus") PostPublicationStatus currentStatus,
       @Param("targetStatus") PostPublicationStatus targetStatus);
 
+  // Used by reconciliation when publication lifecycle metadata must be adjusted explicitly,
+  // without merging a full post aggregate.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "update PostEntity p"
+          + " set p.publicationStatus = :targetStatus,"
+          + " p.currentCreateExecutionIntentId = :currentCreateExecutionIntentId,"
+          + " p.publicationFailureTerminalStatus = :publicationFailureTerminalStatus,"
+          + " p.publicationFailureReason = :publicationFailureReason"
+          + " where p.id = :postId"
+          + " and p.type = :postType"
+          + " and p.publicationStatus = :currentStatus")
+  int updatePublicationStateByIdIfCurrent(
+      @Param("postId") Long postId,
+      @Param("postType") PostType postType,
+      @Param("currentStatus") PostPublicationStatus currentStatus,
+      @Param("targetStatus") PostPublicationStatus targetStatus,
+      @Param("currentCreateExecutionIntentId") String currentCreateExecutionIntentId,
+      @Param("publicationFailureTerminalStatus") String publicationFailureTerminalStatus,
+      @Param("publicationFailureReason") String publicationFailureReason);
+
   // Keep both v2 tag cursor native queries aligned with
   // PostPersistenceAdapter#containsCursorSearch: when search is present,
   // exclude FREE posts and match QUESTION titles only.
