@@ -2,12 +2,12 @@ package momzzangseven.mztkbe.modules.admin.user.api.dto;
 
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusCommand;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
 
 /** Request DTO for {@code PATCH /admin/users/{userId}/status}. */
 public record AdminUserStatusChangeRequestDTO(
-    @NotNull(message = "Status is required") AccountStatus status,
+    @NotNull(message = "Status is required") AdminUserAccountStatus status,
     @Size(max = 500, message = "Reason must not exceed 500 characters") String reason) {
 
   public ChangeAdminUserStatusCommand toCommand(Long operatorUserId, Long targetUserId) {

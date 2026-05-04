@@ -3,6 +3,11 @@ package momzzangseven.mztkbe.global.security.aspect;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardCommentService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostCommentsService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostsService;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminRefundUseCase;
@@ -24,6 +29,48 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("@AdminOnly 어노테이션 컴파일/리플렉션 가드 테스트")
 class AdminOnlyAnnotationTest {
+
+  @Test
+  @DisplayName("관리자 게시글 목록 조회는 admin guard는 유지하되 audit=false 로 설정한다")
+  void getAdminBoardPostsService_isGuardedWithoutAudit() throws NoSuchMethodException {
+    AdminOnly annotation =
+        GetAdminBoardPostsService.class
+            .getMethod("execute", GetAdminBoardPostsCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POSTS_VIEW");
+    assertThat(annotation.audit()).isFalse();
+  }
+
+  @Test
+  @DisplayName("관리자 댓글 목록 조회는 admin guard는 유지하되 audit=false 로 설정한다")
+  void getAdminBoardPostCommentsService_isGuardedWithoutAudit() throws NoSuchMethodException {
+    AdminOnly annotation =
+        GetAdminBoardPostCommentsService.class
+            .getMethod("execute", GetAdminBoardPostCommentsCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POST_COMMENTS_VIEW");
+    assertThat(annotation.audit()).isFalse();
+  }
+
+  @Test
+  @DisplayName("관리자 댓글 ban mutation은 audit=true 기본값을 유지한다")
+  void banAdminBoardCommentService_keepsAuditEnabled() throws NoSuchMethodException {
+    AdminOnly annotation =
+        BanAdminBoardCommentService.class
+            .getMethod(
+                "execute",
+                momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand
+                    .class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_COMMENT_BAN");
+    assertThat(annotation.audit()).isTrue();
+  }
 
   @Test
   @DisplayName(

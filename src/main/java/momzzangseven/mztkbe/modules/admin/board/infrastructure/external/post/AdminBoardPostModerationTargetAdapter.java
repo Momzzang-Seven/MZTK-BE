@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.admin.board.infrastructure.external.post;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostModerationTargetPort;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardType;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetManagedBoardPostUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -18,7 +19,9 @@ public class AdminBoardPostModerationTargetAdapter
   public AdminBoardPostModerationTarget load(Long postId) {
     var post = getManagedBoardPostUseCase.execute(postId);
     return new AdminBoardPostModerationTarget(
-        post.postId(), toBoardType(post.type()), post.status());
+        post.postId(),
+        toBoardType(post.type()),
+        AdminBoardPostStatus.valueOf(post.status().name()));
   }
 
   private AdminBoardType toBoardType(PostType postType) {

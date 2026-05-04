@@ -37,8 +37,13 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
       actionType = "ADMIN_BOARD_POSTS_VIEW",
       targetType = AuditTargetType.POST,
       operatorId = "#command.operatorUserId",
-      targetId = "'posts'")
+      targetId = "'posts'",
+      audit = false)
   public Page<AdminBoardPostResult> execute(GetAdminBoardPostsCommand command) {
+    if (supportsPostPagedSort(command.sortKey())) {
+      return executePostPaged(command);
+    }
+
     List<LoadAdminBoardPostsPort.AdminBoardPostView> posts =
         loadAdminBoardPostsPort.load(
             new LoadAdminBoardPostsPort.AdminBoardPostQuery(command.search(), command.status()));
@@ -57,12 +62,49 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
             .sorted(buildComparator(command.sortKey()))
             .toList();
 
-    int fromIndex = Math.min(command.page() * command.size(), combined.size());
+    long offset = (long) command.page() * command.size();
+    if (offset >= combined.size()) {
+      return new PageImpl<>(
+          List.of(), PageRequest.of(command.page(), command.size()), combined.size());
+    }
+    int fromIndex = (int) offset;
     int toIndex = Math.min(fromIndex + command.size(), combined.size());
     return new PageImpl<>(
         combined.subList(fromIndex, toIndex),
         PageRequest.of(command.page(), command.size()),
         combined.size());
+  }
+
+  private Page<AdminBoardPostResult> executePostPaged(GetAdminBoardPostsCommand command) {
+    Page<LoadAdminBoardPostsPort.AdminBoardPostView> postPage =
+        loadAdminBoardPostsPort.loadPage(
+            new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
+                command.search(),
+                command.status(),
+                command.page(),
+                command.size(),
+                command.sortKey()));
+    if (postPage.isEmpty()) {
+      return emptyPage(command.page(), command.size());
+    }
+
+    List<LoadAdminBoardPostsPort.AdminBoardPostView> posts = postPage.getContent();
+    List<Long> postIds =
+        posts.stream().map(LoadAdminBoardPostsPort.AdminBoardPostView::postId).toList();
+    Map<Long, Long> commentCounts = loadAdminBoardPostCommentCountsPort.load(postIds);
+    Map<Long, String> writerNicknames = loadAdminBoardWriterNicknamesPort.load(writerIds(posts));
+
+    List<AdminBoardPostResult> items =
+        posts.stream().map(post -> toResult(post, writerNicknames, commentCounts)).toList();
+    return new PageImpl<>(
+        items, PageRequest.of(command.page(), command.size()), postPage.getTotalElements());
+  }
+
+  private boolean supportsPostPagedSort(AdminBoardPostSortKey sortKey) {
+    return sortKey == AdminBoardPostSortKey.CREATED_AT
+        || sortKey == AdminBoardPostSortKey.POST_ID
+        || sortKey == AdminBoardPostSortKey.STATUS
+        || sortKey == AdminBoardPostSortKey.TYPE;
   }
 
   private static Collection<Long> writerIds(
@@ -87,10 +129,11 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
   }
 
   private static String preview(String content) {
-    if (content == null || content.length() <= CONTENT_PREVIEW_LENGTH) {
+    if (content == null || content.codePointCount(0, content.length()) <= CONTENT_PREVIEW_LENGTH) {
       return content;
     }
-    return content.substring(0, CONTENT_PREVIEW_LENGTH);
+    int endIndex = content.offsetByCodePoints(0, CONTENT_PREVIEW_LENGTH);
+    return content.substring(0, endIndex);
   }
 
   private Comparator<AdminBoardPostResult> buildComparator(AdminBoardPostSortKey sortKey) {

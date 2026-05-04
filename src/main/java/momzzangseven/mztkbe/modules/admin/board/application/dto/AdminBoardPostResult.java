@@ -1,14 +1,14 @@
 package momzzangseven.mztkbe.modules.admin.board.application.dto;
 
 import java.time.LocalDateTime;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 
 /** Result row for admin board posts. */
 public record AdminBoardPostResult(
     Long postId,
-    PostType type,
-    PostStatus status,
+    AdminBoardPostType type,
+    AdminBoardPostStatus status,
     String title,
     String contentPreview,
     Long writerId,

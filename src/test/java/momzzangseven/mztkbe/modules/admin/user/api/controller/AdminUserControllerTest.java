@@ -8,14 +8,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserListItemResult;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusCommand;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusResult;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.GetAdminUsersCommand;
 import momzzangseven.mztkbe.modules.admin.user.application.port.in.ChangeAdminUserStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.user.application.port.in.GetAdminUsersUseCase;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -70,10 +70,10 @@ class AdminUserControllerTest {
                     new AdminUserListItemResult(
                         21L,
                         "alpha",
-                        UserRole.USER,
+                        AdminUserRole.USER,
                         "alpha@example.com",
                         Instant.parse("2025-01-10T11:22:33Z"),
-                        AccountStatus.ACTIVE,
+                        AdminUserAccountStatus.ACTIVE,
                         3L,
                         4L))));
 
@@ -125,7 +125,7 @@ class AdminUserControllerTest {
     given(
             changeAdminUserStatusUseCase.execute(
                 org.mockito.ArgumentMatchers.any(ChangeAdminUserStatusCommand.class)))
-        .willReturn(new ChangeAdminUserStatusResult(21L, AccountStatus.BLOCKED));
+        .willReturn(new ChangeAdminUserStatusResult(21L, AdminUserAccountStatus.BLOCKED));
 
     mockMvc
         .perform(

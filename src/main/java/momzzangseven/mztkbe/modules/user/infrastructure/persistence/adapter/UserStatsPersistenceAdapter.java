@@ -16,15 +16,19 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UserStatsPersistenceAdapter implements LoadUserStatsPort {
 
+  private static final List<UserRole> COUNTED_ROLES = List.of(UserRole.USER, UserRole.TRAINER);
+
   private final UserStatsQueryRepository userStatsQueryRepository;
 
   @Override
   @Transactional(readOnly = true)
   public UserStatusCounts loadUserStatusCounts() {
     return new UserStatusCounts(
-        userStatsQueryRepository.countAllUserAccounts(),
-        userStatsQueryRepository.countUserAccountsByStatus(AccountStatus.ACTIVE),
-        userStatsQueryRepository.countUserAccountsByStatus(AccountStatus.BLOCKED));
+        userStatsQueryRepository.countUserAccountsByRoles(COUNTED_ROLES),
+        userStatsQueryRepository.countUserAccountsByStatusAndRoles(
+            AccountStatus.ACTIVE, COUNTED_ROLES),
+        userStatsQueryRepository.countUserAccountsByStatusAndRoles(
+            AccountStatus.BLOCKED, COUNTED_ROLES));
   }
 
   @Override

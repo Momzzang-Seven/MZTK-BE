@@ -1,11 +1,14 @@
 package momzzangseven.mztkbe.modules.admin.user.infrastructure.external.user;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserRoleFilter;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUsersPort;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserRole;
 import momzzangseven.mztkbe.modules.user.application.dto.GetManagedUsersPageQuery;
 import momzzangseven.mztkbe.modules.user.application.dto.GetManagedUsersQuery;
 import momzzangseven.mztkbe.modules.user.application.dto.ManagedUserView;
 import momzzangseven.mztkbe.modules.user.application.port.in.GetManagedUsersUseCase;
+import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
@@ -21,14 +24,9 @@ public class AdminUserReadAdapter implements LoadAdminUsersPort {
     return getManagedUsersUseCase
         .execute(
             new GetManagedUsersQuery(
-                query.search(),
-                query.role() != null ? query.role().toUserRole() : null,
-                query.candidateUserIds()))
+                query.search(), toUserRole(query.role()), query.candidateUserIds()))
         .stream()
-        .map(
-            item ->
-                new AdminUserProfileView(
-                    item.userId(), item.nickname(), item.role(), item.email(), item.joinedAt()))
+        .map(this::toProfileView)
         .toList();
   }
 
@@ -38,7 +36,7 @@ public class AdminUserReadAdapter implements LoadAdminUsersPort {
         .executePage(
             new GetManagedUsersPageQuery(
                 query.search(),
-                query.role() != null ? query.role().toUserRole() : null,
+                toUserRole(query.role()),
                 query.candidateUserIds(),
                 query.page(),
                 query.size(),
@@ -48,6 +46,18 @@ public class AdminUserReadAdapter implements LoadAdminUsersPort {
 
   private AdminUserProfileView toProfileView(ManagedUserView item) {
     return new AdminUserProfileView(
-        item.userId(), item.nickname(), item.role(), item.email(), item.joinedAt());
+        item.userId(),
+        item.nickname(),
+        toAdminUserRole(item.role()),
+        item.email(),
+        item.joinedAt());
+  }
+
+  private UserRole toUserRole(AdminUserRoleFilter role) {
+    return role == null ? null : UserRole.valueOf(role.name());
+  }
+
+  private AdminUserRole toAdminUserRole(UserRole role) {
+    return AdminUserRole.valueOf(role.name());
   }
 }

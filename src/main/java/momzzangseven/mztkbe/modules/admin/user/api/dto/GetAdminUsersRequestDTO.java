@@ -1,17 +1,17 @@
 package momzzangseven.mztkbe.modules.admin.user.api.dto;
 
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.common.application.dto.AdminPageQuery;
 import momzzangseven.mztkbe.modules.admin.common.application.dto.AdminPageQueryNormalizer;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserPagePolicies;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserRoleFilter;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserSortKey;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.GetAdminUsersCommand;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
 
 /** Query DTO for {@code GET /admin/users}. */
 public record GetAdminUsersRequestDTO(
     String search,
-    AccountStatus status,
+    AdminUserAccountStatus status,
     AdminUserRoleFilter role,
     Integer page,
     Integer size,

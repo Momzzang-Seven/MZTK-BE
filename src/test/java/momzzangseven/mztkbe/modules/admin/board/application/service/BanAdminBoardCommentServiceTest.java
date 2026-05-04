@@ -5,6 +5,10 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.BanAdminBoardCommentPort;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostModerationTargetPort;
@@ -12,8 +16,8 @@ import momzzangseven.mztkbe.modules.admin.board.application.port.out.SaveAdminBo
 import momzzangseven.mztkbe.modules.admin.board.domain.model.AdminBoardModerationAction;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardType;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +33,7 @@ class BanAdminBoardCommentServiceTest {
   @Mock private BanAdminBoardCommentPort banAdminBoardCommentPort;
   @Mock private LoadAdminBoardPostModerationTargetPort loadAdminBoardPostModerationTargetPort;
   @Mock private SaveAdminBoardModerationActionPort saveAdminBoardModerationActionPort;
+  @Mock private Clock appClock;
 
   @InjectMocks private BanAdminBoardCommentService service;
 
@@ -42,7 +47,9 @@ class BanAdminBoardCommentServiceTest {
     given(loadAdminBoardPostModerationTargetPort.load(21L))
         .willReturn(
             new LoadAdminBoardPostModerationTargetPort.AdminBoardPostModerationTarget(
-                21L, AdminBoardType.FREE, PostStatus.OPEN));
+                21L, AdminBoardType.FREE, AdminBoardPostStatus.OPEN));
+    given(appClock.instant()).willReturn(Instant.parse("2026-05-04T00:00:00Z"));
+    given(appClock.getZone()).willReturn(ZoneId.of("UTC"));
 
     var result = service.execute(command);
 
@@ -61,6 +68,8 @@ class BanAdminBoardCommentServiceTest {
     assertThat(captor.getValue().getBoardType()).isEqualTo(AdminBoardType.FREE);
     assertThat(captor.getValue().getReasonCode()).isEqualTo(AdminBoardModerationReasonCode.SPAM);
     assertThat(captor.getValue().getReasonDetail()).isEqualTo("ad comment");
+    assertThat(captor.getValue().getCreatedAt())
+        .isEqualTo(LocalDateTime.parse("2026-05-04T00:00:00"));
   }
 
   @Test

@@ -1,18 +1,18 @@
 package momzzangseven.mztkbe.modules.admin.user.api.dto;
 
 import java.time.Instant;
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserListItemResult;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserRole;
 
 /** Response row DTO for {@code GET /admin/users}. */
 public record AdminUserListItemResponseDTO(
     Long userId,
     String nickname,
-    UserRole role,
+    AdminUserRole role,
     String email,
     Instant joinedAt,
-    AccountStatus status,
+    AdminUserAccountStatus status,
     long postCount,
     long commentCount) {
 
