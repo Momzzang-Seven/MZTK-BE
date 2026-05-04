@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicatio
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -72,16 +73,13 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
               .orElse(null));
     }
 
-    RecoveryPayload payload = runInTransaction(() -> prepareManagedRecovery(command));
-    QuestionExecutionWriteView web3 =
-        questionLifecycleExecutionPort
-            .recoverQuestionCreate(
-                command.postId(),
-                command.requesterId(),
-                payload.questionContent(),
-                payload.rewardMztk())
-            .orElse(null);
-    recordPreparedCreateIntentIfPresent(command.postId(), web3);
+    RecoveryPreparation preparation = runInTransaction(() -> prepareManagedRecovery(command));
+    QuestionExecutionWriteView web3 = recoverManagedQuestionCreate(command, preparation);
+    runInTransaction(
+        () -> {
+          finalizeManagedRecovery(command, preparation, web3);
+          return null;
+        });
 
     return new PostMutationResult(command.postId(), web3);
   }
@@ -92,17 +90,82 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     }
   }
 
-  private RecoveryPayload prepareManagedRecovery(RecoverQuestionPostEscrowCommand command) {
+  private RecoveryPreparation prepareManagedRecovery(RecoverQuestionPostEscrowCommand command) {
     Post post = loadAndValidateRecoveryTarget(command);
     validateManagedRecoveryEvidence(command, post);
 
-    Post recoveryPost = applyOptionalEdit(command, post).markPublicationPending();
-    postPersistencePort.savePost(recoveryPost);
-    syncTagsAndImages(command, recoveryPost);
-    return new RecoveryPayload(recoveryPost.getContent(), recoveryPost.getReward());
+    long activeAnswerCount = 0L;
+    Post recoveryPost = post;
+    if (command.hasMutationFields()) {
+      activeAnswerCount = countAnswersPort.countAnswers(post.getId());
+      validatePostImagesIfPresent(
+          command.requesterId(), post.getId(), post.getType(), command.imageIds());
+      recoveryPost =
+          post.update(command.title(), command.content(), command.tags(), activeAnswerCount);
+    }
+    return RecoveryPreparation.from(post, recoveryPost, activeAnswerCount);
+  }
+
+  private QuestionExecutionWriteView recoverManagedQuestionCreate(
+      RecoverQuestionPostEscrowCommand command, RecoveryPreparation preparation) {
+    QuestionExecutionWriteView web3 =
+        questionLifecycleExecutionPort
+            .recoverQuestionCreate(
+                command.postId(),
+                command.requesterId(),
+                preparation.questionContent(),
+                preparation.rewardMztk())
+            .orElse(null);
+    if (preparedCreateIntentId(web3) == null) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_CREATE_RECOVERY_UNAVAILABLE);
+    }
+    return web3;
+  }
+
+  private void finalizeManagedRecovery(
+      RecoverQuestionPostEscrowCommand command,
+      RecoveryPreparation preparation,
+      QuestionExecutionWriteView web3) {
+    String executionIntentId = preparedCreateIntentId(web3);
+    Post post = loadAndValidateOwnedQuestion(command);
+    QuestionPublicationEvidence evidence =
+        loadQuestionPublicationEvidencePort.loadEvidence(post.getId(), command.requesterId());
+    validatePreparedCreateIntentEvidence(evidence, executionIntentId);
+
+    int updatedRows =
+        postPersistencePort.updateQuestionPublicationStateIfExpected(
+            post.getId(),
+            preparation.expectedPublicationStatus(),
+            preparation.expectedCurrentCreateExecutionIntentId(),
+            preparation.expectedPublicationFailureTerminalStatus(),
+            preparation.expectedPublicationFailureReason(),
+            PostPublicationStatus.PENDING,
+            executionIntentId,
+            null,
+            null);
+    if (updatedRows == 0) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT);
+    }
+
+    Post claimedPost = post.markPublicationPending(executionIntentId);
+    if (hasPostAggregateEdit(command)) {
+      Post editedPost =
+          claimedPost.update(
+              command.title(), command.content(), command.tags(), preparation.activeAnswerCount());
+      postPersistencePort.savePost(editedPost);
+    }
+    syncTagsAndImages(command, claimedPost);
   }
 
   private Post loadAndValidateRecoveryTarget(RecoverQuestionPostEscrowCommand command) {
+    Post post = loadAndValidateOwnedQuestion(command);
+    if (!post.isPublicationFailed()) {
+      throw new PostInvalidInputException("Only failed question posts support create recovery.");
+    }
+    return post;
+  }
+
+  private Post loadAndValidateOwnedQuestion(RecoverQuestionPostEscrowCommand command) {
     Post post =
         postPersistencePort
             .loadPostForUpdate(command.postId())
@@ -111,9 +174,6 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     if (post.getType() != PostType.QUESTION) {
       throw new PostInvalidInputException("Only question posts support escrow recovery.");
-    }
-    if (!post.isPublicationFailed()) {
-      throw new PostInvalidInputException("Only failed question posts support create recovery.");
     }
     return post;
   }
@@ -133,14 +193,16 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     }
   }
 
-  private Post applyOptionalEdit(RecoverQuestionPostEscrowCommand command, Post post) {
-    if (!command.hasMutationFields()) {
-      return post;
+  private void validatePreparedCreateIntentEvidence(
+      QuestionPublicationEvidence evidence, String executionIntentId) {
+    if (evidence.projectionExists()) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT);
     }
-    long activeAnswerCount = countAnswersPort.countAnswers(post.getId());
-    validatePostImagesIfPresent(
-        command.requesterId(), post.getId(), post.getType(), command.imageIds());
-    return post.update(command.title(), command.content(), command.tags(), activeAnswerCount);
+    if (evidence.activeCreateIntentExists()
+        && evidence.hasLatestCreateExecutionIntent(executionIntentId)) {
+      return;
+    }
+    throw new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT);
   }
 
   private void syncTagsAndImages(RecoverQuestionPostEscrowCommand command, Post post) {
@@ -164,22 +226,18 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     validatePostImagesPort.validateAttachableImages(userId, postId, postType, imageIds);
   }
 
-  private void recordPreparedCreateIntentIfPresent(Long postId, QuestionExecutionWriteView web3) {
+  private String preparedCreateIntentId(QuestionExecutionWriteView web3) {
     if (web3 == null
         || web3.executionIntent() == null
         || web3.executionIntent().id() == null
         || web3.executionIntent().id().isBlank()) {
-      return;
+      return null;
     }
-    runInTransaction(
-        () -> {
-          postPersistencePort
-              .loadPostForUpdate(postId)
-              .filter(post -> post.getType() == PostType.QUESTION)
-              .map(post -> post.markPublicationPending(web3.executionIntent().id()))
-              .ifPresent(postPersistencePort::savePost);
-          return null;
-        });
+    return web3.executionIntent().id();
+  }
+
+  private boolean hasPostAggregateEdit(RecoverQuestionPostEscrowCommand command) {
+    return command.title() != null || command.content() != null || command.tags() != null;
   }
 
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {
@@ -190,4 +248,26 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
   }
 
   private record RecoveryPayload(String questionContent, Long rewardMztk) {}
+
+  private record RecoveryPreparation(
+      String questionContent,
+      Long rewardMztk,
+      PostPublicationStatus expectedPublicationStatus,
+      String expectedCurrentCreateExecutionIntentId,
+      String expectedPublicationFailureTerminalStatus,
+      String expectedPublicationFailureReason,
+      long activeAnswerCount) {
+
+    private static RecoveryPreparation from(
+        Post expectedPost, Post payloadPost, long activeAnswerCount) {
+      return new RecoveryPreparation(
+          payloadPost.getContent(),
+          payloadPost.getReward(),
+          expectedPost.getPublicationStatus(),
+          expectedPost.getCurrentCreateExecutionIntentId(),
+          expectedPost.getPublicationFailureTerminalStatus(),
+          expectedPost.getPublicationFailureReason(),
+          activeAnswerCount);
+    }
+  }
 }

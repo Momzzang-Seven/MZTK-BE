@@ -67,6 +67,41 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
       @Param("publicationFailureTerminalStatus") String publicationFailureTerminalStatus,
       @Param("publicationFailureReason") String publicationFailureReason);
 
+  // Used by recovery flows that must claim one exact failed publication row before applying
+  // local follow-up edits. Every nullable lifecycle metadata field is compared null-safely.
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "update PostEntity p"
+          + " set p.publicationStatus = :targetStatus,"
+          + " p.currentCreateExecutionIntentId = :currentCreateExecutionIntentId,"
+          + " p.publicationFailureTerminalStatus = :publicationFailureTerminalStatus,"
+          + " p.publicationFailureReason = :publicationFailureReason"
+          + " where p.id = :postId"
+          + " and p.type = :postType"
+          + " and p.publicationStatus = :expectedStatus"
+          + " and ((:expectedCurrentCreateExecutionIntentId is null"
+          + " and p.currentCreateExecutionIntentId is null)"
+          + " or p.currentCreateExecutionIntentId = :expectedCurrentCreateExecutionIntentId)"
+          + " and ((:expectedPublicationFailureTerminalStatus is null"
+          + " and p.publicationFailureTerminalStatus is null)"
+          + " or p.publicationFailureTerminalStatus = :expectedPublicationFailureTerminalStatus)"
+          + " and ((:expectedPublicationFailureReason is null"
+          + " and p.publicationFailureReason is null)"
+          + " or p.publicationFailureReason = :expectedPublicationFailureReason)")
+  int updatePublicationStateByIdIfExpected(
+      @Param("postId") Long postId,
+      @Param("postType") PostType postType,
+      @Param("expectedStatus") PostPublicationStatus expectedStatus,
+      @Param("expectedCurrentCreateExecutionIntentId")
+          String expectedCurrentCreateExecutionIntentId,
+      @Param("expectedPublicationFailureTerminalStatus")
+          String expectedPublicationFailureTerminalStatus,
+      @Param("expectedPublicationFailureReason") String expectedPublicationFailureReason,
+      @Param("targetStatus") PostPublicationStatus targetStatus,
+      @Param("currentCreateExecutionIntentId") String currentCreateExecutionIntentId,
+      @Param("publicationFailureTerminalStatus") String publicationFailureTerminalStatus,
+      @Param("publicationFailureReason") String publicationFailureReason);
+
   // Keep both v2 tag cursor native queries aligned with
   // PostPersistenceAdapter#containsCursorSearch: when search is present,
   // exclude FREE posts and match QUESTION titles only.
