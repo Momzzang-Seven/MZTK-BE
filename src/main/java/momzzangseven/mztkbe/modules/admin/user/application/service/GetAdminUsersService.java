@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.admin.user.application.service;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserListItemResult;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserSortKey;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.GetAdminUsersCommand;
@@ -12,6 +11,7 @@ import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUse
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserPostCountsPort;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserStatusesPort;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUsersPort;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -54,7 +54,7 @@ public class GetAdminUsersService implements GetAdminUsersUseCase {
 
     java.util.List<Long> userIds =
         profiles.stream().map(LoadAdminUsersPort.AdminUserProfileView::userId).toList();
-    java.util.Map<Long, AccountStatus> statusByUserId =
+    java.util.Map<Long, AdminUserAccountStatus> statusByUserId =
         loadAdminUserStatusesPort.load(userIds, command.status());
     java.util.Map<Long, Long> postCounts = loadAdminUserPostCountsPort.load(userIds);
     java.util.Map<Long, Long> commentCounts = loadAdminUserCommentCountsPort.load(userIds);
@@ -76,7 +76,12 @@ public class GetAdminUsersService implements GetAdminUsersUseCase {
             .sorted(buildComparator(command.sortKey()))
             .toList();
 
-    int fromIndex = Math.min(command.page() * command.size(), combined.size());
+    long offset = (long) command.page() * command.size();
+    if (offset >= combined.size()) {
+      return new PageImpl<>(
+          java.util.List.of(), PageRequest.of(command.page(), command.size()), combined.size());
+    }
+    int fromIndex = (int) offset;
     int toIndex = Math.min(fromIndex + command.size(), combined.size());
     return new PageImpl<>(
         combined.subList(fromIndex, toIndex),
@@ -103,7 +108,7 @@ public class GetAdminUsersService implements GetAdminUsersUseCase {
         profilePage.getContent().stream()
             .map(LoadAdminUsersPort.AdminUserProfileView::userId)
             .toList();
-    java.util.Map<Long, AccountStatus> statusByUserId =
+    java.util.Map<Long, AdminUserAccountStatus> statusByUserId =
         loadAdminUserStatusesPort.load(userIds, command.status());
     java.util.Map<Long, Long> postCounts = loadAdminUserPostCountsPort.load(userIds);
     java.util.Map<Long, Long> commentCounts = loadAdminUserCommentCountsPort.load(userIds);
@@ -128,7 +133,7 @@ public class GetAdminUsersService implements GetAdminUsersUseCase {
         items, PageRequest.of(command.page(), command.size()), profilePage.getTotalElements());
   }
 
-  private java.util.Set<Long> resolveCandidateUserIds(AccountStatus status) {
+  private java.util.Set<Long> resolveCandidateUserIds(AdminUserAccountStatus status) {
     if (status == null) {
       return null;
     }

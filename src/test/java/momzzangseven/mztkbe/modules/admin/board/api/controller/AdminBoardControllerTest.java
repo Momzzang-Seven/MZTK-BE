@@ -23,8 +23,8 @@ import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoar
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -81,8 +81,8 @@ class AdminBoardControllerTest {
                 List.of(
                     new AdminBoardPostResult(
                         21L,
-                        PostType.FREE,
-                        PostStatus.OPEN,
+                        AdminBoardPostType.FREE,
+                        AdminBoardPostStatus.OPEN,
                         "title",
                         "content",
                         7L,

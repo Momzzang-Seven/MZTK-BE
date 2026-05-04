@@ -3,13 +3,13 @@ package momzzangseven.mztkbe.modules.admin.user.application.service;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusCommand;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusResult;
 import momzzangseven.mztkbe.modules.admin.user.application.port.in.ChangeAdminUserStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.ChangeAdminUserAccountStatusPort;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserRolePort;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +32,7 @@ public class ChangeAdminUserStatusService implements ChangeAdminUserStatusUseCas
     command.validate();
     validateSelfBlock(command);
 
-    UserRole targetRole = loadAdminUserRolePort.load(command.targetUserId());
+    AdminUserRole targetRole = loadAdminUserRolePort.load(command.targetUserId());
     if (targetRole.isAdmin()) {
       throw new IllegalArgumentException("Admin accounts are not managed by this API");
     }
@@ -45,7 +45,7 @@ public class ChangeAdminUserStatusService implements ChangeAdminUserStatusUseCas
   }
 
   private void validateSelfBlock(ChangeAdminUserStatusCommand command) {
-    if (command.status() == AccountStatus.BLOCKED
+    if (command.status() == AdminUserAccountStatus.BLOCKED
         && command.operatorUserId().equals(command.targetUserId())) {
       throw new IllegalArgumentException("Cannot block own account");
     }

@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.account.application.dto.GetManagedUserAccoun
 import momzzangseven.mztkbe.modules.account.application.port.in.GetManagedUserAccountStatusesUseCase;
 import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserStatusesPort;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,8 +17,22 @@ public class AdminUserStatusAdapter implements LoadAdminUserStatusesPort {
   private final GetManagedUserAccountStatusesUseCase getManagedUserAccountStatusesUseCase;
 
   @Override
-  public Map<Long, AccountStatus> load(List<Long> userIds, AccountStatus statusFilter) {
-    return getManagedUserAccountStatusesUseCase.execute(
-        new GetManagedUserAccountStatusesQuery(userIds, statusFilter));
+  public Map<Long, AdminUserAccountStatus> load(
+      List<Long> userIds, AdminUserAccountStatus statusFilter) {
+    return getManagedUserAccountStatusesUseCase
+        .execute(new GetManagedUserAccountStatusesQuery(userIds, toAccountStatus(statusFilter)))
+        .entrySet()
+        .stream()
+        .collect(
+            java.util.stream.Collectors.toMap(
+                Map.Entry::getKey, entry -> toAdminUserAccountStatus(entry.getValue())));
+  }
+
+  private AccountStatus toAccountStatus(AdminUserAccountStatus status) {
+    return status == null ? null : AccountStatus.valueOf(status.name());
+  }
+
+  private AdminUserAccountStatus toAdminUserAccountStatus(AccountStatus status) {
+    return AdminUserAccountStatus.valueOf(status.name());
   }
 }

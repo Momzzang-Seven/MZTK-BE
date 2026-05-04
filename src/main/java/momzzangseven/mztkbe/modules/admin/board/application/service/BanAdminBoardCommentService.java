@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.admin.board.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
@@ -24,6 +26,7 @@ public class BanAdminBoardCommentService implements BanAdminBoardCommentUseCase 
   private final BanAdminBoardCommentPort banAdminBoardCommentPort;
   private final LoadAdminBoardPostModerationTargetPort loadAdminBoardPostModerationTargetPort;
   private final SaveAdminBoardModerationActionPort saveAdminBoardModerationActionPort;
+  private final Clock appClock;
 
   @Override
   @Transactional
@@ -50,7 +53,8 @@ public class BanAdminBoardCommentService implements BanAdminBoardCommentUseCase 
               command.reasonCode(),
               command.reasonDetail(),
               AdminBoardModerationTargetFlowType.STANDARD,
-              AdminBoardModerationExecutionMode.SOFT_DELETE));
+              AdminBoardModerationExecutionMode.SOFT_DELETE,
+              LocalDateTime.now(appClock)));
     }
 
     return new AdminBoardModerationResult(

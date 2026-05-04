@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.account.application.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.user.UserBlockedException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenManager;
@@ -46,6 +47,9 @@ public class ReissueTokenService implements ReissueTokenUseCase {
 
     if (account.isDeleted()) {
       throw new UserWithdrawnException();
+    }
+    if (account.isBlocked()) {
+      throw new UserBlockedException();
     }
 
     RefreshToken dbRefreshToken = validator.inspectSecurityFlaw(tokenValue, jwtUserId);

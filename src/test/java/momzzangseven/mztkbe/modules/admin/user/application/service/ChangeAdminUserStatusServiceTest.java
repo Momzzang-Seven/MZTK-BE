@@ -6,11 +6,11 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.ChangeAdminUserStatusCommand;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.ChangeAdminUserAccountStatusPort;
 import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserRolePort;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,33 +30,35 @@ class ChangeAdminUserStatusServiceTest {
   @Test
   @DisplayName("ACTIVE/BLOCKED 대상 사용자를 BLOCKED 로 변경한다")
   void execute_blocksUser() {
-    given(loadAdminUserRolePort.load(21L)).willReturn(UserRole.USER);
-    given(changeAdminUserAccountStatusPort.change(21L, AccountStatus.BLOCKED))
+    given(loadAdminUserRolePort.load(21L)).willReturn(AdminUserRole.USER);
+    given(changeAdminUserAccountStatusPort.change(21L, AdminUserAccountStatus.BLOCKED))
         .willReturn(
             new ChangeAdminUserAccountStatusPort.ChangeAdminUserAccountStatusResult(
-                21L, AccountStatus.BLOCKED));
+                21L, AdminUserAccountStatus.BLOCKED));
 
     var result =
-        service.execute(new ChangeAdminUserStatusCommand(9L, 21L, AccountStatus.BLOCKED, "spam"));
+        service.execute(
+            new ChangeAdminUserStatusCommand(9L, 21L, AdminUserAccountStatus.BLOCKED, "spam"));
 
     assertThat(result.userId()).isEqualTo(21L);
-    assertThat(result.status()).isEqualTo(AccountStatus.BLOCKED);
+    assertThat(result.status()).isEqualTo(AdminUserAccountStatus.BLOCKED);
   }
 
   @Test
   @DisplayName("BLOCKED 사용자를 ACTIVE 로 변경한다")
   void execute_activatesUser() {
-    given(loadAdminUserRolePort.load(21L)).willReturn(UserRole.TRAINER);
-    given(changeAdminUserAccountStatusPort.change(21L, AccountStatus.ACTIVE))
+    given(loadAdminUserRolePort.load(21L)).willReturn(AdminUserRole.TRAINER);
+    given(changeAdminUserAccountStatusPort.change(21L, AdminUserAccountStatus.ACTIVE))
         .willReturn(
             new ChangeAdminUserAccountStatusPort.ChangeAdminUserAccountStatusResult(
-                21L, AccountStatus.ACTIVE));
+                21L, AdminUserAccountStatus.ACTIVE));
 
     var result =
-        service.execute(new ChangeAdminUserStatusCommand(9L, 21L, AccountStatus.ACTIVE, "clear"));
+        service.execute(
+            new ChangeAdminUserStatusCommand(9L, 21L, AdminUserAccountStatus.ACTIVE, "clear"));
 
     assertThat(result.userId()).isEqualTo(21L);
-    assertThat(result.status()).isEqualTo(AccountStatus.ACTIVE);
+    assertThat(result.status()).isEqualTo(AdminUserAccountStatus.ACTIVE);
   }
 
   @Test
@@ -65,7 +67,7 @@ class ChangeAdminUserStatusServiceTest {
     assertThatThrownBy(
             () ->
                 service.execute(
-                    new ChangeAdminUserStatusCommand(9L, 9L, AccountStatus.BLOCKED, null)))
+                    new ChangeAdminUserStatusCommand(9L, 9L, AdminUserAccountStatus.BLOCKED, null)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Cannot block own account");
 
@@ -77,12 +79,13 @@ class ChangeAdminUserStatusServiceTest {
   @Test
   @DisplayName("ADMIN 계정은 변경 대상에서 제외한다")
   void execute_adminTarget_throws() {
-    given(loadAdminUserRolePort.load(21L)).willReturn(UserRole.ADMIN_GENERATED);
+    given(loadAdminUserRolePort.load(21L)).willReturn(AdminUserRole.ADMIN_GENERATED);
 
     assertThatThrownBy(
             () ->
                 service.execute(
-                    new ChangeAdminUserStatusCommand(9L, 21L, AccountStatus.BLOCKED, null)))
+                    new ChangeAdminUserStatusCommand(
+                        9L, 21L, AdminUserAccountStatus.BLOCKED, null)))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Admin accounts are not managed");
 

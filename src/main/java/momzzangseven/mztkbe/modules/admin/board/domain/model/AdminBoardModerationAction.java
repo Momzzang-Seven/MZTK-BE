@@ -33,7 +33,8 @@ public class AdminBoardModerationAction {
       AdminBoardModerationReasonCode reasonCode,
       String reasonDetail,
       AdminBoardModerationTargetFlowType targetFlowType,
-      AdminBoardModerationExecutionMode executionMode) {
+      AdminBoardModerationExecutionMode executionMode,
+      LocalDateTime createdAt) {
     if (operatorId == null || operatorId <= 0) {
       throw new IllegalArgumentException("operatorId must be positive");
     }
@@ -52,6 +53,9 @@ public class AdminBoardModerationAction {
     if (executionMode == null) {
       throw new IllegalArgumentException("executionMode is required");
     }
+    if (createdAt == null) {
+      throw new IllegalArgumentException("createdAt is required");
+    }
     if (reasonDetail != null && reasonDetail.length() > 500) {
       throw new IllegalArgumentException("reasonDetail must be 500 characters or fewer");
     }
@@ -65,7 +69,7 @@ public class AdminBoardModerationAction {
         .reasonDetail(reasonDetail)
         .targetFlowType(targetFlowType)
         .executionMode(executionMode)
-        .createdAt(LocalDateTime.now())
+        .createdAt(createdAt)
         .build();
   }
 }

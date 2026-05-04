@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -58,6 +59,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
         .isEqualTo("BLOCKED");
     assertThat(findById(users, "userId", admin.userId()).isMissingNode()).isTrue();
 
+    TestLogin userLogin = loginAppUser(user.email());
     ResponseEntity<String> blockResponse =
         patchWithBearer(
             "/admin/users/" + user.userId() + "/status",
@@ -67,6 +69,12 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(data(blockResponse).at("/status").asText()).isEqualTo("BLOCKED");
     assertThat(accountStatus(user.userId())).isEqualTo("BLOCKED");
     assertThat(userRole(user.userId())).isEqualTo("USER");
+
+    ResponseEntity<String> blockedReissueResponse = reissue(userLogin.refreshToken());
+    assertThat(blockedReissueResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    JsonNode blockedReissueBody = objectMapper.readTree(blockedReissueResponse.getBody());
+    assertThat(blockedReissueBody.at("/status").asText()).isEqualTo("FAIL");
+    assertThat(blockedReissueBody.at("/code").asText()).isEqualTo("USER_006");
 
     ResponseEntity<String> blockedStatsResponse =
         getWithBearer("/admin/dashboard/user-stats", admin.accessToken());
@@ -300,6 +308,30 @@ class AdminPageApiE2ETest extends E2ETestBase {
     return objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
   }
 
+  private TestLogin loginAppUser(String email) throws Exception {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/auth/login",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("provider", "LOCAL", "email", email, "password", DEFAULT_TEST_PASSWORD),
+                jsonOnlyHeaders()),
+            String.class);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    String accessToken = objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
+    String setCookie = response.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
+    assertThat(setCookie).isNotNull();
+    String refreshToken = setCookie.split(";")[0].replace("refreshToken=", "").trim();
+    return new TestLogin(accessToken, refreshToken);
+  }
+
+  private ResponseEntity<String> reissue(String refreshToken) {
+    HttpHeaders headers = jsonOnlyHeaders();
+    headers.add(HttpHeaders.COOKIE, "refreshToken=" + refreshToken);
+    return restTemplate.exchange(
+        baseUrl() + "/auth/reissue", HttpMethod.POST, new HttpEntity<>(headers), String.class);
+  }
+
   private ResponseEntity<String> getWithBearer(String path, String accessToken) {
     return restTemplate.exchange(
         baseUrl() + path,
@@ -420,4 +452,6 @@ class AdminPageApiE2ETest extends E2ETestBase {
   private record TestAdmin(Long userId, String accessToken) {}
 
   private record TestAppUser(Long userId, String email, String nickname) {}
+
+  private record TestLogin(String accessToken, String refreshToken) {}
 }

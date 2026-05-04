@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Set;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserRoleFilter;
 import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserSortKey;
-import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserRole;
 import org.springframework.data.domain.Page;
 import org.springframework.lang.Nullable;
 
@@ -27,5 +27,5 @@ public interface LoadAdminUsersPort {
       AdminUserSortKey sortKey) {}
 
   record AdminUserProfileView(
-      Long userId, String nickname, UserRole role, String email, Instant joinedAt) {}
+      Long userId, String nickname, AdminUserRole role, String email, Instant joinedAt) {}
 }

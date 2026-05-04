@@ -19,19 +19,25 @@ import org.springframework.data.repository.query.Param;
  */
 public interface UserStatsQueryRepository extends Repository<UserEntity, Long> {
 
-  @Query("""
+  @Query(
+      """
       select count(ua.id)
       from UserAccountEntity ua
+      join UserEntity u on u.id = ua.userId
+      where u.role in :roles
       """)
-  long countAllUserAccounts();
+  long countUserAccountsByRoles(@Param("roles") Collection<UserRole> roles);
 
   @Query(
       """
       select count(ua.id)
       from UserAccountEntity ua
+      join UserEntity u on u.id = ua.userId
       where ua.status = :status
+        and u.role in :roles
       """)
-  long countUserAccountsByStatus(@Param("status") AccountStatus status);
+  long countUserAccountsByStatusAndRoles(
+      @Param("status") AccountStatus status, @Param("roles") Collection<UserRole> roles);
 
   @Query(
       """

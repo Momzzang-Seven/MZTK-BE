@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.admin.board.domain.model.AdminBoardModerationAction;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationExecutionMode;
@@ -41,7 +42,8 @@ class AdminBoardModerationActionPersistenceAdapterTest {
             AdminBoardModerationReasonCode.SPAM,
             "ad",
             AdminBoardModerationTargetFlowType.STANDARD,
-            AdminBoardModerationExecutionMode.SOFT_DELETE);
+            AdminBoardModerationExecutionMode.SOFT_DELETE,
+            LocalDateTime.parse("2026-05-04T00:00:00"));
     given(repository.save(any(AdminBoardModerationActionEntity.class)))
         .willAnswer(
             invocation -> {

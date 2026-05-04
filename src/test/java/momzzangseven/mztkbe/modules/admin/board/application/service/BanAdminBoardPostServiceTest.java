@@ -7,8 +7,8 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostModerationTargetPort;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardType;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,6 +63,6 @@ class BanAdminBoardPostServiceTest {
   private LoadAdminBoardPostModerationTargetPort.AdminBoardPostModerationTarget target(
       AdminBoardType boardType) {
     return new LoadAdminBoardPostModerationTargetPort.AdminBoardPostModerationTarget(
-        21L, boardType, PostStatus.OPEN);
+        21L, boardType, AdminBoardPostStatus.OPEN);
   }
 }

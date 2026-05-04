@@ -1,12 +1,12 @@
 package momzzangseven.mztkbe.modules.admin.user.application.dto;
 
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
 
 /** Command for fetching the admin user-management list. */
 public record GetAdminUsersCommand(
     Long operatorUserId,
     String search,
-    AccountStatus status,
+    AdminUserAccountStatus status,
     AdminUserRoleFilter role,
     int page,
     int size,

@@ -27,7 +27,8 @@ public class GetAdminBoardPostCommentsService implements GetAdminBoardPostCommen
       actionType = "ADMIN_BOARD_POST_COMMENTS_VIEW",
       targetType = AuditTargetType.COMMENT,
       operatorId = "#command.operatorUserId",
-      targetId = "#command.postId")
+      targetId = "#command.postId",
+      audit = false)
   public Page<AdminBoardCommentResult> execute(GetAdminBoardPostCommentsCommand command) {
     command.validate();
     Page<LoadAdminBoardPostCommentsPort.AdminBoardCommentView> comments =

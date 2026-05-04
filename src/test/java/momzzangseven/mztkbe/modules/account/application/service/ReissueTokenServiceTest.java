@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
 import momzzangseven.mztkbe.global.error.token.RefreshTokenNotFoundException;
+import momzzangseven.mztkbe.global.error.user.UserBlockedException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenManager;
@@ -110,6 +111,26 @@ class ReissueTokenServiceTest {
   }
 
   @Test
+  @DisplayName("execute() rejects blocked user")
+  void execute_blockedUser_throwsUserBlockedException() {
+    String incomingRefreshToken = "refresh-token-12345";
+    ReissueTokenCommand command = new ReissueTokenCommand(incomingRefreshToken);
+
+    given(jwtTokenProvider.getUserIdFromToken(incomingRefreshToken)).willReturn(7L);
+    given(loadUserAccountPort.findByUserId(7L)).willReturn(Optional.of(blockedAccount(7L)));
+
+    assertThatThrownBy(() -> reissueTokenService.execute(command))
+        .isInstanceOf(UserBlockedException.class);
+
+    verify(validator).validateJwtFormat(incomingRefreshToken);
+    verify(validator, never())
+        .inspectSecurityFlaw(
+            org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyLong());
+    verify(refreshTokenManager, never())
+        .rotateTokens(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   @DisplayName("execute() throws UserNotFoundException when user does not exist")
   void execute_userMissing_throwsUserNotFoundException() {
     String incomingRefreshToken = "refresh-token-12345";
@@ -143,6 +164,14 @@ class ReissueTokenServiceTest {
         .userId(userId)
         .provider(AuthProvider.LOCAL)
         .status(AccountStatus.DELETED)
+        .build();
+  }
+
+  private UserAccount blockedAccount(Long userId) {
+    return UserAccount.builder()
+        .userId(userId)
+        .provider(AuthProvider.LOCAL)
+        .status(AccountStatus.BLOCKED)
         .build();
   }
 }

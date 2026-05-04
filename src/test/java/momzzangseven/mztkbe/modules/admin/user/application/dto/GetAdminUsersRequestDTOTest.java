@@ -3,8 +3,8 @@ package momzzangseven.mztkbe.modules.admin.user.application.dto;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import momzzangseven.mztkbe.modules.account.domain.vo.AccountStatus;
 import momzzangseven.mztkbe.modules.admin.user.api.dto.GetAdminUsersRequestDTO;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +16,7 @@ class GetAdminUsersRequestDTOTest {
   void toCommand_normalizesDefaults() {
     GetAdminUsersCommand command =
         new GetAdminUsersRequestDTO(
-                "   ", AccountStatus.ACTIVE, AdminUserRoleFilter.USER, null, null, null)
+                "   ", AdminUserAccountStatus.ACTIVE, AdminUserRoleFilter.USER, null, null, null)
             .toCommand(9L);
 
     assertThat(command.search()).isNull();
