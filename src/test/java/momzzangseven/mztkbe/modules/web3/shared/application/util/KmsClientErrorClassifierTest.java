@@ -125,4 +125,12 @@ class KmsClientErrorClassifierTest {
     KmsSignFailedException ex = new KmsSignFailedException("no details", kmsEx);
     assertThat(KmsClientErrorClassifier.isTerminal(ex)).isFalse();
   }
+
+  @Test
+  @DisplayName("[M-11] non-KmsException cause (RuntimeException) → retryable")
+  void nonKmsExceptionCause_isNotTerminal() {
+    KmsSignFailedException ex =
+        new KmsSignFailedException("garbage cause", new RuntimeException("garbage"));
+    assertThat(KmsClientErrorClassifier.isTerminal(ex)).isFalse();
+  }
 }

@@ -582,4 +582,44 @@ class TransactionalExecuteExecutionIntentDelegateTest {
 
     verify(executionTransactionGatewayPort).releaseReservedNonce(SPONSOR_ADDRESS, sponsorNonce);
   }
+
+  @Test
+  void executeEip7702_happyPath_marksPendingOnchainAndConsumesReservedExposure() {
+    // [M-53] EIP-7702 happy path: sign + broadcast 모두 성공 → markPending + status=PENDING_ONCHAIN.
+    BigInteger reservedCost = BigInteger.valueOf(7_777L);
+    ExecutionIntent intent = existingEip7702Intent(reservedCost);
+    long sponsorNonce = 99L;
+    stubEip7702HappyUntilSign(intent, sponsorNonce);
+    when(executionEip7702GatewayPort.signAndEncode(any()))
+        .thenReturn(new ExecutionEip7702GatewayPort.SignedPayload("0x04signed", "0xexpectedhash"));
+    when(executionTransactionGatewayPort.createAndFlush(any()))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.TransactionRecord(
+                501L, ExecutionTransactionStatus.CREATED, null));
+    when(executionTransactionGatewayPort.broadcast("0x04signed"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xchainhash", null, "main"));
+    SponsorDailyUsage usage = mock(SponsorDailyUsage.class);
+    when(usage.release(any())).thenReturn(usage);
+    when(usage.consume(any())).thenReturn(usage);
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(anyLong(), any())).thenReturn(usage);
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-7702", "0xauth", "0xsubmit", null),
+            sponsorGate());
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.transactionId()).isEqualTo(501L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
+    assertThat(result.txHash()).isEqualTo("0xchainhash");
+    verify(executionTransactionGatewayPort).markPending(501L, "0xchainhash");
+    // Happy path must NOT release the nonce — it is consumed.
+    verify(executionTransactionGatewayPort, never()).releaseReservedNonce(any(), anyLong());
+    // Sponsor exposure: reservedCost moves from reserved → consumed via release().consume() chain.
+    verify(usage).release(reservedCost);
+    verify(usage).consume(reservedCost);
+  }
 }

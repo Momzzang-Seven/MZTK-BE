@@ -20,10 +20,12 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentS
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Tests the orchestrator-level preflight + delegate dispatch contract.
@@ -98,5 +100,16 @@ class ExecuteExecutionIntentServiceTest {
 
     assertThat(actual).isSameAs(expected);
     verify(delegate).execute(command, gate);
+  }
+
+  @Test
+  @DisplayName("[M-35] @Transactional 가 service 클래스에 부착되지 않음 — 트랜잭션 boundary 는 delegate 가 보유")
+  void serviceClass_isNotAnnotatedWithTransactional() {
+    Transactional annotation =
+        ExecuteExecutionIntentService.class.getAnnotation(Transactional.class);
+
+    assertThat(annotation)
+        .as("ExecuteExecutionIntentService 는 preflight 를 @Transactional 밖에서 수행해야 한다")
+        .isNull();
   }
 }

@@ -298,6 +298,97 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(postExists(postId)).isFalse();
   }
 
+  @Test
+  @DisplayName(
+      "[E-10] verifyTreasuryWalletForSignPort 가 TreasuryWalletStateException → preflightSkipped, intent claim 안 됨, settle 액션 0회")
+  void runBatch_skipsClaim_whenVerifyTreasuryWalletForSignThrowsStateException() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    TestUser asker = signupAndLogin("preflight-verify-fail-asker");
+    TestUser responder = signupAndLogin("preflight-verify-fail-responder");
+    SeededSettlementScenario scenario =
+        seedSettlementScenario(
+            asker.userId(),
+            responder.userId(),
+            "preflight verify question",
+            "preflight verify answer");
+
+    ResponseEntity<String> settleResponse =
+        restTemplate.exchange(
+            baseUrl()
+                + "/admin/web3/qna/questions/"
+                + scenario.postId()
+                + "/answers/"
+                + scenario.answerId()
+                + "/settle",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+    assertThat(settleResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+
+    // Flip the verify mock to throw — preflight runs OUTSIDE @Transactional, returns
+    // preflightSkipped(), and the batch loop breaks without claiming the intent.
+    BDDMockito.willThrow(
+            new momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException(
+                "kms key not enabled"))
+        .given(verifyTreasuryWalletForSignPort)
+        .verify(anyString());
+
+    var batchResult = runInternalExecutionBatchUseCase.runBatch(NOW);
+
+    assertThat(batchResult.executedCount()).isZero();
+    assertThat(batchResult.quarantinedCount()).isZero();
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+    // No claim → no settle action → no createAndFlush / sign / broadcast.
+    org.mockito.Mockito.verify(executionTransactionGatewayPort, org.mockito.Mockito.never())
+        .createAndFlush(any());
+    org.mockito.Mockito.verify(executionEip1559SigningPort, org.mockito.Mockito.never())
+        .sign(any());
+  }
+
+  @Test
+  @DisplayName(
+      "[E-11] loadSponsorTreasuryWalletPort 가 Optional.empty() → preflightSkipped (sponsor missing 의 internal 변형), intent claim 안 됨")
+  void runBatch_skipsClaim_whenLoadSponsorTreasuryWalletReturnsEmpty() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    TestUser asker = signupAndLogin("preflight-load-empty-asker");
+    TestUser responder = signupAndLogin("preflight-load-empty-responder");
+    SeededSettlementScenario scenario =
+        seedSettlementScenario(
+            asker.userId(),
+            responder.userId(),
+            "preflight load empty question",
+            "preflight load empty answer");
+
+    ResponseEntity<String> settleResponse =
+        restTemplate.exchange(
+            baseUrl()
+                + "/admin/web3/qna/questions/"
+                + scenario.postId()
+                + "/answers/"
+                + scenario.answerId()
+                + "/settle",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+    assertThat(settleResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+
+    // Sponsor wallet missing entirely — preflight throws Web3InvalidInputException, internal
+    // service catches and returns preflightSkipped(). Batch loop exits, intent untouched.
+    BDDMockito.given(loadSponsorTreasuryWalletPort.load()).willReturn(Optional.empty());
+
+    var batchResult = runInternalExecutionBatchUseCase.runBatch(NOW);
+
+    assertThat(batchResult.executedCount()).isZero();
+    assertThat(batchResult.quarantinedCount()).isZero();
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+    org.mockito.Mockito.verify(executionTransactionGatewayPort, org.mockito.Mockito.never())
+        .createAndFlush(any());
+    org.mockito.Mockito.verify(executionEip1559SigningPort, org.mockito.Mockito.never())
+        .sign(any());
+  }
+
   private AdminUser createAdminAndLogin() {
     String email = randomEmail();
     Long userId = signupUser(email, DEFAULT_TEST_PASSWORD, "QnaAdminE2E");

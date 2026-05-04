@@ -19,10 +19,12 @@ import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalle
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class ExecuteInternalExecutionIntentServiceTest {
@@ -84,5 +86,18 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.executed()).isFalse();
     assertThat(result.quarantined()).isFalse();
     verify(delegate, never()).execute(eq(COMMAND), any());
+  }
+
+  @Test
+  @DisplayName(
+      "[M-40] @Transactional 가 service 클래스에 부착되지 않음 — TransactionTemplate 은 wrapped delegate 가 보유")
+  void serviceClass_isNotAnnotatedWithTransactional() {
+    Transactional annotation =
+        ExecuteInternalExecutionIntentService.class.getAnnotation(Transactional.class);
+
+    assertThat(annotation)
+        .as(
+            "ExecuteInternalExecutionIntentService 의 preflight 는 @Transactional 밖에서 실행되어야 한다 — REQUIRES_NEW 는 wrapped delegate bean 이 책임진다")
+        .isNull();
   }
 }

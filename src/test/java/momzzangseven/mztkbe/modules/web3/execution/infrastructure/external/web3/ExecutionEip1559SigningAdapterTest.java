@@ -1,11 +1,14 @@
 package momzzangseven.mztkbe.modules.web3.execution.infrastructure.external.web3;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
@@ -150,5 +153,36 @@ class ExecutionEip1559SigningAdapterTest {
     assertThat(codec.computeFingerprint(snapshot)).isNotBlank();
     assertThat(signed.rawTransaction()).isEqualTo(canned.rawTx());
     assertThat(signed.txHash()).isEqualTo(canned.txHash());
+  }
+
+  @Test
+  @DisplayName("[M-126] sign(null) → Web3InvalidInputException(\"command is required\")")
+  void sign_throwsWeb3InvalidInputException_whenCommandNull() {
+    assertThatThrownBy(() -> adapter.sign(null))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("command is required");
+  }
+
+  @Test
+  @DisplayName(
+      "[M-127] SignEip1559TxUseCase 의 KmsSignFailedException 은 wrapping 없이 그대로 propagate 된다 — internal delegate 의 retriable/terminal 분기 invariant")
+  void sign_propagatesKmsSignFailedExceptionInstance() {
+    KmsSignFailedException original = new KmsSignFailedException("kms throttled");
+    when(signEip1559TxUseCase.sign(any(SignEip1559TxCommand.class))).thenThrow(original);
+
+    assertThatThrownBy(
+            () ->
+                adapter.sign(
+                    new ExecutionEip1559SigningPort.SignCommand(
+                        CHAIN_ID,
+                        NONCE,
+                        GAS_LIMIT,
+                        CONTRACT_ADDRESS,
+                        BigInteger.ZERO,
+                        CALLDATA,
+                        MAX_PRIORITY_FEE,
+                        MAX_FEE,
+                        new TreasurySigner(WALLET_ALIAS, KMS_KEY_ID, WALLET_ADDRESS))))
+        .isSameAs(original);
   }
 }

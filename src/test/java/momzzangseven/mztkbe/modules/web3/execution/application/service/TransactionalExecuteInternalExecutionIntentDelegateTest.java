@@ -131,6 +131,70 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
   }
 
   @Test
+  void execute_quarantinesIntentWhenNoMatchingActionHandlerExists() {
+    // [M-56] handler.supports(actionType) 가 모두 false → INTERNAL_ISSUER_INVALID_INTENT 로 cancel.
+    ExecutionIntent intent = internalIntent();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+    // Default `lenient().when(...).supports(QNA_ADMIN_SETTLE)` returns true; flip it off.
+    lenient()
+        .when(executionActionHandlerPort.supports(ExecutionActionType.QNA_ADMIN_SETTLE))
+        .thenReturn(false);
+
+    ExecuteInternalExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+            gate);
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenModeIsNotEip1559() {
+    // [M-57] internal issuer 는 EIP-1559 만 지원 — 다른 mode 진입 시 즉시 quarantine.
+    ExecutionIntent intent = internalIntentWithMode(ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+
+    ExecuteInternalExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+            gate);
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
+  void execute_quarantinesIntentWhenUnsignedTxSnapshotIsMissing() {
+    // [M-58] unsignedTxSnapshot/fingerprint 누락 → quarantine.
+    ExecutionIntent intent = internalIntentWithoutSnapshot();
+    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
+        .thenReturn(Optional.of(intent));
+
+    ExecuteInternalExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteInternalExecutionIntentCommand(
+                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)),
+            gate);
+
+    assertThat(result.executed()).isTrue();
+    assertThat(result.quarantined()).isTrue();
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
+    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
+    verify(executionEip1559SigningPort, never()).sign(any());
+  }
+
+  @Test
   void execute_rebindsReservedNonceWhenLocalAllocatorAdvances() {
     ExecutionIntent intent = internalIntent();
     when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
@@ -458,5 +522,20 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
         BigInteger.ZERO,
         LocalDate.of(2026, 4, 17),
         FIXED_NOW);
+  }
+
+  private ExecutionIntent internalIntentWithMode(ExecutionMode mode) {
+    // For non-EIP1559 modes, bypass `create(...)` validation via toBuilder so the delegate's
+    // "internal issuer supports only EIP1559" branch can be exercised end-to-end.
+    return internalIntent().toBuilder().mode(mode).build();
+  }
+
+  private ExecutionIntent internalIntentWithoutSnapshot() {
+    // Bypass `create(...)` validation (which requires non-null snapshot for EIP1559) via toBuilder
+    // to test the defensive null-check inside the delegate.
+    return internalIntent().toBuilder()
+        .unsignedTxSnapshot(null)
+        .unsignedTxFingerprint(null)
+        .build();
   }
 }
