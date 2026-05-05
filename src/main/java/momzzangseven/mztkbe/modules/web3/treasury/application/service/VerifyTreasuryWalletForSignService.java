@@ -9,12 +9,19 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeK
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Pre-sign gate: combines aggregate state ({@link TreasuryWallet#assertSignable()}) with the live
  * KMS key state ({@link DescribeKmsKeyPort}). Throws {@link TreasuryWalletStateException} on either
  * failure so the caller never reaches the {@code SignDigestPort}.
+ *
+ * <p>Intentionally not {@code @Transactional}. The verify path is "single read + in-memory check +
+ * KMS describe (network)" — wrapping it in a read-only transaction would pin a JDBC connection for
+ * the whole AWS round-trip and contradict the {@code SponsorWalletPreflight} contract that this
+ * runs OUTSIDE any transactional boundary. The single repository read is safe under OSIV (request
+ * scope) or auto-commit; the KMS call is additionally suspended via {@code
+ * Propagation.NOT_SUPPORTED} on {@code KmsKeyDescribeAdapter#describe} so connection-pool pressure
+ * is bounded even when this service is called from inside a caller transaction.
  */
 @Service
 @RequiredArgsConstructor
@@ -24,7 +31,6 @@ public class VerifyTreasuryWalletForSignService implements VerifyTreasuryWalletF
   private final DescribeKmsKeyPort describeKmsKeyPort;
 
   @Override
-  @Transactional(readOnly = true)
   public void execute(String walletAlias) {
     if (walletAlias == null || walletAlias.isBlank()) {
       throw new Web3InvalidInputException("walletAlias is required");
