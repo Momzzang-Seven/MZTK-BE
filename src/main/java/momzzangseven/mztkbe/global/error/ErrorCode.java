@@ -73,6 +73,8 @@ public enum ErrorCode {
 
   USER_WITHDRAWN("USER_004", "User account is withdrawn", HttpStatus.CONFLICT),
 
+  USER_BLOCKED("USER_006", "User account is blocked", HttpStatus.FORBIDDEN),
+
   ACCOUNT_NOT_DELETED(
       "USER_005",
       "Account is not in a deleted state and cannot be reactivated",
@@ -549,6 +551,8 @@ public enum ErrorCode {
   RECOVERY_DELIVERY_FAILED(
       "ADMIN_008", "Failed to deliver recovery credentials", HttpStatus.INTERNAL_SERVER_ERROR),
   RATE_LIMITED("ADMIN_009", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
+  ADMIN_BOARD_POST_BAN_POLICY_UNCONFIRMED(
+      "ADMIN_010", "Admin post ban policy is not confirmed", HttpStatus.CONFLICT),
   ;
 
   private final String code;

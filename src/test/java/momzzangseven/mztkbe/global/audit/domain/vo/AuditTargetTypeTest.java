@@ -17,6 +17,10 @@ class AuditTargetTypeTest {
             AuditTargetType.WEB3_TRANSACTION,
             AuditTargetType.ADMIN_ACCOUNT,
             AuditTargetType.QNA_ESCROW_QUESTION,
+            AuditTargetType.USER_ACCOUNT,
+            AuditTargetType.POST,
+            AuditTargetType.COMMENT,
+            AuditTargetType.DASHBOARD,
             AuditTargetType.POST_MODERATION);
   }
 
@@ -39,13 +43,17 @@ class AuditTargetTypeTest {
   void values_includesAdminAccountAlongsideExistingValues() {
     AuditTargetType[] values = AuditTargetType.values();
 
-    assertThat(values).hasSize(5);
+    assertThat(values).hasSize(9);
     assertThat(values)
         .containsExactlyInAnyOrder(
             AuditTargetType.TREASURY_KEY,
             AuditTargetType.WEB3_TRANSACTION,
             AuditTargetType.ADMIN_ACCOUNT,
             AuditTargetType.QNA_ESCROW_QUESTION,
+            AuditTargetType.USER_ACCOUNT,
+            AuditTargetType.POST,
+            AuditTargetType.COMMENT,
+            AuditTargetType.DASHBOARD,
             AuditTargetType.POST_MODERATION);
   }
 

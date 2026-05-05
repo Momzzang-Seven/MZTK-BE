@@ -105,6 +105,37 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("audit=false 메서드는 admin 권한 검증과 비즈니스 실행은 수행하되 audit row를 기록하지 않는다")
+  void around_withAuditDisabled_allowsAdminWithoutRecordingAudit() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("readWithoutAudit", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    when(joinPoint.proceed()).thenReturn("READ_OK");
+    setAuthentication("ROLE_ADMIN");
+
+    Object result = aspect.around(joinPoint);
+
+    assertThat(result).isEqualTo("READ_OK");
+    verify(recordAdminAuditPort, never()).record(any(RecordAdminAuditPort.AuditCommand.class));
+  }
+
+  @Test
+  @DisplayName("audit=false 메서드도 non-admin 호출은 거부하고 audit row를 기록하지 않는다")
+  void around_withAuditDisabledAndNonAdmin_throwsWithoutAudit() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("readWithoutAudit", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    setAuthentication("ROLE_USER");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("Unauthorized access");
+    verify(recordAdminAuditPort, never()).record(any(RecordAdminAuditPort.AuditCommand.class));
+  }
+
+  @Test
   @DisplayName(
       "SecurityContext 인증 정보가 없으면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
   void around_withoutAuthentication_throwsUserNotAuthenticatedException() throws Throwable {
@@ -407,6 +438,15 @@ class AdminOnlyAspectTest {
         operatorId = "#p0")
     String web3Action(Long operatorId) {
       return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "READ",
+        targetType = AuditTargetType.POST,
+        operatorId = "#p0",
+        audit = false)
+    String readWithoutAudit(Long operatorId) {
+      return "READ_OK";
     }
   }
 
