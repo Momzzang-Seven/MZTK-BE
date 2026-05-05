@@ -234,9 +234,14 @@ public class ExecutionIntentServiceConfig {
   ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
       ExecuteTransactionalExecutionIntentDelegatePort
           executeTransactionalExecutionIntentDelegatePort,
-      SponsorWalletPreflight sponsorWalletPreflight) {
+      SponsorWalletPreflight sponsorWalletPreflight,
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      ExecutionTransactionGatewayPort executionTransactionGatewayPort) {
     return new ExecuteExecutionIntentService(
-        executeTransactionalExecutionIntentDelegatePort, sponsorWalletPreflight);
+        executeTransactionalExecutionIntentDelegatePort,
+        sponsorWalletPreflight,
+        executionIntentPersistencePort,
+        executionTransactionGatewayPort);
   }
 
   @Bean

@@ -6,8 +6,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.Optional;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
@@ -15,7 +17,10 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
@@ -42,12 +47,19 @@ class ExecuteExecutionIntentServiceTest {
 
   @Mock private ExecuteTransactionalExecutionIntentDelegatePort delegate;
   @Mock private SponsorWalletPreflight sponsorWalletPreflight;
+  @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
+  @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
 
   private ExecuteExecutionIntentService service;
 
   @BeforeEach
   void setUp() {
-    service = new ExecuteExecutionIntentService(delegate, sponsorWalletPreflight);
+    service =
+        new ExecuteExecutionIntentService(
+            delegate,
+            sponsorWalletPreflight,
+            executionIntentPersistencePort,
+            executionTransactionGatewayPort);
   }
 
   private SponsorWalletGate activeGate() {
@@ -100,6 +112,57 @@ class ExecuteExecutionIntentServiceTest {
 
     assertThat(actual).isSameAs(expected);
     verify(delegate).execute(command, gate);
+  }
+
+  @Test
+  @DisplayName("폴링 패스: submittedTxId != null 이면 preflight 와 delegate 모두 건너뛰고 캐시된 결과 반환")
+  void execute_returnsCachedTransaction_whenIntentAlreadySubmitted_skippingPreflight() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent submittedIntent =
+        mockSubmittedIntent(command.requesterUserId(), command.executionIntentId(), 42L);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(submittedIntent));
+    when(executionTransactionGatewayPort.findById(42L))
+        .thenReturn(
+            Optional.of(
+                new ExecutionTransactionGatewayPort.TransactionRecord(
+                    42L, ExecutionTransactionStatus.PENDING, "0xpastHash")));
+
+    ExecuteExecutionIntentResult result = service.execute(command);
+
+    assertThat(result.transactionId()).isEqualTo(42L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
+    assertThat(result.txHash()).isEqualTo("0xpastHash");
+    // The whole point: a sponsor wallet that went INACTIVE *after* a successful broadcast must
+    // not surface as a 400 to a user merely polling for confirmation status.
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  @DisplayName("폴링 패스의 owner 검증: 다른 사용자가 같은 intent 를 폴링해도 거부")
+  void execute_pollingFastPath_rejectsCrossUserAccess() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent submittedIntent = mockSubmittedIntent(99L, command.executionIntentId(), 42L);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(submittedIntent));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("execution intent owner mismatch");
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  private ExecutionIntent mockSubmittedIntent(Long requesterUserId, String publicId, Long txId) {
+    ExecutionIntent intent = org.mockito.Mockito.mock(ExecutionIntent.class);
+    org.mockito.Mockito.lenient().when(intent.getSubmittedTxId()).thenReturn(txId);
+    org.mockito.Mockito.lenient().when(intent.getRequesterUserId()).thenReturn(requesterUserId);
+    org.mockito.Mockito.lenient().when(intent.getPublicId()).thenReturn(publicId);
+    org.mockito.Mockito.lenient()
+        .when(intent.getStatus())
+        .thenReturn(ExecutionIntentStatus.PENDING_ONCHAIN);
+    return intent;
   }
 
   @Test
