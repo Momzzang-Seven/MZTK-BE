@@ -5,6 +5,7 @@ import jakarta.annotation.PreDestroy;
 import java.math.BigInteger;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.DefaultGasFeeCalculator;
@@ -29,6 +30,7 @@ import org.web3j.protocol.http.HttpService;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnAnyExecutionEnabled
+@Slf4j
 public class QnaContractCallSupport {
 
   private final Web3CoreProperties web3CoreProperties;
@@ -163,25 +165,25 @@ public class QnaContractCallSupport {
 
   private DefaultGasFeeCalculator.FeePlan loadFeePlan(BigInteger estimatedGas) {
     BigInteger maxPriorityFeePerGas = null;
-    RpcAttempt<org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> priorityAttempt =
+    RpcOutcome<org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> priorityOutcome =
         callWithFallback(web3j -> web3j.ethMaxPriorityFeePerGas().send());
-    if (priorityAttempt.success()) {
-      maxPriorityFeePerGas = positiveOrNull(priorityAttempt.response().getMaxPriorityFeePerGas());
+    if (priorityOutcome.success()) {
+      maxPriorityFeePerGas = positiveOrNull(priorityOutcome.response().getMaxPriorityFeePerGas());
     }
 
     BigInteger baseFee = null;
-    RpcAttempt<org.web3j.protocol.core.methods.response.EthBaseFee> baseFeeAttempt =
+    RpcOutcome<org.web3j.protocol.core.methods.response.EthBaseFee> baseFeeOutcome =
         callWithFallback(web3j -> web3j.ethBaseFee().send());
-    if (baseFeeAttempt.success()) {
-      baseFee = positiveOrNull(baseFeeAttempt.response().getBaseFee());
+    if (baseFeeOutcome.success()) {
+      baseFee = positiveOrNull(baseFeeOutcome.response().getBaseFee());
     }
 
     BigInteger gasPrice = null;
     if (baseFee == null) {
-      RpcAttempt<org.web3j.protocol.core.methods.response.EthGasPrice> gasPriceAttempt =
+      RpcOutcome<org.web3j.protocol.core.methods.response.EthGasPrice> gasPriceOutcome =
           callWithFallback(web3j -> web3j.ethGasPrice().send());
-      if (gasPriceAttempt.success()) {
-        gasPrice = positiveOrNull(gasPriceAttempt.response().getGasPrice());
+      if (gasPriceOutcome.success()) {
+        gasPrice = positiveOrNull(gasPriceOutcome.response().getGasPrice());
       }
     }
 
@@ -190,23 +192,22 @@ public class QnaContractCallSupport {
             estimatedGas, maxPriorityFeePerGas, baseFee, gasPrice));
   }
 
-  private <T extends Response<?>> T requireSuccess(RpcAttempt<T> attempt, String operation) {
-    if (attempt.response() != null && !attempt.response().hasError()) {
-      return attempt.response();
+  private <T extends Response<?>> T requireSuccess(RpcOutcome<T> outcome, String operation) {
+    if (outcome.success()) {
+      return outcome.response();
     }
-    throw new Web3InvalidInputException(operation + " failed");
+    String detail = describeFailure(outcome);
+    log.warn("{} failed; {}", operation, detail);
+    throw new Web3InvalidInputException(operation + " failed: " + detail);
   }
 
-  private <T extends Response<?>> RpcAttempt<T> callWithFallback(RpcRequest<T> request) {
+  private <T extends Response<?>> RpcOutcome<T> callWithFallback(RpcRequest<T> request) {
     RpcAttempt<T> main = call(mainWeb3j, request);
     if (main.success()) {
-      return main;
+      return new RpcOutcome<>(main, null);
     }
     RpcAttempt<T> sub = call(subWeb3j, request);
-    if (sub.success()) {
-      return sub;
-    }
-    return sub.response() != null || sub.exception() != null ? sub : main;
+    return new RpcOutcome<>(main, sub);
   }
 
   private <T extends Response<?>> RpcAttempt<T> call(Web3j web3j, RpcRequest<T> request) {
@@ -215,6 +216,38 @@ public class QnaContractCallSupport {
     } catch (Exception e) {
       return new RpcAttempt<>(null, e);
     }
+  }
+
+  private String describeFailure(RpcOutcome<?> outcome) {
+    return "main=" + describeAttempt(outcome.main()) + ", sub=" + describeAttempt(outcome.sub());
+  }
+
+  private String describeAttempt(RpcAttempt<?> attempt) {
+    if (attempt == null) {
+      return "skipped";
+    }
+    if (attempt.response() != null && attempt.response().hasError()) {
+      Response.Error error = attempt.response().getError();
+      String data = error.getData() == null ? "" : error.getData();
+      return "rpcError(code="
+          + error.getCode()
+          + ", message="
+          + nullSafe(error.getMessage())
+          + (data.isEmpty() ? "" : ", data=" + data)
+          + ")";
+    }
+    if (attempt.exception() != null) {
+      return "exception("
+          + attempt.exception().getClass().getSimpleName()
+          + ": "
+          + nullSafe(attempt.exception().getMessage())
+          + ")";
+    }
+    return "noResponse";
+  }
+
+  private String nullSafe(String text) {
+    return text == null ? "" : text;
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})
@@ -265,6 +298,27 @@ public class QnaContractCallSupport {
   private record RpcAttempt<T extends Response<?>>(T response, Exception exception) {
     private boolean success() {
       return exception == null && response != null && !response.hasError();
+    }
+  }
+
+  private record RpcOutcome<T extends Response<?>>(RpcAttempt<T> main, RpcAttempt<T> sub) {
+    private boolean success() {
+      return successAttempt() != null;
+    }
+
+    private RpcAttempt<T> successAttempt() {
+      if (main != null && main.success()) {
+        return main;
+      }
+      if (sub != null && sub.success()) {
+        return sub;
+      }
+      return null;
+    }
+
+    private T response() {
+      RpcAttempt<T> attempt = successAttempt();
+      return attempt == null ? null : attempt.response();
     }
   }
 
