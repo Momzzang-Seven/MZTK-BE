@@ -95,6 +95,28 @@ public class NonceStatePersistenceAdapter implements ReserveNoncePort, LoadPendi
     return reservedNonce;
   }
 
+  /**
+   * Atomically rolls back a previously reserved nonce when no further reservation has advanced the
+   * cursor. The CAS predicate ({@code next_nonce = nonce + 1}) is what makes this safe under
+   * concurrent reservers — if a sibling worker has already taken {@code nonce + 1}, the row count
+   * is zero and the caller is signalled (via {@code false}) that the gap can no longer be closed
+   * here.
+   */
+  @Override
+  @Transactional
+  public boolean releaseNonce(String fromAddress, long nonce) {
+    if (fromAddress == null || fromAddress.isBlank()) {
+      throw new Web3InvalidInputException("fromAddress is required");
+    }
+    if (nonce < 0) {
+      throw new Web3InvalidInputException("nonce must be >= 0");
+    }
+    int rows =
+        repository.releaseNonceCas(
+            fromAddress.toLowerCase(), nonce, nonce + 1, LocalDateTime.now(appClock));
+    return rows == 1;
+  }
+
   @Override
   public long loadPendingNonce(String fromAddress) {
     if (fromAddress == null || fromAddress.isBlank()) {

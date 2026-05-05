@@ -34,6 +34,7 @@ import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareAna
 import momzzangseven.mztkbe.modules.verification.application.port.out.PrepareOriginalImagePort;
 import momzzangseven.mztkbe.modules.verification.application.port.out.WorkoutImageAiPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -73,6 +74,14 @@ class GetMyProfileE2ETest extends E2ETestBase {
     TestUser user = signupAndLogin(randomEmail(), DEFAULT_TEST_PASSWORD, "E2Etester");
     userId = user.userId();
     accessToken = user.accessToken();
+  }
+
+  // web3_treasury_wallets 는 DatabaseCleaner.EXCLUDED_TABLES 라 자동 정리되지 않으므로,
+  // E-7 / E-101 시드 행이 다른 테스트 클래스로 누설되어 alias 충돌을 일으키지 않도록 명시적으로 삭제.
+  @AfterEach
+  void cleanRewardTreasuryWalletSeed() {
+    jdbcTemplate.update(
+        "DELETE FROM web3_treasury_wallets WHERE wallet_alias = ?", "reward-treasury");
   }
 
   // ============================================================
@@ -239,6 +248,20 @@ class GetMyProfileE2ETest extends E2ETestBase {
             userId);
     assertThat(updated).isGreaterThan(0);
 
+    // 레벨업 보상 dispatch 가 reward-treasury wallet 의 address 를 조회하므로
+    // (LevelRewardMztkAdapter#resolveTreasuryAddress) 빈 e2e DB 환경에서도 실패하지 않도록 seed.
+    // web3_treasury_wallets 는 DatabaseCleaner.EXCLUDED_TABLES 에 있으므로 ON CONFLICT 로 idempotent 유지.
+    jdbcTemplate.update(
+        "INSERT INTO web3_treasury_wallets ("
+            + "wallet_alias, treasury_address, kms_key_id, status, key_origin, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, NOW(), NOW()) "
+            + "ON CONFLICT (wallet_alias) DO NOTHING",
+        "reward-treasury",
+        "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "alias/reward-treasury-e2e",
+        "ACTIVE",
+        "IMPORTED");
+
     // 레벨업 시 ERC-20 토큰 전송에 지갑 주소 필요 — 테스트 지갑 삽입
     jdbcTemplate.update(
         "INSERT INTO user_wallets (created_at, registered_at, status, updated_at, user_id,"
@@ -286,6 +309,65 @@ class GetMyProfileE2ETest extends E2ETestBase {
     String walletAddress = data.at("/walletAddress").asText();
     assertThat(walletAddress).isNotNull().isNotBlank();
     assertThat(walletAddress).matches("^0x[0-9a-fA-F]{40}$");
+  }
+
+  @Test
+  @DisplayName("[E-101] 레벨업 후 web3_treasury_wallets 의 kms_key_id / status / key_origin 컬럼이 보존된다")
+  void levelUp_doesNotMutateRewardTreasuryWalletKmsColumns() throws Exception {
+    // given: reward-treasury seed (E-7 와 동일 패턴) — DatabaseCleaner.EXCLUDED_TABLES 이므로 idempotent.
+    jdbcTemplate.update(
+        "INSERT INTO web3_treasury_wallets ("
+            + "wallet_alias, treasury_address, kms_key_id, status, key_origin, created_at, updated_at"
+            + ") VALUES (?, ?, ?, ?, ?, NOW(), NOW()) "
+            + "ON CONFLICT (wallet_alias) DO UPDATE SET "
+            + "kms_key_id = EXCLUDED.kms_key_id,"
+            + " status = EXCLUDED.status,"
+            + " key_origin = EXCLUDED.key_origin",
+        "reward-treasury",
+        "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "alias/reward-treasury-e2e",
+        "ACTIVE",
+        "IMPORTED");
+
+    // 레벨업 사전 작업
+    ResponseEntity<String> attendanceRes =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/attendance",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(attendanceRes.getStatusCode().is2xxSuccessful()).isTrue();
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE user_progress SET available_xp = 400, lifetime_xp = 400 WHERE user_id = ?",
+            userId);
+    assertThat(updated).isGreaterThan(0);
+    jdbcTemplate.update(
+        "INSERT INTO user_wallets (created_at, registered_at, status, updated_at, user_id,"
+            + " wallet_address) VALUES (NOW(), NOW(), 'ACTIVE', NOW(), ?, ?)",
+        userId,
+        "0xdeadbeef1234567890abcdef1234567890abcdef");
+
+    // when: 레벨업 요청
+    ResponseEntity<String> levelUpRes =
+        restTemplate.exchange(
+            baseUrl() + "/users/me/level-ups",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(levelUpRes.getStatusCode().is2xxSuccessful()).isTrue();
+    JsonNode body = objectMapper.readTree(levelUpRes.getBody());
+    assertThat(body.at("/status").asText()).isEqualTo("SUCCESS");
+
+    // then: KMS 컬럼이 그대로 유지되는지 확인 (level-up 흐름이 wallet row 를 mutate 하지 않음)
+    Map<String, Object> walletRow =
+        jdbcTemplate.queryForMap(
+            "SELECT kms_key_id, status, key_origin FROM web3_treasury_wallets"
+                + " WHERE wallet_alias = ?",
+            "reward-treasury");
+    assertThat(walletRow.get("kms_key_id")).isEqualTo("alias/reward-treasury-e2e");
+    assertThat(String.valueOf(walletRow.get("status"))).isEqualTo("ACTIVE");
+    assertThat(String.valueOf(walletRow.get("key_origin"))).isEqualTo("IMPORTED");
   }
 
   @Test
