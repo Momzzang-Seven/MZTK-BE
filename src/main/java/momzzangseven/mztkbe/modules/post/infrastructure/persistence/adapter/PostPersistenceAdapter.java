@@ -15,11 +15,12 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
-import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -30,7 +31,7 @@ import org.springframework.util.StringUtils;
 
 @Component
 @RequiredArgsConstructor
-public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort {
+public class PostPersistenceAdapter implements PostPersistencePort {
 
   private final PostJpaRepository postJpaRepository;
   private final JPAQueryFactory queryFactory;
@@ -101,6 +102,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
         queryFactory
             .selectFrom(postEntity)
             .where(
+                isPublicPost(),
                 eqType(condition.type()),
                 containsSearch(condition.type(), condition.search()),
                 filterByTagIds(filteredPostIds))
@@ -120,6 +122,7 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
             : queryFactory
                 .selectFrom(postEntity)
                 .where(
+                    isPublicPost(),
                     eqType(condition.type()),
                     containsCursorSearch(condition.type(), condition.search()),
                     cursorBefore(condition))
@@ -144,6 +147,70 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
   }
 
   @Override
+  public List<Post> findQuestionPostsForPublicationReconciliation(Long afterPostId, int limit) {
+    List<PostEntity> entities =
+        queryFactory
+            .selectFrom(postEntity)
+            .where(
+                postEntity.type.eq(PostType.QUESTION),
+                afterPostId == null ? null : postEntity.id.gt(afterPostId))
+            .orderBy(postEntity.id.asc())
+            .limit(limit)
+            .fetch();
+
+    return entities.stream().map(PostEntity::toDomain).toList();
+  }
+
+  @Override
+  public int updateQuestionPublicationStatusIfCurrent(
+      Long postId, PostPublicationStatus currentStatus, PostPublicationStatus targetStatus) {
+    return postJpaRepository.updatePublicationStatusByIdIfCurrent(
+        postId, PostType.QUESTION, currentStatus, targetStatus);
+  }
+
+  @Override
+  public int updateQuestionPublicationStateIfCurrent(
+      Long postId,
+      PostPublicationStatus currentStatus,
+      PostPublicationStatus targetStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason) {
+    return postJpaRepository.updatePublicationStateByIdIfCurrent(
+        postId,
+        PostType.QUESTION,
+        currentStatus,
+        targetStatus,
+        currentCreateExecutionIntentId,
+        publicationFailureTerminalStatus,
+        publicationFailureReason);
+  }
+
+  @Override
+  public int updateQuestionPublicationStateIfExpected(
+      Long postId,
+      PostPublicationStatus expectedStatus,
+      String expectedCurrentCreateExecutionIntentId,
+      String expectedPublicationFailureTerminalStatus,
+      String expectedPublicationFailureReason,
+      PostPublicationStatus targetStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason) {
+    return postJpaRepository.updatePublicationStateByIdIfExpected(
+        postId,
+        PostType.QUESTION,
+        expectedStatus,
+        expectedCurrentCreateExecutionIntentId,
+        expectedPublicationFailureTerminalStatus,
+        expectedPublicationFailureReason,
+        targetStatus,
+        currentCreateExecutionIntentId,
+        publicationFailureTerminalStatus,
+        publicationFailureReason);
+  }
+
+  @Override
   public int markQuestionPostSolved(Long postId) {
     return postJpaRepository.markResolvedByIdIfType(
         postId, PostType.QUESTION, PostStatus.OPEN, PostStatus.RESOLVED);
@@ -153,6 +220,13 @@ public class PostPersistenceAdapter implements PostPersistencePort, LoadPostPort
 
   private BooleanExpression eqType(PostType type) {
     return type != null ? postEntity.type.eq(type) : null;
+  }
+
+  private BooleanExpression isPublicPost() {
+    return postEntity
+        .publicationStatus
+        .eq(PostPublicationStatus.VISIBLE)
+        .and(postEntity.moderationStatus.eq(PostModerationStatus.NORMAL));
   }
 
   private BooleanExpression containsSearch(PostType type, String search) {

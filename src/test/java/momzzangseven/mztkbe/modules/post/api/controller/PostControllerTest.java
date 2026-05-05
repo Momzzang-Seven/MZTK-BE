@@ -16,10 +16,12 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.image.ImageNotBelongsToUserException;
 import momzzangseven.mztkbe.global.error.image.ImageNotFoundException;
 import momzzangseven.mztkbe.global.error.image.ImageStatusInvalidException;
 import momzzangseven.mztkbe.global.error.image.InvalidImageRefTypeException;
+import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.port.in.CheckAccountStatusUseCase;
 import momzzangseven.mztkbe.modules.admin.application.port.in.CheckAdminAccountStatusUseCase;
@@ -50,6 +52,7 @@ import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -436,6 +439,184 @@ class PostControllerTest {
 
     verify(recoverQuestionPostEscrowUseCase)
         .recoverQuestionCreate(any(RecoverQuestionPostEscrowCommand.class));
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/web3/recover-create maps optional body to command")
+  void recoverQuestionCreate_withBody_mapsToCommand() throws Exception {
+    given(
+            recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+                any(RecoverQuestionPostEscrowCommand.class)))
+        .willReturn(new PostMutationResult(1L, null));
+
+    mockMvc
+        .perform(
+            post("/posts/1/web3/recover-create")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    json(
+                        Map.of(
+                            "title",
+                            "new title",
+                            "content",
+                            "new content",
+                            "imageIds",
+                            List.of(1L, 2L),
+                            "tags",
+                            List.of("java")))))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<RecoverQuestionPostEscrowCommand> captor =
+        ArgumentCaptor.forClass(RecoverQuestionPostEscrowCommand.class);
+    verify(recoverQuestionPostEscrowUseCase).recoverQuestionCreate(captor.capture());
+    RecoverQuestionPostEscrowCommand command = captor.getValue();
+    org.assertj.core.api.Assertions.assertThat(command.title()).isEqualTo("new title");
+    org.assertj.core.api.Assertions.assertThat(command.content()).isEqualTo("new content");
+    org.assertj.core.api.Assertions.assertThat(command.imageIds()).containsExactly(1L, 2L);
+    org.assertj.core.api.Assertions.assertThat(command.tags()).containsExactly("java");
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/web3/recover-create treats empty JSON as no mutation fields")
+  void recoverQuestionCreate_emptyJson_mapsToNullOptionalFields() throws Exception {
+    given(
+            recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+                any(RecoverQuestionPostEscrowCommand.class)))
+        .willReturn(new PostMutationResult(1L, null));
+
+    mockMvc
+        .perform(
+            post("/posts/1/web3/recover-create")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<RecoverQuestionPostEscrowCommand> captor =
+        ArgumentCaptor.forClass(RecoverQuestionPostEscrowCommand.class);
+    verify(recoverQuestionPostEscrowUseCase).recoverQuestionCreate(captor.capture());
+    RecoverQuestionPostEscrowCommand command = captor.getValue();
+    org.assertj.core.api.Assertions.assertThat(command.hasMutationFields()).isFalse();
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/web3/recover-create rejects invalid edit body")
+  void recoverQuestionCreate_invalidBody_returns400BeforeUseCase() throws Exception {
+    mockMvc
+        .perform(
+            post("/posts/1/web3/recover-create")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("imageIds", List.of(0L)))))
+        .andExpect(status().isBadRequest());
+
+    mockMvc
+        .perform(
+            post("/posts/1/web3/recover-create")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content("{\"imageIds\":[null]}"))
+        .andExpect(status().isBadRequest());
+
+    mockMvc
+        .perform(
+            post("/posts/1/web3/recover-create")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("tags", List.of(" ")))))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(recoverQuestionPostEscrowUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/web3/recover-create maps publication errors to stable codes")
+  void recoverQuestionCreate_publicationErrors_returnStableCodes() throws Exception {
+    given(
+            recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+                any(RecoverQuestionPostEscrowCommand.class)))
+        .willThrow(
+            new PostPublicationStateException(ErrorCode.QUESTION_CREATE_RECOVERY_UNAVAILABLE));
+
+    mockMvc
+        .perform(post("/posts/1/web3/recover-create").with(userPrincipal(1L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("POST_011"));
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/web3/recover-create maps active create intent to POST_008")
+  void recoverQuestionCreate_publicationPending_returnsPost008() throws Exception {
+    given(
+            recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+                any(RecoverQuestionPostEscrowCommand.class)))
+        .willThrow(new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_PENDING));
+
+    mockMvc
+        .perform(post("/posts/1/web3/recover-create").with(userPrincipal(1L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("POST_008"));
+  }
+
+  @Test
+  @DisplayName("POST /posts/{postId}/web3/recover-create maps projection conflict to POST_010")
+  void recoverQuestionCreate_publicationStateConflict_returnsPost010() throws Exception {
+    given(
+            recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
+                any(RecoverQuestionPostEscrowCommand.class)))
+        .willThrow(
+            new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT));
+
+    mockMvc
+        .perform(post("/posts/1/web3/recover-create").with(userPrincipal(1L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("POST_010"));
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{postId} maps publication pending error to POST_008")
+  void updatePost_publicationPending_returnsPost008() throws Exception {
+    given(updatePostUseCase.updatePost(any(), any(), any()))
+        .willThrow(new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_PENDING));
+
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "updated"))))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("POST_008"));
+  }
+
+  @Test
+  @DisplayName("PATCH /posts/{postId} maps create recovery required error to POST_009")
+  void updatePost_recoveryRequired_returnsPost009() throws Exception {
+    given(updatePostUseCase.updatePost(any(), any(), any()))
+        .willThrow(new PostPublicationStateException(ErrorCode.QUESTION_CREATE_RECOVERY_REQUIRED));
+
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "updated"))))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("POST_009"));
+  }
+
+  @Test
+  @DisplayName("DELETE /posts/{postId} maps publication state conflict error to POST_010")
+  void deletePost_publicationStateConflict_returnsPost010() throws Exception {
+    given(deletePostUseCase.deletePost(any(), any()))
+        .willThrow(
+            new PostPublicationStateException(ErrorCode.QUESTION_PUBLICATION_STATE_CONFLICT));
+
+    mockMvc
+        .perform(delete("/posts/1").with(userPrincipal(1L)))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("POST_010"));
   }
 
   @Test

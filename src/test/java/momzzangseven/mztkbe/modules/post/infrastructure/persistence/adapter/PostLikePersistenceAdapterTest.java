@@ -22,6 +22,8 @@ import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.post.application.port.out.LikedPostRow;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLike;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.PostLikeJpaRepository;
@@ -139,6 +141,8 @@ class PostLikePersistenceAdapterTest {
     when(projection.getReward()).thenReturn(reward);
     when(projection.getAcceptedAnswerId()).thenReturn(acceptedAnswerId);
     when(projection.getStatus()).thenReturn(status.name());
+    when(projection.getPublicationStatus()).thenReturn(PostPublicationStatus.VISIBLE.name());
+    when(projection.getModerationStatus()).thenReturn(PostModerationStatus.NORMAL.name());
     when(projection.getPostCreatedAt()).thenReturn(postCreatedAt);
     when(projection.getPostUpdatedAt()).thenReturn(postCreatedAt);
     return projection;

@@ -22,6 +22,7 @@ public class LikePostService implements LikePostUseCase {
   private final PostPersistencePort postPersistencePort;
   private final PostLikePersistencePort postLikePersistencePort;
   private final LoadAnswerLikeTargetPort loadAnswerLikeTargetPort;
+  private final PostVisibilityPolicy postVisibilityPolicy;
 
   @Override
   @Transactional
@@ -52,9 +53,8 @@ public class LikePostService implements LikePostUseCase {
 
   private void validateTarget(LikePostCommand command) {
     if (command.targetType() == PostLikeTargetType.POST) {
-      if (!postPersistencePort.existsPost(command.targetId())) {
-        throw new PostNotFoundException();
-      }
+      postVisibilityPolicy.validateWritable(
+          postPersistencePort.loadPost(command.targetId()).orElseThrow(PostNotFoundException::new));
       return;
     }
 
@@ -65,5 +65,7 @@ public class LikePostService implements LikePostUseCase {
     if (!answerTarget.postId().equals(command.postId())) {
       throw new AnswerPostMismatchException();
     }
+    postVisibilityPolicy.validateWritable(
+        postPersistencePort.loadPost(command.postId()).orElseThrow(PostNotFoundException::new));
   }
 }

@@ -8,6 +8,10 @@ public interface QuestionLifecycleExecutionPort {
     return false;
   }
 
+  default boolean managesQuestionCreateLifecycle() {
+    return false;
+  }
+
   default boolean hasActiveQuestionIntent(Long postId) {
     return false;
   }

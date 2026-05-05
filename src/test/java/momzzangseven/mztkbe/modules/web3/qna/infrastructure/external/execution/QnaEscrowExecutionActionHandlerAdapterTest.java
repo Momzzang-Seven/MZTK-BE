@@ -21,10 +21,13 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionPublicationSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
@@ -45,6 +48,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
   @Mock private QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
+  @Mock private QnaQuestionPublicationSyncPort qnaQuestionPublicationSyncPort;
+  @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   @Mock private QnaLocalDeleteSyncPort qnaLocalDeleteSyncPort;
 
   private QnaEscrowExecutionActionHandlerAdapter adapter;
@@ -59,6 +64,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             qnaProjectionPersistencePort,
             qnaAcceptStateSyncPort,
             qnaAdminRefundStateSyncPort,
+            qnaQuestionPublicationSyncPort,
+            loadQnaExecutionIntentStatePort,
             qnaLocalDeleteSyncPort);
   }
 
@@ -84,6 +91,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     ArgumentCaptor<QnaQuestionProjection> captor =
         ArgumentCaptor.forClass(QnaQuestionProjection.class);
     verify(qnaProjectionPersistencePort).saveQuestion(captor.capture());
+    verify(qnaQuestionPublicationSyncPort).confirmQuestionCreated(101L, "intent-1");
     assertThat(captor.getValue().getPostId()).isEqualTo(101L);
     assertThat(captor.getValue().getAskerUserId()).isEqualTo(7L);
     assertThat(captor.getValue().getQuestionHash()).isEqualTo("0x" + "a".repeat(64));
@@ -455,6 +463,42 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         "RPC_UNAVAILABLE");
 
     verify(qnaAdminRefundStateSyncPort, never()).rollbackPendingRefund(101L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated syncs question create failure when projection is missing")
+  void afterExecutionTerminated_syncsQuestionCreateFailure() throws Exception {
+    QnaEscrowExecutionPayload payload =
+        new QnaEscrowExecutionPayload(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            101L,
+            null,
+            "0x" + "1".repeat(40),
+            "0x" + "2".repeat(40),
+            new BigInteger("50000000000000000000"),
+            "0x" + "a".repeat(64),
+            null,
+            "0x" + "3".repeat(40),
+            "0x1234");
+    when(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .thenReturn(Optional.empty());
+    when(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(
+            "qna:qna_question_create:7:101"))
+        .thenReturn(
+            Optional.of(
+                new QnaExecutionIntentStateView(
+                    "intent-1",
+                    QnaExecutionActionType.QNA_QUESTION_CREATE,
+                    ExecutionIntentStatus.EXPIRED)));
+
+    adapter.afterExecutionTerminated(
+        intent(payload, ExecutionResourceType.QUESTION, "101", 7L),
+        plan(),
+        ExecutionIntentStatus.EXPIRED,
+        "expired");
+
+    verify(qnaQuestionPublicationSyncPort)
+        .failQuestionCreate(101L, "intent-1", ExecutionIntentStatus.EXPIRED, "expired");
   }
 
   private ExecutionIntent intent(

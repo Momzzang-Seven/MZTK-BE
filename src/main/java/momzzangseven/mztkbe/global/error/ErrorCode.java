@@ -314,6 +314,13 @@ public enum ErrorCode {
       "POST_005", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST),
   POST_ALREADY_SOLVED("POST_006", "Post is already solved", HttpStatus.CONFLICT),
   INVALID_POST_TYPE("POST_007", "Invalid post type for this operation", HttpStatus.BAD_REQUEST),
+  QUESTION_PUBLICATION_PENDING("POST_008", "Question publication is pending", HttpStatus.CONFLICT),
+  QUESTION_CREATE_RECOVERY_REQUIRED(
+      "POST_009", "Question create recovery is required", HttpStatus.CONFLICT),
+  QUESTION_PUBLICATION_STATE_CONFLICT(
+      "POST_010", "Question publication state is inconsistent", HttpStatus.CONFLICT),
+  QUESTION_CREATE_RECOVERY_UNAVAILABLE(
+      "POST_011", "Question create recovery is unavailable", HttpStatus.CONFLICT),
   // ========================================
   // Comment Errors (COMMENT_xxx)
   // ========================================

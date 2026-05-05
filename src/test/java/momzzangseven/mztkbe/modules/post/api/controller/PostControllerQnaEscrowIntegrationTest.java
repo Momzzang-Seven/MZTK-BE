@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,6 +43,7 @@ import org.mockito.BDDMockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
@@ -70,6 +72,8 @@ class PostControllerQnaEscrowIntegrationTest {
   @Autowired private ObjectMapper objectMapper;
   @Autowired private PostJpaRepository postJpaRepository;
   @Autowired private AnswerJpaRepository answerJpaRepository;
+  @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private EntityManager entityManager;
 
   @MockitoBean private QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
   @MockitoBean private RecoverQuestionPostEscrowUseCase recoverQuestionPostEscrowUseCase;
@@ -293,7 +297,12 @@ class PostControllerQnaEscrowIntegrationTest {
             .andReturn();
 
     JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
-    return body.path("data").path("postId").asLong();
+    Long postId = body.path("data").path("postId").asLong();
+    jdbcTemplate.update(
+        "UPDATE posts SET publication_status = 'VISIBLE', moderation_status = 'NORMAL' WHERE id = ?",
+        postId);
+    entityManager.clear();
+    return postId;
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {
