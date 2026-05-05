@@ -111,6 +111,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
             WHERE c.writer_id = :userId
               AND c.is_deleted = false
               AND p.type = :postType
+              AND (
+                (p.publication_status = 'VISIBLE' AND p.moderation_status = 'NORMAL')
+                OR p.user_id = :userId
+              )
               AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!')
           ) ranked
           WHERE ranked.rn = 1
@@ -143,6 +147,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
             WHERE c.writer_id = :userId
               AND c.is_deleted = false
               AND p.type = :postType
+              AND (
+                (p.publication_status = 'VISIBLE' AND p.moderation_status = 'NORMAL')
+                OR p.user_id = :userId
+              )
               AND (:search IS NULL OR LOWER(p.title) LIKE CONCAT('%', :search, '%') ESCAPE '!')
           ) ranked
           WHERE ranked.rn = 1

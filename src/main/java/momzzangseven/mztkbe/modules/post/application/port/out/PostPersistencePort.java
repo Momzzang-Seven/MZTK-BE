@@ -6,6 +6,7 @@ import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.PostCursorSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public interface PostPersistencePort {
@@ -29,6 +30,30 @@ public interface PostPersistencePort {
 
   List<Post> findPostsByAuthorCursor(
       Long authorId, PostType type, Long tagId, String search, CursorPageRequest pageRequest);
+
+  List<Post> findQuestionPostsForPublicationReconciliation(Long afterPostId, int limit);
+
+  int updateQuestionPublicationStatusIfCurrent(
+      Long postId, PostPublicationStatus currentStatus, PostPublicationStatus targetStatus);
+
+  int updateQuestionPublicationStateIfCurrent(
+      Long postId,
+      PostPublicationStatus currentStatus,
+      PostPublicationStatus targetStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason);
+
+  int updateQuestionPublicationStateIfExpected(
+      Long postId,
+      PostPublicationStatus expectedStatus,
+      String expectedCurrentCreateExecutionIntentId,
+      String expectedPublicationFailureTerminalStatus,
+      String expectedPublicationFailureReason,
+      PostPublicationStatus targetStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason);
 
   int markQuestionPostSolved(Long postId);
 }

@@ -97,6 +97,7 @@ public class AnswerService
 
     LoadPostPort.PostContext post = loadPost(command.postId());
     validateAnswerablePost(post);
+    validatePostWritable(post);
     answerLifecycleExecutionPort.precheckAnswerCreate(post.postId(), post.content());
 
     Answer answer =
@@ -139,6 +140,7 @@ public class AnswerService
       throw new AnswerInvalidInputException("postId is required.");
     }
     LoadPostPort.PostContext post = loadPost(postId);
+    validatePostReadable(post, currentUserId);
     validateAnswerablePost(post);
 
     List<Answer> answers = loadAnswerPort.loadAnswersByPostId(postId);
@@ -223,6 +225,7 @@ public class AnswerService
     Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
+    validatePostWritable(post);
     // Only content changes affect the escrow payload hash. Image-only updates stay local and
     // therefore return web3 = null.
     boolean contentChanged =
@@ -282,6 +285,7 @@ public class AnswerService
     Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
+    validatePostWritable(post);
 
     answer.validateDeletable(command.userId(), post.answerLocked());
     int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
@@ -366,6 +370,19 @@ public class AnswerService
   private void validateAnswerablePost(LoadPostPort.PostContext post) {
     if (!isQuestionPost(post)) {
       throw new AnswerUnsupportedPostTypeException();
+    }
+  }
+
+  private void validatePostReadable(LoadPostPort.PostContext post, Long requesterUserId) {
+    if (!post.readableBy(requesterUserId)) {
+      throw new AnswerPostNotFoundException();
+    }
+  }
+
+  private void validatePostWritable(LoadPostPort.PostContext post) {
+    if (!post.writable()) {
+      throw new AnswerInvalidInputException(
+          "Post is not in a state that allows answer interactions.");
     }
   }
 
