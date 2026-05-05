@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpda
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.AnswerEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaQuestionPublicationEvidenceUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
@@ -19,6 +20,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionP
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.AnswerEscrowExecutionService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.GetQnaExecutionResumeViewService;
+import momzzangseven.mztkbe.modules.web3.qna.application.service.GetQnaQuestionPublicationEvidenceService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowExecutionService;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.context.annotation.Bean;
@@ -71,6 +73,14 @@ public class QnaExecutionServiceConfig {
   GetQnaExecutionResumeViewUseCase getQnaExecutionResumeViewUseCase(
       GetLatestExecutionIntentSummaryUseCase getLatestExecutionIntentSummaryUseCase) {
     return new GetQnaExecutionResumeViewService(getLatestExecutionIntentSummaryUseCase);
+  }
+
+  @Bean
+  GetQnaQuestionPublicationEvidenceUseCase getQnaQuestionPublicationEvidenceUseCase(
+      QnaProjectionPersistencePort qnaProjectionPersistencePort,
+      LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort) {
+    return new GetQnaQuestionPublicationEvidenceService(
+        qnaProjectionPersistencePort, loadQnaExecutionIntentStatePort);
   }
 
   private record TransactionalQuestionEscrowExecutionUseCase(

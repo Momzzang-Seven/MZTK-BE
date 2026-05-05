@@ -48,8 +48,7 @@ public class CommentService
   @Override
   @Transactional
   public CommentMutationResult createComment(CreateCommentCommand command) {
-    // 1-1. 게시글 존재 여부 검증 (외부 모듈 포트 사용)
-    validatePostExists(command.postId());
+    validatePostWritable(command.postId());
 
     // 1-2. 대댓글인 경우 부모 댓글 검증
     if (command.parentId() != null) {
@@ -80,6 +79,7 @@ public class CommentService
   @Transactional
   public CommentMutationResult updateComment(UpdateCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
+    validatePostWritable(comment.getPostId());
 
     comment.validateWriter(command.userId());
 
@@ -93,7 +93,7 @@ public class CommentService
   @Transactional
   public void deleteComment(DeleteCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
-
+    validatePostWritable(comment.getPostId());
     comment.validateWriter(command.userId());
 
     comment.delete();
@@ -111,7 +111,7 @@ public class CommentService
   // 4. 루트 댓글 조회 (Read)
   @Override
   public Page<CommentResult> getRootComments(GetRootCommentsQuery query) {
-    validatePostExists(query.postId());
+    validatePostReadable(query.postId(), query.requesterUserId());
     return toResultPage(loadCommentPort.loadRootComments(query.postId(), query.pageable()), true);
   }
 
@@ -121,7 +121,7 @@ public class CommentService
     // 부모 댓글이 존재하는지 먼저 확인
     Comment parent =
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
-    validatePostExists(parent.getPostId());
+    validatePostReadable(parent.getPostId(), query.requesterUserId());
     validateParentIsRootComment(parent);
 
     return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()), false);
@@ -129,7 +129,7 @@ public class CommentService
 
   @Override
   public GetCommentsCursorResult getRootCommentsByCursor(GetRootCommentsCursorQuery query) {
-    validatePostExists(query.postId());
+    validatePostReadable(query.postId(), query.requesterUserId());
     List<Comment> comments =
         loadCommentPort.loadRootCommentsByCursor(query.postId(), query.pageRequest());
     boolean hasNext = comments.size() > query.pageRequest().size();
@@ -147,7 +147,7 @@ public class CommentService
   public GetCommentsCursorResult getRepliesByCursor(GetRepliesCursorQuery query) {
     Comment parent =
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
-    validatePostExists(parent.getPostId());
+    validatePostReadable(parent.getPostId(), query.requesterUserId());
     validateParentIsRootComment(parent);
 
     List<Comment> comments =
@@ -189,10 +189,25 @@ public class CommentService
     }
   }
 
-  private void validatePostExists(Long postId) {
-    if (!loadPostPort.existsPost(postId)) {
+  private void validatePostReadable(Long postId, Long requesterUserId) {
+    LoadPostPort.PostVisibilityContext context = loadPostVisibilityOrThrow(postId);
+    if (!context.readableBy(requesterUserId)) {
       throw new BusinessException(ErrorCode.POST_NOT_FOUND);
     }
+  }
+
+  private void validatePostWritable(Long postId) {
+    LoadPostPort.PostVisibilityContext context = loadPostVisibilityOrThrow(postId);
+    if (!context.writable()) {
+      throw new BusinessException(
+          ErrorCode.INVALID_POST_INPUT, "Post is not in a state that allows comment interactions.");
+    }
+  }
+
+  private LoadPostPort.PostVisibilityContext loadPostVisibilityOrThrow(Long postId) {
+    return loadPostPort
+        .loadPostVisibilityContext(postId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
   }
 
   private Page<CommentResult> toResultPage(Page<Comment> comments, boolean includeReplyCount) {

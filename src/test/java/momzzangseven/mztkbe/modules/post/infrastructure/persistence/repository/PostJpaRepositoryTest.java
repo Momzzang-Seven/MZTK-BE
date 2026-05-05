@@ -1,11 +1,13 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -16,6 +18,10 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
@@ -25,6 +31,7 @@ class PostJpaRepositoryTest {
   @Autowired private PostJpaRepository postJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private EntityManager entityManager;
+  @Autowired private PlatformTransactionManager transactionManager;
 
   @Test
   @DisplayName("public posts tag query treats wildcard characters in search literally")
@@ -172,6 +179,228 @@ class PostJpaRepositoryTest {
         .doesNotContain(first.getId(), otherTag.getId(), otherAuthor.getId());
   }
 
+  @Test
+  @DisplayName("expected publication metadata matches exactly then state update succeeds")
+  void updatePublicationStateByIdIfExpected_updatesWhenExpectedMetadataMatches() {
+    PostEntity post =
+        persistPublicationPost(
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation");
+
+    int updated =
+        postJpaRepository.updatePublicationStateByIdIfExpected(
+            post.getId(),
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation",
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+    entityManager.clear();
+
+    PostEntity reloaded = postJpaRepository.findById(post.getId()).orElseThrow();
+    assertThat(updated).isEqualTo(1);
+    assertThat(reloaded.getPublicationStatus()).isEqualTo(PostPublicationStatus.PENDING);
+    assertThat(reloaded.getCurrentCreateExecutionIntentId()).isEqualTo("intent-2");
+    assertThat(reloaded.getPublicationFailureTerminalStatus()).isNull();
+    assertThat(reloaded.getPublicationFailureReason()).isNull();
+  }
+
+  @Test
+  @DisplayName("failed status with different metadata does not satisfy expected publication guard")
+  void updatePublicationStateByIdIfExpected_returnsZeroWhenFailureMetadataDiffers() {
+    PostEntity post =
+        persistPublicationPost(
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            "CANCELLED",
+            "different failure");
+
+    int updated =
+        postJpaRepository.updatePublicationStateByIdIfExpected(
+            post.getId(),
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            "EXPIRED",
+            "publication reconciliation",
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+    entityManager.clear();
+
+    PostEntity reloaded = postJpaRepository.findById(post.getId()).orElseThrow();
+    assertThat(updated).isZero();
+    assertThat(reloaded.getPublicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(reloaded.getPublicationFailureTerminalStatus()).isEqualTo("CANCELLED");
+    assertThat(reloaded.getPublicationFailureReason()).isEqualTo("different failure");
+  }
+
+  @Test
+  @DisplayName("non-question rows do not satisfy expected publication guard")
+  void updatePublicationStateByIdIfExpected_returnsZeroForNonQuestionRows() {
+    PostEntity post =
+        persistPublicationPost(PostType.FREE, PostPublicationStatus.FAILED, null, null, null);
+
+    int updated =
+        postJpaRepository.updatePublicationStateByIdIfExpected(
+            post.getId(),
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            null,
+            null,
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+    entityManager.clear();
+
+    PostEntity reloaded = postJpaRepository.findById(post.getId()).orElseThrow();
+    assertThat(updated).isZero();
+    assertThat(reloaded.getType()).isEqualTo(PostType.FREE);
+    assertThat(reloaded.getPublicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+  }
+
+  @Test
+  @DisplayName("expected publication guard treats matching null metadata as equal")
+  void updatePublicationStateByIdIfExpected_matchesWhenNullableMetadataIsAllNull() {
+    PostEntity post =
+        persistPublicationPost(PostType.QUESTION, PostPublicationStatus.FAILED, null, null, null);
+
+    int updated =
+        postJpaRepository.updatePublicationStateByIdIfExpected(
+            post.getId(),
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            null,
+            null,
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+    entityManager.clear();
+
+    PostEntity reloaded = postJpaRepository.findById(post.getId()).orElseThrow();
+    assertThat(updated).isEqualTo(1);
+    assertThat(reloaded.getPublicationStatus()).isEqualTo(PostPublicationStatus.PENDING);
+    assertThat(reloaded.getCurrentCreateExecutionIntentId()).isEqualTo("intent-2");
+  }
+
+  @Test
+  @DisplayName("expected publication guard rejects null DB metadata against non-null expectation")
+  void updatePublicationStateByIdIfExpected_rejectsDbNullExpectedNonNullMetadata() {
+    PostEntity post =
+        persistPublicationPost(PostType.QUESTION, PostPublicationStatus.FAILED, null, null, null);
+
+    int updated =
+        postJpaRepository.updatePublicationStateByIdIfExpected(
+            post.getId(),
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            "intent-old",
+            "EXPIRED",
+            "publication reconciliation",
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+    entityManager.clear();
+
+    PostEntity reloaded = postJpaRepository.findById(post.getId()).orElseThrow();
+    assertThat(updated).isZero();
+    assertThat(reloaded.getPublicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(reloaded.getCurrentCreateExecutionIntentId()).isNull();
+  }
+
+  @Test
+  @DisplayName("expected publication guard rejects non-null DB metadata against null expectation")
+  void updatePublicationStateByIdIfExpected_rejectsDbNonNullExpectedNullMetadata() {
+    PostEntity post =
+        persistPublicationPost(
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            "intent-old",
+            "EXPIRED",
+            "publication reconciliation");
+
+    int updated =
+        postJpaRepository.updatePublicationStateByIdIfExpected(
+            post.getId(),
+            PostType.QUESTION,
+            PostPublicationStatus.FAILED,
+            null,
+            null,
+            null,
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null);
+    entityManager.clear();
+
+    PostEntity reloaded = postJpaRepository.findById(post.getId()).orElseThrow();
+    assertThat(updated).isZero();
+    assertThat(reloaded.getPublicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(reloaded.getCurrentCreateExecutionIntentId()).isEqualTo("intent-old");
+    assertThat(reloaded.getPublicationFailureTerminalStatus()).isEqualTo("EXPIRED");
+    assertThat(reloaded.getPublicationFailureReason()).isEqualTo("publication reconciliation");
+  }
+
+  @Test
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
+  @DisplayName("expected publication update rolls back when later local work fails")
+  void updatePublicationStateByIdIfExpected_rollsBackWhenLaterLocalWorkFails() {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    Long postId =
+        transactionTemplate.execute(
+            status ->
+                persistPublicationPost(
+                        PostType.QUESTION,
+                        PostPublicationStatus.FAILED,
+                        null,
+                        "EXPIRED",
+                        "publication reconciliation")
+                    .getId());
+
+    assertThatThrownBy(
+            () ->
+                transactionTemplate.executeWithoutResult(
+                    status -> {
+                      int updated =
+                          postJpaRepository.updatePublicationStateByIdIfExpected(
+                              postId,
+                              PostType.QUESTION,
+                              PostPublicationStatus.FAILED,
+                              null,
+                              "EXPIRED",
+                              "publication reconciliation",
+                              PostPublicationStatus.PENDING,
+                              "intent-2",
+                              null,
+                              null);
+                      assertThat(updated).isEqualTo(1);
+                      throw new IllegalStateException("side effect failed after intent");
+                    }))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("side effect failed after intent");
+
+    PostEntity reloaded =
+        transactionTemplate.execute(status -> postJpaRepository.findById(postId).orElseThrow());
+    assertThat(reloaded.getPublicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(reloaded.getCurrentCreateExecutionIntentId()).isNull();
+    assertThat(reloaded.getPublicationFailureTerminalStatus()).isEqualTo("EXPIRED");
+    assertThat(reloaded.getPublicationFailureReason()).isEqualTo("publication reconciliation");
+  }
+
   private PostEntity persistPost(
       Long userId, PostType type, String title, String content, LocalDateTime createdAt) {
     return persistQuestionPost(userId, title, content, type, createdAt, PostStatus.OPEN, null);
@@ -213,6 +442,33 @@ class PostJpaRepositoryTest {
         createdAt,
         createdAt,
         saved.getId());
+    entityManager.clear();
+    return saved;
+  }
+
+  private PostEntity persistPublicationPost(
+      PostType type,
+      PostPublicationStatus publicationStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason) {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 28, 12, 0);
+    PostEntity entity =
+        PostEntity.builder()
+            .userId(99L)
+            .type(type)
+            .title(type == PostType.QUESTION ? "publication question" : null)
+            .content("content")
+            .reward(type == PostType.QUESTION ? 100L : 0L)
+            .status(PostStatus.OPEN)
+            .publicationStatus(publicationStatus)
+            .currentCreateExecutionIntentId(currentCreateExecutionIntentId)
+            .publicationFailureTerminalStatus(publicationFailureTerminalStatus)
+            .publicationFailureReason(publicationFailureReason)
+            .build();
+    ReflectionTestUtils.setField(entity, "createdAt", now);
+    ReflectionTestUtils.setField(entity, "updatedAt", now);
+    PostEntity saved = postJpaRepository.saveAndFlush(entity);
     entityManager.clear();
     return saved;
   }

@@ -14,6 +14,8 @@ import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPo
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
+import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
@@ -236,6 +238,52 @@ class AdminOnlyAspectTest {
         ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
     verify(recordAdminAuditPort).record(captor.capture());
     assertThat(captor.getValue().targetId()).isNull();
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.blockPost 호출이 성공하면 POST_MODERATION 성공 audit 를 기록한다")
+  void around_forModeratePostBlock_recordsPostModerationSuccessAudit() throws Throwable {
+    Method method = ModeratePostService.class.getMethod("blockPost", ModeratePostCommand.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {new ModeratePostCommand(99L, 10L)});
+    when(joinPoint.proceed()).thenReturn(null);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    RecordAdminAuditPort.AuditCommand command = captor.getValue();
+    assertThat(command.operatorId()).isEqualTo(99L);
+    assertThat(command.actionType()).isEqualTo("POST_BLOCK");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST_MODERATION);
+    assertThat(command.targetId()).isEqualTo("post:10");
+    assertThat(command.success()).isTrue();
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.unblockPost 호출이 성공하면 POST_MODERATION 성공 audit 를 기록한다")
+  void around_forModeratePostUnblock_recordsPostModerationSuccessAudit() throws Throwable {
+    Method method = ModeratePostService.class.getMethod("unblockPost", ModeratePostCommand.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {new ModeratePostCommand(99L, 10L)});
+    when(joinPoint.proceed()).thenReturn(null);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    RecordAdminAuditPort.AuditCommand command = captor.getValue();
+    assertThat(command.operatorId()).isEqualTo(99L);
+    assertThat(command.actionType()).isEqualTo("POST_UNBLOCK");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST_MODERATION);
+    assertThat(command.targetId()).isEqualTo("post:10");
+    assertThat(command.success()).isTrue();
   }
 
   @Test

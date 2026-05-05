@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.global.response.ImageItemResponse;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public record PostDetailResponse(
@@ -14,6 +16,8 @@ public record PostDetailResponse(
     long likeCount,
     boolean isLiked,
     long commentCount,
+    PostPublicationStatus publicationStatus,
+    PostModerationStatus moderationStatus,
     List<String> tags,
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
@@ -50,6 +54,8 @@ public record PostDetailResponse(
         result.likeCount(),
         result.liked(),
         result.commentCount(),
+        result.publicationStatus(),
+        result.moderationStatus(),
         result.tags(),
         result.createdAt(),
         result.updatedAt(),
