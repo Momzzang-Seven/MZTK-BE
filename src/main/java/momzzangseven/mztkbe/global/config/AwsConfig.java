@@ -6,7 +6,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 
 /**
@@ -14,7 +13,8 @@ import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
  * EC2 instance role automatically — no static keys required.
  *
  * <p>Local/test environments do not activate this config; they use profile-specific stub adapters
- * instead.
+ * instead. The KMS client lives in {@code AwsKmsConfig} which is property-gated rather than
+ * profile-gated so that developers with KMS access can opt in from any profile.
  */
 @Configuration
 @Profile({"prod"})
@@ -26,14 +26,6 @@ public class AwsConfig {
   @Bean
   public SecretsManagerClient secretsManagerClient() {
     return SecretsManagerClient.builder()
-        .region(Region.of(region))
-        .credentialsProvider(DefaultCredentialsProvider.create())
-        .build();
-  }
-
-  @Bean
-  public KmsClient kmsClient() {
-    return KmsClient.builder()
         .region(Region.of(region))
         .credentialsProvider(DefaultCredentialsProvider.create())
         .build();

@@ -6,8 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Arrays;
-import java.util.List;
 import momzzangseven.mztkbe.global.error.treasury.KmsAliasAlreadyExistsException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.KmsKeyLifecyclePort.ImportParams;
@@ -21,7 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.AlgorithmSpec;
@@ -341,17 +339,20 @@ class KmsKeyLifecycleAdapterTest {
   }
 
   @Nested
-  @DisplayName("G. @Profile gating ([M-36])")
+  @DisplayName("G. @ConditionalOnProperty gating ([M-36])")
   class ProfileGating {
 
     @Test
-    @DisplayName("[M-36] KmsKeyLifecycleAdapter는 @Profile(\"prod\") 보유")
-    void adapter_isProdGated() {
-      Profile profile = KmsKeyLifecycleAdapter.class.getAnnotation(Profile.class);
+    @DisplayName("[M-36] KmsKeyLifecycleAdapter는 @ConditionalOnProperty(web3.kms.enabled=true) 보유")
+    void adapter_isKmsEnabledGated() {
+      ConditionalOnProperty annotation =
+          KmsKeyLifecycleAdapter.class.getAnnotation(ConditionalOnProperty.class);
 
-      assertThat(profile).isNotNull();
-      List<String> values = Arrays.asList(profile.value());
-      assertThat(values).containsExactly("prod");
+      assertThat(annotation).isNotNull();
+      String[] names = annotation.name().length > 0 ? annotation.name() : annotation.value();
+      assertThat(names).containsExactly("web3.kms.enabled");
+      assertThat(annotation.havingValue()).isEqualTo("true");
+      assertThat(annotation.matchIfMissing()).isFalse();
     }
   }
 }
