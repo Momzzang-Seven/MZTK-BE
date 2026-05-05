@@ -17,4 +17,6 @@ public @interface AdminOnly {
   String operatorId() default "#p0";
 
   String targetId() default "";
+
+  boolean audit() default true;
 }
