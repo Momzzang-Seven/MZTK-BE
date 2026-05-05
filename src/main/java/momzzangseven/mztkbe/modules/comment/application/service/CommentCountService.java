@@ -24,4 +24,14 @@ public class CommentCountService implements CountCommentsUseCase {
   public long countCommentsByPostId(Long postId) {
     return loadCommentPort.countCommentsByPostId(postId);
   }
+
+  @Override
+  public Map<Long, Long> countCommentsByAnswerIds(List<Long> answerIds) {
+    return loadCommentPort.countCommentsByAnswerIds(answerIds);
+  }
+
+  @Override
+  public long countCommentsByAnswerId(Long answerId) {
+    return loadCommentPort.countCommentsByAnswerId(answerId);
+  }
 }

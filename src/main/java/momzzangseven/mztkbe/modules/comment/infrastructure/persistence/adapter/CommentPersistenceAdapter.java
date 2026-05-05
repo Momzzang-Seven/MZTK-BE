@@ -14,6 +14,7 @@ import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPo
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import org.springframework.data.domain.Page;
@@ -57,7 +58,14 @@ public class CommentPersistenceAdapter
   @Override
   public Page<Comment> loadRootComments(Long postId, Pageable pageable) {
     return commentRepository
-        .findRootCommentsByPostId(postId, pageable)
+        .findRootCommentsByPostId(CommentTargetType.POST, postId, pageable)
+        .map(CommentEntity::toDomain);
+  }
+
+  @Override
+  public Page<Comment> loadRootCommentsByAnswerId(Long answerId, Pageable pageable) {
+    return commentRepository
+        .findRootCommentsByAnswerId(CommentTargetType.ANSWER, answerId, pageable)
         .map(CommentEntity::toDomain);
   }
 
@@ -72,8 +80,30 @@ public class CommentPersistenceAdapter
     List<CommentEntity> entities =
         pageRequest.hasCursor()
             ? commentRepository.findRootCommentsByPostIdAfterCursor(
-                postId, pageRequest.cursor().createdAt(), pageRequest.cursor().id(), pageable)
-            : commentRepository.findRootCommentsByPostIdFirstPage(postId, pageable);
+                CommentTargetType.POST,
+                postId,
+                pageRequest.cursor().createdAt(),
+                pageRequest.cursor().id(),
+                pageable)
+            : commentRepository.findRootCommentsByPostIdFirstPage(
+                CommentTargetType.POST, postId, pageable);
+    return entities.stream().map(CommentEntity::toDomain).toList();
+  }
+
+  @Override
+  public List<Comment> loadRootCommentsByAnswerIdCursor(
+      Long answerId, CursorPageRequest pageRequest) {
+    Pageable pageable = PageRequest.of(0, pageRequest.limitWithProbe());
+    List<CommentEntity> entities =
+        pageRequest.hasCursor()
+            ? commentRepository.findRootCommentsByAnswerIdAfterCursor(
+                CommentTargetType.ANSWER,
+                answerId,
+                pageRequest.cursor().createdAt(),
+                pageRequest.cursor().id(),
+                pageable)
+            : commentRepository.findRootCommentsByAnswerIdFirstPage(
+                CommentTargetType.ANSWER, answerId, pageable);
     return entities.stream().map(CommentEntity::toDomain).toList();
   }
 
@@ -115,6 +145,19 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public Map<Long, Long> countCommentsByAnswerIds(List<Long> answerIds) {
+    if (answerIds == null || answerIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countCommentsByAnswerIds(CommentTargetType.ANSWER, answerIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.AnswerCommentCount::getAnswerId,
+                CommentJpaRepository.AnswerCommentCount::getCommentCount));
+  }
+
+  @Override
   public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
       FindCommentedPostRefsQuery query) {
     query.validate();
@@ -147,6 +190,14 @@ public class CommentPersistenceAdapter
       return 0L;
     }
     return commentRepository.countByPostId(postId);
+  }
+
+  @Override
+  public long countCommentsByAnswerId(Long answerId) {
+    if (answerId == null) {
+      return 0L;
+    }
+    return commentRepository.countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, answerId);
   }
 
   @Override

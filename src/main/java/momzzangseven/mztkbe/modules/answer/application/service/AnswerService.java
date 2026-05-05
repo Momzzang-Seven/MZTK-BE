@@ -28,6 +28,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.UpdateAnswerUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswerCommentsPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerExecutionResumePort;
@@ -67,6 +68,7 @@ public class AnswerService
 
   private final SaveAnswerPort saveAnswerPort;
   private final CountAnswersPort countAnswersPort;
+  private final CountAnswerCommentsPort countAnswerCommentsPort;
   private final LoadPostPort loadPostPort;
   private final LoadAnswerPort loadAnswerPort;
   private final DeleteAnswerPort deleteAnswerPort;
@@ -87,6 +89,15 @@ public class AnswerService
       throw new AnswerInvalidInputException("postId is required.");
     }
     return countAnswersPort.countAnswers(postId);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Map<Long, Long> countAnswersByPostIds(List<Long> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+    return countAnswersPort.countAnswersByPostIds(postIds);
   }
 
   /** Creates a new answer for a question post. */
@@ -157,6 +168,9 @@ public class AnswerService
     List<Long> answerIds = answers.stream().map(Answer::getId).toList();
     Map<Long, Long> likeCounts =
         answers.isEmpty() ? Map.of() : loadAnswerLikePort.countLikeByAnswerIds(answerIds);
+    Map<Long, Long> loadedCommentCounts =
+        answers.isEmpty() ? Map.of() : countAnswerCommentsPort.countCommentsByAnswerIds(answerIds);
+    Map<Long, Long> commentCounts = loadedCommentCounts == null ? Map.of() : loadedCommentCounts;
     Set<Long> likedAnswerIds =
         answers.isEmpty()
             ? Set.of()
@@ -184,6 +198,7 @@ public class AnswerService
                     writers,
                     imagesByAnswerId,
                     likeCounts,
+                    commentCounts,
                     likedAnswerIds,
                     web3ExecutionsByAnswerId))
         .toList();
@@ -349,6 +364,7 @@ public class AnswerService
       Map<Long, LoadAnswerWriterPort.WriterSummary> writers,
       Map<Long, AnswerImageResult> imagesByAnswerId,
       Map<Long, Long> likeCounts,
+      Map<Long, Long> commentCounts,
       Set<Long> likedAnswerIds,
       Map<Long, momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView>
           web3ExecutionsByAnswerId) {
@@ -357,6 +373,7 @@ public class AnswerService
         writers.get(answer.getUserId()),
         imagesByAnswerId.get(answer.getId()),
         likeCounts.getOrDefault(answer.getId(), 0L),
+        commentCounts.getOrDefault(answer.getId(), 0L),
         likedAnswerIds.contains(answer.getId()),
         web3ExecutionsByAnswerId.get(answer.getId()));
   }

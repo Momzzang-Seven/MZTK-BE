@@ -16,12 +16,14 @@ import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort.WriterSummary;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class CommentService
   private final LoadCommentPort loadCommentPort;
   private final SaveCommentPort saveCommentPort;
   private final LoadPostPort loadPostPort;
+  private final LoadAnswerPort loadAnswerPort;
   private final DeleteCommentPort deleteCommentPort;
   private final GrantCommentXpPort grantCommentXpPort;
   private final LoadCommentWriterPort loadCommentWriterPort;
@@ -48,16 +51,25 @@ public class CommentService
   @Override
   @Transactional
   public CommentMutationResult createComment(CreateCommentCommand command) {
-    validatePostWritable(command.postId());
+    Long targetPostId =
+        CommentTargetType.ANSWER.equals(command.targetType())
+            ? validateAnswerWritable(command.answerId())
+            : command.postId();
+    validatePostWritable(targetPostId);
 
     // 1-2. 대댓글인 경우 부모 댓글 검증
     if (command.parentId() != null) {
-      validateParentComment(command.parentId(), command.postId());
+      validateParentComment(
+          command.parentId(), command.targetType(), command.postId(), command.answerId());
     }
 
     // 1-3. 도메인 객체 생성 및 저장
     Comment newComment =
-        Comment.create(command.postId(), command.userId(), command.parentId(), command.content());
+        CommentTargetType.ANSWER.equals(command.targetType())
+            ? Comment.createForAnswer(
+                command.answerId(), command.userId(), command.parentId(), command.content())
+            : Comment.createForPost(
+                command.postId(), command.userId(), command.parentId(), command.content());
 
     Comment savedComment = saveCommentPort.saveComment(newComment);
 
@@ -79,7 +91,7 @@ public class CommentService
   @Transactional
   public CommentMutationResult updateComment(UpdateCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
-    validatePostWritable(comment.getPostId());
+    validateCommentTargetWritable(comment);
 
     comment.validateWriter(command.userId());
 
@@ -93,7 +105,7 @@ public class CommentService
   @Transactional
   public void deleteComment(DeleteCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
-    validatePostWritable(comment.getPostId());
+    validateCommentTargetWritable(comment);
     comment.validateWriter(command.userId());
 
     comment.delete();
@@ -115,13 +127,21 @@ public class CommentService
     return toResultPage(loadCommentPort.loadRootComments(query.postId(), query.pageable()), true);
   }
 
+  @Override
+  public Page<CommentResult> getAnswerRootComments(GetAnswerRootCommentsQuery query) {
+    Long postId = loadAnswerPostIdOrThrow(query.answerId());
+    validatePostReadable(postId, query.requesterUserId());
+    return toResultPage(
+        loadCommentPort.loadRootCommentsByAnswerId(query.answerId(), query.pageable()), true);
+  }
+
   // 5. 대댓글 조회 (Read)
   @Override
   public Page<CommentResult> getReplies(GetRepliesQuery query) {
     // 부모 댓글이 존재하는지 먼저 확인
     Comment parent =
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
-    validatePostReadable(parent.getPostId(), query.requesterUserId());
+    validateCommentTargetReadable(parent, query.requesterUserId());
     validateParentIsRootComment(parent);
 
     return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()), false);
@@ -144,10 +164,28 @@ public class CommentService
   }
 
   @Override
+  public GetCommentsCursorResult getAnswerRootCommentsByCursor(
+      GetAnswerRootCommentsCursorQuery query) {
+    Long postId = loadAnswerPostIdOrThrow(query.answerId());
+    validatePostReadable(postId, query.requesterUserId());
+    List<Comment> comments =
+        loadCommentPort.loadRootCommentsByAnswerIdCursor(query.answerId(), query.pageRequest());
+    boolean hasNext = comments.size() > query.pageRequest().size();
+    List<Comment> pageComments =
+        hasNext ? comments.subList(0, query.pageRequest().size()) : comments;
+    String nextCursor =
+        hasNext
+            ? createNextCursor(
+                pageComments.get(pageComments.size() - 1), query.pageRequest().scope())
+            : null;
+    return new GetCommentsCursorResult(toResultList(pageComments, true), hasNext, nextCursor);
+  }
+
+  @Override
   public GetCommentsCursorResult getRepliesByCursor(GetRepliesCursorQuery query) {
     Comment parent =
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
-    validatePostReadable(parent.getPostId(), query.requesterUserId());
+    validateCommentTargetReadable(parent, query.requesterUserId());
     validateParentIsRootComment(parent);
 
     List<Comment> comments =
@@ -169,10 +207,14 @@ public class CommentService
     return loadCommentPort.loadComment(commentId).orElseThrow(CommentNotFoundException::new);
   }
 
-  private void validateParentComment(Long parentId, Long postId) {
+  private void validateParentComment(
+      Long parentId, CommentTargetType targetType, Long postId, Long answerId) {
     Comment parent = loadCommentOrThrow(parentId);
 
-    if (!parent.getPostId().equals(postId)) {
+    if (!parent.getTargetType().equals(targetType)
+        || (CommentTargetType.POST.equals(targetType) && !parent.getPostId().equals(postId))
+        || (CommentTargetType.ANSWER.equals(targetType)
+            && !parent.getAnswerId().equals(answerId))) {
       throw new CommentPostMismatchException();
     }
 
@@ -202,6 +244,33 @@ public class CommentService
       throw new BusinessException(
           ErrorCode.INVALID_POST_INPUT, "Post is not in a state that allows comment interactions.");
     }
+  }
+
+  private void validateCommentTargetReadable(Comment comment, Long requesterUserId) {
+    Long postId =
+        CommentTargetType.ANSWER.equals(comment.getTargetType())
+            ? loadAnswerPostIdOrThrow(comment.getAnswerId())
+            : comment.getPostId();
+    validatePostReadable(postId, requesterUserId);
+  }
+
+  private void validateCommentTargetWritable(Comment comment) {
+    Long postId =
+        CommentTargetType.ANSWER.equals(comment.getTargetType())
+            ? validateAnswerWritable(comment.getAnswerId())
+            : comment.getPostId();
+    validatePostWritable(postId);
+  }
+
+  private Long validateAnswerWritable(Long answerId) {
+    return loadAnswerPostIdOrThrow(answerId);
+  }
+
+  private Long loadAnswerPostIdOrThrow(Long answerId) {
+    return loadAnswerPort
+        .loadAnswerCommentContext(answerId)
+        .map(LoadAnswerPort.AnswerCommentContext::postId)
+        .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
   }
 
   private LoadPostPort.PostVisibilityContext loadPostVisibilityOrThrow(Long postId) {

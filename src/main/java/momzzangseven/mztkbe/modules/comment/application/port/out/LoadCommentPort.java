@@ -16,15 +16,23 @@ public interface LoadCommentPort {
 
   Page<Comment> loadRootComments(Long postId, Pageable pageable);
 
+  Page<Comment> loadRootCommentsByAnswerId(Long answerId, Pageable pageable);
+
   Page<Comment> loadReplies(Long parentId, Pageable pageable);
 
   List<Comment> loadRootCommentsByCursor(Long postId, CursorPageRequest pageRequest);
+
+  List<Comment> loadRootCommentsByAnswerIdCursor(Long answerId, CursorPageRequest pageRequest);
 
   List<Comment> loadRepliesByCursor(Long parentId, CursorPageRequest pageRequest);
 
   long countCommentsByPostId(Long postId);
 
   Map<Long, Long> countCommentsByPostIds(List<Long> postIds);
+
+  long countCommentsByAnswerId(Long answerId);
+
+  Map<Long, Long> countCommentsByAnswerIds(List<Long> answerIds);
 
   Map<Long, Long> countDirectRepliesByParentIds(List<Long> parentIds);
 

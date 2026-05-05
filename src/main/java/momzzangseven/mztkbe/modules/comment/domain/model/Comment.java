@@ -10,7 +10,9 @@ import momzzangseven.mztkbe.global.error.comment.CommentUnauthorizedException;
 @Getter
 public class Comment {
   private final Long id;
+  private final CommentTargetType targetType;
   private final Long postId;
+  private final Long answerId;
   private final Long writerId;
   private final Long parentId;
 
@@ -23,7 +25,9 @@ public class Comment {
   @Builder
   public Comment(
       Long id,
+      CommentTargetType targetType,
       Long postId,
+      Long answerId,
       Long writerId,
       Long parentId,
       String content,
@@ -31,7 +35,9 @@ public class Comment {
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
     this.id = id;
+    this.targetType = targetType == null ? CommentTargetType.POST : targetType;
     this.postId = postId;
+    this.answerId = answerId;
     this.writerId = writerId;
     this.parentId = parentId;
     this.content = content;
@@ -42,12 +48,35 @@ public class Comment {
 
   // [Factory Method] 댓글 생성
   public static Comment create(Long postId, Long writerId, Long parentId, String content) {
+    return createForPost(postId, writerId, parentId, content);
+  }
+
+  public static Comment createForPost(Long postId, Long writerId, Long parentId, String content) {
     if (content == null || content.isBlank()) {
       throw new BusinessException(ErrorCode.INVALID_INPUT);
     }
 
     return Comment.builder()
+        .targetType(CommentTargetType.POST)
         .postId(postId)
+        .writerId(writerId)
+        .parentId(parentId)
+        .content(content)
+        .isDeleted(false)
+        .createdAt(LocalDateTime.now())
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public static Comment createForAnswer(
+      Long answerId, Long writerId, Long parentId, String content) {
+    if (content == null || content.isBlank()) {
+      throw new BusinessException(ErrorCode.INVALID_INPUT);
+    }
+
+    return Comment.builder()
+        .targetType(CommentTargetType.ANSWER)
+        .answerId(answerId)
         .writerId(writerId)
         .parentId(parentId)
         .content(content)

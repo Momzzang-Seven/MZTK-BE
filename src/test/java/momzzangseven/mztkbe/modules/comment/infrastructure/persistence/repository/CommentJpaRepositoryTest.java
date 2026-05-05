@@ -6,6 +6,7 @@ import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -125,6 +126,30 @@ class CommentJpaRepositoryTest {
                     CommentJpaRepository.PostCommentCount::getCommentCount));
 
     assertThat(counts).containsEntry(800L, 3L).containsEntry(801L, 1L).doesNotContainKey(802L);
+  }
+
+  @Test
+  @DisplayName("answer comment counts are grouped by answer id and do not include post comments")
+  void countCommentsByAnswerIds_doesNotMixPostComments() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 13, 0);
+    persistRoot(900L, 51L, "post-comment", base);
+    persistAnswerRoot(1000L, 52L, "answer-1000-a", base.plusMinutes(1));
+    persistAnswerRoot(1000L, 53L, "answer-1000-b", base.plusMinutes(2));
+    persistAnswerRoot(1001L, 54L, "answer-1001", base.plusMinutes(3));
+
+    Map<Long, Long> counts =
+        commentJpaRepository
+            .countCommentsByAnswerIds(CommentTargetType.ANSWER, List.of(1000L, 1001L))
+            .stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    CommentJpaRepository.AnswerCommentCount::getAnswerId,
+                    CommentJpaRepository.AnswerCommentCount::getCommentCount));
+
+    assertThat(counts).containsEntry(1000L, 2L).containsEntry(1001L, 1L).doesNotContainKey(900L);
+    assertThat(commentJpaRepository.countByPostId(900L)).isEqualTo(1L);
+    assertThat(commentJpaRepository.countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, 1000L))
+        .isEqualTo(2L);
   }
 
   @Test
@@ -381,6 +406,15 @@ class CommentJpaRepositoryTest {
       Long postId, Long writerId, String content, CommentEntity parent, LocalDateTime createdAt) {
     CommentEntity entity =
         newCommentEntity(postId, writerId, content, false, parent, createdAt, createdAt);
+    return commentJpaRepository.saveAndFlush(entity);
+  }
+
+  private CommentEntity persistAnswerRoot(
+      Long answerId, Long writerId, String content, LocalDateTime createdAt) {
+    CommentEntity entity =
+        newCommentEntity(null, writerId, content, false, null, createdAt, createdAt);
+    ReflectionTestUtils.setField(entity, "targetType", CommentTargetType.ANSWER);
+    ReflectionTestUtils.setField(entity, "answerId", answerId);
     return commentJpaRepository.saveAndFlush(entity);
   }
 

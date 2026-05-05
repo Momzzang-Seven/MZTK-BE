@@ -8,4 +8,8 @@ public record CreateCommentRequest(
   public CreateCommentCommand toCommand(Long postId, Long userId) {
     return new CreateCommentCommand(postId, userId, this.parentId, this.content);
   }
+
+  public CreateCommentCommand toAnswerCommand(Long answerId, Long userId) {
+    return CreateCommentCommand.forAnswer(answerId, userId, this.parentId, this.content);
+  }
 }

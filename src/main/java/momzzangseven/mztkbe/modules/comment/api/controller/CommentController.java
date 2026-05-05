@@ -46,6 +46,23 @@ public class CommentController {
     return ResponseEntity.ok(ApiResponse.success("Comment created successfully", response));
   }
 
+  /** Create a new answer comment. */
+  @PostMapping("/answers/{answerId}/comments")
+  public ResponseEntity<ApiResponse<CommentMutationResponse>> createAnswerComment(
+      @PathVariable Long answerId,
+      @Valid @RequestBody CreateCommentRequest request,
+      @AuthenticationPrincipal Long userId) {
+
+    userId = requireUserId(userId);
+
+    CreateCommentCommand command = request.toAnswerCommand(answerId, userId);
+
+    CommentMutationResult result = createCommentUseCase.createComment(command);
+    CommentMutationResponse response = CommentMutationResponse.from(result);
+
+    return ResponseEntity.ok(ApiResponse.success("Comment created successfully", response));
+  }
+
   /** Update comment */
   @PutMapping("/comments/{commentId}")
   public ResponseEntity<ApiResponse<CommentMutationResponse>> updateComment(
@@ -87,6 +104,21 @@ public class CommentController {
     GetRootCommentsQuery query = new GetRootCommentsQuery(postId, userId, pageable);
 
     Page<CommentResult> resultPage = getCommentUseCase.getRootComments(query);
+    Page<CommentResponse> responsePage = resultPage.map(CommentResponse::from);
+
+    return ResponseEntity.ok(ApiResponse.success(responsePage));
+  }
+
+  /** Get answer root comments. */
+  @GetMapping("/answers/{answerId}/comments")
+  public ResponseEntity<ApiResponse<Page<CommentResponse>>> getAnswerRootComments(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long answerId,
+      @PageableDefault(size = 20) Pageable pageable) {
+
+    GetAnswerRootCommentsQuery query = new GetAnswerRootCommentsQuery(answerId, userId, pageable);
+
+    Page<CommentResult> resultPage = getCommentUseCase.getAnswerRootComments(query);
     Page<CommentResponse> responsePage = resultPage.map(CommentResponse::from);
 
     return ResponseEntity.ok(ApiResponse.success(responsePage));

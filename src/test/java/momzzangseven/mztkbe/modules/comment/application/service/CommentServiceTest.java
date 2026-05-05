@@ -30,14 +30,17 @@ import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsCurso
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -53,6 +56,7 @@ class CommentServiceTest {
   @Mock private LoadCommentPort loadCommentPort;
   @Mock private SaveCommentPort saveCommentPort;
   @Mock private LoadPostPort loadPostPort;
+  @Mock private LoadAnswerPort loadAnswerPort;
   @Mock private DeleteCommentPort deleteCommentPort;
   @Mock private GrantCommentXpPort grantCommentXpPort;
   @Mock private LoadCommentWriterPort loadCommentWriterPort;
@@ -93,6 +97,43 @@ class CommentServiceTest {
     verify(loadPostPort).loadPostVisibilityContext(100L);
     verify(saveCommentPort).saveComment(any(Comment.class));
     verify(grantCommentXpPort).grantCreateCommentXp(200L, 1L);
+  }
+
+  @Test
+  @DisplayName("createComment() creates answer comment using answerId target")
+  void createComment_answerTarget_createsCommentWithAnswerId() {
+    CreateCommentCommand command =
+        CreateCommentCommand.forAnswer(300L, 200L, null, "answer comment");
+
+    given(loadAnswerPort.loadAnswerCommentContext(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+    given(saveCommentPort.saveComment(any(Comment.class)))
+        .willAnswer(
+            invocation -> {
+              Comment input = invocation.getArgument(0);
+              return Comment.builder()
+                  .id(3L)
+                  .targetType(input.getTargetType())
+                  .answerId(input.getAnswerId())
+                  .writerId(input.getWriterId())
+                  .parentId(input.getParentId())
+                  .content(input.getContent())
+                  .isDeleted(input.isDeleted())
+                  .createdAt(input.getCreatedAt())
+                  .updatedAt(input.getUpdatedAt())
+                  .build();
+            });
+
+    CommentMutationResult result = commentService.createComment(command);
+
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    verify(saveCommentPort).saveComment(captor.capture());
+    assertThat(captor.getValue().getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(captor.getValue().getAnswerId()).isEqualTo(300L);
+    assertThat(captor.getValue().getPostId()).isNull();
+    assertThat(result.id()).isEqualTo(3L);
   }
 
   @Test
