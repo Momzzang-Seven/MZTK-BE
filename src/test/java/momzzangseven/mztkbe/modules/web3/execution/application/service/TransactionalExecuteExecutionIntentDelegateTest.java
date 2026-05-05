@@ -217,6 +217,25 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
+  void executeEip1559_rejectsBlankSignedRawTransaction_asWeb3InvalidInput() throws Exception {
+    ExecutionIntent intent = existingEip1559Intent();
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, null),
+                    sponsorGate()))
+        .isInstanceOf(momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException.class)
+        .hasMessageContaining("signedRawTransaction is required");
+    // No DB writes nor broadcast — purely a synchronous client validation failure.
+    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
+    verify(executionTransactionGatewayPort, never()).broadcast(any());
+    verify(executionIntentPersistencePort, never()).update(any());
+  }
+
+  @Test
   void execute_marksExpired_whenIntentExpiredRelativeToInjectedClock() throws Exception {
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.minusSeconds(1)).build();
