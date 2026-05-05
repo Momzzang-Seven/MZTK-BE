@@ -177,6 +177,7 @@ public class TreasuryWalletPersistenceAdapter
     return TreasuryKeyOrigin.valueOf(value);
   }
 
+  // TODO get rid of deprecated KEK fidleds in PR4
   private ExecutionSignerCapabilityView mapCapability(
       Web3TreasuryWalletEntity entity, String keyEncryptionKeyB64) {
     String walletAlias = entity.getWalletAlias();
