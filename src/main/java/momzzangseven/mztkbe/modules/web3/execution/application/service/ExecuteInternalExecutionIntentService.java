@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
@@ -40,12 +41,33 @@ public class ExecuteInternalExecutionIntentService
     try {
       gate = sponsorWalletPreflight.preflight();
     } catch (Web3InvalidInputException e) {
-      log.warn("internal execution preflight skipped: {}", e.getMessage());
+      logSkip("WALLET_INVALID", e);
       return ExecuteInternalExecutionIntentResult.preflightSkipped();
     } catch (TreasuryWalletStateException e) {
-      log.warn("internal execution preflight skipped due to wallet state: {}", e.getMessage(), e);
+      logSkip("WALLET_STATE", e);
+      return ExecuteInternalExecutionIntentResult.preflightSkipped();
+    } catch (KmsKeyDescribeFailedException e) {
+      // Transient AWS KMS DescribeKey failure (throttle / 5xx / permissions). Skip this tick
+      // without claiming an intent, without escalating to terminal failure, and without firing
+      // any cascade event — mirrors TransactionIssuerWorker.
+      logSkip("KMS_DESCRIBE_FAILED", e);
       return ExecuteInternalExecutionIntentResult.preflightSkipped();
     }
     return delegate.execute(command, gate);
+  }
+
+  /**
+   * Emit a structured WARN line that operators can grep on to find intents stuck in
+   * AWAITING_SIGNATURE because sponsor preflight is repeatedly failing. The {@code
+   * event=INTERNAL_EXECUTION_PREFLIGHT_SKIPPED} tag is the agreed search anchor — pair it with a
+   * {@code SELECT * FROM web3_execution_intents WHERE status='AWAITING_SIGNATURE'} query to find
+   * the affected rows.
+   */
+  private void logSkip(String reason, RuntimeException e) {
+    log.warn(
+        "event=INTERNAL_EXECUTION_PREFLIGHT_SKIPPED reason={} exception={} message={}",
+        reason,
+        e.getClass().getSimpleName(),
+        e.getMessage());
   }
 }

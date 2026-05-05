@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
@@ -83,6 +84,20 @@ class ExecuteInternalExecutionIntentServiceTest {
 
     ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
 
+    assertThat(result.executed()).isFalse();
+    assertThat(result.quarantined()).isFalse();
+    verify(delegate, never()).execute(eq(COMMAND), any());
+  }
+
+  @Test
+  void execute_returnsPreflightSkippedWhenKmsDescribeFails_doesNotCallDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("KMS DescribeKey failed"));
+
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
+
+    // Transient KMS failure must not propagate to the cron worker as a per-intent terminal
+    // failure — this would inflate failedCount and ERROR-log every throttle hit.
     assertThat(result.executed()).isFalse();
     assertThat(result.quarantined()).isFalse();
     verify(delegate, never()).execute(eq(COMMAND), any());
