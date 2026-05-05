@@ -38,7 +38,7 @@ import org.springframework.stereotype.Component;
  * populated remain readable through the legacy methods, and rows that have only KMS columns
  * populated are visible to the new methods.
  */
-//TODO TreasuryWalletPersistenceAdapter에 너무 많은 책임이 주어져있다. 별도 객체로 분리.
+// TODO TreasuryWalletPersistenceAdapter에 너무 많은 책임이 주어져있다. 별도 객체로 분리.
 @Component
 @RequiredArgsConstructor
 @Slf4j
