@@ -13,10 +13,11 @@ public interface LoadPostPort {
       boolean questionPost,
       String content,
       Long reward,
-      boolean answerLocked) {
+      boolean answerLocked,
+      boolean publiclyVisible) {
 
     public PostContext(Long postId, Long writerId, boolean isSolved, boolean questionPost) {
-      this(postId, writerId, isSolved, questionPost, null, null, isSolved);
+      this(postId, writerId, isSolved, questionPost, null, null, isSolved, true);
     }
 
     public PostContext(
@@ -26,7 +27,26 @@ public interface LoadPostPort {
         boolean questionPost,
         String content,
         Long reward) {
-      this(postId, writerId, isSolved, questionPost, content, reward, isSolved);
+      this(postId, writerId, isSolved, questionPost, content, reward, isSolved, true);
+    }
+
+    public PostContext(
+        Long postId,
+        Long writerId,
+        boolean isSolved,
+        boolean questionPost,
+        String content,
+        Long reward,
+        boolean answerLocked) {
+      this(postId, writerId, isSolved, questionPost, content, reward, answerLocked, true);
+    }
+
+    public boolean readableBy(Long requesterUserId) {
+      return publiclyVisible || (requesterUserId != null && writerId.equals(requesterUserId));
+    }
+
+    public boolean writable() {
+      return publiclyVisible;
     }
   }
 }

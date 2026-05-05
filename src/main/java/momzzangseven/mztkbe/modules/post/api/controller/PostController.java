@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.post.api.dto.GetPostsResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostDetailResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostListResponse;
 import momzzangseven.mztkbe.modules.post.api.dto.PostMutationResponse;
+import momzzangseven.mztkbe.modules.post.api.dto.RecoverQuestionCreateRequest;
 import momzzangseven.mztkbe.modules.post.api.dto.UpdatePostRequest;
 import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.AcceptAnswerResult;
@@ -150,12 +151,15 @@ public class PostController {
    */
   @PostMapping("/{postId}/web3/recover-create")
   public ResponseEntity<ApiResponse<PostMutationResponse>> recoverQuestionCreate(
-      @AuthenticationPrincipal Long userId, @PathVariable Long postId) {
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long postId,
+      @RequestBody(required = false) @Valid RecoverQuestionCreateRequest request) {
 
     Long validatedUserId = requireUserId(userId);
-    PostMutationResult result =
-        recoverQuestionPostEscrowUseCase.recoverQuestionCreate(
-            new RecoverQuestionPostEscrowCommand(validatedUserId, postId));
+    RecoverQuestionPostEscrowCommand command =
+        (request == null ? RecoverQuestionCreateRequest.empty() : request)
+            .toCommand(validatedUserId, postId);
+    PostMutationResult result = recoverQuestionPostEscrowUseCase.recoverQuestionCreate(command);
     return ResponseEntity.ok(ApiResponse.success(PostMutationResponse.from(result)));
   }
 

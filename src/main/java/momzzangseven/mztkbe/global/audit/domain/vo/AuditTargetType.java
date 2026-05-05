@@ -15,5 +15,6 @@ public enum AuditTargetType {
   USER_ACCOUNT,
   POST,
   COMMENT,
-  DASHBOARD
+  DASHBOARD,
+  POST_MODERATION
 }

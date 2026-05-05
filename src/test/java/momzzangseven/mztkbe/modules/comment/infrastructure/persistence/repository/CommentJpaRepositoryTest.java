@@ -230,6 +230,48 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName(
+      "findCommentedPostRefs queries hide non-readable posts but keep requester-owned hidden posts")
+  void findCommentedPostRefs_filtersUnreadablePosts() {
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
+    persistPost(1300L, 1L, "FREE", null, base);
+    persistPost(1301L, 1L, "FREE", null, base);
+    persistPost(1302L, 1L, "FREE", null, base);
+    persistPost(1303L, 77L, "FREE", null, base);
+    updatePostVisibility(1301L, "VISIBLE", "BLOCKED");
+    updatePostVisibility(1302L, "FAILED", "NORMAL");
+    updatePostVisibility(1303L, "VISIBLE", "BLOCKED");
+
+    CommentEntity hiddenOtherLatest =
+        persistRoot(1301L, 77L, "hidden other", base.minusMinutes(1), false);
+    CommentEntity ownHiddenLatest =
+        persistRoot(1303L, 77L, "own hidden", base.minusMinutes(2), false);
+    CommentEntity publicLatest = persistRoot(1300L, 77L, "public", base.minusMinutes(3), false);
+    CommentEntity failedOtherLatest =
+        persistRoot(1302L, 77L, "failed other", base.minusMinutes(4), false);
+
+    List<CommentJpaRepository.CommentedPostRefProjection> firstPage =
+        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "FREE", null, 1);
+    List<CommentJpaRepository.CommentedPostRefProjection> secondPage =
+        commentJpaRepository.findCommentedPostRefsAfterCursor(
+            77L, "FREE", null, ownHiddenLatest.getCreatedAt(), idOf(ownHiddenLatest), 10);
+
+    assertThat(firstPage)
+        .extracting(
+            CommentJpaRepository.CommentedPostRefProjection::getPostId,
+            CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .containsExactly(org.assertj.core.groups.Tuple.tuple(1303L, idOf(ownHiddenLatest)));
+    assertThat(secondPage)
+        .extracting(
+            CommentJpaRepository.CommentedPostRefProjection::getPostId,
+            CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .containsExactly(org.assertj.core.groups.Tuple.tuple(1300L, idOf(publicLatest)));
+    assertThat(secondPage)
+        .extracting(CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .doesNotContain(idOf(hiddenOtherLatest), idOf(failedOtherLatest));
+  }
+
+  @Test
   @DisplayName("deleteAllByPostId() soft-deletes all comments of the post")
   void deleteAllByPostId_softDeletesCommentsByPostId() {
     LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 10, 0);
@@ -305,13 +347,18 @@ class CommentJpaRepositoryTest {
   }
 
   private void persistPost(Long postId, String type, String title, LocalDateTime createdAt) {
+    persistPost(postId, 1L, type, title, createdAt);
+  }
+
+  private void persistPost(
+      Long postId, Long userId, String type, String title, LocalDateTime createdAt) {
     jdbcTemplate.update(
         """
         INSERT INTO posts (id, user_id, type, title, content, reward, status, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         postId,
-        1L,
+        userId,
         type,
         title,
         "content",
@@ -319,6 +366,15 @@ class CommentJpaRepositoryTest {
         "OPEN",
         createdAt,
         createdAt);
+  }
+
+  private void updatePostVisibility(
+      Long postId, String publicationStatus, String moderationStatus) {
+    jdbcTemplate.update(
+        "UPDATE posts SET publication_status = ?, moderation_status = ? WHERE id = ?",
+        publicationStatus,
+        moderationStatus,
+        postId);
   }
 
   private CommentEntity persistReply(

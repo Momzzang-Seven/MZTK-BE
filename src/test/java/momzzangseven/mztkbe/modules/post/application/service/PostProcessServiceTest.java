@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -10,18 +11,24 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
+import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicationEvidence;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
@@ -30,6 +37,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -44,6 +52,8 @@ class PostProcessServiceTest {
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private CountAnswersPort countAnswersPort;
   @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  @Mock private LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
+  @Spy private PostVisibilityPolicy postVisibilityPolicy = new PostVisibilityPolicy();
 
   @InjectMocks private PostProcessService postProcessService;
 
@@ -344,6 +354,299 @@ class PostProcessServiceTest {
     verify(postPersistencePort).deletePost(post);
     verify(questionLifecycleExecutionPort).prepareQuestionDelete(postId, ownerId, "질문 내용", 50L);
     verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  @Test
+  @DisplayName("FAILED question content update is blocked before local or web3 side effects")
+  void updateFailedQuestionBlockedBeforeSideEffects() {
+    Long ownerId = 7L;
+    Long postId = 77L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+    UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_009"));
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(
+        countAnswersPort,
+        validatePostImagesPort,
+        linkTagPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("FAILED question metadata-only update is blocked before image and tag side effects")
+  void updateFailedQuestionMetadataOnlyBlockedBeforeSideEffects() {
+    Long ownerId = 7L;
+    Long postId = 85L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+    UpdatePostCommand command = UpdatePostCommand.of("수정 제목", null, List.of(1L), List.of("java"));
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_009"));
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(
+        countAnswersPort,
+        validatePostImagesPort,
+        linkTagPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort,
+        loadQuestionPublicationEvidencePort);
+  }
+
+  @Test
+  @DisplayName("PENDING question update is blocked before local or web3 side effects")
+  void updatePendingQuestionBlockedBeforeSideEffects() {
+    Long ownerId = 7L;
+    Long postId = 80L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.PENDING)
+            .build();
+    UpdatePostCommand command =
+        UpdatePostCommand.of("new title", "new content", List.of(1L), List.of("java"));
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_008"));
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(
+        countAnswersPort,
+        validatePostImagesPort,
+        linkTagPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("PENDING question update by non-owner returns ownership error before state error")
+  void updatePendingQuestionByNonOwnerDoesNotLeakPublicationState() {
+    Long ownerId = 7L;
+    Long postId = 86L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.PENDING)
+            .build();
+    UpdatePostCommand command = UpdatePostCommand.of(null, "new content", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(8L, postId, command))
+        .isInstanceOf(PostUnauthorizedException.class);
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(
+        countAnswersPort,
+        validatePostImagesPort,
+        linkTagPort,
+        updatePostImagesPort,
+        questionLifecycleExecutionPort,
+        loadQuestionPublicationEvidencePort);
+  }
+
+  @Test
+  @DisplayName("PENDING question delete is blocked before cleanup or web3 side effects")
+  void deletePendingQuestionBlockedBeforeSideEffects() {
+    Long ownerId = 7L;
+    Long postId = 81L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.PENDING)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_008"));
+
+    verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(countAnswersPort, eventPublisher, questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("FAILED question delete removes local row without on-chain delete")
+  void deleteFailedQuestionDeletesLocallyWithoutWeb3() {
+    Long ownerId = 7L;
+    Long postId = 78L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.deletePost(ownerId, postId);
+
+    verify(postPersistencePort).deletePost(post);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionDelete(org.mockito.ArgumentMatchers.any(), any(), any(), any());
+    verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  @Test
+  @DisplayName(
+      "managed FAILED question delete allows cleanup even without terminal create evidence")
+  void deleteManagedFailedQuestionAllowsCleanupWithoutTerminalCreateEvidence() {
+    Long ownerId = 7L;
+    Long postId = 87L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(new QuestionPublicationEvidence(true, false, false, false, null));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.deletePost(ownerId, postId);
+
+    verify(postPersistencePort).deletePost(post);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionDelete(org.mockito.ArgumentMatchers.any(), any(), any(), any());
+    verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  @Test
+  @DisplayName("managed FAILED question delete blocks when projection exists")
+  void deleteManagedFailedQuestionBlocksWhenProjectionExists() {
+    Long ownerId = 7L;
+    Long postId = 82L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(new QuestionPublicationEvidence(true, true, true, true, "PENDING"));
+
+    assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_010"));
+
+    verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(countAnswersPort, eventPublisher);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionDelete(org.mockito.ArgumentMatchers.any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("managed FAILED question delete blocks when active create intent exists")
+  void deleteManagedFailedQuestionBlocksWhenActiveCreateIntentExists() {
+    Long ownerId = 7L;
+    Long postId = 83L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(new QuestionPublicationEvidence(true, false, true, false, "CREATED"));
+
+    assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_008"));
+
+    verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(countAnswersPort, eventPublisher);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionDelete(org.mockito.ArgumentMatchers.any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName(
+      "managed FAILED question delete allows local cleanup when no projection or active intent")
+  void deleteManagedFailedQuestionAllowsLocalCleanupWithoutProjectionOrActiveIntent() {
+    Long ownerId = 7L;
+    Long postId = 84L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(new QuestionPublicationEvidence(true, false, false, true, "EXPIRED"));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+
+    postProcessService.deletePost(ownerId, postId);
+
+    verify(postPersistencePort).deletePost(post);
+    verify(questionLifecycleExecutionPort, never())
+        .prepareQuestionDelete(org.mockito.ArgumentMatchers.any(), any(), any(), any());
+    verify(eventPublisher).publishEvent(new PostDeletedEvent(postId, PostType.QUESTION));
+  }
+
+  @Test
+  @DisplayName("BLOCKED FAILED question delete stops before lifecycle evidence or cleanup")
+  void deleteBlockedFailedQuestionStopsBeforeEvidenceOrCleanup() {
+    Long ownerId = 7L;
+    Long postId = 88L;
+    Post post =
+        questionPost(ownerId, postId).toBuilder()
+            .publicationStatus(PostPublicationStatus.FAILED)
+            .moderationStatus(PostModerationStatus.BLOCKED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Blocked posts");
+
+    verify(postPersistencePort, never()).deletePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(
+        questionLifecycleExecutionPort,
+        loadQuestionPublicationEvidencePort,
+        countAnswersPort,
+        eventPublisher);
+  }
+
+  @Test
+  @DisplayName("BLOCKED post cannot be updated by owner")
+  void updateBlockedPostRejected() {
+    Long ownerId = 7L;
+    Long postId = 79L;
+    Post post =
+        ownedPost(ownerId, postId).toBuilder()
+            .moderationStatus(PostModerationStatus.BLOCKED)
+            .build();
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+
+    assertThatThrownBy(
+            () ->
+                postProcessService.updatePost(
+                    ownerId, postId, UpdatePostCommand.of(null, "blocked edit", null, null)))
+        .isInstanceOf(PostInvalidInputException.class)
+        .hasMessageContaining("Blocked posts");
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
   }
 
   private Post questionPost(Long ownerId, Long postId) {

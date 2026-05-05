@@ -41,6 +41,7 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
   private final LoadPostImagesPort loadPostImagesPort;
   private final PostLikePersistencePort postLikePersistencePort;
   private final LoadQuestionExecutionResumePort loadQuestionExecutionResumePort;
+  private final PostVisibilityPolicy postVisibilityPolicy;
 
   @Override
   @Transactional(readOnly = true)
@@ -58,6 +59,8 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                     post.getReward(),
                     post.getStatus() != PostStatus.OPEN,
                     post.getStatus(),
+                    post.getPublicationStatus(),
+                    post.getModerationStatus(),
                     post.getAcceptedAnswerId()));
   }
 
@@ -77,6 +80,8 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
                     post.getReward(),
                     post.getStatus() != PostStatus.OPEN,
                     post.getStatus(),
+                    post.getPublicationStatus(),
+                    post.getModerationStatus(),
                     post.getAcceptedAnswerId()));
   }
 
@@ -85,6 +90,7 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
   @Transactional(readOnly = true)
   public PostDetailResult getPost(Long postId, Long requesterUserId) {
     Post post = postPersistencePort.loadPost(postId).orElseThrow(PostNotFoundException::new);
+    postVisibilityPolicy.validateReadable(post, requesterUserId);
 
     List<String> tags = loadTagPort.findTagNamesByPostId(postId);
     post = post.withTags(tags);

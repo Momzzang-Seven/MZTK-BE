@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.global.pagination.CursorScope;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
+import momzzangseven.mztkbe.modules.comment.application.dto.DeleteCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetCommentsCursorResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesCursorQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
@@ -63,7 +64,8 @@ class CommentServiceTest {
   void createComment_createsRootCommentWhenPostExists() {
     CreateCommentCommand command = new CreateCommentCommand(100L, 200L, null, "hello");
 
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(saveCommentPort.saveComment(any(Comment.class)))
         .willAnswer(
             invocation -> {
@@ -88,7 +90,7 @@ class CommentServiceTest {
     assertThat(result.parentId()).isNull();
     assertThat(result.isDeleted()).isFalse();
 
-    verify(loadPostPort).existsPost(100L);
+    verify(loadPostPort).loadPostVisibilityContext(100L);
     verify(saveCommentPort).saveComment(any(Comment.class));
     verify(grantCommentXpPort).grantCreateCommentXp(200L, 1L);
   }
@@ -97,11 +99,25 @@ class CommentServiceTest {
   @DisplayName("createComment() throws when post does not exist")
   void createComment_postMissing_throwsBusinessException() {
     CreateCommentCommand command = new CreateCommentCommand(100L, 200L, null, "hello");
-    given(loadPostPort.existsPost(100L)).willReturn(false);
+    given(loadPostPort.loadPostVisibilityContext(100L)).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> commentService.createComment(command))
         .isInstanceOf(BusinessException.class)
         .hasMessage(ErrorCode.POST_NOT_FOUND.getMessage());
+
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+    verifyNoInteractions(grantCommentXpPort);
+  }
+
+  @Test
+  @DisplayName("createComment() throws when post is not publicly writable")
+  void createComment_nonPublicPost_throwsBusinessException() {
+    CreateCommentCommand command = new CreateCommentCommand(100L, 200L, null, "hello");
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(hiddenPostContext(100L, 200L)));
+
+    assertThatThrownBy(() -> commentService.createComment(command))
+        .isInstanceOf(BusinessException.class);
 
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
     verifyNoInteractions(grantCommentXpPort);
@@ -126,7 +142,7 @@ class CommentServiceTest {
   void getRootComments_postMissing_throwsBusinessException() {
     Pageable pageable = PageRequest.of(0, 20);
     GetRootCommentsQuery query = new GetRootCommentsQuery(100L, pageable);
-    given(loadPostPort.existsPost(100L)).willReturn(false);
+    given(loadPostPort.loadPostVisibilityContext(100L)).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> commentService.getRootComments(query))
         .isInstanceOf(BusinessException.class)
@@ -151,7 +167,8 @@ class CommentServiceTest {
             .build();
     CreateCommentCommand command = new CreateCommentCommand(100L, 200L, 10L, "reply content");
 
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parentComment));
     given(saveCommentPort.saveComment(any(Comment.class)))
         .willAnswer(
@@ -193,7 +210,8 @@ class CommentServiceTest {
             .build();
     CreateCommentCommand command = new CreateCommentCommand(100L, 200L, 10L, "reply");
 
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parentComment));
 
     assertThatThrownBy(() -> commentService.createComment(command))
@@ -218,7 +236,8 @@ class CommentServiceTest {
             .build();
     CreateCommentCommand command = new CreateCommentCommand(100L, 200L, 10L, "reply");
 
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(deletedParent));
 
     assertThatThrownBy(() -> commentService.createComment(command))
@@ -245,7 +264,8 @@ class CommentServiceTest {
             .build();
     CreateCommentCommand command = new CreateCommentCommand(100L, 200L, 10L, "nested reply");
 
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(replyParent));
 
     assertThatThrownBy(() -> commentService.createComment(command))
@@ -260,7 +280,8 @@ class CommentServiceTest {
   void createComment_xpGrantFails_returnsSavedComment() {
     CreateCommentCommand command = new CreateCommentCommand(100L, 200L, null, "hello");
 
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(saveCommentPort.saveComment(any(Comment.class)))
         .willAnswer(
             invocation -> {
@@ -303,7 +324,8 @@ class CommentServiceTest {
             .build();
     Pageable pageable = PageRequest.of(0, 10);
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadReplies(10L, pageable)).willReturn(Page.empty(pageable));
 
     Page<CommentResult> result = commentService.getReplies(new GetRepliesQuery(10L, pageable));
@@ -327,7 +349,8 @@ class CommentServiceTest {
             .updatedAt(now)
             .build();
     Pageable pageable = PageRequest.of(0, 20);
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadRootComments(100L, pageable))
         .willReturn(new PageImpl<>(List.of(root), pageable, 1));
     given(loadCommentPort.countDirectRepliesByParentIds(List.of(11L))).willReturn(Map.of(11L, 2L));
@@ -373,7 +396,8 @@ class CommentServiceTest {
             .build();
     Pageable pageable = PageRequest.of(0, 1);
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadReplies(10L, pageable))
         .willReturn(new PageImpl<>(List.of(reply), pageable, 2));
     given(loadCommentWriterPort.loadWritersByIds(java.util.Set.of(202L)))
@@ -407,7 +431,7 @@ class CommentServiceTest {
             .build();
     Pageable pageable = PageRequest.of(0, 10);
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
-    given(loadPostPort.existsPost(100L)).willReturn(false);
+    given(loadPostPort.loadPostVisibilityContext(100L)).willReturn(Optional.empty());
 
     assertThatThrownBy(() -> commentService.getReplies(new GetRepliesQuery(10L, pageable)))
         .isInstanceOf(BusinessException.class)
@@ -433,7 +457,8 @@ class CommentServiceTest {
             .build();
     Pageable pageable = PageRequest.of(0, 10);
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(replyParent));
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
 
     assertThatThrownBy(() -> commentService.getReplies(new GetRepliesQuery(10L, pageable)))
         .isInstanceOf(BusinessException.class)
@@ -453,7 +478,8 @@ class CommentServiceTest {
     Comment probe = comment(13L, 100L, 203L, null, "probe", false, probeTime);
     CursorPageRequest pageRequest =
         CursorPageRequest.of(null, 2, 20, 50, CursorScope.rootComments(100L));
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadRootCommentsByCursor(100L, pageRequest))
         .willReturn(List.of(first, second, probe));
     given(loadCommentPort.countDirectRepliesByParentIds(List.of(11L, 12L)))
@@ -480,7 +506,8 @@ class CommentServiceTest {
     Comment probe = comment(22L, 100L, 202L, 10L, "probe", false, now.plusMinutes(2));
     CursorPageRequest pageRequest = CursorPageRequest.of(null, 1, 10, 50, CursorScope.replies(10L));
     given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(parent));
-    given(loadPostPort.existsPost(100L)).willReturn(true);
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
     given(loadCommentPort.loadRepliesByCursor(10L, pageRequest))
         .willReturn(List.of(firstReply, probe));
     given(loadCommentWriterPort.loadWritersByIds(java.util.Set.of(201L))).willReturn(Map.of());
@@ -503,6 +530,36 @@ class CommentServiceTest {
     verify(deleteCommentPort).deleteAllByPostId(33L);
   }
 
+  @Test
+  @DisplayName("deleteComment() soft-deletes writer comment when parent post is writable")
+  void deleteComment_visibleParentPost_deletesWriterComment() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = comment(31L, 100L, 200L, null, "comment", false, now);
+    given(loadCommentPort.loadComment(31L)).willReturn(Optional.of(comment));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+
+    commentService.deleteComment(new DeleteCommentCommand(31L, 200L));
+
+    verify(loadPostPort).loadPostVisibilityContext(100L);
+    verify(saveCommentPort).saveComment(org.mockito.ArgumentMatchers.argThat(Comment::isDeleted));
+  }
+
+  @Test
+  @DisplayName("deleteComment() throws when parent post is not publicly writable")
+  void deleteComment_hiddenParentPost_throwsBusinessException() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = comment(32L, 100L, 200L, null, "comment", false, now);
+    given(loadCommentPort.loadComment(32L)).willReturn(Optional.of(comment));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(hiddenPostContext(100L, 200L)));
+
+    assertThatThrownBy(() -> commentService.deleteComment(new DeleteCommentCommand(32L, 200L)))
+        .isInstanceOf(BusinessException.class);
+
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
   private Comment comment(
       Long id,
       Long postId,
@@ -521,5 +578,13 @@ class CommentServiceTest {
         .createdAt(createdAt)
         .updatedAt(createdAt)
         .build();
+  }
+
+  private LoadPostPort.PostVisibilityContext visiblePostContext(Long postId) {
+    return new LoadPostPort.PostVisibilityContext(postId, 1L, true);
+  }
+
+  private LoadPostPort.PostVisibilityContext hiddenPostContext(Long postId, Long writerId) {
+    return new LoadPostPort.PostVisibilityContext(postId, writerId, false);
   }
 }
