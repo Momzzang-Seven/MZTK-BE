@@ -135,6 +135,7 @@ class CommentJpaRepositoryTest {
     persistRoot(900L, 51L, "post-comment", base);
     persistAnswerRoot(1000L, 52L, "answer-1000-a", base.plusMinutes(1));
     persistAnswerRoot(1000L, 53L, "answer-1000-b", base.plusMinutes(2));
+    persistAnswerRoot(1000L, 55L, "deleted-answer-1000", base.plusMinutes(4), true);
     persistAnswerRoot(1001L, 54L, "answer-1001", base.plusMinutes(3));
 
     Map<Long, Long> counts =
@@ -150,6 +151,21 @@ class CommentJpaRepositoryTest {
     assertThat(commentJpaRepository.countByPostId(900L)).isEqualTo(1L);
     assertThat(commentJpaRepository.countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, 1000L))
         .isEqualTo(2L);
+  }
+
+  @Test
+  @DisplayName("findRootCommentsByAnswerId() excludes soft-deleted answer comments")
+  void findRootCommentsByAnswerId_excludesSoftDeletedAnswerComments() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 14, 0);
+    CommentEntity active = persistAnswerRoot(2000L, 61L, "active", base);
+    CommentEntity deleted = persistAnswerRoot(2000L, 62L, "deleted", base.plusMinutes(1), true);
+
+    Page<CommentEntity> page =
+        commentJpaRepository.findRootCommentsByAnswerId(
+            CommentTargetType.ANSWER, 2000L, PageRequest.of(0, 10));
+
+    assertThat(page.getContent().stream().map(this::idOf).toList()).containsExactly(idOf(active));
+    assertThat(page.getContent().stream().map(this::idOf).toList()).doesNotContain(idOf(deleted));
   }
 
   @Test
@@ -318,6 +334,32 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName("deleteAllByAnswerId() soft-deletes answer comments without touching post comments")
+  void deleteAllByAnswerId_softDeletesAnswerCommentsOnly() {
+    LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 11, 0);
+    CommentEntity target1 = persistAnswerRoot(7000L, 71L, "answer-target1", oldTime);
+    CommentEntity target2 = persistAnswerRoot(7000L, 72L, "answer-target2", oldTime.plusMinutes(1));
+    CommentEntity otherAnswer =
+        persistAnswerRoot(7001L, 73L, "other-answer", oldTime.plusMinutes(2));
+    CommentEntity postComment = persistRoot(7000L, 74L, "post-comment", oldTime.plusMinutes(3));
+
+    commentJpaRepository.deleteAllByAnswerId(CommentTargetType.ANSWER, 7000L);
+
+    CommentEntity updated1 = commentJpaRepository.findById(idOf(target1)).orElseThrow();
+    CommentEntity updated2 = commentJpaRepository.findById(idOf(target2)).orElseThrow();
+    CommentEntity untouchedAnswer = commentJpaRepository.findById(idOf(otherAnswer)).orElseThrow();
+    CommentEntity untouchedPost = commentJpaRepository.findById(idOf(postComment)).orElseThrow();
+
+    assertThat(isDeletedOf(updated1)).isTrue();
+    assertThat(isDeletedOf(updated2)).isTrue();
+    assertThat(updatedAtOf(updated1)).isAfter(oldTime.minusNanos(1));
+    assertThat(updatedAtOf(updated2)).isAfter(oldTime.minusNanos(1));
+    assertThat(isDeletedOf(untouchedAnswer)).isFalse();
+    assertThat(isDeletedOf(untouchedPost)).isFalse();
+    assertThat(commentJpaRepository.countByPostId(7000L)).isEqualTo(1L);
+  }
+
+  @Test
   @DisplayName(
       "findIdsByIsDeletedTrueAndUpdatedAtBefore() returns only deleted comment ids before cutoff")
   void findIdsByIsDeletedTrueAndUpdatedAtBefore_returnsMatchingIds() {
@@ -411,8 +453,13 @@ class CommentJpaRepositoryTest {
 
   private CommentEntity persistAnswerRoot(
       Long answerId, Long writerId, String content, LocalDateTime createdAt) {
+    return persistAnswerRoot(answerId, writerId, content, createdAt, false);
+  }
+
+  private CommentEntity persistAnswerRoot(
+      Long answerId, Long writerId, String content, LocalDateTime createdAt, boolean isDeleted) {
     CommentEntity entity =
-        newCommentEntity(null, writerId, content, false, null, createdAt, createdAt);
+        newCommentEntity(null, writerId, content, isDeleted, null, createdAt, createdAt);
     ReflectionTestUtils.setField(entity, "targetType", CommentTargetType.ANSWER);
     ReflectionTestUtils.setField(entity, "answerId", answerId);
     return commentJpaRepository.saveAndFlush(entity);

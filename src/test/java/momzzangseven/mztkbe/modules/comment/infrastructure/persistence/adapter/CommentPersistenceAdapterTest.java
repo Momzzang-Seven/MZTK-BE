@@ -170,6 +170,14 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("deleteAllByAnswerId() soft-deletes ANSWER target comments only")
+  void deleteAllByAnswerId_delegatesToAnswerTargetRepository() {
+    adapter.deleteAllByAnswerId(20L);
+
+    verify(commentRepository).deleteAllByAnswerId(CommentTargetType.ANSWER, 20L);
+  }
+
+  @Test
   @DisplayName("countCommentsByPostIds() no-ops for null or empty list")
   void countCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
     assertThat(adapter.countCommentsByPostIds(null)).isEmpty();

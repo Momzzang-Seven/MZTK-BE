@@ -5,5 +5,7 @@ import java.util.List;
 public interface DeleteCommentPort {
   void deleteAllByPostId(Long postId);
 
+  void deleteAllByAnswerId(Long answerId);
+
   void deleteAllById(List<Long> commentIds);
 }

@@ -215,6 +215,12 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  @Transactional(readOnly = false)
+  public void deleteAllByAnswerId(Long answerId) {
+    commentRepository.deleteAllByAnswerId(CommentTargetType.ANSWER, answerId);
+  }
+
+  @Override
   @Transactional
   public void deleteAllById(List<Long> commentIds) {
     if (commentIds == null || commentIds.isEmpty()) {

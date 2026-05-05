@@ -15,7 +15,13 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   long countByTargetTypeAndPostId(CommentTargetType targetType, Long postId);
 
-  long countByTargetTypeAndAnswerId(CommentTargetType targetType, Long answerId);
+  @Query(
+      "SELECT COUNT(c.id) FROM CommentEntity c "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.isDeleted = false")
+  long countByTargetTypeAndAnswerId(
+      @Param("targetType") CommentTargetType targetType, @Param("answerId") Long answerId);
 
   default long countByPostId(Long postId) {
     return countByTargetTypeAndPostId(CommentTargetType.POST, postId);
@@ -36,7 +42,9 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
   @Query(
       "SELECT c.answerId AS answerId, COUNT(c.id) AS commentCount "
           + "FROM CommentEntity c "
-          + "WHERE c.targetType = :targetType AND c.answerId IN :answerIds "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId IN :answerIds "
+          + "AND c.isDeleted = false "
           + "GROUP BY c.answerId")
   List<AnswerCommentCount> countCommentsByAnswerIds(
       @Param("targetType") CommentTargetType targetType, @Param("answerIds") List<Long> answerIds);
@@ -57,7 +65,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   @Query(
       "SELECT c FROM CommentEntity c "
-          + "WHERE c.targetType = :targetType AND c.answerId = :answerId AND c.parent IS NULL "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.parent IS NULL "
+          + "AND c.isDeleted = false "
           + "ORDER BY c.createdAt ASC, c.id ASC")
   Page<CommentEntity> findRootCommentsByAnswerId(
       @Param("targetType") CommentTargetType targetType,
@@ -75,7 +86,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   @Query(
       "SELECT c FROM CommentEntity c "
-          + "WHERE c.targetType = :targetType AND c.answerId = :answerId AND c.parent IS NULL "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.parent IS NULL "
+          + "AND c.isDeleted = false "
           + "ORDER BY c.createdAt ASC, c.id ASC")
   List<CommentEntity> findRootCommentsByAnswerIdFirstPage(
       @Param("targetType") CommentTargetType targetType,
@@ -97,7 +111,10 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   @Query(
       "SELECT c FROM CommentEntity c "
-          + "WHERE c.targetType = :targetType AND c.answerId = :answerId AND c.parent IS NULL "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.parent IS NULL "
+          + "AND c.isDeleted = false "
           + "AND (c.createdAt > :cursorCreatedAt "
           + "OR (c.createdAt = :cursorCreatedAt AND c.id > :cursorId)) "
           + "ORDER BY c.createdAt ASC, c.id ASC")
@@ -227,6 +244,15 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
               + "WHERE post_id = :postId",
       nativeQuery = true)
   void deleteAllByPostId(@Param("postId") Long postId);
+
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          "UPDATE comments SET is_deleted = true, updated_at = CURRENT_TIMESTAMP "
+              + "WHERE target_type = :#{#targetType.name()} AND answer_id = :answerId",
+      nativeQuery = true)
+  void deleteAllByAnswerId(
+      @Param("targetType") CommentTargetType targetType, @Param("answerId") Long answerId);
 
   @Query("SELECT c.id FROM CommentEntity c WHERE c.isDeleted = true AND c.updatedAt < :cutoff")
   List<Long> findIdsByIsDeletedTrueAndUpdatedAtBefore(

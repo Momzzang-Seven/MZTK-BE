@@ -6,4 +6,6 @@ public interface DeleteCommentUseCase {
   void deleteComment(DeleteCommentCommand command);
 
   void deleteCommentsByPostId(Long postId);
+
+  void deleteCommentsByAnswerId(Long answerId);
 }

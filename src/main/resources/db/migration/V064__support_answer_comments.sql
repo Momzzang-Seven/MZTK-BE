@@ -11,6 +11,10 @@ ALTER TABLE comments
 ALTER TABLE comments
     ADD COLUMN answer_id bigint;
 
+-- answers are physically deleted in the current lifecycle. A direct FK would either block
+-- answer deletion or force hard-deleting comments, so answer comment integrity is enforced by
+-- application validation plus AnswerDeletedEvent-driven soft deletion.
+
 ALTER TABLE comments
     ALTER COLUMN post_id DROP NOT NULL;
 

@@ -572,6 +572,14 @@ class CommentServiceTest {
   }
 
   @Test
+  @DisplayName("deleteCommentsByAnswerId() delegates to delete port")
+  void deleteCommentsByAnswerId_delegatesToDeletePort() {
+    commentService.deleteCommentsByAnswerId(44L);
+
+    verify(deleteCommentPort).deleteAllByAnswerId(44L);
+  }
+
+  @Test
   @DisplayName("deleteComment() soft-deletes writer comment when parent post is writable")
   void deleteComment_visibleParentPost_deletesWriterComment() {
     LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);

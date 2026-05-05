@@ -454,7 +454,7 @@ class AnswerServiceTest {
     }
 
     @Test
-    @DisplayName("deleteByPostId deletes answers and publishes one event per answer")
+    @DisplayName("deleteByPostId publishes one AnswerDeletedEvent per answer for comment cleanup")
     void deleteByPostId_delegatesToPort_andPublishesEvents() {
       given(loadAnswerPort.loadAnswerIdsByPostId(10L)).willReturn(List.of(100L, 101L));
 

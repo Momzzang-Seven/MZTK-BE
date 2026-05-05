@@ -120,6 +120,12 @@ public class CommentService
     deleteCommentPort.deleteAllByPostId(postId);
   }
 
+  @Override
+  @Transactional(readOnly = false)
+  public void deleteCommentsByAnswerId(Long answerId) {
+    deleteCommentPort.deleteAllByAnswerId(answerId);
+  }
+
   // 4. 루트 댓글 조회 (Read)
   @Override
   public Page<CommentResult> getRootComments(GetRootCommentsQuery query) {
