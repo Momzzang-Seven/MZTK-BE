@@ -42,8 +42,8 @@ public interface LoadClassSlotPort {
   /**
    * Find a single slot by its ID without acquiring a lock.
    *
-   * <p>Used for read-only enrichment (e.g., resolving slotId → classId for reservation display).
-   * Do not use when concurrent-write protection is needed — use {@link #findByIdWithLock} instead.
+   * <p>Used for read-only enrichment (e.g., resolving slotId → classId for reservation display). Do
+   * not use when concurrent-write protection is needed — use {@link #findByIdWithLock} instead.
    *
    * @param slotId slot ID
    * @return Optional containing the slot if found

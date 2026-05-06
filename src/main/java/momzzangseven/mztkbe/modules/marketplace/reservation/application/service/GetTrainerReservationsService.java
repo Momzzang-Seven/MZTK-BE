@@ -49,9 +49,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
         .map(
             r ->
                 ReservationSummaryResult.from(
-                    r,
-                    classSummaries.get(r.getSlotId()),
-                    trainerSummaries.get(r.getTrainerId())))
+                    r, classSummaries.get(r.getSlotId()), trainerSummaries.get(r.getTrainerId())))
         .toList();
   }
 }

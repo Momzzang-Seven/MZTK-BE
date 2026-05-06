@@ -35,7 +35,8 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
   @Override
   @Transactional(readOnly = true)
   public Optional<MarketplaceClass> findBySlotId(Long slotId) {
-    return loadClassSlotPort.findById(slotId)
+    return loadClassSlotPort
+        .findById(slotId)
         .flatMap(slot -> loadClassPort.findById(slot.getClassId()));
   }
 
@@ -45,4 +46,3 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
     return loadClassSlotPort.findByIdWithLock(slotId);
   }
 }
-

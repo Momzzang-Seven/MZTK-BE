@@ -49,9 +49,7 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
         .map(
             r ->
                 ReservationSummaryResult.from(
-                    r,
-                    classSummaries.get(r.getSlotId()),
-                    trainerSummaries.get(r.getTrainerId())))
+                    r, classSummaries.get(r.getSlotId()), trainerSummaries.get(r.getTrainerId())))
         .toList();
   }
 }

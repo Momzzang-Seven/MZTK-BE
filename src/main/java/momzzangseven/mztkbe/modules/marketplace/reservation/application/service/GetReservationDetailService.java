@@ -51,8 +51,7 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
         loadClassSummaryPort.findBySlotId(reservation.getSlotId()).orElse(null);
     UserSummary trainerSummary =
         loadUserSummaryPort.findById(reservation.getTrainerId()).orElse(null);
-    UserSummary userSummary =
-        loadUserSummaryPort.findById(reservation.getUserId()).orElse(null);
+    UserSummary userSummary = loadUserSummaryPort.findById(reservation.getUserId()).orElse(null);
 
     return GetReservationResult.from(reservation, classSummary, trainerSummary, userSummary);
   }
