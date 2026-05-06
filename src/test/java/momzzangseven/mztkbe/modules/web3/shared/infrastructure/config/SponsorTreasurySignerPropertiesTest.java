@@ -18,12 +18,9 @@ class SponsorTreasurySignerPropertiesTest {
                 .withProperty("web3.eip7702.sponsor.enabled", "true")
                 .withProperty("web3.execution.internal.enabled", "true")
                 .withProperty("web3.eip7702.sponsor.wallet-alias", " sponsor-main ")
-                .withProperty("web3.execution.internal.signer.wallet-alias", "sponsor-main")
-                .withProperty("web3.eip7702.sponsor.key-encryption-key-b64", " test-kek ")
-                .withProperty("web3.execution.internal.signer.key-encryption-key-b64", "test-kek"));
+                .withProperty("web3.execution.internal.signer.wallet-alias", "sponsor-main"));
 
     assertThat(properties.getWalletAlias()).isEqualTo("sponsor-main");
-    assertThat(properties.getKeyEncryptionKeyB64()).isEqualTo("test-kek");
   }
 
   @Test
@@ -33,11 +30,9 @@ class SponsorTreasurySignerPropertiesTest {
             new MockEnvironment()
                 .withProperty("web3.eip7702.enabled", "true")
                 .withProperty("web3.eip7702.sponsor.enabled", "true")
-                .withProperty("web3.eip7702.sponsor.wallet-alias", "sponsor-main")
-                .withProperty("web3.eip7702.sponsor.key-encryption-key-b64", "test-kek"));
+                .withProperty("web3.eip7702.sponsor.wallet-alias", "sponsor-main"));
 
     assertThat(properties.getWalletAlias()).isEqualTo("sponsor-main");
-    assertThat(properties.getKeyEncryptionKeyB64()).isEqualTo("test-kek");
   }
 
   @Test
@@ -57,22 +52,6 @@ class SponsorTreasurySignerPropertiesTest {
   }
 
   @Test
-  void constructor_rejectsMismatchedKeyEncryptionKeys() {
-    assertThatThrownBy(
-            () ->
-                new SponsorTreasurySignerProperties(
-                    new MockEnvironment()
-                        .withProperty("web3.eip7702.enabled", "true")
-                        .withProperty("web3.eip7702.sponsor.enabled", "true")
-                        .withProperty("web3.execution.internal.enabled", "true")
-                        .withProperty("web3.eip7702.sponsor.key-encryption-key-b64", "one")
-                        .withProperty(
-                            "web3.execution.internal.signer.key-encryption-key-b64", "two")))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("key-encryption-key-b64");
-  }
-
-  @Test
   void load_ignoresEip7702SponsorValues_whenSponsorFeatureDisabled() {
     SponsorTreasurySignerProperties properties =
         new SponsorTreasurySignerProperties(
@@ -80,13 +59,9 @@ class SponsorTreasurySignerPropertiesTest {
                 .withProperty("web3.eip7702.enabled", "true")
                 .withProperty("web3.eip7702.sponsor.enabled", "false")
                 .withProperty("web3.eip7702.sponsor.wallet-alias", "sponsor-main")
-                .withProperty("web3.eip7702.sponsor.key-encryption-key-b64", "test-kek")
                 .withProperty("web3.execution.internal.enabled", "true")
-                .withProperty("web3.execution.internal.signer.wallet-alias", "internal-main")
-                .withProperty(
-                    "web3.execution.internal.signer.key-encryption-key-b64", "internal-kek"));
+                .withProperty("web3.execution.internal.signer.wallet-alias", "internal-main"));
 
     assertThat(properties.getWalletAlias()).isEqualTo("internal-main");
-    assertThat(properties.getKeyEncryptionKeyB64()).isEqualTo("internal-kek");
   }
 }

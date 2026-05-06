@@ -16,7 +16,6 @@ public class SponsorTreasurySignerProperties {
   private static final String INTERNAL_ENABLED_PROPERTY = "web3.execution.internal.enabled";
 
   private final String walletAlias;
-  private final String keyEncryptionKeyB64;
 
   public SponsorTreasurySignerProperties(Environment environment) {
     Binder binder = Binder.get(environment);
@@ -28,30 +27,16 @@ public class SponsorTreasurySignerProperties {
         eip7702Enabled ? bind(binder, EIP7702_PREFIX + ".wallet-alias") : null;
     String internalWalletAlias =
         internalExecutionEnabled ? bind(binder, INTERNAL_PREFIX + ".wallet-alias") : null;
-    String eip7702KeyEncryptionKey =
-        eip7702Enabled ? bind(binder, EIP7702_PREFIX + ".key-encryption-key-b64") : null;
-    String internalKeyEncryptionKey =
-        internalExecutionEnabled ? bind(binder, INTERNAL_PREFIX + ".key-encryption-key-b64") : null;
     this.walletAlias =
         resolveConsistentProperty(
             eip7702WalletAlias,
             internalWalletAlias,
             EIP7702_PREFIX + ".wallet-alias",
             INTERNAL_PREFIX + ".wallet-alias");
-    this.keyEncryptionKeyB64 =
-        resolveConsistentProperty(
-            eip7702KeyEncryptionKey,
-            internalKeyEncryptionKey,
-            EIP7702_PREFIX + ".key-encryption-key-b64",
-            INTERNAL_PREFIX + ".key-encryption-key-b64"); // gitleaks:allow
   }
 
   public String getWalletAlias() {
     return walletAlias;
-  }
-
-  public String getKeyEncryptionKeyB64() {
-    return keyEncryptionKeyB64;
   }
 
   private static String bind(Binder binder, String propertyName) {

@@ -187,7 +187,6 @@ web3:
     # 임계치/워커 튜닝은 yml 상수 유지
     treasury:
       wallet-alias: reward-treasury
-      key-encryption-key-b64: ${TREASURY_KEY_ENCRYPTION_KEY_B64}
       provisioning:
         enabled: ${WEB3_TREASURY_PROVISIONING_ENABLED}
 
@@ -219,7 +218,6 @@ web3:
 
     sponsor:
       enabled: true
-      key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
       wallet-alias: sponsor-treasury
 
       # 안전장치는 yml 상수 유지(운영 중 급변할 값 아니면)
@@ -267,7 +265,6 @@ web3:
       eip1559-ttl-seconds: 90
       action-policy: ${WEB3_EXECUTION_INTERNAL_ACTION_POLICY}
       signer:
-        key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
         wallet-alias: sponsor-treasury
   qna:
     admin:
