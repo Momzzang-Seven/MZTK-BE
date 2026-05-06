@@ -53,8 +53,7 @@ class LevelRewardMztkAdapterTest {
     lenient()
         .when(loadRewardTreasurySignerConfigPort.load())
         .thenReturn(
-            new LoadRewardTreasurySignerConfigPort.RewardTreasurySignerConfig(
-                "reward-treasury", "test-kek"));
+            new LoadRewardTreasurySignerConfigPort.RewardTreasurySignerConfig("reward-treasury"));
     lenient()
         .when(loadTreasuryAddressProjectionPort.loadAddressByAlias("reward-treasury"))
         .thenReturn(Optional.of(TREASURY));
