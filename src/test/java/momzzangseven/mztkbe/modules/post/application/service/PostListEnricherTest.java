@@ -13,6 +13,7 @@ import java.util.Set;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult.PostImageSlot;
 import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
@@ -34,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PostListEnricherTest {
 
   @Mock private CountCommentsPort countCommentsPort;
+  @Mock private CountAnswersPort countAnswersPort;
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
   @Mock private PostLikePersistencePort postLikePersistencePort;
@@ -58,6 +60,7 @@ class PostListEnricherTest {
         .thenReturn(Map.of(1L, 5L, 2L, 7L));
     when(countCommentsPort.countCommentsByPostIds(List.of(1L, 2L)))
         .thenReturn(Map.of(1L, 3L, 2L, 4L));
+    when(countAnswersPort.countAnswersByPostIds(List.of(2L))).thenReturn(Map.of(2L, 6L));
     when(postLikePersistencePort.findLikedTargetIds(PostLikeTargetType.POST, List.of(1L, 2L), 99L))
         .thenReturn(Set.of(2L));
     when(loadPostImagesPort.loadImagesByPostIds(
@@ -76,6 +79,7 @@ class PostListEnricherTest {
     assertThat(results.get(0).profileImageUrl()).isEqualTo("free.png");
     assertThat(results.get(0).likeCount()).isEqualTo(5L);
     assertThat(results.get(0).commentCount()).isEqualTo(3L);
+    assertThat(results.get(0).answerCount()).isZero();
     assertThat(results.get(0).liked()).isFalse();
     assertThat(results.get(0).images()).containsExactly(new PostImageSlot(101L, "free.webp"));
 
@@ -85,6 +89,7 @@ class PostListEnricherTest {
     assertThat(results.get(1).profileImageUrl()).isNull();
     assertThat(results.get(1).likeCount()).isEqualTo(7L);
     assertThat(results.get(1).commentCount()).isEqualTo(4L);
+    assertThat(results.get(1).answerCount()).isEqualTo(6L);
     assertThat(results.get(1).liked()).isTrue();
     assertThat(results.get(1).reward()).isEqualTo(100L);
     assertThat(results.get(1).isSolved()).isTrue();
@@ -101,6 +106,7 @@ class PostListEnricherTest {
     when(postLikePersistencePort.countByTargetIds(PostLikeTargetType.POST, List.of(1L)))
         .thenReturn(Map.of());
     when(countCommentsPort.countCommentsByPostIds(List.of(1L))).thenReturn(null);
+    when(countAnswersPort.countAnswersByPostIds(List.of())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(PostLikeTargetType.POST, List.of(1L), 99L))
         .thenReturn(Set.of());
     when(loadPostImagesPort.loadImagesByPostIds(Map.of(PostType.FREE, List.of(1L))))
@@ -114,6 +120,7 @@ class PostListEnricherTest {
     assertThat(results.getFirst().profileImageUrl()).isNull();
     assertThat(results.getFirst().likeCount()).isZero();
     assertThat(results.getFirst().commentCount()).isZero();
+    assertThat(results.getFirst().answerCount()).isZero();
     assertThat(results.getFirst().liked()).isFalse();
     assertThat(results.getFirst().images()).isEmpty();
   }
@@ -129,6 +136,7 @@ class PostListEnricherTest {
     when(postLikePersistencePort.countByTargetIds(PostLikeTargetType.POST, List.of(1L, 2L)))
         .thenReturn(Map.of());
     when(countCommentsPort.countCommentsByPostIds(List.of(1L, 2L))).thenReturn(Map.of());
+    when(countAnswersPort.countAnswersByPostIds(List.of())).thenReturn(Map.of());
     when(loadPostImagesPort.loadImagesByPostIds(Map.of(PostType.FREE, List.of(1L, 2L))))
         .thenReturn(Map.of());
 

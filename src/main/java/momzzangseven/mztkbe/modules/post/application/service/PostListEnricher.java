@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostListResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
@@ -17,17 +17,59 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistenc
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class PostListEnricher {
 
   private final CountCommentsPort countCommentsPort;
+  private final CountAnswersPort countAnswersPort;
   private final LoadTagPort loadTagPort;
   private final LoadPostWriterPort loadPostWriterPort;
   private final PostLikePersistencePort postLikePersistencePort;
   private final LoadPostImagesPort loadPostImagesPort;
+
+  @Autowired
+  public PostListEnricher(
+      CountCommentsPort countCommentsPort,
+      CountAnswersPort countAnswersPort,
+      LoadTagPort loadTagPort,
+      LoadPostWriterPort loadPostWriterPort,
+      PostLikePersistencePort postLikePersistencePort,
+      LoadPostImagesPort loadPostImagesPort) {
+    this.countCommentsPort = countCommentsPort;
+    this.countAnswersPort = countAnswersPort;
+    this.loadTagPort = loadTagPort;
+    this.loadPostWriterPort = loadPostWriterPort;
+    this.postLikePersistencePort = postLikePersistencePort;
+    this.loadPostImagesPort = loadPostImagesPort;
+  }
+
+  PostListEnricher(
+      CountCommentsPort countCommentsPort,
+      LoadTagPort loadTagPort,
+      LoadPostWriterPort loadPostWriterPort,
+      PostLikePersistencePort postLikePersistencePort,
+      LoadPostImagesPort loadPostImagesPort) {
+    this(
+        countCommentsPort,
+        new CountAnswersPort() {
+          @Override
+          public long countAnswers(Long postId) {
+            return 0L;
+          }
+
+          @Override
+          public Map<Long, Long> countAnswersByPostIds(List<Long> postIds) {
+            return Map.of();
+          }
+        },
+        loadTagPort,
+        loadPostWriterPort,
+        postLikePersistencePort,
+        loadPostImagesPort);
+  }
 
   public List<PostListResult> enrich(List<Post> posts, Long requesterUserId) {
     if (posts == null || posts.isEmpty()) {
@@ -59,6 +101,13 @@ public class PostListEnricher {
         postLikePersistencePort.countByTargetIds(PostLikeTargetType.POST, postIds);
     Map<Long, Long> loadedCommentCounts = countCommentsPort.countCommentsByPostIds(postIds);
     Map<Long, Long> commentCounts = loadedCommentCounts == null ? Map.of() : loadedCommentCounts;
+    List<Long> questionPostIds =
+        posts.stream()
+            .filter(post -> PostType.QUESTION.equals(post.getType()))
+            .map(Post::getId)
+            .toList();
+    Map<Long, Long> loadedAnswerCounts = countAnswersPort.countAnswersByPostIds(questionPostIds);
+    Map<Long, Long> answerCounts = loadedAnswerCounts == null ? Map.of() : loadedAnswerCounts;
 
     Map<PostType, List<Long>> postIdsByType =
         posts.stream()
@@ -77,6 +126,7 @@ public class PostListEnricher {
               String profileImageUrl = writer != null ? writer.profileImageUrl() : null;
               long likeCount = likeCounts.getOrDefault(post.getId(), 0L);
               long commentCount = commentCounts.getOrDefault(post.getId(), 0L);
+              long answerCount = answerCounts.getOrDefault(post.getId(), 0L);
               boolean liked = allLiked || likedPostIds.contains(post.getId());
               PostImageResult images = imagesByPostId.get(post.getId());
               List<PostImageResult.PostImageSlot> imageSlots =
@@ -85,6 +135,7 @@ public class PostListEnricher {
                   post.withTags(tags),
                   likeCount,
                   commentCount,
+                  answerCount,
                   liked,
                   nickname,
                   profileImageUrl,

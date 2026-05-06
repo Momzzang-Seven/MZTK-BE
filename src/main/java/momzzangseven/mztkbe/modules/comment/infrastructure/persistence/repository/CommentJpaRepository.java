@@ -4,6 +4,7 @@ import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,7 +16,19 @@ import org.springframework.data.repository.query.Param;
 
 public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
 
-  long countByPostId(Long postId);
+  long countByTargetTypeAndPostId(CommentTargetType targetType, Long postId);
+
+  @Query(
+      "SELECT COUNT(c.id) FROM CommentEntity c "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.isDeleted = false")
+  long countByTargetTypeAndAnswerId(
+      @Param("targetType") CommentTargetType targetType, @Param("answerId") Long answerId);
+
+  default long countByPostId(Long postId) {
+    return countByTargetTypeAndPostId(CommentTargetType.POST, postId);
+  }
 
   Page<CommentEntity> findByPostId(Long postId, Pageable pageable);
 
@@ -33,30 +46,99 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
   @Query(
       "SELECT c.postId AS postId, COUNT(c.id) AS commentCount "
           + "FROM CommentEntity c "
-          + "WHERE c.postId IN :postIds AND c.isDeleted = false "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.postId IN :postIds "
+          + "AND c.isDeleted = false "
           + "GROUP BY c.postId")
-  List<PostCommentCount> countCommentsByPostIds(@Param("postIds") List<Long> postIds);
+  List<PostCommentCount> countCommentsByPostIds(
+      @Param("targetType") CommentTargetType targetType, @Param("postIds") List<Long> postIds);
+
+  default List<PostCommentCount> countCommentsByPostIds(List<Long> postIds) {
+    return countCommentsByPostIds(CommentTargetType.POST, postIds);
+  }
+
+  @Query(
+      "SELECT c.answerId AS answerId, COUNT(c.id) AS commentCount "
+          + "FROM CommentEntity c "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId IN :answerIds "
+          + "AND c.isDeleted = false "
+          + "GROUP BY c.answerId")
+  List<AnswerCommentCount> countCommentsByAnswerIds(
+      @Param("targetType") CommentTargetType targetType, @Param("answerIds") List<Long> answerIds);
 
   // 1. 최상위 댓글 조회
   @Query(
-      "SELECT c FROM CommentEntity c WHERE c.postId = :postId AND c.parent IS NULL ORDER BY c.createdAt ASC, c.id ASC")
-  Page<CommentEntity> findRootCommentsByPostId(@Param("postId") Long postId, Pageable pageable);
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.targetType = :targetType AND c.postId = :postId AND c.parent IS NULL "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  Page<CommentEntity> findRootCommentsByPostId(
+      @Param("targetType") CommentTargetType targetType,
+      @Param("postId") Long postId,
+      Pageable pageable);
+
+  default Page<CommentEntity> findRootCommentsByPostId(Long postId, Pageable pageable) {
+    return findRootCommentsByPostId(CommentTargetType.POST, postId, pageable);
+  }
 
   @Query(
       "SELECT c FROM CommentEntity c "
-          + "WHERE c.postId = :postId AND c.parent IS NULL "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.parent IS NULL "
+          + "AND c.isDeleted = false "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  Page<CommentEntity> findRootCommentsByAnswerId(
+      @Param("targetType") CommentTargetType targetType,
+      @Param("answerId") Long answerId,
+      Pageable pageable);
+
+  @Query(
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.targetType = :targetType AND c.postId = :postId AND c.parent IS NULL "
           + "ORDER BY c.createdAt ASC, c.id ASC")
   List<CommentEntity> findRootCommentsByPostIdFirstPage(
-      @Param("postId") Long postId, Pageable pageable);
+      @Param("targetType") CommentTargetType targetType,
+      @Param("postId") Long postId,
+      Pageable pageable);
 
   @Query(
       "SELECT c FROM CommentEntity c "
-          + "WHERE c.postId = :postId AND c.parent IS NULL "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.parent IS NULL "
+          + "AND c.isDeleted = false "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  List<CommentEntity> findRootCommentsByAnswerIdFirstPage(
+      @Param("targetType") CommentTargetType targetType,
+      @Param("answerId") Long answerId,
+      Pageable pageable);
+
+  @Query(
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.targetType = :targetType AND c.postId = :postId AND c.parent IS NULL "
           + "AND (c.createdAt > :cursorCreatedAt "
           + "OR (c.createdAt = :cursorCreatedAt AND c.id > :cursorId)) "
           + "ORDER BY c.createdAt ASC, c.id ASC")
   List<CommentEntity> findRootCommentsByPostIdAfterCursor(
+      @Param("targetType") CommentTargetType targetType,
       @Param("postId") Long postId,
+      @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
+  @Query(
+      "SELECT c FROM CommentEntity c "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.answerId = :answerId "
+          + "AND c.parent IS NULL "
+          + "AND c.isDeleted = false "
+          + "AND (c.createdAt > :cursorCreatedAt "
+          + "OR (c.createdAt = :cursorCreatedAt AND c.id > :cursorId)) "
+          + "ORDER BY c.createdAt ASC, c.id ASC")
+  List<CommentEntity> findRootCommentsByAnswerIdAfterCursor(
+      @Param("targetType") CommentTargetType targetType,
+      @Param("answerId") Long answerId,
       @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
       @Param("cursorId") Long cursorId,
       Pageable pageable);
@@ -181,6 +263,15 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
       nativeQuery = true)
   void deleteAllByPostId(@Param("postId") Long postId);
 
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          "UPDATE comments SET is_deleted = true, updated_at = CURRENT_TIMESTAMP "
+              + "WHERE target_type = :#{#targetType.name()} AND answer_id = :answerId",
+      nativeQuery = true)
+  void deleteAllByAnswerId(
+      @Param("targetType") CommentTargetType targetType, @Param("answerId") Long answerId);
+
   @Query("SELECT c.id FROM CommentEntity c WHERE c.isDeleted = true AND c.updatedAt < :cutoff")
   List<Long> findIdsByIsDeletedTrueAndUpdatedAtBefore(
       @Param("cutoff") LocalDateTime cutoff, Pageable pageable);
@@ -197,6 +288,12 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   interface PostCommentCount {
     Long getPostId();
+
+    Long getCommentCount();
+  }
+
+  interface AnswerCommentCount {
+    Long getAnswerId();
 
     Long getCommentCount();
   }

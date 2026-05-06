@@ -16,6 +16,7 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetAnswerRootCommentsQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.UpdateCommentCommand;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -189,6 +191,35 @@ class CommentControllerTest {
           .andExpect(jsonPath("$.data.content").value(longContent));
 
       verify(createCommentUseCase).createComment(any(CreateCommentCommand.class));
+    }
+  }
+
+  @Nested
+  @DisplayName("POST /answers/{answerId}/comments")
+  class CreateAnswerComment {
+
+    @Test
+    @DisplayName("정상 요청이면 answerId 기반 댓글을 생성하고 200을 반환한다")
+    void createAnswerComment_success() throws Exception {
+      given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
+          .willReturn(mutationResult(31L, "답변 댓글", null, false));
+
+      mockMvc
+          .perform(
+              post("/answers/300/comments")
+                  .with(userPrincipal(1L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "답변 댓글"))))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.commentId").value(31))
+          .andExpect(jsonPath("$.data.content").value("답변 댓글"));
+
+      ArgumentCaptor<CreateCommentCommand> captor =
+          ArgumentCaptor.forClass(CreateCommentCommand.class);
+      verify(createCommentUseCase).createComment(captor.capture());
+      org.assertj.core.api.Assertions.assertThat(captor.getValue().answerId()).isEqualTo(300L);
+      org.assertj.core.api.Assertions.assertThat(captor.getValue().postId()).isNull();
     }
   }
 
@@ -366,6 +397,24 @@ class CommentControllerTest {
     @DisplayName("인증 없이 대댓글 조회 시 401을 반환한다")
     void getReplies_unauthenticated_returns401() throws Exception {
       mockMvc.perform(get("/comments/5/replies")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("답변 루트 댓글 조회는 post 댓글과 같은 Page 구조를 반환한다")
+    void getAnswerRootComments_success() throws Exception {
+      given(getCommentUseCase.getAnswerRootComments(any(GetAnswerRootCommentsQuery.class)))
+          .willReturn(
+              new PageImpl<>(
+                  java.util.List.of(comment(41L, "답변 댓글", false)), PageRequest.of(0, 1), 1));
+
+      mockMvc
+          .perform(get("/answers/300/comments?page=0&size=1").with(userPrincipal(1L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.content[0].commentId").value(41))
+          .andExpect(jsonPath("$.data.content[0].content").value("답변 댓글"))
+          .andExpect(jsonPath("$.data.content[0].writer.userId").value(1))
+          .andExpect(jsonPath("$.data.last").value(true));
     }
   }
 

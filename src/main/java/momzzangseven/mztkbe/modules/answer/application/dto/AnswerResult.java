@@ -13,6 +13,7 @@ public record AnswerResult(
     String content,
     boolean accepted,
     long likeCount,
+    long commentCount,
     boolean liked,
     List<AnswerImageResult.AnswerImageSlot> images,
     AnswerExecutionResumeView web3Execution,
@@ -23,11 +24,52 @@ public record AnswerResult(
     images = images == null ? List.of() : images;
   }
 
+  public AnswerResult(
+      Long answerId,
+      Long userId,
+      String nickname,
+      String profileImageUrl,
+      String content,
+      boolean accepted,
+      long likeCount,
+      boolean liked,
+      List<AnswerImageResult.AnswerImageSlot> images,
+      AnswerExecutionResumeView web3Execution,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this(
+        answerId,
+        userId,
+        nickname,
+        profileImageUrl,
+        content,
+        accepted,
+        likeCount,
+        0L,
+        liked,
+        images,
+        web3Execution,
+        createdAt,
+        updatedAt);
+  }
+
   public static AnswerResult from(
       Answer answer,
       String nickname,
       String profileImageUrl,
       long likeCount,
+      boolean liked,
+      List<AnswerImageResult.AnswerImageSlot> images,
+      AnswerExecutionResumeView web3Execution) {
+    return from(answer, nickname, profileImageUrl, likeCount, 0L, liked, images, web3Execution);
+  }
+
+  public static AnswerResult from(
+      Answer answer,
+      String nickname,
+      String profileImageUrl,
+      long likeCount,
+      long commentCount,
       boolean liked,
       List<AnswerImageResult.AnswerImageSlot> images,
       AnswerExecutionResumeView web3Execution) {
@@ -39,6 +81,7 @@ public record AnswerResult(
         answer.getContent(),
         answer.getIsAccepted(),
         likeCount,
+        commentCount,
         liked,
         images,
         web3Execution,

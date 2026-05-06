@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -167,6 +168,40 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("countCommentsByAnswerIds() maps answerId counts separately from post counts")
+  void countCommentsByAnswerIds_mapsProjection() {
+    CommentJpaRepository.AnswerCommentCount first = answerCommentCount(20L, 2L);
+    CommentJpaRepository.AnswerCommentCount second = answerCommentCount(21L, 4L);
+    given(commentRepository.countCommentsByAnswerIds(CommentTargetType.ANSWER, List.of(20L, 21L)))
+        .willReturn(List.of(first, second));
+
+    Map<Long, Long> result = adapter.countCommentsByAnswerIds(List.of(20L, 21L));
+
+    assertThat(result).containsEntry(20L, 2L).containsEntry(21L, 4L);
+    verify(commentRepository).countCommentsByAnswerIds(CommentTargetType.ANSWER, List.of(20L, 21L));
+  }
+
+  @Test
+  @DisplayName("countCommentsByAnswerId() uses answerId target count")
+  void countCommentsByAnswerId_delegatesToAnswerTargetRepository() {
+    given(commentRepository.countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, 20L))
+        .willReturn(2L);
+
+    long result = adapter.countCommentsByAnswerId(20L);
+
+    assertThat(result).isEqualTo(2L);
+    verify(commentRepository).countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, 20L);
+  }
+
+  @Test
+  @DisplayName("deleteAllByAnswerId() soft-deletes ANSWER target comments only")
+  void deleteAllByAnswerId_delegatesToAnswerTargetRepository() {
+    adapter.deleteAllByAnswerId(20L);
+
+    verify(commentRepository).deleteAllByAnswerId(CommentTargetType.ANSWER, 20L);
+  }
+
+  @Test
   @DisplayName("countCommentsByPostIds() no-ops for null or empty list")
   void countCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
     assertThat(adapter.countCommentsByPostIds(null)).isEmpty();
@@ -307,6 +342,21 @@ class CommentPersistenceAdapterTest {
       @Override
       public Long getPostId() {
         return postId;
+      }
+
+      @Override
+      public Long getCommentCount() {
+        return commentCount;
+      }
+    };
+  }
+
+  private CommentJpaRepository.AnswerCommentCount answerCommentCount(
+      Long answerId, Long commentCount) {
+    return new CommentJpaRepository.AnswerCommentCount() {
+      @Override
+      public Long getAnswerId() {
+        return answerId;
       }
 
       @Override

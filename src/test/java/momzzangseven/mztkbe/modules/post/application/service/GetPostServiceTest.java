@@ -13,6 +13,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
@@ -38,6 +39,7 @@ class GetPostServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private CountCommentsPort countCommentsPort;
+  @Mock private CountAnswersPort countAnswersPort;
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
   @Mock private LoadPostImagesPort loadPostImagesPort;
@@ -46,6 +48,7 @@ class GetPostServiceTest {
   @Spy private PostVisibilityPolicy postVisibilityPolicy = new PostVisibilityPolicy();
 
   @InjectMocks private GetPostService getPostService;
+  @InjectMocks private PostContextService postContextService;
 
   @Test
   @DisplayName("returns minimal post context derived from status for external module queries")
@@ -67,7 +70,7 @@ class GetPostServiceTest {
 
     when(postPersistencePort.loadPost(40L)).thenReturn(Optional.of(post));
 
-    var result = getPostService.getPostContext(40L);
+    var result = postContextService.getPostContext(40L);
 
     assertThat(result).isPresent();
     assertThat(result.get().postId()).isEqualTo(40L);
@@ -97,7 +100,7 @@ class GetPostServiceTest {
 
     when(postPersistencePort.loadPost(41L)).thenReturn(Optional.of(post));
 
-    var result = getPostService.getPostContext(41L);
+    var result = postContextService.getPostContext(41L);
 
     assertThat(result).isPresent();
     assertThat(result.get().solved()).isTrue();
@@ -123,7 +126,7 @@ class GetPostServiceTest {
 
     when(postPersistencePort.loadPost(411L)).thenReturn(Optional.of(post));
 
-    var result = getPostService.getPostContext(411L);
+    var result = postContextService.getPostContext(411L);
 
     assertThat(result).isPresent();
     assertThat(result.get().solved()).isTrue();
@@ -150,7 +153,7 @@ class GetPostServiceTest {
 
     when(postPersistencePort.loadPostForUpdate(42L)).thenReturn(Optional.of(post));
 
-    var result = getPostService.getPostContextForUpdate(42L);
+    var result = postContextService.getPostContextForUpdate(42L);
 
     assertThat(result).isPresent();
     assertThat(result.get().postId()).isEqualTo(42L);
@@ -292,6 +295,7 @@ class GetPostServiceTest {
     when(loadPostImagesPort.loadImages(PostType.QUESTION, 30L))
         .thenReturn(new PostImageResult(List.of()));
     when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(1L);
+    when(countAnswersPort.countAnswers(30L)).thenReturn(7L);
     when(loadQuestionExecutionResumePort.loadLatest(30L)).thenReturn(Optional.empty());
 
     PostDetailResult result = getPostService.getPost(30L, 99L);
@@ -300,6 +304,7 @@ class GetPostServiceTest {
     assertThat(result.title()).isEqualTo("질문 제목");
     assertThat(result.reward()).isEqualTo(50L);
     assertThat(result.isSolved()).isTrue();
+    assertThat(result.answerCount()).isEqualTo(7L);
     assertThat(result.web3Execution()).isNull();
   }
 

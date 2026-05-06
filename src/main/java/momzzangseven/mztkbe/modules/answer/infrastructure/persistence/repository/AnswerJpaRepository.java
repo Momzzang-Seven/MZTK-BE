@@ -17,6 +17,13 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
 
   long countByPostId(Long postId);
 
+  @Query(
+      "SELECT a.postId AS postId, COUNT(a.id) AS answerCount "
+          + "FROM AnswerEntity a "
+          + "WHERE a.postId IN :postIds "
+          + "GROUP BY a.postId")
+  List<PostAnswerCount> countAnswersByPostIds(@Param("postIds") List<Long> postIds);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select a from AnswerEntity a where a.id = :answerId")
   Optional<AnswerEntity> findByIdForUpdate(@Param("answerId") Long answerId);
@@ -35,4 +42,10 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
   List<Long> findOrphanAnswerIds(@Param("batchSize") int batchSize);
 
   void deleteAllByPostId(Long postId);
+
+  interface PostAnswerCount {
+    Long getPostId();
+
+    Long getAnswerCount();
+  }
 }

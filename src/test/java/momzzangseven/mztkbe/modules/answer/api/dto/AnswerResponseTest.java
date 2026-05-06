@@ -32,6 +32,7 @@ class AnswerResponseTest {
               "answer content",
               true,
               5L,
+              9L,
               true,
               List.of(
                   new AnswerImageResult.AnswerImageSlot(1L, "https://cdn.example.com/answer.webp")),
@@ -48,6 +49,7 @@ class AnswerResponseTest {
       assertThat(response.content()).isEqualTo("answer content");
       assertThat(response.isAccepted()).isTrue();
       assertThat(response.likeCount()).isEqualTo(5L);
+      assertThat(response.commentCount()).isEqualTo(9L);
       assertThat(response.isLiked()).isTrue();
       assertThat(response.images())
           .containsExactly(new ImageItemResponse(1L, "https://cdn.example.com/answer.webp"));
@@ -76,6 +78,7 @@ class AnswerResponseTest {
       AnswerResponse response = AnswerResponse.from(result);
 
       assertThat(response.likeCount()).isZero();
+      assertThat(response.commentCount()).isZero();
       assertThat(response.isLiked()).isFalse();
       assertThat(response.images()).isEmpty();
     }

@@ -43,4 +43,26 @@ class CommentCountServiceTest {
     assertThat(result).isEqualTo(3L);
     verify(loadCommentPort).countCommentsByPostId(1L);
   }
+
+  @Test
+  @DisplayName("countCommentsByAnswerIds() delegates to load comment port")
+  void countCommentsByAnswerIds_delegatesToPort() {
+    when(loadCommentPort.countCommentsByAnswerIds(List.of(10L, 11L))).thenReturn(Map.of(10L, 2L));
+
+    Map<Long, Long> result = commentCountService.countCommentsByAnswerIds(List.of(10L, 11L));
+
+    assertThat(result).containsEntry(10L, 2L);
+    verify(loadCommentPort).countCommentsByAnswerIds(List.of(10L, 11L));
+  }
+
+  @Test
+  @DisplayName("countCommentsByAnswerId() delegates to load comment port")
+  void countCommentsByAnswerId_delegatesToPort() {
+    when(loadCommentPort.countCommentsByAnswerId(10L)).thenReturn(2L);
+
+    long result = commentCountService.countCommentsByAnswerId(10L);
+
+    assertThat(result).isEqualTo(2L);
+    verify(loadCommentPort).countCommentsByAnswerId(10L);
+  }
 }
