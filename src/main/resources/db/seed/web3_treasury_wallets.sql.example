@@ -10,28 +10,36 @@
 --   web3_treasury_wallets.sql 은 .gitignore 에 등록되어 있습니다.
 --   절대 실제 값이 담긴 파일을 커밋하지 마세요.
 --
--- [값 생성 방법]
---   treasury_address        : 테스트넷 전용 Ethereum 지갑 주소 (0x로 시작, 42자)
---   treasury_private_key_encrypted :
---       Admin API POST /admin/web3/treasury-keys/provision 를 호출하면
---       서버가 KEK로 암호화한 값을 DB에 직접 저장합니다.
---       또는 로컬에서 ProvisionTreasuryKeyService 를 통해 생성된 암호문을 사용하세요.
+-- [값 생성 방법 — KMS 시대]
+--   treasury_address : Admin API POST /admin/web3/treasury-keys/provision 호출 시
+--                      서버가 KMS 로 생성한 keypair 의 공개키로부터 derive 한 EVM 주소.
+--   kms_key_id       : 동 endpoint 가 KMS 에서 생성한 CMK 의 keyId (UUID 형식).
+--   status           : 'ACTIVE' (provision 직후 기본값).
+--   key_origin       : 'IMPORTED' (KMS Imported key material 만 허용 — V065 CHECK).
+--
+--   provision 절차:
+--     1. POST /admin/web3/treasury-keys/provision { "role": "REWARD" } 또는 { "role": "SPONSOR" }
+--     2. 응답 body 의 treasuryAddress / kmsKeyId 를 아래 SQL 의 placeholder 와 교체
+--     3. dev DB 에 적용
 
 update web3_treasury_wallets
 set wallet_alias = 'reward-treasury',
     treasury_address = '<YOUR_DEV_TREASURY_ADDRESS>',
-    treasury_private_key_encrypted = '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>',
+    kms_key_id = '<YOUR_DEV_KMS_KEY_ID>',
+    status = 'ACTIVE',
+    key_origin = 'IMPORTED',
     updated_at = current_timestamp
 where id = 1
   and '<YOUR_DEV_TREASURY_ADDRESS>' like '0x%'
-  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42
-  and position('.' in '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>') > 1;
+  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42;
 
 insert into web3_treasury_wallets (
     id,
     wallet_alias,
     treasury_address,
-    treasury_private_key_encrypted,
+    kms_key_id,
+    status,
+    key_origin,
     created_at,
     updated_at
 )
@@ -39,7 +47,9 @@ select
     1,
     'reward-treasury',
     '<YOUR_DEV_TREASURY_ADDRESS>',
-    '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>',
+    '<YOUR_DEV_KMS_KEY_ID>',
+    'ACTIVE',
+    'IMPORTED',
     current_timestamp,
     current_timestamp
 where not exists (
@@ -48,5 +58,4 @@ where not exists (
     where id = 1
 )
   and '<YOUR_DEV_TREASURY_ADDRESS>' like '0x%'
-  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42
-  and position('.' in '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>') > 1;
+  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42;

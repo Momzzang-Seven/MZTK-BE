@@ -61,9 +61,7 @@ import org.web3j.utils.Numeric;
       "web3.reward-token.enabled=true",
       "web3.qna.admin.enabled=true",
       "web3.execution.internal.signer.wallet-alias=sponsor-treasury",
-      "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA==",
       "web3.eip7702.sponsor.wallet-alias=sponsor-treasury",
-      "web3.eip7702.sponsor.key-encryption-key-b64=dGVzdA==",
     })
 @Tag("e2e")
 @DisplayName("[E2E] Sponsor KMS Signing — LocalEcSigner golden path + inactive-wallet quarantine")

@@ -87,7 +87,6 @@ web3:
     token-contract-address: "0x0000000000000000000000000000000000000000"
     treasury:
       wallet-alias: reward-treasury
-      key-encryption-key-b64: "dGVzdC1rZXktZW5jcnlwdGlvbi1rZXktcGxhY2Vob2xkZXI=" #gitleaks:allow
   escrow:
     marketplace-contract-address: "0x0000000000000000000000000000000000000000"
     qna-contract-address: "0x0000000000000000000000000000000000000000"
