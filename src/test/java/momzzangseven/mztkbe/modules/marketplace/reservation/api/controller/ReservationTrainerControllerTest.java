@@ -80,33 +80,42 @@ class ReservationTrainerControllerTest {
   // ── fixtures ────────────────────────────────────────────────────────────
 
   private ReservationSummaryResult summaryResult() {
-    return new ReservationSummaryResult(
-        1L,
-        10L,
-        100L,
-        50L,
-        LocalDate.of(2025, 6, 10),
-        LocalTime.of(10, 0),
-        60,
-        ReservationStatus.PENDING,
-        "부탁드립니다");
+    return ReservationSummaryResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .slotId(10L)
+            .trainerId(100L)
+            .userId(50L)
+            .reservationDate(LocalDate.of(2025, 6, 10))
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.PENDING)
+            .userRequest("부탁드립니다")
+            .build(),
+        null,
+        null);
   }
 
   private GetReservationResult detailResult() {
-    return new GetReservationResult(
-        1L,
-        50L,
-        100L,
-        10L,
-        LocalDate.of(2025, 6, 10),
-        LocalTime.of(10, 0),
-        60,
-        ReservationStatus.PENDING,
-        "부탁드립니다",
-        "order-abc",
+    return GetReservationResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .userId(50L)
+            .trainerId(100L)
+            .slotId(10L)
+            .reservationDate(LocalDate.of(2025, 6, 10))
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.PENDING)
+            .userRequest("부탁드립니다")
+            .orderId("order-abc")
+            .txHash(null)
+            .createdAt(java.time.LocalDateTime.now())
+            .updatedAt(java.time.LocalDateTime.now())
+            .build(),
         null,
-        java.time.LocalDateTime.now(),
-        java.time.LocalDateTime.now());
+        null,
+        null);
   }
 
   // ── GET /marketplace/trainer/reservations ──────────────────────────────
