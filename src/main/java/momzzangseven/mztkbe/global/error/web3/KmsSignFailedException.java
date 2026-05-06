@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
  * <p>The exception always carries {@code retryable=true} so that HTTP clients receive a consistent
  * retry signal for transient AWS conditions. Callers that need to distinguish terminal from
  * transient KMS failures (e.g. transaction issuer worker, eip-7702 sponsor delegates) inspect the
- * underlying cause via {@code KmsClientErrorClassifier.isTerminal()} and re-throw an
- * {@link ExecutionIntentTerminalException} with {@code retryable=false} for terminal cases.
+ * underlying cause via {@code KmsClientErrorClassifier.isTerminal()} and re-throw an {@link
+ * ExecutionIntentTerminalException} with {@code retryable=false} for terminal cases.
  *
  * <p>Use {@link SignatureRecoveryException} instead when the KMS call succeeded but the returned
  * DER signature could not be linked back to the expected Ethereum address.

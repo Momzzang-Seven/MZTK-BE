@@ -16,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 
 /**
@@ -28,11 +29,17 @@ import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorC
  * boundary covers the FOR UPDATE select + atomic write semantics that prevent double-execute of the
  * same intent.
  *
- * <p>Polling fast-path: clients commonly re-call this endpoint to check the on-chain status of an
- * already-submitted intent. We peek at the intent (non-locking) before preflight; if {@code
- * submittedTxId != null}, the broadcast already happened and there is nothing for sponsor preflight
- * to gate. Returning the cached transaction summary directly means an INACTIVE wallet later in time
- * does not surface as a 400 on a successful past transaction.
+ * <p>The non-locking peek runs once and feeds two short-circuits:
+ *
+ * <ol>
+ *   <li><b>Polling fast-path</b> — clients re-call this endpoint to check the on-chain status of an
+ *       already-submitted intent. If {@code submittedTxId != null}, return the cached transaction
+ *       summary so an INACTIVE wallet later in time does not surface as 400 on a past success.
+ *   <li><b>EIP-1559 short-circuit</b> — EIP-1559 intents carry a user-signed raw transaction and
+ *       never consume sponsor wallet material. Run delegate without preflight so a sponsor outage
+ *       cannot block a legitimate user retry. {@code gate=null} is passed to the delegate; the
+ *       EIP-7702 branch enforces non-null on entry.
+ * </ol>
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -46,17 +53,25 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   /**
    * Executes the target intent and returns latest intent/transaction summary.
    *
-   * <p>Polling fast-path runs first — already-submitted intents return their cached transaction
-   * snapshot without invoking sponsor preflight. Otherwise sponsor preflight runs (verify result is
-   * Caffeine-cached 60s, so warm-path cost is negligible) and the locked, atomic execute proceeds
-   * inside the transactional delegate.
+   * <p>Single non-locking peek decides the path: cached snapshot → return; pending EIP-1559 →
+   * delegate with no preflight; everything else → preflight then delegate. Owner mismatch on the
+   * cached path is enforced here; on the new-intent path it is enforced by the delegate's FOR
+   * UPDATE select.
    */
   @Override
   public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
-    Optional<ExecuteExecutionIntentResult> polling = tryPollingFastPath(command);
-    if (polling.isPresent()) {
-      return polling.get();
+    ExecutionIntent peeked =
+        executionIntentPersistencePort.findByPublicId(command.executionIntentId()).orElse(null);
+
+    Optional<ExecuteExecutionIntentResult> cached = tryPollingFastPath(command, peeked);
+    if (cached.isPresent()) {
+      return cached.get();
     }
+
+    if (peeked != null && peeked.getMode() == ExecutionMode.EIP1559) {
+      return delegate.execute(command, null);
+    }
+
     SponsorWalletGate gate = preflightOrTranslate();
     return delegate.execute(command, gate);
   }
@@ -90,9 +105,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   }
 
   private Optional<ExecuteExecutionIntentResult> tryPollingFastPath(
-      ExecuteExecutionIntentCommand command) {
-    ExecutionIntent intent =
-        executionIntentPersistencePort.findByPublicId(command.executionIntentId()).orElse(null);
+      ExecuteExecutionIntentCommand command, ExecutionIntent intent) {
     if (intent == null || intent.getSubmittedTxId() == null) {
       return Optional.empty();
     }

@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -71,9 +72,10 @@ public class TransactionalExecuteExecutionIntentDelegate
   /**
    * Executes the target intent within a single transaction.
    *
-   * <p>Caller must supply a pre-validated {@link SponsorWalletGate}; the gate is consumed only
-   * inside the EIP-7702 path. Repeated calls for already-submitted intents return current state
-   * without creating a new transaction.
+   * <p>{@code gate} is the pre-validated sponsor wallet handle — required for EIP-7702 intents and
+   * {@code null} for EIP-1559 user-signed intents (which never use sponsor material). The EIP-7702
+   * path enforces non-null on entry. Repeated calls for already-submitted intents return current
+   * state without creating a new transaction.
    */
   @Override
   public ExecuteExecutionIntentResult execute(
@@ -134,6 +136,7 @@ public class TransactionalExecuteExecutionIntentDelegate
       ExecutionActionHandlerPort actionHandler,
       ExecutionActionPlan actionPlan,
       SponsorWalletGate gate) {
+    Objects.requireNonNull(gate, "EIP-7702 path requires a sponsor wallet gate");
     //  Validate command, client given signatures.
     if (command.authorizationSignature() == null || command.authorizationSignature().isBlank()) {
       throw new Web3InvalidInputException("authorizationSignature is required");

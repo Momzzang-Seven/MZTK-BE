@@ -14,6 +14,10 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWallet
  *
  * <p>Defined as a port to satisfy the architecture rule that application/service references sibling
  * delegates via interface injection, not via the concrete delegate class.
+ *
+ * <p>{@code gate} is {@code null} for EIP-1559 user-signed intents — the EIP-1559 branch never uses
+ * sponsor wallet material. The implementing delegate must enforce non-null only on the EIP-7702
+ * branch where the gate is actually consumed.
  */
 public interface ExecuteTransactionalExecutionIntentDelegatePort {
 

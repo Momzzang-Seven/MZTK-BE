@@ -236,6 +236,60 @@ class TransactionalExecuteExecutionIntentDelegateTest {
   }
 
   @Test
+  void executeEip1559_succeedsWithNullGate_sinceBranchDoesNotConsumeSponsor() throws Exception {
+    ExecutionIntent intent = existingEip1559Intent();
+    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
+        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
+            "0xsigned",
+            "0xhash",
+            intent.getUnsignedTxSnapshot().fromAddress(),
+            intent.getUnsignedTxSnapshot(),
+            intent.getUnsignedTxFingerprint());
+    ExecutionTransactionGatewayPort.TransactionRecord created =
+        new ExecutionTransactionGatewayPort.TransactionRecord(
+            201L, ExecutionTransactionStatus.CREATED, null);
+
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(intent));
+    when(eip1559TransactionCodecPort.decodeAndVerify(
+            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
+        .thenReturn(decoded);
+    when(executionEip7702GatewayPort.loadPendingAccountNonce(
+            intent.getUnsignedTxSnapshot().fromAddress()))
+        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
+    when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
+    when(executionTransactionGatewayPort.broadcast("0xsigned"))
+        .thenReturn(
+            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", "rpc-1", null));
+    when(executionIntentPersistencePort.update(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    ExecuteExecutionIntentResult result =
+        delegate.execute(
+            new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"),
+            /* gate */ null);
+
+    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
+    assertThat(result.transactionId()).isEqualTo(201L);
+  }
+
+  @Test
+  void executeEip7702_throwsNpe_whenGateIsNull() throws Exception {
+    ExecutionIntent intent = existingEip7702Intent();
+    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
+        .thenReturn(Optional.of(intent));
+
+    assertThatThrownBy(
+            () ->
+                delegate.execute(
+                    new ExecuteExecutionIntentCommand(
+                        7L, "intent-7702", "0xauth", "0xsubmit", null),
+                    /* gate */ null))
+        .isInstanceOf(NullPointerException.class)
+        .hasMessageContaining("EIP-7702 path requires a sponsor wallet gate");
+  }
+
+  @Test
   void execute_marksExpired_whenIntentExpiredRelativeToInjectedClock() throws Exception {
     ExecutionIntent intent =
         existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.minusSeconds(1)).build();

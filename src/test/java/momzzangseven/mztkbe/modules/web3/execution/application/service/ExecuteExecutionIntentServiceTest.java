@@ -24,6 +24,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
@@ -119,6 +120,55 @@ class ExecuteExecutionIntentServiceTest {
   }
 
   @Test
+  @DisplayName("EIP-1559 신규 intent → preflight 우회 + delegate 에 gate=null 로 호출")
+  void execute_skipsPreflightForEip1559_andCallsDelegateWithNullGate() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent eip1559Intent = mockNewIntent(command, ExecutionMode.EIP1559);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(eip1559Intent));
+    ExecuteExecutionIntentResult expected =
+        new ExecuteExecutionIntentResult(
+            "intent-1",
+            ExecutionIntentStatus.SIGNED,
+            55L,
+            ExecutionTransactionStatus.SIGNED,
+            "0xhash1559");
+    when(delegate.execute(command, null)).thenReturn(expected);
+
+    ExecuteExecutionIntentResult actual = service.execute(command);
+
+    assertThat(actual).isSameAs(expected);
+    // The whole point: a sponsor wallet outage must not block a user-signed EIP-1559 retry.
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate).execute(command, null);
+  }
+
+  @Test
+  @DisplayName("EIP-7702 신규 intent → preflight 호출 + delegate 에 gate 전달")
+  void execute_runsPreflightForEip7702_andCallsDelegateWithGate() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent eip7702Intent = mockNewIntent(command, ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(eip7702Intent));
+    SponsorWalletGate gate = activeGate();
+    when(sponsorWalletPreflight.preflight()).thenReturn(gate);
+    ExecuteExecutionIntentResult expected =
+        new ExecuteExecutionIntentResult(
+            "intent-1",
+            ExecutionIntentStatus.PENDING_ONCHAIN,
+            77L,
+            ExecutionTransactionStatus.PENDING,
+            "0xhash7702");
+    when(delegate.execute(command, gate)).thenReturn(expected);
+
+    ExecuteExecutionIntentResult actual = service.execute(command);
+
+    assertThat(actual).isSameAs(expected);
+    verify(sponsorWalletPreflight).preflight();
+    verify(delegate).execute(command, gate);
+  }
+
+  @Test
   @DisplayName("폴링 패스: submittedTxId != null 이면 preflight 와 delegate 모두 건너뛰고 캐시된 결과 반환")
   void execute_returnsCachedTransaction_whenIntentAlreadySubmitted_skippingPreflight() {
     ExecuteExecutionIntentCommand command = command();
@@ -166,6 +216,22 @@ class ExecuteExecutionIntentServiceTest {
     org.mockito.Mockito.lenient()
         .when(intent.getStatus())
         .thenReturn(ExecutionIntentStatus.PENDING_ONCHAIN);
+    return intent;
+  }
+
+  private ExecutionIntent mockNewIntent(ExecuteExecutionIntentCommand command, ExecutionMode mode) {
+    ExecutionIntent intent = org.mockito.Mockito.mock(ExecutionIntent.class);
+    org.mockito.Mockito.lenient().when(intent.getSubmittedTxId()).thenReturn(null);
+    org.mockito.Mockito.lenient()
+        .when(intent.getRequesterUserId())
+        .thenReturn(command.requesterUserId());
+    org.mockito.Mockito.lenient()
+        .when(intent.getPublicId())
+        .thenReturn(command.executionIntentId());
+    org.mockito.Mockito.lenient().when(intent.getMode()).thenReturn(mode);
+    org.mockito.Mockito.lenient()
+        .when(intent.getStatus())
+        .thenReturn(ExecutionIntentStatus.AWAITING_SIGNATURE);
     return intent;
   }
 
