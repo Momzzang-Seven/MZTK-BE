@@ -26,9 +26,7 @@ public class UserSummaryAdapter implements LoadUserSummaryPort {
 
   @Override
   public Optional<UserSummary> findById(Long userId) {
-    return loadUserInfoUseCase
-        .loadUserById(userId)
-        .map(u -> new UserSummary(u.id(), u.nickname()));
+    return loadUserInfoUseCase.loadUserById(userId).map(u -> new UserSummary(u.id(), u.nickname()));
   }
 
   @Override

@@ -24,7 +24,8 @@ import org.springframework.stereotype.Component;
  *
  * <ol>
  *   <li>Use {@link GetClassInfoUseCase#findBySlotId} to resolve slotId → {@link
- *       momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass} (lock-free).
+ *       momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass}
+ *       (lock-free).
  *   <li>Use {@link GetClassDetailUseCase} with the obtained classId to fetch title, priceAmount,
  *       and thumbnailFinalObjectKey in a single input-port call.
  * </ol>
@@ -49,8 +50,8 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
    * Batch-load class summaries for multiple slot IDs.
    *
    * <p><b>Note:</b> currently implemented as a per-slot loop (each slot triggers up to two input
-   * port calls). Suitable for typical reservation list sizes. If performance becomes a concern,
-   * add a bulk {@code findBySlotIds} method to {@code GetClassInfoUseCase}.
+   * port calls). Suitable for typical reservation list sizes. If performance becomes a concern, add
+   * a bulk {@code findBySlotIds} method to {@code GetClassInfoUseCase}.
    */
   @Override
   public Map<Long, ClassSummary> findBySlotIds(List<Long> slotIds) {
