@@ -22,16 +22,17 @@
 --     2. 응답 body 의 treasuryAddress / kmsKeyId 를 아래 SQL 의 placeholder 와 교체
 --     3. dev DB 에 적용
 
+-- reward-treasury (id=1)
 update web3_treasury_wallets
 set wallet_alias = 'reward-treasury',
-    treasury_address = '<YOUR_DEV_TREASURY_ADDRESS>',
-    kms_key_id = '<YOUR_DEV_KMS_KEY_ID>',
+    treasury_address = '<YOUR_DEV_REWARD_TREASURY_ADDRESS>',
+    kms_key_id = '<YOUR_DEV_REWARD_KMS_KEY_ID>',
     status = 'ACTIVE',
     key_origin = 'IMPORTED',
     updated_at = current_timestamp
 where id = 1
-  and '<YOUR_DEV_TREASURY_ADDRESS>' like '0x%'
-  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42;
+  and '<YOUR_DEV_REWARD_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_REWARD_TREASURY_ADDRESS>') = 42;
 
 insert into web3_treasury_wallets (
     id,
@@ -46,8 +47,8 @@ insert into web3_treasury_wallets (
 select
     1,
     'reward-treasury',
-    '<YOUR_DEV_TREASURY_ADDRESS>',
-    '<YOUR_DEV_KMS_KEY_ID>',
+    '<YOUR_DEV_REWARD_TREASURY_ADDRESS>',
+    '<YOUR_DEV_REWARD_KMS_KEY_ID>',
     'ACTIVE',
     'IMPORTED',
     current_timestamp,
@@ -57,5 +58,47 @@ where not exists (
     from web3_treasury_wallets
     where id = 1
 )
-  and '<YOUR_DEV_TREASURY_ADDRESS>' like '0x%'
-  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42;
+  and '<YOUR_DEV_REWARD_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_REWARD_TREASURY_ADDRESS>') = 42;
+
+-- sponsor-treasury (id=2)
+--   ProbeExecutionSignerCapabilityService.execute() 가 sponsor-treasury alias 로
+--   probe 하므로, 이 row 가 없으면 dev 부팅 시 QnaAdmin Health DOWN 으로 빠진다.
+--   web3.eip7702.sponsor.enabled=true 환경에서는 반드시 채워야 한다.
+update web3_treasury_wallets
+set wallet_alias = 'sponsor-treasury',
+    treasury_address = '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>',
+    kms_key_id = '<YOUR_DEV_SPONSOR_KMS_KEY_ID>',
+    status = 'ACTIVE',
+    key_origin = 'IMPORTED',
+    updated_at = current_timestamp
+where id = 2
+  and '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>') = 42;
+
+insert into web3_treasury_wallets (
+    id,
+    wallet_alias,
+    treasury_address,
+    kms_key_id,
+    status,
+    key_origin,
+    created_at,
+    updated_at
+)
+select
+    2,
+    'sponsor-treasury',
+    '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>',
+    '<YOUR_DEV_SPONSOR_KMS_KEY_ID>',
+    'ACTIVE',
+    'IMPORTED',
+    current_timestamp,
+    current_timestamp
+where not exists (
+    select 1
+    from web3_treasury_wallets
+    where id = 2
+)
+  and '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>') = 42;
