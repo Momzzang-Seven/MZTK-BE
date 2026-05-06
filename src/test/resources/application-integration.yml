@@ -85,8 +85,6 @@ web3:
   reward-token:
     enabled: true
     token-contract-address: "0x0000000000000000000000000000000000000000"
-    treasury:
-      wallet-alias: reward-treasury
   escrow:
     marketplace-contract-address: "0x0000000000000000000000000000000000000000"
     qna-contract-address: "0x0000000000000000000000000000000000000000"

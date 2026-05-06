@@ -123,7 +123,6 @@ web3:
     token-contract-address: "0x0000000000000000000000000000000000000001"
     decimals: 18
     treasury:
-      wallet-alias: reward-treasury
       provisioning:
         enabled: false
     prevalidate:
@@ -150,7 +149,6 @@ web3:
       default-receiver-address: "0x0000000000000000000000000000000000000001"
     sponsor:
       enabled: false
-      wallet-alias: sponsor-treasury
       max-gas-limit: 500000
       max-max-fee-gwei: 60
       max-priority-fee-gwei: 2
