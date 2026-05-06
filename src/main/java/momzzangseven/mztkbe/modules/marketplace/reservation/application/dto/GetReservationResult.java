@@ -13,7 +13,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
  *
  * <p>Enrichment fields ({@code classTitle}, {@code priceAmount}, {@code trainerNickname}, {@code
  * userNickname}, {@code thumbnailFinalObjectKey}) are populated from cross-module lookups. They may
- * be {@code null} (or {@code 0} for {@code priceAmount}) if the referenced data is unavailable.
+ * be {@code null} if the referenced data is unavailable.
  *
  * @param reservationId primary key
  * @param userId reserving user's ID
@@ -29,7 +29,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
  * @param createdAt reservation creation timestamp
  * @param updatedAt last update timestamp
  * @param classTitle class title; {@code null} if class data is unavailable
- * @param priceAmount class price in KRW; {@code 0} if class data is unavailable
+ * @param priceAmount class price in KRW; {@code null} if class data is unavailable
  * @param trainerNickname trainer's display nickname; {@code null} if user data is unavailable
  * @param userNickname reserving user's display nickname; {@code null} if user data is unavailable
  * @param thumbnailFinalObjectKey S3 object key for the class thumbnail; {@code null} if not set
@@ -49,7 +49,7 @@ public record GetReservationResult(
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     String classTitle,
-    int priceAmount,
+    Integer priceAmount,
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey) {
@@ -83,7 +83,7 @@ public record GetReservationResult(
         reservation.getCreatedAt(),
         reservation.getUpdatedAt(),
         classSummary != null ? classSummary.title() : null,
-        classSummary != null ? classSummary.priceAmount() : 0,
+        classSummary != null ? classSummary.priceAmount() : null,
         trainerSummary != null ? trainerSummary.nickname() : null,
         userSummary != null ? userSummary.nickname() : null,
         classSummary != null ? classSummary.thumbnailFinalObjectKey() : null);
