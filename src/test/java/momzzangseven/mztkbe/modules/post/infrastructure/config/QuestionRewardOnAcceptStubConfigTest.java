@@ -14,7 +14,7 @@ class QuestionRewardOnAcceptStubConfigTest {
     var port = new QuestionRewardOnAcceptStubConfig().questionLifecycleExecutionPort();
 
     assertThat(port.prepareQuestionCreate(1L, 2L, "q", 10L)).isEmpty();
-    assertThat(port.prepareQuestionUpdate(1L, 2L, "q", 10L)).isEmpty();
+    assertThat(port.prepareQuestionUpdate(1L, 2L, "q", 10L, 1L, "token")).isEmpty();
     assertThat(port.prepareQuestionDelete(1L, 2L, "q", 10L)).isEmpty();
     assertThat(port.prepareAnswerAccept(1L, 3L, 2L, 4L, "q", "a", 10L)).isEmpty();
   }

@@ -30,5 +30,20 @@ class PostMutationResponseTest {
     assertThat(response.postId()).isEqualTo(10L);
     assertThat(response.web3()).isNotNull();
     assertThat(response.web3().actionType()).isEqualTo("QNA_QUESTION_UPDATE");
+    assertThat(response.questionUpdate()).isNull();
+  }
+
+  @Test
+  @DisplayName("from(PostMutationResult) maps retryable question update preparation failure")
+  void from_mapsQuestionUpdatePreparationFailure() {
+    PostMutationResponse response =
+        PostMutationResponse.from(PostMutationResult.questionUpdatePreparationFailed(10L));
+
+    assertThat(response.postId()).isEqualTo(10L);
+    assertThat(response.web3()).isNull();
+    assertThat(response.questionUpdate()).isNotNull();
+    assertThat(response.questionUpdate().status()).isEqualTo("PREPARATION_FAILED");
+    assertThat(response.questionUpdate().retryable()).isTrue();
+    assertThat(response.questionUpdate().errorCode()).isNull();
   }
 }

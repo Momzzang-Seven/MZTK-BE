@@ -6,4 +6,6 @@ import momzzangseven.mztkbe.modules.tag.domain.model.Tag;
 public interface LoadTagPort {
 
   List<Tag> loadTagsByNames(List<String> names);
+
+  List<Long> loadTagIdsByPostId(Long postId);
 }

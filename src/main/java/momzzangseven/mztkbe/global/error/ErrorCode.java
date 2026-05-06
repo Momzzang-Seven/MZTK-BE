@@ -323,6 +323,8 @@ public enum ErrorCode {
       "POST_010", "Question publication state is inconsistent", HttpStatus.CONFLICT),
   QUESTION_CREATE_RECOVERY_UNAVAILABLE(
       "POST_011", "Question create recovery is unavailable", HttpStatus.CONFLICT),
+  QUESTION_UPDATE_SUPERSEDED(
+      "POST_012", "Question update was superseded by a newer content update", HttpStatus.CONFLICT),
   // ========================================
   // Comment Errors (COMMENT_xxx)
   // ========================================

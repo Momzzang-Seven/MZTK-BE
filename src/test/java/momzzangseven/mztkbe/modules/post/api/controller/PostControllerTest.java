@@ -379,6 +379,27 @@ class PostControllerTest {
   }
 
   @Test
+  @DisplayName("PATCH /posts/{postId} exposes retryable question update preparation failure")
+  void updatePost_questionUpdatePreparationFailed() throws Exception {
+    given(updatePostUseCase.updatePost(any(), any(), any()))
+        .willReturn(PostMutationResult.questionUpdatePreparationFailed(1L, "WEB3_009", true));
+
+    mockMvc
+        .perform(
+            patch("/posts/1")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "updated question"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.postId").value(1))
+        .andExpect(jsonPath("$.data.web3").doesNotExist())
+        .andExpect(jsonPath("$.data.questionUpdate.status").value("PREPARATION_FAILED"))
+        .andExpect(jsonPath("$.data.questionUpdate.retryable").value(true))
+        .andExpect(jsonPath("$.data.questionUpdate.errorCode").value("WEB3_009"));
+  }
+
+  @Test
   @DisplayName("PATCH /posts/{postId} maps foreign image to 403 IMAGE_009")
   void updatePost_imageOwnershipInvalid_returns403() throws Exception {
     given(updatePostUseCase.updatePost(any(), any(), any()))

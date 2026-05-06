@@ -138,6 +138,13 @@ class MarketplaceClassE2ETest extends E2ETestBase {
     return objectMapper.readTree(response.getBody()).at("/data/classId").asLong();
   }
 
+  private int countClassTagMappings(Long classId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM class_tags WHERE class_id = ?", Integer.class, classId);
+    return count == null ? 0 : count;
+  }
+
   // ============================================================
   // E2E Tests — 클래스 등록 (POST)
   // ============================================================
@@ -324,6 +331,22 @@ class MarketplaceClassE2ETest extends E2ETestBase {
     assertThat(data.at("/title").asText()).isEqualTo("PT 90분 중급 업데이트");
     assertThat(data.at("/priceAmount").asInt()).isEqualTo(80000);
     assertThat(data.at("/durationMinutes").asInt()).isEqualTo(90);
+  }
+
+  @Test
+  @DisplayName("[CE-7a] 동일 클래스 태그 유지 수정 시 PostgreSQL unique 충돌 없이 매핑을 유지한다")
+  void updateClass_retainingSameTags_keepsMappings() throws Exception {
+    Long classId = registerClassAndGetId(trainerAccessToken);
+
+    ResponseEntity<String> updateResponse =
+        restTemplate.exchange(
+            baseUrl() + "/marketplace/trainer/classes/" + classId,
+            HttpMethod.PUT,
+            new HttpEntity<>(validClassBody(), authHeaders(trainerAccessToken)),
+            String.class);
+
+    assertThat(updateResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(countClassTagMappings(classId)).isEqualTo(2);
   }
 
   @Test

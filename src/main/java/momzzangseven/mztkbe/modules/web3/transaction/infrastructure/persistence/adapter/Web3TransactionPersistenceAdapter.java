@@ -35,10 +35,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
     }
 
     Web3TransactionEntity existingByReference =
-        repository
-            .findByReferenceTypeAndReferenceId(
-                Web3ReferenceType.LEVEL_UP_REWARD, command.referenceId())
-            .orElse(null);
+        repository.findLevelRewardByReferenceId(command.referenceId()).orElse(null);
     if (existingByReference != null) {
       return mapAndValidateExisting(existingByReference);
     }
@@ -67,8 +64,7 @@ public class Web3TransactionPersistenceAdapter implements SaveTransactionPort {
     } catch (DataIntegrityViolationException e) {
       Web3TransactionEntity raced =
           repository
-              .findByReferenceTypeAndReferenceId(
-                  Web3ReferenceType.LEVEL_UP_REWARD, command.referenceId())
+              .findLevelRewardByReferenceId(command.referenceId())
               .orElseGet(
                   () ->
                       repository

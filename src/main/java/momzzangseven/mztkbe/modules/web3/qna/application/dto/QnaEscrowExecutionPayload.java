@@ -13,4 +13,33 @@ public record QnaEscrowExecutionPayload(
     String questionHash,
     String contentHash,
     String callTarget,
-    String callData) {}
+    String callData,
+    Long questionUpdateVersion,
+    String questionUpdateToken) {
+
+  public QnaEscrowExecutionPayload(
+      QnaExecutionActionType actionType,
+      Long postId,
+      Long answerId,
+      String authorityAddress,
+      String tokenAddress,
+      BigInteger amountWei,
+      String questionHash,
+      String contentHash,
+      String callTarget,
+      String callData) {
+    this(
+        actionType,
+        postId,
+        answerId,
+        authorityAddress,
+        tokenAddress,
+        amountWei,
+        questionHash,
+        contentHash,
+        callTarget,
+        callData,
+        null,
+        null);
+  }
+}

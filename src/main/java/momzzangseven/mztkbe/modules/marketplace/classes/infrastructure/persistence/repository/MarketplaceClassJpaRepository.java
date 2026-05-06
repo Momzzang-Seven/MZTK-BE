@@ -1,10 +1,14 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.repository;
 
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.MarketplaceClassEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -40,6 +44,10 @@ public interface MarketplaceClassJpaRepository extends JpaRepository<Marketplace
    */
   Page<MarketplaceClassEntity> findByTrainerIdOrderByCreatedAtDesc(
       Long trainerId, Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select c from MarketplaceClassEntity c where c.id = :classId")
+  Optional<MarketplaceClassEntity> findByIdForUpdate(@Param("classId") Long classId);
 
   /**
    * Find a single active class by its ID.

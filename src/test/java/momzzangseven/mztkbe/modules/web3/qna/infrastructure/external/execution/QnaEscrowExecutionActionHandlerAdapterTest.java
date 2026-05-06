@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -28,11 +30,14 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIn
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionPublicationSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
+import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,6 +55,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   @Mock private QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
   @Mock private QnaQuestionPublicationSyncPort qnaQuestionPublicationSyncPort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
+  @Mock private QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort;
   @Mock private QnaLocalDeleteSyncPort qnaLocalDeleteSyncPort;
 
   private QnaEscrowExecutionActionHandlerAdapter adapter;
@@ -66,6 +72,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             qnaAdminRefundStateSyncPort,
             qnaQuestionPublicationSyncPort,
             loadQnaExecutionIntentStatePort,
+            qnaQuestionUpdateStatePersistencePort,
             qnaLocalDeleteSyncPort);
   }
 
@@ -286,6 +293,65 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName("afterExecutionConfirmed applies latest matching question update state")
+  void afterExecutionConfirmed_appliesLatestMatchingQuestionUpdate() throws Exception {
+    String questionHash = "0x" + "f".repeat(64);
+    when(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(updateState(2L, "token-2", questionHash, "intent-1")));
+    when(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(questionProjection("0x" + "a".repeat(64), 0)));
+
+    adapter.afterExecutionConfirmed(
+        intent(
+            questionUpdatePayload(questionHash, 2L, "token-2"),
+            ExecutionResourceType.QUESTION,
+            "101",
+            7L),
+        plan());
+
+    ArgumentCaptor<QnaQuestionProjection> questionCaptor =
+        ArgumentCaptor.forClass(QnaQuestionProjection.class);
+    verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
+    assertThat(questionCaptor.getValue().getQuestionHash()).isEqualTo(questionHash);
+    verify(qnaQuestionUpdateStatePersistencePort).markConfirmed("intent-1");
+  }
+
+  @Test
+  @DisplayName("afterExecutionConfirmed ignores stale question update confirmation")
+  void afterExecutionConfirmed_ignoresStaleQuestionUpdate() throws Exception {
+    String questionHash = "0x" + "f".repeat(64);
+    when(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(updateState(3L, "token-3", "0x" + "e".repeat(64), "intent-3")));
+
+    adapter.afterExecutionConfirmed(
+        intent(
+            questionUpdatePayload(questionHash, 2L, "token-2"),
+            ExecutionResourceType.QUESTION,
+            "101",
+            7L),
+        plan());
+
+    verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
+    verify(qnaQuestionUpdateStatePersistencePort, never()).markConfirmed(any());
+  }
+
+  @Test
+  @DisplayName(
+      "afterExecutionConfirmed ignores legacy question update payload without version token")
+  void afterExecutionConfirmed_ignoresLegacyQuestionUpdatePayload() throws Exception {
+    adapter.afterExecutionConfirmed(
+        intent(
+            questionUpdatePayload("0x" + "f".repeat(64), null, null),
+            ExecutionResourceType.QUESTION,
+            "101",
+            7L),
+        plan());
+
+    verify(qnaQuestionUpdateStatePersistencePort, never()).findLatestByPostIdForUpdate(any());
+    verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
+  }
+
+  @Test
   @DisplayName(
       "afterExecutionFailedOnchain defers rollback to terminal callback when failure reason is missing")
   void afterExecutionFailedOnchain_defersRollbackWhenFailureReasonIsNull() throws Exception {
@@ -414,6 +480,41 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         "AUTH_NONCE_MISMATCH");
 
     verify(qnaAcceptStateSyncPort).rollbackPendingAccept(101L, 201L);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated marks question update failure as non retryable")
+  void afterExecutionTerminated_marksQuestionUpdateFailureNonRetryable() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(
+            questionUpdatePayload("0x" + "f".repeat(64), 2L, "token-2"),
+            ExecutionResourceType.QUESTION,
+            "101",
+            7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "TREASURY_TOKEN_INSUFFICIENT");
+
+    verify(qnaQuestionUpdateStatePersistencePort)
+        .markPreparationFailedByExecutionIntentPublicId(
+            "intent-1", "FAILED_ONCHAIN", "TREASURY_TOKEN_INSUFFICIENT", false);
+  }
+
+  @Test
+  @DisplayName("afterExecutionTerminated keeps question update state for retryable failure")
+  void afterExecutionTerminated_keepsQuestionUpdateStateForRetryableFailure() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(
+            questionUpdatePayload("0x" + "f".repeat(64), 2L, "token-2"),
+            ExecutionResourceType.QUESTION,
+            "101",
+            7L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "RPC_UNAVAILABLE");
+
+    verify(qnaQuestionUpdateStatePersistencePort, never())
+        .markPreparationFailedByExecutionIntentPublicId(any(), any(), any(), anyBoolean());
   }
 
   @Test
@@ -563,6 +664,38 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         null,
         "0x" + "3".repeat(40),
         "0x1234");
+  }
+
+  private QnaEscrowExecutionPayload questionUpdatePayload(
+      String questionHash, Long updateVersion, String updateToken) {
+    return new QnaEscrowExecutionPayload(
+        QnaExecutionActionType.QNA_QUESTION_UPDATE,
+        101L,
+        null,
+        "0x" + "1".repeat(40),
+        "0x" + "2".repeat(40),
+        new BigInteger("50000000000000000000"),
+        questionHash,
+        null,
+        "0x" + "3".repeat(40),
+        "0x1234",
+        updateVersion,
+        updateToken);
+  }
+
+  private QnaQuestionUpdateState updateState(
+      Long version, String token, String questionHash, String intentId) {
+    return QnaQuestionUpdateState.builder()
+        .postId(101L)
+        .requesterUserId(7L)
+        .updateVersion(version)
+        .updateToken(token)
+        .expectedQuestionHash(questionHash)
+        .executionIntentPublicId(intentId)
+        .status(QnaQuestionUpdateStateStatus.INTENT_BOUND)
+        .createdAt(LocalDateTime.of(2026, 4, 12, 10, 0))
+        .updatedAt(LocalDateTime.of(2026, 4, 12, 10, 1))
+        .build();
   }
 
   private QnaEscrowExecutionPayload adminSettlePayload() {

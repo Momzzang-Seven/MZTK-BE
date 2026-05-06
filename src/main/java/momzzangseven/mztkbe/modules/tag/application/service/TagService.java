@@ -1,8 +1,10 @@
 package momzzangseven.mztkbe.modules.tag.application.service;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.tag.application.port.in.ManageTagsUseCase;
 import momzzangseven.mztkbe.modules.tag.application.port.out.LoadTagPort;
@@ -23,58 +25,29 @@ public class TagService implements ManageTagsUseCase {
   @Override
   @Transactional // 쓰기 작업이 있으므로 트랜잭션 필요
   public void linkTagsToPost(Long postId, List<String> tagNames) {
-    if (tagNames == null || tagNames.isEmpty()) {
-      return;
-    }
-
-    // 1. 중복 제거 및 공백 제거
-    List<String> distinctNames =
-        tagNames.stream()
-            .filter(Objects::nonNull)
-            .map(String::trim)
-            .map(String::toLowerCase)
-            .filter(name -> !name.isBlank())
-            .distinct()
-            .toList();
+    List<String> distinctNames = normalizeTagNames(tagNames);
     if (distinctNames.isEmpty()) {
       return;
     }
 
-    // 2. 이미 DB에 존재하는 태그 조회
-    List<Tag> existingTags = loadTagPort.loadTagsByNames(distinctNames);
-    List<String> existingNames = existingTags.stream().map(Tag::getName).toList();
-
-    // 3. 존재하지 않는 새 태그 생성
-    List<Tag> newTags =
-        distinctNames.stream()
-            .filter(name -> !existingNames.contains(name))
-            .map(Tag::create)
-            .toList();
-
-    // 4. 새 태그 저장 (ID 생성됨)
-    List<Tag> savedNewTags = new ArrayList<>();
-    if (!newTags.isEmpty()) {
-      savedNewTags = saveTagPort.saveTags(newTags);
-    }
-
-    // 5. 전체 태그 ID 수집 (기존 태그 ID + 새 태그 ID)
-    List<Long> allTagIds = new ArrayList<>();
-    allTagIds.addAll(existingTags.stream().map(Tag::getId).toList());
-    allTagIds.addAll(savedNewTags.stream().map(Tag::getId).toList());
-
-    // 6. 게시글-태그 연결 (매핑 저장)
-    saveTagPort.savePostTagMappings(postId, allTagIds);
+    saveTagPort.savePostTagMappings(postId, resolveTagIds(distinctNames));
   }
 
   @Override
   @Transactional
   public void updateTags(Long postId, List<String> tagNames) {
+    List<Long> requestedTagIds = resolveTagIds(normalizeTagNames(tagNames));
+    Set<Long> requested = new LinkedHashSet<>(requestedTagIds);
+    Set<Long> existing = new LinkedHashSet<>(loadTagPort.loadTagIdsByPostId(postId));
 
-    saveTagPort.deleteTagsByPostId(postId);
+    List<Long> toDelete = existing.stream().filter(tagId -> !requested.contains(tagId)).toList();
+    List<Long> toInsert = requested.stream().filter(tagId -> !existing.contains(tagId)).toList();
 
-    // 새 태그 연결
-    if (tagNames != null && !tagNames.isEmpty()) {
-      this.linkTagsToPost(postId, tagNames);
+    if (!toDelete.isEmpty()) {
+      saveTagPort.deletePostTagMappings(postId, toDelete);
+    }
+    if (!toInsert.isEmpty()) {
+      saveTagPort.savePostTagMappings(postId, toInsert);
     }
   }
 
@@ -82,5 +55,26 @@ public class TagService implements ManageTagsUseCase {
   @Transactional
   public void deleteTagsByPostId(Long postId) {
     saveTagPort.deleteTagsByPostId(postId);
+  }
+
+  private List<Long> resolveTagIds(List<String> distinctNames) {
+    if (distinctNames.isEmpty()) {
+      return List.of();
+    }
+    saveTagPort.saveTagNamesIfAbsent(distinctNames);
+    return loadTagPort.loadTagsByNames(distinctNames).stream().map(Tag::getId).toList();
+  }
+
+  private List<String> normalizeTagNames(List<String> tagNames) {
+    if (tagNames == null || tagNames.isEmpty()) {
+      return List.of();
+    }
+    return tagNames.stream()
+        .filter(Objects::nonNull)
+        .map(String::trim)
+        .map(name -> name.toLowerCase(Locale.ROOT))
+        .filter(name -> !name.isBlank())
+        .distinct()
+        .toList();
   }
 }

@@ -80,6 +80,20 @@ class PostE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
   }
 
+  private Long createFreePost(String content, List<String> tags) throws Exception {
+    Map<String, Object> body = Map.of("content", content, "imageIds", imageIds, "tags", tags);
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            baseUrl() + "/posts/free",
+            HttpMethod.POST,
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(res.getStatusCode())
+        .as("Free post creation with tags should return 201")
+        .isEqualTo(HttpStatus.CREATED);
+    return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
+  }
+
   private Long createQuestionPost(String title, String content, long reward) throws Exception {
     Map<String, Object> body = Map.of("title", title, "content", content, "reward", reward);
     ResponseEntity<String> res =
@@ -162,6 +176,13 @@ class PostE2ETest extends E2ETestBase {
             "SELECT COUNT(*) FROM post_like WHERE target_type = 'POST' AND target_id = ?",
             Integer.class,
             postId);
+    return count == null ? 0 : count;
+  }
+
+  private int countPostTagMappings(Long postId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM post_tags WHERE post_id = ?", Integer.class, postId);
     return count == null ? 0 : count;
   }
 
@@ -282,6 +303,25 @@ class PostE2ETest extends E2ETestBase {
     // then - DB 직접 검증
     String savedContent = getPostContentFromDb(postId);
     assertThat(savedContent).isEqualTo("수정 후 내용 E2E");
+  }
+
+  @Test
+  @DisplayName("자유 게시글 동일 태그 유지 수정 시 PostgreSQL unique 충돌 없이 매핑을 유지한다")
+  void updateFreePost_retainingSameTag_keepsSingleMapping() throws Exception {
+    Long postId = createFreePost("태그 유지 원본", List.of("java"));
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(
+                Map.of("content", "태그 유지 수정", "tags", List.of("java")),
+                bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(getPostContentFromDb(postId)).isEqualTo("태그 유지 수정");
+    assertThat(countPostTagMappings(postId)).isEqualTo(1);
   }
 
   @Test
