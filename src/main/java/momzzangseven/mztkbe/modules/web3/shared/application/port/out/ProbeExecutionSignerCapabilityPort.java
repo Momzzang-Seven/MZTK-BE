@@ -4,5 +4,5 @@ import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerC
 
 public interface ProbeExecutionSignerCapabilityPort {
 
-  ExecutionSignerCapabilityView probe(String walletAlias, String keyEncryptionKeyB64);
+  ExecutionSignerCapabilityView probe(String walletAlias);
 }

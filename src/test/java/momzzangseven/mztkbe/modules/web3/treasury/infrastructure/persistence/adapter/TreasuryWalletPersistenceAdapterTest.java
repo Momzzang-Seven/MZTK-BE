@@ -40,7 +40,7 @@ class TreasuryWalletPersistenceAdapterTest {
   void probe_returnsSlotMissing_whenAliasNotFound() {
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.empty());
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.SLOT_MISSING);
     assertThat(result.signable()).isFalse();
@@ -52,7 +52,7 @@ class TreasuryWalletPersistenceAdapterTest {
     Web3TreasuryWalletEntity entity = Web3TreasuryWalletEntity.builder().walletAlias(ALIAS).build();
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(entity));
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.UNPROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.NONE);
@@ -66,7 +66,7 @@ class TreasuryWalletPersistenceAdapterTest {
         Web3TreasuryWalletEntity.builder().walletAlias(ALIAS).treasuryAddress(ADDRESS).build();
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(entity));
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.UNPROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.CORRUPTED_SLOT);
@@ -80,7 +80,7 @@ class TreasuryWalletPersistenceAdapterTest {
         Web3TreasuryWalletEntity.builder().walletAlias(ALIAS).kmsKeyId(KMS_KEY_ID).build();
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(entity));
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.UNPROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.CORRUPTED_SLOT);
@@ -94,7 +94,7 @@ class TreasuryWalletPersistenceAdapterTest {
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(entity));
     when(describeKmsKeyPort.describe(KMS_KEY_ID)).thenReturn(KmsKeyState.ENABLED);
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.READY);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.NONE);
@@ -107,7 +107,7 @@ class TreasuryWalletPersistenceAdapterTest {
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(activeKmsEntity()));
     when(describeKmsKeyPort.describe(KMS_KEY_ID)).thenReturn(KmsKeyState.DISABLED);
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.PROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.KMS_KEY_DISABLED);
@@ -119,7 +119,7 @@ class TreasuryWalletPersistenceAdapterTest {
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(activeKmsEntity()));
     when(describeKmsKeyPort.describe(KMS_KEY_ID)).thenReturn(KmsKeyState.PENDING_DELETION);
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.PROVISIONED);
     assertThat(result.failureReason())
@@ -132,7 +132,7 @@ class TreasuryWalletPersistenceAdapterTest {
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(activeKmsEntity()));
     when(describeKmsKeyPort.describe(KMS_KEY_ID)).thenReturn(KmsKeyState.PENDING_IMPORT);
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.PROVISIONED);
     assertThat(result.failureReason())
@@ -145,7 +145,7 @@ class TreasuryWalletPersistenceAdapterTest {
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(activeKmsEntity()));
     when(describeKmsKeyPort.describe(KMS_KEY_ID)).thenReturn(KmsKeyState.UNAVAILABLE);
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.PROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.KMS_KEY_UNAVAILABLE);
@@ -157,7 +157,7 @@ class TreasuryWalletPersistenceAdapterTest {
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(activeKmsEntity()));
     when(describeKmsKeyPort.describe(KMS_KEY_ID)).thenThrow(new RuntimeException("aws down"));
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.PROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.KMS_DESCRIBE_FAILED);
@@ -169,7 +169,7 @@ class TreasuryWalletPersistenceAdapterTest {
     Web3TreasuryWalletEntity entity = kmsEntityWithStatus(TreasuryWalletStatus.DISABLED.name());
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(entity));
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.PROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.WALLET_DISABLED);
@@ -182,7 +182,7 @@ class TreasuryWalletPersistenceAdapterTest {
     Web3TreasuryWalletEntity entity = kmsEntityWithStatus(TreasuryWalletStatus.ARCHIVED.name());
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(entity));
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.PROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.WALLET_ARCHIVED);
@@ -195,7 +195,7 @@ class TreasuryWalletPersistenceAdapterTest {
     Web3TreasuryWalletEntity entity = kmsEntityWithStatus(null);
     when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(entity));
 
-    var result = adapter.probe(ALIAS, null);
+    var result = adapter.probe(ALIAS);
 
     assertThat(result.slotStatus()).isEqualTo(ExecutionSignerSlotStatus.UNPROVISIONED);
     assertThat(result.failureReason()).isEqualTo(ExecutionSignerFailureReason.KMS_KEY_ID_MISSING);
