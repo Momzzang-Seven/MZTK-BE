@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.shared.application.util;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -131,6 +132,35 @@ class KmsClientErrorClassifierTest {
   void nonKmsExceptionCause_isNotTerminal() {
     KmsSignFailedException ex =
         new KmsSignFailedException("garbage cause", new RuntimeException("garbage"));
+    assertThat(KmsClientErrorClassifier.isTerminal(ex)).isFalse();
+  }
+
+  @Test
+  @DisplayName("KmsKeyDescribeFailedException + AccessDenied → terminal")
+  void describeKeyAccessDenied_isTerminal() {
+    KmsKeyDescribeFailedException ex =
+        new KmsKeyDescribeFailedException(
+            "describe denied", kmsExWithCode("AccessDeniedException"));
+    assertThat(KmsClientErrorClassifier.isTerminal(ex)).isTrue();
+  }
+
+  @Test
+  @DisplayName("KmsKeyDescribeFailedException + NotFound → terminal")
+  void describeKeyNotFound_isTerminal() {
+    NotFoundException kmsEx =
+        (NotFoundException)
+            NotFoundException.builder()
+                .awsErrorDetails(AwsErrorDetails.builder().errorCode("NotFoundException").build())
+                .build();
+    KmsKeyDescribeFailedException ex = new KmsKeyDescribeFailedException("not found", kmsEx);
+    assertThat(KmsClientErrorClassifier.isTerminal(ex)).isTrue();
+  }
+
+  @Test
+  @DisplayName("KmsKeyDescribeFailedException + Throttling → retryable")
+  void describeKeyThrottling_isNotTerminal() {
+    KmsKeyDescribeFailedException ex =
+        new KmsKeyDescribeFailedException("throttled", kmsExWithCode("ThrottlingException"));
     assertThat(KmsClientErrorClassifier.isTerminal(ex)).isFalse();
   }
 }
