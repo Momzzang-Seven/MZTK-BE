@@ -36,6 +36,8 @@ class KmsExceptionTest {
       assertThat(ex.getCode()).isEqualTo("WEB3_017");
       assertThat(ex.getHttpStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
       assertThat(ex).isInstanceOf(BusinessException.class);
+      assertThat(ex).isInstanceOf(Web3TransferException.class);
+      assertThat(ex.isRetryable()).isTrue();
     }
 
     @Test
@@ -51,6 +53,7 @@ class KmsExceptionTest {
       assertThat(signEx.getCause()).isSameAs(cause);
       assertThat(signEx.getMessage()).isEqualTo("wrapped");
       assertThat(signEx.getCode()).isEqualTo("WEB3_017");
+      assertThat(signEx.isRetryable()).isTrue();
     }
   }
 
