@@ -1,0 +1,189 @@
+package momzzangseven.mztkbe.modules.admin.user.application.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserRoleFilter;
+import momzzangseven.mztkbe.modules.admin.user.application.dto.AdminUserSortKey;
+import momzzangseven.mztkbe.modules.admin.user.application.dto.GetAdminUsersCommand;
+import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserCommentCountsPort;
+import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserPostCountsPort;
+import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUserStatusesPort;
+import momzzangseven.mztkbe.modules.admin.user.application.port.out.LoadAdminUsersPort;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserAccountStatus;
+import momzzangseven.mztkbe.modules.admin.user.domain.vo.AdminUserRole;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("GetAdminUsersService 단위 테스트")
+class GetAdminUsersServiceTest {
+
+  @Mock private LoadAdminUsersPort loadAdminUsersPort;
+  @Mock private LoadAdminUserStatusesPort loadAdminUserStatusesPort;
+  @Mock private LoadAdminUserPostCountsPort loadAdminUserPostCountsPort;
+  @Mock private LoadAdminUserCommentCountsPort loadAdminUserCommentCountsPort;
+
+  @InjectMocks private GetAdminUsersService service;
+
+  @Test
+  @DisplayName("status filter, count 조합, postCount 정렬을 service 에서 수행한다")
+  void execute_combinesStatusAndCounts() {
+    GetAdminUsersCommand command =
+        new GetAdminUsersCommand(
+            9L,
+            "alpha",
+            AdminUserAccountStatus.ACTIVE,
+            AdminUserRoleFilter.USER,
+            0,
+            20,
+            AdminUserSortKey.POST_COUNT);
+
+    given(loadAdminUserStatusesPort.load(null, AdminUserAccountStatus.ACTIVE))
+        .willReturn(Map.of(10L, AdminUserAccountStatus.ACTIVE, 11L, AdminUserAccountStatus.ACTIVE));
+    given(
+            loadAdminUsersPort.load(
+                new LoadAdminUsersPort.AdminUserProfileQuery(
+                    "alpha", AdminUserRoleFilter.USER, Set.of(10L, 11L))))
+        .willReturn(
+            List.of(
+                new LoadAdminUsersPort.AdminUserProfileView(
+                    10L,
+                    "alpha-1",
+                    AdminUserRole.USER,
+                    "alpha1@test.com",
+                    Instant.parse("2025-01-10T00:00:00Z")),
+                new LoadAdminUsersPort.AdminUserProfileView(
+                    11L,
+                    "alpha-2",
+                    AdminUserRole.USER,
+                    "alpha2@test.com",
+                    Instant.parse("2025-01-11T00:00:00Z"))));
+    given(loadAdminUserStatusesPort.load(List.of(10L, 11L), AdminUserAccountStatus.ACTIVE))
+        .willReturn(Map.of(10L, AdminUserAccountStatus.ACTIVE, 11L, AdminUserAccountStatus.ACTIVE));
+    given(loadAdminUserPostCountsPort.load(List.of(10L, 11L))).willReturn(Map.of(10L, 3L, 11L, 7L));
+    given(loadAdminUserCommentCountsPort.load(List.of(10L, 11L)))
+        .willReturn(Map.of(10L, 1L, 11L, 2L));
+
+    var result = service.execute(command);
+
+    assertThat(result.getTotalElements()).isEqualTo(2L);
+    assertThat(result.getContent()).extracting(item -> item.userId()).containsExactly(11L, 10L);
+    assertThat(result.getContent().get(0).postCount()).isEqualTo(7L);
+    assertThat(result.getContent().get(0).commentCount()).isEqualTo(2L);
+  }
+
+  @Test
+  @DisplayName("프로필 기반 sort 는 DB paging 결과의 userIds 에 대해서만 status/count 를 병합한다")
+  void execute_profileSort_usesPagedProfileQuery() {
+    GetAdminUsersCommand command =
+        new GetAdminUsersCommand(9L, null, null, null, 1, 2, AdminUserSortKey.JOINED_AT);
+    var first =
+        new LoadAdminUsersPort.AdminUserProfileView(
+            12L,
+            "beta",
+            AdminUserRole.TRAINER,
+            "beta@test.com",
+            Instant.parse("2025-01-12T00:00:00Z"));
+    var second =
+        new LoadAdminUsersPort.AdminUserProfileView(
+            11L,
+            "alpha",
+            AdminUserRole.USER,
+            "alpha@test.com",
+            Instant.parse("2025-01-11T00:00:00Z"));
+    given(
+            loadAdminUsersPort.loadPage(
+                new LoadAdminUsersPort.AdminUserProfilePageQuery(
+                    null, null, null, 1, 2, AdminUserSortKey.JOINED_AT)))
+        .willReturn(new PageImpl<>(List.of(first, second), PageRequest.of(1, 2), 5));
+    given(loadAdminUserStatusesPort.load(List.of(12L, 11L), null))
+        .willReturn(
+            Map.of(12L, AdminUserAccountStatus.ACTIVE, 11L, AdminUserAccountStatus.BLOCKED));
+    given(loadAdminUserPostCountsPort.load(List.of(12L, 11L))).willReturn(Map.of(12L, 1L));
+    given(loadAdminUserCommentCountsPort.load(List.of(12L, 11L))).willReturn(Map.of(11L, 4L));
+
+    var result = service.execute(command);
+
+    assertThat(result.getTotalElements()).isEqualTo(5L);
+    assertThat(result.getContent()).extracting(item -> item.userId()).containsExactly(12L, 11L);
+    assertThat(result.getContent().get(0).postCount()).isEqualTo(1L);
+    assertThat(result.getContent().get(1).commentCount()).isEqualTo(4L);
+    verify(loadAdminUsersPort, never()).load(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  @DisplayName("count 기반 sort 의 메모리 페이징은 정상 page 를 반환한다")
+  void execute_countSortMemoryPagination_returnsRequestedPage() {
+    GetAdminUsersCommand command =
+        new GetAdminUsersCommand(9L, null, null, null, 1, 1, AdminUserSortKey.POST_COUNT);
+    given(loadAdminUsersPort.load(new LoadAdminUsersPort.AdminUserProfileQuery(null, null, null)))
+        .willReturn(
+            List.of(
+                new LoadAdminUsersPort.AdminUserProfileView(
+                    10L,
+                    "alpha",
+                    AdminUserRole.USER,
+                    "alpha@test.com",
+                    Instant.parse("2025-01-10T00:00:00Z")),
+                new LoadAdminUsersPort.AdminUserProfileView(
+                    11L,
+                    "beta",
+                    AdminUserRole.USER,
+                    "beta@test.com",
+                    Instant.parse("2025-01-11T00:00:00Z"))));
+    given(loadAdminUserStatusesPort.load(List.of(10L, 11L), null))
+        .willReturn(Map.of(10L, AdminUserAccountStatus.ACTIVE, 11L, AdminUserAccountStatus.ACTIVE));
+    given(loadAdminUserPostCountsPort.load(List.of(10L, 11L))).willReturn(Map.of(10L, 3L, 11L, 7L));
+    given(loadAdminUserCommentCountsPort.load(List.of(10L, 11L))).willReturn(Map.of());
+
+    var result = service.execute(command);
+
+    assertThat(result.getTotalElements()).isEqualTo(2L);
+    assertThat(result.getContent()).extracting(item -> item.userId()).containsExactly(10L);
+  }
+
+  @Test
+  @DisplayName("count 기반 sort 의 큰 page 는 int overflow 없이 빈 페이지를 반환한다")
+  void execute_countSortMemoryPagination_largePageReturnsEmptyPage() {
+    GetAdminUsersCommand command =
+        new GetAdminUsersCommand(
+            9L, null, null, null, Integer.MAX_VALUE, 100, AdminUserSortKey.POST_COUNT);
+    given(loadAdminUsersPort.load(new LoadAdminUsersPort.AdminUserProfileQuery(null, null, null)))
+        .willReturn(
+            List.of(
+                new LoadAdminUsersPort.AdminUserProfileView(
+                    10L,
+                    "alpha",
+                    AdminUserRole.USER,
+                    "alpha@test.com",
+                    Instant.parse("2025-01-10T00:00:00Z")),
+                new LoadAdminUsersPort.AdminUserProfileView(
+                    11L,
+                    "beta",
+                    AdminUserRole.USER,
+                    "beta@test.com",
+                    Instant.parse("2025-01-11T00:00:00Z"))));
+    given(loadAdminUserStatusesPort.load(List.of(10L, 11L), null))
+        .willReturn(Map.of(10L, AdminUserAccountStatus.ACTIVE, 11L, AdminUserAccountStatus.ACTIVE));
+    given(loadAdminUserPostCountsPort.load(List.of(10L, 11L))).willReturn(Map.of(10L, 3L, 11L, 7L));
+    given(loadAdminUserCommentCountsPort.load(List.of(10L, 11L))).willReturn(Map.of());
+
+    var result = service.execute(command);
+
+    assertThat(result.getTotalElements()).isEqualTo(2L);
+    assertThat(result.getContent()).isEmpty();
+  }
+}

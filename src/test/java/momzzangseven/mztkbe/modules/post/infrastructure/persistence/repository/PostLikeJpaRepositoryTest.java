@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostEntity;
@@ -70,12 +72,48 @@ class PostLikeJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName("liked posts query hides non-readable posts but keeps requester-owned hidden posts")
+  void findLikedPostsFirstPageNative_filtersUnreadablePosts() {
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
+    PostEntity publicPost = persistPost(PostType.FREE, 10L, base.minusDays(1));
+    PostEntity blockedOtherPost = persistPost(PostType.FREE, 20L, base.minusDays(2));
+    PostEntity failedOtherPost = persistPost(PostType.FREE, 30L, base.minusDays(3));
+    PostEntity ownBlockedPost = persistPost(PostType.FREE, 7L, base.minusDays(4));
+    updatePostVisibility(
+        blockedOtherPost, PostPublicationStatus.VISIBLE, PostModerationStatus.BLOCKED);
+    updatePostVisibility(
+        failedOtherPost, PostPublicationStatus.FAILED, PostModerationStatus.NORMAL);
+    updatePostVisibility(
+        ownBlockedPost, PostPublicationStatus.VISIBLE, PostModerationStatus.BLOCKED);
+
+    persistLike(PostLikeTargetType.POST, blockedOtherPost.getId(), 7L, base);
+    PostLikeEntity ownBlockedLike =
+        persistLike(PostLikeTargetType.POST, ownBlockedPost.getId(), 7L, base.minusMinutes(1));
+    PostLikeEntity publicLike =
+        persistLike(PostLikeTargetType.POST, publicPost.getId(), 7L, base.minusMinutes(2));
+    persistLike(PostLikeTargetType.POST, failedOtherPost.getId(), 7L, base.minusMinutes(3));
+
+    List<PostLikeJpaRepository.LikedPostProjection> results =
+        postLikeJpaRepository.findLikedPostsFirstPageNative(7L, "FREE", 10);
+
+    assertThat(results)
+        .extracting(PostLikeJpaRepository.LikedPostProjection::getLikeId)
+        .containsExactly(ownBlockedLike.getId(), publicLike.getId());
+    assertThat(results)
+        .extracting(PostLikeJpaRepository.LikedPostProjection::getPostId)
+        .doesNotContain(blockedOtherPost.getId(), failedOtherPost.getId());
+  }
+
+  @Test
   @DisplayName("liked posts keyset uses createdAt DESC and id DESC tie-breaker without duplication")
   void findLikedPostsAfterCursorNative_usesLikeIdTieBreaker() {
     LocalDateTime sameLikedAt = LocalDateTime.of(2026, 4, 26, 12, 0);
     PostEntity olderInsertedPost = persistPost(PostType.FREE, 10L, sameLikedAt.minusDays(1));
     PostEntity newerInsertedPost = persistPost(PostType.FREE, 20L, sameLikedAt.minusDays(2));
     PostEntity nextTimePost = persistPost(PostType.FREE, 30L, sameLikedAt.minusDays(3));
+    PostEntity hiddenNextTimePost = persistPost(PostType.FREE, 40L, sameLikedAt.minusDays(4));
+    updatePostVisibility(
+        hiddenNextTimePost, PostPublicationStatus.VISIBLE, PostModerationStatus.BLOCKED);
 
     PostLikeEntity lowerIdLike =
         persistLike(PostLikeTargetType.POST, olderInsertedPost.getId(), 7L, sameLikedAt);
@@ -83,6 +121,9 @@ class PostLikeJpaRepositoryTest {
         persistLike(PostLikeTargetType.POST, newerInsertedPost.getId(), 7L, sameLikedAt);
     PostLikeEntity olderTimeLike =
         persistLike(PostLikeTargetType.POST, nextTimePost.getId(), 7L, sameLikedAt.minusMinutes(1));
+    PostLikeEntity hiddenOlderTimeLike =
+        persistLike(
+            PostLikeTargetType.POST, hiddenNextTimePost.getId(), 7L, sameLikedAt.minusMinutes(2));
 
     List<PostLikeJpaRepository.LikedPostProjection> firstPage =
         postLikeJpaRepository.findLikedPostsFirstPageNative(7L, "FREE", 1);
@@ -97,7 +138,7 @@ class PostLikeJpaRepositoryTest {
     assertThat(secondPage.stream().map(PostLikeJpaRepository.LikedPostProjection::getLikeId))
         .containsExactly(lowerIdLike.getId(), olderTimeLike.getId());
     assertThat(secondPage.stream().map(PostLikeJpaRepository.LikedPostProjection::getLikeId))
-        .doesNotContain(higherIdLike.getId());
+        .doesNotContain(higherIdLike.getId(), hiddenOlderTimeLike.getId());
   }
 
   private PostEntity persistPost(PostType type, Long userId, LocalDateTime createdAt) {
@@ -130,5 +171,16 @@ class PostLikeJpaRepositoryTest {
     jdbcTemplate.update(
         "UPDATE post_like SET created_at = ? WHERE id = ?", createdAt, saved.getId());
     return saved;
+  }
+
+  private void updatePostVisibility(
+      PostEntity post,
+      PostPublicationStatus publicationStatus,
+      PostModerationStatus moderationStatus) {
+    jdbcTemplate.update(
+        "UPDATE posts SET publication_status = ?, moderation_status = ? WHERE id = ?",
+        publicationStatus.name(),
+        moderationStatus.name(),
+        post.getId());
   }
 }

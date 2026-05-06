@@ -14,6 +14,8 @@ import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPo
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
+import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.junit.jupiter.api.AfterEach;
@@ -100,6 +102,37 @@ class AdminOnlyAspectTest {
     assertThat(payload).containsEntry("name", "alice");
     assertThat(payload).containsEntry("secretKey", "***");
     assertThat(payload).containsEntry("count", 3);
+  }
+
+  @Test
+  @DisplayName("audit=false 메서드는 admin 권한 검증과 비즈니스 실행은 수행하되 audit row를 기록하지 않는다")
+  void around_withAuditDisabled_allowsAdminWithoutRecordingAudit() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("readWithoutAudit", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    when(joinPoint.proceed()).thenReturn("READ_OK");
+    setAuthentication("ROLE_ADMIN");
+
+    Object result = aspect.around(joinPoint);
+
+    assertThat(result).isEqualTo("READ_OK");
+    verify(recordAdminAuditPort, never()).record(any(RecordAdminAuditPort.AuditCommand.class));
+  }
+
+  @Test
+  @DisplayName("audit=false 메서드도 non-admin 호출은 거부하고 audit row를 기록하지 않는다")
+  void around_withAuditDisabledAndNonAdmin_throwsWithoutAudit() throws Throwable {
+    Method method = DummyAdminMethods.class.getDeclaredMethod("readWithoutAudit", Long.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {1L});
+    setAuthentication("ROLE_USER");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint))
+        .isInstanceOf(BusinessException.class)
+        .hasMessageContaining("Unauthorized access");
+    verify(recordAdminAuditPort, never()).record(any(RecordAdminAuditPort.AuditCommand.class));
   }
 
   @Test
@@ -239,6 +272,52 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("ModeratePostService.blockPost 호출이 성공하면 POST_MODERATION 성공 audit 를 기록한다")
+  void around_forModeratePostBlock_recordsPostModerationSuccessAudit() throws Throwable {
+    Method method = ModeratePostService.class.getMethod("blockPost", ModeratePostCommand.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {new ModeratePostCommand(99L, 10L)});
+    when(joinPoint.proceed()).thenReturn(null);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    RecordAdminAuditPort.AuditCommand command = captor.getValue();
+    assertThat(command.operatorId()).isEqualTo(99L);
+    assertThat(command.actionType()).isEqualTo("POST_BLOCK");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST_MODERATION);
+    assertThat(command.targetId()).isEqualTo("post:10");
+    assertThat(command.success()).isTrue();
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.unblockPost 호출이 성공하면 POST_MODERATION 성공 audit 를 기록한다")
+  void around_forModeratePostUnblock_recordsPostModerationSuccessAudit() throws Throwable {
+    Method method = ModeratePostService.class.getMethod("unblockPost", ModeratePostCommand.class);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {new ModeratePostCommand(99L, 10L)});
+    when(joinPoint.proceed()).thenReturn(null);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    RecordAdminAuditPort.AuditCommand command = captor.getValue();
+    assertThat(command.operatorId()).isEqualTo(99L);
+    assertThat(command.actionType()).isEqualTo("POST_UNBLOCK");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST_MODERATION);
+    assertThat(command.targetId()).isEqualTo("post:10");
+    assertThat(command.success()).isTrue();
+  }
+
+  @Test
   @DisplayName("operatorId SpEL 결과가 0 이하 숫자이면, around 는 UserNotAuthenticatedException 을 던진다")
   void around_whenOperatorIdNonPositive_throwsAuthenticationError() throws Throwable {
     Method method =
@@ -359,6 +438,15 @@ class AdminOnlyAspectTest {
         operatorId = "#p0")
     String web3Action(Long operatorId) {
       return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "READ",
+        targetType = AuditTargetType.POST,
+        operatorId = "#p0",
+        audit = false)
+    String readWithoutAudit(Long operatorId) {
+      return "READ_OK";
     }
   }
 

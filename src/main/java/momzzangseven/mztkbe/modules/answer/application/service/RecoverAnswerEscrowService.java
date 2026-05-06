@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.answer.application.service;
 
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerMutationResult;
@@ -42,6 +43,7 @@ public class RecoverAnswerEscrowService implements RecoverAnswerEscrowUseCase {
             .loadPost(command.postId())
             .orElseThrow(momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException::new);
     validateAnswerablePost(post);
+    validatePostWritable(post);
     answerLifecycleExecutionPort.precheckAnswerCreate(post.postId(), post.content());
     int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(command.postId()));
 
@@ -67,6 +69,13 @@ public class RecoverAnswerEscrowService implements RecoverAnswerEscrowUseCase {
     }
     if (post.answerLocked()) {
       throw new CannotAnswerSolvedPostException();
+    }
+  }
+
+  private void validatePostWritable(LoadPostPort.PostContext post) {
+    if (!post.writable()) {
+      throw new AnswerInvalidInputException(
+          "Post is not in a state that allows answer interactions.");
     }
   }
 }

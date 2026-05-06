@@ -21,6 +21,11 @@ public class Post {
   private final Long reward;
   private final Long acceptedAnswerId;
   private final PostStatus status;
+  private final PostPublicationStatus publicationStatus;
+  private final PostModerationStatus moderationStatus;
+  private final String currentCreateExecutionIntentId;
+  private final String publicationFailureTerminalStatus;
+  private final String publicationFailureReason;
   private final List<String> tags;
 
   private final LocalDateTime createdAt;
@@ -36,6 +41,11 @@ public class Post {
       Long reward,
       Long acceptedAnswerId,
       PostStatus status,
+      PostPublicationStatus publicationStatus,
+      PostModerationStatus moderationStatus,
+      String currentCreateExecutionIntentId,
+      String publicationFailureTerminalStatus,
+      String publicationFailureReason,
       List<String> tags,
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
@@ -47,6 +57,13 @@ public class Post {
     this.reward = reward;
     this.acceptedAnswerId = acceptedAnswerId;
     this.status = validateAndResolveStatus(type, status, acceptedAnswerId);
+    this.publicationStatus =
+        publicationStatus == null ? PostPublicationStatus.VISIBLE : publicationStatus;
+    this.moderationStatus =
+        moderationStatus == null ? PostModerationStatus.NORMAL : moderationStatus;
+    this.currentCreateExecutionIntentId = normalizeBlank(currentCreateExecutionIntentId);
+    this.publicationFailureTerminalStatus = normalizeBlank(publicationFailureTerminalStatus);
+    this.publicationFailureReason = normalizeBlank(publicationFailureReason);
     this.tags = tags != null ? tags : new ArrayList<>();
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
@@ -79,6 +96,8 @@ public class Post {
         .reward(reward)
         .acceptedAnswerId(null)
         .status(PostStatus.OPEN)
+        .publicationStatus(PostPublicationStatus.VISIBLE)
+        .moderationStatus(PostModerationStatus.NORMAL)
         .tags(tags != null ? tags : new ArrayList<>())
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
@@ -102,6 +121,115 @@ public class Post {
     if (!this.userId.equals(currentUserId)) {
       throw new PostUnauthorizedException();
     }
+  }
+
+  public boolean isOwnedBy(Long currentUserId) {
+    return currentUserId != null && this.userId.equals(currentUserId);
+  }
+
+  public boolean isPubliclyVisible() {
+    return this.publicationStatus == PostPublicationStatus.VISIBLE
+        && this.moderationStatus == PostModerationStatus.NORMAL;
+  }
+
+  public boolean isPublicationPending() {
+    return this.publicationStatus == PostPublicationStatus.PENDING;
+  }
+
+  public boolean isPublicationFailed() {
+    return this.publicationStatus == PostPublicationStatus.FAILED;
+  }
+
+  public boolean matchesCurrentCreateExecutionIntent(String executionIntentId) {
+    return executionIntentId != null
+        && !executionIntentId.isBlank()
+        && executionIntentId.equals(currentCreateExecutionIntentId);
+  }
+
+  public boolean isModerationBlocked() {
+    return this.moderationStatus == PostModerationStatus.BLOCKED;
+  }
+
+  public Post markPublicationPending() {
+    return markPublicationPending(null);
+  }
+
+  public Post markPublicationPending(String executionIntentId) {
+    String normalizedIntentId = normalizeBlank(executionIntentId);
+    if (publicationStatus == PostPublicationStatus.PENDING) {
+      if (Objects.equals(currentCreateExecutionIntentId, normalizedIntentId)
+          && publicationFailureTerminalStatus == null
+          && publicationFailureReason == null) {
+        return this;
+      }
+    }
+    return this.toBuilder()
+        .publicationStatus(PostPublicationStatus.PENDING)
+        .currentCreateExecutionIntentId(normalizedIntentId)
+        .publicationFailureTerminalStatus(null)
+        .publicationFailureReason(null)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post markPublicationVisible() {
+    if (publicationStatus == PostPublicationStatus.VISIBLE) {
+      if (currentCreateExecutionIntentId == null
+          && publicationFailureTerminalStatus == null
+          && publicationFailureReason == null) {
+        return this;
+      }
+    }
+    return this.toBuilder()
+        .publicationStatus(PostPublicationStatus.VISIBLE)
+        .currentCreateExecutionIntentId(null)
+        .publicationFailureTerminalStatus(null)
+        .publicationFailureReason(null)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post markPublicationFailed() {
+    return markPublicationFailed(null, null);
+  }
+
+  public Post markPublicationFailed(String terminalStatus, String failureReason) {
+    String normalizedTerminalStatus = normalizeBlank(terminalStatus);
+    String normalizedFailureReason = normalizeBlank(failureReason);
+    if (publicationStatus == PostPublicationStatus.FAILED) {
+      if (currentCreateExecutionIntentId == null
+          && Objects.equals(publicationFailureTerminalStatus, normalizedTerminalStatus)
+          && Objects.equals(publicationFailureReason, normalizedFailureReason)) {
+        return this;
+      }
+    }
+    return this.toBuilder()
+        .publicationStatus(PostPublicationStatus.FAILED)
+        .currentCreateExecutionIntentId(null)
+        .publicationFailureTerminalStatus(normalizedTerminalStatus)
+        .publicationFailureReason(normalizedFailureReason)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post block() {
+    if (moderationStatus == PostModerationStatus.BLOCKED) {
+      return this;
+    }
+    return this.toBuilder()
+        .moderationStatus(PostModerationStatus.BLOCKED)
+        .updatedAt(LocalDateTime.now())
+        .build();
+  }
+
+  public Post unblock() {
+    if (moderationStatus == PostModerationStatus.NORMAL) {
+      return this;
+    }
+    return this.toBuilder()
+        .moderationStatus(PostModerationStatus.NORMAL)
+        .updatedAt(LocalDateTime.now())
+        .build();
   }
 
   public void validateDeletable(long activeAnswerCount) {
@@ -273,6 +401,10 @@ public class Post {
           "PENDING_ADMIN_REFUND question posts cannot have acceptedAnswerId.");
     }
     return status;
+  }
+
+  private static String normalizeBlank(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   private void validateAcceptTarget(Long answerId) {

@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 public interface LoadCommentPort {
   Optional<Comment> loadComment(Long commentId);
 
+  Optional<Comment> loadCommentForUpdate(Long commentId);
+
   Page<Comment> loadRootComments(Long postId, Pageable pageable);
 
   Page<Comment> loadReplies(Long parentId, Pageable pageable);
@@ -21,6 +23,8 @@ public interface LoadCommentPort {
   List<Comment> loadRootCommentsByCursor(Long postId, CursorPageRequest pageRequest);
 
   List<Comment> loadRepliesByCursor(Long parentId, CursorPageRequest pageRequest);
+
+  Map<Long, Long> countCommentsByUserIds(List<Long> userIds);
 
   long countCommentsByPostId(Long postId);
 
