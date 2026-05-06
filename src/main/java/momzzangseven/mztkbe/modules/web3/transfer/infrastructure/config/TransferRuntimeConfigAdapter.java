@@ -30,7 +30,6 @@ public class TransferRuntimeConfigAdapter implements LoadTransferRuntimeConfigPo
         transferEip7702Properties.getDelegation().getBatchImplAddress(),
         transferEip7702Properties.getDelegation().getDefaultReceiverAddress(),
         sponsorSignerConfig.walletAlias(),
-        sponsorSignerConfig.keyEncryptionKeyB64(),
         transferEip7702Properties.getSponsor().getMaxGasLimit(),
         transferEip7702Properties.getSponsor().getMaxTransferAmountEth(),
         transferEip7702Properties.getSponsor().getPerTxCapEth(),

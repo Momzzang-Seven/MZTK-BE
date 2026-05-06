@@ -16,6 +16,6 @@ public class SponsorTreasurySignerConfigAdapter implements LoadSponsorTreasurySi
   @Override
   public SponsorTreasurySignerConfig load() {
     var config = getSponsorTreasurySignerConfigUseCase.execute();
-    return new SponsorTreasurySignerConfig(config.walletAlias(), config.keyEncryptionKeyB64());
+    return new SponsorTreasurySignerConfig(config.walletAlias());
   }
 }

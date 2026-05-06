@@ -6,14 +6,11 @@ public interface LoadSponsorTreasurySignerConfigPort {
 
   SponsorTreasurySignerConfig load();
 
-  record SponsorTreasurySignerConfig(String walletAlias, String keyEncryptionKeyB64) {
+  record SponsorTreasurySignerConfig(String walletAlias) {
 
     public SponsorTreasurySignerConfig {
       if (walletAlias == null || walletAlias.isBlank()) {
         throw new Web3InvalidInputException("sponsor walletAlias is required");
-      }
-      if (keyEncryptionKeyB64 == null || keyEncryptionKeyB64.isBlank()) {
-        throw new Web3InvalidInputException("sponsor keyEncryptionKeyB64 is required");
       }
     }
   }

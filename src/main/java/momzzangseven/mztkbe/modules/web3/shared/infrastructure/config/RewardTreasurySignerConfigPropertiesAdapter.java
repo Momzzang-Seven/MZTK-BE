@@ -14,8 +14,6 @@ public class RewardTreasurySignerConfigPropertiesAdapter
 
   @Override
   public TreasurySignerConfigView load() {
-    return new TreasurySignerConfigView(
-        rewardTreasurySignerProperties.getWalletAlias(),
-        rewardTreasurySignerProperties.getKeyEncryptionKeyB64());
+    return new TreasurySignerConfigView(rewardTreasurySignerProperties.getWalletAlias());
   }
 }

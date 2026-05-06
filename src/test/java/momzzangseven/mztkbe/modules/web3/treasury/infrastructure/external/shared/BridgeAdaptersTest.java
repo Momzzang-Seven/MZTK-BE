@@ -98,7 +98,7 @@ class BridgeAdaptersTest {
     @Test
     @DisplayName("[M-127a] loadAlias — walletAlias 존재 → Optional.of")
     void loadAlias_present_returnsOptional() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView("reward-treasury", "kek"));
+      when(useCase.execute()).thenReturn(new TreasurySignerConfigView("reward-treasury"));
       RewardTreasuryAliasAdapter adapter = new RewardTreasuryAliasAdapter(useCase);
 
       Optional<String> result = adapter.loadAlias();
@@ -109,7 +109,7 @@ class BridgeAdaptersTest {
     @Test
     @DisplayName("[M-127b] loadAlias — walletAlias가 null → Optional.empty")
     void loadAlias_nullWalletAlias_returnsEmpty() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView(null, "kek"));
+      when(useCase.execute()).thenReturn(new TreasurySignerConfigView(null));
       RewardTreasuryAliasAdapter adapter = new RewardTreasuryAliasAdapter(useCase);
 
       assertThat(adapter.loadAlias()).isEmpty();
@@ -125,7 +125,7 @@ class BridgeAdaptersTest {
     @Test
     @DisplayName("[M-128a] loadAlias — walletAlias 존재 → Optional.of")
     void loadAlias_present_returnsOptional() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView("sponsor-treasury", "kek"));
+      when(useCase.execute()).thenReturn(new TreasurySignerConfigView("sponsor-treasury"));
       SponsorTreasuryAliasAdapter adapter = new SponsorTreasuryAliasAdapter(useCase);
 
       Optional<String> result = adapter.loadAlias();
@@ -136,7 +136,7 @@ class BridgeAdaptersTest {
     @Test
     @DisplayName("[M-128b] loadAlias — walletAlias가 null → Optional.empty")
     void loadAlias_nullWalletAlias_returnsEmpty() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView(null, "kek"));
+      when(useCase.execute()).thenReturn(new TreasurySignerConfigView(null));
       SponsorTreasuryAliasAdapter adapter = new SponsorTreasuryAliasAdapter(useCase);
 
       assertThat(adapter.loadAlias()).isEmpty();

@@ -16,6 +16,6 @@ public class RewardTreasurySignerConfigAdapter implements LoadRewardTreasurySign
   @Override
   public RewardTreasurySignerConfig load() {
     var config = getRewardTreasurySignerConfigUseCase.execute();
-    return new RewardTreasurySignerConfig(config.walletAlias(), config.keyEncryptionKeyB64());
+    return new RewardTreasurySignerConfig(config.walletAlias());
   }
 }
