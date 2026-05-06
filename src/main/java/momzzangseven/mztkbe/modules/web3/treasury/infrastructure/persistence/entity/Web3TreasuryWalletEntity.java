@@ -17,10 +17,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * JPA mapping for {@code web3_treasury_wallets}. Mirrors the {@code TreasuryWallet} aggregate but
- * also retains the legacy {@code treasuryAddress} / {@code treasuryPrivateKeyEncrypted} columns
- * during the KMS migration window. The legacy private-key column is scheduled for removal in PR4
- * once all environments have switched to KMS-backed signing.
+ * JPA mapping for {@code web3_treasury_wallets}. Mirrors the {@code TreasuryWallet} aggregate.
+ * After V065 every row is KMS-backed: {@code wallet_alias}, {@code treasury_address}, {@code
+ * kms_key_id}, {@code status}, {@code key_origin} are all NOT NULL and {@code kms_key_id} is
+ * UNIQUE.
  *
  * <p>The {@code status} and {@code keyOrigin} columns are persisted as plain strings rather than
  * {@code @Enumerated} domain enums; ARCHITECTURE.md requires the entity to stay free of domain
@@ -43,19 +43,16 @@ public class Web3TreasuryWalletEntity {
   @Column(name = "wallet_alias", nullable = false, unique = true, length = 64)
   private String walletAlias;
 
-  @Column(name = "treasury_address", length = 42)
+  @Column(name = "treasury_address", nullable = false, length = 42)
   private String treasuryAddress;
 
-  @Column(name = "treasury_private_key_encrypted", columnDefinition = "TEXT")
-  private String treasuryPrivateKeyEncrypted;
-
-  @Column(name = "kms_key_id", length = 255)
+  @Column(name = "kms_key_id", nullable = false, unique = true, length = 255)
   private String kmsKeyId;
 
-  @Column(name = "status", length = 32)
+  @Column(name = "status", nullable = false, length = 32)
   private String status;
 
-  @Column(name = "key_origin", length = 32)
+  @Column(name = "key_origin", nullable = false, length = 32)
   private String keyOrigin;
 
   @Column(name = "disabled_at")

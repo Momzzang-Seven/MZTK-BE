@@ -14,7 +14,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * E2E migration invariants for {@code web3_treasury_wallets} (V059..V061) and {@code
+ * E2E migration invariants for {@code web3_treasury_wallets} (V059..V065) and {@code
  * web3_treasury_kms_audits} (V062).
  *
  * <p>Cases [E-102]..[E-105] from {@code
@@ -26,7 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * momzzangseven.mztkbe.integration.e2e.support.DatabaseCleaner}; this class explicitly deletes the
  * test wallet rows in {@link #cleanInsertedRows()}.
  */
-@DisplayName("[E2E] Treasury wallets / KMS audits migration invariants (V059..V062)")
+@DisplayName("[E2E] Treasury wallets / KMS audits migration invariants (V059..V065)")
 class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
 
   private static final String LEGACY_ALIAS = "legacy-row";
@@ -43,11 +43,11 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-102] V060 — kms_key_id 컬럼은 nullable, 레거시 INSERT (kms_key_id 미지정) 가 성공")
-  void v060_kmsKeyIdColumn_isNullable_legacyInsertSucceeds() {
+  @DisplayName("[E-102] V065 — kms_key_id NOT NULL 강제, kms_key_id 미지정 INSERT 가 거부")
+  void v065_kmsKeyIdColumn_isNotNull_legacyInsertRejected() {
     String legacyAddress = "0x" + "1".repeat(40);
 
-    assertThatCode(
+    assertThatThrownBy(
             () ->
                 jdbcTemplate.update(
                     "INSERT INTO web3_treasury_wallets"
@@ -56,19 +56,12 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
                         + " VALUES (?, ?, 'ACTIVE', 'IMPORTED', NOW(), NOW())",
                     LEGACY_ALIAS,
                     legacyAddress))
-        .doesNotThrowAnyException();
-
-    String kmsKeyId =
-        jdbcTemplate.queryForObject(
-            "SELECT kms_key_id FROM web3_treasury_wallets WHERE wallet_alias = ?",
-            String.class,
-            LEGACY_ALIAS);
-    assertThat(kmsKeyId).isNull();
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
-  @DisplayName("[E-103] V061 — slot_pair CHECK DROP 후 KMS-only row INSERT 가 성공")
-  void v061_slotPairCheckDropped_kmsOnlyRowInsertSucceeds() {
+  @DisplayName("[E-103] V065 — KMS-only row INSERT 가 성공 (legacy 컬럼 DROP 후)")
+  void v065_kmsOnlyRowInsertSucceeds() {
     String kmsAddress = "0xdead000000000000000000000000000000000001";
 
     assertThatCode(
@@ -76,8 +69,8 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
                 jdbcTemplate.update(
                     "INSERT INTO web3_treasury_wallets"
                         + " (wallet_alias, treasury_address, kms_key_id, status, key_origin,"
-                        + " treasury_private_key_encrypted, created_at, updated_at)"
-                        + " VALUES (?, ?, ?, 'ACTIVE', 'IMPORTED', NULL, NOW(), NOW())",
+                        + " created_at, updated_at)"
+                        + " VALUES (?, ?, ?, 'ACTIVE', 'IMPORTED', NOW(), NOW())",
                     KMS_ONLY_ALIAS,
                     kmsAddress,
                     "alias/kms-only"))

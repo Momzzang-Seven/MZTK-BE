@@ -16,7 +16,6 @@ import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.rep
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -212,41 +211,6 @@ class TreasuryWalletPersistenceAdapterTest {
     var result = adapter.loadAddressByAlias(ALIAS);
 
     assertThat(result).contains(ADDRESS);
-  }
-
-  @Test
-  void upsert_createsNewEntity_whenAliasMissing() {
-    when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.empty());
-
-    adapter.upsert(ALIAS, "0x" + "a".repeat(40), "enc");
-
-    ArgumentCaptor<Web3TreasuryWalletEntity> captor =
-        ArgumentCaptor.forClass(Web3TreasuryWalletEntity.class);
-    verify(repository).save(captor.capture());
-    assertThat(captor.getValue().getWalletAlias()).isEqualTo(ALIAS);
-    assertThat(captor.getValue().getTreasuryPrivateKeyEncrypted()).isEqualTo("enc");
-  }
-
-  @Test
-  void upsert_updatesExistingEntity_whenAliasAlreadyExists() {
-    Web3TreasuryWalletEntity existing =
-        Web3TreasuryWalletEntity.builder()
-            .id(1L)
-            .walletAlias(ALIAS)
-            .treasuryAddress("0x" + "a".repeat(40))
-            .treasuryPrivateKeyEncrypted("old-enc")
-            .build();
-    when(repository.findByWalletAlias(ALIAS)).thenReturn(Optional.of(existing));
-
-    adapter.upsert(ALIAS, "0x" + "b".repeat(40), "new-enc");
-
-    ArgumentCaptor<Web3TreasuryWalletEntity> captor =
-        ArgumentCaptor.forClass(Web3TreasuryWalletEntity.class);
-    verify(repository).save(captor.capture());
-    assertThat(captor.getValue().getId()).isEqualTo(1L);
-    assertThat(captor.getValue().getWalletAlias()).isEqualTo(ALIAS);
-    assertThat(captor.getValue().getTreasuryAddress()).isEqualTo("0x" + "b".repeat(40));
-    assertThat(captor.getValue().getTreasuryPrivateKeyEncrypted()).isEqualTo("new-enc");
   }
 
   private static Web3TreasuryWalletEntity activeKmsEntity() {

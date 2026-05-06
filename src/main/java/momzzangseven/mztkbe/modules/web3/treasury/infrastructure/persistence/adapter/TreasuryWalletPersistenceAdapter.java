@@ -12,7 +12,6 @@ import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAddressProjectionPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
@@ -24,19 +23,10 @@ import org.springframework.stereotype.Component;
 /**
  * Persistence adapter for treasury wallets.
  *
- * <p>Implements two cohorts of ports during the KMS migration window:
- *
- * <ul>
- *   <li><b>New (KMS-backed)</b> — {@link LoadTreasuryWalletPort} / {@link SaveTreasuryWalletPort}
- *       project the {@code TreasuryWallet} aggregate, reading {@code kms_key_id} and the new
- *       lifecycle columns added in V056.
- *   <li><b>Legacy (cipher-backed)</b> — {@link SaveTreasuryKeyPort} continues to back the
- *       historical encrypted-private-key column until V063 drops it in PR4.
- * </ul>
- *
- * <p>Both port families share the same JPA repository / entity; rows that have only legacy columns
- * populated remain readable through the legacy methods, and rows that have only KMS columns
- * populated are visible to the new methods.
+ * <p>Projects the {@code TreasuryWallet} aggregate against {@code web3_treasury_wallets}, reading
+ * {@code kms_key_id} together with the lifecycle columns ({@code status}, {@code key_origin},
+ * {@code disabled_at}). After V065 every row is KMS-backed: {@code treasury_private_key_encrypted}
+ * has been dropped and the legacy cipher-backed write path no longer exists.
  */
 // TODO TreasuryWalletPersistenceAdapter에 너무 많은 책임이 주어져있다. 별도 객체로 분리.
 @Component
@@ -45,7 +35,6 @@ import org.springframework.stereotype.Component;
 public class TreasuryWalletPersistenceAdapter
     implements LoadTreasuryWalletPort,
         SaveTreasuryWalletPort,
-        SaveTreasuryKeyPort,
         ProbeExecutionSignerCapabilityPort,
         LoadTreasuryAddressProjectionPort {
 
@@ -105,25 +94,6 @@ public class TreasuryWalletPersistenceAdapter
         .findByWalletAlias(walletAlias)
         .map(Web3TreasuryWalletEntity::getTreasuryAddress)
         .filter(TreasuryWalletPersistenceAdapter::hasText);
-  }
-
-  // ----- SaveTreasuryKeyPort (legacy upsert) -----
-
-  @Override
-  public void upsert(
-      String walletAlias, String treasuryAddress, String treasuryPrivateKeyEncrypted) {
-    requireNonBlank(walletAlias, "walletAlias");
-    requireNonBlank(treasuryAddress, "treasuryAddress");
-    requireNonBlank(treasuryPrivateKeyEncrypted, "treasuryPrivateKeyEncrypted");
-
-    Web3TreasuryWalletEntity entity =
-        repository
-            .findByWalletAlias(walletAlias)
-            .orElseGet(() -> Web3TreasuryWalletEntity.builder().build());
-    entity.setWalletAlias(walletAlias);
-    entity.setTreasuryAddress(treasuryAddress);
-    entity.setTreasuryPrivateKeyEncrypted(treasuryPrivateKeyEncrypted);
-    repository.save(entity);
   }
 
   // ----- helpers -----
