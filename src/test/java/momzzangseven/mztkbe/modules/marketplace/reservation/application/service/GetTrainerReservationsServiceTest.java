@@ -12,8 +12,10 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -104,5 +106,27 @@ class GetTrainerReservationsServiceTest {
   void execute_NullTrainerId_ThrowsIllegalArgument() {
     assertThatThrownBy(() -> sut.execute(new GetTrainerReservationsQuery(null, null)))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("트레이너 수강 신청 목록 조회 - classSummary와 trainerSummary가 모두 있으면 enrichment 필드에 값이 채워진다")
+  void execute_EnrichmentPresent_FieldsPopulated() {
+    // given
+    Reservation reservation = sampleReservation(2L);
+    ClassSummary classSummary = new ClassSummary("스트레칭 클래스", 30000, "thumb/key.jpg");
+    UserSummary trainerSummary = new UserSummary(2L, "trainer-nick");
+
+    given(loadReservationPort.findByTrainerId(2L, null)).willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(List.of(3L))).willReturn(Map.of(3L, classSummary));
+    given(loadUserSummaryPort.findByIds(List.of(2L))).willReturn(Map.of(2L, trainerSummary));
+
+    // when
+    List<ReservationSummaryResult> results = sut.execute(new GetTrainerReservationsQuery(2L, null));
+
+    // then — enrichment fields must be populated
+    assertThat(results).hasSize(1);
+    assertThat(results.get(0).classTitle()).isEqualTo("스트레칭 클래스");
+    assertThat(results.get(0).trainerNickname()).isEqualTo("trainer-nick");
+    assertThat(results.get(0).thumbnailFinalObjectKey()).isEqualTo("thumb/key.jpg");
   }
 }

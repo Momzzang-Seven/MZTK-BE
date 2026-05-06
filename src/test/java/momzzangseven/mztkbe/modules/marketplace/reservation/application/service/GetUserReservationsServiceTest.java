@@ -12,8 +12,10 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -102,5 +104,27 @@ class GetUserReservationsServiceTest {
   void execute_NullUserId_ThrowsIllegalArgument() {
     assertThatThrownBy(() -> sut.execute(new GetUserReservationsQuery(null, null)))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - classSummary와 trainerSummary가 모두 있으면 enrichment 필드에 값이 채워진다")
+  void execute_EnrichmentPresent_FieldsPopulated() {
+    // given
+    Reservation reservation = sampleReservation(1L);
+    ClassSummary classSummary = new ClassSummary("필라테스 입문", 45000, "thumb/pilates.jpg");
+    UserSummary trainerSummary = new UserSummary(2L, "trainer-nick");
+
+    given(loadReservationPort.findByUserId(1L, null)).willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(List.of(3L))).willReturn(Map.of(3L, classSummary));
+    given(loadUserSummaryPort.findByIds(List.of(2L))).willReturn(Map.of(2L, trainerSummary));
+
+    // when
+    List<ReservationSummaryResult> results = sut.execute(new GetUserReservationsQuery(1L, null));
+
+    // then — enrichment fields must be populated
+    assertThat(results).hasSize(1);
+    assertThat(results.get(0).classTitle()).isEqualTo("필라테스 입문");
+    assertThat(results.get(0).trainerNickname()).isEqualTo("trainer-nick");
+    assertThat(results.get(0).thumbnailFinalObjectKey()).isEqualTo("thumb/pilates.jpg");
   }
 }
