@@ -12,7 +12,6 @@ public class RewardTreasurySignerProperties {
   private static final String REWARD_TREASURY_PREFIX = "web3.reward-token.treasury";
 
   private final String walletAlias;
-  private final String keyEncryptionKeyB64;
 
   public RewardTreasurySignerProperties(Environment environment) {
     Binder binder = Binder.get(environment);
@@ -21,18 +20,10 @@ public class RewardTreasurySignerProperties {
         rewardTokenEnabled
             ? normalize(bind(binder, REWARD_TREASURY_PREFIX + ".wallet-alias"))
             : null;
-    this.keyEncryptionKeyB64 =
-        rewardTokenEnabled
-            ? normalize(bind(binder, REWARD_TREASURY_PREFIX + ".key-encryption-key-b64"))
-            : null; // gitleaks:allow
   }
 
   public String getWalletAlias() {
     return walletAlias;
-  }
-
-  public String getKeyEncryptionKeyB64() {
-    return keyEncryptionKeyB64;
   }
 
   private static String bind(Binder binder, String propertyName) {
