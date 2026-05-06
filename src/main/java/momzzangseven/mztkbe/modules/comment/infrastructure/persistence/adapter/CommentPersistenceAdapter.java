@@ -9,9 +9,12 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetManagedBoardPostCommentsQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
+import momzzangseven.mztkbe.modules.comment.application.dto.ManagedBoardCommentView;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadManagedBoardPostCommentsPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
 import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
@@ -20,6 +23,7 @@ import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repositor
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CommentPersistenceAdapter
-    implements LoadCommentPort, SaveCommentPort, DeleteCommentPort {
+    implements LoadCommentPort,
+        SaveCommentPort,
+        DeleteCommentPort,
+        LoadManagedBoardPostCommentsPort {
 
   private final CommentJpaRepository commentRepository;
 
@@ -53,6 +60,12 @@ public class CommentPersistenceAdapter
   @Override
   public Optional<Comment> loadComment(Long commentId) {
     return commentRepository.findById(commentId).map(CommentEntity::toDomain);
+  }
+
+  @Override
+  @Transactional
+  public Optional<Comment> loadCommentForUpdate(Long commentId) {
+    return commentRepository.findByIdForUpdate(commentId).map(CommentEntity::toDomain);
   }
 
   @Override
@@ -158,6 +171,26 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public Map<Long, Long> countCommentsByUserIds(List<Long> userIds) {
+    if (userIds == null || userIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countCommentsByUserIds(userIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.UserCommentCount::getUserId,
+                CommentJpaRepository.UserCommentCount::getCommentCount));
+  }
+
+  @Override
+  public Page<ManagedBoardCommentView> load(GetManagedBoardPostCommentsQuery query) {
+    Pageable pageable =
+        PageRequest.of(query.page(), query.size(), Sort.by(Sort.Direction.DESC, "createdAt", "id"));
+    return commentRepository.findByPostId(query.postId(), pageable).map(this::toManagedView);
+  }
+
+  @Override
   public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
       FindCommentedPostRefsQuery query) {
     query.validate();
@@ -204,6 +237,18 @@ public class CommentPersistenceAdapter
   public List<Long> loadCommentIdsForDeletion(LocalDateTime cutoff, int batchSize) {
     return commentRepository.findIdsByIsDeletedTrueAndUpdatedAtBefore(
         cutoff, PageRequest.of(0, batchSize));
+  }
+
+  private ManagedBoardCommentView toManagedView(CommentEntity entity) {
+    Comment comment = entity.toDomain();
+    return new ManagedBoardCommentView(
+        comment.getId(),
+        comment.getPostId(),
+        comment.getWriterId(),
+        comment.getContent(),
+        comment.getParentId(),
+        comment.isDeleted(),
+        comment.getCreatedAt());
   }
 
   // ========== DeleteCommentPort Implementation ==========

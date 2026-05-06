@@ -96,7 +96,9 @@ public class AdminOnlyAspect {
       caught = e;
       throw e;
     } finally {
-      recordAdminAudit(adminOnly, targetMethod, args, operatorId, result, caught);
+      if (adminOnly.audit()) {
+        recordAdminAudit(adminOnly, targetMethod, args, operatorId, result, caught);
+      }
     }
   }
 

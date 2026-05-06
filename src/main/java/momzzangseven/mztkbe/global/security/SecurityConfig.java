@@ -246,6 +246,8 @@ public class SecurityConfig {
                     // --- Admin Endpoints ---
                     .requestMatchers(HttpMethod.POST, "/admin/recovery/reseed")
                     .permitAll()
+                    .requestMatchers("/admin/dashboard/**", "/admin/users/**", "/admin/boards/**")
+                    .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/admin/accounts")
                     .hasAuthority("ROLE_ADMIN")
                     .requestMatchers(HttpMethod.GET, "/admin/accounts")

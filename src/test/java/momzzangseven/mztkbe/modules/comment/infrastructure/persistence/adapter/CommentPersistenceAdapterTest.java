@@ -119,6 +119,30 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("loadCommentForUpdate() uses locked repository query and maps entity to domain")
+  void loadCommentForUpdate_mapsEntityToDomain() {
+    LocalDateTime now = LocalDateTime.now();
+    CommentEntity entity =
+        CommentEntity.builder()
+            .id(1L)
+            .postId(100L)
+            .writerId(200L)
+            .content("hello")
+            .isDeleted(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    given(commentRepository.findByIdForUpdate(1L)).willReturn(Optional.of(entity));
+
+    Optional<Comment> loaded = adapter.loadCommentForUpdate(1L);
+
+    assertThat(loaded).isPresent();
+    assertThat(loaded.orElseThrow().getId()).isEqualTo(1L);
+    verify(commentRepository).findByIdForUpdate(1L);
+  }
+
+  @Test
   @DisplayName(
       "countCommentsByPostId() delegates to repository count query including soft-deleted rows")
   void countCommentsByPostId_delegatesToRepository() {
@@ -131,7 +155,7 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("countCommentsByPostIds() maps repository projections including soft-deleted rows")
+  @DisplayName("countCommentsByPostIds() maps active-comment repository projections")
   void countCommentsByPostIds_mapsProjection() {
     CommentJpaRepository.PostCommentCount first = postCommentCount(10L, 3L);
     CommentJpaRepository.PostCommentCount second = postCommentCount(11L, 1L);

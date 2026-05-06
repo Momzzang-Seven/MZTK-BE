@@ -1,12 +1,15 @@
 package momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository;
 
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -27,10 +30,25 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
     return countByTargetTypeAndPostId(CommentTargetType.POST, postId);
   }
 
+  Page<CommentEntity> findByPostId(Long postId, Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT c FROM CommentEntity c WHERE c.id = :id")
+  Optional<CommentEntity> findByIdForUpdate(@Param("id") Long id);
+
+  @Query(
+      "SELECT c.writerId AS userId, COUNT(c.id) AS commentCount "
+          + "FROM CommentEntity c "
+          + "WHERE c.writerId IN :userIds AND c.isDeleted = false "
+          + "GROUP BY c.writerId")
+  List<UserCommentCount> countCommentsByUserIds(@Param("userIds") List<Long> userIds);
+
   @Query(
       "SELECT c.postId AS postId, COUNT(c.id) AS commentCount "
           + "FROM CommentEntity c "
-          + "WHERE c.targetType = :targetType AND c.postId IN :postIds "
+          + "WHERE c.targetType = :targetType "
+          + "AND c.postId IN :postIds "
+          + "AND c.isDeleted = false "
           + "GROUP BY c.postId")
   List<PostCommentCount> countCommentsByPostIds(
       @Param("targetType") CommentTargetType targetType, @Param("postIds") List<Long> postIds);
@@ -276,6 +294,12 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
 
   interface AnswerCommentCount {
     Long getAnswerId();
+
+    Long getCommentCount();
+  }
+
+  interface UserCommentCount {
+    Long getUserId();
 
     Long getCommentCount();
   }
