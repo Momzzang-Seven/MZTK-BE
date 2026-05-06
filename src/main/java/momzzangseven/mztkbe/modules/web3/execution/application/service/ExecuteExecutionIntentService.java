@@ -3,7 +3,10 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
@@ -13,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 
 /**
  * Thin orchestrator for the user-facing execute-intent HTTP entry point.
@@ -53,8 +57,36 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     if (polling.isPresent()) {
       return polling.get();
     }
-    SponsorWalletGate gate = sponsorWalletPreflight.preflight();
+    SponsorWalletGate gate = preflightOrTranslate();
     return delegate.execute(command, gate);
+  }
+
+  /**
+   * Runs sponsor-wallet preflight and translates {@link KmsKeyDescribeFailedException} into a
+   * {@link Web3TransferException} carrying a retryable signal so HTTP clients can distinguish
+   * transient AWS hiccups (retry safe) from terminal config errors (operator action required).
+   * Other preflight exceptions ({@code Web3InvalidInputException}, {@code
+   * TreasuryWalletStateException}) propagate unchanged to their existing handlers.
+   */
+  private SponsorWalletGate preflightOrTranslate() {
+    try {
+      return sponsorWalletPreflight.preflight();
+    } catch (KmsKeyDescribeFailedException e) {
+      boolean terminal = KmsClientErrorClassifier.isTerminal(e);
+      if (terminal) {
+        log.error(
+            "event=USER_EXECUTION_PREFLIGHT_TERMINAL_KMS exception={} message={}",
+            e.getClass().getSimpleName(),
+            e.getMessage());
+      } else {
+        log.warn(
+            "event=USER_EXECUTION_PREFLIGHT_TRANSIENT_KMS exception={} message={}",
+            e.getClass().getSimpleName(),
+            e.getMessage());
+      }
+      throw new Web3TransferException(
+          ErrorCode.WEB3_KMS_KEY_DESCRIBE_FAILED, e.getMessage(), e, !terminal);
+    }
   }
 
   private Optional<ExecuteExecutionIntentResult> tryPollingFastPath(

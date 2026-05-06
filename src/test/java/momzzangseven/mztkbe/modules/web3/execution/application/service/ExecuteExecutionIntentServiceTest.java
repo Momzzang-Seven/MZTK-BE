@@ -11,7 +11,9 @@ import static org.mockito.Mockito.when;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
@@ -31,6 +33,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.kms.model.KmsException;
 
 /**
  * Tests the orchestrator-level preflight + delegate dispatch contract.
@@ -163,6 +167,35 @@ class ExecuteExecutionIntentServiceTest {
         .when(intent.getStatus())
         .thenReturn(ExecutionIntentStatus.PENDING_ONCHAIN);
     return intent;
+  }
+
+  @Test
+  @DisplayName("transient KMS DescribeKey 실패 → Web3TransferException(retryable=true)")
+  void execute_translatesTransientDescribeKeyToRetryableWeb3TransferException() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("throttled"));
+
+    assertThatThrownBy(() -> service.execute(command()))
+        .isInstanceOfSatisfying(
+            Web3TransferException.class, ex -> assertThat(ex.isRetryable()).isTrue());
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  @DisplayName("terminal KMS DescribeKey (NotFound) → Web3TransferException(retryable=false)")
+  void execute_translatesTerminalDescribeKeyToNonRetryableWeb3TransferException() {
+    KmsException terminalCause =
+        (KmsException)
+            KmsException.builder()
+                .awsErrorDetails(AwsErrorDetails.builder().errorCode("NotFoundException").build())
+                .build();
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("key missing", terminalCause));
+
+    assertThatThrownBy(() -> service.execute(command()))
+        .isInstanceOfSatisfying(
+            Web3TransferException.class, ex -> assertThat(ex.isRetryable()).isFalse());
+    verify(delegate, never()).execute(any(), any());
   }
 
   @Test

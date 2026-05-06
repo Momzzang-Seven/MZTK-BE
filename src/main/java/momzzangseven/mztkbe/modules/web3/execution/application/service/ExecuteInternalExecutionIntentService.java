@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWallet
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 
 /**
  * Thin orchestrator for the cron-driven internal execution-intent path.
@@ -47,10 +48,15 @@ public class ExecuteInternalExecutionIntentService
       logSkip("WALLET_STATE", e);
       return ExecuteInternalExecutionIntentResult.preflightSkipped();
     } catch (KmsKeyDescribeFailedException e) {
-      // Transient AWS KMS DescribeKey failure (throttle / 5xx / permissions). Skip this tick
-      // without claiming an intent, without escalating to terminal failure, and without firing
-      // any cascade event — mirrors TransactionIssuerWorker.
-      logSkip("KMS_DESCRIBE_FAILED", e);
+      // Terminal AWS KMS DescribeKey failures (AccessDenied / NotFound / Disabled / ...) are
+      // logged at ERROR with a distinct event tag so operators can alert on them — without
+      // surfacing as a crash or cascading any intent-level event. Intent claim is still skipped
+      // because the sponsor wallet itself is broken; no specific intent is at fault.
+      if (KmsClientErrorClassifier.isTerminal(e)) {
+        logTerminal("KMS_DESCRIBE_TERMINAL", e);
+      } else {
+        logSkip("KMS_DESCRIBE_FAILED", e);
+      }
       return ExecuteInternalExecutionIntentResult.preflightSkipped();
     }
     return delegate.execute(command, gate);
@@ -66,6 +72,19 @@ public class ExecuteInternalExecutionIntentService
   private void logSkip(String reason, RuntimeException e) {
     log.warn(
         "event=INTERNAL_EXECUTION_PREFLIGHT_SKIPPED reason={} exception={} message={}",
+        reason,
+        e.getClass().getSimpleName(),
+        e.getMessage());
+  }
+
+  /**
+   * Emit an ERROR line distinct from the transient skip log so alert rules can trigger on terminal
+   * KMS configuration errors (IAM deny, key not found, key disabled) that will not self-heal — pair
+   * with the same {@code AWAITING_SIGNATURE} query to identify affected intents.
+   */
+  private void logTerminal(String reason, RuntimeException e) {
+    log.error(
+        "event=INTERNAL_EXECUTION_PREFLIGHT_TERMINAL_KMS reason={} exception={} message={}",
         reason,
         e.getClass().getSimpleName(),
         e.getMessage());

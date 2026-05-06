@@ -26,6 +26,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.kms.model.KmsException;
 
 @ExtendWith(MockitoExtension.class)
 class ExecuteInternalExecutionIntentServiceTest {
@@ -98,6 +100,28 @@ class ExecuteInternalExecutionIntentServiceTest {
 
     // Transient KMS failure must not propagate to the cron worker as a per-intent terminal
     // failure — this would inflate failedCount and ERROR-log every throttle hit.
+    assertThat(result.executed()).isFalse();
+    assertThat(result.quarantined()).isFalse();
+    verify(delegate, never()).execute(eq(COMMAND), any());
+  }
+
+  @Test
+  @DisplayName("terminal KMS DescribeKey (AccessDenied) → preflightSkipped + ERROR 로그 alert anchor")
+  void execute_returnsPreflightSkippedOnTerminalKmsDescribe_doesNotCallDelegate() {
+    KmsException terminalCause =
+        (KmsException)
+            KmsException.builder()
+                .awsErrorDetails(
+                    AwsErrorDetails.builder().errorCode("AccessDeniedException").build())
+                .build();
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("KMS DescribeKey failed", terminalCause));
+
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
+
+    // Intent is still NOT claimed — sponsor wallet itself is broken; no specific intent at fault.
+    // ERROR-level event=INTERNAL_EXECUTION_PREFLIGHT_TERMINAL_KMS is the alert grep anchor; this
+    // test verifies the orchestrator does not propagate or escalate beyond the skip contract.
     assertThat(result.executed()).isFalse();
     assertThat(result.quarantined()).isFalse();
     verify(delegate, never()).execute(eq(COMMAND), any());
