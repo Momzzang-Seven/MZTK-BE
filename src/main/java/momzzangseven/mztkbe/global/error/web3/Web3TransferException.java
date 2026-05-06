@@ -19,4 +19,10 @@ public class Web3TransferException extends BusinessException {
     super(errorCode);
     this.retryable = retryable;
   }
+
+  public Web3TransferException(
+      ErrorCode errorCode, String message, Throwable cause, boolean retryable) {
+    super(errorCode, message, cause);
+    this.retryable = retryable;
+  }
 }
