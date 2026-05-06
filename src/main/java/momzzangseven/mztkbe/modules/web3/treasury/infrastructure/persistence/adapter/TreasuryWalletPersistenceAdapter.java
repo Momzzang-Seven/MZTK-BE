@@ -119,11 +119,23 @@ public class TreasuryWalletPersistenceAdapter
   }
 
   private static void applyDomain(Web3TreasuryWalletEntity entity, TreasuryWallet wallet) {
+    // V065 enforces NOT NULL on status / key_origin (and the entity mirrors with nullable=false).
+    // Surfacing the violation at the adapter boundary turns an opaque SQL constraint error into a
+    // domain-level invariant failure that names the offending field.
+    requireNonBlank(wallet.getWalletAlias(), "walletAlias");
+    requireNonBlank(wallet.getKmsKeyId(), "kmsKeyId");
+    requireNonBlank(wallet.getWalletAddress(), "walletAddress");
+    if (wallet.getStatus() == null) {
+      throw new Web3InvalidInputException("status is required");
+    }
+    if (wallet.getKeyOrigin() == null) {
+      throw new Web3InvalidInputException("keyOrigin is required");
+    }
     entity.setWalletAlias(wallet.getWalletAlias());
     entity.setKmsKeyId(wallet.getKmsKeyId());
     entity.setTreasuryAddress(wallet.getWalletAddress());
-    entity.setStatus(wallet.getStatus() == null ? null : wallet.getStatus().name());
-    entity.setKeyOrigin(wallet.getKeyOrigin() == null ? null : wallet.getKeyOrigin().name());
+    entity.setStatus(wallet.getStatus().name());
+    entity.setKeyOrigin(wallet.getKeyOrigin().name());
     entity.setDisabledAt(wallet.getDisabledAt());
     if (wallet.getCreatedAt() != null) {
       entity.setCreatedAt(wallet.getCreatedAt());
