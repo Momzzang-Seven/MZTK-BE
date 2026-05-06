@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.eip7702.application.service;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.SignDigestPort;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.SignEip7702TxPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.Eip7702Fields;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.SignedTx;
@@ -14,7 +15,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 @RequiredArgsConstructor
-public final class SignEip7702TxService {
+public final class SignEip7702TxService implements SignEip7702TxPort {
 
   private final SignDigestPort signDigestPort;
 
@@ -25,6 +26,7 @@ public final class SignEip7702TxService {
    * @param signer KMS-backed treasury signer capability handle (no secret material)
    * @return signed transaction envelope ready for broadcast
    */
+  @Override
   public SignedTx sign(Eip7702Fields fields, TreasurySigner signer) {
 
     // build RLP encoded(serialized) byte

@@ -5,7 +5,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.service.SignEip7702TxService;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.SignEip7702TxPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.AuthorizationTuple;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder.Eip7702Fields;
@@ -16,11 +16,11 @@ import org.web3j.utils.Numeric;
 
 /**
  * Thin adapter that bridges {@link Eip7702TransactionCodecPort.SignCommand} into the pure {@link
- * Eip7702TxEncoder} + {@link SignEip7702TxService} pipeline.
+ * Eip7702TxEncoder} + {@link SignEip7702TxPort} pipeline.
  *
  * <p>Converts the infra-level {@link Eip7702ChainPort.AuthorizationTuple} (BigInteger r/s) into the
  * domain-level {@link AuthorizationTuple} (32-byte big-endian arrays) and delegates digest signing
- * to {@link SignEip7702TxService}.
+ * to {@link SignEip7702TxPort}.
  */
 @Component
 @RequiredArgsConstructor
@@ -28,7 +28,7 @@ public class Eip7702TransactionCodecAdapter implements Eip7702TransactionCodecPo
 
   private static final int SCALAR_BYTE_LENGTH = 32;
 
-  private final SignEip7702TxService signEip7702TxService;
+  private final SignEip7702TxPort signEip7702TxPort;
 
   @Override
   public String encodeTransferData(String toAddress, BigInteger amountWei) {
@@ -67,7 +67,7 @@ public class Eip7702TransactionCodecAdapter implements Eip7702TransactionCodecPo
             command.data(),
             command.authorizationList().stream().map(this::toDomainAuthTuple).toList());
 
-    SignedTx signed = signEip7702TxService.sign(fields, command.sponsorSigner());
+    SignedTx signed = signEip7702TxPort.sign(fields, command.sponsorSigner());
     return new SignedPayload(signed.rawTx(), signed.txHash());
   }
 

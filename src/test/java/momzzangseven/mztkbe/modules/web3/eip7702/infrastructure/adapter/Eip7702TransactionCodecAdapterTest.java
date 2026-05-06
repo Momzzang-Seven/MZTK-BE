@@ -10,7 +10,7 @@ import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.eip7702.application.service.SignEip7702TxService;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.SignEip7702TxPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.domain.encoder.Eip7702TxEncoder;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.DisplayName;
@@ -22,13 +22,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("Eip7702TransactionCodecAdapter (codec port → SignEip7702TxService bridging)")
+@DisplayName("Eip7702TransactionCodecAdapter (codec port → SignEip7702TxPort bridging)")
 class Eip7702TransactionCodecAdapterTest {
 
   private static final String TO = "0x" + "a".repeat(40);
   private static final String DATA = "0xdeadbeef";
 
-  @Mock private SignEip7702TxService signEip7702TxService;
+  @Mock private SignEip7702TxPort signEip7702TxPort;
 
   @InjectMocks private Eip7702TransactionCodecAdapter adapter;
 
@@ -48,7 +48,7 @@ class Eip7702TransactionCodecAdapterTest {
 
   @Test
   @DisplayName(
-      "signAndEncode — SignCommand 를 Eip7702Fields/TreasurySigner 로 변환해 SignEip7702TxService 에 위임")
+      "signAndEncode — SignCommand 를 Eip7702Fields/TreasurySigner 로 변환해 SignEip7702TxPort 에 위임")
   void signAndEncode_translatesFieldsAndDelegatesToService() {
     TreasurySigner signer = signer();
     Eip7702TransactionCodecPort.SignCommand command =
@@ -66,7 +66,7 @@ class Eip7702TransactionCodecAdapterTest {
 
     Eip7702TxEncoder.SignedTx canned =
         new Eip7702TxEncoder.SignedTx("0x04abcdef", "0x" + "f".repeat(64));
-    when(signEip7702TxService.sign(any(Eip7702TxEncoder.Eip7702Fields.class), any()))
+    when(signEip7702TxPort.sign(any(Eip7702TxEncoder.Eip7702Fields.class), any()))
         .thenReturn(canned);
 
     Eip7702TransactionCodecPort.SignedPayload result = adapter.signAndEncode(command);
@@ -74,7 +74,7 @@ class Eip7702TransactionCodecAdapterTest {
     ArgumentCaptor<Eip7702TxEncoder.Eip7702Fields> fieldsCaptor =
         ArgumentCaptor.forClass(Eip7702TxEncoder.Eip7702Fields.class);
     ArgumentCaptor<TreasurySigner> signerCaptor = ArgumentCaptor.forClass(TreasurySigner.class);
-    org.mockito.Mockito.verify(signEip7702TxService)
+    org.mockito.Mockito.verify(signEip7702TxPort)
         .sign(fieldsCaptor.capture(), signerCaptor.capture());
 
     Eip7702TxEncoder.Eip7702Fields fields = fieldsCaptor.getValue();
