@@ -3,76 +3,57 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.math.BigInteger;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip7702GatewayPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.kms.model.KmsException;
 
+/**
+ * Tests the orchestrator-level preflight + delegate dispatch contract.
+ *
+ * <p>Per-mode signing logic lives in {@link TransactionalExecuteExecutionIntentDelegateTest}.
+ * Sponsor-wallet structural fail-fast cases live in {@code SponsorWalletPreflightTest}.
+ */
 @ExtendWith(MockitoExtension.class)
 class ExecuteExecutionIntentServiceTest {
 
-  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
-  private static final Clock FIXED_CLOCK =
-      Clock.fixed(Instant.parse("2026-04-07T03:00:00Z"), APP_ZONE);
-  private static final LocalDateTime FIXED_NOW =
-      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+  private static final String SPONSOR_ALIAS = "sponsor-treasury";
+  private static final String SPONSOR_KMS_KEY_ID = "alias/sponsor-treasury";
+  private static final String SPONSOR_ADDRESS = "0x" + "6".repeat(40);
 
+  @Mock private ExecuteTransactionalExecutionIntentDelegatePort delegate;
+  @Mock private SponsorWalletPreflight sponsorWalletPreflight;
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
-  @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
-  @Mock private ExecutionEip7702GatewayPort executionEip7702GatewayPort;
-  @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
-  @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
-  @Mock private LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort;
-  @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
-  @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
-  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
   private ExecuteExecutionIntentService service;
 
@@ -80,299 +61,217 @@ class ExecuteExecutionIntentServiceTest {
   void setUp() {
     service =
         new ExecuteExecutionIntentService(
+            delegate,
+            sponsorWalletPreflight,
             executionIntentPersistencePort,
-            sponsorDailyUsagePersistencePort,
-            executionTransactionGatewayPort,
-            loadExecutionSponsorKeyPort,
-            executionEip7702GatewayPort,
-            eip1559TransactionCodecPort,
-            loadExecutionChainIdPort,
-            loadExecutionSponsorWalletConfigPort,
-            loadExecutionRetryPolicyPort,
-            List.of(executionActionHandlerPort),
-            publishExecutionIntentTerminatedPort,
-            FIXED_CLOCK);
-    lenient()
-        .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
-        .thenReturn(true);
-    lenient()
-        .when(executionActionHandlerPort.buildActionPlan(org.mockito.ArgumentMatchers.any()))
-        .thenReturn(
-            new ExecutionActionPlan(
-                BigInteger.valueOf(100),
-                ExecutionReferenceType.USER_TO_USER,
-                List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234"))));
-    lenient()
-        .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
-        .thenReturn(new ExecutionRetryPolicy(30));
-    lenient().when(loadExecutionChainIdPort.loadChainId()).thenReturn(11155111L);
-    lenient()
-        .when(loadExecutionSponsorWalletConfigPort.loadSponsorWalletConfig())
-        .thenReturn(new ExecutionSponsorWalletConfig("alias", "kek"));
+            executionTransactionGatewayPort);
+  }
+
+  private SponsorWalletGate activeGate() {
+    return new SponsorWalletGate(
+        new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS, true),
+        new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY_ID, SPONSOR_ADDRESS));
+  }
+
+  private ExecuteExecutionIntentCommand command() {
+    return new ExecuteExecutionIntentCommand(7L, "intent-1", "0xauth", "0xsubmit", null);
   }
 
   @Test
-  void execute_returnsExistingTransaction_whenIntentAlreadyHasSubmittedTxId() throws Exception {
-    ExecutionIntent intent = existingEip1559Intent().toBuilder().submittedTxId(99L).build();
-    ExecutionTransactionGatewayPort.TransactionRecord transaction =
-        new ExecutionTransactionGatewayPort.TransactionRecord(
-            99L, ExecutionTransactionStatus.SIGNED, "0xhash");
+  void execute_propagatesPreflightWeb3InvalidInput_withoutCallingDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new Web3InvalidInputException("sponsor signer key is missing"));
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.findById(99L)).thenReturn(Optional.of(transaction));
-
-    ExecuteExecutionIntentResult result =
-        service.execute(new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, null));
-
-    assertThat(result.transactionId()).isEqualTo(99L);
-    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
-    assertThat(result.txHash()).isEqualTo("0xhash");
-  }
-
-  @Test
-  void execute_marksNonceStale_whenEip1559PendingNonceChanged() throws Exception {
-    ExecutionIntent intent = existingEip1559Intent();
-    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
-        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
-            "0xsigned",
-            "0xhash",
-            intent.getUnsignedTxSnapshot().fromAddress(),
-            intent.getUnsignedTxSnapshot(),
-            intent.getUnsignedTxFingerprint());
-
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
-    when(eip1559TransactionCodecPort.decodeAndVerify(
-            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
-        .thenReturn(decoded);
-    when(executionEip7702GatewayPort.loadPendingAccountNonce(
-            intent.getUnsignedTxSnapshot().fromAddress()))
-        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce() + 1));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
-
-    assertThatThrownBy(
-            () ->
-                service.execute(
-                    new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned")))
-        .isInstanceOf(Web3TransferException.class)
-        .extracting(ex -> ((Web3TransferException) ex).getCode())
-        .isEqualTo(ErrorCode.NONCE_STALE_RECREATE_REQUIRED.getCode());
-
-    verify(publishExecutionIntentTerminatedPort)
-        .publish(
-            argThat(
-                event ->
-                    event.executionIntentId().equals("intent-1")
-                        && event.terminalStatus() == ExecutionIntentStatus.NONCE_STALE
-                        && event
-                            .failureReason()
-                            .equals(ErrorCode.NONCE_STALE_RECREATE_REQUIRED.name())));
-  }
-
-  @Test
-  void execute_doesNotMarkTerminalState_whenValidationFails() throws Exception {
-    ExecutionIntent intent = existingEip1559Intent();
-
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
-
-    assertThatThrownBy(
-            () ->
-                service.execute(
-                    new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, null)))
+    assertThatThrownBy(() -> service.execute(command()))
         .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("signedRawTransaction is required");
-
-    verify(executionIntentPersistencePort, never()).update(any());
-    verify(publishExecutionIntentTerminatedPort, never()).publish(any());
+        .hasMessage("sponsor signer key is missing");
+    verify(delegate, never()).execute(any(), any());
   }
 
   @Test
-  void executeEip1559_handlesBroadcastNullAuditFields_withoutThrowing() throws Exception {
-    ExecutionIntent intent = existingEip1559Intent();
-    Eip1559TransactionCodecPort.DecodedSignedTransaction decoded =
-        new Eip1559TransactionCodecPort.DecodedSignedTransaction(
-            "0xsigned",
-            "0xhash",
-            intent.getUnsignedTxSnapshot().fromAddress(),
-            intent.getUnsignedTxSnapshot(),
-            intent.getUnsignedTxFingerprint());
-    ExecutionTransactionGatewayPort.TransactionRecord created =
-        new ExecutionTransactionGatewayPort.TransactionRecord(
-            101L, ExecutionTransactionStatus.CREATED, null);
+  void execute_propagatesTreasuryWalletStateException_withoutCallingDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new TreasuryWalletStateException("KMS key disabled"));
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
-    when(eip1559TransactionCodecPort.decodeAndVerify(
-            "0xsigned", intent.getUnsignedTxSnapshot(), intent.getUnsignedTxFingerprint()))
-        .thenReturn(decoded);
-    when(executionEip7702GatewayPort.loadPendingAccountNonce(
-            intent.getUnsignedTxSnapshot().fromAddress()))
-        .thenReturn(BigInteger.valueOf(intent.getUnsignedTxSnapshot().expectedNonce()));
-    when(executionTransactionGatewayPort.createAndFlush(any())).thenReturn(created);
-    when(executionTransactionGatewayPort.broadcast("0xsigned"))
-        .thenReturn(new ExecutionTransactionGatewayPort.BroadcastResult(false, null, null, null));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
-
-    ExecuteExecutionIntentResult result =
-        service.execute(new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned"));
-
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
-    assertThat(result.transactionId()).isEqualTo(101L);
-    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
-    assertThat(result.txHash()).isEqualTo("0xhash");
+    assertThatThrownBy(() -> service.execute(command()))
+        .isInstanceOf(TreasuryWalletStateException.class)
+        .hasMessageContaining("KMS key disabled");
+    verify(delegate, never()).execute(any(), any());
   }
 
   @Test
-  void execute_marksExpired_whenIntentExpiredRelativeToInjectedClock() throws Exception {
-    ExecutionIntent intent =
-        existingEip1559Intent().toBuilder().expiresAt(FIXED_NOW.minusSeconds(1)).build();
+  void execute_invokesDelegateWithSponsorWalletGate_whenPreflightPasses() {
+    SponsorWalletGate gate = activeGate();
+    when(sponsorWalletPreflight.preflight()).thenReturn(gate);
+    ExecuteExecutionIntentResult expected =
+        new ExecuteExecutionIntentResult(
+            "intent-1",
+            ExecutionIntentStatus.PENDING_ONCHAIN,
+            42L,
+            ExecutionTransactionStatus.PENDING,
+            "0xhash");
+    ExecuteExecutionIntentCommand command = command();
+    when(delegate.execute(eq(command), eq(gate))).thenReturn(expected);
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-1"))
-        .thenReturn(Optional.of(intent));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    ExecuteExecutionIntentResult actual = service.execute(command);
 
-    assertThatThrownBy(
-            () ->
-                service.execute(
-                    new ExecuteExecutionIntentCommand(7L, "intent-1", null, null, "0xsigned")))
-        .isInstanceOf(Web3TransferException.class)
-        .extracting(ex -> ((Web3TransferException) ex).getCode())
-        .isEqualTo(ErrorCode.EXECUTION_INTENT_EXPIRED.getCode());
-
-    verify(executionIntentPersistencePort).update(any());
-    verify(publishExecutionIntentTerminatedPort)
-        .publish(
-            argThat(
-                event ->
-                    event.executionIntentId().equals("intent-1")
-                        && event.terminalStatus() == ExecutionIntentStatus.EXPIRED
-                        && event
-                            .failureReason()
-                            .equals(ErrorCode.EXECUTION_INTENT_EXPIRED.name())));
+    assertThat(actual).isSameAs(expected);
+    verify(delegate).execute(command, gate);
   }
 
   @Test
-  void execute_marksNonceStale_whenEip7702AuthorityNonceChanged() throws Exception {
-    ExecutionIntent intent = existingEip7702Intent();
+  @DisplayName("EIP-1559 신규 intent → preflight 우회 + delegate 에 gate=null 로 호출")
+  void execute_skipsPreflightForEip1559_andCallsDelegateWithNullGate() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent eip1559Intent = mockNewIntent(command, ExecutionMode.EIP1559);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(eip1559Intent));
+    ExecuteExecutionIntentResult expected =
+        new ExecuteExecutionIntentResult(
+            "intent-1",
+            ExecutionIntentStatus.SIGNED,
+            55L,
+            ExecutionTransactionStatus.SIGNED,
+            "0xhash1559");
+    when(delegate.execute(command, null)).thenReturn(expected);
 
-    when(executionIntentPersistencePort.findByPublicIdForUpdate("intent-7702"))
-        .thenReturn(Optional.of(intent));
-    when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
+    ExecuteExecutionIntentResult actual = service.execute(command);
+
+    assertThat(actual).isSameAs(expected);
+    // The whole point: a sponsor wallet outage must not block a user-signed EIP-1559 retry.
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate).execute(command, null);
+  }
+
+  @Test
+  @DisplayName("EIP-7702 신규 intent → preflight 호출 + delegate 에 gate 전달")
+  void execute_runsPreflightForEip7702_andCallsDelegateWithGate() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent eip7702Intent = mockNewIntent(command, ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(eip7702Intent));
+    SponsorWalletGate gate = activeGate();
+    when(sponsorWalletPreflight.preflight()).thenReturn(gate);
+    ExecuteExecutionIntentResult expected =
+        new ExecuteExecutionIntentResult(
+            "intent-1",
+            ExecutionIntentStatus.PENDING_ONCHAIN,
+            77L,
+            ExecutionTransactionStatus.PENDING,
+            "0xhash7702");
+    when(delegate.execute(command, gate)).thenReturn(expected);
+
+    ExecuteExecutionIntentResult actual = service.execute(command);
+
+    assertThat(actual).isSameAs(expected);
+    verify(sponsorWalletPreflight).preflight();
+    verify(delegate).execute(command, gate);
+  }
+
+  @Test
+  @DisplayName("폴링 패스: submittedTxId != null 이면 preflight 와 delegate 모두 건너뛰고 캐시된 결과 반환")
+  void execute_returnsCachedTransaction_whenIntentAlreadySubmitted_skippingPreflight() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent submittedIntent =
+        mockSubmittedIntent(command.requesterUserId(), command.executionIntentId(), 42L);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(submittedIntent));
+    when(executionTransactionGatewayPort.findById(42L))
         .thenReturn(
             Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    "0x" + "6".repeat(40), "0x" + "7".repeat(64))));
-    when(executionEip7702GatewayPort.toAuthorizationTuple(anyLong(), any(), any(), any()))
-        .thenReturn(
-            new ExecutionEip7702GatewayPort.AuthorizationTuple(
-                BigInteger.valueOf(11155111L),
-                "0x" + "2".repeat(40),
-                BigInteger.valueOf(12L),
-                BigInteger.ZERO,
-                BigInteger.ONE,
-                BigInteger.TWO));
-    when(executionEip7702GatewayPort.hashCalls(any())).thenReturn("0x" + "9".repeat(64));
-    when(executionEip7702GatewayPort.verifyAuthorizationSigner(
-            anyLong(), any(), any(), any(), any()))
-        .thenReturn(true);
-    when(executionEip7702GatewayPort.loadPendingAccountNonce(intent.getAuthorityAddress()))
-        .thenReturn(BigInteger.valueOf(intent.getAuthorityNonce() + 1));
-    when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+                new ExecutionTransactionGatewayPort.TransactionRecord(
+                    42L, ExecutionTransactionStatus.PENDING, "0xpastHash")));
 
-    assertThatThrownBy(
-            () ->
-                service.execute(
-                    new ExecuteExecutionIntentCommand(
-                        7L, "intent-7702", "0xauth", "0xsubmit", null)))
-        .isInstanceOf(Web3TransferException.class)
-        .extracting(ex -> ((Web3TransferException) ex).getCode())
-        .isEqualTo(ErrorCode.AUTH_NONCE_MISMATCH.getCode());
+    ExecuteExecutionIntentResult result = service.execute(command);
 
-    verify(executionIntentPersistencePort).update(any());
-    verify(publishExecutionIntentTerminatedPort)
-        .publish(
-            argThat(
-                event ->
-                    event.executionIntentId().equals("intent-7702")
-                        && event.terminalStatus() == ExecutionIntentStatus.NONCE_STALE
-                        && event.failureReason().equals(ErrorCode.AUTH_NONCE_MISMATCH.name())));
+    assertThat(result.transactionId()).isEqualTo(42L);
+    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
+    assertThat(result.txHash()).isEqualTo("0xpastHash");
+    // The whole point: a sponsor wallet that went INACTIVE *after* a successful broadcast must
+    // not surface as a 400 to a user merely polling for confirmation status.
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate, never()).execute(any(), any());
   }
 
-  private ExecutionIntent existingEip1559Intent() throws Exception {
-    TransferExecutionPayload payload =
-        new TransferExecutionPayload(
-            "request-101",
-            7L,
-            8L,
-            "0x" + "1".repeat(40),
-            "0x" + "2".repeat(40),
-            "0x" + "3".repeat(40),
-            BigInteger.valueOf(100),
-            "0x1234");
+  @Test
+  @DisplayName("폴링 패스의 owner 검증: 다른 사용자가 같은 intent 를 폴링해도 거부")
+  void execute_pollingFastPath_rejectsCrossUserAccess() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent submittedIntent = mockSubmittedIntent(99L, command.executionIntentId(), 42L);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(submittedIntent));
 
-    return ExecutionIntent.create(
-        "intent-1",
-        "root-1",
-        1,
-        ExecutionResourceType.TRANSFER,
-        "web3:TRANSFER_SEND:7:request-101",
-        ExecutionActionType.TRANSFER_SEND,
-        7L,
-        8L,
-        ExecutionMode.EIP1559,
-        "0x" + "a".repeat(64),
-        new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(payload),
-        null,
-        null,
-        null,
-        FIXED_NOW.plusMinutes(5),
-        null,
-        null,
-        new UnsignedTxSnapshot(
-            11155111L,
-            "0x" + "4".repeat(40),
-            "0x" + "3".repeat(40),
-            BigInteger.ZERO,
-            "0x1234",
-            5L,
-            BigInteger.valueOf(80_000),
-            BigInteger.valueOf(2_000_000_000L),
-            BigInteger.valueOf(50_000_000_000L)),
-        "0x" + "b".repeat(64),
-        BigInteger.ZERO,
-        LocalDate.of(2026, 4, 6),
-        FIXED_NOW);
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("execution intent owner mismatch");
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate, never()).execute(any(), any());
   }
 
-  private ExecutionIntent existingEip7702Intent() {
-    return ExecutionIntent.create(
-        "intent-7702",
-        "root-7702",
-        1,
-        ExecutionResourceType.TRANSFER,
-        "transfer:7702",
-        ExecutionActionType.TRANSFER_SEND,
-        7L,
-        8L,
-        ExecutionMode.EIP7702,
-        "0x" + "a".repeat(64),
-        "{\"amountWei\":\"100\"}",
-        "0x" + "1".repeat(40),
-        12L,
-        "0x" + "2".repeat(40),
-        FIXED_NOW.plusMinutes(5),
-        "0x" + "3".repeat(64),
-        "0x" + "4".repeat(64),
-        null,
-        null,
-        BigInteger.ZERO,
-        LocalDate.of(2026, 4, 6),
-        FIXED_NOW);
+  private ExecutionIntent mockSubmittedIntent(Long requesterUserId, String publicId, Long txId) {
+    ExecutionIntent intent = org.mockito.Mockito.mock(ExecutionIntent.class);
+    org.mockito.Mockito.lenient().when(intent.getSubmittedTxId()).thenReturn(txId);
+    org.mockito.Mockito.lenient().when(intent.getRequesterUserId()).thenReturn(requesterUserId);
+    org.mockito.Mockito.lenient().when(intent.getPublicId()).thenReturn(publicId);
+    org.mockito.Mockito.lenient()
+        .when(intent.getStatus())
+        .thenReturn(ExecutionIntentStatus.PENDING_ONCHAIN);
+    return intent;
+  }
+
+  private ExecutionIntent mockNewIntent(ExecuteExecutionIntentCommand command, ExecutionMode mode) {
+    ExecutionIntent intent = org.mockito.Mockito.mock(ExecutionIntent.class);
+    org.mockito.Mockito.lenient().when(intent.getSubmittedTxId()).thenReturn(null);
+    org.mockito.Mockito.lenient()
+        .when(intent.getRequesterUserId())
+        .thenReturn(command.requesterUserId());
+    org.mockito.Mockito.lenient()
+        .when(intent.getPublicId())
+        .thenReturn(command.executionIntentId());
+    org.mockito.Mockito.lenient().when(intent.getMode()).thenReturn(mode);
+    org.mockito.Mockito.lenient()
+        .when(intent.getStatus())
+        .thenReturn(ExecutionIntentStatus.AWAITING_SIGNATURE);
+    return intent;
+  }
+
+  @Test
+  @DisplayName("transient KMS DescribeKey 실패 → Web3TransferException(retryable=true)")
+  void execute_translatesTransientDescribeKeyToRetryableWeb3TransferException() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("throttled"));
+
+    assertThatThrownBy(() -> service.execute(command()))
+        .isInstanceOfSatisfying(
+            Web3TransferException.class, ex -> assertThat(ex.isRetryable()).isTrue());
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  @DisplayName("terminal KMS DescribeKey (NotFound) → Web3TransferException(retryable=false)")
+  void execute_translatesTerminalDescribeKeyToNonRetryableWeb3TransferException() {
+    KmsException terminalCause =
+        (KmsException)
+            KmsException.builder()
+                .awsErrorDetails(AwsErrorDetails.builder().errorCode("NotFoundException").build())
+                .build();
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("key missing", terminalCause));
+
+    assertThatThrownBy(() -> service.execute(command()))
+        .isInstanceOfSatisfying(
+            Web3TransferException.class, ex -> assertThat(ex.isRetryable()).isFalse());
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  @DisplayName("[M-35] @Transactional 가 service 클래스에 부착되지 않음 — 트랜잭션 boundary 는 delegate 가 보유")
+  void serviceClass_isNotAnnotatedWithTransactional() {
+    Transactional annotation =
+        ExecuteExecutionIntentService.class.getAnnotation(Transactional.class);
+
+    assertThat(annotation)
+        .as("ExecuteExecutionIntentService 는 preflight 를 @Transactional 밖에서 수행해야 한다")
+        .isNull();
   }
 }

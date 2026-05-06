@@ -2,24 +2,24 @@ package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.ad
 
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerFailureReason;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
+import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
+import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAddressProjectionPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
-import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter.TreasuryKeyCipher;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.entity.Web3TreasuryWalletEntity;
 import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.persistence.repository.Web3TreasuryWalletJpaRepository;
 import org.springframework.stereotype.Component;
-import org.web3j.crypto.Credentials;
 
 /**
  * Persistence adapter for treasury wallets.
@@ -30,28 +30,27 @@ import org.web3j.crypto.Credentials;
  *   <li><b>New (KMS-backed)</b> — {@link LoadTreasuryWalletPort} / {@link SaveTreasuryWalletPort}
  *       project the {@code TreasuryWallet} aggregate, reading {@code kms_key_id} and the new
  *       lifecycle columns added in V056.
- *   <li><b>Legacy (cipher-backed)</b> — {@link LoadTreasuryKeyPort} / {@link SaveTreasuryKeyPort}
- *       continue to drive the historical encrypted-private-key path so {@code transaction} (until
- *       PR2) and {@code eip7702} / {@code execution} (until PR3) can still issue signatures while
- *       the new KMS path is being adopted.
+ *   <li><b>Legacy (cipher-backed)</b> — {@link SaveTreasuryKeyPort} continues to back the
+ *       historical encrypted-private-key column until V063 drops it in PR4.
  * </ul>
  *
  * <p>Both port families share the same JPA repository / entity; rows that have only legacy columns
  * populated remain readable through the legacy methods, and rows that have only KMS columns
  * populated are visible to the new methods.
  */
+// TODO TreasuryWalletPersistenceAdapter에 너무 많은 책임이 주어져있다. 별도 객체로 분리.
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class TreasuryWalletPersistenceAdapter
     implements LoadTreasuryWalletPort,
         SaveTreasuryWalletPort,
-        LoadTreasuryKeyPort,
         SaveTreasuryKeyPort,
         ProbeExecutionSignerCapabilityPort,
         LoadTreasuryAddressProjectionPort {
 
   private final Web3TreasuryWalletJpaRepository repository;
-  private final TreasuryKeyCipher treasuryKeyCipher;
+  private final DescribeKmsKeyPort describeKmsKeyPort;
 
   // ----- LoadTreasuryWalletPort / SaveTreasuryWalletPort (new, KMS-backed) -----
 
@@ -84,19 +83,7 @@ public class TreasuryWalletPersistenceAdapter
     return toDomain(saved);
   }
 
-  // ----- LoadTreasuryKeyPort (legacy cipher path, retained until PR2/PR4) -----
-
-  @Override
-  public Optional<TreasuryKeyMaterial> loadByAlias(String walletAlias, String kekB64) {
-    requireNonBlank(walletAlias, "walletAlias");
-    requireNonBlank(kekB64, "kekB64");
-    return repository
-        .findByWalletAlias(walletAlias)
-        .filter(this::hasProvisionedSlotMaterial)
-        .flatMap(entity -> resolveProvisionedMaterial(entity, kekB64).material());
-  }
-
-  // ----- ProbeExecutionSignerCapabilityPort (legacy probe) -----
+  // ----- ProbeExecutionSignerCapabilityPort (KMS-backed probe) -----
 
   @Override
   public ExecutionSignerCapabilityView probe(String walletAlias, String keyEncryptionKeyB64) {
@@ -190,70 +177,74 @@ public class TreasuryWalletPersistenceAdapter
     return TreasuryKeyOrigin.valueOf(value);
   }
 
+  // TODO get rid of deprecated KEK fidleds in PR4
   private ExecutionSignerCapabilityView mapCapability(
       Web3TreasuryWalletEntity entity, String keyEncryptionKeyB64) {
     String walletAlias = entity.getWalletAlias();
     boolean hasAddress = hasText(entity.getTreasuryAddress());
-    boolean hasEncryptedKey = hasText(entity.getTreasuryPrivateKeyEncrypted());
+    boolean hasKmsKeyId = hasText(entity.getKmsKeyId());
 
-    if (!hasAddress && !hasEncryptedKey) {
+    if (!hasAddress && !hasKmsKeyId) {
       return ExecutionSignerCapabilityView.unprovisioned(walletAlias);
     }
-    if (hasAddress != hasEncryptedKey) {
+    if (hasAddress != hasKmsKeyId) {
       return ExecutionSignerCapabilityView.unavailable(
           walletAlias,
           ExecutionSignerSlotStatus.UNPROVISIONED,
           ExecutionSignerFailureReason.CORRUPTED_SLOT);
     }
-    ProvisionedMaterialResolution resolution =
-        resolveProvisionedMaterial(entity, keyEncryptionKeyB64);
-    if (resolution.material().isPresent()) {
-      return ExecutionSignerCapabilityView.ready(walletAlias, entity.getTreasuryAddress());
-    }
-    return ExecutionSignerCapabilityView.provisionedUnavailable(
-        walletAlias, resolution.failureReason());
+    return mapKmsCapability(entity);
   }
 
-  private boolean hasProvisionedSlotMaterial(Web3TreasuryWalletEntity entity) {
-    return hasText(entity.getTreasuryAddress()) && hasText(entity.getTreasuryPrivateKeyEncrypted());
+  private ExecutionSignerCapabilityView mapKmsCapability(Web3TreasuryWalletEntity entity) {
+    String walletAlias = entity.getWalletAlias();
+    TreasuryWalletStatus status = parseStatus(entity.getStatus());
+    if (status == TreasuryWalletStatus.DISABLED) {
+      return ExecutionSignerCapabilityView.provisionedUnavailable(
+          walletAlias, ExecutionSignerFailureReason.WALLET_DISABLED);
+    }
+    if (status == TreasuryWalletStatus.ARCHIVED) {
+      return ExecutionSignerCapabilityView.provisionedUnavailable(
+          walletAlias, ExecutionSignerFailureReason.WALLET_ARCHIVED);
+    }
+    if (status != TreasuryWalletStatus.ACTIVE) {
+      return ExecutionSignerCapabilityView.unavailable(
+          walletAlias,
+          ExecutionSignerSlotStatus.UNPROVISIONED,
+          ExecutionSignerFailureReason.KMS_KEY_ID_MISSING);
+    }
+
+    KmsKeyState state;
+    try {
+      state = describeKmsKeyPort.describe(entity.getKmsKeyId());
+    } catch (RuntimeException e) {
+      log.warn(
+          "describeKmsKeyPort failed for alias={} kmsKeyId={}",
+          walletAlias,
+          entity.getKmsKeyId(),
+          e);
+      return ExecutionSignerCapabilityView.provisionedUnavailable(
+          walletAlias, ExecutionSignerFailureReason.KMS_DESCRIBE_FAILED);
+    }
+
+    return switch (state) {
+      case ENABLED -> ExecutionSignerCapabilityView.ready(walletAlias, entity.getTreasuryAddress());
+      case DISABLED ->
+          ExecutionSignerCapabilityView.provisionedUnavailable(
+              walletAlias, ExecutionSignerFailureReason.KMS_KEY_DISABLED);
+      case PENDING_DELETION ->
+          ExecutionSignerCapabilityView.provisionedUnavailable(
+              walletAlias, ExecutionSignerFailureReason.KMS_KEY_PENDING_DELETION);
+      case PENDING_IMPORT ->
+          ExecutionSignerCapabilityView.provisionedUnavailable(
+              walletAlias, ExecutionSignerFailureReason.KMS_KEY_PENDING_IMPORT);
+      case UNAVAILABLE ->
+          ExecutionSignerCapabilityView.provisionedUnavailable(
+              walletAlias, ExecutionSignerFailureReason.KMS_KEY_UNAVAILABLE);
+    };
   }
 
   private static boolean hasText(String value) {
     return value != null && !value.isBlank();
-  }
-
-  private ProvisionedMaterialResolution resolveProvisionedMaterial(
-      Web3TreasuryWalletEntity entity, String keyEncryptionKeyB64) {
-    if (!hasText(keyEncryptionKeyB64)) {
-      return ProvisionedMaterialResolution.failure(
-          ExecutionSignerFailureReason.KEY_ENCRYPTION_KEY_MISSING);
-    }
-
-    try {
-      String privateKeyHex =
-          treasuryKeyCipher.decrypt(entity.getTreasuryPrivateKeyEncrypted(), keyEncryptionKeyB64);
-      String derivedAddress = Credentials.create(privateKeyHex).getAddress().toLowerCase();
-      if (!derivedAddress.equalsIgnoreCase(entity.getTreasuryAddress())) {
-        return ProvisionedMaterialResolution.failure(ExecutionSignerFailureReason.ADDRESS_MISMATCH);
-      }
-      return ProvisionedMaterialResolution.success(
-          TreasuryKeyMaterial.of(entity.getTreasuryAddress(), privateKeyHex));
-    } catch (RuntimeException e) {
-      return ProvisionedMaterialResolution.failure(ExecutionSignerFailureReason.DECRYPT_FAILED);
-    }
-  }
-
-  private record ProvisionedMaterialResolution(
-      Optional<TreasuryKeyMaterial> material, ExecutionSignerFailureReason failureReason) {
-
-    private static ProvisionedMaterialResolution success(TreasuryKeyMaterial material) {
-      return new ProvisionedMaterialResolution(
-          Optional.of(material), ExecutionSignerFailureReason.NONE);
-    }
-
-    private static ProvisionedMaterialResolution failure(
-        ExecutionSignerFailureReason failureReason) {
-      return new ProvisionedMaterialResolution(Optional.empty(), failureReason);
-    }
   }
 }

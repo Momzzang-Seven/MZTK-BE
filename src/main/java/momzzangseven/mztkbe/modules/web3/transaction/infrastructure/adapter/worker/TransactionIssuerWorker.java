@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadRewardTreasuryWalletPort;
@@ -29,7 +30,6 @@ import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audi
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.PrevalidateAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.SignAuditDetail;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.audit.detail.StateChangeAuditDetail;
-import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.KmsClientErrorClassifier;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker.strategy.RetryStrategy;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;

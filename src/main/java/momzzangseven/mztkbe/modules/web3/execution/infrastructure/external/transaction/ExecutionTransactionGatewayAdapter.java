@@ -72,6 +72,11 @@ public class ExecutionTransactionGatewayAdapter implements ExecutionTransactionG
   }
 
   @Override
+  public boolean releaseReservedNonce(String fromAddress, long reservedNonce) {
+    return manageExecutionTransactionUseCase.releaseReservedNonce(fromAddress, reservedNonce);
+  }
+
+  @Override
   public long loadPendingNonce(String fromAddress) {
     return manageExecutionTransactionUseCase.loadPendingNonce(fromAddress);
   }

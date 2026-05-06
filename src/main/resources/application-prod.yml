@@ -84,6 +84,9 @@ mztk:
   admin:
     bootstrap:
       enabled: true
+    seed:
+      seed-count: 2
+      delivery-target: mztk/prod/admin/bootstrap-delivery
     recovery:
       rate-limit:
         trust-forwarded-for: true

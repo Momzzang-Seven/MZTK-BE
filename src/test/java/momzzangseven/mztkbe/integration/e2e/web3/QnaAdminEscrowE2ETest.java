@@ -6,12 +6,10 @@ import static org.mockito.ArgumentMatchers.anyString;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,18 +17,21 @@ import java.util.concurrent.atomic.AtomicReference;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter.TreasuryKeyCipher;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -45,11 +46,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.web3j.crypto.Credentials;
 
 @TestPropertySource(
     properties = {
@@ -57,7 +55,8 @@ import org.web3j.crypto.Credentials;
       "web3.eip7702.enabled=false",
       "web3.execution.internal.enabled=true",
       "web3.qna.admin.enabled=true",
-      "web3.execution.internal.signer.wallet-alias=test-sponsor"
+      "web3.execution.internal.signer.wallet-alias=test-sponsor",
+      "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA=="
     })
 @Tag("e2e")
 @DisplayName("[E2E] QnA admin manual settle/refund flow")
@@ -68,22 +67,11 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   private static final String CALL_TARGET = "0x0000000000000000000000000000000000000000";
   private static final String TOKEN_ADDRESS = "0x1111111111111111111111111111111111111111";
   private static final BigInteger REWARD_AMOUNT_WEI = new BigInteger("50000000000000000000");
-  private static final String PRIVATE_KEY_HEX = "0x" + "9".repeat(64);
-  private static final String TEST_KEK_RAW = "0123456789abcdef".repeat(2);
-  private static final String KEY_ENCRYPTION_KEY_B64 = encodeTestKek();
-
-  @DynamicPropertySource
-  static void registerSignerProperties(DynamicPropertyRegistry registry) {
-    registry.add(
-        "web3.execution.internal.signer.key-encryption-key-b64",
-        QnaAdminEscrowE2ETest::encodeTestKek);
-  }
 
   @Autowired private JdbcTemplate jdbcTemplate;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private RunInternalExecutionBatchUseCase runInternalExecutionBatchUseCase;
   @Autowired private MarkExecutionIntentSucceededUseCase markExecutionIntentSucceededUseCase;
-  @Autowired private TreasuryKeyCipher treasuryKeyCipher;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
@@ -92,18 +80,22 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   private QnaAdminExecutionConfigurationValidator qnaAdminExecutionConfigurationValidator;
 
   @MockitoBean private QnaContractCallSupport qnaContractCallSupport;
-  @MockitoBean private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
+  @MockitoBean private LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort;
+  @MockitoBean private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
   @MockitoBean private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
+  @MockitoBean private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
 
   @BeforeEach
   void setUp() {
-    seedExecutionSignerSlot();
-    BDDMockito.given(loadExecutionSponsorKeyPort.loadByAlias(any(), any()))
+    BDDMockito.given(loadSponsorTreasuryWalletPort.load())
         .willReturn(
             Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    SIGNER_ADDRESS, PRIVATE_KEY_HEX)));
+                new TreasuryWalletInfo(
+                    "test-sponsor", "alias/test-sponsor", SIGNER_ADDRESS, true)));
+    BDDMockito.given(probeExecutionSignerCapabilityUseCase.execute())
+        .willReturn(ExecutionSignerCapabilityView.ready("test-sponsor", SIGNER_ADDRESS));
+    BDDMockito.willDoNothing().given(verifyTreasuryWalletForSignPort).verify(anyString());
     BDDMockito.given(qnaContractCallSupport.isRelayerRegistered(anyString(), anyString()))
         .willReturn(true);
     BDDMockito.willDoNothing()
@@ -119,10 +111,6 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     BDDMockito.given(executionEip1559SigningPort.sign(any()))
         .willReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash-signed"));
     BDDMockito.given(executionTransactionGatewayPort.reserveNextNonce(anyString())).willReturn(77L);
-  }
-
-  private static String encodeTestKek() {
-    return Base64.getEncoder().encodeToString(TEST_KEK_RAW.getBytes(StandardCharsets.UTF_8));
   }
 
   @Test
@@ -310,6 +298,97 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     assertThat(postExists(postId)).isFalse();
   }
 
+  @Test
+  @DisplayName(
+      "[E-10] verifyTreasuryWalletForSignPort 가 TreasuryWalletStateException → preflightSkipped, intent claim 안 됨, settle 액션 0회")
+  void runBatch_skipsClaim_whenVerifyTreasuryWalletForSignThrowsStateException() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    TestUser asker = signupAndLogin("preflight-verify-fail-asker");
+    TestUser responder = signupAndLogin("preflight-verify-fail-responder");
+    SeededSettlementScenario scenario =
+        seedSettlementScenario(
+            asker.userId(),
+            responder.userId(),
+            "preflight verify question",
+            "preflight verify answer");
+
+    ResponseEntity<String> settleResponse =
+        restTemplate.exchange(
+            baseUrl()
+                + "/admin/web3/qna/questions/"
+                + scenario.postId()
+                + "/answers/"
+                + scenario.answerId()
+                + "/settle",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+    assertThat(settleResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+
+    // Flip the verify mock to throw — preflight runs OUTSIDE @Transactional, returns
+    // preflightSkipped(), and the batch loop breaks without claiming the intent.
+    BDDMockito.willThrow(
+            new momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException(
+                "kms key not enabled"))
+        .given(verifyTreasuryWalletForSignPort)
+        .verify(anyString());
+
+    var batchResult = runInternalExecutionBatchUseCase.runBatch(NOW);
+
+    assertThat(batchResult.executedCount()).isZero();
+    assertThat(batchResult.quarantinedCount()).isZero();
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+    // No claim → no settle action → no createAndFlush / sign / broadcast.
+    org.mockito.Mockito.verify(executionTransactionGatewayPort, org.mockito.Mockito.never())
+        .createAndFlush(any());
+    org.mockito.Mockito.verify(executionEip1559SigningPort, org.mockito.Mockito.never())
+        .sign(any());
+  }
+
+  @Test
+  @DisplayName(
+      "[E-11] loadSponsorTreasuryWalletPort 가 Optional.empty() → preflightSkipped (sponsor missing 의 internal 변형), intent claim 안 됨")
+  void runBatch_skipsClaim_whenLoadSponsorTreasuryWalletReturnsEmpty() throws Exception {
+    AdminUser admin = createAdminAndLogin();
+    TestUser asker = signupAndLogin("preflight-load-empty-asker");
+    TestUser responder = signupAndLogin("preflight-load-empty-responder");
+    SeededSettlementScenario scenario =
+        seedSettlementScenario(
+            asker.userId(),
+            responder.userId(),
+            "preflight load empty question",
+            "preflight load empty answer");
+
+    ResponseEntity<String> settleResponse =
+        restTemplate.exchange(
+            baseUrl()
+                + "/admin/web3/qna/questions/"
+                + scenario.postId()
+                + "/answers/"
+                + scenario.answerId()
+                + "/settle",
+            HttpMethod.POST,
+            new HttpEntity<>(bearerJsonHeaders(admin.accessToken())),
+            String.class);
+    assertThat(settleResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+
+    // Sponsor wallet missing entirely — preflight throws Web3InvalidInputException, internal
+    // service catches and returns preflightSkipped(). Batch loop exits, intent untouched.
+    BDDMockito.given(loadSponsorTreasuryWalletPort.load()).willReturn(Optional.empty());
+
+    var batchResult = runInternalExecutionBatchUseCase.runBatch(NOW);
+
+    assertThat(batchResult.executedCount()).isZero();
+    assertThat(batchResult.quarantinedCount()).isZero();
+    assertThat(latestExecutionIntentStatus(scenario.postId())).isEqualTo("AWAITING_SIGNATURE");
+    org.mockito.Mockito.verify(executionTransactionGatewayPort, org.mockito.Mockito.never())
+        .createAndFlush(any());
+    org.mockito.Mockito.verify(executionEip1559SigningPort, org.mockito.Mockito.never())
+        .sign(any());
+  }
+
   private AdminUser createAdminAndLogin() {
     String email = randomEmail();
     Long userId = signupUser(email, DEFAULT_TEST_PASSWORD, "QnaAdminE2E");
@@ -360,21 +439,6 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
     insertAnswerProjection(
         postId, answerId, responderUserId, answerContent, createdAt.plusMinutes(5));
     return new SeededSettlementScenario(postId, answerId);
-  }
-
-  private void seedExecutionSignerSlot() {
-    String normalizedPrivateKey = PRIVATE_KEY_HEX.substring(2);
-    String encryptedPrivateKey =
-        treasuryKeyCipher.encrypt(normalizedPrivateKey, KEY_ENCRYPTION_KEY_B64);
-    String treasuryAddress = Credentials.create(normalizedPrivateKey).getAddress().toLowerCase();
-
-    jdbcTemplate.update("delete from web3_treasury_wallets where wallet_alias = ?", "test-sponsor");
-    jdbcTemplate.update(
-        "insert into web3_treasury_wallets (wallet_alias, treasury_address, treasury_private_key_encrypted, created_at, updated_at)"
-            + " values (?, ?, ?, now(), now())",
-        "test-sponsor",
-        treasuryAddress,
-        encryptedPrivateKey);
   }
 
   private Long seedRefundScenario(Long askerUserId, String questionContent) {

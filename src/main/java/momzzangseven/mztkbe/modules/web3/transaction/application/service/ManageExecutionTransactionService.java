@@ -123,6 +123,11 @@ public class ManageExecutionTransactionService implements ManageExecutionTransac
   }
 
   @Override
+  public boolean releaseReservedNonce(String fromAddress, long reservedNonce) {
+    return reserveNoncePort.releaseNonce(fromAddress, reservedNonce);
+  }
+
+  @Override
   public long loadPendingNonce(String fromAddress) {
     return loadPendingNoncePort.loadPendingNonce(fromAddress);
   }

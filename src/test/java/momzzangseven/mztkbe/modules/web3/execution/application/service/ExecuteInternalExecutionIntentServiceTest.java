@@ -2,359 +2,141 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.lenient;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.math.BigInteger;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteInternalExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolicy;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionSponsorWalletConfig;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
+import software.amazon.awssdk.services.kms.model.KmsException;
 
 @ExtendWith(MockitoExtension.class)
 class ExecuteInternalExecutionIntentServiceTest {
 
-  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
-  private static final Clock FIXED_CLOCK =
-      Clock.fixed(Instant.parse("2026-04-17T01:00:00Z"), APP_ZONE);
-  private static final LocalDateTime FIXED_NOW =
-      LocalDateTime.ofInstant(FIXED_CLOCK.instant(), APP_ZONE);
+  private static final String SPONSOR_ALIAS = "test-sponsor";
+  private static final String SPONSOR_KMS_KEY = "alias/test-sponsor";
+  private static final String SPONSOR_ADDRESS = "0x" + "4".repeat(40);
 
-  @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
-  @Mock private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  @Mock private LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort;
-  @Mock private LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort;
-  @Mock private ExecutionEip1559SigningPort executionEip1559SigningPort;
-  @Mock private Eip1559TransactionCodecPort eip1559TransactionCodecPort;
-  @Mock private LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort;
-  @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
-  @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
+  private static final ExecuteInternalExecutionIntentCommand COMMAND =
+      new ExecuteInternalExecutionIntentCommand(List.of(ExecutionActionType.QNA_ADMIN_SETTLE));
+
+  @Mock private ExecuteTransactionalInternalExecutionIntentDelegatePort delegate;
+  @Mock private SponsorWalletPreflight sponsorWalletPreflight;
 
   private ExecuteInternalExecutionIntentService service;
 
   @BeforeEach
   void setUp() {
-    service =
-        new ExecuteInternalExecutionIntentService(
-            executionIntentPersistencePort,
-            executionTransactionGatewayPort,
-            loadInternalExecutionSignerConfigPort,
-            loadExecutionSponsorKeyPort,
-            executionEip1559SigningPort,
-            eip1559TransactionCodecPort,
-            loadExecutionRetryPolicyPort,
-            List.of(executionActionHandlerPort),
-            publishExecutionIntentTerminatedPort,
-            FIXED_CLOCK);
-
-    lenient()
-        .when(executionActionHandlerPort.supports(ExecutionActionType.QNA_ADMIN_SETTLE))
-        .thenReturn(true);
-    lenient()
-        .when(executionActionHandlerPort.buildActionPlan(any()))
-        .thenReturn(
-            new ExecutionActionPlan(
-                BigInteger.valueOf(100),
-                ExecutionReferenceType.USER_TO_USER,
-                List.of(new ExecutionDraftCall("0x" + "3".repeat(40), BigInteger.ZERO, "0x1234"))));
-    lenient()
-        .when(loadInternalExecutionSignerConfigPort.loadSignerConfig())
-        .thenReturn(new ExecutionSponsorWalletConfig("alias", "kek"));
-    lenient()
-        .when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
-        .thenReturn(
-            Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    "0x" + "4".repeat(40), "0x" + "9".repeat(64))));
-    lenient()
-        .when(loadExecutionRetryPolicyPort.loadRetryPolicy())
-        .thenReturn(new ExecutionRetryPolicy(30));
-    lenient()
-        .when(eip1559TransactionCodecPort.computeFingerprint(any()))
-        .thenReturn("0x" + "c".repeat(64));
-    lenient()
-        .when(executionIntentPersistencePort.update(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    service = new ExecuteInternalExecutionIntentService(delegate, sponsorWalletPreflight);
   }
 
   @Test
-  void execute_returnsNotFoundWhenNoEligibleIntentExists() {
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.empty());
+  void execute_callsDelegateWithGateOnPreflightSuccess() {
+    SponsorWalletGate gate =
+        new SponsorWalletGate(
+            new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS, true),
+            new TreasurySigner(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS));
+    when(sponsorWalletPreflight.preflight()).thenReturn(gate);
+    ExecuteInternalExecutionIntentResult expected = ExecuteInternalExecutionIntentResult.notFound();
+    when(delegate.execute(COMMAND, gate)).thenReturn(expected);
 
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
+
+    assertThat(result).isSameAs(expected);
+    verify(delegate).execute(COMMAND, gate);
+  }
+
+  @Test
+  void execute_returnsPreflightSkippedWhenWalletInvalid_doesNotCallDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new Web3InvalidInputException("sponsor signer key is missing"));
+
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
+
+    // executed=false → batch loop breaks → no hot-loop on missing wallet.
+    assertThat(result.executed()).isFalse();
+    assertThat(result.quarantined()).isFalse();
+    assertThat(result.executionIntentId()).isNull();
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  void execute_returnsPreflightSkippedWhenTreasuryStateRejects_doesNotCallDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new TreasuryWalletStateException("kms key not enabled"));
+
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
 
     assertThat(result.executed()).isFalse();
-    verify(executionActionHandlerPort, never()).beforeExecute(any(), any());
+    assertThat(result.quarantined()).isFalse();
+    verify(delegate, never()).execute(eq(COMMAND), any());
   }
 
   @Test
-  void execute_rebindsReservedNonceWhenLocalAllocatorAdvances() {
-    ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40))).thenReturn(13L);
-    when(executionEip1559SigningPort.sign(any()))
-        .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
-    when(executionTransactionGatewayPort.createAndFlush(any()))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.TransactionRecord(
-                77L, ExecutionTransactionStatus.CREATED, null));
-    when(executionTransactionGatewayPort.broadcast("0xsigned"))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", null, "main"));
+  void execute_returnsPreflightSkippedWhenKmsDescribeFails_doesNotCallDelegate() {
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("KMS DescribeKey failed"));
 
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
 
-    assertThat(result.executed()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
-    verify(executionEip1559SigningPort).sign(argThat(command -> command.nonce() == 13L));
-    verify(executionTransactionGatewayPort)
-        .createAndFlush(argThat(command -> command.nonce().equals(13L)));
+    // Transient KMS failure must not propagate to the cron worker as a per-intent terminal
+    // failure — this would inflate failedCount and ERROR-log every throttle hit.
+    assertThat(result.executed()).isFalse();
+    assertThat(result.quarantined()).isFalse();
+    verify(delegate, never()).execute(eq(COMMAND), any());
   }
 
   @Test
-  void execute_marksPendingOnchainWhenBroadcastSucceeds() {
-    ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
-    when(executionEip1559SigningPort.sign(any()))
-        .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
-    when(executionTransactionGatewayPort.createAndFlush(any()))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.TransactionRecord(
-                77L, ExecutionTransactionStatus.CREATED, null));
-    when(executionTransactionGatewayPort.broadcast("0xsigned"))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.BroadcastResult(true, "0xhash", null, "main"));
+  @DisplayName("terminal KMS DescribeKey (AccessDenied) → preflightSkipped + ERROR 로그 alert anchor")
+  void execute_returnsPreflightSkippedOnTerminalKmsDescribe_doesNotCallDelegate() {
+    KmsException terminalCause =
+        (KmsException)
+            KmsException.builder()
+                .awsErrorDetails(
+                    AwsErrorDetails.builder().errorCode("AccessDeniedException").build())
+                .build();
+    when(sponsorWalletPreflight.preflight())
+        .thenThrow(new KmsKeyDescribeFailedException("KMS DescribeKey failed", terminalCause));
 
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
 
-    assertThat(result.executed()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.PENDING_ONCHAIN);
-    assertThat(result.transactionId()).isEqualTo(77L);
-    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.PENDING);
-    assertThat(result.txHash()).isEqualTo("0xhash");
-    verify(executionTransactionGatewayPort).markPending(77L, "0xhash");
+    // Intent is still NOT claimed — sponsor wallet itself is broken; no specific intent at fault.
+    // ERROR-level event=INTERNAL_EXECUTION_PREFLIGHT_TERMINAL_KMS is the alert grep anchor; this
+    // test verifies the orchestrator does not propagate or escalate beyond the skip contract.
+    assertThat(result.executed()).isFalse();
+    assertThat(result.quarantined()).isFalse();
+    verify(delegate, never()).execute(eq(COMMAND), any());
   }
 
   @Test
-  void execute_marksSignedAndSchedulesRetryWhenBroadcastFails() {
-    ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
-    when(executionEip1559SigningPort.sign(any()))
-        .thenReturn(new ExecutionEip1559SigningPort.SignedTransaction("0xsigned", "0xhash"));
-    when(executionTransactionGatewayPort.createAndFlush(any()))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.TransactionRecord(
-                78L, ExecutionTransactionStatus.CREATED, null));
-    when(executionTransactionGatewayPort.broadcast("0xsigned"))
-        .thenReturn(
-            new ExecutionTransactionGatewayPort.BroadcastResult(
-                false, null, "RPC_UNAVAILABLE", "main"));
+  @DisplayName(
+      "[M-40] @Transactional 가 service 클래스에 부착되지 않음 — TransactionTemplate 은 wrapped delegate 가 보유")
+  void serviceClass_isNotAnnotatedWithTransactional() {
+    Transactional annotation =
+        ExecuteInternalExecutionIntentService.class.getAnnotation(Transactional.class);
 
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
-
-    assertThat(result.executed()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.SIGNED);
-    assertThat(result.transactionId()).isEqualTo(78L);
-    assertThat(result.transactionStatus()).isEqualTo(ExecutionTransactionStatus.SIGNED);
-    verify(executionTransactionGatewayPort).scheduleRetry(any(), any(), any());
-  }
-
-  @Test
-  void execute_quarantinesIntentWhenSignerDoesNotMatch() {
-    ExecutionIntent intent = internalIntentWithSigner("0x" + "5".repeat(40));
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
-
-    assertThat(result.executed()).isTrue();
-    assertThat(result.quarantined()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(publishExecutionIntentTerminatedPort)
-        .publish(
-            argThat(
-                event ->
-                    event.executionIntentId().equals("intent-admin-settle")
-                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
-    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
-    verify(executionEip1559SigningPort, never()).sign(any());
-  }
-
-  @Test
-  void execute_publishesTerminationEventDuringQuarantine() {
-    ExecutionIntent intent = internalIntentWithSigner("0x" + "5".repeat(40));
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
-
-    assertThat(result.executed()).isTrue();
-    assertThat(result.quarantined()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(executionIntentPersistencePort).update(any());
-    verify(publishExecutionIntentTerminatedPort)
-        .publish(
-            argThat(
-                event ->
-                    event.executionIntentId().equals("intent-admin-settle")
-                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
-    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
-  }
-
-  @Test
-  void execute_quarantinesIntentWhenSponsorSignerAddressIsMalformed() {
-    ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-    when(loadExecutionSponsorKeyPort.loadByAlias("alias", "kek"))
-        .thenReturn(
-            Optional.of(
-                new LoadExecutionSponsorKeyPort.ExecutionSponsorKey(
-                    "not-an-address", "0x" + "9".repeat(64))));
-
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
-
-    assertThat(result.executed()).isTrue();
-    assertThat(result.quarantined()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(publishExecutionIntentTerminatedPort)
-        .publish(
-            argThat(
-                event ->
-                    event.executionIntentId().equals("intent-admin-settle")
-                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
-    verify(executionTransactionGatewayPort, never()).reserveNextNonce(any());
-    verify(executionEip1559SigningPort, never()).sign(any());
-  }
-
-  @Test
-  void execute_quarantinesIntentWhenSigningInputIsInvalid() {
-    ExecutionIntent intent = internalIntent();
-    when(executionIntentPersistencePort.claimNextInternalExecutableForUpdate(any()))
-        .thenReturn(Optional.of(intent));
-    when(executionTransactionGatewayPort.reserveNextNonce("0x" + "4".repeat(40)))
-        .thenReturn(intent.getUnsignedTxSnapshot().expectedNonce());
-    when(executionEip1559SigningPort.sign(any()))
-        .thenThrow(new Web3InvalidInputException("invalid EVM address: broken"));
-
-    ExecuteInternalExecutionIntentResult result =
-        service.execute(
-            new ExecuteInternalExecutionIntentCommand(
-                List.of(ExecutionActionType.QNA_ADMIN_SETTLE)));
-
-    assertThat(result.executed()).isTrue();
-    assertThat(result.quarantined()).isTrue();
-    assertThat(result.executionIntentStatus()).isEqualTo(ExecutionIntentStatus.CANCELED);
-    verify(publishExecutionIntentTerminatedPort)
-        .publish(
-            argThat(
-                event ->
-                    event.executionIntentId().equals("intent-admin-settle")
-                        && event.terminalStatus() == ExecutionIntentStatus.CANCELED));
-    verify(executionTransactionGatewayPort, never()).createAndFlush(any());
-    verify(executionTransactionGatewayPort, never()).broadcast(any());
-  }
-
-  private ExecutionIntent internalIntent() {
-    return internalIntentWithSigner("0x" + "4".repeat(40));
-  }
-
-  private ExecutionIntent internalIntentWithSigner(String fromAddress) {
-    return ExecutionIntent.create(
-        "intent-admin-settle",
-        "root-admin-settle",
-        1,
-        ExecutionResourceType.QUESTION,
-        "101",
-        ExecutionActionType.QNA_ADMIN_SETTLE,
-        7L,
-        22L,
-        ExecutionMode.EIP1559,
-        "0x" + "a".repeat(64),
-        "{\"payload\":true}",
-        null,
-        null,
-        null,
-        FIXED_NOW.plusMinutes(5),
-        null,
-        null,
-        new UnsignedTxSnapshot(
-            11155111L,
-            fromAddress,
-            "0x" + "3".repeat(40),
-            BigInteger.ZERO,
-            "0x1234",
-            12L,
-            BigInteger.valueOf(210_000),
-            BigInteger.valueOf(2_000_000_000L),
-            BigInteger.valueOf(30_000_000_000L)),
-        "0x" + "b".repeat(64),
-        BigInteger.ZERO,
-        LocalDate.of(2026, 4, 17),
-        FIXED_NOW);
+    assertThat(annotation)
+        .as(
+            "ExecuteInternalExecutionIntentService 의 preflight 는 @Transactional 밖에서 실행되어야 한다 — REQUIRES_NEW 는 wrapped delegate bean 이 책임진다")
+        .isNull();
   }
 }

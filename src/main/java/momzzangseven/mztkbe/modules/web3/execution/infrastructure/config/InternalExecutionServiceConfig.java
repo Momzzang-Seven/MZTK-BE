@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.config;
 import java.time.Clock;
 import java.util.List;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionSponsorWalletAddressUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetInternalExecutionIssuerPolicyUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunInternalExecutionBatchUseCase;
@@ -12,14 +13,15 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionIssuerPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionSignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteInternalExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetExecutionSponsorWalletAddressService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.GetInternalExecutionIssuerPolicyService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunInternalExecutionBatchService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteInternalExecutionIntentDelegate;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,10 +35,8 @@ public class InternalExecutionServiceConfig {
 
   @Bean
   GetExecutionSponsorWalletAddressUseCase getExecutionSponsorWalletAddressUseCase(
-      LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort,
-      LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort) {
-    return new GetExecutionSponsorWalletAddressService(
-        loadInternalExecutionSignerConfigPort, loadExecutionSponsorKeyPort);
+      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort) {
+    return new GetExecutionSponsorWalletAddressService(loadSponsorTreasuryWalletPort);
   }
 
   @Bean
@@ -46,22 +46,19 @@ public class InternalExecutionServiceConfig {
   }
 
   @Bean
-  ExecuteInternalExecutionIntentService executeInternalExecutionIntentService(
-      ExecutionIntentPersistencePort executionIntentPersistencePort,
-      ExecutionTransactionGatewayPort executionTransactionGatewayPort,
-      LoadInternalExecutionSignerConfigPort loadInternalExecutionSignerConfigPort,
-      LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort,
-      ExecutionEip1559SigningPort executionEip1559SigningPort,
-      Eip1559TransactionCodecPort eip1559TransactionCodecPort,
-      LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
-      List<ExecutionActionHandlerPort> executionActionHandlerPorts,
-      PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
-      Clock appClock) {
-    return new ExecuteInternalExecutionIntentService(
+  TransactionalExecuteInternalExecutionIntentDelegate
+      transactionalExecuteInternalExecutionIntentDelegate(
+          ExecutionIntentPersistencePort executionIntentPersistencePort,
+          ExecutionTransactionGatewayPort executionTransactionGatewayPort,
+          ExecutionEip1559SigningPort executionEip1559SigningPort,
+          Eip1559TransactionCodecPort eip1559TransactionCodecPort,
+          LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
+          List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+          PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
+          Clock appClock) {
+    return new TransactionalExecuteInternalExecutionIntentDelegate(
         executionIntentPersistencePort,
         executionTransactionGatewayPort,
-        loadInternalExecutionSignerConfigPort,
-        loadExecutionSponsorKeyPort,
         executionEip1559SigningPort,
         eip1559TransactionCodecPort,
         loadExecutionRetryPolicyPort,
@@ -72,11 +69,14 @@ public class InternalExecutionServiceConfig {
 
   @Bean
   ExecuteInternalExecutionIntentUseCase executeInternalExecutionIntentUseCase(
-      ExecuteInternalExecutionIntentService delegate,
+      TransactionalExecuteInternalExecutionIntentDelegate delegate,
+      SponsorWalletPreflight sponsorWalletPreflight,
       PlatformTransactionManager transactionManager) {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-    return command -> transactionTemplate.execute(status -> delegate.execute(command));
+    ExecuteTransactionalInternalExecutionIntentDelegatePort txWrappedDelegate =
+        (command, gate) -> transactionTemplate.execute(status -> delegate.execute(command, gate));
+    return new ExecuteInternalExecutionIntentService(txWrappedDelegate, sponsorWalletPreflight);
   }
 
   @Bean

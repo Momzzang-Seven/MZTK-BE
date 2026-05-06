@@ -101,30 +101,30 @@ public class ExecutionEip7702GatewayAdapter implements ExecutionEip7702GatewayPo
 
   @Override
   public SignedPayload signAndEncode(SignCommand command) {
-    Eip7702ExecutionSignedPayload signedPayload =
-        manageExecutionEip7702UseCase.signAndEncode(
-            new Eip7702ExecutionSignCommand(
-                command.chainId(),
-                command.nonce(),
-                command.maxPriorityFeePerGas(),
-                command.maxFeePerGas(),
-                command.gasLimit(),
-                command.to(),
-                command.value(),
-                command.data(),
-                command.authorizationList().stream()
-                    .map(
-                        tuple ->
-                            new Eip7702ExecutionAuthorizationTuple(
-                                tuple.chainId(),
-                                tuple.address(),
-                                tuple.nonce(),
-                                tuple.yParity(),
-                                tuple.r(),
-                                tuple.s()))
-                    .toList(),
-                command.sponsorPrivateKeyHex()));
-    return new SignedPayload(signedPayload.rawTx(), signedPayload.txHash());
+    Eip7702ExecutionSignCommand inner =
+        new Eip7702ExecutionSignCommand(
+            command.chainId(),
+            command.nonce(),
+            command.maxPriorityFeePerGas(),
+            command.maxFeePerGas(),
+            command.gasLimit(),
+            command.to(),
+            command.value(),
+            command.data(),
+            command.authorizationList().stream()
+                .map(
+                    tuple ->
+                        new Eip7702ExecutionAuthorizationTuple(
+                            tuple.chainId(),
+                            tuple.address(),
+                            tuple.nonce(),
+                            tuple.yParity(),
+                            tuple.r(),
+                            tuple.s()))
+                .toList(),
+            command.sponsorSigner());
+    Eip7702ExecutionSignedPayload signed = manageExecutionEip7702UseCase.signAndEncode(inner);
+    return new SignedPayload(signed.rawTx(), signed.txHash());
   }
 
   @Override

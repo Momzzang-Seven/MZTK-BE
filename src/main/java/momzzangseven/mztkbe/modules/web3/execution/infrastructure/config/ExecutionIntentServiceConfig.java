@@ -3,13 +3,11 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.config;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.List;
-import momzzangseven.mztkbe.global.error.web3.ExecutionIntentTerminalException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalExecutionIntentDelegatePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
@@ -24,13 +22,13 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorKeyPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionSponsorWalletConfigPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.CreateExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecuteExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.ExecutionModeSelector;
@@ -40,6 +38,8 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
+import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
@@ -48,7 +48,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -198,28 +197,24 @@ public class ExecutionIntentServiceConfig {
 
   @Bean
   @ConditionalOnUserExecutionEnabled
-  ExecuteExecutionIntentService executeExecutionIntentService(
+  TransactionalExecuteExecutionIntentDelegate transactionalExecuteExecutionIntentDelegate(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
       ExecutionTransactionGatewayPort executionTransactionGatewayPort,
-      LoadExecutionSponsorKeyPort loadExecutionSponsorKeyPort,
       ExecutionEip7702GatewayPort executionEip7702GatewayPort,
       Eip1559TransactionCodecPort eip1559TransactionCodecPort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
-      LoadExecutionSponsorWalletConfigPort loadExecutionSponsorWalletConfigPort,
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
       Clock appClock) {
-    return new ExecuteExecutionIntentService(
+    return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
         sponsorDailyUsagePersistencePort,
         executionTransactionGatewayPort,
-        loadExecutionSponsorKeyPort,
         executionEip7702GatewayPort,
         eip1559TransactionCodecPort,
         loadExecutionChainIdPort,
-        loadExecutionSponsorWalletConfigPort,
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
@@ -227,12 +222,26 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
-  @Primary
+  SponsorWalletPreflight sponsorWalletPreflight(
+      LoadSponsorTreasuryWalletPort loadSponsorTreasuryWalletPort,
+      VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort) {
+    return new SponsorWalletPreflight(
+        loadSponsorTreasuryWalletPort, verifyTreasuryWalletForSignPort);
+  }
+
+  @Bean
   @ConditionalOnUserExecutionEnabled
   ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
-      ExecuteExecutionIntentService delegate, PlatformTransactionManager transactionManager) {
-    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-    return new TransactionalExecuteExecutionIntentUseCase(delegate, transactionTemplate);
+      ExecuteTransactionalExecutionIntentDelegatePort
+          executeTransactionalExecutionIntentDelegatePort,
+      SponsorWalletPreflight sponsorWalletPreflight,
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      ExecutionTransactionGatewayPort executionTransactionGatewayPort) {
+    return new ExecuteExecutionIntentService(
+        executeTransactionalExecutionIntentDelegatePort,
+        sponsorWalletPreflight,
+        executionIntentPersistencePort,
+        executionTransactionGatewayPort);
   }
 
   @Bean
@@ -287,33 +296,5 @@ public class ExecutionIntentServiceConfig {
     public CreateExecutionIntentResult execute(CreateExecutionIntentCommand command) {
       return transactionTemplate.execute(status -> delegate.execute(command));
     }
-  }
-
-  private record TransactionalExecuteExecutionIntentUseCase(
-      ExecuteExecutionIntentService delegate, TransactionTemplate transactionTemplate)
-      implements ExecuteExecutionIntentUseCase {
-
-    @Override
-    public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
-      TerminalExceptionHolder terminalExceptionHolder = new TerminalExceptionHolder();
-      ExecuteExecutionIntentResult result =
-          transactionTemplate.execute(
-              status -> {
-                try {
-                  return delegate.execute(command);
-                } catch (ExecutionIntentTerminalException e) {
-                  terminalExceptionHolder.exception = e;
-                  return null;
-                }
-              });
-      if (terminalExceptionHolder.exception != null) {
-        throw terminalExceptionHolder.exception;
-      }
-      return result;
-    }
-  }
-
-  private static class TerminalExceptionHolder {
-    private ExecutionIntentTerminalException exception;
   }
 }

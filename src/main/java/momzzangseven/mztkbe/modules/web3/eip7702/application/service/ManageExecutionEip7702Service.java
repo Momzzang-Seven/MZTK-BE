@@ -123,7 +123,7 @@ public class ManageExecutionEip7702Service implements ManageExecutionEip7702UseC
                                 tuple.r(),
                                 tuple.s()))
                     .toList(),
-                command.sponsorPrivateKeyHex()));
+                command.sponsorSigner()));
     return new Eip7702ExecutionSignedPayload(signedPayload.rawTx(), signedPayload.txHash());
   }
 
