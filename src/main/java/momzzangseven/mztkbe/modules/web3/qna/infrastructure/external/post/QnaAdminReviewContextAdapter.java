@@ -19,7 +19,6 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -31,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminEnabled
-@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
+@ConditionalOnBean(ProbeExecutionSignerCapabilityPort.class)
 public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPort {
 
   private final GetPostContextUseCase getPostContextUseCase;

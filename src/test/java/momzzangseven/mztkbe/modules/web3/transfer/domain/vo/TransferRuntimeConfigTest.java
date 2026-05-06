@@ -17,7 +17,6 @@ class TransferRuntimeConfigTest {
             30,
             "0x" + "b".repeat(40),
             "0x" + "c".repeat(40),
-            "reward-sponsor",
             1_000_000L,
             new BigDecimal("0.05"),
             new BigDecimal("0.01"),
@@ -41,7 +40,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -64,7 +62,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -87,7 +84,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -110,7 +106,6 @@ class TransferRuntimeConfigTest {
                     0,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -133,7 +128,6 @@ class TransferRuntimeConfigTest {
                     30,
                     " ",
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -147,29 +141,6 @@ class TransferRuntimeConfigTest {
   }
 
   @Test
-  void constructor_throws_whenSponsorWalletAliasBlank() {
-    assertThatThrownBy(
-            () ->
-                new TransferRuntimeConfig(
-                    11155111L,
-                    "0x" + "a".repeat(40),
-                    30,
-                    "0x" + "b".repeat(40),
-                    "0x" + "c".repeat(40),
-                    " ",
-                    1_000_000L,
-                    new BigDecimal("0.05"),
-                    new BigDecimal("0.01"),
-                    new BigDecimal("0.02"),
-                    600,
-                    "Asia/Seoul",
-                    7,
-                    100))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessageContaining("sponsor wallet alias is required");
-  }
-
-  @Test
   void constructor_throws_whenSponsorMaxGasLimitInvalid() {
     assertThatThrownBy(
             () ->
@@ -179,7 +150,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     0L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -202,7 +172,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("-0.01"),
                     new BigDecimal("0.01"),
@@ -225,7 +194,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -248,7 +216,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     null,
                     new BigDecimal("0.01"),
@@ -271,7 +238,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     null,
@@ -294,7 +260,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -317,7 +282,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),
@@ -340,7 +304,6 @@ class TransferRuntimeConfigTest {
                     30,
                     "0x" + "b".repeat(40),
                     "0x" + "c".repeat(40),
-                    "reward-sponsor",
                     1_000_000L,
                     new BigDecimal("0.05"),
                     new BigDecimal("0.01"),

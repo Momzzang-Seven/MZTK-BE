@@ -20,7 +20,6 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminOrAutoAcceptEnabled;
@@ -31,7 +30,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminOrAutoAcceptEnabled
-@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
+@ConditionalOnBean(ProbeExecutionSignerCapabilityPort.class)
 public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecutionDraftPort {
 
   private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;

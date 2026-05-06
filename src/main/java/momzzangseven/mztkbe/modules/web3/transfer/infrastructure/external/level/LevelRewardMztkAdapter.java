@@ -13,10 +13,10 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevel
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadRewardTreasurySignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.transfer.domain.model.RewardIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAddressProjectionPort;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +29,6 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
   private final CreateLevelUpRewardTransactionIntentUseCase
       createLevelUpRewardTransactionIntentUseCase;
   private final TransferRewardTokenProperties rewardTokenProperties;
-  private final LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort;
   private final LoadTreasuryAddressProjectionPort loadTreasuryAddressProjectionPort;
 
   @Override
@@ -92,7 +91,7 @@ public class LevelRewardMztkAdapter implements RewardMztkPort {
   }
 
   private String resolveTreasuryAddress() {
-    String walletAlias = loadRewardTreasurySignerConfigPort.load().walletAlias();
+    String walletAlias = TreasuryRole.REWARD.toAlias();
     return loadTreasuryAddressProjectionPort
         .loadAddressByAlias(walletAlias)
         .orElseThrow(() -> new RewardTreasuryAddressInvalidException("walletAlias=" + walletAlias));
