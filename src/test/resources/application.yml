@@ -124,7 +124,6 @@ web3:
     decimals: 18
     treasury:
       wallet-alias: reward-treasury
-      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk= # gitleaks:allow
       provisioning:
         enabled: false
     prevalidate:
@@ -151,7 +150,6 @@ web3:
       default-receiver-address: "0x0000000000000000000000000000000000000001"
     sponsor:
       enabled: false
-      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk= # gitleaks:allow
       wallet-alias: sponsor-treasury
       max-gas-limit: 500000
       max-max-fee-gwei: 60

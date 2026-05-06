@@ -55,8 +55,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.eip7702.enabled=false",
       "web3.execution.internal.enabled=true",
       "web3.qna.admin.enabled=true",
-      "web3.execution.internal.signer.wallet-alias=test-sponsor",
-      "web3.execution.internal.signer.key-encryption-key-b64=dGVzdA=="
+      "web3.execution.internal.signer.wallet-alias=test-sponsor"
     })
 @Tag("e2e")
 @DisplayName("[E2E] QnA admin manual settle/refund flow")
