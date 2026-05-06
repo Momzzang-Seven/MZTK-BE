@@ -86,6 +86,18 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
             });
   }
 
+  @Override
+  public Optional<MarketplaceClass> findByIdForUpdate(Long classId) {
+    log.debug("Loading class by id with write lock: {}", classId);
+    return classJpaRepository
+        .findByIdForUpdate(classId)
+        .map(
+            entity -> {
+              List<String> tags = loadClassTagPort.findTagNamesByClassId(classId);
+              return entity.toDomainWithTags(tags);
+            });
+  }
+
   /**
    * {@inheritDoc}
    *

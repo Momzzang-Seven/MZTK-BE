@@ -126,8 +126,6 @@ class AnswerEscrowExecutionServiceTest {
   @DisplayName(
       "precheckAnswerCreate blocks when the question already has an active on-chain mutation")
   void precheckAnswerCreate_blocksWhenQuestionHasActiveIntent() {
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
-        .willReturn(Optional.of(questionProjection("온체인 질문")));
     given(
             loadQnaExecutionIntentStatePort.loadLatestActiveByResource(
                 QnaExecutionResourceType.QUESTION, "101"))
@@ -142,6 +140,8 @@ class AnswerEscrowExecutionServiceTest {
             () -> service.precheckAnswerCreate(new PrecheckAnswerCreateCommand(101L, "온체인 질문")))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("active onchain mutation");
+
+    verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
   }
 
   @Test
@@ -320,18 +320,6 @@ class AnswerEscrowExecutionServiceTest {
   @Test
   @DisplayName("prepareAnswerDelete blocks when another active answer intent exists")
   void prepareAnswerDelete_blocksWhenConflictingIntentExists() {
-    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
-        .willReturn(Optional.of(questionProjection("온체인 질문")));
-    given(qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(201L))
-        .willReturn(
-            Optional.of(
-                QnaAnswerProjection.create(
-                    201L,
-                    101L,
-                    QnaEscrowIdCodec.questionId(101L),
-                    QnaEscrowIdCodec.answerId(201L),
-                    22L,
-                    QnaContentHashFactory.hash("온체인 답변"))));
     given(
             loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(
                 QnaExecutionResourceType.ANSWER, "201", QnaExecutionActionType.QNA_ANSWER_DELETE))
@@ -343,6 +331,9 @@ class AnswerEscrowExecutionServiceTest {
                     new PrepareAnswerDeleteCommand(101L, 201L, 22L, 7L, "온체인 질문", 50L, 0)))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("conflicting active answer execution intent");
+
+    verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
+    verify(qnaProjectionPersistencePort, never()).findAnswerByAnswerIdForUpdate(any());
   }
 
   private QnaQuestionProjection questionProjection(String questionHash) {

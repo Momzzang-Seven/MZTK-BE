@@ -45,7 +45,6 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
   @Override
   public void precheckAnswerCreate(PrecheckAnswerCreateCommand command) {
     command.validate();
-    QnaQuestionProjection question = requireQuestionProjection(command.postId());
     if (loadQnaExecutionIntentStatePort
         .loadLatestActiveByResource(
             QnaExecutionResourceType.QUESTION, String.valueOf(command.postId()))
@@ -53,6 +52,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
       throw new Web3InvalidInputException(
           "question has active onchain mutation in progress: postId=" + command.postId());
     }
+    QnaQuestionProjection question = requireQuestionProjection(command.postId());
     String localQuestionHash = QnaContentHashFactory.hash(command.questionContent());
     if (!localQuestionHash.equals(question.getQuestionHash())) {
       throw new Web3InvalidInputException(
@@ -64,8 +64,8 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
   public QnaExecutionIntentResult prepareAnswerCreate(PrepareAnswerCreateCommand command) {
     command.validate();
 
-    QnaQuestionProjection question = requireQuestionProjection(command.postId());
     ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_SUBMIT);
+    QnaQuestionProjection question = requireQuestionProjection(command.postId());
     RewardContext rewardContext = rewardContext(question);
     String answerHash = QnaContentHashFactory.hash(command.answerContent());
 
@@ -112,11 +112,11 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
   public QnaExecutionIntentResult prepareAnswerUpdate(PrepareAnswerUpdateCommand command) {
     command.validate();
 
+    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_UPDATE);
     QnaQuestionProjection question = requireQuestionProjection(command.postId());
     RewardContext rewardContext = rewardContext(question);
     String answerHash = QnaContentHashFactory.hash(command.answerContent());
     requireAnswerProjection(command.answerId());
-    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_UPDATE);
 
     return submit(
         new QnaEscrowExecutionRequest(
@@ -137,10 +137,10 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
   public QnaExecutionIntentResult prepareAnswerDelete(PrepareAnswerDeleteCommand command) {
     command.validate();
 
+    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_DELETE);
     QnaQuestionProjection question = requireQuestionProjection(command.postId());
     RewardContext rewardContext = rewardContext(question);
     requireAnswerProjection(command.answerId());
-    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_DELETE);
 
     return submit(
         new QnaEscrowExecutionRequest(

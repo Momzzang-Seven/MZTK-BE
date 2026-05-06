@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.LoadLevelRewardTransactionsUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,7 @@ public class LoadLevelRewardTransactionsService implements LoadLevelRewardTransa
     Map<Long, RewardTxView> views = new LinkedHashMap<>();
 
     loadTransactionPort
-        .loadByReferenceTypeAndReferenceIds(Web3ReferenceType.LEVEL_UP_REWARD, referenceIds)
+        .loadLevelRewardsByReferenceIds(referenceIds)
         .forEach(
             snapshot ->
                 views.put(

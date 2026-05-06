@@ -12,10 +12,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
+import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
+import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
@@ -267,12 +271,102 @@ class PostProcessServiceTest {
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
+        .thenReturn(
+            Optional.of(
+                new QuestionLifecycleExecutionPort.QuestionUpdateStatePreparation(
+                    postId, 1L, "update-token", "hash")));
 
     postProcessService.updatePost(ownerId, postId, command);
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(linkTagPort).updateTags(postId, List.of("java"));
-    verify(questionLifecycleExecutionPort).prepareQuestionUpdate(postId, ownerId, "수정된 질문 내용", 50L);
+    verify(questionLifecycleExecutionPort)
+        .prepareQuestionUpdate(postId, ownerId, "수정된 질문 내용", 50L, 1L, "update-token");
+  }
+
+  @Test
+  @DisplayName(
+      "QUESTION content update returns retryable state for retryable web3 preparation failure")
+  void updateQuestionPostReturnsPreparationFailedWhenRetryableWeb3PrepareFails() {
+    Long ownerId = 7L;
+    Long postId = 75L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
+        .thenReturn(
+            Optional.of(
+                new QuestionLifecycleExecutionPort.QuestionUpdateStatePreparation(
+                    postId, 1L, "update-token", "hash")));
+    when(questionLifecycleExecutionPort.prepareQuestionUpdate(
+            postId, ownerId, "수정된 질문 내용", 50L, 1L, "update-token"))
+        .thenThrow(new Web3TransferException(ErrorCode.SPONSOR_DAILY_LIMIT_EXCEEDED, true));
+
+    PostMutationResult result = postProcessService.updatePost(ownerId, postId, command);
+
+    assertThat(result.postId()).isEqualTo(postId);
+    assertThat(result.web3()).isNull();
+    assertThat(result.questionUpdate()).isNotNull();
+    assertThat(result.questionUpdate().status()).isEqualTo("PREPARATION_FAILED");
+    assertThat(result.questionUpdate().retryable()).isTrue();
+    assertThat(result.questionUpdate().errorCode()).isEqualTo("WEB3_009");
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+  }
+
+  @Test
+  @DisplayName(
+      "QUESTION content update returns non-retryable state for business preparation failure")
+  void updateQuestionPostReturnsPreparationFailedWhenBusinessPrepareFails() {
+    Long ownerId = 7L;
+    Long postId = 77L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
+        .thenReturn(
+            Optional.of(
+                new QuestionLifecycleExecutionPort.QuestionUpdateStatePreparation(
+                    postId, 1L, "update-token", "hash")));
+    when(questionLifecycleExecutionPort.prepareQuestionUpdate(
+            postId, ownerId, "수정된 질문 내용", 50L, 1L, "update-token"))
+        .thenThrow(new WalletNotConnectedException(ownerId));
+
+    PostMutationResult result = postProcessService.updatePost(ownerId, postId, command);
+
+    assertThat(result.web3()).isNull();
+    assertThat(result.questionUpdate()).isNotNull();
+    assertThat(result.questionUpdate().status()).isEqualTo("PREPARATION_FAILED");
+    assertThat(result.questionUpdate().retryable()).isFalse();
+    assertThat(result.questionUpdate().errorCode()).isEqualTo("WALLET_003");
+  }
+
+  @Test
+  @DisplayName("QUESTION content update rethrows unexpected preparation failure")
+  void updateQuestionPostRethrowsUnexpectedPrepareFailure() {
+    Long ownerId = 7L;
+    Long postId = 78L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
+        .thenReturn(
+            Optional.of(
+                new QuestionLifecycleExecutionPort.QuestionUpdateStatePreparation(
+                    postId, 1L, "update-token", "hash")));
+    when(questionLifecycleExecutionPort.prepareQuestionUpdate(
+            postId, ownerId, "수정된 질문 내용", 50L, 1L, "update-token"))
+        .thenThrow(new IllegalStateException("bug"));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("bug");
   }
 
   @Test
@@ -293,6 +387,49 @@ class PostProcessServiceTest {
 
     verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     verify(questionLifecycleExecutionPort).recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L);
+  }
+
+  @Test
+  @DisplayName("QUESTION metadata update reports recovery business failure after local save")
+  void updateQuestionMetadataOnlyReportsRecoveryBusinessFailure() {
+    Long ownerId = 7L;
+    Long postId = 79L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", "질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L))
+        .thenThrow(new WalletNotConnectedException(ownerId));
+
+    PostMutationResult result = postProcessService.updatePost(ownerId, postId, command);
+
+    assertThat(result.web3()).isNull();
+    assertThat(result.questionUpdate()).isNotNull();
+    assertThat(result.questionUpdate().status()).isEqualTo("PREPARATION_FAILED");
+    assertThat(result.questionUpdate().retryable()).isFalse();
+    assertThat(result.questionUpdate().errorCode()).isEqualTo("WALLET_003");
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+  }
+
+  @Test
+  @DisplayName("QUESTION metadata update still rethrows unexpected recovery failure")
+  void updateQuestionMetadataOnlyRethrowsUnexpectedRecoveryFailure() {
+    Long ownerId = 7L;
+    Long postId = 80L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", "질문 내용", null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L))
+        .thenThrow(new IllegalStateException("bug"));
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("bug");
+
+    verify(postPersistencePort).savePost(org.mockito.ArgumentMatchers.any(Post.class));
   }
 
   @Test

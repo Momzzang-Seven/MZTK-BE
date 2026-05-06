@@ -2,10 +2,12 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
@@ -16,6 +18,7 @@ import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublic
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort.QuestionUpdateStatePreparation;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicationEvidence;
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
@@ -64,8 +67,30 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
 
     UpdatePreparation preparation =
         runInTransaction(() -> prepareLocalUpdate(currentUserId, postId, command));
-    QuestionExecutionWriteView web3 = prepareQuestionUpdateExecution(preparation);
-    return new PostMutationResult(postId, web3);
+    try {
+      QuestionExecutionWriteView web3 = prepareQuestionUpdateExecution(preparation);
+      return new PostMutationResult(postId, web3);
+    } catch (PostPublicationStateException e) {
+      throw e;
+    } catch (RuntimeException e) {
+      return handleQuestionUpdatePreparationFailure(postId, preparation, e);
+    }
+  }
+
+  private PostMutationResult handleQuestionUpdatePreparationFailure(
+      Long postId, UpdatePreparation preparation, RuntimeException failure) {
+    if (!preparation.canReportQuestionUpdateFailure()) {
+      throw failure;
+    }
+    if (failure instanceof Web3TransferException web3Failure) {
+      return PostMutationResult.questionUpdatePreparationFailed(
+          postId, web3Failure.getCode(), web3Failure.isRetryable());
+    }
+    if (failure instanceof BusinessException businessFailure) {
+      return PostMutationResult.questionUpdatePreparationFailed(
+          postId, businessFailure.getCode(), false);
+    }
+    throw failure;
   }
 
   private UpdatePreparation prepareLocalUpdate(
@@ -102,13 +127,22 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
       updatePostImagesPort.updateImages(currentUserId, postId, post.getType(), command.imageIds());
     }
 
+    QuestionUpdateStatePreparation questionUpdateState = null;
+    if (shouldPrepareQuestionUpdate && contentChanged) {
+      questionUpdateState =
+          questionLifecycleExecutionPort
+              .beginQuestionUpdateState(postId, currentUserId, updatedPost.getContent())
+              .orElse(null);
+    }
+
     return new UpdatePreparation(
         postId,
         currentUserId,
         updatedPost.getContent(),
         updatedPost.getReward(),
         shouldPrepareQuestionUpdate,
-        contentChanged);
+        contentChanged,
+        questionUpdateState);
   }
 
   private QuestionExecutionWriteView prepareQuestionUpdateExecution(UpdatePreparation preparation) {
@@ -120,7 +154,9 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
                 preparation.postId(),
                 preparation.currentUserId(),
                 preparation.questionContent(),
-                preparation.rewardMztk())
+                preparation.rewardMztk(),
+                preparation.questionUpdateVersion(),
+                preparation.questionUpdateToken())
             : questionLifecycleExecutionPort.recoverQuestionUpdate(
                 preparation.postId(),
                 preparation.currentUserId(),
@@ -260,7 +296,25 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
       String questionContent,
       Long rewardMztk,
       boolean shouldPrepareQuestionUpdate,
-      boolean contentChanged) {}
+      boolean contentChanged,
+      QuestionUpdateStatePreparation questionUpdateState) {
+
+    private Long questionUpdateVersion() {
+      return questionUpdateState == null ? null : questionUpdateState.updateVersion();
+    }
+
+    private String questionUpdateToken() {
+      return questionUpdateState == null ? null : questionUpdateState.updateToken();
+    }
+
+    private boolean hasQuestionUpdateState() {
+      return shouldPrepareQuestionUpdate && contentChanged && questionUpdateState != null;
+    }
+
+    private boolean canReportQuestionUpdateFailure() {
+      return hasQuestionUpdateState() || (shouldPrepareQuestionUpdate && !contentChanged);
+    }
+  }
 
   private record DeletePreparation(
       boolean shouldPrepareQuestionDelete, String questionContent, Long rewardMztk) {

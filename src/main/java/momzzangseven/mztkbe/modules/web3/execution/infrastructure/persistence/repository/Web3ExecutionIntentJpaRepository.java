@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.persistence.entity.Web3ExecutionIntentEntity;
@@ -94,6 +95,19 @@ public interface Web3ExecutionIntentJpaRepository
       @Param("resourceType") ExecutionResourceType resourceType,
       @Param("resourceId") String resourceId,
       @Param("statuses") Collection<ExecutionIntentStatus> statuses,
+      Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " and e.status in :statuses and e.actionType <> :actionType"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findActiveByResourceAndActionTypeNotForUpdate(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      @Param("statuses") Collection<ExecutionIntentStatus> statuses,
+      @Param("actionType") ExecutionActionType actionType,
       Pageable pageable);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)

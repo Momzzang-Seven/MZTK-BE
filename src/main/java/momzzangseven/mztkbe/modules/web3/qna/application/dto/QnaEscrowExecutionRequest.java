@@ -15,4 +15,35 @@ public record QnaEscrowExecutionRequest(
     String tokenAddress,
     BigInteger rewardAmountWei,
     String questionHash,
-    String contentHash) {}
+    String contentHash,
+    Long questionUpdateVersion,
+    String questionUpdateToken) {
+
+  public QnaEscrowExecutionRequest(
+      QnaExecutionResourceType resourceType,
+      String resourceId,
+      QnaExecutionActionType actionType,
+      Long requesterUserId,
+      Long counterpartyUserId,
+      Long postId,
+      Long answerId,
+      String tokenAddress,
+      BigInteger rewardAmountWei,
+      String questionHash,
+      String contentHash) {
+    this(
+        resourceType,
+        resourceId,
+        actionType,
+        requesterUserId,
+        counterpartyUserId,
+        postId,
+        answerId,
+        tokenAddress,
+        rewardAmountWei,
+        questionHash,
+        contentHash,
+        null,
+        null);
+  }
+}

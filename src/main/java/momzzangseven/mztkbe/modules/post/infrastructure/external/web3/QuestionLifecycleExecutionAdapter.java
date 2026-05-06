@@ -4,12 +4,15 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +22,7 @@ import org.springframework.stereotype.Component;
 public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecutionPort {
 
   private final QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
+  private final BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
 
   @Override
   public boolean managesAcceptLifecycle() {
@@ -39,6 +43,22 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   public void precheckQuestionCreate(Long requesterUserId, Long rewardMztk) {
     questionEscrowExecutionUseCase.precheckQuestionCreate(
         new PrecheckQuestionCreateCommand(requesterUserId, rewardMztk));
+  }
+
+  @Override
+  public Optional<QuestionUpdateStatePreparation> beginQuestionUpdateState(
+      Long postId, Long requesterUserId, String questionContent) {
+    String expectedQuestionHash = QnaContentHashFactory.hash(questionContent);
+    return Optional.of(
+            beginQuestionUpdateStateUseCase.begin(
+                new BeginQuestionUpdateStateCommand(postId, requesterUserId, expectedQuestionHash)))
+        .map(
+            result ->
+                new QuestionUpdateStatePreparation(
+                    result.postId(),
+                    result.updateVersion(),
+                    result.updateToken(),
+                    result.expectedQuestionHash()));
   }
 
   @Override
@@ -72,12 +92,22 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
 
   @Override
   public Optional<QuestionExecutionWriteView> prepareQuestionUpdate(
-      Long postId, Long requesterUserId, String questionContent, Long rewardMztk) {
+      Long postId,
+      Long requesterUserId,
+      String questionContent,
+      Long rewardMztk,
+      Long questionUpdateVersion,
+      String questionUpdateToken) {
     return Optional.of(
         toView(
             questionEscrowExecutionUseCase.prepareQuestionUpdate(
                 new PrepareQuestionUpdateCommand(
-                    postId, requesterUserId, questionContent, rewardMztk))));
+                    postId,
+                    requesterUserId,
+                    questionContent,
+                    rewardMztk,
+                    questionUpdateVersion,
+                    questionUpdateToken))));
   }
 
   @Override

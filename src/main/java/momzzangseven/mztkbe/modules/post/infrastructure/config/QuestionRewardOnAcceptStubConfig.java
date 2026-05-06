@@ -37,7 +37,12 @@ public class QuestionRewardOnAcceptStubConfig {
 
       @Override
       public Optional<QuestionExecutionWriteView> prepareQuestionUpdate(
-          Long postId, Long requesterUserId, String questionContent, Long rewardMztk) {
+          Long postId,
+          Long requesterUserId,
+          String questionContent,
+          Long rewardMztk,
+          Long questionUpdateVersion,
+          String questionUpdateToken) {
         return Optional.empty();
       }
 

@@ -42,6 +42,9 @@ public interface ExecutionIntentPersistencePort {
   Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId);
 
+  boolean existsActiveByResourceAndActionTypeNotForUpdate(
+      ExecutionResourceType resourceType, String resourceId, ExecutionActionType actionType);
+
   Optional<ExecutionIntent> claimNextInternalExecutableForUpdate(
       List<ExecutionActionType> actionTypes);
 

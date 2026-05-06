@@ -3,7 +3,11 @@ package momzzangseven.mztkbe.modules.web3.qna.application.service;
 import java.math.BigInteger;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.BusinessException;
+import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -17,9 +21,11 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecuti
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
+import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
@@ -32,6 +38,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
   private final PrecheckQuestionFundingPort precheckQuestionFundingPort;
   private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
+  private final QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   private final BuildQnaExecutionDraftPort buildQnaExecutionDraftPort;
   private final SubmitQnaExecutionDraftPort submitQnaExecutionDraftPort;
@@ -86,47 +93,133 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
       PrepareQuestionUpdateCommand command) {
     command.validate();
 
+    ensureQuestionMutationConflictFree(
+        command.postId(), QnaExecutionActionType.QNA_QUESTION_UPDATE);
     QnaQuestionProjection question = requireQuestionProjection(command.postId());
     String localQuestionHash = QnaContentHashFactory.hash(command.questionContent());
     if (localQuestionHash.equals(question.getQuestionHash())) {
       return Optional.empty();
     }
-    if (!isQuestionUpdateRecoverable(command.postId(), command.requesterUserId())) {
+    QnaQuestionUpdateState retryable =
+        qnaQuestionUpdateStatePersistencePort
+            .findLatestByPostId(command.postId())
+            .filter(QnaQuestionUpdateState::isRetryablePreparationFailure)
+            .filter(state -> state.matchesExpectedHash(localQuestionHash))
+            .filter(state -> state.getRequesterUserId().equals(command.requesterUserId()))
+            .orElse(null);
+    if (retryable == null) {
       return Optional.empty();
     }
-    return Optional.of(prepareQuestionUpdate(command));
+    return Optional.of(
+        prepareQuestionUpdateWithFailureRecording(
+            new PrepareQuestionUpdateCommand(
+                command.postId(),
+                command.requesterUserId(),
+                command.questionContent(),
+                command.rewardMztk(),
+                retryable.getUpdateVersion(),
+                retryable.getUpdateToken()),
+            question));
   }
 
   @Override
   public QnaExecutionIntentResult prepareQuestionUpdate(PrepareQuestionUpdateCommand command) {
-    command.validate();
+    command.validateVersionTokenRequired();
 
-    QnaQuestionProjection question = requireQuestionProjection(command.postId());
-    ensureQuestionMutationAllowed(question, QnaExecutionActionType.QNA_QUESTION_UPDATE);
+    try {
+      ensureQuestionMutationConflictFree(
+          command.postId(), QnaExecutionActionType.QNA_QUESTION_UPDATE);
+      QnaQuestionProjection question = requireQuestionProjection(command.postId());
+      ensureQuestionHasNoAnswers(question);
+      return submitQuestionUpdate(command, question);
+    } catch (PostPublicationStateException e) {
+      throw e;
+    } catch (RuntimeException e) {
+      markQuestionUpdatePreparationFailed(command, e);
+      throw e;
+    }
+  }
+
+  private QnaExecutionIntentResult prepareQuestionUpdateWithFailureRecording(
+      PrepareQuestionUpdateCommand command, QnaQuestionProjection question) {
+    try {
+      return submitQuestionUpdate(command, question);
+    } catch (PostPublicationStateException e) {
+      throw e;
+    } catch (RuntimeException e) {
+      markQuestionUpdatePreparationFailed(command, e);
+      throw e;
+    }
+  }
+
+  private QnaExecutionIntentResult submitQuestionUpdate(
+      PrepareQuestionUpdateCommand command, QnaQuestionProjection question) {
     RewardContext rewardContext = rewardContext(question);
     String questionHash = QnaContentHashFactory.hash(command.questionContent());
 
-    return submit(
-        new QnaEscrowExecutionRequest(
-            QnaExecutionResourceType.QUESTION,
-            String.valueOf(command.postId()),
-            QnaExecutionActionType.QNA_QUESTION_UPDATE,
-            command.requesterUserId(),
-            null,
-            command.postId(),
-            null,
-            rewardContext.tokenAddress(),
-            rewardContext.amountWei(),
-            questionHash,
-            null));
+    QnaExecutionIntentResult result =
+        submit(
+            new QnaEscrowExecutionRequest(
+                QnaExecutionResourceType.QUESTION,
+                String.valueOf(command.postId()),
+                QnaExecutionActionType.QNA_QUESTION_UPDATE,
+                command.requesterUserId(),
+                null,
+                command.postId(),
+                null,
+                rewardContext.tokenAddress(),
+                rewardContext.amountWei(),
+                questionHash,
+                null,
+                command.questionUpdateVersion(),
+                command.questionUpdateToken()));
+    boolean bound =
+        qnaQuestionUpdateStatePersistencePort
+            .bindExecutionIntent(
+                command.postId(),
+                command.questionUpdateVersion(),
+                command.questionUpdateToken(),
+                result.executionIntent().id())
+            .isPresent();
+    if (!bound) {
+      throw new PostPublicationStateException(ErrorCode.QUESTION_UPDATE_SUPERSEDED);
+    }
+    return result;
+  }
+
+  private void markQuestionUpdatePreparationFailed(
+      PrepareQuestionUpdateCommand command, RuntimeException failure) {
+    qnaQuestionUpdateStatePersistencePort.markPreparationFailed(
+        command.postId(),
+        command.questionUpdateVersion(),
+        command.questionUpdateToken(),
+        preparationFailureErrorCode(failure),
+        failure.getMessage(),
+        isRetryablePreparationFailure(failure));
+  }
+
+  private String preparationFailureErrorCode(RuntimeException failure) {
+    if (failure instanceof BusinessException businessFailure) {
+      return businessFailure.getCode();
+    }
+    return failure.getClass().getSimpleName();
+  }
+
+  private boolean isRetryablePreparationFailure(RuntimeException failure) {
+    if (failure instanceof Web3TransferException web3Failure) {
+      return web3Failure.isRetryable();
+    }
+    return !(failure instanceof BusinessException);
   }
 
   @Override
   public QnaExecutionIntentResult prepareQuestionDelete(PrepareQuestionDeleteCommand command) {
     command.validate();
 
+    ensureQuestionMutationConflictFree(
+        command.postId(), QnaExecutionActionType.QNA_QUESTION_DELETE);
     QnaQuestionProjection question = requireQuestionProjection(command.postId());
-    ensureQuestionMutationAllowed(question, QnaExecutionActionType.QNA_QUESTION_DELETE);
+    ensureQuestionHasNoAnswers(question);
     RewardContext rewardContext = rewardContext(question);
 
     return submit(
@@ -148,10 +241,10 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
   public QnaExecutionIntentResult prepareAnswerAccept(PrepareAnswerAcceptCommand command) {
     command.validate();
 
-    QnaQuestionProjection question = requireQuestionProjection(command.postId());
-    QnaAnswerProjection answer = requireAnswerProjection(command.answerId());
     ensureQuestionMutationConflictFree(command.postId(), QnaExecutionActionType.QNA_ANSWER_ACCEPT);
     ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_ACCEPT);
+    QnaQuestionProjection question = requireQuestionProjection(command.postId());
+    QnaAnswerProjection answer = requireAnswerProjection(command.answerId());
     ensureHashesMatch(
         command.questionContent(),
         question.getQuestionHash(),
@@ -221,24 +314,11 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
                     "question create recovery is not available: postId=" + postId));
   }
 
-  private void ensureQuestionMutationAllowed(
-      QnaQuestionProjection question, QnaExecutionActionType requestedActionType) {
+  private void ensureQuestionHasNoAnswers(QnaQuestionProjection question) {
     if (question.getAnswerCount() > 0) {
       throw new Web3InvalidInputException(
           "question has unresolved onchain answers: postId=" + question.getPostId());
     }
-    ensureQuestionMutationConflictFree(question.getPostId(), requestedActionType);
-  }
-
-  private boolean isQuestionUpdateRecoverable(Long postId, Long requesterUserId) {
-    String rootIdempotencyKey =
-        QnaEscrowIdempotencyKeyFactory.create(
-            QnaExecutionActionType.QNA_QUESTION_UPDATE, requesterUserId, postId, null);
-    return loadQnaExecutionIntentStatePort
-        .loadLatestByRootIdempotencyKey(rootIdempotencyKey)
-        .filter(
-            it -> it.matchesAction(QnaExecutionActionType.QNA_QUESTION_UPDATE) && it.isTerminal())
-        .isPresent();
   }
 
   private void ensureQuestionMutationConflictFree(

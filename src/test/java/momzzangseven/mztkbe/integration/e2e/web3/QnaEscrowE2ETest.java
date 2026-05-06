@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuesti
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.MarkTransactionSucceededUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -109,6 +110,15 @@ class QnaEscrowE2ETest extends E2ETestBase {
             inv -> {
               momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest req =
                   inv.getArgument(0);
+              String rootIdempotencyKey =
+                  req.actionType() == QnaExecutionActionType.QNA_QUESTION_UPDATE
+                      ? QnaEscrowIdempotencyKeyFactory.createQuestionUpdate(
+                          req.requesterUserId(),
+                          req.postId(),
+                          req.questionUpdateVersion(),
+                          req.questionUpdateToken())
+                      : QnaEscrowIdempotencyKeyFactory.create(
+                          req.actionType(), req.requesterUserId(), req.postId(), req.answerId());
               return new QnaExecutionDraft(
                   req.resourceType(),
                   req.resourceId(),
@@ -116,8 +126,7 @@ class QnaEscrowE2ETest extends E2ETestBase {
                   req.actionType(),
                   req.requesterUserId(),
                   req.counterpartyUserId(),
-                  QnaEscrowIdempotencyKeyFactory.create(
-                      req.actionType(), req.requesterUserId(), req.postId(), req.answerId()),
+                  rootIdempotencyKey,
                   "0x" + "a".repeat(64),
                   "{}",
                   List.of(
@@ -505,6 +514,46 @@ class QnaEscrowE2ETest extends E2ETestBase {
     assertThat(getPostPublicationStatus(postId)).isEqualTo("FAILED");
   }
 
+  @Test
+  @Order(15)
+  @DisplayName("PATCH /posts/{postId} — 같은 질문의 두 번째 content update는 새 version intent로 생성된다")
+  void updateQuestionTwice_createsSupersedingVersionedIntents() throws Exception {
+    Long postId = insertOnchainReadyQuestion(currentUserId, "반복 수정 질문", "원본 본문", 45L);
+
+    ResponseEntity<String> firstResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(Map.of("content", "첫 번째 수정 본문"), bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(
+            objectMapper
+                .readTree(firstResponse.getBody())
+                .path("data")
+                .path("web3")
+                .path("actionType")
+                .asText())
+        .isEqualTo("QNA_QUESTION_UPDATE");
+
+    ResponseEntity<String> secondResponse =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(Map.of("content", "두 번째 수정 본문"), bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode secondData = objectMapper.readTree(secondResponse.getBody()).path("data");
+    assertThat(secondData.path("web3").path("actionType").asText())
+        .isEqualTo("QNA_QUESTION_UPDATE");
+    assertThat(getPostContent(postId)).isEqualTo("두 번째 수정 본문");
+    assertThat(countQuestionUpdateIntents(postId)).isEqualTo(2);
+    assertThat(getQuestionUpdateStateStatus(postId, 1L)).isEqualTo("STALE");
+    assertThat(getQuestionUpdateStateStatus(postId, 2L)).isEqualTo("INTENT_BOUND");
+    assertThat(getLatestQuestionUpdateRoot(postId)).contains(":v2:");
+  }
+
   private Long createQuestionPostId(String title, String content, Long reward) throws Exception {
     ResponseEntity<String> response = createQuestionPost(title, content, reward);
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -581,6 +630,36 @@ class QnaEscrowE2ETest extends E2ETestBase {
             Integer.class,
             postId.toString());
     return count == null ? 0 : count;
+  }
+
+  private int countQuestionUpdateIntents(Long postId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM web3_execution_intents "
+                + "WHERE resource_type = 'QUESTION' "
+                + "AND resource_id = ? AND action_type = 'QNA_QUESTION_UPDATE'",
+            Integer.class,
+            postId.toString());
+    return count == null ? 0 : count;
+  }
+
+  private String getQuestionUpdateStateStatus(Long postId, Long updateVersion) {
+    return jdbcTemplate.queryForObject(
+        "SELECT status FROM qna_question_update_states "
+            + "WHERE post_id = ? AND update_version = ?",
+        String.class,
+        postId,
+        updateVersion);
+  }
+
+  private String getLatestQuestionUpdateRoot(Long postId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT root_idempotency_key FROM web3_execution_intents "
+            + "WHERE resource_type = 'QUESTION' "
+            + "AND resource_id = ? AND action_type = 'QNA_QUESTION_UPDATE' "
+            + "ORDER BY created_at DESC, id DESC LIMIT 1",
+        String.class,
+        postId.toString());
   }
 
   private Long insertFailedQuestionPost(
