@@ -195,6 +195,11 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/v2/answers/{answerId}/comments")
                     .authenticated()
+                    .requestMatchers(HttpMethod.PUT, "/v2/answers/{answerId}/comments/{commentId}")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.DELETE, "/v2/answers/{answerId}/comments/{commentId}")
+                    .authenticated()
                     .requestMatchers(HttpMethod.GET, "/v2/comments/{commentId}/replies")
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/v2/users/me/liked-posts")

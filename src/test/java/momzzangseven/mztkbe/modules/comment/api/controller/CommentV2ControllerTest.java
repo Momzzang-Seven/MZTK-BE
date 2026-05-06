@@ -2,10 +2,13 @@ package momzzangseven.mztkbe.modules.comment.api.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -15,7 +18,9 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
+import momzzangseven.mztkbe.modules.comment.application.dto.DeleteAnswerCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetCommentsCursorResult;
+import momzzangseven.mztkbe.modules.comment.application.dto.UpdateAnswerCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.port.in.CreateCommentUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.DeleteCommentUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.GetCommentCursorUseCase;
@@ -129,6 +134,51 @@ class CommentV2ControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.commentId").value(32))
         .andExpect(jsonPath("$.data.content").value("답변 댓글"));
+  }
+
+  @Test
+  @DisplayName("PUT /v2/answers/{answerId}/comments/{commentId} updates answer comment")
+  void updateAnswerCommentV2_success() throws Exception {
+    given(updateCommentUseCase.updateAnswerComment(any(UpdateAnswerCommentCommand.class)))
+        .willReturn(mutationResult(32L, "수정된 답변 댓글", null, false));
+
+    mockMvc
+        .perform(
+            put("/v2/answers/300/comments/32")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", "수정된 답변 댓글"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.commentId").value(32))
+        .andExpect(jsonPath("$.data.content").value("수정된 답변 댓글"));
+
+    verify(updateCommentUseCase).updateAnswerComment(any(UpdateAnswerCommentCommand.class));
+  }
+
+  @Test
+  @DisplayName("PUT /v2/answers/{answerId}/comments/{commentId} returns 400 for blank content")
+  void updateAnswerCommentV2_blankContent_returns400() throws Exception {
+    mockMvc
+        .perform(
+            put("/v2/answers/300/comments/32")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", " "))))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(updateCommentUseCase);
+  }
+
+  @Test
+  @DisplayName("DELETE /v2/answers/{answerId}/comments/{commentId} deletes answer comment")
+  void deleteAnswerCommentV2_success() throws Exception {
+    mockMvc
+        .perform(delete("/v2/answers/300/comments/32").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    verify(deleteCommentUseCase).deleteAnswerComment(any(DeleteAnswerCommentCommand.class));
   }
 
   @Test

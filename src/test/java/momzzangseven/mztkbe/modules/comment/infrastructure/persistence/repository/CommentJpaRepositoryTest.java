@@ -360,6 +360,22 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName("deleteAllByAnswerId() soft-deletes answer root comments and replies")
+  void deleteAllByAnswerId_softDeletesAnswerRootAndReplies() {
+    LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 12, 0);
+    CommentEntity root = persistAnswerRoot(8000L, 81L, "answer-root", oldTime);
+    CommentEntity reply =
+        persistAnswerReply(8000L, 82L, "answer-reply", root, oldTime.plusMinutes(1));
+
+    commentJpaRepository.deleteAllByAnswerId(CommentTargetType.ANSWER, 8000L);
+
+    CommentEntity updatedRoot = commentJpaRepository.findById(idOf(root)).orElseThrow();
+    CommentEntity updatedReply = commentJpaRepository.findById(idOf(reply)).orElseThrow();
+    assertThat(isDeletedOf(updatedRoot)).isTrue();
+    assertThat(isDeletedOf(updatedReply)).isTrue();
+  }
+
+  @Test
   @DisplayName(
       "findIdsByIsDeletedTrueAndUpdatedAtBefore() returns only deleted comment ids before cutoff")
   void findIdsByIsDeletedTrueAndUpdatedAtBefore_returnsMatchingIds() {
@@ -460,6 +476,15 @@ class CommentJpaRepositoryTest {
       Long answerId, Long writerId, String content, LocalDateTime createdAt, boolean isDeleted) {
     CommentEntity entity =
         newCommentEntity(null, writerId, content, isDeleted, null, createdAt, createdAt);
+    ReflectionTestUtils.setField(entity, "targetType", CommentTargetType.ANSWER);
+    ReflectionTestUtils.setField(entity, "answerId", answerId);
+    return commentJpaRepository.saveAndFlush(entity);
+  }
+
+  private CommentEntity persistAnswerReply(
+      Long answerId, Long writerId, String content, CommentEntity parent, LocalDateTime createdAt) {
+    CommentEntity entity =
+        newCommentEntity(null, writerId, content, false, parent, createdAt, createdAt);
     ReflectionTestUtils.setField(entity, "targetType", CommentTargetType.ANSWER);
     ReflectionTestUtils.setField(entity, "answerId", answerId);
     return commentJpaRepository.saveAndFlush(entity);

@@ -22,12 +22,14 @@ import momzzangseven.mztkbe.global.pagination.CursorScope;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
+import momzzangseven.mztkbe.modules.comment.application.dto.DeleteAnswerCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.DeleteCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetCommentsCursorResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesCursorQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsCursorQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.UpdateAnswerCommentCommand;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
@@ -595,6 +597,107 @@ class CommentServiceTest {
   }
 
   @Test
+  @DisplayName("updateAnswerComment() updates writer answer comment when answerId matches")
+  void updateAnswerComment_matchingAnswer_updatesContent() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = answerComment(41L, 300L, 200L, null, "before", false, now);
+    given(loadCommentPort.loadComment(41L)).willReturn(Optional.of(comment));
+    given(loadAnswerPort.loadAnswerCommentContext(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+    given(saveCommentPort.saveComment(any(Comment.class)))
+        .willAnswer(invocation -> invocation.getArgument(0));
+
+    CommentMutationResult result =
+        commentService.updateAnswerComment(
+            new UpdateAnswerCommentCommand(300L, 41L, 200L, "after"));
+
+    assertThat(result.content()).isEqualTo("after");
+    verify(saveCommentPort)
+        .saveComment(
+            org.mockito.ArgumentMatchers.argThat(saved -> "after".equals(saved.getContent())));
+  }
+
+  @Test
+  @DisplayName("updateAnswerComment() throws when answerId does not match")
+  void updateAnswerComment_answerMismatch_throwsException() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = answerComment(42L, 300L, 200L, null, "before", false, now);
+    given(loadCommentPort.loadComment(42L)).willReturn(Optional.of(comment));
+
+    assertThatThrownBy(
+            () ->
+                commentService.updateAnswerComment(
+                    new UpdateAnswerCommentCommand(301L, 42L, 200L, "after")))
+        .isInstanceOf(CommentPostMismatchException.class);
+
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
+  @Test
+  @DisplayName("updateAnswerComment() throws when target comment is post comment")
+  void updateAnswerComment_postComment_throwsException() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = comment(43L, 100L, 200L, null, "before", false, now);
+    given(loadCommentPort.loadComment(43L)).willReturn(Optional.of(comment));
+
+    assertThatThrownBy(
+            () ->
+                commentService.updateAnswerComment(
+                    new UpdateAnswerCommentCommand(300L, 43L, 200L, "after")))
+        .isInstanceOf(CommentPostMismatchException.class);
+
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
+  @Test
+  @DisplayName("deleteAnswerComment() soft-deletes writer answer comment when answerId matches")
+  void deleteAnswerComment_matchingAnswer_deletesComment() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = answerComment(44L, 300L, 200L, null, "comment", false, now);
+    given(loadCommentPort.loadComment(44L)).willReturn(Optional.of(comment));
+    given(loadAnswerPort.loadAnswerCommentContext(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+
+    commentService.deleteAnswerComment(new DeleteAnswerCommentCommand(300L, 44L, 200L));
+
+    verify(saveCommentPort).saveComment(org.mockito.ArgumentMatchers.argThat(Comment::isDeleted));
+  }
+
+  @Test
+  @DisplayName("deleteAnswerComment() throws when answerId does not match")
+  void deleteAnswerComment_answerMismatch_throwsException() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = answerComment(45L, 300L, 200L, null, "comment", false, now);
+    given(loadCommentPort.loadComment(45L)).willReturn(Optional.of(comment));
+
+    assertThatThrownBy(
+            () ->
+                commentService.deleteAnswerComment(new DeleteAnswerCommentCommand(301L, 45L, 200L)))
+        .isInstanceOf(CommentPostMismatchException.class);
+
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
+  @Test
+  @DisplayName("deleteAnswerComment() throws when target comment is post comment")
+  void deleteAnswerComment_postComment_throwsException() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = comment(46L, 100L, 200L, null, "comment", false, now);
+    given(loadCommentPort.loadComment(46L)).willReturn(Optional.of(comment));
+
+    assertThatThrownBy(
+            () ->
+                commentService.deleteAnswerComment(new DeleteAnswerCommentCommand(300L, 46L, 200L)))
+        .isInstanceOf(CommentPostMismatchException.class);
+
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
+  @Test
   @DisplayName("deleteComment() throws when parent post is not publicly writable")
   void deleteComment_hiddenParentPost_throwsBusinessException() {
     LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
@@ -620,6 +723,27 @@ class CommentServiceTest {
     return Comment.builder()
         .id(id)
         .postId(postId)
+        .writerId(writerId)
+        .parentId(parentId)
+        .content(content)
+        .isDeleted(isDeleted)
+        .createdAt(createdAt)
+        .updatedAt(createdAt)
+        .build();
+  }
+
+  private Comment answerComment(
+      Long id,
+      Long answerId,
+      Long writerId,
+      Long parentId,
+      String content,
+      boolean isDeleted,
+      LocalDateTime createdAt) {
+    return Comment.builder()
+        .id(id)
+        .targetType(CommentTargetType.ANSWER)
+        .answerId(answerId)
         .writerId(writerId)
         .parentId(parentId)
         .content(content)

@@ -91,13 +91,15 @@ public class CommentService
   @Transactional
   public CommentMutationResult updateComment(UpdateCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
-    validateCommentTargetWritable(comment);
+    return updateLoadedComment(comment, command.userId(), command.content());
+  }
 
-    comment.validateWriter(command.userId());
-
-    comment.updateContent(command.content());
-
-    return CommentMutationResult.from(saveCommentPort.saveComment(comment));
+  @Override
+  @Transactional
+  public CommentMutationResult updateAnswerComment(UpdateAnswerCommentCommand command) {
+    Comment comment = loadCommentOrThrow(command.commentId());
+    validateAnswerCommentTarget(comment, command.answerId());
+    return updateLoadedComment(comment, command.userId(), command.content());
   }
 
   // 3-1. 삭제 (Delete - 사용자 요청)
@@ -105,11 +107,15 @@ public class CommentService
   @Transactional
   public void deleteComment(DeleteCommentCommand command) {
     Comment comment = loadCommentOrThrow(command.commentId());
-    validateCommentTargetWritable(comment);
-    comment.validateWriter(command.userId());
+    deleteLoadedComment(comment, command.userId());
+  }
 
-    comment.delete();
-    saveCommentPort.saveComment(comment);
+  @Override
+  @Transactional
+  public void deleteAnswerComment(DeleteAnswerCommentCommand command) {
+    Comment comment = loadCommentOrThrow(command.commentId());
+    validateAnswerCommentTarget(comment, command.answerId());
+    deleteLoadedComment(comment, command.userId());
   }
 
   // 3-2. 삭제 (Delete - 게시글 삭제 이벤트 수신용)
@@ -211,6 +217,27 @@ public class CommentService
 
   private Comment loadCommentOrThrow(Long commentId) {
     return loadCommentPort.loadComment(commentId).orElseThrow(CommentNotFoundException::new);
+  }
+
+  private CommentMutationResult updateLoadedComment(Comment comment, Long userId, String content) {
+    validateCommentTargetWritable(comment);
+    comment.validateWriter(userId);
+    comment.updateContent(content);
+    return CommentMutationResult.from(saveCommentPort.saveComment(comment));
+  }
+
+  private void deleteLoadedComment(Comment comment, Long userId) {
+    validateCommentTargetWritable(comment);
+    comment.validateWriter(userId);
+    comment.delete();
+    saveCommentPort.saveComment(comment);
+  }
+
+  private void validateAnswerCommentTarget(Comment comment, Long answerId) {
+    if (!CommentTargetType.ANSWER.equals(comment.getTargetType())
+        || !answerId.equals(comment.getAnswerId())) {
+      throw new CommentPostMismatchException();
+    }
   }
 
   private void validateParentComment(
