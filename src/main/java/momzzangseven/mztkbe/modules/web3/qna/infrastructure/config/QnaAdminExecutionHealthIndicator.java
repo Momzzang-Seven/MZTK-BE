@@ -6,7 +6,6 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadExecutionSignerConfigPort;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
 import org.springframework.boot.actuate.health.Health;
@@ -17,7 +16,7 @@ import org.springframework.stereotype.Component;
 @Component("qnaAdminExecution")
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminEnabled
-@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
+@ConditionalOnBean(ProbeExecutionSignerCapabilityPort.class)
 public class QnaAdminExecutionHealthIndicator implements HealthIndicator {
 
   private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;

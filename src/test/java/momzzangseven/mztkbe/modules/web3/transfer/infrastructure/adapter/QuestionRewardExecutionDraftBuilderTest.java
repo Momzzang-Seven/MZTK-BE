@@ -75,7 +75,6 @@ class QuestionRewardExecutionDraftBuilderTest {
             30,
             "0x" + "4".repeat(40),
             "0x" + "5".repeat(40),
-            "alias",
             200_000L,
             BigDecimal.ONE,
             BigDecimal.ONE,

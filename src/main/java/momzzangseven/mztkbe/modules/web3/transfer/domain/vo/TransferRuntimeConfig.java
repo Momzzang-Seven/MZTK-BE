@@ -8,7 +8,6 @@ public record TransferRuntimeConfig(
     int retryBackoffSeconds,
     String delegationBatchImplAddress,
     String delegationDefaultReceiverAddress,
-    String sponsorWalletAlias,
     long sponsorMaxGasLimit,
     BigDecimal sponsorMaxTransferAmountEth,
     BigDecimal sponsorPerTxCapEth,
@@ -30,9 +29,6 @@ public record TransferRuntimeConfig(
     }
     if (isBlank(delegationBatchImplAddress) || isBlank(delegationDefaultReceiverAddress)) {
       throw new IllegalArgumentException("delegation addresses are required");
-    }
-    if (isBlank(sponsorWalletAlias)) {
-      throw new IllegalArgumentException("sponsor wallet alias is required");
     }
     if (sponsorMaxGasLimit <= 0) {
       throw new IllegalArgumentException("sponsorMaxGasLimit must be positive");
