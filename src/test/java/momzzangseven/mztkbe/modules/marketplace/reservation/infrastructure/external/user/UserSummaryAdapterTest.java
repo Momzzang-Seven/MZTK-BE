@@ -2,9 +2,13 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.exte
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -14,6 +18,7 @@ import momzzangseven.mztkbe.modules.user.application.port.in.LoadUserInfoUseCase
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -70,7 +75,7 @@ class UserSummaryAdapterTest {
   void findByIds_CallsBatchApiOnce() {
     // given
     List<UserInfo> users = List.of(userInfo(1L, "nick-A"), userInfo(2L, "nick-B"));
-    given(loadUserInfoUseCase.loadUsersByIds(org.mockito.ArgumentMatchers.anyCollection()))
+    given(loadUserInfoUseCase.loadUsersByIds(anyCollection()))
         .willReturn(users);
 
     // when
@@ -78,7 +83,7 @@ class UserSummaryAdapterTest {
 
     // then — loadUsersByIds must be called exactly once regardless of list size
     verify(loadUserInfoUseCase, times(1))
-        .loadUsersByIds(org.mockito.ArgumentMatchers.anyCollection());
+        .loadUsersByIds(anyCollection());
   }
 
   @Test
@@ -86,7 +91,7 @@ class UserSummaryAdapterTest {
   void findByIds_DuplicateIds_DeduplicatedBeforeQuery() {
     // given — same trainerId appears 3 times (typical list scenario)
     List<UserInfo> users = List.of(userInfo(2L, "trainer-nick"));
-    given(loadUserInfoUseCase.loadUsersByIds(org.mockito.ArgumentMatchers.anyCollection()))
+    given(loadUserInfoUseCase.loadUsersByIds(anyCollection()))
         .willReturn(users);
 
     // when
@@ -97,8 +102,7 @@ class UserSummaryAdapterTest {
     assertThat(result.get(2L).nickname()).isEqualTo("trainer-nick");
 
     @SuppressWarnings("unchecked")
-    org.mockito.ArgumentCaptor<java.util.Collection<Long>> captor =
-        org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+    ArgumentCaptor<Collection<Long>> captor = ArgumentCaptor.forClass(Collection.class);
     verify(loadUserInfoUseCase).loadUsersByIds(captor.capture());
     assertThat(captor.getValue()).hasSize(1);
   }
@@ -108,7 +112,7 @@ class UserSummaryAdapterTest {
   void findByIds_MultipleUsers_AllMapped() {
     // given
     List<UserInfo> users = List.of(userInfo(1L, "nick-A"), userInfo(2L, "nick-B"));
-    given(loadUserInfoUseCase.loadUsersByIds(org.mockito.ArgumentMatchers.anyCollection()))
+    given(loadUserInfoUseCase.loadUsersByIds(anyCollection()))
         .willReturn(users);
 
     // when
@@ -124,7 +128,8 @@ class UserSummaryAdapterTest {
   @DisplayName("findByIds - 빈 목록이면 빈 맵 반환")
   void findByIds_EmptyInput_ReturnsEmptyMap() {
     // given
-    given(loadUserInfoUseCase.loadUsersByIds(java.util.Set.of())).willReturn(List.of());
+    given(loadUserInfoUseCase.loadUsersByIds(anyCollection()))
+        .willReturn(List.of());
 
     // when
     Map<Long, UserSummary> result = sut.findByIds(List.of());

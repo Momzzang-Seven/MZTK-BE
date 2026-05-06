@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.classes;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.any;
 
 import java.util.List;
 import java.util.Map;
@@ -128,7 +130,7 @@ class ClassSummaryAdapterTest {
   @Test
   @DisplayName("ClassSummary - priceAmount가 0이면 IllegalStateException (도메인 불변 조건 위반)")
   void classSummary_ZeroPriceAmount_ThrowsIllegalState() {
-    org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ClassSummary("요가", 0, null))
+    assertThatThrownBy(() -> new ClassSummary("요가", 0, null))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("priceAmount must be > 0");
   }
@@ -136,7 +138,7 @@ class ClassSummaryAdapterTest {
   @Test
   @DisplayName("ClassSummary - priceAmount가 음수이면 IllegalStateException (도메인 불변 조건 위반)")
   void classSummary_NegativePriceAmount_ThrowsIllegalState() {
-    org.assertj.core.api.Assertions.assertThatThrownBy(() -> new ClassSummary("요가", -1000, null))
+    assertThatThrownBy(() -> new ClassSummary("요가", -1000, null))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("priceAmount must be > 0");
   }

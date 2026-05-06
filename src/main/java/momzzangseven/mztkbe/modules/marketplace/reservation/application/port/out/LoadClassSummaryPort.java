@@ -24,7 +24,7 @@ public interface LoadClassSummaryPort {
    * @param thumbnailFinalObjectKey S3 object key for the thumbnail; {@code null} if not set
    */
   record ClassSummary(String title, int priceAmount, String thumbnailFinalObjectKey) {
-    ClassSummary {
+    public ClassSummary {
       if (title == null || title.isBlank()) {
         throw new IllegalStateException("ClassSummary title must not be blank");
       }
