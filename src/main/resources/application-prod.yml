@@ -61,6 +61,9 @@ google:
     redirect-uri: ${GOOGLE_REDIRECT_URI}
 
 web3:
+  kms:
+    enabled: true
+
   challenge:
     eip4361:
       uri: ${PROD_DOMAIN}

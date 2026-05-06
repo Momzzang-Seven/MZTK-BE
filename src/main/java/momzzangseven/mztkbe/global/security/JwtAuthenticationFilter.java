@@ -97,6 +97,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         writeErrorResponse(response, ErrorCode.USER_WITHDRAWN);
         return;
       }
+      if (isBlockedUser(userId, role)) {
+        writeErrorResponse(response, ErrorCode.USER_BLOCKED);
+        return;
+      }
       filterChain.doFilter(request, response);
       return;
     }
@@ -123,6 +127,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
   private boolean isWithdrawnUser(Long userId) {
     return checkAccountStatusUseCase.isDeleted(userId);
+  }
+
+  private boolean isBlockedUser(Long userId, UserRole role) {
+    if (role.isAdmin()) {
+      return false;
+    }
+    return checkAccountStatusUseCase.isBlocked(userId);
   }
 
   private void writeErrorResponse(HttpServletResponse response, ErrorCode errorCode)

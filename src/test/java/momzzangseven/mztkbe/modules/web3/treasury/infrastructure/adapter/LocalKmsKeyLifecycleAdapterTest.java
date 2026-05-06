@@ -3,15 +3,14 @@ package momzzangseven.mztkbe.modules.web3.treasury.infrastructure.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.util.Arrays;
-import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /**
- * Unit tests for {@link LocalKmsKeyLifecycleAdapter} — covers [M-107] and [M-36] (!prod gate).
+ * Unit tests for {@link LocalKmsKeyLifecycleAdapter} — covers [M-107] and [M-36] (kms-disabled
+ * gate).
  *
  * <p>The adapter is intentionally inert in non-prod profiles: every method must throw {@code
  * UnsupportedOperationException} so that a stray call (e.g. via misconfigured tests) surfaces as
@@ -92,17 +91,22 @@ class LocalKmsKeyLifecycleAdapterTest {
   }
 
   @Nested
-  @DisplayName("B. @Profile gating ([M-36])")
+  @DisplayName("B. @ConditionalOnProperty gating ([M-36])")
   class ProfileGating {
 
     @Test
-    @DisplayName("[M-36] LocalKmsKeyLifecycleAdapter는 @Profile(\"!prod\") 보유")
-    void adapter_isNonProdGated() {
-      Profile profile = LocalKmsKeyLifecycleAdapter.class.getAnnotation(Profile.class);
+    @DisplayName(
+        "[M-36] LocalKmsKeyLifecycleAdapter는 @ConditionalOnProperty(web3.kms.enabled=false,"
+            + " matchIfMissing=true) 보유")
+    void adapter_isKmsDisabledGated() {
+      ConditionalOnProperty annotation =
+          LocalKmsKeyLifecycleAdapter.class.getAnnotation(ConditionalOnProperty.class);
 
-      assertThat(profile).isNotNull();
-      List<String> values = Arrays.asList(profile.value());
-      assertThat(values).containsExactly("!prod");
+      assertThat(annotation).isNotNull();
+      String[] names = annotation.name().length > 0 ? annotation.name() : annotation.value();
+      assertThat(names).containsExactly("web3.kms.enabled");
+      assertThat(annotation.havingValue()).isEqualTo("false");
+      assertThat(annotation.matchIfMissing()).isTrue();
     }
   }
 }

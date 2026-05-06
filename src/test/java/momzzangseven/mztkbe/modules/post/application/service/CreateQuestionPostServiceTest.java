@@ -18,12 +18,14 @@ import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleE
 import momzzangseven.mztkbe.modules.post.application.port.out.UpdatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.ValidatePostImagesPort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -51,6 +53,67 @@ class CreateQuestionPostServiceTest {
             validatePostImagesPort,
             updatePostImagesPort,
             questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("stores question as pending when Web3 manages question create lifecycle")
+  void executeStoresPendingWhenWeb3ManagesQuestionCreate() {
+    CreatePostCommand command =
+        CreatePostCommand.of(3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, null, null);
+    Post savedPost =
+        Post.builder()
+            .id(21L)
+            .userId(3L)
+            .type(PostType.QUESTION)
+            .title("질문 제목")
+            .content("질문 내용")
+            .reward(50L)
+            .status(PostStatus.OPEN)
+            .publicationStatus(PostPublicationStatus.PENDING)
+            .build();
+
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
+    when(questionLifecycleExecutionPort.prepareQuestionCreate(21L, 3L, "질문 내용", 50L))
+        .thenReturn(Optional.empty());
+
+    createQuestionPostService.execute(command);
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort).savePost(postCaptor.capture());
+    assertThat(postCaptor.getValue().getPublicationStatus())
+        .isEqualTo(PostPublicationStatus.PENDING);
+  }
+
+  @Test
+  @DisplayName("records prepared create intent id after managed web3 prepare succeeds")
+  void executeRecordsPreparedCreateIntentId() {
+    CreatePostCommand command =
+        CreatePostCommand.of(3L, "질문 제목", "질문 내용", PostType.QUESTION, 50L, null, null);
+    Post savedPost =
+        Post.builder()
+            .id(21L)
+            .userId(3L)
+            .type(PostType.QUESTION)
+            .title("질문 제목")
+            .content("질문 내용")
+            .reward(50L)
+            .status(PostStatus.OPEN)
+            .publicationStatus(PostPublicationStatus.PENDING)
+            .build();
+
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(postPersistencePort.savePost(any(Post.class))).thenReturn(savedPost);
+    when(postPersistencePort.loadPostForUpdate(21L)).thenReturn(Optional.of(savedPost));
+    when(questionLifecycleExecutionPort.prepareQuestionCreate(21L, 3L, "질문 내용", 50L))
+        .thenReturn(Optional.of(web3("intent-1")));
+
+    createQuestionPostService.execute(command);
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort, org.mockito.Mockito.times(2)).savePost(postCaptor.capture());
+    assertThat(postCaptor.getAllValues().get(1).getCurrentCreateExecutionIntentId())
+        .isEqualTo("intent-1");
   }
 
   @Test
@@ -114,5 +177,17 @@ class CreateQuestionPostServiceTest {
         validatePostImagesPort,
         updatePostImagesPort,
         questionLifecycleExecutionPort);
+  }
+
+  private momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView web3(
+      String executionIntentId) {
+    return new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView(
+        null,
+        "QNA_QUESTION_CREATE",
+        new momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView
+            .ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null),
+        null,
+        null,
+        false);
   }
 }

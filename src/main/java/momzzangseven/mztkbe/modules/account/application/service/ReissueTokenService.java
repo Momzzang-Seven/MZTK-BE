@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.account.application.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.UserNotFoundException;
+import momzzangseven.mztkbe.global.error.user.UserBlockedException;
 import momzzangseven.mztkbe.global.error.user.UserWithdrawnException;
 import momzzangseven.mztkbe.global.security.JwtTokenProvider;
 import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenManager;
@@ -11,6 +12,7 @@ import momzzangseven.mztkbe.modules.account.application.delegation.RefreshTokenV
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenCommand;
 import momzzangseven.mztkbe.modules.account.application.dto.ReissueTokenResult;
 import momzzangseven.mztkbe.modules.account.application.port.in.ReissueTokenUseCase;
+import momzzangseven.mztkbe.modules.account.application.port.out.CheckAdminRefreshSubjectPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.LoadUserAccountPort;
 import momzzangseven.mztkbe.modules.account.domain.model.RefreshToken;
 import momzzangseven.mztkbe.modules.account.domain.model.UserAccount;
@@ -27,6 +29,7 @@ public class ReissueTokenService implements ReissueTokenUseCase {
   private final RefreshTokenManager refreshTokenManager;
   private final JwtTokenProvider jwtTokenProvider;
   private final LoadUserAccountPort loadUserAccountPort;
+  private final CheckAdminRefreshSubjectPort checkAdminRefreshSubjectPort;
 
   @Override
   public ReissueTokenResult execute(ReissueTokenCommand command) {
@@ -39,14 +42,7 @@ public class ReissueTokenService implements ReissueTokenUseCase {
 
     Long jwtUserId = jwtTokenProvider.getUserIdFromToken(tokenValue);
 
-    UserAccount account =
-        loadUserAccountPort
-            .findByUserId(jwtUserId)
-            .orElseThrow(() -> new UserNotFoundException(jwtUserId));
-
-    if (account.isDeleted()) {
-      throw new UserWithdrawnException();
-    }
+    validateRefreshSubject(jwtUserId);
 
     RefreshToken dbRefreshToken = validator.inspectSecurityFlaw(tokenValue, jwtUserId);
     TokenPair tokenPair = refreshTokenManager.rotateTokens(jwtUserId, dbRefreshToken);
@@ -60,5 +56,26 @@ public class ReissueTokenService implements ReissueTokenUseCase {
 
     log.info("Token reissue successful: userId={}", jwtUserId);
     return result;
+  }
+
+  private void validateRefreshSubject(Long userId) {
+    loadUserAccountPort
+        .findByUserId(userId)
+        .ifPresentOrElse(
+            this::validateUserAccount,
+            () -> {
+              if (!checkAdminRefreshSubjectPort.isActiveAdmin(userId)) {
+                throw new UserNotFoundException(userId);
+              }
+            });
+  }
+
+  private void validateUserAccount(UserAccount account) {
+    if (account.isDeleted()) {
+      throw new UserWithdrawnException();
+    }
+    if (account.isBlocked()) {
+      throw new UserBlockedException();
+    }
   }
 }
