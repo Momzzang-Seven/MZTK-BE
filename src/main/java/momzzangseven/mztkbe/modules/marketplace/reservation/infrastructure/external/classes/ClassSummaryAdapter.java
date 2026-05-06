@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.error.marketplace.ClassNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassDetailQuery;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassDetailResult;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassDetailUseCase;
@@ -29,6 +30,12 @@ import org.springframework.stereotype.Component;
  *   <li>Use {@link GetClassDetailUseCase} with the obtained classId to fetch title, priceAmount,
  *       and thumbnailFinalObjectKey in a single input-port call.
  * </ol>
+ *
+ * <p><b>Inactive-class handling:</b> {@link GetClassDetailUseCase} filters by {@code active = true}
+ * internally. If the class was deactivated after the reservation was created, the use-case throws
+ * {@link ClassNotFoundException}. We absorb that here and return {@link Optional#empty()} so that
+ * past reservations linked to inactive classes still render — with enrichment fields omitted —
+ * rather than failing with HTTP 500.
  */
 @Slf4j
 @Component
@@ -42,8 +49,26 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
   public Optional<ClassSummary> findBySlotId(Long slotId) {
     return getClassInfoUseCase
         .findBySlotId(slotId)
-        .map(cls -> getClassDetailUseCase.execute(new GetClassDetailQuery(cls.getId())))
+        .flatMap(cls -> fetchDetail(cls.getId()))
         .map(this::toClassSummary);
+  }
+
+  /**
+   * Fetches class detail via the input port, absorbing {@link ClassNotFoundException} that is
+   * thrown when the class exists but is inactive ({@code active = false}).
+   *
+   * @param classId class primary key resolved from the slot
+   * @return Optional with detail, or empty if the class is not found / inactive
+   */
+  private Optional<GetClassDetailResult> fetchDetail(Long classId) {
+    try {
+      return Optional.of(getClassDetailUseCase.execute(new GetClassDetailQuery(classId)));
+    } catch (ClassNotFoundException e) {
+      log.debug(
+          "Class id={} not found or inactive during reservation enrichment; skipping summary",
+          classId);
+      return Optional.empty();
+    }
   }
 
   /**
