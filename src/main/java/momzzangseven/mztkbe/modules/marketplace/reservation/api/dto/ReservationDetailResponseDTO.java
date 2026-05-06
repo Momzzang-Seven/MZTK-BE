@@ -31,7 +31,7 @@ public record ReservationDetailResponseDTO(
     LocalDateTime createdAt,
     LocalDateTime updatedAt,
     String classTitle,
-    int priceAmount,
+    Integer priceAmount,
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey) {

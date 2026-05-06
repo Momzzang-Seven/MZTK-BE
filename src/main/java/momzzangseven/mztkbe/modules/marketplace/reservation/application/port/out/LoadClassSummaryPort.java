@@ -9,21 +9,31 @@ import java.util.Optional;
  *
  * <p>Implemented by {@code ClassSummaryAdapter} in the reservation module's external layer. The
  * adapter is the only place allowed to cross the module boundary into the {@code classes} module.
- *
- * @param title class title
- * @param priceAmount class price in KRW
- * @param thumbnailFinalObjectKey S3 object key for the thumbnail; {@code null} if not set
  */
 public interface LoadClassSummaryPort {
 
   /**
    * Summary of a class required for reservation display.
    *
+   * <p>{@code priceAmount} must be positive — the domain invariant enforces {@code priceAmount > 0}
+   * for every published class. An {@link IllegalStateException} is thrown at construction time if
+   * this invariant is violated, catching data-integrity issues early at the adapter boundary.
+   *
    * @param title class title
-   * @param priceAmount class price in KRW
+   * @param priceAmount class price in KRW; must be &gt; 0
    * @param thumbnailFinalObjectKey S3 object key for the thumbnail; {@code null} if not set
    */
-  record ClassSummary(String title, int priceAmount, String thumbnailFinalObjectKey) {}
+  record ClassSummary(String title, int priceAmount, String thumbnailFinalObjectKey) {
+    ClassSummary {
+      if (title == null || title.isBlank()) {
+        throw new IllegalStateException("ClassSummary title must not be blank");
+      }
+      if (priceAmount <= 0) {
+        throw new IllegalStateException(
+            "ClassSummary priceAmount must be > 0, got: " + priceAmount);
+      }
+    }
+  }
 
   /**
    * Find the class summary that owns the given slot (lock-free read).
