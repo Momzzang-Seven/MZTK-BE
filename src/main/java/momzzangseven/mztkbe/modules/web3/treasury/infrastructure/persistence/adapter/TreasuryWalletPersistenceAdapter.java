@@ -75,12 +75,12 @@ public class TreasuryWalletPersistenceAdapter
   // ----- ProbeExecutionSignerCapabilityPort (KMS-backed probe) -----
 
   @Override
-  public ExecutionSignerCapabilityView probe(String walletAlias, String keyEncryptionKeyB64) {
+  public ExecutionSignerCapabilityView probe(String walletAlias) {
     requireNonBlank(walletAlias, "walletAlias");
 
     return repository
         .findByWalletAlias(walletAlias)
-        .map(entity -> mapCapability(entity, keyEncryptionKeyB64))
+        .map(this::mapCapability)
         .orElseGet(() -> ExecutionSignerCapabilityView.slotMissing(walletAlias));
   }
 
@@ -147,9 +147,7 @@ public class TreasuryWalletPersistenceAdapter
     return TreasuryKeyOrigin.valueOf(value);
   }
 
-  // TODO get rid of deprecated KEK fidleds in PR4
-  private ExecutionSignerCapabilityView mapCapability(
-      Web3TreasuryWalletEntity entity, String keyEncryptionKeyB64) {
+  private ExecutionSignerCapabilityView mapCapability(Web3TreasuryWalletEntity entity) {
     String walletAlias = entity.getWalletAlias();
     boolean hasAddress = hasText(entity.getTreasuryAddress());
     boolean hasKmsKeyId = hasText(entity.getKmsKeyId());

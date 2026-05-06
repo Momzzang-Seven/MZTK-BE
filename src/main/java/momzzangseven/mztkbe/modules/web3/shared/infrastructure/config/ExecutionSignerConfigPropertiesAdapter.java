@@ -13,8 +13,6 @@ public class ExecutionSignerConfigPropertiesAdapter implements LoadExecutionSign
 
   @Override
   public ExecutionSignerConfig load() {
-    return new ExecutionSignerConfig(
-        sponsorTreasurySignerProperties.getWalletAlias(),
-        sponsorTreasurySignerProperties.getKeyEncryptionKeyB64());
+    return new ExecutionSignerConfig(sponsorTreasurySignerProperties.getWalletAlias());
   }
 }

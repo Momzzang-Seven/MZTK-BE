@@ -6,14 +6,11 @@ public interface LoadExecutionSignerConfigPort {
 
   ExecutionSignerConfig load();
 
-  record ExecutionSignerConfig(String walletAlias, String keyEncryptionKeyB64) {
+  record ExecutionSignerConfig(String walletAlias) {
 
     public ExecutionSignerConfig {
       if (walletAlias == null || walletAlias.isBlank()) {
         throw new Web3InvalidInputException("walletAlias is required");
-      }
-      if (keyEncryptionKeyB64 == null || keyEncryptionKeyB64.isBlank()) {
-        throw new Web3InvalidInputException("keyEncryptionKeyB64 is required");
       }
     }
   }

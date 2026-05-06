@@ -16,7 +16,6 @@ public class ProbeExecutionSignerCapabilityService
   @Override
   public ExecutionSignerCapabilityView execute() {
     var signerConfig = loadExecutionSignerConfigPort.load();
-    return probeExecutionSignerCapabilityPort.probe(
-        signerConfig.walletAlias(), signerConfig.keyEncryptionKeyB64());
+    return probeExecutionSignerCapabilityPort.probe(signerConfig.walletAlias());
   }
 }
