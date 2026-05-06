@@ -91,25 +91,42 @@ class ClassReservationControllerTest {
   private static final LocalDate FUTURE_DATE = LocalDate.now().plusDays(7);
 
   private ReservationSummaryResult summaryResult() {
-    return new ReservationSummaryResult(
-        1L, 10L, 100L, 50L, FUTURE_DATE, LocalTime.of(10, 0), 60, ReservationStatus.PENDING, null);
+    return ReservationSummaryResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .slotId(10L)
+            .trainerId(100L)
+            .userId(50L)
+            .reservationDate(FUTURE_DATE)
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.PENDING)
+            .userRequest(null)
+            .build(),
+        null,
+        null);
   }
 
   private GetReservationResult detailResult(Long viewerId) {
-    return new GetReservationResult(
-        1L,
-        viewerId,
-        100L,
-        10L,
-        FUTURE_DATE,
-        LocalTime.of(10, 0),
-        60,
-        ReservationStatus.PENDING,
+    return GetReservationResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .userId(viewerId)
+            .trainerId(100L)
+            .slotId(10L)
+            .reservationDate(FUTURE_DATE)
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.PENDING)
+            .userRequest(null)
+            .orderId("order-abc")
+            .txHash(null)
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build(),
         null,
-        "order-abc",
         null,
-        LocalDateTime.now(),
-        LocalDateTime.now());
+        null);
   }
 
   /** Minimal valid create-reservation request body. */

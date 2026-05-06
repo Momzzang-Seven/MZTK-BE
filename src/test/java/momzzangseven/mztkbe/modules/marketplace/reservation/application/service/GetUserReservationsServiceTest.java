@@ -2,14 +2,20 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +29,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GetUserReservationsServiceTest {
 
   @Mock private LoadReservationPort loadReservationPort;
+  @Mock private LoadClassSummaryPort loadClassSummaryPort;
+  @Mock private LoadUserSummaryPort loadUserSummaryPort;
 
   @InjectMocks private GetUserReservationsService sut;
 
@@ -47,6 +55,8 @@ class GetUserReservationsServiceTest {
     // given
     List<Reservation> reservations = List.of(sampleReservation(1L), sampleReservation(1L));
     given(loadReservationPort.findByUserId(1L, null)).willReturn(reservations);
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
 
     // when
     List<ReservationSummaryResult> results = sut.execute(new GetUserReservationsQuery(1L, null));
@@ -62,6 +72,8 @@ class GetUserReservationsServiceTest {
     // given
     given(loadReservationPort.findByUserId(1L, ReservationStatus.PENDING))
         .willReturn(List.of(sampleReservation(1L)));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
 
     // when
     List<ReservationSummaryResult> results =
@@ -77,6 +89,8 @@ class GetUserReservationsServiceTest {
   void execute_NoReservations_ReturnsEmptyList() {
     // given
     given(loadReservationPort.findByUserId(1L, null)).willReturn(List.of());
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
 
     // when
     List<ReservationSummaryResult> results = sut.execute(new GetUserReservationsQuery(1L, null));
@@ -90,5 +104,27 @@ class GetUserReservationsServiceTest {
   void execute_NullUserId_ThrowsIllegalArgument() {
     assertThatThrownBy(() -> sut.execute(new GetUserReservationsQuery(null, null)))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - classSummary와 trainerSummary가 모두 있으면 enrichment 필드에 값이 채워진다")
+  void execute_EnrichmentPresent_FieldsPopulated() {
+    // given
+    Reservation reservation = sampleReservation(1L);
+    ClassSummary classSummary = new ClassSummary("필라테스 입문", 45000, "thumb/pilates.jpg");
+    UserSummary trainerSummary = new UserSummary(2L, "trainer-nick");
+
+    given(loadReservationPort.findByUserId(1L, null)).willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(List.of(3L))).willReturn(Map.of(3L, classSummary));
+    given(loadUserSummaryPort.findByIds(List.of(2L))).willReturn(Map.of(2L, trainerSummary));
+
+    // when
+    List<ReservationSummaryResult> results = sut.execute(new GetUserReservationsQuery(1L, null));
+
+    // then — enrichment fields must be populated
+    assertThat(results).hasSize(1);
+    assertThat(results.get(0).classTitle()).isEqualTo("필라테스 입문");
+    assertThat(results.get(0).trainerNickname()).isEqualTo("trainer-nick");
+    assertThat(results.get(0).thumbnailFinalObjectKey()).isEqualTo("thumb/pilates.jpg");
   }
 }

@@ -19,4 +19,18 @@ public interface GetClassInfoUseCase {
    * @return Optional containing the class aggregate if found
    */
   Optional<MarketplaceClass> findById(Long classId);
+
+  /**
+   * Find the class that owns the given slot, without acquiring a lock.
+   *
+   * <p>Intended for read-only cross-module enrichment (e.g., the {@code reservation} module
+   * populating classId from a slotId). Uses a plain {@code SELECT} — do not use when you need
+   * concurrent-write protection; use {@link
+   * momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase#findByIdWithLock}
+   * for that.
+   *
+   * @param slotId slot ID
+   * @return Optional containing the class aggregate if the slot and its class are found
+   */
+  Optional<MarketplaceClass> findBySlotId(Long slotId);
 }

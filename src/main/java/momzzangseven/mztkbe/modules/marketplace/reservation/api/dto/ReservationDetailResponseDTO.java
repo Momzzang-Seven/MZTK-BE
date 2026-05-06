@@ -6,6 +6,16 @@ import java.time.LocalTime;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
+/**
+ * HTTP response DTO for the reservation detail endpoints.
+ *
+ * <p>Used by:
+ *
+ * <ul>
+ *   <li>{@code GET /marketplace/reservations/{id}}
+ *   <li>{@code GET /marketplace/trainer/reservations/{id}}
+ * </ul>
+ */
 public record ReservationDetailResponseDTO(
     Long reservationId,
     Long userId,
@@ -19,7 +29,12 @@ public record ReservationDetailResponseDTO(
     String orderId,
     String txHash,
     LocalDateTime createdAt,
-    LocalDateTime updatedAt) {
+    LocalDateTime updatedAt,
+    String classTitle,
+    Integer priceAmount,
+    String trainerNickname,
+    String userNickname,
+    String thumbnailFinalObjectKey) {
 
   public static ReservationDetailResponseDTO from(GetReservationResult result) {
     return new ReservationDetailResponseDTO(
@@ -35,6 +50,11 @@ public record ReservationDetailResponseDTO(
         result.orderId(),
         result.txHash(),
         result.createdAt(),
-        result.updatedAt());
+        result.updatedAt(),
+        result.classTitle(),
+        result.priceAmount(),
+        result.trainerNickname(),
+        result.userNickname(),
+        result.thumbnailFinalObjectKey());
   }
 }

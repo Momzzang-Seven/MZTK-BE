@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 import java.time.LocalDate;
@@ -11,7 +12,11 @@ import momzzangseven.mztkbe.global.error.marketplace.MarketplaceUnauthorizedAcce
 import momzzangseven.mztkbe.global.error.marketplace.ReservationNotFoundException;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort;
+import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadUserSummaryPort.UserSummary;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -25,6 +30,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GetReservationDetailServiceTest {
 
   @Mock private LoadReservationPort loadReservationPort;
+  @Mock private LoadClassSummaryPort loadClassSummaryPort;
+  @Mock private LoadUserSummaryPort loadUserSummaryPort;
 
   @InjectMocks private GetReservationDetailService sut;
 
@@ -49,6 +56,8 @@ class GetReservationDetailServiceTest {
     // given
     Reservation reservation = sampleReservation(1L, 2L);
     given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
 
     // when
     GetReservationResult result = sut.execute(new GetReservationQuery(10L, 1L));
@@ -64,12 +73,63 @@ class GetReservationDetailServiceTest {
     // given
     Reservation reservation = sampleReservation(1L, 2L);
     given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(loadClassSummaryPort.findBySlotId(any())).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
 
     // when
     GetReservationResult result = sut.execute(new GetReservationQuery(10L, 2L));
 
     // then
     assertThat(result.trainerId()).isEqualTo(2L);
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - 클래스/유저 정보가 모두 존재하면 enrichment 필드가 채워진다")
+  void execute_AllSummariesPresent_EnrichmentFieldsPopulated() {
+    // given
+    Reservation reservation = sampleReservation(1L, 2L);
+    ClassSummary classSummary = new ClassSummary("요가 기초", 50000, "thumbnail/key.jpg");
+    UserSummary trainerSummary = new UserSummary(2L, "trainer-nick");
+    UserSummary userSummary = new UserSummary(1L, "user-nick");
+
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(loadClassSummaryPort.findBySlotId(3L)).willReturn(Optional.of(classSummary));
+    given(loadUserSummaryPort.findById(2L)).willReturn(Optional.of(trainerSummary));
+    given(loadUserSummaryPort.findById(1L)).willReturn(Optional.of(userSummary));
+
+    // when
+    GetReservationResult result = sut.execute(new GetReservationQuery(10L, 1L));
+
+    // then — enrichment fields must be populated
+    assertThat(result.classTitle()).isEqualTo("요가 기초");
+    assertThat(result.priceAmount()).isEqualTo(50000);
+    assertThat(result.thumbnailFinalObjectKey()).isEqualTo("thumbnail/key.jpg");
+    assertThat(result.trainerNickname()).isEqualTo("trainer-nick");
+    assertThat(result.userNickname()).isEqualTo("user-nick");
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - 비활성 클래스(classSummary 없음)이면 enrichment 필드는 null")
+  void execute_InactiveClass_EnrichmentFieldsNull() {
+    // given — classSummary is absent (e.g., class was deactivated)
+    Reservation reservation = sampleReservation(1L, 2L);
+    UserSummary trainerSummary = new UserSummary(2L, "trainer-nick");
+    UserSummary userSummary = new UserSummary(1L, "user-nick");
+
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(loadClassSummaryPort.findBySlotId(3L)).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findById(2L)).willReturn(Optional.of(trainerSummary));
+    given(loadUserSummaryPort.findById(1L)).willReturn(Optional.of(userSummary));
+
+    // when
+    GetReservationResult result = sut.execute(new GetReservationQuery(10L, 1L));
+
+    // then — class enrichment fields absent; user fields still populated
+    assertThat(result.classTitle()).isNull();
+    assertThat(result.priceAmount()).isNull();
+    assertThat(result.thumbnailFinalObjectKey()).isNull();
+    assertThat(result.trainerNickname()).isEqualTo("trainer-nick");
+    assertThat(result.userNickname()).isEqualTo("user-nick");
   }
 
   @Test
