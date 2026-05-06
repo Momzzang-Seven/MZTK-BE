@@ -5,13 +5,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignDigestCommand;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignDigestResult;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySignerConfigView;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.in.DescribeKmsKeyUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.GetRewardTreasurySignerConfigUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.GetSponsorTreasurySignerConfigUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.in.SignDigestUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
@@ -24,12 +20,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Unit tests for the {@code treasury → shared} bridge adapters: covers [M-125], [M-126], [M-127],
- * [M-128].
+ * Unit tests for the {@code treasury → shared} bridge adapters: covers [M-125], [M-126].
  *
- * <p>Each adapter is a one-line delegate; tests verify (a) field-by-field propagation, (b) the
- * mapping between shared {@code SignDigestResult} ↔ shared {@link Vrs}, and (c) Optional handling
- * for the alias adapters.
+ * <p>Each adapter is a one-line delegate; tests verify field-by-field propagation and the mapping
+ * between shared {@code SignDigestResult} ↔ shared {@link Vrs}.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Treasury 브리지 어댑터 단위 테스트")
@@ -86,60 +80,6 @@ class BridgeAdaptersTest {
       assertThat(result.v()).isEqualTo(v);
       assertThat(result.r()).isEqualTo(r);
       assertThat(result.s()).isEqualTo(s);
-    }
-  }
-
-  @Nested
-  @DisplayName("C. RewardTreasuryAliasAdapter")
-  class RewardAlias {
-
-    @Mock private GetRewardTreasurySignerConfigUseCase useCase;
-
-    @Test
-    @DisplayName("[M-127a] loadAlias — walletAlias 존재 → Optional.of")
-    void loadAlias_present_returnsOptional() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView("reward-treasury"));
-      RewardTreasuryAliasAdapter adapter = new RewardTreasuryAliasAdapter(useCase);
-
-      Optional<String> result = adapter.loadAlias();
-
-      assertThat(result).contains("reward-treasury");
-    }
-
-    @Test
-    @DisplayName("[M-127b] loadAlias — walletAlias가 null → Optional.empty")
-    void loadAlias_nullWalletAlias_returnsEmpty() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView(null));
-      RewardTreasuryAliasAdapter adapter = new RewardTreasuryAliasAdapter(useCase);
-
-      assertThat(adapter.loadAlias()).isEmpty();
-    }
-  }
-
-  @Nested
-  @DisplayName("D. SponsorTreasuryAliasAdapter")
-  class SponsorAlias {
-
-    @Mock private GetSponsorTreasurySignerConfigUseCase useCase;
-
-    @Test
-    @DisplayName("[M-128a] loadAlias — walletAlias 존재 → Optional.of")
-    void loadAlias_present_returnsOptional() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView("sponsor-treasury"));
-      SponsorTreasuryAliasAdapter adapter = new SponsorTreasuryAliasAdapter(useCase);
-
-      Optional<String> result = adapter.loadAlias();
-
-      assertThat(result).contains("sponsor-treasury");
-    }
-
-    @Test
-    @DisplayName("[M-128b] loadAlias — walletAlias가 null → Optional.empty")
-    void loadAlias_nullWalletAlias_returnsEmpty() {
-      when(useCase.execute()).thenReturn(new TreasurySignerConfigView(null));
-      SponsorTreasuryAliasAdapter adapter = new SponsorTreasuryAliasAdapter(useCase);
-
-      assertThat(adapter.loadAlias()).isEmpty();
     }
   }
 }

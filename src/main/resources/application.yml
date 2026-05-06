@@ -186,7 +186,6 @@ web3:
 
     # 임계치/워커 튜닝은 yml 상수 유지
     treasury:
-      wallet-alias: reward-treasury
       provisioning:
         enabled: ${WEB3_TREASURY_PROVISIONING_ENABLED}
 
@@ -218,7 +217,6 @@ web3:
 
     sponsor:
       enabled: true
-      wallet-alias: sponsor-treasury
 
       # 안전장치는 yml 상수 유지(운영 중 급변할 값 아니면)
       max-gas-limit: 500000
@@ -264,8 +262,6 @@ web3:
       zone: Asia/Seoul
       eip1559-ttl-seconds: 90
       action-policy: ${WEB3_EXECUTION_INTERNAL_ACTION_POLICY}
-      signer:
-        wallet-alias: sponsor-treasury
   qna:
     admin:
       enabled: ${WEB3_QNA_ADMIN_ENABLED}
