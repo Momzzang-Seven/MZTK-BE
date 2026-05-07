@@ -23,6 +23,8 @@ public interface LoadClassPort {
    */
   Optional<MarketplaceClass> findById(Long classId);
 
+  Optional<MarketplaceClass> findByIdForUpdate(Long classId);
+
   /**
    * Find all active classes matching the given filters, sorted and paginated.
    *

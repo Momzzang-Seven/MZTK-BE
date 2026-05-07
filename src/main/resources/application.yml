@@ -278,6 +278,11 @@ web3:
       batch-size: 50
       cron: "0 17 * * * *"
       zone: "Asia/Seoul"
+    question-update-reconciliation:
+      enabled: true
+      batch-size: 100
+      cron: "0 */5 * * * *"
+      zone: "Asia/Seoul"
   marketplace:
     admin:
       enabled: ${WEB3_MARKETPLACE_ADMIN_ENABLED}

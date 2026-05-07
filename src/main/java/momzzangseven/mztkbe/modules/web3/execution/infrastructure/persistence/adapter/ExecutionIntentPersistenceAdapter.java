@@ -124,6 +124,22 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public boolean existsActiveByResourceAndActionTypeNotForUpdate(
+      ExecutionResourceType resourceType, String resourceId, ExecutionActionType actionType) {
+    return !repository
+        .findActiveByResourceAndActionTypeNotForUpdate(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN),
+            actionType,
+            PageRequest.of(0, 1))
+        .isEmpty();
+  }
+
+  @Override
   public Optional<ExecutionIntent> claimNextInternalExecutableForUpdate(
       List<ExecutionActionType> actionTypes) {
     if (actionTypes == null || actionTypes.isEmpty()) {

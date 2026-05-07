@@ -17,7 +17,6 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionNotFoundException;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.LoadTransactionWorkPort;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.UpdateTransactionPort;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3ReferenceType;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3Transaction;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxStatus;
@@ -228,15 +227,12 @@ public class TransactionWorkPersistenceAdapter
 
   @Override
   @Transactional(readOnly = true)
-  public List<LoadTransactionPort.TransactionSnapshot> loadByReferenceTypeAndReferenceIds(
-      Web3ReferenceType referenceType, Collection<String> referenceIds) {
-    if (referenceType == null) {
-      throw new Web3InvalidInputException("referenceType is required");
-    }
+  public List<LoadTransactionPort.TransactionSnapshot> loadLevelRewardsByReferenceIds(
+      Collection<String> referenceIds) {
     if (referenceIds == null || referenceIds.isEmpty()) {
       return List.of();
     }
-    return repository.findByReferenceTypeAndReferenceIdIn(referenceType, referenceIds).stream()
+    return repository.findLevelRewardsByReferenceIdIn(referenceIds).stream()
         .map(
             entity ->
                 new LoadTransactionPort.TransactionSnapshot(
