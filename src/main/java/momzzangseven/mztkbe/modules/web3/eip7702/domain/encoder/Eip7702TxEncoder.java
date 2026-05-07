@@ -134,7 +134,7 @@ public final class Eip7702TxEncoder {
    * @param to 0x-prefixed 20-byte destination address (validated via {@link EvmAddress#of(String)})
    * @param value transferred wei, {@code >= 0}
    * @param data 0x-prefixed hex calldata; {@code "0x"} is allowed for an empty payload
-   * @param authorizationList list of authorization tuples; non-null, may be empty
+   * @param authorizationList list of authorization tuples; non-null and non-empty (EIP-7702 spec)
    */
   public record Eip7702Fields(
       long chainId,
@@ -177,8 +177,8 @@ public final class Eip7702TxEncoder {
       if (data == null || !HEX_DATA_PATTERN.matcher(data).matches()) {
         throw new Web3InvalidInputException("data must be 0x-prefixed hex");
       }
-      if (authorizationList == null) {
-        throw new Web3InvalidInputException("authorizationList is required");
+      if (authorizationList == null || authorizationList.isEmpty()) {
+        throw new Web3InvalidInputException("authorizationList must be non-empty");
       }
       // Defensive immutability — callers cannot mutate the list after record creation.
       authorizationList = List.copyOf(authorizationList);

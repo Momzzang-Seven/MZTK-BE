@@ -237,21 +237,22 @@ class Eip7702TxEncoderTest {
     }
 
     @Test
-    @DisplayName("[E-8] authorizationList 빈 리스트 허용")
-    void constructor_emptyAuthList_succeeds() {
-      Eip7702Fields fields =
-          new Eip7702Fields(
-              CHAIN_ID,
-              NONCE,
-              MAX_PRIORITY,
-              MAX_FEE,
-              GAS_LIMIT,
-              DESTINATION,
-              VALUE,
-              DATA,
-              List.of());
-
-      assertThat(fields.authorizationList()).isEmpty();
+    @DisplayName("[E-8] authorizationList = empty → Web3InvalidInputException (EIP-7702 spec)")
+    void constructor_emptyAuthList_throws() {
+      assertThatThrownBy(
+              () ->
+                  new Eip7702Fields(
+                      CHAIN_ID,
+                      NONCE,
+                      MAX_PRIORITY,
+                      MAX_FEE,
+                      GAS_LIMIT,
+                      DESTINATION,
+                      VALUE,
+                      DATA,
+                      List.of()))
+          .isInstanceOf(Web3InvalidInputException.class)
+          .hasMessageContaining("authorizationList");
     }
 
     @Test
@@ -407,33 +408,13 @@ class Eip7702TxEncoderTest {
   }
 
   // =========================================================================
-  // Group 4 — authorizationList shape across 0/1/2 tuples
+  // Group 4 — authorizationList shape across 1/2 tuples
+  // (length-0 case is rejected by Eip7702Fields invariant — see [E-8])
   // =========================================================================
 
   @Nested
-  @DisplayName("4. authorizationList RLP shape (0/1/2 tuples)")
+  @DisplayName("4. authorizationList RLP shape (1/2 tuples)")
   class AuthListShape {
-
-    @Test
-    @DisplayName("[E-17] 0개 tuple → authorizationList는 빈 RlpList")
-    void zeroTuples_empty() {
-      Eip7702Fields fields =
-          new Eip7702Fields(
-              CHAIN_ID,
-              NONCE,
-              MAX_PRIORITY,
-              MAX_FEE,
-              GAS_LIMIT,
-              DESTINATION,
-              VALUE,
-              DATA,
-              List.of());
-
-      RlpList decoded = decodePayload(Eip7702TxEncoder.buildUnsigned(fields));
-
-      RlpList authList = (RlpList) decoded.getValues().get(9);
-      assertThat(authList.getValues()).isEmpty();
-    }
 
     @Test
     @DisplayName("[E-18] 1개 tuple → authorizationList는 1개의 6-요소 inner RlpList")

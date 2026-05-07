@@ -21,5 +21,9 @@ public record Eip7702ExecutionSignCommand(
     if (sponsorSigner == null) {
       throw new Web3InvalidInputException("sponsorSigner is required");
     }
+    if (authorizationList == null || authorizationList.isEmpty()) {
+      throw new Web3InvalidInputException("authorizationList must be non-empty");
+    }
+    authorizationList = List.copyOf(authorizationList);
   }
 }
