@@ -38,12 +38,26 @@ public final class KmsClientErrorClassifier {
   private KmsClientErrorClassifier() {}
 
   /**
-   * Returns {@code true} when the underlying cause indicates an unrecoverable KMS condition that
-   * the caller should not keep retrying. Returns {@code false} for transient SDK client errors,
-   * non-KMS causes, and missing error metadata — the caller falls back to retry.
+   * Returns {@code true} when the underlying cause of {@code ex} indicates an unrecoverable KMS
+   * condition that the caller should not keep retrying. Returns {@code false} for transient SDK
+   * client errors, non-KMS causes, and missing error metadata — the caller falls back to retry.
    */
   public static boolean isTerminal(BusinessException ex) {
-    Throwable cause = ex.getCause();
+    return isTerminalCause(ex.getCause());
+  }
+
+  /**
+   * Cause-level entry point for classifying a raw {@link Throwable} (typically an {@link
+   * software.amazon.awssdk.core.exception.SdkException} caught at the adapter boundary). Returns
+   * {@code true} only when {@code cause} is a {@link KmsException} carrying one of the terminal AWS
+   * error codes; everything else (null, non-KMS exceptions, missing {@link AwsErrorDetails}) is
+   * treated as retryable.
+   *
+   * <p>Adapters use this overload to decide the {@code retryable} flag at the throw site so direct
+   * propagators (e.g. {@code ProvisionTreasuryKeyService} sanity-sign) surface the correct retry
+   * signal in the HTTP response without reclassifying themselves.
+   */
+  public static boolean isTerminalCause(Throwable cause) {
     if (!(cause instanceof KmsException kex)) {
       return false;
     }
