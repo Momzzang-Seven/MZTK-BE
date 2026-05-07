@@ -199,6 +199,7 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
     "[P-1] admin settlement review/settle broadcasts and mines an on-chain admin settle tx",
     { tag: ["@requires-rpc", "@requires-internal-issuer"] },
     async ({ request }) => {
+      test.setTimeout(USER_CONFIRM_TIMEOUT_MS + INTENT_TIMEOUT_MS + RECEIPT_TIMEOUT_MS + 60_000);
       test.skip(
         !hasAnswerInfra(),
         "RPC / QnA contract / reward token / funded asker+responder wallet env is required"
@@ -296,6 +297,7 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
     "[P-2] admin refund review/refund broadcasts and mines an on-chain admin refund tx",
     { tag: ["@requires-rpc", "@requires-internal-issuer"] },
     async ({ request }) => {
+      test.setTimeout(USER_CONFIRM_TIMEOUT_MS + INTENT_TIMEOUT_MS + RECEIPT_TIMEOUT_MS + 60_000);
       test.skip(
         !hasQuestionInfra(),
         "RPC / QnA contract / reward token / funded asker wallet env is required"
