@@ -55,6 +55,35 @@ class KmsExceptionTest {
       assertThat(signEx.getCode()).isEqualTo("WEB3_017");
       assertThat(signEx.isRetryable()).isTrue();
     }
+
+    @Test
+    @DisplayName("[M-50-2] KmsSignFailedException(message, retryable=false) — terminal 신호 보존")
+    void messageAndRetryableConstructor_carriesExplicitFalse() {
+      // given / when
+      KmsSignFailedException ex = new KmsSignFailedException("denied", false);
+
+      // then
+      assertThat(ex.getMessage()).isEqualTo("denied");
+      assertThat(ex.getCode()).isEqualTo("WEB3_017");
+      assertThat(ex.isRetryable()).isFalse();
+    }
+
+    @Test
+    @DisplayName(
+        "[M-52a-2] KmsSignFailedException(message, cause, retryable=false) — terminal + cause 보존")
+    void threeArgConstructor_carriesExplicitFalseAndPreservesCause() {
+      // given
+      RuntimeException cause = new RuntimeException("aws AccessDenied");
+
+      // when
+      KmsSignFailedException ex = new KmsSignFailedException("denied", cause, false);
+
+      // then
+      assertThat(ex.getCause()).isSameAs(cause);
+      assertThat(ex.getMessage()).isEqualTo("denied");
+      assertThat(ex.getCode()).isEqualTo("WEB3_017");
+      assertThat(ex.isRetryable()).isFalse();
+    }
   }
 
   // =========================================================================
