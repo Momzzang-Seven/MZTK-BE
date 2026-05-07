@@ -29,6 +29,13 @@ public interface AnswerUpdateStatePort {
       String executionIntentId,
       String errorReason);
 
+  int markPreparationFailedIfCurrent(
+      Long answerId,
+      Long updateVersion,
+      String updateToken,
+      String preparationToken,
+      String errorReason);
+
   int discardLatestFailed(Long answerId);
 
   int bindRecoveryIntentIfCurrent(Long stateId, String executionIntentId);

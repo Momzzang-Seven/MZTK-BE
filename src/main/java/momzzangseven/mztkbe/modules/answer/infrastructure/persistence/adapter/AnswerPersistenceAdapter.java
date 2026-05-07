@@ -83,6 +83,12 @@ public class AnswerPersistenceAdapter
   }
 
   @Override
+  public long countOnchainBlockingAnswers(Long postId) {
+    return answerJpaRepository.countByPostIdAndPublicationStatus(
+        postId, AnswerPublicationStatus.VISIBLE);
+  }
+
+  @Override
   public List<Long> loadAnswerIdsByPostId(Long postId) {
     return answerJpaRepository.findIdsByPostId(postId);
   }
@@ -161,6 +167,18 @@ public class AnswerPersistenceAdapter
       Long answerId, String executionIntentId, String terminalStatus, String failureReason) {
     return answerJpaRepository.rollbackDeleteIfCurrent(
         answerId, executionIntentId, terminalStatus, failureReason);
+  }
+
+  @Override
+  public int rollbackDeletePreparationIfCurrent(
+      Long answerId, String preparationToken, String terminalStatus, String failureReason) {
+    return answerJpaRepository.rollbackDeletePreparationIfCurrent(
+        answerId,
+        preparationToken,
+        terminalStatus,
+        failureReason,
+        AnswerPublicationStatus.VISIBLE,
+        AnswerDeleteStatus.PREPARING);
   }
 
   @Override

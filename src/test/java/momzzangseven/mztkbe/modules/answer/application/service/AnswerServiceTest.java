@@ -402,6 +402,42 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("managed answer update marks preparation failed when web3 preparation fails")
+    void updateAnswer_managedUpdateMarksPreparationFailed_whenWeb3PrepareFails() {
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+      AnswerUpdateStatePort.AnswerUpdateState updateState =
+          new AnswerUpdateStatePort.AnswerUpdateState(
+              500L, 100L, 3L, "update-token", null, "updated", false);
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.UPDATE))
+          .willReturn(true);
+      given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
+          .willReturn(updateState);
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerUpdate(
+                  10L, 100L, 20L, 30L, "question content", 50L, "updated", 1, 3L, "update-token"))
+          .willThrow(new RuntimeException("web3 down"));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessageContaining("web3 down");
+
+      verify(answerUpdateStatePort)
+          .markPreparationFailedIfCurrent(
+              org.mockito.ArgumentMatchers.eq(100L),
+              org.mockito.ArgumentMatchers.eq(3L),
+              org.mockito.ArgumentMatchers.eq("update-token"),
+              org.mockito.ArgumentMatchers.anyString(),
+              org.mockito.ArgumentMatchers.eq("web3 down"));
+    }
+
+    @Test
     @DisplayName("update with imageIds only syncs images without saving answer row")
     void updateAnswer_allowsImageOnlyUpdate() {
       UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, null, List.of(9L));
@@ -539,6 +575,39 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("managed delete rolls back preparation when web3 preparation fails")
+    void deleteAnswer_managedDeleteRollsBackPreparation_whenWeb3PrepareFails() {
+      DeleteAnswerCommand command = new DeleteAnswerCommand(10L, 100L, 20L);
+      Answer answer = buildAnswer(100L, 10L, 20L, "delete me", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.DELETE))
+          .willReturn(true);
+      given(saveAnswerPort.saveAnswer(any(Answer.class)))
+          .willAnswer(invocation -> invocation.getArgument(0));
+      given(countAnswersPort.countAnswers(10L)).willReturn(0L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerDelete(
+                  10L, 100L, 20L, 30L, "question content", 50L, 0))
+          .willThrow(new RuntimeException("web3 down"));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessageContaining("web3 down");
+
+      verify(saveAnswerPort)
+          .rollbackDeletePreparationIfCurrent(
+              org.mockito.ArgumentMatchers.eq(100L),
+              org.mockito.ArgumentMatchers.anyString(),
+              org.mockito.ArgumentMatchers.eq("PREPARATION_FAILED"),
+              org.mockito.ArgumentMatchers.eq("web3 down"));
+      verify(deleteAnswerPort, never()).deleteAnswer(100L);
+    }
+
+    @Test
     @DisplayName("deleteByPostId deletes answers and publishes one event per answer")
     void deleteByPostId_delegatesToPort_andPublishesEvents() {
       given(loadAnswerPort.loadAnswerIdsByPostId(10L)).willReturn(List.of(100L, 101L));
@@ -666,6 +735,32 @@ class AnswerServiceTest {
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(RuntimeException.class)
           .hasMessageContaining("sync failed");
+    }
+
+    @Test
+    @DisplayName("managed create cleans up reserved answer when web3 preparation fails")
+    void createAnswer_managedCreateCleansUpReservedAnswer_whenWeb3PrepareFails() {
+      CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", null);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+      Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.CREATE))
+          .willReturn(true);
+      given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerCreate(
+                  10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
+          .willThrow(new RuntimeException("web3 down"));
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(RuntimeException.class)
+          .hasMessageContaining("web3 down");
+
+      verify(deleteAnswerPort).deleteAnswer(99L);
+      verify(publishAnswerDeletedEventPort).publish(new AnswerDeletedEvent(99L));
     }
 
     @Test

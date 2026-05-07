@@ -105,6 +105,23 @@ class AnswerPersistenceAdapterTest {
     }
 
     @Test
+    @DisplayName("countOnchainBlockingAnswers() counts visible answers including pending delete")
+    void countOnchainBlockingAnswers_delegatesToVisibleCount() {
+      given(
+              answerJpaRepository.countByPostIdAndPublicationStatus(
+                  10L,
+                  momzzangseven.mztkbe.modules.answer.domain.vo.AnswerPublicationStatus.VISIBLE))
+          .willReturn(1L);
+
+      long result = answerPersistenceAdapter.countOnchainBlockingAnswers(10L);
+
+      assertThat(result).isEqualTo(1L);
+      verify(answerJpaRepository)
+          .countByPostIdAndPublicationStatus(
+              10L, momzzangseven.mztkbe.modules.answer.domain.vo.AnswerPublicationStatus.VISIBLE);
+    }
+
+    @Test
     @DisplayName("deleteAnswer() delegates to deleteById")
     void deleteAnswer_deletesById() {
       answerPersistenceAdapter.deleteAnswer(100L);

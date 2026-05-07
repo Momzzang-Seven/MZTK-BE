@@ -36,8 +36,7 @@ class LoadLevelRewardTransactionsServiceTest {
 
   @Test
   void loadByLevelUpHistoryIds_mapsSnapshotsByReferenceId() {
-    when(loadTransactionPort.loadByReferenceTypeAndReferenceIds(
-            Web3ReferenceType.LEVEL_UP_REWARD, List.of("101", "102")))
+    when(loadTransactionPort.loadLevelRewardsByReferenceIds(List.of("101", "102")))
         .thenReturn(
             List.of(
                 new LoadTransactionPort.TransactionSnapshot(
@@ -71,8 +70,7 @@ class LoadLevelRewardTransactionsServiceTest {
 
   @Test
   void loadByLevelUpHistoryIds_throws_whenSnapshotReferenceIsNotLong() {
-    when(loadTransactionPort.loadByReferenceTypeAndReferenceIds(
-            Web3ReferenceType.LEVEL_UP_REWARD, List.of("101")))
+    when(loadTransactionPort.loadLevelRewardsByReferenceIds(List.of("101")))
         .thenReturn(
             List.of(
                 new LoadTransactionPort.TransactionSnapshot(

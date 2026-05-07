@@ -51,6 +51,8 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
   long countByPostIdAndPublicationStatusAndPendingDeleteStatusIsNull(
       Long postId, AnswerPublicationStatus publicationStatus);
 
+  long countByPostIdAndPublicationStatus(Long postId, AnswerPublicationStatus publicationStatus);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select a from AnswerEntity a where a.id = :answerId")
   Optional<AnswerEntity> findByIdForUpdate(@Param("answerId") Long answerId);
@@ -192,6 +194,30 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
       @Param("executionIntentId") String executionIntentId,
       @Param("terminalStatus") String terminalStatus,
       @Param("failureReason") String failureReason);
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      """
+      update AnswerEntity a
+      set a.pendingDeleteStatus = null,
+          a.currentDeleteExecutionIntentId = null,
+          a.deletePreparationToken = null,
+          a.deletePreparationExpiresAt = null,
+          a.deleteFailureTerminalStatus = :terminalStatus,
+          a.deleteFailureReason = :failureReason
+      where a.id = :answerId
+        and a.publicationStatus = :visibleStatus
+        and a.pendingDeleteStatus = :preparingDeleteStatus
+        and a.deletePreparationToken = :preparationToken
+        and a.currentDeleteExecutionIntentId is null
+      """)
+  int rollbackDeletePreparationIfCurrent(
+      @Param("answerId") Long answerId,
+      @Param("preparationToken") String preparationToken,
+      @Param("terminalStatus") String terminalStatus,
+      @Param("failureReason") String failureReason,
+      @Param("visibleStatus") AnswerPublicationStatus visibleStatus,
+      @Param("preparingDeleteStatus") AnswerDeleteStatus preparingDeleteStatus);
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(

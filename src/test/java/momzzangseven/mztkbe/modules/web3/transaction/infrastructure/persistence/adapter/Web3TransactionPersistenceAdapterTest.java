@@ -54,7 +54,7 @@ class Web3TransactionPersistenceAdapterTest {
 
   @Test
   void saveLevelUpRewardIntent_throws_whenExistingFailedOnchain() {
-    when(repository.findByReferenceTypeAndReferenceId(Web3ReferenceType.LEVEL_UP_REWARD, "101"))
+    when(repository.findLevelRewardByReferenceId("101"))
         .thenReturn(Optional.of(existingEntity(Web3TxStatus.FAILED_ONCHAIN)));
 
     assertThatThrownBy(() -> adapter.saveLevelUpRewardIntent(validCommand()))
@@ -63,7 +63,7 @@ class Web3TransactionPersistenceAdapterTest {
 
   @Test
   void saveLevelUpRewardIntent_returnsExisting_whenAlreadyPresent() {
-    when(repository.findByReferenceTypeAndReferenceId(Web3ReferenceType.LEVEL_UP_REWARD, "101"))
+    when(repository.findLevelRewardByReferenceId("101"))
         .thenReturn(Optional.of(existingEntity(Web3TxStatus.CREATED)));
 
     var tx = adapter.saveLevelUpRewardIntent(validCommand());
@@ -75,8 +75,7 @@ class Web3TransactionPersistenceAdapterTest {
 
   @Test
   void saveLevelUpRewardIntent_createsNewIntentWithAppClock() {
-    when(repository.findByReferenceTypeAndReferenceId(Web3ReferenceType.LEVEL_UP_REWARD, "101"))
-        .thenReturn(Optional.empty());
+    when(repository.findLevelRewardByReferenceId("101")).thenReturn(Optional.empty());
     when(repository.findByIdempotencyKey("idem-101")).thenReturn(Optional.empty());
     when(repository.saveAndFlush(any(Web3TransactionEntity.class)))
         .thenAnswer(invocation -> invocation.getArgument(0, Web3TransactionEntity.class));

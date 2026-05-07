@@ -6,5 +6,7 @@ public interface CountAnswersUseCase {
 
   long countPublicVisibleAnswers(Long postId);
 
+  long countOnchainBlockingAnswers(Long postId);
+
   boolean existsPreparingOrPendingCreateByPostId(Long postId);
 }

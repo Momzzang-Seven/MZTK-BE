@@ -5,4 +5,6 @@ public interface CountAnswersPort {
   long countAnswers(Long postId);
 
   long countPublicVisibleAnswers(Long postId);
+
+  long countOnchainBlockingAnswers(Long postId);
 }

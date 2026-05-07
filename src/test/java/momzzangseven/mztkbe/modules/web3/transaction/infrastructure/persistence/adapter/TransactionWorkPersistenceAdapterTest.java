@@ -229,28 +229,21 @@ class TransactionWorkPersistenceAdapterTest {
   }
 
   @Test
-  void loadByReferenceTypeAndReferenceIds_throws_whenReferenceTypeNull() {
-    assertThatThrownBy(() -> adapter.loadByReferenceTypeAndReferenceIds(null, List.of("ref-1")))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("referenceType is required");
+  void loadLevelRewardsByReferenceIds_returnsEmpty_whenReferenceIdsNull() {
+    List<LoadTransactionPort.TransactionSnapshot> snapshots =
+        adapter.loadLevelRewardsByReferenceIds(null);
+
+    assertThat(snapshots).isEmpty();
+    verify(repository, never()).findLevelRewardsByReferenceIdIn(any());
   }
 
   @Test
-  void loadByReferenceTypeAndReferenceIds_returnsEmpty_whenReferenceIdsNull() {
+  void loadLevelRewardsByReferenceIds_returnsEmpty_whenReferenceIdsEmpty() {
     List<LoadTransactionPort.TransactionSnapshot> snapshots =
-        adapter.loadByReferenceTypeAndReferenceIds(Web3ReferenceType.USER_TO_USER, null);
+        adapter.loadLevelRewardsByReferenceIds(List.of());
 
     assertThat(snapshots).isEmpty();
-    verify(repository, never()).findByReferenceTypeAndReferenceIdIn(any(), any());
-  }
-
-  @Test
-  void loadByReferenceTypeAndReferenceIds_returnsEmpty_whenReferenceIdsEmpty() {
-    List<LoadTransactionPort.TransactionSnapshot> snapshots =
-        adapter.loadByReferenceTypeAndReferenceIds(Web3ReferenceType.USER_TO_USER, List.of());
-
-    assertThat(snapshots).isEmpty();
-    verify(repository, never()).findByReferenceTypeAndReferenceIdIn(any(), any());
+    verify(repository, never()).findLevelRewardsByReferenceIdIn(any());
   }
 
   @Test
@@ -346,12 +339,12 @@ class TransactionWorkPersistenceAdapterTest {
   }
 
   @Test
-  void loadByReferenceTypeAndReferenceIds_mapsSnapshots() {
+  void loadLevelRewardsByReferenceIds_mapsSnapshots() {
     Web3TransactionEntity entity =
         Web3TransactionEntity.builder()
             .id(1L)
             .idempotencyKey("idem-1")
-            .referenceType(Web3ReferenceType.USER_TO_USER)
+            .referenceType(Web3ReferenceType.LEVEL_UP_REWARD)
             .referenceId("ref-1")
             .fromUserId(7L)
             .toUserId(22L)
@@ -362,13 +355,10 @@ class TransactionWorkPersistenceAdapterTest {
             .status(Web3TxStatus.SIGNED)
             .txHash("0x" + "c".repeat(64))
             .build();
-    when(repository.findByReferenceTypeAndReferenceIdIn(
-            Web3ReferenceType.USER_TO_USER, List.of("ref-1")))
-        .thenReturn(List.of(entity));
+    when(repository.findLevelRewardsByReferenceIdIn(List.of("ref-1"))).thenReturn(List.of(entity));
 
     List<LoadTransactionPort.TransactionSnapshot> snapshots =
-        adapter.loadByReferenceTypeAndReferenceIds(
-            Web3ReferenceType.USER_TO_USER, List.of("ref-1"));
+        adapter.loadLevelRewardsByReferenceIds(List.of("ref-1"));
 
     assertThat(snapshots).hasSize(1);
     assertThat(snapshots.getFirst().transactionId()).isEqualTo(1L);

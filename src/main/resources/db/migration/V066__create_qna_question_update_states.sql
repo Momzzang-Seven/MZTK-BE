@@ -15,7 +15,7 @@ CREATE TABLE qna_question_update_states (
     CONSTRAINT uk_qna_question_update_states_post_version UNIQUE (post_id, update_version),
     CONSTRAINT uk_qna_question_update_states_token UNIQUE (update_token),
     CONSTRAINT ck_qna_question_update_states_status
-        CHECK (status IN ('PREPARING', 'PREPARATION_FAILED', 'INTENT_BOUND', 'CONFIRMED', 'STALE'))
+        CHECK (status IN ('PREPARING','PREPARATION_FAILED','INTENT_BOUND','CONFIRMED','STALE'))
 );
 
 CREATE UNIQUE INDEX uk_qna_question_update_states_intent_public_id

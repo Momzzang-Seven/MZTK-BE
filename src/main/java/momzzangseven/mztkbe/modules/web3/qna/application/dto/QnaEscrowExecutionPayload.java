@@ -14,6 +14,8 @@ public record QnaEscrowExecutionPayload(
     String contentHash,
     String callTarget,
     String callData,
+    Long questionUpdateVersion,
+    String questionUpdateToken,
     Long answerUpdateVersion,
     String answerUpdateToken) {
 
@@ -39,6 +41,8 @@ public record QnaEscrowExecutionPayload(
         contentHash,
         callTarget,
         callData,
+        null,
+        null,
         null,
         null);
   }

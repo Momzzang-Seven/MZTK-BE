@@ -43,13 +43,14 @@ class TagServiceTest {
   @DisplayName("linkTagsToPost filters blank and null tag names before lookup")
   void linkTagsToPost_filtersBlankAndNullNames() {
     Tag existingJava = Tag.builder().id(10L).name("java").build();
-    Tag savedSpring = Tag.builder().id(20L).name("spring").build();
+    Tag existingSpring = Tag.builder().id(20L).name("spring").build();
 
-    when(loadTagPort.loadTagsByNames(List.of("java", "spring"))).thenReturn(List.of(existingJava));
-    when(saveTagPort.saveTags(anyList())).thenReturn(List.of(savedSpring));
+    when(loadTagPort.loadTagsByNames(List.of("java", "spring")))
+        .thenReturn(List.of(existingJava, existingSpring));
 
     tagService.linkTagsToPost(77L, Arrays.asList(" Java ", " ", null, "Spring "));
 
+    verify(saveTagPort).saveTagNamesIfAbsent(List.of("java", "spring"));
     verify(loadTagPort).loadTagsByNames(List.of("java", "spring"));
     verify(saveTagPort).savePostTagMappings(77L, List.of(10L, 20L));
   }
@@ -61,6 +62,7 @@ class TagServiceTest {
 
     verifyNoInteractions(loadTagPort);
     verify(saveTagPort, never()).saveTags(anyList());
+    verify(saveTagPort, never()).saveTagNamesIfAbsent(anyList());
     verify(saveTagPort, never()).savePostTagMappings(eq(88L), anyList());
   }
 
@@ -69,17 +71,15 @@ class TagServiceTest {
   void linkTagsToPostNormalizesAndSaves() {
     List<String> input = List.of(" Java ", "java", "Spring ");
     Tag existingJava = Tag.builder().id(10L).name("java").build();
-    Tag savedSpring = Tag.builder().id(20L).name("spring").build();
+    Tag existingSpring = Tag.builder().id(20L).name("spring").build();
 
-    when(loadTagPort.loadTagsByNames(List.of("java", "spring"))).thenReturn(List.of(existingJava));
-    when(saveTagPort.saveTags(anyList())).thenReturn(List.of(savedSpring));
+    when(loadTagPort.loadTagsByNames(List.of("java", "spring")))
+        .thenReturn(List.of(existingJava, existingSpring));
 
     tagService.linkTagsToPost(99L, input);
 
-    ArgumentCaptor<List<Tag>> newTagsCaptor = ArgumentCaptor.forClass(List.class);
-    verify(saveTagPort).saveTags(newTagsCaptor.capture());
-    assertThat(newTagsCaptor.getValue()).hasSize(1);
-    assertThat(newTagsCaptor.getValue().getFirst().getName()).isEqualTo("spring");
+    verify(saveTagPort).saveTagNamesIfAbsent(List.of("java", "spring"));
+    verify(saveTagPort, never()).saveTags(anyList());
 
     ArgumentCaptor<List<Long>> idsCaptor = ArgumentCaptor.forClass(List.class);
     verify(saveTagPort)
@@ -95,6 +95,7 @@ class TagServiceTest {
 
     tagService.linkTagsToPost(50L, List.of("JAVA", " java "));
 
+    verify(saveTagPort).saveTagNamesIfAbsent(List.of("java"));
     verify(saveTagPort, never()).saveTags(anyList());
     verify(saveTagPort).savePostTagMappings(50L, List.of(10L));
   }
@@ -103,32 +104,36 @@ class TagServiceTest {
   @DisplayName("updateTags deletes old mapping and relinks when new tag names exist")
   void updateTagsWithNames() {
     Tag saved = Tag.builder().id(7L).name("kotlin").build();
-    when(loadTagPort.loadTagsByNames(List.of("kotlin"))).thenReturn(List.of());
-    when(saveTagPort.saveTags(anyList())).thenReturn(List.of(saved));
+    when(loadTagPort.loadTagsByNames(List.of("kotlin"))).thenReturn(List.of(saved));
+    when(loadTagPort.loadTagIdsByPostId(11L)).thenReturn(List.of(3L));
 
     tagService.updateTags(11L, List.of("kotlin"));
 
-    verify(saveTagPort).deleteTagsByPostId(11L);
+    verify(saveTagPort).saveTagNamesIfAbsent(List.of("kotlin"));
+    verify(saveTagPort).deletePostTagMappings(11L, List.of(3L));
     verify(saveTagPort).savePostTagMappings(11L, List.of(7L));
   }
 
   @Test
   @DisplayName("updateTags only deletes when incoming tag names are null")
   void updateTagsWithNullNames() {
+    when(loadTagPort.loadTagIdsByPostId(12L)).thenReturn(List.of(1L, 2L));
+
     tagService.updateTags(12L, null);
 
-    verify(saveTagPort).deleteTagsByPostId(12L);
-    verifyNoInteractions(loadTagPort);
+    verify(saveTagPort).deletePostTagMappings(12L, List.of(1L, 2L));
     verify(saveTagPort, never()).saveTags(anyList());
+    verify(saveTagPort, never()).savePostTagMappings(eq(12L), anyList());
   }
 
   @Test
   @DisplayName("updateTags only deletes when incoming tag names are blank")
   void updateTagsWithBlankNames() {
+    when(loadTagPort.loadTagIdsByPostId(14L)).thenReturn(List.of(1L));
+
     tagService.updateTags(14L, Arrays.asList(" ", null, ""));
 
-    verify(saveTagPort).deleteTagsByPostId(14L);
-    verifyNoInteractions(loadTagPort);
+    verify(saveTagPort).deletePostTagMappings(14L, List.of(1L));
     verify(saveTagPort, never()).saveTags(anyList());
     verify(saveTagPort, never()).savePostTagMappings(eq(14L), anyList());
   }

@@ -22,6 +22,11 @@ public class AnswerCountAdapter implements CountAnswersPort {
   }
 
   @Override
+  public long countOnchainBlockingAnswers(Long postId) {
+    return countAnswersUseCase.countOnchainBlockingAnswers(postId);
+  }
+
+  @Override
   public boolean existsPreparingOrPendingCreateByPostId(Long postId) {
     return countAnswersUseCase.existsPreparingOrPendingCreateByPostId(postId);
   }

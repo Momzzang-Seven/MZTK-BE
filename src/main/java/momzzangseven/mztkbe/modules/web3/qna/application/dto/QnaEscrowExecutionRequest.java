@@ -16,6 +16,8 @@ public record QnaEscrowExecutionRequest(
     BigInteger rewardAmountWei,
     String questionHash,
     String contentHash,
+    Long questionUpdateVersion,
+    String questionUpdateToken,
     Long answerUpdateVersion,
     String answerUpdateToken) {
 
@@ -43,6 +45,8 @@ public record QnaEscrowExecutionRequest(
         rewardAmountWei,
         questionHash,
         contentHash,
+        null,
+        null,
         null,
         null);
   }

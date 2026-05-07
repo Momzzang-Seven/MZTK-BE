@@ -17,6 +17,9 @@ public interface SaveAnswerPort {
   int rollbackDeleteIfCurrent(
       Long answerId, String executionIntentId, String terminalStatus, String failureReason);
 
+  int rollbackDeletePreparationIfCurrent(
+      Long answerId, String preparationToken, String terminalStatus, String failureReason);
+
   int markDeleteSyncConflictIfMismatched(
       Long answerId, String executionIntentId, String conflictReason);
 }

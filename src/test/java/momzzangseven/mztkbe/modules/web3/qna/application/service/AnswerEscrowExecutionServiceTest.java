@@ -13,6 +13,7 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckAnswerCreateCommand;
@@ -131,13 +132,11 @@ class AnswerEscrowExecutionServiceTest {
   @DisplayName(
       "precheckAnswerCreate blocks when the question already has an active on-chain mutation")
   void precheckAnswerCreate_blocksWhenQuestionHasActiveIntent() {
-    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
-        .willReturn(Optional.of(questionProjection("온체인 질문")));
     given(
-            loadQnaExecutionIntentStatePort.loadActiveByResource(
+            loadQnaExecutionIntentStatePort.loadLatestActiveByResource(
                 QnaExecutionResourceType.QUESTION, "101"))
         .willReturn(
-            List.of(
+            Optional.of(
                 new QnaExecutionIntentStateView(
                     "intent-active",
                     QnaExecutionActionType.QNA_QUESTION_DELETE,
@@ -145,8 +144,10 @@ class AnswerEscrowExecutionServiceTest {
 
     assertThatThrownBy(
             () -> service.precheckAnswerCreate(new PrecheckAnswerCreateCommand(101L, "온체인 질문")))
-        .isInstanceOf(Web3InvalidInputException.class)
+        .isInstanceOf(RetryableWeb3PreparationException.class)
         .hasMessageContaining("active onchain mutation");
+
+    verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
   }
 
   @Test
@@ -323,34 +324,20 @@ class AnswerEscrowExecutionServiceTest {
   @Test
   @DisplayName("prepareAnswerDelete blocks when another active answer intent exists")
   void prepareAnswerDelete_blocksWhenConflictingIntentExists() {
-    given(qnaProjectionPersistencePort.findQuestionByPostId(101L))
-        .willReturn(Optional.of(questionProjection("온체인 질문")));
-    given(qnaProjectionPersistencePort.findAnswerByAnswerId(201L))
-        .willReturn(
-            Optional.of(
-                QnaAnswerProjection.create(
-                    201L,
-                    101L,
-                    QnaEscrowIdCodec.questionId(101L),
-                    QnaEscrowIdCodec.answerId(201L),
-                    22L,
-                    QnaContentHashFactory.hash("온체인 답변"))));
     given(
-            loadQnaExecutionIntentStatePort.loadActiveByResource(
-                QnaExecutionResourceType.ANSWER, "201"))
-        .willReturn(
-            List.of(
-                new QnaExecutionIntentStateView(
-                    "intent-1",
-                    QnaExecutionActionType.QNA_ANSWER_UPDATE,
-                    ExecutionIntentStatus.AWAITING_SIGNATURE)));
+            loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(
+                QnaExecutionResourceType.ANSWER, "201", QnaExecutionActionType.QNA_ANSWER_DELETE))
+        .willReturn(true);
 
     assertThatThrownBy(
             () ->
                 service.prepareAnswerDelete(
                     new PrepareAnswerDeleteCommand(101L, 201L, 22L, 7L, "온체인 질문", 50L, 0)))
-        .isInstanceOf(Web3InvalidInputException.class)
+        .isInstanceOf(RetryableWeb3PreparationException.class)
         .hasMessageContaining("conflicting active answer execution intent");
+
+    verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
+    verify(qnaProjectionPersistencePort, never()).findAnswerByAnswerIdForUpdate(any());
   }
 
   private QnaQuestionProjection questionProjection(String questionHash) {

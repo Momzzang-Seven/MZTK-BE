@@ -56,6 +56,18 @@ public class QnaExecutionIntentStateAdapter implements LoadQnaExecutionIntentSta
   }
 
   @Override
+  public boolean hasConflictingActiveIntent(
+      QnaExecutionResourceType resourceType,
+      String resourceId,
+      QnaExecutionActionType requestedActionType) {
+    return executionIntentPersistencePort.existsActiveByResourceAndActionTypeNotForUpdate(
+        toExecutionResourceType(resourceType),
+        resourceId,
+        momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType.valueOf(
+            requestedActionType.name()));
+  }
+
+  @Override
   public List<QnaExecutionIntentStateView> loadActiveByResourceForUpdate(
       QnaExecutionResourceType resourceType, String resourceId) {
     return executionIntentPersistencePort

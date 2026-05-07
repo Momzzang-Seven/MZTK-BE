@@ -126,6 +126,15 @@ public class AnswerService
 
   @Override
   @Transactional(readOnly = true)
+  public long countOnchainBlockingAnswers(Long postId) {
+    if (postId == null) {
+      throw new AnswerInvalidInputException("postId is required.");
+    }
+    return countAnswersPort.countOnchainBlockingAnswers(postId);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public boolean existsPreparingOrPendingCreateByPostId(Long postId) {
     if (postId == null) {
       throw new AnswerInvalidInputException("postId is required.");
@@ -170,18 +179,26 @@ public class AnswerService
     }
 
     int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(savedAnswer.getPostId()));
-    var web3 =
-        answerLifecycleExecutionPort
-            .prepareAnswerCreate(
-                savedAnswer.getPostId(),
-                savedAnswer.getId(),
-                savedAnswer.getUserId(),
-                post.writerId(),
-                post.content(),
-                post.reward(),
-                savedAnswer.getContent(),
-                activeAnswerCount)
-            .orElse(null);
+    AnswerExecutionWriteView web3;
+    try {
+      web3 =
+          answerLifecycleExecutionPort
+              .prepareAnswerCreate(
+                  savedAnswer.getPostId(),
+                  savedAnswer.getId(),
+                  savedAnswer.getUserId(),
+                  post.writerId(),
+                  post.content(),
+                  post.reward(),
+                  savedAnswer.getContent(),
+                  activeAnswerCount)
+              .orElse(null);
+    } catch (RuntimeException ex) {
+      if (managedCreate) {
+        cleanupUnboundCreatedAnswer(savedAnswer.getId());
+      }
+      throw ex;
+    }
     if (managedCreate && web3 != null) {
       int bound =
           runInTransaction(
@@ -320,40 +337,47 @@ public class AnswerService
 
     Optional<momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView>
         preparedWeb3;
-    if (preparation.managedUpdate()) {
-      preparedWeb3 =
-          answerLifecycleExecutionPort.prepareAnswerUpdate(
-              preparation.postId(),
-              preparation.answerId(),
-              preparation.userId(),
-              preparation.questionWriterId(),
-              preparation.questionContent(),
-              preparation.reward(),
-              preparation.answerContent(),
-              preparation.activeAnswerCount(),
-              preparation.updateVersion(),
-              preparation.updateToken());
-    } else {
-      preparedWeb3 =
-          preparation.contentChanged()
-              ? answerLifecycleExecutionPort.prepareAnswerUpdate(
-                  preparation.postId(),
-                  preparation.answerId(),
-                  preparation.userId(),
-                  preparation.questionWriterId(),
-                  preparation.questionContent(),
-                  preparation.reward(),
-                  preparation.answerContent(),
-                  preparation.activeAnswerCount())
-              : answerLifecycleExecutionPort.recoverAnswerUpdate(
-                  preparation.postId(),
-                  preparation.answerId(),
-                  preparation.userId(),
-                  preparation.questionWriterId(),
-                  preparation.questionContent(),
-                  preparation.reward(),
-                  preparation.answerContent(),
-                  preparation.activeAnswerCount());
+    try {
+      if (preparation.managedUpdate()) {
+        preparedWeb3 =
+            answerLifecycleExecutionPort.prepareAnswerUpdate(
+                preparation.postId(),
+                preparation.answerId(),
+                preparation.userId(),
+                preparation.questionWriterId(),
+                preparation.questionContent(),
+                preparation.reward(),
+                preparation.answerContent(),
+                preparation.activeAnswerCount(),
+                preparation.updateVersion(),
+                preparation.updateToken());
+      } else {
+        preparedWeb3 =
+            preparation.contentChanged()
+                ? answerLifecycleExecutionPort.prepareAnswerUpdate(
+                    preparation.postId(),
+                    preparation.answerId(),
+                    preparation.userId(),
+                    preparation.questionWriterId(),
+                    preparation.questionContent(),
+                    preparation.reward(),
+                    preparation.answerContent(),
+                    preparation.activeAnswerCount())
+                : answerLifecycleExecutionPort.recoverAnswerUpdate(
+                    preparation.postId(),
+                    preparation.answerId(),
+                    preparation.userId(),
+                    preparation.questionWriterId(),
+                    preparation.questionContent(),
+                    preparation.reward(),
+                    preparation.answerContent(),
+                    preparation.activeAnswerCount());
+      }
+    } catch (RuntimeException ex) {
+      if (preparation.managedUpdate()) {
+        markAnswerUpdatePreparationFailed(preparation, ex);
+      }
+      throw ex;
     }
     if (preparation.managedUpdate() && preparedWeb3.isPresent()) {
       int bound =
@@ -459,15 +483,23 @@ public class AnswerService
     if (!preparation.shouldPrepareWeb3()) {
       return preparation.localResult();
     }
-    var web3 =
-        answerLifecycleExecutionPort.prepareAnswerDelete(
-            preparation.postId(),
-            preparation.answerId(),
-            preparation.userId(),
-            preparation.questionWriterId(),
-            preparation.questionContent(),
-            preparation.reward(),
-            preparation.activeAnswerCount());
+    Optional<AnswerExecutionWriteView> web3;
+    try {
+      web3 =
+          answerLifecycleExecutionPort.prepareAnswerDelete(
+              preparation.postId(),
+              preparation.answerId(),
+              preparation.userId(),
+              preparation.questionWriterId(),
+              preparation.questionContent(),
+              preparation.reward(),
+              preparation.activeAnswerCount());
+    } catch (RuntimeException ex) {
+      if (preparation.managedDelete()) {
+        rollbackAnswerDeletePreparation(preparation, ex);
+      }
+      throw ex;
+    }
     if (web3.isPresent()) {
       if (preparation.managedDelete()) {
         int bound =
@@ -634,6 +666,32 @@ public class AnswerService
         () -> {
           deleteAnswerPort.deleteAnswer(answerId);
           publishAnswerDeletedEventPort.publish(new AnswerDeletedEvent(answerId));
+          return null;
+        });
+  }
+
+  private void markAnswerUpdatePreparationFailed(
+      UpdatePreparation preparation, RuntimeException ex) {
+    runInTransaction(
+        () -> {
+          answerUpdateStatePort.markPreparationFailedIfCurrent(
+              preparation.answerId(),
+              preparation.updateVersion(),
+              preparation.updateToken(),
+              preparation.preparationToken(),
+              ex.getMessage());
+          return null;
+        });
+  }
+
+  private void rollbackAnswerDeletePreparation(DeletePreparation preparation, RuntimeException ex) {
+    runInTransaction(
+        () -> {
+          saveAnswerPort.rollbackDeletePreparationIfCurrent(
+              preparation.answerId(),
+              preparation.preparationToken(),
+              "PREPARATION_FAILED",
+              ex.getMessage());
           return null;
         });
   }

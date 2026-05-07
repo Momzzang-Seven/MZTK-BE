@@ -184,6 +184,33 @@ public class AnswerUpdateStateJdbcAdapter implements AnswerUpdateStatePort {
   }
 
   @Override
+  public int markPreparationFailedIfCurrent(
+      Long answerId,
+      Long updateVersion,
+      String updateToken,
+      String preparationToken,
+      String errorReason) {
+    return jdbcTemplate.update(
+        """
+        UPDATE qna_answer_update_states
+        SET status = 'PREPARATION_FAILED',
+            error_reason = ?,
+            updated_at = NOW()
+        WHERE answer_id = ?
+          AND update_version = ?
+          AND update_token = ?
+          AND preparation_token = ?
+          AND execution_intent_public_id IS NULL
+          AND status = 'PREPARING'
+        """,
+        errorReason,
+        answerId,
+        updateVersion,
+        updateToken,
+        preparationToken);
+  }
+
+  @Override
   public int discardLatestFailed(Long answerId) {
     return jdbcTemplate.update(
         """
