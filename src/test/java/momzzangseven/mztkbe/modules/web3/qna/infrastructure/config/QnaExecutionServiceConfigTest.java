@@ -3,16 +3,22 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
+import java.time.Clock;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.AnswerEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaQuestionUpdateReconciliationUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateConfirmationSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.service.BeginQuestionUpdateStateService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowExecutionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +38,12 @@ class QnaExecutionServiceConfigTest {
           .withBean(
               QnaProjectionPersistencePort.class, () -> mock(QnaProjectionPersistencePort.class))
           .withBean(
+              QnaQuestionUpdateStatePersistencePort.class,
+              () -> mock(QnaQuestionUpdateStatePersistencePort.class))
+          .withBean(
+              QnaQuestionUpdateConfirmationSyncPort.class,
+              () -> mock(QnaQuestionUpdateConfirmationSyncPort.class))
+          .withBean(
               LoadQnaExecutionIntentStatePort.class,
               () -> mock(LoadQnaExecutionIntentStatePort.class))
           .withBean(BuildQnaExecutionDraftPort.class, () -> mock(BuildQnaExecutionDraftPort.class))
@@ -40,6 +52,7 @@ class QnaExecutionServiceConfigTest {
           .withBean(
               GetLatestExecutionIntentSummaryUseCase.class,
               () -> mock(GetLatestExecutionIntentSummaryUseCase.class))
+          .withBean(Clock.class, Clock::systemUTC)
           .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
 
   @Test
@@ -50,13 +63,20 @@ class QnaExecutionServiceConfigTest {
         .run(
             context -> {
               assertThat(context).hasSingleBean(QuestionEscrowExecutionService.class);
+              assertThat(context).hasSingleBean(BeginQuestionUpdateStateService.class);
               assertThat(context).hasSingleBean(AnswerEscrowExecutionUseCase.class);
               assertThat(context).hasSingleBean(GetQnaExecutionResumeViewUseCase.class);
+              assertThat(context).hasSingleBean(RunQnaQuestionUpdateReconciliationUseCase.class);
               assertThat(context).hasBean("questionEscrowExecutionUseCase");
+              assertThat(context).hasBean("beginQuestionUpdateStateUseCase");
               assertThat(
                       context.getBean(
                           "questionEscrowExecutionUseCase", QuestionEscrowExecutionUseCase.class))
                   .isNotSameAs(context.getBean(QuestionEscrowExecutionService.class));
+              assertThat(
+                      context.getBean(
+                          "beginQuestionUpdateStateUseCase", BeginQuestionUpdateStateUseCase.class))
+                  .isNotSameAs(context.getBean(BeginQuestionUpdateStateService.class));
             });
   }
 
@@ -68,9 +88,11 @@ class QnaExecutionServiceConfigTest {
         .run(
             context -> {
               assertThat(context).doesNotHaveBean(QuestionEscrowExecutionService.class);
+              assertThat(context).doesNotHaveBean(BeginQuestionUpdateStateUseCase.class);
               assertThat(context).doesNotHaveBean(QuestionEscrowExecutionUseCase.class);
               assertThat(context).doesNotHaveBean(AnswerEscrowExecutionUseCase.class);
               assertThat(context).doesNotHaveBean(GetQnaExecutionResumeViewUseCase.class);
+              assertThat(context).doesNotHaveBean(RunQnaQuestionUpdateReconciliationUseCase.class);
             });
   }
 }

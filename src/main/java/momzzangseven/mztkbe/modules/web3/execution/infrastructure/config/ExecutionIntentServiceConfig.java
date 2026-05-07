@@ -15,6 +15,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatest
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentFailedOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
@@ -39,6 +40,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.GetLatest
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentFailedOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentPendingOnchainService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.MarkExecutionIntentSucceededService;
+import momzzangseven.mztkbe.modules.web3.execution.application.service.ReplayConfirmedExecutionIntentService;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
@@ -276,6 +278,14 @@ public class ExecutionIntentServiceConfig {
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
     return new RunExecutionTerminationHookService(
+        executionIntentPersistencePort, executionActionHandlerPorts);
+  }
+
+  @Bean
+  ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase(
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      List<ExecutionActionHandlerPort> executionActionHandlerPorts) {
+    return new ReplayConfirmedExecutionIntentService(
         executionIntentPersistencePort, executionActionHandlerPorts);
   }
 

@@ -139,7 +139,9 @@ class UpdateClassServiceTest {
     @BeforeEach
     void commonGiven() {
       // lenient: 모든 성공 테스트에서 공통으로 필요한 stub — 사용하지 않는 테스트에서도 오류 없이 무시
-      lenient().when(loadClassPort.findById(CLASS_ID)).thenReturn(Optional.of(validClass()));
+      lenient()
+          .when(loadClassPort.findByIdForUpdate(CLASS_ID))
+          .thenReturn(Optional.of(validClass()));
       lenient().when(saveClassPort.save(any())).thenReturn(validClass());
     }
 
@@ -221,7 +223,7 @@ class UpdateClassServiceTest {
     @DisplayName("[U-05] 존재하지 않는 classId → ClassNotFoundException, save 미호출")
     void execute_ClassNotFound_ThrowsClassNotFoundException() {
       // given
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.empty());
+      given(loadClassPort.findByIdForUpdate(CLASS_ID)).willReturn(Optional.empty());
 
       // when & then
       assertThatThrownBy(() -> updateClassService.execute(updateExistingSlotCommand(SLOT_ID)))
@@ -233,7 +235,7 @@ class UpdateClassServiceTest {
     @DisplayName("[U-06] 소유자가 아닌 트레이너 수정 시도 → MarketplaceUnauthorizedAccessException")
     void execute_WrongOwner_ThrowsUnauthorizedException() {
       // given
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(validClass()));
+      given(loadClassPort.findByIdForUpdate(CLASS_ID)).willReturn(Optional.of(validClass()));
 
       UpdateClassCommand wrongOwnerCmd =
           new UpdateClassCommand(
@@ -261,7 +263,7 @@ class UpdateClassServiceTest {
     @DisplayName("[U-07] 활성 예약 있는 슬롯 삭제 시도 → SlotHasActiveReservationException")
     void execute_RemoveSlotWithActiveReservation_ThrowsException() {
       // given: SLOT_ID 존재 & request에 없음 → 삭제 시도
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(validClass()));
+      given(loadClassPort.findByIdForUpdate(CLASS_ID)).willReturn(Optional.of(validClass()));
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(activeSlot(SLOT_ID)));
       given(loadSlotReservationPort.countActiveReservationsIn(java.util.List.of(SLOT_ID)))
@@ -277,7 +279,7 @@ class UpdateClassServiceTest {
     @DisplayName("[U-08] 용량을 활성 예약 수 미만으로 축소 → CapacityShorterThanReservationsException")
     void execute_CapacityBelowActiveReservations_ThrowsException() {
       // given
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(validClass()));
+      given(loadClassPort.findByIdForUpdate(CLASS_ID)).willReturn(Optional.of(validClass()));
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID))
           .willReturn(List.of(activeSlot(SLOT_ID)));
       given(loadSlotReservationPort.countActiveReservationsIn(java.util.List.of(SLOT_ID)))
@@ -310,7 +312,7 @@ class UpdateClassServiceTest {
     @DisplayName("[U-09] 새 슬롯들 간 시간 충돌 → SlotTimeConflictException")
     void execute_ConflictingNewSlots_ThrowsSlotTimeConflictException() {
       // given: 기존 슬롯 없음
-      given(loadClassPort.findById(CLASS_ID)).willReturn(Optional.of(validClass()));
+      given(loadClassPort.findByIdForUpdate(CLASS_ID)).willReturn(Optional.of(validClass()));
       given(loadClassSlotPort.findByClassIdWithLock(CLASS_ID)).willReturn(List.of());
 
       // 동일 요일 10:00 + 10:30, duration=60 → 충돌

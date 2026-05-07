@@ -11,8 +11,7 @@ public interface LoadTransactionPort {
 
   Optional<TransactionSnapshot> loadById(Long transactionId);
 
-  List<TransactionSnapshot> loadByReferenceTypeAndReferenceIds(
-      Web3ReferenceType referenceType, Collection<String> referenceIds);
+  List<TransactionSnapshot> loadLevelRewardsByReferenceIds(Collection<String> referenceIds);
 
   record TransactionSnapshot(
       Long transactionId,
