@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.comment.api.event;
+package momzzangseven.mztkbe.modules.comment.infrastructure.event;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +21,7 @@ public class CommentEventHandler {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void handlePostDeletedEvent(PostDeletedEvent event) {
     try {
-      deleteCommentUseCase.deleteCommentsByPostId(event.postId());
+      deleteCommentUseCase.softDeleteAllCommentsByRootPostId(event.postId());
       log.debug("Successfully soft-deleted comments for deleted post: postId={}", event.postId());
     } catch (Exception e) {
       log.error(

@@ -201,6 +201,17 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("softDeleteActiveOrphanAnswerComments() delegates to repository")
+  void softDeleteActiveOrphanAnswerComments_delegatesToRepository() {
+    given(commentRepository.softDeleteActiveOrphanAnswerComments(50)).willReturn(3);
+
+    int result = adapter.softDeleteActiveOrphanAnswerComments(50);
+
+    assertThat(result).isEqualTo(3);
+    verify(commentRepository).softDeleteActiveOrphanAnswerComments(50);
+  }
+
+  @Test
   @DisplayName("countCommentsByPostIds() no-ops for null or empty list")
   void countCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
     assertThat(adapter.countCommentsByPostIds(null)).isEmpty();

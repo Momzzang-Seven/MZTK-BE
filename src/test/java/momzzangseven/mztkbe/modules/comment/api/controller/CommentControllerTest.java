@@ -437,6 +437,24 @@ class CommentControllerTest {
           .andExpect(jsonPath("$.data.content[0].writer.userId").value(1))
           .andExpect(jsonPath("$.data.last").value(true));
     }
+
+    @Test
+    @DisplayName("답변 루트 댓글 조회 시 삭제 댓글은 마스킹된다")
+    void getAnswerRootComments_deletedCommentMasked() throws Exception {
+      given(getCommentUseCase.getAnswerRootComments(any(GetAnswerRootCommentsQuery.class)))
+          .willReturn(
+              new PageImpl<>(java.util.List.of(comment(42L, "원문", true)), PageRequest.of(0, 1), 1));
+
+      mockMvc
+          .perform(get("/answers/300/comments?page=0&size=1").with(userPrincipal(1L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.data.content[0].commentId").value(42))
+          .andExpect(jsonPath("$.data.content[0].isDeleted").value(true))
+          .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."))
+          .andExpect(jsonPath("$.data.content[0].writer").doesNotExist())
+          .andExpect(jsonPath("$.data.content[0].replyCount").value(1));
+    }
   }
 
   private CommentResult comment(Long id, String content, boolean isDeleted) {

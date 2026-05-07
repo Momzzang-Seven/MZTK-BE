@@ -86,7 +86,6 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
           + "WHERE c.targetType = :targetType "
           + "AND c.answerId = :answerId "
           + "AND c.parent IS NULL "
-          + "AND c.isDeleted = false "
           + "ORDER BY c.createdAt ASC, c.id ASC")
   Page<CommentEntity> findRootCommentsByAnswerId(
       @Param("targetType") CommentTargetType targetType,
@@ -107,7 +106,6 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
           + "WHERE c.targetType = :targetType "
           + "AND c.answerId = :answerId "
           + "AND c.parent IS NULL "
-          + "AND c.isDeleted = false "
           + "ORDER BY c.createdAt ASC, c.id ASC")
   List<CommentEntity> findRootCommentsByAnswerIdFirstPage(
       @Param("targetType") CommentTargetType targetType,
@@ -132,7 +130,6 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
           + "WHERE c.targetType = :targetType "
           + "AND c.answerId = :answerId "
           + "AND c.parent IS NULL "
-          + "AND c.isDeleted = false "
           + "AND (c.createdAt > :cursorCreatedAt "
           + "OR (c.createdAt = :cursorCreatedAt AND c.id > :cursorId)) "
           + "ORDER BY c.createdAt ASC, c.id ASC")
@@ -259,18 +256,42 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
   @Query(
       value =
           "UPDATE comments SET is_deleted = true, updated_at = CURRENT_TIMESTAMP "
-              + "WHERE post_id = :postId",
+              + "WHERE post_id = :postId AND is_deleted = false",
       nativeQuery = true)
-  void deleteAllByPostId(@Param("postId") Long postId);
+  void softDeleteAllCommentsByRootPostId(@Param("postId") Long postId);
 
   @Modifying(clearAutomatically = true)
   @Query(
       value =
           "UPDATE comments SET is_deleted = true, updated_at = CURRENT_TIMESTAMP "
-              + "WHERE target_type = :#{#targetType.name()} AND answer_id = :answerId",
+              + "WHERE target_type = :#{#targetType.name()} "
+              + "AND answer_id = :answerId "
+              + "AND is_deleted = false",
       nativeQuery = true)
   void deleteAllByAnswerId(
       @Param("targetType") CommentTargetType targetType, @Param("answerId") Long answerId);
+
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          """
+          UPDATE comments
+          SET is_deleted = true,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id IN (
+              SELECT c.id
+              FROM comments c
+              LEFT JOIN answers a ON a.id = c.answer_id
+              WHERE c.target_type = 'ANSWER'
+                AND c.answer_id IS NOT NULL
+                AND c.is_deleted = false
+                AND a.id IS NULL
+              ORDER BY c.id
+              LIMIT :batchSize
+          )
+          """,
+      nativeQuery = true)
+  int softDeleteActiveOrphanAnswerComments(@Param("batchSize") int batchSize);
 
   @Query("SELECT c.id FROM CommentEntity c WHERE c.isDeleted = true AND c.updatedAt < :cutoff")
   List<Long> findIdsByIsDeletedTrueAndUpdatedAtBefore(

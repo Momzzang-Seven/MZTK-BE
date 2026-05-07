@@ -393,6 +393,44 @@ class CommentServiceTest {
   }
 
   @Test
+  @DisplayName("createComment() maps missing answer reply parent to COMMENT_NOT_FOUND")
+  void createComment_answerReplyParentMissing_throwsCommentNotFound() {
+    CreateCommentCommand command = CreateCommentCommand.forAnswer(300L, 200L, 10L, "reply");
+
+    given(loadAnswerPort.loadAnswerCommentContextForUpdate(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.empty());
+
+    assertThatThrownBy(() -> commentService.createComment(command))
+        .isInstanceOf(CommentNotFoundException.class)
+        .hasMessage(ErrorCode.COMMENT_NOT_FOUND.getMessage());
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+    verifyNoInteractions(grantCommentXpPort);
+  }
+
+  @Test
+  @DisplayName("createComment() rejects deleted answer reply parent")
+  void createComment_answerReplyDeletedParent_throwsCannotUpdateDeletedComment() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment deletedParent = answerComment(10L, 300L, 99L, null, "삭제된 댓글입니다.", true, now);
+    CreateCommentCommand command = CreateCommentCommand.forAnswer(300L, 200L, 10L, "reply");
+
+    given(loadAnswerPort.loadAnswerCommentContextForUpdate(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+    given(loadCommentPort.loadComment(10L)).willReturn(Optional.of(deletedParent));
+
+    assertThatThrownBy(() -> commentService.createComment(command))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT.getMessage());
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+    verifyNoInteractions(grantCommentXpPort);
+  }
+
+  @Test
   @DisplayName("createComment() maps answer parent from different answer to target mismatch")
   void createComment_answerParentAnswerMismatch_throwsTargetMismatch() {
     LocalDateTime now = LocalDateTime.now();
@@ -582,6 +620,47 @@ class CommentServiceTest {
   }
 
   @Test
+  @DisplayName(
+      "getAnswerRootComments() enriches answer roots with writer summaries and reply counts")
+  void getAnswerRootComments_returnsPagedAnswerRootCommentsWithWriterAndReplyCount() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment active = answerComment(21L, 300L, 201L, null, "answer-root", false, now);
+    Comment deleted = answerComment(22L, 300L, 202L, null, "삭제된 댓글입니다.", true, now);
+    Pageable pageable = PageRequest.of(0, 20);
+
+    given(loadAnswerPort.loadAnswerCommentContext(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+    given(loadCommentPort.loadRootCommentsByAnswerId(300L, pageable))
+        .willReturn(new PageImpl<>(List.of(active, deleted), pageable, 2));
+    given(loadCommentPort.countDirectRepliesByParentIds(List.of(21L, 22L)))
+        .willReturn(Map.of(21L, 2L, 22L, 1L));
+    given(loadCommentWriterPort.loadWritersByIds(java.util.Set.of(201L)))
+        .willReturn(
+            Map.of(
+                201L,
+                new LoadCommentWriterPort.WriterSummary(201L, "answer-writer", "answer.png")));
+
+    Page<CommentResult> result =
+        commentService.getAnswerRootComments(new GetAnswerRootCommentsQuery(300L, null, pageable));
+
+    assertThat(result.getContent()).hasSize(2);
+    CommentResult first = result.getContent().get(0);
+    CommentResult second = result.getContent().get(1);
+    assertThat(first.id()).isEqualTo(21L);
+    assertThat(first.writerId()).isEqualTo(201L);
+    assertThat(first.writerNickname()).isEqualTo("answer-writer");
+    assertThat(first.writerProfileImageUrl()).isEqualTo("answer.png");
+    assertThat(first.replyCount()).isEqualTo(2L);
+    assertThat(second.id()).isEqualTo(22L);
+    assertThat(second.isDeleted()).isTrue();
+    assertThat(second.writerNickname()).isNull();
+    assertThat(second.replyCount()).isEqualTo(1L);
+    verify(loadCommentPort).loadRootCommentsByAnswerId(300L, pageable);
+  }
+
+  @Test
   @DisplayName("getReplies() enriches replies with writer summaries and keeps Page last metadata")
   void getReplies_enrichesWriterAndKeepsPageMetadata() {
     LocalDateTime now = LocalDateTime.now();
@@ -730,6 +809,73 @@ class CommentServiceTest {
   }
 
   @Test
+  @DisplayName("getAnswerRootCommentsByCursor trims probe row and builds next cursor")
+  void getAnswerRootCommentsByCursor_trimsProbeAndBuildsNextCursor() {
+    LocalDateTime firstTime = LocalDateTime.of(2026, 4, 24, 10, 0);
+    LocalDateTime secondTime = LocalDateTime.of(2026, 4, 24, 11, 0);
+    LocalDateTime probeTime = LocalDateTime.of(2026, 4, 24, 12, 0);
+    Comment first = answerComment(31L, 300L, 201L, null, "first", false, firstTime);
+    Comment second = answerComment(32L, 300L, 202L, null, "second", false, secondTime);
+    Comment probe = answerComment(33L, 300L, 203L, null, "probe", false, probeTime);
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(null, 2, 20, 50, CursorScope.answerRootComments(300L));
+
+    given(loadAnswerPort.loadAnswerCommentContext(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+    given(loadCommentPort.loadRootCommentsByAnswerIdCursor(300L, pageRequest))
+        .willReturn(List.of(first, second, probe));
+    given(loadCommentPort.countDirectRepliesByParentIds(List.of(31L, 32L)))
+        .willReturn(Map.of(31L, 1L, 32L, 2L));
+    given(loadCommentWriterPort.loadWritersByIds(java.util.Set.of(201L, 202L)))
+        .willReturn(
+            Map.of(
+                201L,
+                new LoadCommentWriterPort.WriterSummary(201L, "first-writer", "first.png"),
+                202L,
+                new LoadCommentWriterPort.WriterSummary(202L, "second-writer", "second.png")));
+
+    GetCommentsCursorResult result =
+        commentService.getAnswerRootCommentsByCursor(
+            new GetAnswerRootCommentsCursorQuery(300L, null, pageRequest));
+
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.comments()).extracting("id").containsExactly(31L, 32L);
+    assertThat(result.comments()).extracting("replyCount").containsExactly(1L, 2L);
+    assertThat(result.comments())
+        .extracting("writerNickname")
+        .containsExactly("first-writer", "second-writer");
+    assertThat(CursorCodec.decode(result.nextCursor(), pageRequest.scope()).id()).isEqualTo(32L);
+    verify(loadCommentPort).loadRootCommentsByAnswerIdCursor(300L, pageRequest);
+  }
+
+  @Test
+  @DisplayName(
+      "getAnswerRootCommentsByCursor keeps POST_NOT_FOUND when answer root post is missing")
+  void getAnswerRootCommentsByCursor_rootPostMissing_throwsPostNotFound() {
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(null, 2, 20, 50, CursorScope.answerRootComments(300L));
+    given(loadAnswerPort.loadAnswerCommentContext(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+    given(loadPostPort.loadPostVisibilityContext(100L)).willReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                commentService.getAnswerRootCommentsByCursor(
+                    new GetAnswerRootCommentsCursorQuery(300L, null, pageRequest)))
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.POST_NOT_FOUND.getMessage());
+
+    verify(loadAnswerPort).loadAnswerCommentContext(300L);
+    verify(loadPostPort).loadPostVisibilityContext(100L);
+    verify(loadCommentPort, never())
+        .loadRootCommentsByAnswerIdCursor(any(Long.class), any(CursorPageRequest.class));
+    verify(loadCommentPort, never()).countDirectRepliesByParentIds(any());
+    verify(loadCommentWriterPort, never()).loadWritersByIds(any());
+  }
+
+  @Test
   @DisplayName("getRepliesByCursor does not count nested replies")
   void getRepliesByCursor_doesNotCountNestedReplies() {
     LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
@@ -755,11 +901,11 @@ class CommentServiceTest {
   }
 
   @Test
-  @DisplayName("deleteCommentsByPostId() delegates to delete port")
-  void deleteCommentsByPostId_delegatesToDeletePort() {
-    commentService.deleteCommentsByPostId(33L);
+  @DisplayName("softDeleteAllCommentsByRootPostId() delegates to delete port")
+  void softDeleteAllCommentsByRootPostId_delegatesToDeletePort() {
+    commentService.softDeleteAllCommentsByRootPostId(33L);
 
-    verify(deleteCommentPort).deleteAllByPostId(33L);
+    verify(deleteCommentPort).softDeleteAllByRootPostId(33L);
   }
 
   @Test

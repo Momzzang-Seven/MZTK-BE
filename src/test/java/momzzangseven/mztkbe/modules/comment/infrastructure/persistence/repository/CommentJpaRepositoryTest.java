@@ -224,18 +224,87 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
-  @DisplayName("findRootCommentsByAnswerId() excludes soft-deleted answer comments")
-  void findRootCommentsByAnswerId_excludesSoftDeletedAnswerComments() {
+  @DisplayName("orphan answer comment cleanup removes active orphan rows from answer counts")
+  void softDeleteActiveOrphanAnswerComments_removesOrphansFromAnswerCounts() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 13, 30);
+    persistAnswer(2101L, 701L, 501L, "existing answer", base);
+    CommentEntity orphan =
+        persistAnswerRootForPost(701L, 2100L, 61L, "orphan", base.plusMinutes(1), false);
+    persistAnswerRootForPost(701L, 2101L, 62L, "existing", base.plusMinutes(2), false);
+
+    Map<Long, Long> before =
+        commentJpaRepository
+            .countCommentsByAnswerIds(CommentTargetType.ANSWER, List.of(2100L, 2101L))
+            .stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    CommentJpaRepository.AnswerCommentCount::getAnswerId,
+                    CommentJpaRepository.AnswerCommentCount::getCommentCount));
+
+    int updated = commentJpaRepository.softDeleteActiveOrphanAnswerComments(10);
+
+    Map<Long, Long> after =
+        commentJpaRepository
+            .countCommentsByAnswerIds(CommentTargetType.ANSWER, List.of(2100L, 2101L))
+            .stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    CommentJpaRepository.AnswerCommentCount::getAnswerId,
+                    CommentJpaRepository.AnswerCommentCount::getCommentCount));
+
+    assertThat(before).containsEntry(2100L, 1L).containsEntry(2101L, 1L);
+    assertThat(updated).isEqualTo(1);
+    assertThat(isDeletedOf(commentJpaRepository.findById(idOf(orphan)).orElseThrow())).isTrue();
+    assertThat(after).doesNotContainKey(2100L).containsEntry(2101L, 1L);
+  }
+
+  @Test
+  @DisplayName("findRootCommentsByAnswerId() keeps answer tombstones")
+  void findRootCommentsByAnswerId_keepsAnswerTombstones() {
     LocalDateTime base = LocalDateTime.of(2026, 3, 2, 14, 0);
     CommentEntity active = persistAnswerRoot(2000L, 61L, "active", base);
     CommentEntity deleted = persistAnswerRoot(2000L, 62L, "deleted", base.plusMinutes(1), true);
+    persistAnswerReply(2000L, 63L, "reply", deleted, base.plusMinutes(2));
 
     Page<CommentEntity> page =
         commentJpaRepository.findRootCommentsByAnswerId(
             CommentTargetType.ANSWER, 2000L, PageRequest.of(0, 10));
 
-    assertThat(page.getContent().stream().map(this::idOf).toList()).containsExactly(idOf(active));
-    assertThat(page.getContent().stream().map(this::idOf).toList()).doesNotContain(idOf(deleted));
+    assertThat(page.getContent().stream().map(this::idOf).toList())
+        .containsExactly(idOf(active), idOf(deleted));
+    assertThat(isDeletedOf(page.getContent().get(1))).isTrue();
+    assertThat(commentJpaRepository.countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, 2000L))
+        .isEqualTo(2L);
+    assertThat(commentJpaRepository.countDirectRepliesByParentIds(List.of(idOf(deleted))))
+        .extracting(CommentJpaRepository.DirectReplyCount::getReplyCount)
+        .containsExactly(1L);
+  }
+
+  @Test
+  @DisplayName("findRootCommentsByAnswerId cursor keeps answer tombstones")
+  void findRootCommentsByAnswerIdCursor_keepsAnswerTombstones() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 14, 30);
+    CommentEntity first = persistAnswerRoot(2001L, 64L, "first", base);
+    CommentEntity deleted = persistAnswerRoot(2001L, 65L, "deleted", base.plusMinutes(1), true);
+    CommentEntity second = persistAnswerRoot(2001L, 66L, "second", base.plusMinutes(2));
+    persistAnswerRoot(2002L, 67L, "other-answer", base.plusMinutes(3));
+    persistAnswerReply(2001L, 68L, "reply", deleted, base.plusMinutes(4));
+
+    List<CommentEntity> firstPage =
+        commentJpaRepository.findRootCommentsByAnswerIdFirstPage(
+            CommentTargetType.ANSWER, 2001L, PageRequest.of(0, 2));
+    List<CommentEntity> nextPage =
+        commentJpaRepository.findRootCommentsByAnswerIdAfterCursor(
+            CommentTargetType.ANSWER,
+            2001L,
+            deleted.getCreatedAt(),
+            idOf(deleted),
+            PageRequest.of(0, 10));
+
+    assertThat(firstPage.stream().map(this::idOf).toList())
+        .containsExactly(idOf(first), idOf(deleted));
+    assertThat(isDeletedOf(firstPage.get(1))).isTrue();
+    assertThat(nextPage.stream().map(this::idOf).toList()).containsExactly(idOf(second));
   }
 
   @Test
@@ -425,23 +494,33 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
-  @DisplayName("deleteAllByPostId() soft-deletes all comments of the post")
-  void deleteAllByPostId_softDeletesCommentsByPostId() {
+  @DisplayName(
+      "softDeleteAllCommentsByRootPostId() soft-deletes active post and answer comments by root post")
+  void softDeleteAllCommentsByRootPostId_softDeletesActiveCommentsByRootPost() {
     LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 10, 0);
-    CommentEntity target1 = persistRoot(300L, 31L, "target1", oldTime);
-    CommentEntity target2 = persistRoot(300L, 32L, "target2", oldTime.plusMinutes(1));
+    CommentEntity postComment = persistRoot(300L, 31L, "post-target", oldTime);
+    CommentEntity answerComment =
+        persistAnswerRootForPost(300L, 1300L, 32L, "answer-target", oldTime.plusMinutes(1), false);
+    CommentEntity alreadyDeleted =
+        persistAnswerRootForPost(300L, 1301L, 33L, "already-deleted", oldTime.plusMinutes(2), true);
     CommentEntity otherPost = persistRoot(400L, 33L, "other", oldTime.plusMinutes(2));
 
-    commentJpaRepository.deleteAllByPostId(300L);
+    commentJpaRepository.softDeleteAllCommentsByRootPostId(300L);
 
-    CommentEntity updated1 = commentJpaRepository.findById(idOf(target1)).orElseThrow();
-    CommentEntity updated2 = commentJpaRepository.findById(idOf(target2)).orElseThrow();
+    CommentEntity updatedPostComment =
+        commentJpaRepository.findById(idOf(postComment)).orElseThrow();
+    CommentEntity updatedAnswerComment =
+        commentJpaRepository.findById(idOf(answerComment)).orElseThrow();
+    CommentEntity unchangedDeleted =
+        commentJpaRepository.findById(idOf(alreadyDeleted)).orElseThrow();
     CommentEntity untouched = commentJpaRepository.findById(idOf(otherPost)).orElseThrow();
 
-    assertThat(isDeletedOf(updated1)).isTrue();
-    assertThat(isDeletedOf(updated2)).isTrue();
-    assertThat(updatedAtOf(updated1)).isAfter(oldTime.minusNanos(1));
-    assertThat(updatedAtOf(updated2)).isAfter(oldTime.minusNanos(1));
+    assertThat(isDeletedOf(updatedPostComment)).isTrue();
+    assertThat(isDeletedOf(updatedAnswerComment)).isTrue();
+    assertThat(updatedAtOf(updatedPostComment)).isAfter(oldTime.minusNanos(1));
+    assertThat(updatedAtOf(updatedAnswerComment)).isAfter(oldTime.minusNanos(1));
+    assertThat(isDeletedOf(unchangedDeleted)).isTrue();
+    assertThat(updatedAtOf(unchangedDeleted)).isEqualTo(oldTime.plusMinutes(2));
     assertThat(isDeletedOf(untouched)).isFalse();
   }
 
@@ -451,6 +530,8 @@ class CommentJpaRepositoryTest {
     LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 11, 0);
     CommentEntity target1 = persistAnswerRoot(7000L, 71L, "answer-target1", oldTime);
     CommentEntity target2 = persistAnswerRoot(7000L, 72L, "answer-target2", oldTime.plusMinutes(1));
+    CommentEntity alreadyDeleted =
+        persistAnswerRoot(7000L, 75L, "already-deleted", oldTime.plusMinutes(4), true);
     CommentEntity otherAnswer =
         persistAnswerRoot(7001L, 73L, "other-answer", oldTime.plusMinutes(2));
     CommentEntity postComment = persistRoot(7000L, 74L, "post-comment", oldTime.plusMinutes(3));
@@ -459,6 +540,8 @@ class CommentJpaRepositoryTest {
 
     CommentEntity updated1 = commentJpaRepository.findById(idOf(target1)).orElseThrow();
     CommentEntity updated2 = commentJpaRepository.findById(idOf(target2)).orElseThrow();
+    CommentEntity unchangedDeleted =
+        commentJpaRepository.findById(idOf(alreadyDeleted)).orElseThrow();
     CommentEntity untouchedAnswer = commentJpaRepository.findById(idOf(otherAnswer)).orElseThrow();
     CommentEntity untouchedPost = commentJpaRepository.findById(idOf(postComment)).orElseThrow();
 
@@ -466,9 +549,52 @@ class CommentJpaRepositoryTest {
     assertThat(isDeletedOf(updated2)).isTrue();
     assertThat(updatedAtOf(updated1)).isAfter(oldTime.minusNanos(1));
     assertThat(updatedAtOf(updated2)).isAfter(oldTime.minusNanos(1));
+    assertThat(isDeletedOf(unchangedDeleted)).isTrue();
+    assertThat(updatedAtOf(unchangedDeleted)).isEqualTo(oldTime.plusMinutes(4));
     assertThat(isDeletedOf(untouchedAnswer)).isFalse();
     assertThat(isDeletedOf(untouchedPost)).isFalse();
     assertThat(commentJpaRepository.countByPostId(7000L)).isEqualTo(1L);
+  }
+
+  @Test
+  @DisplayName("softDeleteActiveOrphanAnswerComments() updates only active orphan answer comments")
+  void softDeleteActiveOrphanAnswerComments_updatesOnlyActiveOrphanAnswerComments() {
+    LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 13, 0);
+    persistAnswer(9001L, 900L, 81L, "existing answer", oldTime);
+    CommentEntity firstOrphan =
+        persistAnswerRootForPost(900L, 9000L, 82L, "first-orphan", oldTime, false);
+    CommentEntity secondOrphan =
+        persistAnswerRootForPost(900L, 9002L, 83L, "second-orphan", oldTime.plusMinutes(1), false);
+    CommentEntity existingAnswerComment =
+        persistAnswerRootForPost(
+            900L, 9001L, 84L, "existing-answer", oldTime.plusMinutes(2), false);
+    CommentEntity deletedOrphan =
+        persistAnswerRootForPost(900L, 9003L, 85L, "deleted-orphan", oldTime.plusMinutes(3), true);
+    CommentEntity postComment = persistRoot(900L, 86L, "post-comment", oldTime.plusMinutes(4));
+
+    int firstBatch = commentJpaRepository.softDeleteActiveOrphanAnswerComments(1);
+    int secondBatch = commentJpaRepository.softDeleteActiveOrphanAnswerComments(10);
+    int thirdBatch = commentJpaRepository.softDeleteActiveOrphanAnswerComments(10);
+
+    CommentEntity updatedFirst = commentJpaRepository.findById(idOf(firstOrphan)).orElseThrow();
+    CommentEntity updatedSecond = commentJpaRepository.findById(idOf(secondOrphan)).orElseThrow();
+    CommentEntity untouchedExisting =
+        commentJpaRepository.findById(idOf(existingAnswerComment)).orElseThrow();
+    CommentEntity unchangedDeleted =
+        commentJpaRepository.findById(idOf(deletedOrphan)).orElseThrow();
+    CommentEntity untouchedPost = commentJpaRepository.findById(idOf(postComment)).orElseThrow();
+
+    assertThat(firstBatch).isEqualTo(1);
+    assertThat(secondBatch).isEqualTo(1);
+    assertThat(thirdBatch).isZero();
+    assertThat(isDeletedOf(updatedFirst)).isTrue();
+    assertThat(isDeletedOf(updatedSecond)).isTrue();
+    assertThat(updatedAtOf(updatedFirst)).isAfter(oldTime.minusNanos(1));
+    assertThat(updatedAtOf(updatedSecond)).isAfter(oldTime.minusNanos(1));
+    assertThat(isDeletedOf(untouchedExisting)).isFalse();
+    assertThat(isDeletedOf(unchangedDeleted)).isTrue();
+    assertThat(updatedAtOf(unchangedDeleted)).isEqualTo(oldTime.plusMinutes(3));
+    assertThat(isDeletedOf(untouchedPost)).isFalse();
   }
 
   @Test
@@ -539,6 +665,22 @@ class CommentJpaRepositoryTest {
 
   private void persistPost(Long postId, String type, LocalDateTime createdAt) {
     persistPost(postId, type, "QUESTION".equals(type) ? "title" : null, createdAt);
+  }
+
+  private void persistAnswer(
+      Long answerId, Long postId, Long userId, String content, LocalDateTime createdAt) {
+    jdbcTemplate.update(
+        """
+        INSERT INTO answers (id, post_id, user_id, content, is_accepted, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        answerId,
+        postId,
+        userId,
+        content,
+        false,
+        createdAt,
+        createdAt);
   }
 
   private void persistPost(Long postId, String type, String title, LocalDateTime createdAt) {

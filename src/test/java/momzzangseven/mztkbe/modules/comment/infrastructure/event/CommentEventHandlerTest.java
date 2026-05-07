@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.comment.api.event;
+package momzzangseven.mztkbe.modules.comment.infrastructure.event;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.doThrow;
@@ -24,13 +24,14 @@ class CommentEventHandlerTest {
   @InjectMocks private CommentEventHandler commentEventHandler;
 
   @Test
-  @DisplayName("handlePostDeletedEvent() calls deleteCommentsByPostId() with event postId")
-  void handlePostDeletedEvent_callsDeleteCommentsByPostId() {
+  @DisplayName(
+      "handlePostDeletedEvent() calls softDeleteAllCommentsByRootPostId() with event postId")
+  void handlePostDeletedEvent_callsSoftDeleteAllCommentsByRootPostId() {
     PostDeletedEvent event = new PostDeletedEvent(100L, PostType.QUESTION);
 
     commentEventHandler.handlePostDeletedEvent(event);
 
-    verify(deleteCommentUseCase).deleteCommentsByPostId(100L);
+    verify(deleteCommentUseCase).softDeleteAllCommentsByRootPostId(100L);
   }
 
   @Test
@@ -39,11 +40,11 @@ class CommentEventHandlerTest {
     PostDeletedEvent event = new PostDeletedEvent(200L, PostType.FREE);
     doThrow(new RuntimeException("db fail"))
         .when(deleteCommentUseCase)
-        .deleteCommentsByPostId(200L);
+        .softDeleteAllCommentsByRootPostId(200L);
 
     assertThatCode(() -> commentEventHandler.handlePostDeletedEvent(event))
         .doesNotThrowAnyException();
-    verify(deleteCommentUseCase).deleteCommentsByPostId(200L);
+    verify(deleteCommentUseCase).softDeleteAllCommentsByRootPostId(200L);
   }
 
   @Test

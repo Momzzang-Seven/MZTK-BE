@@ -255,14 +255,20 @@ public class CommentPersistenceAdapter
 
   @Override
   @Transactional(readOnly = false)
-  public void deleteAllByPostId(Long postId) {
-    commentRepository.deleteAllByPostId(postId);
+  public void softDeleteAllByRootPostId(Long postId) {
+    commentRepository.softDeleteAllCommentsByRootPostId(postId);
   }
 
   @Override
   @Transactional(readOnly = false)
   public void deleteAllByAnswerId(Long answerId) {
     commentRepository.deleteAllByAnswerId(CommentTargetType.ANSWER, answerId);
+  }
+
+  @Override
+  @Transactional(readOnly = false)
+  public int softDeleteActiveOrphanAnswerComments(int batchSize) {
+    return commentRepository.softDeleteActiveOrphanAnswerComments(batchSize);
   }
 
   @Override

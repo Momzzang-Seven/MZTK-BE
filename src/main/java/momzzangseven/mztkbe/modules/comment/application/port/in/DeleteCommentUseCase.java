@@ -8,7 +8,7 @@ public interface DeleteCommentUseCase {
 
   void deleteAnswerComment(DeleteAnswerCommentCommand command);
 
-  void deleteCommentsByPostId(Long postId);
+  void softDeleteAllCommentsByRootPostId(Long postId);
 
   void deleteCommentsByAnswerId(Long answerId);
 }
