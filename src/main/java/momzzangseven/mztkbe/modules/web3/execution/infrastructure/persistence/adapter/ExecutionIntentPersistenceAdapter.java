@@ -136,6 +136,16 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public boolean existsClaimableInternal(List<ExecutionActionType> actionTypes) {
+    if (actionTypes == null || actionTypes.isEmpty()) {
+      return false;
+    }
+    return repository
+        .peekClaimableInternal(actionTypes.stream().map(Enum::name).toList())
+        .isPresent();
+  }
+
+  @Override
   public Optional<ExecutionIntent> findBySubmittedTxId(Long submittedTxId) {
     return repository.findBySubmittedTxId(submittedTxId).map(this::toDomain);
   }

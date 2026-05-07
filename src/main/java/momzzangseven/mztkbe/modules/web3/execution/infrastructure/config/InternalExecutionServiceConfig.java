@@ -71,12 +71,14 @@ public class InternalExecutionServiceConfig {
   ExecuteInternalExecutionIntentUseCase executeInternalExecutionIntentUseCase(
       TransactionalExecuteInternalExecutionIntentDelegate delegate,
       SponsorWalletPreflight sponsorWalletPreflight,
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
       PlatformTransactionManager transactionManager) {
     TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
     transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     ExecuteTransactionalInternalExecutionIntentDelegatePort txWrappedDelegate =
         (command, gate) -> transactionTemplate.execute(status -> delegate.execute(command, gate));
-    return new ExecuteInternalExecutionIntentService(txWrappedDelegate, sponsorWalletPreflight);
+    return new ExecuteInternalExecutionIntentService(
+        txWrappedDelegate, sponsorWalletPreflight, executionIntentPersistencePort);
   }
 
   @Bean

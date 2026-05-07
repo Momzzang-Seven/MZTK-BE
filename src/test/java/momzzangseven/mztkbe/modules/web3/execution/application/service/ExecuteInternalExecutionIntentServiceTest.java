@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -16,6 +17,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.TreasuryWalletInfo;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
@@ -41,16 +43,29 @@ class ExecuteInternalExecutionIntentServiceTest {
 
   @Mock private ExecuteTransactionalInternalExecutionIntentDelegatePort delegate;
   @Mock private SponsorWalletPreflight sponsorWalletPreflight;
+  @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
 
   private ExecuteInternalExecutionIntentService service;
 
   @BeforeEach
   void setUp() {
-    service = new ExecuteInternalExecutionIntentService(delegate, sponsorWalletPreflight);
+    service =
+        new ExecuteInternalExecutionIntentService(
+            delegate, sponsorWalletPreflight, executionIntentPersistencePort);
+  }
+
+  /**
+   * Stubs the cheap exists-peek to return {@code true} so the service falls through to the legacy
+   * preflight branch under test. The empty-queue short-circuit has its own dedicated test below.
+   */
+  private void stubQueueHasWork() {
+    when(executionIntentPersistencePort.existsClaimableInternal(COMMAND.actionTypes()))
+        .thenReturn(true);
   }
 
   @Test
   void execute_callsDelegateWithGateOnPreflightSuccess() {
+    stubQueueHasWork();
     SponsorWalletGate gate =
         new SponsorWalletGate(
             new TreasuryWalletInfo(SPONSOR_ALIAS, SPONSOR_KMS_KEY, SPONSOR_ADDRESS, true),
@@ -67,6 +82,7 @@ class ExecuteInternalExecutionIntentServiceTest {
 
   @Test
   void execute_returnsPreflightSkippedWhenWalletInvalid_doesNotCallDelegate() {
+    stubQueueHasWork();
     when(sponsorWalletPreflight.preflight())
         .thenThrow(new Web3InvalidInputException("sponsor signer key is missing"));
 
@@ -81,6 +97,7 @@ class ExecuteInternalExecutionIntentServiceTest {
 
   @Test
   void execute_returnsPreflightSkippedWhenTreasuryStateRejects_doesNotCallDelegate() {
+    stubQueueHasWork();
     when(sponsorWalletPreflight.preflight())
         .thenThrow(new TreasuryWalletStateException("kms key not enabled"));
 
@@ -93,6 +110,7 @@ class ExecuteInternalExecutionIntentServiceTest {
 
   @Test
   void execute_returnsPreflightSkippedWhenKmsDescribeFails_doesNotCallDelegate() {
+    stubQueueHasWork();
     when(sponsorWalletPreflight.preflight())
         .thenThrow(new KmsKeyDescribeFailedException("KMS DescribeKey failed"));
 
@@ -108,6 +126,7 @@ class ExecuteInternalExecutionIntentServiceTest {
   @Test
   @DisplayName("terminal KMS DescribeKey (AccessDenied) → preflightSkipped + ERROR 로그 alert anchor")
   void execute_returnsPreflightSkippedOnTerminalKmsDescribe_doesNotCallDelegate() {
+    stubQueueHasWork();
     KmsException terminalCause =
         (KmsException)
             KmsException.builder()
@@ -125,6 +144,22 @@ class ExecuteInternalExecutionIntentServiceTest {
     assertThat(result.executed()).isFalse();
     assertThat(result.quarantined()).isFalse();
     verify(delegate, never()).execute(eq(COMMAND), any());
+  }
+
+  @Test
+  @DisplayName("빈 큐 → preflight 자체 호출 없이 preflightSkipped 즉시 반환 (terminal-KMS 로그 노이즈 차단)")
+  void execute_skipsPreflightAndDelegate_whenQueueIsEmpty() {
+    when(executionIntentPersistencePort.existsClaimableInternal(COMMAND.actionTypes()))
+        .thenReturn(false);
+
+    ExecuteInternalExecutionIntentResult result = service.execute(COMMAND);
+
+    assertThat(result.executed()).isFalse();
+    assertThat(result.quarantined()).isFalse();
+    // KMS DescribeKey 가 깨져 있어도 매 tick 마다 ERROR 가 찍히지 않으려면, claimable 이 없을 때
+    // sponsor preflight 자체가 호출되지 않아야 한다.
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate, never()).execute(any(), any());
   }
 
   @Test

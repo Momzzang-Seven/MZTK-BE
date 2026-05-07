@@ -117,6 +117,19 @@ public interface Web3ExecutionIntentJpaRepository
       @Param("actionTypes") Collection<String> actionTypes);
 
   @Query(
+      value =
+          """
+          select 1
+          from web3_execution_intents e
+          where e.status = 'AWAITING_SIGNATURE'
+            and e.mode = 'EIP1559'
+            and e.action_type in :actionTypes
+          limit 1
+          """,
+      nativeQuery = true)
+  Optional<Integer> peekClaimableInternal(@Param("actionTypes") Collection<String> actionTypes);
+
+  @Query(
       "select e.id from Web3ExecutionIntentEntity e"
           + " where e.status = :status and e.expiresAt < :now"
           + " order by e.expiresAt asc")

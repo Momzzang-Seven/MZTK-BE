@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteIntern
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.SponsorWalletGate;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteInternalExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteTransactionalInternalExecutionIntentDelegatePort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 
@@ -34,10 +35,18 @@ public class ExecuteInternalExecutionIntentService
 
   private final ExecuteTransactionalInternalExecutionIntentDelegatePort delegate;
   private final SponsorWalletPreflight sponsorWalletPreflight;
+  private final ExecutionIntentPersistencePort executionIntentPersistencePort;
 
   @Override
   public ExecuteInternalExecutionIntentResult execute(
       ExecuteInternalExecutionIntentCommand command) {
+    // No-work short-circuit: skip sponsor preflight (and the terminal-KMS ERROR log it can produce)
+    // when the queue has nothing to claim. Without this, a broken sponsor wallet would emit one
+    // INTERNAL_EXECUTION_PREFLIGHT_TERMINAL_KMS line per scheduler tick even with zero pending
+    // intents, drowning the alert signal in noise.
+    if (!executionIntentPersistencePort.existsClaimableInternal(command.actionTypes())) {
+      return ExecuteInternalExecutionIntentResult.preflightSkipped();
+    }
     SponsorWalletGate gate;
     try {
       gate = sponsorWalletPreflight.preflight();
