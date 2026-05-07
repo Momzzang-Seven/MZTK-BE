@@ -79,10 +79,14 @@ class ExecuteExecutionIntentServiceTest {
 
   @Test
   void execute_propagatesPreflightWeb3InvalidInput_withoutCallingDelegate() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent peeked = mockNewIntent(command, ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(peeked));
     when(sponsorWalletPreflight.preflight())
         .thenThrow(new Web3InvalidInputException("sponsor signer key is missing"));
 
-    assertThatThrownBy(() -> service.execute(command()))
+    assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessage("sponsor signer key is missing");
     verify(delegate, never()).execute(any(), any());
@@ -90,10 +94,14 @@ class ExecuteExecutionIntentServiceTest {
 
   @Test
   void execute_propagatesTreasuryWalletStateException_withoutCallingDelegate() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent peeked = mockNewIntent(command, ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(peeked));
     when(sponsorWalletPreflight.preflight())
         .thenThrow(new TreasuryWalletStateException("KMS key disabled"));
 
-    assertThatThrownBy(() -> service.execute(command()))
+    assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(TreasuryWalletStateException.class)
         .hasMessageContaining("KMS key disabled");
     verify(delegate, never()).execute(any(), any());
@@ -101,6 +109,10 @@ class ExecuteExecutionIntentServiceTest {
 
   @Test
   void execute_invokesDelegateWithSponsorWalletGate_whenPreflightPasses() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent peeked = mockNewIntent(command, ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(peeked));
     SponsorWalletGate gate = activeGate();
     when(sponsorWalletPreflight.preflight()).thenReturn(gate);
     ExecuteExecutionIntentResult expected =
@@ -110,7 +122,6 @@ class ExecuteExecutionIntentServiceTest {
             42L,
             ExecutionTransactionStatus.PENDING,
             "0xhash");
-    ExecuteExecutionIntentCommand command = command();
     when(delegate.execute(eq(command), eq(gate))).thenReturn(expected);
 
     ExecuteExecutionIntentResult actual = service.execute(command);
@@ -238,10 +249,14 @@ class ExecuteExecutionIntentServiceTest {
   @Test
   @DisplayName("transient KMS DescribeKey 실패 → Web3TransferException(retryable=true)")
   void execute_translatesTransientDescribeKeyToRetryableWeb3TransferException() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent peeked = mockNewIntent(command, ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(peeked));
     when(sponsorWalletPreflight.preflight())
         .thenThrow(new KmsKeyDescribeFailedException("throttled"));
 
-    assertThatThrownBy(() -> service.execute(command()))
+    assertThatThrownBy(() -> service.execute(command))
         .isInstanceOfSatisfying(
             Web3TransferException.class, ex -> assertThat(ex.isRetryable()).isTrue());
     verify(delegate, never()).execute(any(), any());
@@ -250,6 +265,10 @@ class ExecuteExecutionIntentServiceTest {
   @Test
   @DisplayName("terminal KMS DescribeKey (NotFound) → Web3TransferException(retryable=false)")
   void execute_translatesTerminalDescribeKeyToNonRetryableWeb3TransferException() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent peeked = mockNewIntent(command, ExecutionMode.EIP7702);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(peeked));
     KmsException terminalCause =
         (KmsException)
             KmsException.builder()
@@ -258,9 +277,40 @@ class ExecuteExecutionIntentServiceTest {
     when(sponsorWalletPreflight.preflight())
         .thenThrow(new KmsKeyDescribeFailedException("key missing", terminalCause));
 
-    assertThatThrownBy(() -> service.execute(command()))
+    assertThatThrownBy(() -> service.execute(command))
         .isInstanceOfSatisfying(
             Web3TransferException.class, ex -> assertThat(ex.isRetryable()).isFalse());
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  @DisplayName("intent 가 존재하지 않으면 sponsor preflight 호출 전에 not-found 로 fail-fast")
+  void execute_throwsNotFound_whenIntentDoesNotExist_evenWhenPreflightWouldFail() {
+    ExecuteExecutionIntentCommand command = command();
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("executionIntentId not found");
+    // KMS / sponsor 장애가 not-found 응답을 가리지 않도록 preflight 자체가 호출되지 않아야 한다.
+    verifyNoInteractions(sponsorWalletPreflight);
+    verify(delegate, never()).execute(any(), any());
+  }
+
+  @Test
+  @DisplayName("신규 EIP-7702 intent 의 owner mismatch 도 sponsor preflight 호출 전에 fail-fast")
+  void execute_throwsOwnerMismatch_forNewEip7702Intent_evenWhenPreflightWouldFail() {
+    ExecuteExecutionIntentCommand command = command();
+    ExecutionIntent intentOwnedByOther = mockNewIntent(command, ExecutionMode.EIP7702);
+    org.mockito.Mockito.lenient().when(intentOwnedByOther.getRequesterUserId()).thenReturn(99L);
+    when(executionIntentPersistencePort.findByPublicId(command.executionIntentId()))
+        .thenReturn(Optional.of(intentOwnedByOther));
+
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("execution intent owner mismatch");
+    verifyNoInteractions(sponsorWalletPreflight);
     verify(delegate, never()).execute(any(), any());
   }
 

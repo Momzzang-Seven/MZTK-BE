@@ -53,22 +53,41 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
   /**
    * Executes the target intent and returns latest intent/transaction summary.
    *
-   * <p>Single non-locking peek decides the path: cached snapshot → return; pending EIP-1559 →
-   * delegate with no preflight; everything else → preflight then delegate. Owner mismatch on the
-   * cached path is enforced here; on the new-intent path it is enforced by the delegate's FOR
-   * UPDATE select.
+   * <p>Branch order is dictated by failure isolation: not-found and owner-mismatch must be raised
+   * BEFORE sponsor preflight so that an unrelated KMS / sponsor outage cannot mask a 4xx-shaped
+   * input error as a 5xx-shaped {@code WEB3_KMS_KEY_DESCRIBE_FAILED}. The delegate's FOR UPDATE
+   * select re-validates the same invariants under the row lock to close the peek→delegate race.
+   *
+   * <ol>
+   *   <li>Non-locking peek
+   *   <li>Fail fast on {@code peeked == null} → not-found
+   *   <li>Fail fast on owner mismatch (covers brand-new EIP-7702 intents that have not yet hit the
+   *       polling fast-path)
+   *   <li>Polling fast-path for already-submitted intents
+   *   <li>EIP-1559 short-circuit — sponsor material unused, skip preflight
+   *   <li>Preflight + delegate (EIP-7702 or unrecognised mode)
+   * </ol>
    */
   @Override
   public ExecuteExecutionIntentResult execute(ExecuteExecutionIntentCommand command) {
     ExecutionIntent peeked =
         executionIntentPersistencePort.findByPublicId(command.executionIntentId()).orElse(null);
 
+    if (peeked == null) {
+      throw new Web3InvalidInputException(
+          "executionIntentId not found: " + command.executionIntentId());
+    }
+
+    if (!peeked.getRequesterUserId().equals(command.requesterUserId())) {
+      throw new Web3InvalidInputException("execution intent owner mismatch");
+    }
+
     Optional<ExecuteExecutionIntentResult> cached = tryPollingFastPath(command, peeked);
     if (cached.isPresent()) {
       return cached.get();
     }
 
-    if (peeked != null && peeked.getMode() == ExecutionMode.EIP1559) {
+    if (peeked.getMode() == ExecutionMode.EIP1559) {
       return delegate.execute(command, null);
     }
 
