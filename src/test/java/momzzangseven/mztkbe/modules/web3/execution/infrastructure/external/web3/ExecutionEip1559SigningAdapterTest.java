@@ -9,10 +9,7 @@ import static org.mockito.Mockito.when;
 import java.math.BigInteger;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionEip1559SigningPort;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.Eip1559TransactionCodecAdapter;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.Eip1559Fields;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignEip1559TxCommand;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.SignEip1559TxResult;
@@ -116,11 +113,12 @@ class ExecutionEip1559SigningAdapterTest {
 
   @Test
   @DisplayName(
-      "Eip1559Fields invariants survive round-trip: produced raw tx decodes back to the same snapshot")
-  void sign_producesRawTransactionThatRoundTripsThroughCodec() {
-    // Sanity check at the integration boundary between the adapter and the shared codec contract:
-    // any signed bytes produced through the shared SignEip1559TxUseCase must decode back via the
-    // execution-local Eip1559TransactionCodecPort to the same logical snapshot the adapter built.
+      "sign returns the raw tx bytes produced by the shared SignEip1559TxUseCase verbatim")
+  void sign_propagatesRawTransactionFromSignEip1559TxUseCase() {
+    // The adapter's only sign-time job is to translate the SignCommand → SignEip1559TxCommand
+    // and forward the use-case's SignedTx output as ExecutionEip1559SigningPort.SignedTransaction.
+    // The signed-bytes ↔ snapshot round-trip invariant lives in Eip1559TransactionCodecAdapterTest
+    // (real ECKeyPair + TransactionEncoder.signMessage); this test stays at delegation level.
     SignedTx canned = new SignedTx("0xfeed", "0x" + "f".repeat(64));
     when(signEip1559TxUseCase.sign(any(SignEip1559TxCommand.class)))
         .thenReturn(new SignEip1559TxResult(canned));
@@ -138,19 +136,6 @@ class ExecutionEip1559SigningAdapterTest {
                 MAX_FEE,
                 new TreasurySigner(WALLET_ALIAS, KMS_KEY_ID, WALLET_ADDRESS)));
 
-    Eip1559TransactionCodecPort codec = new Eip1559TransactionCodecAdapter();
-    UnsignedTxSnapshot snapshot =
-        new UnsignedTxSnapshot(
-            CHAIN_ID,
-            WALLET_ADDRESS,
-            CONTRACT_ADDRESS,
-            BigInteger.ZERO,
-            CALLDATA,
-            NONCE,
-            GAS_LIMIT,
-            MAX_PRIORITY_FEE,
-            MAX_FEE);
-    assertThat(codec.computeFingerprint(snapshot)).isNotBlank();
     assertThat(signed.rawTransaction()).isEqualTo(canned.rawTx());
     assertThat(signed.txHash()).isEqualTo(canned.txHash());
   }
