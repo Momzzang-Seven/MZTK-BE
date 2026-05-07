@@ -10,7 +10,31 @@ public record PrepareAnswerUpdateCommand(
     String questionContent,
     Long rewardMztk,
     String answerContent,
-    int activeAnswerCount) {
+    int activeAnswerCount,
+    Long updateVersion,
+    String updateToken) {
+
+  public PrepareAnswerUpdateCommand(
+      Long postId,
+      Long answerId,
+      Long requesterUserId,
+      Long questionWriterUserId,
+      String questionContent,
+      Long rewardMztk,
+      String answerContent,
+      int activeAnswerCount) {
+    this(
+        postId,
+        answerId,
+        requesterUserId,
+        questionWriterUserId,
+        questionContent,
+        rewardMztk,
+        answerContent,
+        activeAnswerCount,
+        null,
+        null);
+  }
 
   public void validate() {
     validatePositive(postId, "postId");
@@ -22,6 +46,15 @@ public record PrepareAnswerUpdateCommand(
     validateContent(answerContent, "answerContent");
     if (activeAnswerCount <= 0) {
       throw new Web3InvalidInputException("activeAnswerCount must be positive");
+    }
+    boolean hasUpdateVersion = updateVersion != null;
+    boolean hasUpdateToken = updateToken != null && !updateToken.isBlank();
+    if (hasUpdateVersion != hasUpdateToken) {
+      throw new Web3InvalidInputException(
+          "updateVersion and updateToken must be provided together");
+    }
+    if (hasUpdateVersion && updateVersion <= 0) {
+      throw new Web3InvalidInputException("updateVersion must be positive");
     }
   }
 

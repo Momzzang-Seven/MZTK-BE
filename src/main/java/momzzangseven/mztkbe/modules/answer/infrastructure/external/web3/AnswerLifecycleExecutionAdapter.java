@@ -4,6 +4,9 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerLifecycleAction;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerUpdateCommand;
@@ -17,6 +20,12 @@ import org.springframework.stereotype.Component;
 public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecutionPort {
 
   private final AnswerEscrowExecutionUseCase answerEscrowExecutionUseCase;
+  private final CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
+
+  @Override
+  public boolean managesAnswerLifecycle(AnswerLifecycleAction action) {
+    return action != null;
+  }
 
   @Override
   public boolean hasActiveAnswerIntent(Long answerId) {
@@ -28,6 +37,13 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
     answerEscrowExecutionUseCase.precheckAnswerCreate(
         new momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckAnswerCreateCommand(
             postId, questionContent));
+  }
+
+  @Override
+  public boolean cancelSignableIntent(String executionIntentId, String reason) {
+    return cancelExecutionIntentUseCase.cancelIfSignable(
+        new CancelExecutionIntentCommand(
+            executionIntentId, "ANSWER_LIFECYCLE_BIND_FAILED", reason));
   }
 
   @Override
@@ -124,6 +140,34 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
                     rewardMztk,
                     answerContent,
                     activeAnswerCount))));
+  }
+
+  @Override
+  public Optional<AnswerExecutionWriteView> prepareAnswerUpdate(
+      Long postId,
+      Long answerId,
+      Long requesterUserId,
+      Long questionWriterUserId,
+      String questionContent,
+      Long rewardMztk,
+      String answerContent,
+      int activeAnswerCount,
+      Long updateVersion,
+      String updateToken) {
+    return Optional.of(
+        toView(
+            answerEscrowExecutionUseCase.prepareAnswerUpdate(
+                new PrepareAnswerUpdateCommand(
+                    postId,
+                    answerId,
+                    requesterUserId,
+                    questionWriterUserId,
+                    questionContent,
+                    rewardMztk,
+                    answerContent,
+                    activeAnswerCount,
+                    updateVersion,
+                    updateToken))));
   }
 
   @Override

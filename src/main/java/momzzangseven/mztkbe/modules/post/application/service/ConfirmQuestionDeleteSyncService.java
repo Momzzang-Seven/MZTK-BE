@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.application.port.in.ConfirmQuestionDeleteSyncUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostAnswerIdsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import org.springframework.context.ApplicationEventPublisher;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConfirmQuestionDeleteSyncService implements ConfirmQuestionDeleteSyncUseCase {
 
   private final PostPersistencePort postPersistencePort;
+  private final LoadPostAnswerIdsPort loadPostAnswerIdsPort;
   private final ApplicationEventPublisher eventPublisher;
 
   @Override
@@ -28,8 +30,9 @@ public class ConfirmQuestionDeleteSyncService implements ConfirmQuestionDeleteSy
         .loadPostForUpdate(postId)
         .ifPresent(
             post -> {
+              var answerIds = loadPostAnswerIdsPort.loadAnswerIdsByPostId(postId);
               postPersistencePort.deletePost(post);
-              eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
+              eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType(), answerIds));
             });
   }
 }

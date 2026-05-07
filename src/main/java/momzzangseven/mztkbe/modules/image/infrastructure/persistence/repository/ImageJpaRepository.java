@@ -114,6 +114,7 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
               + "WHERE id IN ("
               + "  SELECT id FROM images "
               + "  WHERE status = 'PENDING' AND created_at < :cutoff "
+              + "  AND NOT (reference_type = 'COMMUNITY_ANSWER_UPDATE' AND reference_id IS NOT NULL) "
               + "  LIMIT :batchSize"
               + ")",
       nativeQuery = true)

@@ -8,6 +8,10 @@ public interface LoadAnswerPort {
   // 특정 게시글의 답변 목록 조회
   List<Answer> loadAnswersByPostId(Long postId);
 
+  List<Answer> loadPublicVisibleAnswersByPostId(Long postId);
+
+  List<Answer> loadPublicAndOwnerVisibleAnswersByPostId(Long postId, Long ownerUserId);
+
   // 답변 수정을 위한 특정 답변 단건 조회
   Optional<Answer> loadAnswer(Long answerId);
 
@@ -18,4 +22,6 @@ public interface LoadAnswerPort {
 
   // 게시글이 이미 삭제되어 post_id 참조가 깨진 고아 답변 ID 조회
   List<Long> loadOrphanAnswerIds(int batchSize);
+
+  boolean existsPreparingOrPendingCreateByPostId(Long postId);
 }

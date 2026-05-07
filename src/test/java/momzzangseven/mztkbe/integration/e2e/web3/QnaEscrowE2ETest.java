@@ -285,9 +285,9 @@ class QnaEscrowE2ETest extends E2ETestBase {
             String.class);
 
     assertThat(nonOwnerReadResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
-    JsonNode nonOwnerAnswer =
-        objectMapper.readTree(nonOwnerReadResponse.getBody()).path("data").get(0);
-    assertThat(nonOwnerAnswer.path("web3Execution").isNull()).isTrue();
+    JsonNode nonOwnerAnswers = objectMapper.readTree(nonOwnerReadResponse.getBody()).path("data");
+    assertThat(nonOwnerAnswers.isArray()).isTrue();
+    assertThat(nonOwnerAnswers.size()).isZero();
   }
 
   @Test

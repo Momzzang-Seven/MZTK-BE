@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
@@ -37,11 +38,31 @@ public class QnaExecutionIntentStateAdapter implements LoadQnaExecutionIntentSta
   }
 
   @Override
+  public List<QnaExecutionIntentStateView> loadActiveByResource(
+      QnaExecutionResourceType resourceType, String resourceId) {
+    return executionIntentPersistencePort
+        .findActiveByResource(toExecutionResourceType(resourceType), resourceId)
+        .stream()
+        .map(this::toView)
+        .toList();
+  }
+
+  @Override
   public Optional<QnaExecutionIntentStateView> loadLatestActiveByResourceForUpdate(
       QnaExecutionResourceType resourceType, String resourceId) {
     return executionIntentPersistencePort
         .findLatestActiveByResourceForUpdate(toExecutionResourceType(resourceType), resourceId)
         .map(this::toView);
+  }
+
+  @Override
+  public List<QnaExecutionIntentStateView> loadActiveByResourceForUpdate(
+      QnaExecutionResourceType resourceType, String resourceId) {
+    return executionIntentPersistencePort
+        .findActiveByResourceForUpdate(toExecutionResourceType(resourceType), resourceId)
+        .stream()
+        .map(this::toView)
+        .toList();
   }
 
   private ExecutionResourceType toExecutionResourceType(QnaExecutionResourceType resourceType) {

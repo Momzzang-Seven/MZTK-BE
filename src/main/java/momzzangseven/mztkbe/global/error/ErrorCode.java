@@ -386,6 +386,23 @@ public enum ErrorCode {
       "ANSWER_009", "Cannot update an answer on a solved post", HttpStatus.BAD_REQUEST),
   CANNOT_DELETE_ANSWER_ON_SOLVED_POST(
       "ANSWER_010", "Cannot delete an answer on a solved post", HttpStatus.BAD_REQUEST),
+  ANSWER_PUBLICATION_PENDING("ANSWER_011", "Answer publication is pending", HttpStatus.CONFLICT),
+  ANSWER_CREATE_RECOVERY_REQUIRED(
+      "ANSWER_012", "Answer create recovery is required", HttpStatus.CONFLICT),
+  ANSWER_CREATE_RECOVERY_UNAVAILABLE(
+      "ANSWER_013", "Answer create recovery is unavailable", HttpStatus.CONFLICT),
+  ANSWER_PUBLICATION_STATE_CONFLICT(
+      "ANSWER_014", "Answer publication state is inconsistent", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_ONCHAIN_IN_PROGRESS(
+      "ANSWER_015", "Answer update onchain mutation is in progress", HttpStatus.CONFLICT),
+  ANSWER_DELETE_ONCHAIN_IN_PROGRESS(
+      "ANSWER_016", "Answer delete onchain mutation is in progress", HttpStatus.CONFLICT),
+  ANSWER_PREPARATION_IN_PROGRESS(
+      "ANSWER_017", "Answer preparation is in progress", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_RECOVERY_UNAVAILABLE(
+      "ANSWER_018", "Answer update recovery is unavailable", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_DISCARD_UNAVAILABLE(
+      "ANSWER_019", "Answer update discard is unavailable", HttpStatus.CONFLICT),
   // ========================================
   // Image Errors (IMAGE_xxx)
   // ========================================

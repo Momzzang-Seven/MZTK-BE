@@ -17,10 +17,9 @@ spring:
   flyway:
     enabled: false
 
-  # SQL 초기화 비활성화
   sql:
     init:
-      mode: never
+      mode: always
 
   jpa:
     defer-datasource-initialization: false

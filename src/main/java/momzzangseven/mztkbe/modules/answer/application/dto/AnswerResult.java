@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerDeleteStatus;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerPublicationStatus;
 
 public record AnswerResult(
     Long answerId,
@@ -12,6 +14,13 @@ public record AnswerResult(
     String profileImageUrl,
     String content,
     boolean accepted,
+    AnswerPublicationStatus publicationStatus,
+    AnswerDeleteStatus pendingDeleteStatus,
+    String publicationFailureTerminalStatus,
+    String publicationFailureReason,
+    String deleteFailureTerminalStatus,
+    String deleteFailureReason,
+    String reconciliationRequiredReason,
     long likeCount,
     boolean liked,
     List<AnswerImageResult.AnswerImageSlot> images,
@@ -21,6 +30,41 @@ public record AnswerResult(
 
   public AnswerResult {
     images = images == null ? List.of() : images;
+  }
+
+  public AnswerResult(
+      Long answerId,
+      Long userId,
+      String nickname,
+      String profileImageUrl,
+      String content,
+      boolean accepted,
+      long likeCount,
+      boolean liked,
+      List<AnswerImageResult.AnswerImageSlot> images,
+      AnswerExecutionResumeView web3Execution,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this(
+        answerId,
+        userId,
+        nickname,
+        profileImageUrl,
+        content,
+        accepted,
+        AnswerPublicationStatus.VISIBLE,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        likeCount,
+        liked,
+        images,
+        web3Execution,
+        createdAt,
+        updatedAt);
   }
 
   public static AnswerResult from(
@@ -38,6 +82,13 @@ public record AnswerResult(
         profileImageUrl,
         answer.getContent(),
         answer.getIsAccepted(),
+        answer.getPublicationStatus(),
+        answer.getPendingDeleteStatus(),
+        answer.getPublicationFailureTerminalStatus(),
+        answer.getPublicationFailureReason(),
+        answer.getDeleteFailureTerminalStatus(),
+        answer.getDeleteFailureReason(),
+        answer.getReconciliationRequiredReason(),
         likeCount,
         liked,
         images,

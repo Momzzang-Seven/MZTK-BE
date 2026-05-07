@@ -15,4 +15,9 @@ public class AnswerCountAdapter implements CountAnswersPort {
   public long countAnswers(Long postId) {
     return countAnswersUseCase.countAnswers(postId);
   }
+
+  @Override
+  public long countPublicVisibleAnswers(Long postId) {
+    return countAnswersUseCase.countPublicVisibleAnswers(postId);
+  }
 }

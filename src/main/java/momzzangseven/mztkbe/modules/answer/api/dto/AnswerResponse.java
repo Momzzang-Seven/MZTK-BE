@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.global.response.ImageItemResponse;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerDeleteStatus;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerPublicationStatus;
 
 public record AnswerResponse(
     Long answerId,
@@ -12,6 +14,13 @@ public record AnswerResponse(
     String profileImageUrl,
     String content,
     boolean isAccepted,
+    AnswerPublicationStatus publicationStatus,
+    AnswerDeleteStatus pendingDeleteStatus,
+    String publicationFailureTerminalStatus,
+    String publicationFailureReason,
+    String deleteFailureTerminalStatus,
+    String deleteFailureReason,
+    String reconciliationRequiredReason,
     long likeCount,
     boolean isLiked,
     List<ImageItemResponse> images,
@@ -32,6 +41,13 @@ public record AnswerResponse(
         answer.profileImageUrl(),
         answer.content(),
         answer.accepted(),
+        answer.publicationStatus(),
+        answer.pendingDeleteStatus(),
+        answer.publicationFailureTerminalStatus(),
+        answer.publicationFailureReason(),
+        answer.deleteFailureTerminalStatus(),
+        answer.deleteFailureReason(),
+        answer.reconciliationRequiredReason(),
         answer.likeCount(),
         answer.liked(),
         images,

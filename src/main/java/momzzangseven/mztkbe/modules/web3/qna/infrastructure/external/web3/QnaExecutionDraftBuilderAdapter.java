@@ -88,7 +88,9 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             request.questionHash(),
             request.contentHash(),
             callTarget,
-            callData);
+            callData,
+            request.answerUpdateVersion(),
+            request.answerUpdateToken());
 
     return new QnaExecutionDraft(
         request.resourceType(),
@@ -97,8 +99,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         request.actionType(),
         request.requesterUserId(),
         request.counterpartyUserId(),
-        QnaEscrowIdempotencyKeyFactory.create(
-            request.actionType(), request.requesterUserId(), request.postId(), request.answerId()),
+        rootIdempotencyKey(request),
         qnaPayloadSerializer.hashHex(payload),
         qnaPayloadSerializer.serialize(payload),
         List.of(call),
@@ -114,6 +115,19 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
 
   private long requestChainId() {
     return web3CoreProperties.getChainId();
+  }
+
+  private String rootIdempotencyKey(QnaEscrowExecutionRequest request) {
+    if (request.actionType() == QnaExecutionActionType.QNA_ANSWER_UPDATE) {
+      return QnaEscrowIdempotencyKeyFactory.createAnswerUpdate(
+          request.requesterUserId(),
+          request.postId(),
+          request.answerId(),
+          request.answerUpdateVersion(),
+          request.answerUpdateToken());
+    }
+    return QnaEscrowIdempotencyKeyFactory.create(
+        request.actionType(), request.requesterUserId(), request.postId(), request.answerId());
   }
 
   private String resolveActiveWalletAddress(Long requesterUserId) {

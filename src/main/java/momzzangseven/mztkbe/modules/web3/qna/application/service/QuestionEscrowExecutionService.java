@@ -41,9 +41,9 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
     if (postId == null) {
       return false;
     }
-    return loadQnaExecutionIntentStatePort
-        .loadLatestActiveByResource(QnaExecutionResourceType.QUESTION, String.valueOf(postId))
-        .isPresent();
+    return !loadQnaExecutionIntentStatePort
+        .loadActiveByResource(QnaExecutionResourceType.QUESTION, String.valueOf(postId))
+        .isEmpty();
   }
 
   @Override

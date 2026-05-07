@@ -21,4 +21,14 @@ public final class QnaEscrowIdempotencyKeyFactory {
     String suffix = answerId == null ? "" : ":" + answerId;
     return "qna:" + actionType.name().toLowerCase() + ":" + requesterUserId + ":" + postId + suffix;
   }
+
+  public static String createAnswerUpdate(
+      Long requesterUserId, Long postId, Long answerId, Long updateVersion, String updateToken) {
+    String base =
+        create(QnaExecutionActionType.QNA_ANSWER_UPDATE, requesterUserId, postId, answerId);
+    if (updateVersion == null || updateToken == null || updateToken.isBlank()) {
+      return base;
+    }
+    return base + ":v" + updateVersion + ":" + updateToken;
+  }
 }

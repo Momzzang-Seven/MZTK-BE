@@ -12,6 +12,8 @@ import momzzangseven.mztkbe.modules.post.application.port.in.DeletePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UpdatePostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadAnswerCreateIntentConflictPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostAnswerIdsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
@@ -45,6 +47,8 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final CountAnswersPort countAnswersPort;
+  private final LoadAnswerCreateIntentConflictPort loadAnswerCreateIntentConflictPort;
+  private final LoadPostAnswerIdsPort loadPostAnswerIdsPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
   private final LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
   private final PostVisibilityPolicy postVisibilityPolicy;
@@ -165,16 +169,18 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     post.validateDeletable(countActiveAnswers(post));
 
     if (isFailedQuestion(post)) {
+      List<Long> answerIds = loadPostAnswerIdsPort.loadAnswerIdsByPostId(postId);
       postPersistencePort.deletePost(post);
-      eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
+      eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType(), answerIds));
       return DeletePreparation.completed();
     }
 
     if (PostType.QUESTION.equals(post.getType())) {
       return DeletePreparation.question(post.getContent(), post.getReward());
     }
+    List<Long> answerIds = loadPostAnswerIdsPort.loadAnswerIdsByPostId(postId);
     postPersistencePort.deletePost(post);
-    eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
+    eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType(), answerIds));
     return DeletePreparation.completed();
   }
 
@@ -184,8 +190,9 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     postVisibilityPolicy.validateOwnerMutationAllowed(post);
     validateQuestionDeletePublicationAllowed(post, currentUserId);
     post.validateDeletable(countActiveAnswers(post));
+    List<Long> answerIds = loadPostAnswerIdsPort.loadAnswerIdsByPostId(postId);
     postPersistencePort.deletePost(post);
-    eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType()));
+    eventPublisher.publishEvent(new PostDeletedEvent(postId, post.getType(), answerIds));
   }
 
   private Post loadPostOrThrow(Long postId) {
@@ -196,7 +203,11 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     if (!PostType.QUESTION.equals(post.getType())) {
       return 0L;
     }
-    return countAnswersPort.countAnswers(post.getId());
+    long localAnswerCount = countAnswersPort.countPublicVisibleAnswers(post.getId());
+    if (localAnswerCount > 0) {
+      return localAnswerCount;
+    }
+    return loadAnswerCreateIntentConflictPort.hasActiveAnswerCreateIntent(post.getId()) ? 1L : 0L;
   }
 
   private void validateQuestionUpdatePublicationAllowed(Post post) {

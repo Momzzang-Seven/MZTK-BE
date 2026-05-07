@@ -17,6 +17,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionP
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerPublicationSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerUpdateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionPublicationSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
@@ -50,6 +52,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   private final QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
   private final QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
   private final QnaQuestionPublicationSyncPort qnaQuestionPublicationSyncPort;
+  private final QnaAnswerPublicationSyncPort qnaAnswerPublicationSyncPort;
+  private final QnaAnswerUpdateSyncPort qnaAnswerUpdateSyncPort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   private final momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort
       qnaLocalDeleteSyncPort;
@@ -76,8 +80,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       case QNA_QUESTION_UPDATE -> applyQuestionUpdate(payload);
       case QNA_QUESTION_DELETE -> applyQuestionDelete(payload);
       case QNA_ANSWER_SUBMIT -> applyAnswerSubmit(intent, payload);
-      case QNA_ANSWER_UPDATE -> applyAnswerUpdate(payload);
-      case QNA_ANSWER_DELETE -> applyAnswerDelete(payload);
+      case QNA_ANSWER_UPDATE -> applyAnswerUpdate(intent, payload);
+      case QNA_ANSWER_DELETE -> applyAnswerDelete(intent, payload);
       case QNA_ANSWER_ACCEPT -> applyAnswerAccept(payload);
       case QNA_ADMIN_SETTLE -> applyAdminSettle(payload);
       case QNA_ADMIN_REFUND -> applyAdminRefund(payload);
@@ -106,7 +110,30 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       }
       return;
     }
+    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_SUBMIT) {
+      if (shouldFailAnswerSubmit(intent, payload)) {
+        qnaAnswerPublicationSyncPort.failAnswerSubmit(
+            payload.answerId(), intent.getPublicId(), terminalStatus, failureReason);
+      }
+      return;
+    }
     if (!shouldRollbackPendingState(terminalStatus, failureReason)) {
+      return;
+    }
+    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_UPDATE
+        && payload.answerUpdateVersion() != null
+        && payload.answerUpdateToken() != null) {
+      qnaAnswerUpdateSyncPort.failAnswerUpdate(
+          payload.answerId(),
+          payload.answerUpdateVersion(),
+          payload.answerUpdateToken(),
+          intent.getPublicId(),
+          failureReason);
+      return;
+    }
+    if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_DELETE) {
+      qnaLocalDeleteSyncPort.rollbackAnswerDelete(
+          payload.answerId(), intent.getPublicId(), terminalStatus.name(), failureReason);
       return;
     }
     if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT
@@ -190,6 +217,25 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
         .orElse(true);
   }
 
+  private boolean shouldFailAnswerSubmit(
+      ExecutionIntent intent, QnaEscrowExecutionPayload payload) {
+    if (qnaProjectionPersistencePort
+        .findAnswerByAnswerIdForUpdate(payload.answerId())
+        .isPresent()) {
+      return false;
+    }
+    String rootIdempotencyKey =
+        QnaEscrowIdempotencyKeyFactory.create(
+            QnaExecutionActionType.QNA_ANSWER_SUBMIT,
+            intent.getRequesterUserId(),
+            payload.postId(),
+            payload.answerId());
+    return loadQnaExecutionIntentStatePort
+        .loadLatestByRootIdempotencyKey(rootIdempotencyKey)
+        .map(latest -> intent.getPublicId().equals(latest.executionIntentId()))
+        .orElse(true);
+  }
+
   private void applyQuestionUpdate(QnaEscrowExecutionPayload payload) {
     QnaQuestionProjection question = requireQuestion(payload.postId());
     qnaProjectionPersistencePort.saveQuestion(question.updateQuestionHash(payload.questionHash()));
@@ -197,6 +243,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
 
   private void applyQuestionDelete(QnaEscrowExecutionPayload payload) {
     QnaQuestionProjection question = requireQuestion(payload.postId());
+    qnaProjectionPersistencePort.deleteAnswerProjectionsByPostId(payload.postId());
     qnaProjectionPersistencePort.saveQuestion(question.markDeleted());
     qnaLocalDeleteSyncPort.confirmQuestionDeleted(payload.postId());
   }
@@ -213,20 +260,28 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
             QnaEscrowIdCodec.answerId(payload.answerId()),
             intent.getRequesterUserId(),
             payload.contentHash()));
+    qnaAnswerPublicationSyncPort.confirmAnswerSubmitted(payload.answerId(), intent.getPublicId());
   }
 
-  private void applyAnswerUpdate(QnaEscrowExecutionPayload payload) {
+  private void applyAnswerUpdate(ExecutionIntent intent, QnaEscrowExecutionPayload payload) {
     QnaAnswerProjection answer = requireAnswer(payload.answerId());
     qnaProjectionPersistencePort.saveAnswer(answer.updateContentHash(payload.contentHash()));
+    if (payload.answerUpdateVersion() != null && payload.answerUpdateToken() != null) {
+      qnaAnswerUpdateSyncPort.confirmAnswerUpdate(
+          payload.answerId(),
+          payload.answerUpdateVersion(),
+          payload.answerUpdateToken(),
+          intent.getPublicId());
+    }
   }
 
-  private void applyAnswerDelete(QnaEscrowExecutionPayload payload) {
+  private void applyAnswerDelete(ExecutionIntent intent, QnaEscrowExecutionPayload payload) {
     QnaQuestionProjection question = requireQuestion(payload.postId());
     requireAnswer(payload.answerId());
     qnaProjectionPersistencePort.deleteAnswerByAnswerId(payload.answerId());
     qnaProjectionPersistencePort.saveQuestion(
         question.syncAnswerCount(question.getAnswerCount() - 1));
-    qnaLocalDeleteSyncPort.confirmAnswerDeleted(payload.answerId());
+    qnaLocalDeleteSyncPort.confirmAnswerDeleted(payload.answerId(), intent.getPublicId());
   }
 
   private void applyAnswerAccept(QnaEscrowExecutionPayload payload) {
@@ -253,6 +308,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     QnaQuestionProjection question = requireQuestion(payload.postId());
     QnaQuestionProjection refunded =
         question.getAnswerCount() > 0 ? question.markDeletedWithAnswers() : question.markDeleted();
+    qnaProjectionPersistencePort.deleteAnswerProjectionsByPostId(payload.postId());
     qnaProjectionPersistencePort.saveQuestion(refunded);
     qnaLocalDeleteSyncPort.confirmQuestionDeleted(payload.postId());
   }

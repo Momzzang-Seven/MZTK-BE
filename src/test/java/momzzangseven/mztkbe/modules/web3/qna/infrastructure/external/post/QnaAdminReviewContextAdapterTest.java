@@ -9,8 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -41,8 +41,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaAdminReviewContextAdapterTest {
 
   @Mock private GetPostContextUseCase getPostContextUseCase;
-  @Mock private GetAnswerSummaryUseCase getAnswerSummaryUseCase;
-  @Mock private GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  @Mock private GetVisibleAnswerSummaryUseCase getVisibleAnswerSummaryUseCase;
+  @Mock private GetVisibleAnswerSummaryForUpdateUseCase getVisibleAnswerSummaryForUpdateUseCase;
   @Mock private LoadQnaAnswerIdsPort loadQnaAnswerIdsPort;
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
@@ -59,8 +59,8 @@ class QnaAdminReviewContextAdapterTest {
     adapter =
         new QnaAdminReviewContextAdapter(
             getPostContextUseCase,
-            getAnswerSummaryUseCase,
-            getAnswerSummaryForUpdateUseCase,
+            getVisibleAnswerSummaryUseCase,
+            getVisibleAnswerSummaryForUpdateUseCase,
             loadQnaAnswerIdsPort,
             qnaProjectionPersistencePort,
             loadQnaExecutionIntentStatePort,

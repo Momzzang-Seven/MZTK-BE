@@ -107,6 +107,22 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public List<ExecutionIntent> findActiveByResource(
+      ExecutionResourceType resourceType, String resourceId) {
+    return repository
+        .findAllByResourceAndStatusIn(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN))
+        .stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId) {
     return repository
@@ -121,6 +137,22 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
         .stream()
         .findFirst()
         .map(this::toDomain);
+  }
+
+  @Override
+  public List<ExecutionIntent> findActiveByResourceForUpdate(
+      ExecutionResourceType resourceType, String resourceId) {
+    return repository
+        .findAllByResourceAndStatusInForUpdate(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN))
+        .stream()
+        .map(this::toDomain)
+        .toList();
   }
 
   @Override

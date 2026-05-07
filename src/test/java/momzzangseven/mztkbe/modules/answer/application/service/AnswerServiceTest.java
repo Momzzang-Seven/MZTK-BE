@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.global.error.answer.AnswerInvalidInputException;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostNotFoundException;
+import momzzangseven.mztkbe.global.error.answer.AnswerPublicationStateException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnauthorizedException;
 import momzzangseven.mztkbe.global.error.answer.AnswerUnsupportedPostTypeException;
 import momzzangseven.mztkbe.global.error.answer.CannotAnswerOwnPostException;
@@ -32,7 +33,10 @@ import momzzangseven.mztkbe.modules.answer.application.dto.DeleteAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerUpdateImagePort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerUpdateStatePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerExecutionResumePort;
@@ -41,10 +45,13 @@ import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePo
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadPostPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.PublishAnswerDeletedEventPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerLifecycleAction;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerUpdateStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -54,7 +61,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AnswerService")
@@ -70,8 +76,10 @@ class AnswerServiceTest {
   @Mock private LoadAnswerLikePort loadAnswerLikePort;
   @Mock private UpdateAnswerImagesPort updateAnswerImagesPort;
   @Mock private AnswerLifecycleExecutionPort answerLifecycleExecutionPort;
+  @Mock private AnswerUpdateImagePort answerUpdateImagePort;
+  @Mock private AnswerUpdateStatePort answerUpdateStatePort;
   @Mock private LoadAnswerExecutionResumePort loadAnswerExecutionResumePort;
-  @Mock private ApplicationEventPublisher eventPublisher;
+  @Mock private PublishAnswerDeletedEventPort publishAnswerDeletedEventPort;
   @Spy private AnswerReadAssembler answerReadAssembler = new AnswerReadAssembler();
 
   @InjectMocks private AnswerService answerService;
@@ -175,7 +183,8 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadPostPort.loadPost(postId)).willReturn(Optional.of(postContext));
-      given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
+      given(loadAnswerPort.loadPublicAndOwnerVisibleAnswersByPostId(postId, 999L))
+          .willReturn(answers);
       given(loadAnswerWriterPort.loadWritersByIds(List.of(20L, 21L)))
           .willReturn(
               Map.of(
@@ -221,7 +230,8 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadPostPort.loadPost(postId)).willReturn(Optional.of(postContext));
-      given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
+      given(loadAnswerPort.loadPublicAndOwnerVisibleAnswersByPostId(postId, null))
+          .willReturn(answers);
       given(loadAnswerWriterPort.loadWritersByIds(List.of(20L)))
           .willReturn(
               Map.of(20L, new LoadAnswerWriterPort.WriterSummary(20L, "writer-a", "profile-a")));
@@ -249,7 +259,8 @@ class AnswerServiceTest {
       LoadPostPort.PostContext postContext = new LoadPostPort.PostContext(10L, 30L, false, true);
 
       given(loadPostPort.loadPost(postId)).willReturn(Optional.of(postContext));
-      given(loadAnswerPort.loadAnswersByPostId(postId)).willReturn(answers);
+      given(loadAnswerPort.loadPublicAndOwnerVisibleAnswersByPostId(postId, 20L))
+          .willReturn(answers);
       given(loadAnswerWriterPort.loadWritersByIds(List.of(20L, 21L)))
           .willReturn(
               Map.of(
@@ -308,6 +319,86 @@ class AnswerServiceTest {
       verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
       verify(answerLifecycleExecutionPort)
           .prepareAnswerUpdate(10L, 100L, 20L, 30L, "question content", 50L, "updated", 1);
+    }
+
+    @Test
+    @DisplayName("managed content+image update defers image changes until update confirmation")
+    void updateAnswer_managedContentAndImage_defersImagesUntilConfirm() {
+      UpdateAnswerCommand command =
+          new UpdateAnswerCommand(10L, 100L, 20L, "updated", List.of(9L, 10L));
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+      AnswerUpdateStatePort.AnswerUpdateState updateState =
+          new AnswerUpdateStatePort.AnswerUpdateState(
+              500L, 100L, 3L, "update-token", null, "updated", true);
+      AnswerExecutionWriteView web3 = answerWeb3("intent-update");
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.UPDATE))
+          .willReturn(true);
+      given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
+          .willReturn(updateState);
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerUpdate(
+                  10L, 100L, 20L, 30L, "question content", 50L, "updated", 1, 3L, "update-token"))
+          .willReturn(Optional.of(web3));
+      given(
+              answerUpdateStatePort.bindIntentIfCurrent(
+                  org.mockito.ArgumentMatchers.eq(100L),
+                  org.mockito.ArgumentMatchers.eq(3L),
+                  org.mockito.ArgumentMatchers.eq("update-token"),
+                  org.mockito.ArgumentMatchers.anyString(),
+                  org.mockito.ArgumentMatchers.eq("intent-update")))
+          .willReturn(1);
+
+      var result = answerService.execute(command);
+
+      assertThat(result.pendingUpdateStatus()).isEqualTo(AnswerUpdateStatus.INTENT_BOUND);
+      assertThat(result.pendingUpdateVersion()).isEqualTo(3L);
+      verify(saveAnswerPort, never()).saveAnswer(any(Answer.class));
+      verify(updateAnswerImagesPort, never()).updateImages(any(), any(), any());
+      verify(answerUpdateImagePort).savePendingImages(500L, 20L, 100L, List.of(9L, 10L));
+    }
+
+    @Test
+    @DisplayName("managed answer update cancels prepared intent when local CAS bind fails")
+    void updateAnswer_managedUpdateCancelsPreparedIntentWhenBindFails() {
+      UpdateAnswerCommand command = new UpdateAnswerCommand(10L, 100L, 20L, "updated", null);
+      Answer answer = buildAnswer(100L, 10L, 20L, "before", false);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+      AnswerUpdateStatePort.AnswerUpdateState updateState =
+          new AnswerUpdateStatePort.AnswerUpdateState(
+              500L, 100L, 3L, "update-token", null, "updated", false);
+      AnswerExecutionWriteView web3 = answerWeb3("intent-update");
+
+      given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.UPDATE))
+          .willReturn(true);
+      given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
+          .willReturn(updateState);
+      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerUpdate(
+                  10L, 100L, 20L, 30L, "question content", 50L, "updated", 1, 3L, "update-token"))
+          .willReturn(Optional.of(web3));
+      given(
+              answerUpdateStatePort.bindIntentIfCurrent(
+                  org.mockito.ArgumentMatchers.eq(100L),
+                  org.mockito.ArgumentMatchers.eq(3L),
+                  org.mockito.ArgumentMatchers.eq("update-token"),
+                  org.mockito.ArgumentMatchers.anyString(),
+                  org.mockito.ArgumentMatchers.eq("intent-update")))
+          .willReturn(0);
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(AnswerPublicationStateException.class);
+      verify(answerLifecycleExecutionPort)
+          .cancelSignableIntent("intent-update", "answer update intent bind failed");
     }
 
     @Test
@@ -422,7 +513,7 @@ class AnswerServiceTest {
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
       verify(answerLifecycleExecutionPort)
           .prepareAnswerDelete(10L, 100L, 20L, 30L, "question content", 50L, 0);
-      verifyNoInteractions(eventPublisher);
+      verifyNoInteractions(publishAnswerDeletedEventPort);
     }
 
     @Test
@@ -444,7 +535,7 @@ class AnswerServiceTest {
       answerService.execute(command);
 
       verify(deleteAnswerPort).deleteAnswer(101L);
-      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(101L));
+      verify(publishAnswerDeletedEventPort).publish(new AnswerDeletedEvent(101L));
     }
 
     @Test
@@ -455,8 +546,8 @@ class AnswerServiceTest {
       answerService.deleteByPostId(10L);
 
       verify(deleteAnswerPort).deleteAnswersByPostId(10L);
-      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(100L));
-      verify(eventPublisher).publishEvent(new AnswerDeletedEvent(101L));
+      verify(publishAnswerDeletedEventPort).publish(new AnswerDeletedEvent(100L));
+      verify(publishAnswerDeletedEventPort).publish(new AnswerDeletedEvent(101L));
     }
 
     @Test
@@ -605,7 +696,7 @@ class AnswerServiceTest {
 
       assertThatThrownBy(() -> answerService.execute(10L, 1L))
           .isInstanceOf(AnswerPostNotFoundException.class);
-      verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
+      verify(loadAnswerPort, never()).loadPublicAndOwnerVisibleAnswersByPostId(10L, 1L);
       verifyNoInteractions(loadAnswerImagesPort);
     }
 
@@ -618,7 +709,7 @@ class AnswerServiceTest {
 
       assertThatThrownBy(() -> answerService.execute(10L, 1L))
           .isInstanceOf(AnswerUnsupportedPostTypeException.class);
-      verify(loadAnswerPort, never()).loadAnswersByPostId(10L);
+      verify(loadAnswerPort, never()).loadPublicAndOwnerVisibleAnswersByPostId(10L, 1L);
       verifyNoInteractions(loadAnswerImagesPort);
     }
 
@@ -765,7 +856,7 @@ class AnswerServiceTest {
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
-      verifyNoInteractions(eventPublisher);
+      verifyNoInteractions(publishAnswerDeletedEventPort);
     }
 
     @Test
@@ -782,7 +873,7 @@ class AnswerServiceTest {
       assertThatThrownBy(() -> answerService.execute(command))
           .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class);
       verify(deleteAnswerPort, never()).deleteAnswer(100L);
-      verifyNoInteractions(eventPublisher);
+      verifyNoInteractions(publishAnswerDeletedEventPort);
     }
 
     @Test
@@ -804,5 +895,16 @@ class AnswerServiceTest {
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();
+  }
+
+  private AnswerExecutionWriteView answerWeb3(String executionIntentId) {
+    return new AnswerExecutionWriteView(
+        new AnswerExecutionWriteView.Resource("ANSWER", "100", "PENDING_EXECUTION"),
+        "QNA_ANSWER_UPDATE",
+        new AnswerExecutionWriteView.ExecutionIntent(
+            executionIntentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(10)),
+        new AnswerExecutionWriteView.Execution("EIP7702", 2),
+        null,
+        false);
   }
 }

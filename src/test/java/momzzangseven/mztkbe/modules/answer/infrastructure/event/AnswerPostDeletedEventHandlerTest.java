@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
+import java.util.List;
 import momzzangseven.mztkbe.modules.answer.application.port.in.DeleteAnswersByPostUseCase;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -34,17 +35,19 @@ class AnswerPostDeletedEventHandlerTest {
 
       handler.handle(event);
 
-      verify(deleteAnswersByPostUseCase).deleteByPostId(10L);
+      verify(deleteAnswersByPostUseCase).deleteByPostId(10L, List.of());
     }
 
     @Test
     @DisplayName("logs exception and does not throw")
     void handle_logsExceptionAndDoesNotThrow() {
       PostDeletedEvent event = new PostDeletedEvent(20L, PostType.QUESTION);
-      doThrow(new RuntimeException("db fail")).when(deleteAnswersByPostUseCase).deleteByPostId(20L);
+      doThrow(new RuntimeException("db fail"))
+          .when(deleteAnswersByPostUseCase)
+          .deleteByPostId(20L, List.of());
 
       assertThatCode(() -> handler.handle(event)).doesNotThrowAnyException();
-      verify(deleteAnswersByPostUseCase).deleteByPostId(20L);
+      verify(deleteAnswersByPostUseCase).deleteByPostId(20L, List.of());
     }
   }
 }

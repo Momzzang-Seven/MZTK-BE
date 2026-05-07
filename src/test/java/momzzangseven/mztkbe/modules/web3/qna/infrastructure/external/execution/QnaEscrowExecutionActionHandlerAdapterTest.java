@@ -24,6 +24,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionP
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefundStateSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerPublicationSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerUpdateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaLocalDeleteSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
@@ -49,6 +51,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   @Mock private QnaAcceptStateSyncPort qnaAcceptStateSyncPort;
   @Mock private QnaAdminRefundStateSyncPort qnaAdminRefundStateSyncPort;
   @Mock private QnaQuestionPublicationSyncPort qnaQuestionPublicationSyncPort;
+  @Mock private QnaAnswerPublicationSyncPort qnaAnswerPublicationSyncPort;
+  @Mock private QnaAnswerUpdateSyncPort qnaAnswerUpdateSyncPort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   @Mock private QnaLocalDeleteSyncPort qnaLocalDeleteSyncPort;
 
@@ -65,6 +69,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
             qnaAcceptStateSyncPort,
             qnaAdminRefundStateSyncPort,
             qnaQuestionPublicationSyncPort,
+            qnaAnswerPublicationSyncPort,
+            qnaAnswerUpdateSyncPort,
             loadQnaExecutionIntentStatePort,
             qnaLocalDeleteSyncPort);
   }
@@ -161,7 +167,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
     verify(qnaProjectionPersistencePort).saveQuestion(questionCaptor.capture());
     assertThat(questionCaptor.getValue().getAnswerCount()).isEqualTo(0);
     assertThat(questionCaptor.getValue().getState()).isEqualTo(QnaQuestionState.CREATED);
-    verify(qnaLocalDeleteSyncPort).confirmAnswerDeleted(201L);
+    verify(qnaLocalDeleteSyncPort).confirmAnswerDeleted(201L, "intent-1");
   }
 
   @Test

@@ -21,10 +21,8 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
-@Transactional
 public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCase {
 
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
@@ -37,19 +35,18 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
     if (answerId == null) {
       return false;
     }
-    return loadQnaExecutionIntentStatePort
-        .loadLatestActiveByResource(QnaExecutionResourceType.ANSWER, String.valueOf(answerId))
-        .isPresent();
+    return !loadQnaExecutionIntentStatePort
+        .loadActiveByResource(QnaExecutionResourceType.ANSWER, String.valueOf(answerId))
+        .isEmpty();
   }
 
   @Override
   public void precheckAnswerCreate(PrecheckAnswerCreateCommand command) {
     command.validate();
     QnaQuestionProjection question = requireQuestionProjection(command.postId());
-    if (loadQnaExecutionIntentStatePort
-        .loadLatestActiveByResource(
-            QnaExecutionResourceType.QUESTION, String.valueOf(command.postId()))
-        .isPresent()) {
+    if (!loadQnaExecutionIntentStatePort
+        .loadActiveByResource(QnaExecutionResourceType.QUESTION, String.valueOf(command.postId()))
+        .isEmpty()) {
       throw new Web3InvalidInputException(
           "question has active onchain mutation in progress: postId=" + command.postId());
     }
@@ -65,7 +62,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
     command.validate();
 
     QnaQuestionProjection question = requireQuestionProjection(command.postId());
-    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_SUBMIT);
+    ensureAnswerMutationConflictFree(command.answerId());
     RewardContext rewardContext = rewardContext(question);
     String answerHash = QnaContentHashFactory.hash(command.answerContent());
 
@@ -116,7 +113,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
     RewardContext rewardContext = rewardContext(question);
     String answerHash = QnaContentHashFactory.hash(command.answerContent());
     requireAnswerProjection(command.answerId());
-    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_UPDATE);
+    ensureAnswerMutationConflictFree(command.answerId());
 
     return submit(
         new QnaEscrowExecutionRequest(
@@ -130,7 +127,9 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
             question.getQuestionHash(),
-            answerHash));
+            answerHash,
+            command.updateVersion(),
+            command.updateToken()));
   }
 
   @Override
@@ -140,7 +139,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
     QnaQuestionProjection question = requireQuestionProjection(command.postId());
     RewardContext rewardContext = rewardContext(question);
     requireAnswerProjection(command.answerId());
-    ensureAnswerMutationConflictFree(command.answerId(), QnaExecutionActionType.QNA_ANSWER_DELETE);
+    ensureAnswerMutationConflictFree(command.answerId());
 
     return submit(
         new QnaEscrowExecutionRequest(
@@ -159,7 +158,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
 
   private QnaQuestionProjection requireQuestionProjection(Long postId) {
     return qnaProjectionPersistencePort
-        .findQuestionByPostIdForUpdate(postId)
+        .findQuestionByPostId(postId)
         .orElseThrow(
             () ->
                 new Web3InvalidInputException(
@@ -168,7 +167,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
 
   private QnaAnswerProjection requireAnswerProjection(Long answerId) {
     return qnaProjectionPersistencePort
-        .findAnswerByAnswerIdForUpdate(answerId)
+        .findAnswerByAnswerId(answerId)
         .orElseThrow(
             () ->
                 new Web3InvalidInputException(
@@ -180,7 +179,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
   }
 
   private void ensureAnswerCreateRecoverable(Long postId, Long answerId, Long requesterUserId) {
-    if (qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(answerId).isPresent()) {
+    if (qnaProjectionPersistencePort.findAnswerByAnswerId(answerId).isPresent()) {
       throw new Web3InvalidInputException(
           "answer is already registered onchain: answerId=" + answerId);
     }
@@ -196,10 +195,10 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
                     "answer create recovery is not available: answerId=" + answerId));
   }
 
-  private void ensureAnswerMutationConflictFree(
-      Long answerId, QnaExecutionActionType requestedActionType) {
-    if (loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(
-        QnaExecutionResourceType.ANSWER, String.valueOf(answerId), requestedActionType)) {
+  private void ensureAnswerMutationConflictFree(Long answerId) {
+    if (!loadQnaExecutionIntentStatePort
+        .loadActiveByResource(QnaExecutionResourceType.ANSWER, String.valueOf(answerId))
+        .isEmpty()) {
       throw new Web3InvalidInputException(
           "conflicting active answer execution intent exists: answerId=" + answerId);
     }

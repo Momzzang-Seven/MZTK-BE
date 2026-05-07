@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardT
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.PrecheckQuestionFundingPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.service.AnswerEscrowExecutionService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowExecutionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,13 +51,18 @@ class QnaExecutionServiceConfigTest {
         .run(
             context -> {
               assertThat(context).hasSingleBean(QuestionEscrowExecutionService.class);
-              assertThat(context).hasSingleBean(AnswerEscrowExecutionUseCase.class);
+              assertThat(context).hasSingleBean(AnswerEscrowExecutionService.class);
               assertThat(context).hasSingleBean(GetQnaExecutionResumeViewUseCase.class);
               assertThat(context).hasBean("questionEscrowExecutionUseCase");
               assertThat(
                       context.getBean(
                           "questionEscrowExecutionUseCase", QuestionEscrowExecutionUseCase.class))
                   .isNotSameAs(context.getBean(QuestionEscrowExecutionService.class));
+              assertThat(context).hasBean("answerEscrowExecutionUseCase");
+              assertThat(
+                      context.getBean(
+                          "answerEscrowExecutionUseCase", AnswerEscrowExecutionUseCase.class))
+                  .isNotSameAs(context.getBean(AnswerEscrowExecutionService.class));
             });
   }
 

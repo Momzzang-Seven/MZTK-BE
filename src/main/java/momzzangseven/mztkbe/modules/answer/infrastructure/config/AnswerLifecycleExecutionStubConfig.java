@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.config;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionWriteView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerLifecycleAction;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,11 @@ public class AnswerLifecycleExecutionStubConfig {
   @ConditionalOnMissingBean(AnswerLifecycleExecutionPort.class)
   public AnswerLifecycleExecutionPort answerLifecycleExecutionPort() {
     return new AnswerLifecycleExecutionPort() {
+      @Override
+      public boolean managesAnswerLifecycle(AnswerLifecycleAction action) {
+        return false;
+      }
+
       @Override
       public void precheckAnswerCreate(Long postId, String questionContent) {}
 

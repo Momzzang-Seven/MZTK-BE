@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentCleanupProtectionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
@@ -31,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ExecutionIntentCleanupServiceTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
+  @Mock private ExecutionIntentCleanupProtectionPort executionIntentCleanupProtectionPort;
   @Mock private SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   @Mock private LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
@@ -42,6 +44,7 @@ class ExecutionIntentCleanupServiceTest {
     service =
         new ExecutionIntentCleanupService(
             executionIntentPersistencePort,
+            executionIntentCleanupProtectionPort,
             sponsorDailyUsagePersistencePort,
             loadExecutionCleanupPolicyPort,
             publishExecutionIntentTerminatedPort);
@@ -55,6 +58,8 @@ class ExecutionIntentCleanupServiceTest {
         .thenReturn(List.of());
     when(executionIntentPersistencePort.findRetainedFinalizedIds(
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(100)))
+        .thenReturn(List.of());
+    when(executionIntentCleanupProtectionPort.filterDeletableFinalizedIntentIds(List.of()))
         .thenReturn(List.of());
     when(sponsorDailyUsagePersistencePort.findUsageIdsForCleanup(
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(100)))
@@ -97,6 +102,8 @@ class ExecutionIntentCleanupServiceTest {
         .thenAnswer(invocation -> invocation.getArgument(0));
     when(executionIntentPersistencePort.findRetainedFinalizedIds(
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(100)))
+        .thenReturn(List.of(11L, 12L));
+    when(executionIntentCleanupProtectionPort.filterDeletableFinalizedIntentIds(List.of(11L, 12L)))
         .thenReturn(List.of(11L, 12L));
     when(sponsorDailyUsagePersistencePort.findUsageIdsForCleanup(
             org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(100)))

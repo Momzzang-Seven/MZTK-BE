@@ -70,6 +70,11 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
     qnaAnswerProjectionJpaRepository.deleteById(answerId);
   }
 
+  @Override
+  public void deleteAnswerProjectionsByPostId(Long postId) {
+    qnaAnswerProjectionJpaRepository.deleteAllByPostId(postId);
+  }
+
   private QnaQuestionProjectionEntity toEntity(QnaQuestionProjection questionProjection) {
     return QnaQuestionProjectionEntity.builder()
         .postId(questionProjection.getPostId())

@@ -11,5 +11,8 @@ public interface QnaLocalDeleteSyncPort {
 
   void confirmQuestionDeleted(Long postId);
 
-  void confirmAnswerDeleted(Long answerId);
+  void confirmAnswerDeleted(Long answerId, String executionIntentId);
+
+  void rollbackAnswerDelete(
+      Long answerId, String executionIntentId, String terminalStatus, String failureReason);
 }

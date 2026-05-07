@@ -8,9 +8,9 @@ import java.util.List;
  * <p>Request-facing types (sent by the client): COMMUNITY_FREE, COMMUNITY_QUESTION,
  * COMMUNITY_ANSWER, MARKET_CLASS, MARKET_STORE, WORKOUT.
  *
- * <p>Internal-only (concrete) types stored in DB: MARKET_CLASS_THUMB, MARKET_CLASS_DETAIL,
- * MARKET_STORE_THUMB, MARKET_STORE_DETAIL. When a client sends MARKET_CLASS or MARKET_STORE, the
- * presigned-URL service expands them into their concrete subtypes internally.
+ * <p>Internal-only types stored in DB: MARKET_CLASS_THUMB, MARKET_CLASS_DETAIL, MARKET_STORE_THUMB,
+ * MARKET_STORE_DETAIL, COMMUNITY_ANSWER_UPDATE. When a client sends MARKET_CLASS or MARKET_STORE,
+ * the presigned-URL service expands them into their concrete subtypes internally.
  *
  * <p>This class does not have finalPathPrefix. Lambda notifies the backend of the final path, so
  * Spring does not need to assemble it.
@@ -24,6 +24,7 @@ public enum ImageReferenceType {
   COMMUNITY_FREE,
   COMMUNITY_QUESTION,
   COMMUNITY_ANSWER,
+  COMMUNITY_ANSWER_UPDATE,
 
   /** MARKET */
   /**
@@ -54,7 +55,8 @@ public enum ImageReferenceType {
     return this != MARKET_CLASS_THUMB
         && this != MARKET_CLASS_DETAIL
         && this != MARKET_STORE_THUMB
-        && this != MARKET_STORE_DETAIL;
+        && this != MARKET_STORE_DETAIL
+        && this != COMMUNITY_ANSWER_UPDATE;
   }
 
   /**

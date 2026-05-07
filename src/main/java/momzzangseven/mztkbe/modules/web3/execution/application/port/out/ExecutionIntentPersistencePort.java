@@ -39,7 +39,12 @@ public interface ExecutionIntentPersistencePort {
   Optional<ExecutionIntent> findLatestActiveByResource(
       ExecutionResourceType resourceType, String resourceId);
 
+  List<ExecutionIntent> findActiveByResource(ExecutionResourceType resourceType, String resourceId);
+
   Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
+      ExecutionResourceType resourceType, String resourceId);
+
+  List<ExecutionIntent> findActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId);
 
   Optional<ExecutionIntent> claimNextInternalExecutableForUpdate(
