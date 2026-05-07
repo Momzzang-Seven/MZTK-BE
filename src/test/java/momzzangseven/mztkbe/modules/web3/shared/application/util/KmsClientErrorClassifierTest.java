@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.core.exception.SdkClientException;
@@ -162,5 +163,44 @@ class KmsClientErrorClassifierTest {
     KmsKeyDescribeFailedException ex =
         new KmsKeyDescribeFailedException("throttled", kmsExWithCode("ThrottlingException"));
     assertThat(KmsClientErrorClassifier.isTerminal(ex)).isFalse();
+  }
+
+  @Nested
+  @DisplayName("isTerminalCause(Throwable) — adapter-side cause classification")
+  class IsTerminalCause {
+
+    @Test
+    @DisplayName("AccessDeniedException 코드 → terminal")
+    void accessDeniedCause_isTerminal() {
+      assertThat(KmsClientErrorClassifier.isTerminalCause(kmsExWithCode("AccessDeniedException")))
+          .isTrue();
+    }
+
+    @Test
+    @DisplayName("ThrottlingException 코드 → retryable")
+    void throttlingCause_isNotTerminal() {
+      assertThat(KmsClientErrorClassifier.isTerminalCause(kmsExWithCode("ThrottlingException")))
+          .isFalse();
+    }
+
+    @Test
+    @DisplayName("null cause → retryable")
+    void nullCause_isNotTerminal() {
+      assertThat(KmsClientErrorClassifier.isTerminalCause(null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("non-KmsException Throwable → retryable")
+    void nonKmsCause_isNotTerminal() {
+      assertThat(KmsClientErrorClassifier.isTerminalCause(new RuntimeException("garbage")))
+          .isFalse();
+    }
+
+    @Test
+    @DisplayName("KmsException with null awsErrorDetails → retryable")
+    void kmsCauseWithoutDetails_isNotTerminal() {
+      KmsException kmsEx = (KmsException) KmsException.builder().message("opaque").build();
+      assertThat(KmsClientErrorClassifier.isTerminalCause(kmsEx)).isFalse();
+    }
   }
 }
