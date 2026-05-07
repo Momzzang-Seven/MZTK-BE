@@ -27,6 +27,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import org.springframework.stereotype.Component;
@@ -225,6 +226,7 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
             .findLatestByPostIdForUpdate(payload.postId())
             .orElse(null);
     if (latest == null
+        || latest.getStatus() != QnaQuestionUpdateStateStatus.INTENT_BOUND
         || !latest.matches(payload.questionUpdateVersion(), payload.questionUpdateToken())
         || !latest.matchesIntent(intent.getPublicId())
         || !latest.matchesExpectedHash(payload.questionHash())) {

@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
+import momzzangseven.mztkbe.global.error.web3.Web3PreparationFailureClassifier;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
@@ -88,7 +89,7 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     }
     if (failure instanceof BusinessException businessFailure) {
       return PostMutationResult.questionUpdatePreparationFailed(
-          postId, businessFailure.getCode(), false);
+          postId, businessFailure.getCode(), Web3PreparationFailureClassifier.isRetryable(failure));
     }
     throw failure;
   }

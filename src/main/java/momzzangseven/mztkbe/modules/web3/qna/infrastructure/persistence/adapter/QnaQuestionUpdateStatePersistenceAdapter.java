@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.adapter
 
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -22,16 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class QnaQuestionUpdateStatePersistenceAdapter
     implements QnaQuestionUpdateStatePersistencePort {
-
-  private static final EnumSet<QnaQuestionUpdateStateStatus> NON_TERMINAL_STATUSES =
-      EnumSet.of(
-          QnaQuestionUpdateStateStatus.PREPARING,
-          QnaQuestionUpdateStateStatus.PREPARATION_FAILED,
-          QnaQuestionUpdateStateStatus.INTENT_BOUND);
-
-  private static final EnumSet<QnaQuestionUpdateStateStatus> BINDABLE_STATUSES =
-      EnumSet.of(
-          QnaQuestionUpdateStateStatus.PREPARING, QnaQuestionUpdateStateStatus.PREPARATION_FAILED);
 
   private final QnaQuestionUpdateStateJpaRepository repository;
   private final Clock appClock;
@@ -80,10 +69,10 @@ public class QnaQuestionUpdateStatePersistenceAdapter
 
   @Override
   @Transactional
-  public int markNonTerminalStaleByPostId(Long postId) {
+  public int markSupersedableStaleByPostId(Long postId) {
     return repository.markNonTerminalStaleByPostId(
         postId,
-        NON_TERMINAL_STATUSES,
+        QnaQuestionUpdateStateStatus.supersedableByNewPreparationStatuses(),
         QnaQuestionUpdateStateStatus.STALE,
         LocalDateTime.now(appClock));
   }
@@ -98,7 +87,7 @@ public class QnaQuestionUpdateStatePersistenceAdapter
             updateVersion,
             updateToken,
             executionIntentPublicId,
-            BINDABLE_STATUSES,
+            QnaQuestionUpdateStateStatus.bindableStatuses(),
             QnaQuestionUpdateStateStatus.PREPARATION_FAILED,
             QnaQuestionUpdateStateStatus.INTENT_BOUND,
             LocalDateTime.now(appClock));
@@ -125,7 +114,7 @@ public class QnaQuestionUpdateStatePersistenceAdapter
             errorCode,
             errorReason,
             retryable,
-            BINDABLE_STATUSES,
+            QnaQuestionUpdateStateStatus.bindableStatuses(),
             QnaQuestionUpdateStateStatus.PREPARATION_FAILED,
             LocalDateTime.now(appClock));
     if (updated == 0) {
@@ -144,7 +133,7 @@ public class QnaQuestionUpdateStatePersistenceAdapter
             errorCode,
             errorReason,
             retryable,
-            NON_TERMINAL_STATUSES,
+            QnaQuestionUpdateStateStatus.nonTerminalStatuses(),
             QnaQuestionUpdateStateStatus.PREPARATION_FAILED,
             LocalDateTime.now(appClock));
     if (updated == 0) {
@@ -188,7 +177,7 @@ public class QnaQuestionUpdateStatePersistenceAdapter
     int updated =
         repository.markStaleByExecutionIntentPublicId(
             executionIntentPublicId,
-            NON_TERMINAL_STATUSES,
+            QnaQuestionUpdateStateStatus.nonTerminalStatuses(),
             QnaQuestionUpdateStateStatus.STALE,
             LocalDateTime.now(appClock));
     if (updated == 0) {

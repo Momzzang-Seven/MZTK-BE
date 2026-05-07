@@ -14,6 +14,7 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -73,6 +74,9 @@ class QuestionEscrowExecutionServiceTest {
     lenient()
         .when(loadQnaExecutionIntentStatePort.loadLatestByRootIdempotencyKey(anyString()))
         .thenReturn(Optional.empty());
+    lenient()
+        .when(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(updateState("수정된 질문", QnaQuestionUpdateStateStatus.PREPARING)));
   }
 
   @Test
@@ -105,6 +109,26 @@ class QuestionEscrowExecutionServiceTest {
     verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
     verify(qnaProjectionPersistencePort, never()).saveAnswer(any());
     assertThat(result.executionIntent().id()).isEqualTo("intent-1");
+  }
+
+  @Test
+  @DisplayName("prepareQuestionUpdate does not submit when the prepared state was superseded")
+  void prepareQuestionUpdate_doesNotSubmitWhenStateWasSuperseded() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .willReturn(Optional.of(updateState("다른 질문", QnaQuestionUpdateStateStatus.PREPARING)));
+
+    assertThatThrownBy(
+            () ->
+                service.prepareQuestionUpdate(
+                    new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L, 1L, "update-token")))
+        .isInstanceOf(PostPublicationStateException.class);
+
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+    verify(qnaQuestionUpdateStatePersistencePort, never())
+        .bindExecutionIntent(any(), any(), any(), any());
   }
 
   @Test
@@ -188,7 +212,7 @@ class QuestionEscrowExecutionServiceTest {
 
     assertThat(result).isPresent();
     assertThat(result.orElseThrow().executionIntent().id()).isEqualTo("intent-recovered-update");
-    verify(qnaQuestionUpdateStatePersistencePort, never()).findLatestByPostIdForUpdate(101L);
+    verify(qnaQuestionUpdateStatePersistencePort).findLatestByPostIdForUpdate(101L);
   }
 
   @Test
@@ -354,6 +378,14 @@ class QuestionEscrowExecutionServiceTest {
         .hasMessageContaining("conflicting active question execution intent");
 
     verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
+    verify(qnaQuestionUpdateStatePersistencePort)
+        .markPreparationFailed(
+            101L,
+            1L,
+            "update-token",
+            "WEB3_001",
+            "conflicting active question execution intent exists: postId=101",
+            true);
   }
 
   @Test

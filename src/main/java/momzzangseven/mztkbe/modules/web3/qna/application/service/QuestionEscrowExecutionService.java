@@ -7,7 +7,7 @@ import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
+import momzzangseven.mztkbe.global.error.web3.Web3PreparationFailureClassifier;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -156,6 +156,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
       PrepareQuestionUpdateCommand command, QnaQuestionProjection question) {
     RewardContext rewardContext = rewardContext(question);
     String questionHash = QnaContentHashFactory.hash(command.questionContent());
+    ensureQuestionUpdateStateBindable(command, questionHash);
 
     QnaExecutionIntentResult result =
         submit(
@@ -182,9 +183,27 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
                 result.executionIntent().id())
             .isPresent();
     if (!bound) {
-      throw new PostPublicationStateException(ErrorCode.QUESTION_UPDATE_SUPERSEDED);
+      throw questionUpdateSuperseded();
     }
     return result;
+  }
+
+  private void ensureQuestionUpdateStateBindable(
+      PrepareQuestionUpdateCommand command, String questionHash) {
+    QnaQuestionUpdateState state =
+        qnaQuestionUpdateStatePersistencePort
+            .findLatestByPostIdForUpdate(command.postId())
+            .orElseThrow(this::questionUpdateSuperseded);
+    if (!state.matches(command.questionUpdateVersion(), command.questionUpdateToken())
+        || !state.matchesExpectedHash(questionHash)
+        || !command.requesterUserId().equals(state.getRequesterUserId())
+        || !state.getStatus().isBindable()) {
+      throw questionUpdateSuperseded();
+    }
+  }
+
+  private PostPublicationStateException questionUpdateSuperseded() {
+    return new PostPublicationStateException(ErrorCode.QUESTION_UPDATE_SUPERSEDED);
   }
 
   private void markQuestionUpdatePreparationFailed(
@@ -206,10 +225,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
   }
 
   private boolean isRetryablePreparationFailure(RuntimeException failure) {
-    if (failure instanceof Web3TransferException web3Failure) {
-      return web3Failure.isRetryable();
-    }
-    return !(failure instanceof BusinessException);
+    return Web3PreparationFailureClassifier.isRetryable(failure);
   }
 
   @Override

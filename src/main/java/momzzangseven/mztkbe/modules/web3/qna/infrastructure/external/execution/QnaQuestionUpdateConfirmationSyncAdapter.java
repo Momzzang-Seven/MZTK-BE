@@ -1,23 +1,31 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
-import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateConfirmationSyncPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-@RequiredArgsConstructor
 @ConditionalOnAnyExecutionEnabled
 public class QnaQuestionUpdateConfirmationSyncAdapter
     implements QnaQuestionUpdateConfirmationSyncPort {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
-  private final QnaEscrowExecutionActionHandlerAdapter actionHandlerAdapter;
+  private final ExecutionActionHandlerPort actionHandler;
+
+  public QnaQuestionUpdateConfirmationSyncAdapter(
+      ExecutionIntentPersistencePort executionIntentPersistencePort,
+      @Qualifier("qnaEscrowExecutionActionHandlerAdapter")
+          ExecutionActionHandlerPort actionHandler) {
+    this.executionIntentPersistencePort = executionIntentPersistencePort;
+    this.actionHandler = actionHandler;
+  }
 
   @Override
   @Transactional
@@ -27,8 +35,7 @@ public class QnaQuestionUpdateConfirmationSyncAdapter
         .filter(this::isConfirmedQuestionUpdate)
         .map(
             intent -> {
-              actionHandlerAdapter.afterExecutionConfirmed(
-                  intent, actionHandlerAdapter.buildActionPlan(intent));
+              actionHandler.afterExecutionConfirmed(intent, actionHandler.buildActionPlan(intent));
               return true;
             })
         .orElse(false);

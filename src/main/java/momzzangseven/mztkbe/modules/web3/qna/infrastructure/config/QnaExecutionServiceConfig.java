@@ -62,8 +62,11 @@ public class QnaExecutionServiceConfig {
 
   @Bean
   BeginQuestionUpdateStateService beginQuestionUpdateStateService(
-      QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort, Clock appClock) {
-    return new BeginQuestionUpdateStateService(qnaQuestionUpdateStatePersistencePort, appClock);
+      QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort,
+      LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort,
+      Clock appClock) {
+    return new BeginQuestionUpdateStateService(
+        qnaQuestionUpdateStatePersistencePort, loadQnaExecutionIntentStatePort, appClock);
   }
 
   @Bean

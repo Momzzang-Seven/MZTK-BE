@@ -4,30 +4,41 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QuestionUpdateStatePreparationResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 
 @RequiredArgsConstructor
 public class BeginQuestionUpdateStateService implements BeginQuestionUpdateStateUseCase {
 
   private final QnaQuestionUpdateStatePersistencePort statePersistencePort;
+  private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
   private final Clock appClock;
 
   @Override
   public QuestionUpdateStatePreparationResult begin(BeginQuestionUpdateStateCommand command) {
     command.validate();
     LocalDateTime now = LocalDateTime.now(appClock);
-    Long nextVersion =
-        statePersistencePort
-            .findLatestByPostIdForUpdate(command.postId())
-            .map(QnaQuestionUpdateState::getUpdateVersion)
-            .map(version -> version + 1)
-            .orElse(1L);
+    QnaQuestionUpdateState latest =
+        statePersistencePort.findLatestByPostIdForUpdate(command.postId()).orElse(null);
+    if (latest != null && latest.getStatus() == QnaQuestionUpdateStateStatus.INTENT_BOUND) {
+      throw new Web3InvalidInputException(
+          "question update execution intent is pending; wait for confirmation sync");
+    }
+    if (loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
+        QnaExecutionResourceType.QUESTION, String.valueOf(command.postId()))) {
+      throw new Web3InvalidInputException(
+          "question has pending onchain mutation; wait for completion or recover first");
+    }
 
-    statePersistencePort.markNonTerminalStaleByPostId(command.postId());
+    Long nextVersion = latest == null ? 1L : latest.getUpdateVersion() + 1;
+    statePersistencePort.markSupersedableStaleByPostId(command.postId());
     QnaQuestionUpdateState saved =
         statePersistencePort.save(
             QnaQuestionUpdateState.preparing(

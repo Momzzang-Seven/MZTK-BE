@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -30,7 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaQuestionUpdateConfirmationSyncAdapterTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
-  @Mock private QnaEscrowExecutionActionHandlerAdapter actionHandlerAdapter;
+  @Mock private ExecutionActionHandlerPort actionHandler;
 
   @InjectMocks private QnaQuestionUpdateConfirmationSyncAdapter adapter;
 
@@ -41,12 +42,12 @@ class QnaQuestionUpdateConfirmationSyncAdapterTest {
     ExecutionActionPlan plan =
         new ExecutionActionPlan(BigInteger.ZERO, ExecutionReferenceType.USER_TO_SERVER, List.of());
     when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
-    when(actionHandlerAdapter.buildActionPlan(intent)).thenReturn(plan);
+    when(actionHandler.buildActionPlan(intent)).thenReturn(plan);
 
     boolean result = adapter.syncConfirmedQuestionUpdate("intent-1");
 
     assertThat(result).isTrue();
-    verify(actionHandlerAdapter).afterExecutionConfirmed(intent, plan);
+    verify(actionHandler).afterExecutionConfirmed(intent, plan);
   }
 
   @Test
@@ -58,7 +59,7 @@ class QnaQuestionUpdateConfirmationSyncAdapterTest {
     boolean result = adapter.syncConfirmedQuestionUpdate("intent-1");
 
     assertThat(result).isFalse();
-    verify(actionHandlerAdapter, never()).afterExecutionConfirmed(any(), any());
+    verify(actionHandler, never()).afterExecutionConfirmed(any(), any());
   }
 
   private ExecutionIntent confirmedIntent(ExecutionActionType actionType) {

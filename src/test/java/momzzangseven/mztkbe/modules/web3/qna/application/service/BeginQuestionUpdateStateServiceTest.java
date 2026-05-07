@@ -1,6 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -9,9 +12,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,12 +34,14 @@ class BeginQuestionUpdateStateServiceTest {
       Clock.fixed(Instant.parse("2026-04-12T01:00:00Z"), ZoneId.of("Asia/Seoul"));
 
   @Mock private QnaQuestionUpdateStatePersistencePort statePersistencePort;
+  @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
 
   @Test
   @DisplayName("first question update creates version 1 state")
   void beginCreatesFirstVersion() {
     BeginQuestionUpdateStateService service =
-        new BeginQuestionUpdateStateService(statePersistencePort, CLOCK);
+        new BeginQuestionUpdateStateService(
+            statePersistencePort, loadQnaExecutionIntentStatePort, CLOCK);
     when(statePersistencePort.findLatestByPostIdForUpdate(101L)).thenReturn(Optional.empty());
     when(statePersistencePort.save(org.mockito.ArgumentMatchers.any()))
         .thenAnswer(invocation -> invocation.getArgument(0));
@@ -43,7 +51,7 @@ class BeginQuestionUpdateStateServiceTest {
     assertThat(result.updateVersion()).isEqualTo(1L);
     assertThat(result.updateToken()).isNotBlank();
     assertThat(result.expectedQuestionHash()).isEqualTo(hash("a"));
-    verify(statePersistencePort).markNonTerminalStaleByPostId(101L);
+    verify(statePersistencePort).markSupersedableStaleByPostId(101L);
   }
 
   @Test
@@ -51,9 +59,11 @@ class BeginQuestionUpdateStateServiceTest {
       "next question update marks previous non-terminal state stale and saves next version")
   void beginAdvancesVersionAndMarksPreviousStale() {
     BeginQuestionUpdateStateService service =
-        new BeginQuestionUpdateStateService(statePersistencePort, CLOCK);
+        new BeginQuestionUpdateStateService(
+            statePersistencePort, loadQnaExecutionIntentStatePort, CLOCK);
     when(statePersistencePort.findLatestByPostIdForUpdate(101L))
-        .thenReturn(Optional.of(existingState(2L)));
+        .thenReturn(
+            Optional.of(existingState(2L, QnaQuestionUpdateStateStatus.PREPARATION_FAILED)));
     when(statePersistencePort.save(org.mockito.ArgumentMatchers.any()))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -61,21 +71,59 @@ class BeginQuestionUpdateStateServiceTest {
 
     ArgumentCaptor<QnaQuestionUpdateState> captor =
         ArgumentCaptor.forClass(QnaQuestionUpdateState.class);
-    verify(statePersistencePort).markNonTerminalStaleByPostId(101L);
+    verify(statePersistencePort).markSupersedableStaleByPostId(101L);
     verify(statePersistencePort).save(captor.capture());
     assertThat(captor.getValue().getUpdateVersion()).isEqualTo(3L);
     assertThat(captor.getValue().getStatus()).isEqualTo(QnaQuestionUpdateStateStatus.PREPARING);
     assertThat(captor.getValue().getExpectedQuestionHash()).isEqualTo(hash("b"));
   }
 
-  private QnaQuestionUpdateState existingState(Long version) {
+  @Test
+  @DisplayName("begin rejects while a previous update intent is bound")
+  void beginRejectsIntentBoundState() {
+    BeginQuestionUpdateStateService service =
+        new BeginQuestionUpdateStateService(
+            statePersistencePort, loadQnaExecutionIntentStatePort, CLOCK);
+    when(statePersistencePort.findLatestByPostIdForUpdate(101L))
+        .thenReturn(Optional.of(existingState(2L, QnaQuestionUpdateStateStatus.INTENT_BOUND)));
+
+    assertThatThrownBy(
+            () -> service.begin(new BeginQuestionUpdateStateCommand(101L, 7L, hash("b"))))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("wait for confirmation sync");
+
+    verify(statePersistencePort, never()).markSupersedableStaleByPostId(any());
+    verify(statePersistencePort, never()).save(any());
+  }
+
+  @Test
+  @DisplayName("begin rejects while an active question execution intent exists")
+  void beginRejectsActiveQuestionIntent() {
+    BeginQuestionUpdateStateService service =
+        new BeginQuestionUpdateStateService(
+            statePersistencePort, loadQnaExecutionIntentStatePort, CLOCK);
+    when(statePersistencePort.findLatestByPostIdForUpdate(101L)).thenReturn(Optional.empty());
+    when(loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
+            QnaExecutionResourceType.QUESTION, "101"))
+        .thenReturn(true);
+
+    assertThatThrownBy(
+            () -> service.begin(new BeginQuestionUpdateStateCommand(101L, 7L, hash("b"))))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("pending onchain mutation");
+
+    verify(statePersistencePort, never()).markSupersedableStaleByPostId(any());
+    verify(statePersistencePort, never()).save(any());
+  }
+
+  private QnaQuestionUpdateState existingState(Long version, QnaQuestionUpdateStateStatus status) {
     return QnaQuestionUpdateState.builder()
         .postId(101L)
         .requesterUserId(7L)
         .updateVersion(version)
         .updateToken("token-" + version)
         .expectedQuestionHash(hash("old"))
-        .status(QnaQuestionUpdateStateStatus.INTENT_BOUND)
+        .status(status)
         .createdAt(LocalDateTime.of(2026, 4, 12, 10, 0))
         .updatedAt(LocalDateTime.of(2026, 4, 12, 10, 0))
         .build();

@@ -16,7 +16,7 @@ public interface QnaQuestionUpdateStatePersistencePort {
 
   QnaQuestionUpdateState save(QnaQuestionUpdateState state);
 
-  int markNonTerminalStaleByPostId(Long postId);
+  int markSupersedableStaleByPostId(Long postId);
 
   Optional<QnaQuestionUpdateState> bindExecutionIntent(
       Long postId, Long updateVersion, String updateToken, String executionIntentPublicId);

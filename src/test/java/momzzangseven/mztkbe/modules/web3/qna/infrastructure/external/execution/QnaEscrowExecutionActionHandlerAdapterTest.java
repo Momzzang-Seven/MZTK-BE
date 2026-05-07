@@ -317,6 +317,33 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName("afterExecutionConfirmed skips projection update when state is already confirmed")
+  void afterExecutionConfirmed_skipsProjectionWhenStateAlreadyConfirmed() throws Exception {
+    String questionHash = "0x" + "f".repeat(64);
+    when(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .thenReturn(
+            Optional.of(
+                updateState(
+                    2L,
+                    "token-2",
+                    questionHash,
+                    "intent-1",
+                    QnaQuestionUpdateStateStatus.CONFIRMED)));
+
+    adapter.afterExecutionConfirmed(
+        intent(
+            questionUpdatePayload(questionHash, 2L, "token-2"),
+            ExecutionResourceType.QUESTION,
+            "101",
+            7L),
+        plan());
+
+    verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
+    verify(qnaProjectionPersistencePort, never()).findQuestionByPostIdForUpdate(any());
+    verify(qnaQuestionUpdateStatePersistencePort, never()).markConfirmed(any());
+  }
+
+  @Test
   @DisplayName("afterExecutionConfirmed ignores stale question update confirmation")
   void afterExecutionConfirmed_ignoresStaleQuestionUpdate() throws Exception {
     String questionHash = "0x" + "f".repeat(64);
@@ -685,6 +712,16 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
 
   private QnaQuestionUpdateState updateState(
       Long version, String token, String questionHash, String intentId) {
+    return updateState(
+        version, token, questionHash, intentId, QnaQuestionUpdateStateStatus.INTENT_BOUND);
+  }
+
+  private QnaQuestionUpdateState updateState(
+      Long version,
+      String token,
+      String questionHash,
+      String intentId,
+      QnaQuestionUpdateStateStatus status) {
     return QnaQuestionUpdateState.builder()
         .postId(101L)
         .requesterUserId(7L)
@@ -692,7 +729,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         .updateToken(token)
         .expectedQuestionHash(questionHash)
         .executionIntentPublicId(intentId)
-        .status(QnaQuestionUpdateStateStatus.INTENT_BOUND)
+        .status(status)
         .createdAt(LocalDateTime.of(2026, 4, 12, 10, 0))
         .updatedAt(LocalDateTime.of(2026, 4, 12, 10, 1))
         .build();
