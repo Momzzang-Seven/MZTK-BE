@@ -143,8 +143,7 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName(
-      "countCommentsByPostId() delegates to repository count query including soft-deleted rows")
+  @DisplayName("countCommentsByPostId() delegates to active POST count repository query")
   void countCommentsByPostId_delegatesToRepository() {
     given(commentRepository.countByPostId(10L)).willReturn(4L);
 

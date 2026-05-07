@@ -21,6 +21,12 @@ public record CreateCommentCommand(
     validate(targetType, postId, answerId, userId, content);
   }
 
+  public static CreateCommentCommand forPost(
+      Long postId, Long userId, Long parentId, String content) {
+    return new CreateCommentCommand(
+        CommentTargetType.POST, postId, null, userId, parentId, content);
+  }
+
   public static CreateCommentCommand forAnswer(
       Long answerId, Long userId, Long parentId, String content) {
     return new CreateCommentCommand(
@@ -29,10 +35,15 @@ public record CreateCommentCommand(
 
   private void validate(
       CommentTargetType targetType, Long postId, Long answerId, Long userId, String content) {
-    boolean missingTarget =
-        (CommentTargetType.POST.equals(targetType) && postId == null)
-            || (CommentTargetType.ANSWER.equals(targetType) && answerId == null);
-    if (missingTarget || userId == null || content == null || content.isBlank()) {
+    boolean invalidPostTarget =
+        CommentTargetType.POST.equals(targetType) && (postId == null || answerId != null);
+    boolean invalidAnswerTarget =
+        CommentTargetType.ANSWER.equals(targetType) && (postId != null || answerId == null);
+    if (invalidPostTarget
+        || invalidAnswerTarget
+        || userId == null
+        || content == null
+        || content.isBlank()) {
       throw new BusinessException(ErrorCode.MISSING_REQUIRED_FIELD);
     }
   }

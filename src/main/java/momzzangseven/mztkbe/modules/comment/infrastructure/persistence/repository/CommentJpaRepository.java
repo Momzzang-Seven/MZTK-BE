@@ -16,7 +16,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
 
-  long countByTargetTypeAndPostId(CommentTargetType targetType, Long postId);
+  long countByTargetTypeAndPostIdAndIsDeletedFalse(CommentTargetType targetType, Long postId);
 
   @Query(
       "SELECT COUNT(c.id) FROM CommentEntity c "
@@ -27,7 +27,7 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
       @Param("targetType") CommentTargetType targetType, @Param("answerId") Long answerId);
 
   default long countByPostId(Long postId) {
-    return countByTargetTypeAndPostId(CommentTargetType.POST, postId);
+    return countByTargetTypeAndPostIdAndIsDeletedFalse(CommentTargetType.POST, postId);
   }
 
   Page<CommentEntity> findByPostId(Long postId, Pageable pageable);

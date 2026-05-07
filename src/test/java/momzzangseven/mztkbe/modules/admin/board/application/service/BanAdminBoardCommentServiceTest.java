@@ -88,4 +88,36 @@ class BanAdminBoardCommentServiceTest {
     verify(saveAdminBoardModerationActionPort, never())
         .save(org.mockito.Mockito.any(AdminBoardModerationAction.class));
   }
+
+  @Test
+  @DisplayName("answer 댓글 ban은 root question postId로 게시글 대상과 moderation action을 저장한다")
+  void execute_answerCommentBan_usesRootQuestionPostIdForAudit() {
+    BanAdminBoardCommentCommand command =
+        new BanAdminBoardCommentCommand(
+            9L, 31L, AdminBoardModerationReasonCode.POLICY_VIOLATION, "answer comment");
+    given(banAdminBoardCommentPort.ban(31L))
+        .willReturn(new BanAdminBoardCommentPort.BanAdminBoardCommentResult(31L, 21L, true));
+    given(loadAdminBoardPostModerationTargetPort.load(21L))
+        .willReturn(
+            new LoadAdminBoardPostModerationTargetPort.AdminBoardPostModerationTarget(
+                21L, AdminBoardType.QUESTION, AdminBoardPostStatus.OPEN));
+    given(appClock.instant()).willReturn(Instant.parse("2026-05-04T00:00:00Z"));
+    given(appClock.getZone()).willReturn(ZoneId.of("UTC"));
+
+    var result = service.execute(command);
+
+    assertThat(result.targetId()).isEqualTo(31L);
+    assertThat(result.targetType()).isEqualTo(AdminBoardModerationTargetType.COMMENT);
+    assertThat(result.moderated()).isTrue();
+
+    verify(loadAdminBoardPostModerationTargetPort).load(21L);
+    ArgumentCaptor<AdminBoardModerationAction> captor =
+        ArgumentCaptor.forClass(AdminBoardModerationAction.class);
+    verify(saveAdminBoardModerationActionPort).save(captor.capture());
+    assertThat(captor.getValue().getTargetId()).isEqualTo(31L);
+    assertThat(captor.getValue().getPostId()).isEqualTo(21L);
+    assertThat(captor.getValue().getBoardType()).isEqualTo(AdminBoardType.QUESTION);
+    assertThat(captor.getValue().getReasonCode())
+        .isEqualTo(AdminBoardModerationReasonCode.POLICY_VIOLATION);
+  }
 }

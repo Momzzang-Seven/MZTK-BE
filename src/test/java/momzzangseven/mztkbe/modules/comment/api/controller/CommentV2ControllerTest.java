@@ -15,6 +15,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.global.pagination.CursorScope;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
@@ -26,8 +30,10 @@ import momzzangseven.mztkbe.modules.comment.application.port.in.DeleteCommentUse
 import momzzangseven.mztkbe.modules.comment.application.port.in.GetCommentCursorUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.GetCommentUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.in.UpdateCommentUseCase;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -119,7 +125,55 @@ class CommentV2ControllerTest {
   }
 
   @Test
-  @DisplayName("POST /v2/answers/{answerId}/comments creates answer comment")
+  @DisplayName("GET /v2/answers/{answerId}/comments returns 401 when unauthenticated")
+  void getAnswerRootCommentsV2_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(get("/v2/answers/300/comments")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(getCommentCursorUseCase);
+  }
+
+  @Test
+  @DisplayName("GET /v2/answers/{answerId}/comments returns 400 for malformed cursor")
+  void getAnswerRootCommentsV2_malformedCursor_returns400() throws Exception {
+    mockMvc
+        .perform(get("/v2/answers/300/comments?cursor=%%%").with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+
+    verifyNoInteractions(getCommentCursorUseCase);
+  }
+
+  @Test
+  @DisplayName("GET /v2/answers/{answerId}/comments rejects post root cursor scope")
+  void getAnswerRootCommentsV2_postRootCursorScope_returns400() throws Exception {
+    String cursor = cursorFor(CursorScope.rootComments(300L));
+
+    mockMvc
+        .perform(get("/v2/answers/300/comments").param("cursor", cursor).with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+
+    verifyNoInteractions(getCommentCursorUseCase);
+  }
+
+  @Test
+  @DisplayName("GET /v2/answers/{answerId}/comments rejects another answer cursor scope")
+  void getAnswerRootCommentsV2_otherAnswerCursorScope_returns400() throws Exception {
+    String cursor = cursorFor(CursorScope.answerRootComments(301L));
+
+    mockMvc
+        .perform(get("/v2/answers/300/comments").param("cursor", cursor).with(userPrincipal(1L)))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("VALIDATION_001"));
+
+    verifyNoInteractions(getCommentCursorUseCase);
+  }
+
+  @Test
+  @DisplayName("v2 create 정책: POST /v2/answers/{answerId}/comments returns 201 without message")
   void createAnswerCommentV2_success() throws Exception {
     given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
         .willReturn(mutationResult(32L, "답변 댓글", null, false));
@@ -132,8 +186,99 @@ class CommentV2ControllerTest {
                 .content(objectMapper.writeValueAsString(Map.of("content", "답변 댓글"))))
         .andExpect(status().isCreated())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.message").doesNotExist())
         .andExpect(jsonPath("$.data.commentId").value(32))
         .andExpect(jsonPath("$.data.content").value("답변 댓글"));
+  }
+
+  @Test
+  @DisplayName("v2 create 정책: POST /v2/posts/{postId}/comments returns 201 without message")
+  void createPostCommentV2_success() throws Exception {
+    given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
+        .willReturn(mutationResult(33L, "게시글 댓글", null, false));
+
+    mockMvc
+        .perform(
+            post("/v2/posts/10/comments")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", "게시글 댓글"))))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.message").doesNotExist())
+        .andExpect(jsonPath("$.data.commentId").value(33))
+        .andExpect(jsonPath("$.data.content").value("게시글 댓글"))
+        .andExpect(jsonPath("$.data.writerId").value(1))
+        .andExpect(jsonPath("$.data.parentId").doesNotExist())
+        .andExpect(jsonPath("$.data.isDeleted").value(false));
+
+    ArgumentCaptor<CreateCommentCommand> captor =
+        ArgumentCaptor.forClass(CreateCommentCommand.class);
+    verify(createCommentUseCase).createComment(captor.capture());
+    CreateCommentCommand command = captor.getValue();
+    org.assertj.core.api.Assertions.assertThat(command.targetType())
+        .isEqualTo(CommentTargetType.POST);
+    org.assertj.core.api.Assertions.assertThat(command.postId()).isEqualTo(10L);
+    org.assertj.core.api.Assertions.assertThat(command.answerId()).isNull();
+  }
+
+  @Test
+  @DisplayName("POST /v2/posts/{postId}/comments returns 401 when unauthenticated")
+  void createPostCommentV2_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/v2/posts/10/comments")
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", "게시글 댓글"))))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(createCommentUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /v2/posts/{postId}/comments returns 400 for blank content")
+  void createPostCommentV2_blankContent_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/v2/posts/10/comments")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", " "))))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(createCommentUseCase);
+  }
+
+  @Test
+  @DisplayName("POST /v2/answers/{answerId}/comments returns 401 when unauthenticated")
+  void createAnswerCommentV2_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(
+            post("/v2/answers/300/comments")
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", "답변 댓글"))))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(createCommentUseCase);
+  }
+
+  @Test
+  @DisplayName(
+      "POST /v2/answers/{answerId}/comments returns ANSWER_NOT_FOUND when answer is missing")
+  void createAnswerCommentV2_answerMissing_returnsAnswerNotFound() throws Exception {
+    given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
+        .willThrow(new AnswerNotFoundException());
+
+    mockMvc
+        .perform(
+            post("/v2/answers/300/comments")
+                .with(userPrincipal(1L))
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", "답변 댓글"))))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("ANSWER_001"))
+        .andExpect(jsonPath("$.message").value("Answer not found"));
   }
 
   @Test
@@ -171,14 +316,39 @@ class CommentV2ControllerTest {
   }
 
   @Test
+  @DisplayName("PUT /v2/answers/{answerId}/comments/{commentId} returns 401 when unauthenticated")
+  void updateAnswerCommentV2_unauthenticated_returns401() throws Exception {
+    mockMvc
+        .perform(
+            put("/v2/answers/300/comments/32")
+                .contentType(APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("content", "수정된 답변 댓글"))))
+        .andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(updateCommentUseCase);
+  }
+
+  @Test
   @DisplayName("DELETE /v2/answers/{answerId}/comments/{commentId} deletes answer comment")
   void deleteAnswerCommentV2_success() throws Exception {
     mockMvc
         .perform(delete("/v2/answers/300/comments/32").with(userPrincipal(1L)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.status").value("SUCCESS"));
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.message").doesNotExist())
+        .andExpect(jsonPath("$.data").isMap())
+        .andExpect(jsonPath("$.data.commentId").value(32));
 
     verify(deleteCommentUseCase).deleteAnswerComment(any(DeleteAnswerCommentCommand.class));
+  }
+
+  @Test
+  @DisplayName(
+      "DELETE /v2/answers/{answerId}/comments/{commentId} returns 401 when unauthenticated")
+  void deleteAnswerCommentV2_unauthenticated_returns401() throws Exception {
+    mockMvc.perform(delete("/v2/answers/300/comments/32")).andExpect(status().isUnauthorized());
+
+    verifyNoInteractions(deleteCommentUseCase);
   }
 
   @Test
@@ -227,5 +397,9 @@ class CommentV2ControllerTest {
         new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
     return org.springframework.security.test.web.servlet.request
         .SecurityMockMvcRequestPostProcessors.authentication(token);
+  }
+
+  private String cursorFor(String scope) {
+    return CursorCodec.encode(new KeysetCursor(LocalDateTime.of(2026, 4, 24, 12, 0), 1L, scope));
   }
 }

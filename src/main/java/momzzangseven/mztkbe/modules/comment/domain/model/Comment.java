@@ -35,7 +35,9 @@ public class Comment {
       LocalDateTime createdAt,
       LocalDateTime updatedAt) {
     this.id = id;
-    this.targetType = targetType == null ? CommentTargetType.POST : targetType;
+    CommentTargetType resolvedTargetType = targetType == null ? CommentTargetType.POST : targetType;
+    validateTarget(resolvedTargetType, postId, answerId);
+    this.targetType = resolvedTargetType;
     this.postId = postId;
     this.answerId = answerId;
     this.writerId = writerId;
@@ -69,13 +71,14 @@ public class Comment {
   }
 
   public static Comment createForAnswer(
-      Long answerId, Long writerId, Long parentId, String content) {
+      Long postId, Long answerId, Long writerId, Long parentId, String content) {
     if (content == null || content.isBlank()) {
       throw new BusinessException(ErrorCode.INVALID_INPUT);
     }
 
     return Comment.builder()
         .targetType(CommentTargetType.ANSWER)
+        .postId(postId)
         .answerId(answerId)
         .writerId(writerId)
         .parentId(parentId)
@@ -84,6 +87,16 @@ public class Comment {
         .createdAt(LocalDateTime.now())
         .updatedAt(LocalDateTime.now())
         .build();
+  }
+
+  private static void validateTarget(CommentTargetType targetType, Long postId, Long answerId) {
+    boolean invalidPostTarget =
+        CommentTargetType.POST.equals(targetType) && (postId == null || answerId != null);
+    boolean invalidAnswerTarget =
+        CommentTargetType.ANSWER.equals(targetType) && (postId == null || answerId == null);
+    if (invalidPostTarget || invalidAnswerTarget) {
+      throw new BusinessException(ErrorCode.INVALID_INPUT);
+    }
   }
 
   // [Business Logic] 내용 수정

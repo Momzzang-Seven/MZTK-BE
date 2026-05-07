@@ -356,6 +356,11 @@ public enum ErrorCode {
   COMMENT_DEPTH_EXCEEDED(
       "COMMENT_008", "Replies cannot have nested replies", HttpStatus.BAD_REQUEST // 400
       ),
+  COMMENT_TARGET_MISMATCH(
+      "COMMENT_009",
+      "Comment does not belong to the specified target",
+      HttpStatus.BAD_REQUEST // 400
+      ),
   // ========================================
   // Answer Errors (ANSWER_xxx)
   // ========================================

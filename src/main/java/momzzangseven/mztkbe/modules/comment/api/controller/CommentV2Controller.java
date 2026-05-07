@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import momzzangseven.mztkbe.modules.comment.api.dto.CommentDeleteResponse;
 import momzzangseven.mztkbe.modules.comment.api.dto.CommentMutationResponse;
 import momzzangseven.mztkbe.modules.comment.api.dto.CreateCommentRequest;
 import momzzangseven.mztkbe.modules.comment.api.dto.GetCommentsCursorRequest;
@@ -63,6 +64,17 @@ public class CommentV2Controller {
     return ResponseEntity.ok(ApiResponse.success(GetCommentsResponse.from(result)));
   }
 
+  @PostMapping("/v2/posts/{postId}/comments")
+  public ResponseEntity<ApiResponse<CommentMutationResponse>> createComment(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long postId,
+      @RequestBody @Valid CreateCommentRequest request) {
+    CreateCommentCommand command = request.toCommand(postId, requireUserId(userId));
+    CommentMutationResult result = createCommentUseCase.createComment(command);
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(ApiResponse.success(CommentMutationResponse.from(result)));
+  }
+
   @PostMapping("/v2/answers/{answerId}/comments")
   public ResponseEntity<ApiResponse<CommentMutationResponse>> createAnswerComment(
       @AuthenticationPrincipal Long userId,
@@ -86,14 +98,14 @@ public class CommentV2Controller {
   }
 
   @DeleteMapping("/v2/answers/{answerId}/comments/{commentId}")
-  public ResponseEntity<ApiResponse<String>> deleteAnswerComment(
+  public ResponseEntity<ApiResponse<CommentDeleteResponse>> deleteAnswerComment(
       @AuthenticationPrincipal Long userId,
       @PathVariable Long answerId,
       @PathVariable Long commentId) {
     DeleteAnswerCommentCommand command =
         new DeleteAnswerCommentCommand(answerId, commentId, requireUserId(userId));
     deleteCommentUseCase.deleteAnswerComment(command);
-    return ResponseEntity.ok(ApiResponse.success("Comment deleted successfully"));
+    return ResponseEntity.ok(ApiResponse.success(CommentDeleteResponse.from(commentId)));
   }
 
   @GetMapping("/v2/comments/{commentId}/replies")

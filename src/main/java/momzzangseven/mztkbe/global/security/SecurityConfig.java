@@ -191,6 +191,8 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers(HttpMethod.GET, "/v2/posts/{postId}/comments")
                     .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/v2/posts/{postId}/comments")
+                    .authenticated()
                     .requestMatchers(HttpMethod.GET, "/v2/answers/{answerId}/comments")
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/v2/answers/{answerId}/comments")

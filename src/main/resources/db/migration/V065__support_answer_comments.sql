@@ -1,5 +1,5 @@
 ALTER TABLE comments
-    ADD COLUMN target_type varchar(20);
+    ADD COLUMN target_type varchar(20) DEFAULT 'POST';
 
 UPDATE comments
 SET target_type = 'POST'
@@ -25,9 +25,17 @@ ALTER TABLE comments
             OR (target_type = 'ANSWER' AND answer_id IS NOT NULL AND post_id IS NULL)
         );
 
+DROP INDEX IF EXISTS idx_comments_root_cursor;
+
+CREATE INDEX idx_comments_root_cursor
+    ON comments (target_type, post_id, created_at ASC, id ASC)
+    WHERE parent_id IS NULL;
+
 CREATE INDEX idx_comments_answer_cursor
     ON comments (answer_id, created_at ASC, id ASC)
-    WHERE parent_id IS NULL AND target_type = 'ANSWER';
+    WHERE parent_id IS NULL
+      AND target_type = 'ANSWER'
+      AND is_deleted = false;
 
 CREATE INDEX idx_comments_post_target
     ON comments (target_type, post_id);

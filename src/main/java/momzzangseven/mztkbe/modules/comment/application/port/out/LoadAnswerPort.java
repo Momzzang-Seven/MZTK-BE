@@ -6,5 +6,7 @@ public interface LoadAnswerPort {
 
   Optional<AnswerCommentContext> loadAnswerCommentContext(Long answerId);
 
+  Optional<AnswerCommentContext> loadAnswerCommentContextForUpdate(Long answerId);
+
   record AnswerCommentContext(Long answerId, Long postId) {}
 }

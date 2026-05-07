@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentMutationResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CommentResult;
 import momzzangseven.mztkbe.modules.comment.application.dto.CreateCommentCommand;
@@ -116,7 +117,7 @@ class CommentControllerTest {
   class CreateComment {
 
     @Test
-    @DisplayName("정상 요청이면 200과 댓글 데이터를 반환한다")
+    @DisplayName("v1 legacy 정책: 정상 요청이면 200과 message 및 댓글 데이터를 반환한다")
     void createComment_success() throws Exception {
       given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
           .willReturn(mutationResult(1L, "첫 댓글", null, false));
@@ -129,6 +130,7 @@ class CommentControllerTest {
                   .content(json(Map.of("content", "첫 댓글"))))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.message").value("Comment created successfully"))
           .andExpect(jsonPath("$.data.commentId").value(1))
           .andExpect(jsonPath("$.data.content").value("첫 댓글"))
           .andExpect(jsonPath("$.data.writer").doesNotExist())
@@ -199,7 +201,7 @@ class CommentControllerTest {
   class CreateAnswerComment {
 
     @Test
-    @DisplayName("정상 요청이면 answerId 기반 댓글을 생성하고 200을 반환한다")
+    @DisplayName("v1 legacy 정책: answerId 기반 댓글 생성은 200과 message 및 댓글 데이터를 반환한다")
     void createAnswerComment_success() throws Exception {
       given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
           .willReturn(mutationResult(31L, "답변 댓글", null, false));
@@ -212,6 +214,7 @@ class CommentControllerTest {
                   .content(json(Map.of("content", "답변 댓글"))))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
+          .andExpect(jsonPath("$.message").value("Comment created successfully"))
           .andExpect(jsonPath("$.data.commentId").value(31))
           .andExpect(jsonPath("$.data.content").value("답변 댓글"));
 
@@ -220,6 +223,24 @@ class CommentControllerTest {
       verify(createCommentUseCase).createComment(captor.capture());
       org.assertj.core.api.Assertions.assertThat(captor.getValue().answerId()).isEqualTo(300L);
       org.assertj.core.api.Assertions.assertThat(captor.getValue().postId()).isNull();
+    }
+
+    @Test
+    @DisplayName("answer가 없으면 ANSWER_NOT_FOUND code를 반환한다")
+    void createAnswerComment_answerMissing_returnsAnswerNotFound() throws Exception {
+      given(createCommentUseCase.createComment(any(CreateCommentCommand.class)))
+          .willThrow(new AnswerNotFoundException());
+
+      mockMvc
+          .perform(
+              post("/answers/300/comments")
+                  .with(userPrincipal(1L))
+                  .contentType(APPLICATION_JSON)
+                  .content(json(Map.of("content", "답변 댓글"))))
+          .andExpect(status().isNotFound())
+          .andExpect(jsonPath("$.status").value("FAIL"))
+          .andExpect(jsonPath("$.code").value("ANSWER_001"))
+          .andExpect(jsonPath("$.message").value("Answer not found"));
     }
   }
 

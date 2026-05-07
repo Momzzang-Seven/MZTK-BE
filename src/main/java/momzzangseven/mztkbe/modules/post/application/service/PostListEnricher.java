@@ -46,31 +46,6 @@ public class PostListEnricher {
     this.loadPostImagesPort = loadPostImagesPort;
   }
 
-  PostListEnricher(
-      CountCommentsPort countCommentsPort,
-      LoadTagPort loadTagPort,
-      LoadPostWriterPort loadPostWriterPort,
-      PostLikePersistencePort postLikePersistencePort,
-      LoadPostImagesPort loadPostImagesPort) {
-    this(
-        countCommentsPort,
-        new CountAnswersPort() {
-          @Override
-          public long countAnswers(Long postId) {
-            return 0L;
-          }
-
-          @Override
-          public Map<Long, Long> countAnswersByPostIds(List<Long> postIds) {
-            return Map.of();
-          }
-        },
-        loadTagPort,
-        loadPostWriterPort,
-        postLikePersistencePort,
-        loadPostImagesPort);
-  }
-
   public List<PostListResult> enrich(List<Post> posts, Long requesterUserId) {
     if (posts == null || posts.isEmpty()) {
       return List.of();
@@ -106,7 +81,10 @@ public class PostListEnricher {
             .filter(post -> PostType.QUESTION.equals(post.getType()))
             .map(Post::getId)
             .toList();
-    Map<Long, Long> loadedAnswerCounts = countAnswersPort.countAnswersByPostIds(questionPostIds);
+    Map<Long, Long> loadedAnswerCounts =
+        questionPostIds.isEmpty()
+            ? Map.of()
+            : countAnswersPort.countAnswersByPostIds(questionPostIds);
     Map<Long, Long> answerCounts = loadedAnswerCounts == null ? Map.of() : loadedAnswerCounts;
 
     Map<PostType, List<Long>> postIdsByType =

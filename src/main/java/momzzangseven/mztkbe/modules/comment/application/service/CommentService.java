@@ -8,8 +8,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
+import momzzangseven.mztkbe.global.error.comment.CommentTargetMismatchException;
 import momzzangseven.mztkbe.global.pagination.CursorCodec;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
@@ -51,9 +53,13 @@ public class CommentService
   @Override
   @Transactional
   public CommentMutationResult createComment(CreateCommentCommand command) {
+    LoadAnswerPort.AnswerCommentContext answerContext =
+        CommentTargetType.ANSWER.equals(command.targetType())
+            ? loadAnswerContextForUpdateOrThrow(command.answerId())
+            : null;
     Long targetPostId =
         CommentTargetType.ANSWER.equals(command.targetType())
-            ? validateAnswerWritable(command.answerId())
+            ? answerContext.postId()
             : command.postId();
     validatePostWritable(targetPostId);
 
@@ -67,7 +73,11 @@ public class CommentService
     Comment newComment =
         CommentTargetType.ANSWER.equals(command.targetType())
             ? Comment.createForAnswer(
-                command.answerId(), command.userId(), command.parentId(), command.content())
+                targetPostId,
+                command.answerId(),
+                command.userId(),
+                command.parentId(),
+                command.content())
             : Comment.createForPost(
                 command.postId(), command.userId(), command.parentId(), command.content());
 
@@ -90,32 +100,36 @@ public class CommentService
   @Override
   @Transactional
   public CommentMutationResult updateComment(UpdateCommentCommand command) {
-    Comment comment = loadCommentOrThrow(command.commentId());
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
     return updateLoadedComment(comment, command.userId(), command.content());
   }
 
   @Override
   @Transactional
   public CommentMutationResult updateAnswerComment(UpdateAnswerCommentCommand command) {
-    Comment comment = loadCommentOrThrow(command.commentId());
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
+    validateAnswerScopedMutationAccess(comment, command.userId());
     validateAnswerCommentTarget(comment, command.answerId());
-    return updateLoadedComment(comment, command.userId(), command.content());
+    comment.updateContent(command.content());
+    return CommentMutationResult.from(saveCommentPort.saveComment(comment));
   }
 
   // 3-1. 삭제 (Delete - 사용자 요청)
   @Override
   @Transactional
   public void deleteComment(DeleteCommentCommand command) {
-    Comment comment = loadCommentOrThrow(command.commentId());
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
     deleteLoadedComment(comment, command.userId());
   }
 
   @Override
   @Transactional
   public void deleteAnswerComment(DeleteAnswerCommentCommand command) {
-    Comment comment = loadCommentOrThrow(command.commentId());
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
+    validateAnswerScopedMutationAccess(comment, command.userId());
     validateAnswerCommentTarget(comment, command.answerId());
-    deleteLoadedComment(comment, command.userId());
+    comment.delete();
+    saveCommentPort.saveComment(comment);
   }
 
   // 3-2. 삭제 (Delete - 게시글 삭제 이벤트 수신용)
@@ -219,7 +233,14 @@ public class CommentService
     return loadCommentPort.loadComment(commentId).orElseThrow(CommentNotFoundException::new);
   }
 
+  private Comment loadCommentForUpdateOrThrow(Long commentId) {
+    return loadCommentPort
+        .loadCommentForUpdate(commentId)
+        .orElseThrow(CommentNotFoundException::new);
+  }
+
   private CommentMutationResult updateLoadedComment(Comment comment, Long userId, String content) {
+    validateCommentNotDeleted(comment);
     validateCommentTargetWritable(comment);
     comment.validateWriter(userId);
     comment.updateContent(content);
@@ -227,10 +248,23 @@ public class CommentService
   }
 
   private void deleteLoadedComment(Comment comment, Long userId) {
+    validateCommentNotDeleted(comment);
     validateCommentTargetWritable(comment);
     comment.validateWriter(userId);
     comment.delete();
     saveCommentPort.saveComment(comment);
+  }
+
+  private void validateAnswerScopedMutationAccess(Comment comment, Long userId) {
+    validateCommentNotDeleted(comment);
+    comment.validateWriter(userId);
+    validateCommentTargetWritable(comment);
+  }
+
+  private void validateCommentNotDeleted(Comment comment) {
+    if (comment.isDeleted()) {
+      throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
+    }
   }
 
   private void validateAnswerCommentTarget(Comment comment, Long answerId) {
@@ -244,10 +278,11 @@ public class CommentService
       Long parentId, CommentTargetType targetType, Long postId, Long answerId) {
     Comment parent = loadCommentOrThrow(parentId);
 
-    if (!parent.getTargetType().equals(targetType)
-        || (CommentTargetType.POST.equals(targetType) && !parent.getPostId().equals(postId))
-        || (CommentTargetType.ANSWER.equals(targetType)
-            && !parent.getAnswerId().equals(answerId))) {
+    if (CommentTargetType.ANSWER.equals(targetType)) {
+      if (!parent.getTargetType().equals(targetType) || !parent.getAnswerId().equals(answerId)) {
+        throw new CommentTargetMismatchException();
+      }
+    } else if (!parent.getTargetType().equals(targetType) || !parent.getPostId().equals(postId)) {
       throw new CommentPostMismatchException();
     }
 
@@ -296,14 +331,20 @@ public class CommentService
   }
 
   private Long validateAnswerWritable(Long answerId) {
-    return loadAnswerPostIdOrThrow(answerId);
+    return loadAnswerContextForUpdateOrThrow(answerId).postId();
   }
 
   private Long loadAnswerPostIdOrThrow(Long answerId) {
     return loadAnswerPort
         .loadAnswerCommentContext(answerId)
         .map(LoadAnswerPort.AnswerCommentContext::postId)
-        .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+        .orElseThrow(AnswerNotFoundException::new);
+  }
+
+  private LoadAnswerPort.AnswerCommentContext loadAnswerContextForUpdateOrThrow(Long answerId) {
+    return loadAnswerPort
+        .loadAnswerCommentContextForUpdate(answerId)
+        .orElseThrow(AnswerNotFoundException::new);
   }
 
   private LoadPostPort.PostVisibilityContext loadPostVisibilityOrThrow(Long postId) {

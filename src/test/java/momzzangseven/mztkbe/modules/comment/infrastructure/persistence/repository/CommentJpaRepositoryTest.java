@@ -37,15 +37,50 @@ class CommentJpaRepositoryTest {
     CommentEntity otherPostRoot = persistRoot(200L, 13L, "other-post-root", base.plusMinutes(2));
     CommentEntity parent = persistRoot(100L, 14L, "parent", base.plusMinutes(3));
     persistReply(100L, 15L, "reply", parent, base.plusMinutes(4));
+    CommentEntity deletedRoot = persistRoot(100L, 16L, "deleted-root", base.plusMinutes(5), true);
+    CommentEntity answerRoot =
+        persistAnswerRootForPost(100L, 900L, 17L, "answer-root", base.plusMinutes(6), false);
 
     Page<CommentEntity> page =
         commentJpaRepository.findRootCommentsByPostId(100L, PageRequest.of(0, 10));
 
-    assertThat(page.getTotalElements()).isEqualTo(3);
+    assertThat(page.getTotalElements()).isEqualTo(4);
     assertThat(page.getContent().stream().map(this::idOf).toList())
-        .containsExactly(idOf(rootEarlier), idOf(parent), idOf(rootLater));
+        .containsExactly(idOf(rootEarlier), idOf(parent), idOf(deletedRoot), idOf(rootLater));
     assertThat(page.getContent().stream().map(this::idOf).toList())
-        .doesNotContain(idOf(otherPostRoot));
+        .doesNotContain(idOf(otherPostRoot), idOf(answerRoot));
+    assertThat(isDeletedOf(page.getContent().get(2))).isTrue();
+  }
+
+  @Test
+  @DisplayName(
+      "findRootCommentsByPostId cursor keeps post tombstones and excludes answer root comments")
+  void findRootCommentsByPostIdCursor_filtersTargetTypeAndKeepsTombstones() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 1, 10, 0);
+    CommentEntity first = persistRoot(100L, 21L, "first", base.plusMinutes(1));
+    CommentEntity deleted = persistRoot(100L, 22L, "deleted", base.plusMinutes(2), true);
+    CommentEntity second = persistRoot(100L, 23L, "second", base.plusMinutes(3));
+    CommentEntity answerRoot =
+        persistAnswerRootForPost(100L, 901L, 24L, "answer-root", base.plusMinutes(4), false);
+    persistReply(100L, 25L, "reply", first, base.plusMinutes(5));
+
+    List<CommentEntity> firstPage =
+        commentJpaRepository.findRootCommentsByPostIdFirstPage(
+            CommentTargetType.POST, 100L, PageRequest.of(0, 2));
+    List<CommentEntity> nextPage =
+        commentJpaRepository.findRootCommentsByPostIdAfterCursor(
+            CommentTargetType.POST,
+            100L,
+            deleted.getCreatedAt(),
+            idOf(deleted),
+            PageRequest.of(0, 10));
+
+    assertThat(firstPage.stream().map(this::idOf).toList())
+        .containsExactly(idOf(first), idOf(deleted));
+    assertThat(isDeletedOf(firstPage.get(1))).isTrue();
+    assertThat(nextPage.stream().map(this::idOf).toList()).containsExactly(idOf(second));
+    assertThat(firstPage.stream().map(this::idOf).toList()).doesNotContain(idOf(answerRoot));
+    assertThat(nextPage.stream().map(this::idOf).toList()).doesNotContain(idOf(answerRoot));
   }
 
   @Test
@@ -72,6 +107,32 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName("findByPostId() includes answer comments by root post for admin managed list")
+  void findByPostId_includesAnswerCommentsByRootPost() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 9, 30);
+    CommentEntity postComment = persistRoot(100L, 31L, "post-comment", base);
+    CommentEntity answerComment =
+        persistAnswerRootForPost(100L, 900L, 32L, "answer-comment", base.plusMinutes(1), false);
+    CommentEntity otherPostAnswer =
+        persistAnswerRootForPost(
+            101L, 901L, 33L, "other-answer-comment", base.plusMinutes(2), false);
+
+    Page<CommentEntity> page = commentJpaRepository.findByPostId(100L, PageRequest.of(0, 10));
+
+    assertThat(page.getContent().stream().map(this::idOf).toList())
+        .containsExactlyInAnyOrder(idOf(postComment), idOf(answerComment));
+    assertThat(page.getContent().stream().map(this::idOf).toList())
+        .doesNotContain(idOf(otherPostAnswer));
+    assertThat(page.getContent())
+        .anySatisfy(
+            comment -> {
+              assertThat(comment.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+              assertThat(comment.getPostId()).isEqualTo(100L);
+              assertThat(comment.getAnswerId()).isEqualTo(900L);
+            });
+  }
+
+  @Test
   @DisplayName("countDirectRepliesByParentIds() returns direct child counts by parent id")
   void countDirectRepliesByParentIds_returnsDirectReplyCounts() {
     LocalDateTime base = LocalDateTime.of(2026, 3, 2, 10, 0);
@@ -95,17 +156,25 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
-  @DisplayName("countByPostId() includes root, reply, and soft-deleted comments for the post")
-  void countByPostId_includesSoftDeletedComments() {
+  @DisplayName("countByPostId() counts only active POST comments for the post")
+  void countByPostId_countsOnlyActivePostComments() {
     LocalDateTime base = LocalDateTime.of(2026, 3, 2, 11, 0);
     CommentEntity root = persistRoot(700L, 31L, "root", base);
     persistReply(700L, 32L, "reply", root, base.plusMinutes(1));
     persistRoot(700L, 33L, "deleted-root", base.plusMinutes(2), true);
+    persistAnswerRootForPost(700L, 1700L, 35L, "answer-comment", base.plusMinutes(4), false);
     persistRoot(701L, 34L, "other-post", base.plusMinutes(3));
 
     long count = commentJpaRepository.countByPostId(700L);
+    Map<Long, Long> batchCounts =
+        commentJpaRepository.countCommentsByPostIds(List.of(700L)).stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    CommentJpaRepository.PostCommentCount::getPostId,
+                    CommentJpaRepository.PostCommentCount::getCommentCount));
 
-    assertThat(count).isEqualTo(3L);
+    assertThat(count).isEqualTo(2L);
+    assertThat(batchCounts).containsEntry(700L, 2L);
   }
 
   @Test
@@ -117,6 +186,7 @@ class CommentJpaRepositoryTest {
     persistRoot(800L, 43L, "deleted-root", base.plusMinutes(2), true);
     persistRoot(801L, 44L, "single", base.plusMinutes(3));
     persistRoot(802L, 45L, "ignored", base.plusMinutes(4));
+    persistAnswerRootForPost(800L, 1800L, 46L, "answer-comment", base.plusMinutes(5), false);
 
     Map<Long, Long> counts =
         commentJpaRepository.countCommentsByPostIds(List.of(800L, 801L)).stream()
@@ -313,6 +383,48 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName(
+      "findCommentedPostRefs includes answer comments by root post and deduplicates latest")
+  void findCommentedPostRefs_includesAnswerCommentsByRootPostAndDeduplicatesLatest() {
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
+    persistPost(1400L, "QUESTION", "answer commented question", base);
+    persistPost(1401L, "QUESTION", "second answer commented question", base);
+    CommentEntity olderPostComment =
+        persistRoot(1400L, 77L, "older post comment", base.minusMinutes(5), false);
+    CommentEntity latestAnswerComment =
+        persistAnswerRootForPost(
+            1400L, 5000L, 77L, "latest answer comment", base.minusMinutes(1), false);
+    CommentEntity secondPostLatest =
+        persistAnswerRootForPost(
+            1401L, 5001L, 77L, "second answer comment", base.minusMinutes(2), false);
+
+    List<CommentJpaRepository.CommentedPostRefProjection> firstPage =
+        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "QUESTION", null, 1);
+    List<CommentJpaRepository.CommentedPostRefProjection> nextPage =
+        commentJpaRepository.findCommentedPostRefsAfterCursor(
+            77L,
+            "QUESTION",
+            null,
+            latestAnswerComment.getCreatedAt(),
+            idOf(latestAnswerComment),
+            10);
+
+    assertThat(firstPage)
+        .extracting(
+            CommentJpaRepository.CommentedPostRefProjection::getPostId,
+            CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .containsExactly(org.assertj.core.groups.Tuple.tuple(1400L, idOf(latestAnswerComment)));
+    assertThat(firstPage)
+        .extracting(CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .doesNotContain(idOf(olderPostComment));
+    assertThat(nextPage)
+        .extracting(
+            CommentJpaRepository.CommentedPostRefProjection::getPostId,
+            CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .containsExactly(org.assertj.core.groups.Tuple.tuple(1401L, idOf(secondPostLatest)));
+  }
+
+  @Test
   @DisplayName("deleteAllByPostId() soft-deletes all comments of the post")
   void deleteAllByPostId_softDeletesCommentsByPostId() {
     LocalDateTime oldTime = LocalDateTime.of(2026, 3, 3, 10, 0);
@@ -474,8 +586,18 @@ class CommentJpaRepositoryTest {
 
   private CommentEntity persistAnswerRoot(
       Long answerId, Long writerId, String content, LocalDateTime createdAt, boolean isDeleted) {
+    return persistAnswerRootForPost(answerId, answerId, writerId, content, createdAt, isDeleted);
+  }
+
+  private CommentEntity persistAnswerRootForPost(
+      Long postId,
+      Long answerId,
+      Long writerId,
+      String content,
+      LocalDateTime createdAt,
+      boolean isDeleted) {
     CommentEntity entity =
-        newCommentEntity(null, writerId, content, isDeleted, null, createdAt, createdAt);
+        newCommentEntity(postId, writerId, content, isDeleted, null, createdAt, createdAt);
     ReflectionTestUtils.setField(entity, "targetType", CommentTargetType.ANSWER);
     ReflectionTestUtils.setField(entity, "answerId", answerId);
     return commentJpaRepository.saveAndFlush(entity);
@@ -484,7 +606,7 @@ class CommentJpaRepositoryTest {
   private CommentEntity persistAnswerReply(
       Long answerId, Long writerId, String content, CommentEntity parent, LocalDateTime createdAt) {
     CommentEntity entity =
-        newCommentEntity(null, writerId, content, false, parent, createdAt, createdAt);
+        newCommentEntity(answerId, writerId, content, false, parent, createdAt, createdAt);
     ReflectionTestUtils.setField(entity, "targetType", CommentTargetType.ANSWER);
     ReflectionTestUtils.setField(entity, "answerId", answerId);
     return commentJpaRepository.saveAndFlush(entity);

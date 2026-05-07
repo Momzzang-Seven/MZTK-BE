@@ -94,6 +94,7 @@ class PostListEnricherTest {
     assertThat(results.get(1).reward()).isEqualTo(100L);
     assertThat(results.get(1).isSolved()).isTrue();
     assertThat(results.get(1).images()).containsExactly(new PostImageSlot(201L, "question.webp"));
+    verify(countAnswersPort).countAnswersByPostIds(List.of(2L));
   }
 
   @Test
@@ -106,7 +107,6 @@ class PostListEnricherTest {
     when(postLikePersistencePort.countByTargetIds(PostLikeTargetType.POST, List.of(1L)))
         .thenReturn(Map.of());
     when(countCommentsPort.countCommentsByPostIds(List.of(1L))).thenReturn(null);
-    when(countAnswersPort.countAnswersByPostIds(List.of())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(PostLikeTargetType.POST, List.of(1L), 99L))
         .thenReturn(Set.of());
     when(loadPostImagesPort.loadImagesByPostIds(Map.of(PostType.FREE, List.of(1L))))
@@ -123,6 +123,7 @@ class PostListEnricherTest {
     assertThat(results.getFirst().answerCount()).isZero();
     assertThat(results.getFirst().liked()).isFalse();
     assertThat(results.getFirst().images()).isEmpty();
+    verify(countAnswersPort, never()).countAnswersByPostIds(any());
   }
 
   @Test
@@ -136,7 +137,6 @@ class PostListEnricherTest {
     when(postLikePersistencePort.countByTargetIds(PostLikeTargetType.POST, List.of(1L, 2L)))
         .thenReturn(Map.of());
     when(countCommentsPort.countCommentsByPostIds(List.of(1L, 2L))).thenReturn(Map.of());
-    when(countAnswersPort.countAnswersByPostIds(List.of())).thenReturn(Map.of());
     when(loadPostImagesPort.loadImagesByPostIds(Map.of(PostType.FREE, List.of(1L, 2L))))
         .thenReturn(Map.of());
 
@@ -145,6 +145,7 @@ class PostListEnricherTest {
     assertThat(results).extracting(PostListResult::postId).containsExactly(1L, 2L);
     assertThat(results).allSatisfy(result -> assertThat(result.liked()).isTrue());
     verify(postLikePersistencePort, never()).findLikedTargetIds(any(), any(), any());
+    verify(countAnswersPort, never()).countAnswersByPostIds(any());
   }
 
   private Post post(Long id, Long userId, PostType type, PostStatus status, Long acceptedAnswerId) {
