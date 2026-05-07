@@ -34,6 +34,8 @@ public interface LoadCommentPort {
 
   Map<Long, Long> countCommentsByPostIds(List<Long> postIds);
 
+  Map<Long, Long> countManagedBoardCommentsByPostIds(List<Long> postIds);
+
   long countCommentsByAnswerId(Long answerId);
 
   Map<Long, Long> countCommentsByAnswerIds(List<Long> answerIds);

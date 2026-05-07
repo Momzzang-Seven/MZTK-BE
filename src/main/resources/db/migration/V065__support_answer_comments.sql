@@ -34,8 +34,7 @@ CREATE INDEX idx_comments_root_cursor
 CREATE INDEX idx_comments_answer_cursor
     ON comments (answer_id, created_at ASC, id ASC)
     WHERE parent_id IS NULL
-      AND target_type = 'ANSWER'
-      AND is_deleted = false;
+      AND target_type = 'ANSWER';
 
 CREATE INDEX idx_comments_post_target
     ON comments (target_type, post_id);

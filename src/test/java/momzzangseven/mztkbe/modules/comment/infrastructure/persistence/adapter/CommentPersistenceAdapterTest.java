@@ -167,6 +167,20 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("countManagedBoardCommentsByPostIds() maps managed repository projections")
+  void countManagedBoardCommentsByPostIds_mapsProjection() {
+    CommentJpaRepository.PostCommentCount first = postCommentCount(10L, 3L);
+    CommentJpaRepository.PostCommentCount second = postCommentCount(11L, 1L);
+    given(commentRepository.countManagedBoardCommentsByPostIds(List.of(10L, 11L)))
+        .willReturn(List.of(first, second));
+
+    Map<Long, Long> result = adapter.countManagedBoardCommentsByPostIds(List.of(10L, 11L));
+
+    assertThat(result).containsEntry(10L, 3L).containsEntry(11L, 1L);
+    verify(commentRepository).countManagedBoardCommentsByPostIds(List.of(10L, 11L));
+  }
+
+  @Test
   @DisplayName("countCommentsByAnswerIds() maps answerId counts separately from post counts")
   void countCommentsByAnswerIds_mapsProjection() {
     CommentJpaRepository.AnswerCommentCount first = answerCommentCount(20L, 2L);
@@ -216,6 +230,15 @@ class CommentPersistenceAdapterTest {
   void countCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
     assertThat(adapter.countCommentsByPostIds(null)).isEmpty();
     assertThat(adapter.countCommentsByPostIds(List.of())).isEmpty();
+
+    verifyNoInteractions(commentRepository);
+  }
+
+  @Test
+  @DisplayName("countManagedBoardCommentsByPostIds() no-ops for null or empty list")
+  void countManagedBoardCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
+    assertThat(adapter.countManagedBoardCommentsByPostIds(null)).isEmpty();
+    assertThat(adapter.countManagedBoardCommentsByPostIds(List.of())).isEmpty();
 
     verifyNoInteractions(commentRepository);
   }

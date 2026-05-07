@@ -31,6 +31,20 @@ WHERE target_type = 'ANSWER'
       WHERE qa.answer_id = comments.answer_id
   );
 
+-- Projection-only answers can recover post_id, but without a local answers row they should not
+-- remain active in user/admin comment surfaces after the migration.
+UPDATE comments
+SET is_deleted = true,
+    updated_at = CURRENT_TIMESTAMP
+WHERE target_type = 'ANSWER'
+  AND answer_id IS NOT NULL
+  AND is_deleted = false
+  AND NOT EXISTS (
+      SELECT 1
+      FROM answers a
+      WHERE a.id = comments.answer_id
+  );
+
 -- The strict target constraint applies to every row, including soft-deleted rows. Legacy answer
 -- comments whose answer/post context cannot be restored would otherwise require a fake post_id, so
 -- remove them after marking them deleted instead of preserving misleading data.

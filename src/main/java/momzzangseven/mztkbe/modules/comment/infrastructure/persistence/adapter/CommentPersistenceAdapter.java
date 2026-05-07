@@ -158,6 +158,19 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public Map<Long, Long> countManagedBoardCommentsByPostIds(List<Long> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countManagedBoardCommentsByPostIds(postIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.PostCommentCount::getPostId,
+                CommentJpaRepository.PostCommentCount::getCommentCount));
+  }
+
+  @Override
   public Map<Long, Long> countCommentsByAnswerIds(List<Long> answerIds) {
     if (answerIds == null || answerIds.isEmpty()) {
       return Map.of();

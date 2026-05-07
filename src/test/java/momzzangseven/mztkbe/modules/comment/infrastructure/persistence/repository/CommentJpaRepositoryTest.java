@@ -199,6 +199,27 @@ class CommentJpaRepositoryTest {
   }
 
   @Test
+  @DisplayName("countManagedBoardCommentsByPostIds() matches managed list root post criteria")
+  void countManagedBoardCommentsByPostIds_matchesManagedListCriteria() {
+    LocalDateTime base = LocalDateTime.of(2026, 3, 2, 12, 30);
+    CommentEntity root = persistRoot(810L, 41L, "root", base);
+    persistReply(810L, 42L, "reply", root, base.plusMinutes(1));
+    persistAnswerRootForPost(810L, 1810L, 43L, "answer-comment", base.plusMinutes(2), false);
+    persistRoot(811L, 44L, "deleted-root", base.plusMinutes(3), true);
+    persistAnswerRootForPost(
+        811L, 1811L, 45L, "other-post-answer-comment", base.plusMinutes(4), false);
+
+    Map<Long, Long> counts =
+        commentJpaRepository.countManagedBoardCommentsByPostIds(List.of(810L, 811L)).stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    CommentJpaRepository.PostCommentCount::getPostId,
+                    CommentJpaRepository.PostCommentCount::getCommentCount));
+
+    assertThat(counts).containsEntry(810L, 3L).containsEntry(811L, 2L);
+  }
+
+  @Test
   @DisplayName("answer comment counts are grouped by answer id and do not include post comments")
   void countCommentsByAnswerIds_doesNotMixPostComments() {
     LocalDateTime base = LocalDateTime.of(2026, 3, 2, 13, 0);
@@ -491,6 +512,34 @@ class CommentJpaRepositoryTest {
             CommentJpaRepository.CommentedPostRefProjection::getPostId,
             CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
         .containsExactly(org.assertj.core.groups.Tuple.tuple(1401L, idOf(secondPostLatest)));
+  }
+
+  @Test
+  @DisplayName("findCommentedPostRefs excludes migration-soft-deleted orphan answer comments")
+  void findCommentedPostRefs_excludesSoftDeletedOrphanAnswerComments() {
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 13, 0);
+    persistPost(1410L, "QUESTION", "orphan answer commented question", base);
+    persistPost(1411L, "QUESTION", "active answer commented question", base);
+    persistAnswer(5011L, 1411L, 78L, "existing answer", base.minusMinutes(3));
+    CommentEntity softDeletedOrphan =
+        persistAnswerRootForPost(
+            1410L, 5010L, 77L, "soft-deleted orphan", base.minusMinutes(1), true);
+    CommentEntity activeExistingAnswerComment =
+        persistAnswerRootForPost(
+            1411L, 5011L, 77L, "active existing answer", base.minusMinutes(2), false);
+
+    List<CommentJpaRepository.CommentedPostRefProjection> refs =
+        commentJpaRepository.findCommentedPostRefsFirstPage(77L, "QUESTION", null, 10);
+
+    assertThat(refs)
+        .extracting(
+            CommentJpaRepository.CommentedPostRefProjection::getPostId,
+            CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(1411L, idOf(activeExistingAnswerComment)));
+    assertThat(refs)
+        .extracting(CommentJpaRepository.CommentedPostRefProjection::getLatestCommentId)
+        .doesNotContain(idOf(softDeletedOrphan));
   }
 
   @Test
