@@ -33,6 +33,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -42,7 +43,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolic
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -348,7 +348,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
                     .ExecutionIntentTerminatedEvent.class);
     verify(publishExecutionIntentTerminatedPort).publish(captor.capture());
     assertThat(captor.getValue().failureReason())
-        .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
+        .isEqualTo(ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
@@ -442,7 +442,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
                     .ExecutionIntentTerminatedEvent.class);
     verify(publishExecutionIntentTerminatedPort).publish(captor.capture());
     assertThat(captor.getValue().failureReason())
-        .isEqualTo(Web3TxFailureReason.SIGNATURE_INVALID.name());
+        .isEqualTo(ExecutionFailureReason.SIGNATURE_INVALID.name());
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
   }
 

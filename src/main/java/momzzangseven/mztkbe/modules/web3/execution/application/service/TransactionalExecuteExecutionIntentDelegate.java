@@ -28,6 +28,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExec
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -37,7 +38,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactio
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -261,7 +261,7 @@ public class TransactionalExecuteExecutionIntentDelegate
       if (KmsClientErrorClassifier.isTerminal(e)) {
         cancelEip7702IntentAndCascade(
             intent,
-            Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL,
+            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL,
             ErrorCode.WEB3_KMS_SIGN_FAILED,
             SPONSOR_KMS_SIGN_FAILED_TERMINAL);
         // unreachable; cancelEip7702IntentAndCascade always throws
@@ -278,7 +278,7 @@ public class TransactionalExecuteExecutionIntentDelegate
       releaseAndLogIfGap(sponsorAddress, sponsorNonce, intent.getPublicId());
       cancelEip7702IntentAndCascade(
           intent,
-          Web3TxFailureReason.SIGNATURE_INVALID,
+          ExecutionFailureReason.SIGNATURE_INVALID,
           ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED,
           SPONSOR_SIGNATURE_INVALID);
       // unreachable; cancelEip7702IntentAndCascade always throws
@@ -581,7 +581,7 @@ public class TransactionalExecuteExecutionIntentDelegate
    */
   private void cancelEip7702IntentAndCascade(
       ExecutionIntent intent,
-      Web3TxFailureReason eventReason,
+      ExecutionFailureReason eventReason,
       ErrorCode errorCode,
       String failureReason) {
     LocalDateTime now = LocalDateTime.now(appClock);

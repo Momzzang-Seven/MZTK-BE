@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionFailureReason;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
@@ -31,7 +32,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactio
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
-import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 
 /**
  * Transactional inner stage of internal execution intent processing.
@@ -183,7 +183,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
             actionPlan,
             ErrorCode.WEB3_KMS_SIGN_FAILED.name(),
             SPONSOR_KMS_SIGN_FAILED_TERMINAL,
-            Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL);
+            ExecutionFailureReason.KMS_SIGN_FAILED_TERMINAL);
       }
       // Transient: leave intent in AWAITING_SIGNATURE so the next cron tick re-claims it via
       // claimNextInternalExecutableForUpdate. Do NOT cancel and do NOT publish the terminated
@@ -203,7 +203,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
           actionPlan,
           ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.name(),
           SPONSOR_SIGNATURE_INVALID,
-          Web3TxFailureReason.SIGNATURE_INVALID);
+          ExecutionFailureReason.SIGNATURE_INVALID);
     } catch (Web3InvalidInputException e) {
       releaseAndLogIfGap(expectedSigner, reservedNonce, intent.getPublicId());
       return quarantineInvalidIntent(
@@ -351,7 +351,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
       ExecutionActionPlan actionPlan,
       String errorCode,
       String failureReason,
-      Web3TxFailureReason eventReason) {
+      ExecutionFailureReason eventReason) {
     LocalDateTime now = LocalDateTime.now(appClock);
     ExecutionIntent canceled =
         executionIntentPersistencePort.update(
