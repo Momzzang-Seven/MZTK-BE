@@ -74,8 +74,7 @@ class InternalExecutionIntentClaimQueryTest {
     // IN :actionTypes 가 모두 적용되는지 확인.
     saveIntent(
         "wrong-action", ExecutionMode.EIP1559, ExecutionActionType.QNA_ANSWER_ACCEPT, at(8, 0));
-    saveIntent(
-        "wrong-mode", ExecutionMode.EIP7702, ExecutionActionType.QNA_ADMIN_SETTLE, at(8, 0));
+    saveIntent("wrong-mode", ExecutionMode.EIP7702, ExecutionActionType.QNA_ADMIN_SETTLE, at(8, 0));
 
     var peeked =
         repository.peekClaimableInternal(List.of(ExecutionActionType.QNA_ADMIN_SETTLE.name()));

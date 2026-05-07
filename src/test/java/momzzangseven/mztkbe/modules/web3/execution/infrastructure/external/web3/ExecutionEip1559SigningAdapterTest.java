@@ -112,8 +112,7 @@ class ExecutionEip1559SigningAdapterTest {
   }
 
   @Test
-  @DisplayName(
-      "sign returns the raw tx bytes produced by the shared SignEip1559TxUseCase verbatim")
+  @DisplayName("sign returns the raw tx bytes produced by the shared SignEip1559TxUseCase verbatim")
   void sign_propagatesRawTransactionFromSignEip1559TxUseCase() {
     // The adapter's only sign-time job is to translate the SignCommand → SignEip1559TxCommand
     // and forward the use-case's SignedTx output as ExecutionEip1559SigningPort.SignedTransaction.

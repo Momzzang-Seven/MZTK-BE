@@ -10,12 +10,12 @@ import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
  *
  * <p>The {@code authorizationList} non-empty invariant mirrors what the EIP-7702 spec demands
  * (length-0 type-4 transactions are invalid and will be rejected by every RPC) and what the
- * domain-layer encoder ({@code Eip7702TxEncoder.Eip7702Fields}) already enforces. Repeating it
- * here is intentional: this DTO is the boundary every application caller crosses, so a missing
- * {@code authorizationList} surfaces as a domain-shaped {@code Web3InvalidInputException} instead
- * of a downstream NPE inside the codec adapter. In MZTK's current flows every caller (QnA
- * escrow / level-up reward) builds a length-1 list, but the invariant is spec-bound, not
- * caller-shape-bound — leave it as {@code !isEmpty()}.
+ * domain-layer encoder ({@code Eip7702TxEncoder.Eip7702Fields}) already enforces. Repeating it here
+ * is intentional: this DTO is the boundary every application caller crosses, so a missing {@code
+ * authorizationList} surfaces as a domain-shaped {@code Web3InvalidInputException} instead of a
+ * downstream NPE inside the codec adapter. In MZTK's current flows every caller (QnA escrow /
+ * level-up reward) builds a length-1 list, but the invariant is spec-bound, not caller-shape-bound
+ * — leave it as {@code !isEmpty()}.
  */
 public record Eip7702ExecutionSignCommand(
     long chainId,
