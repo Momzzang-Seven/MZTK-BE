@@ -211,12 +211,13 @@ class TransactionIssuerWorkerTest {
   }
 
   @Test
-  void processBatch_verifyForSignThrowsKmsKeyDescribeFailed_schedulesKmsKeyNotEnabledRetry() {
+  void processBatch_verifyForSignThrowsTransientKmsKeyDescribe_schedulesKmsKeyNotEnabledRetry() {
     LocalDateTime retryAt = LocalDateTime.now().plusSeconds(60);
     when(loadTransactionWorkPort.claimByStatus(
             eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
         .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
     when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    // No AWS cause attached → KmsClientErrorClassifier returns transient → retryable path.
     doThrow(new KmsKeyDescribeFailedException("describe throttled"))
         .when(verifyTreasuryWalletForSignPort)
         .verify(WALLET_ALIAS);
@@ -231,6 +232,36 @@ class TransactionIssuerWorkerTest {
         .scheduleRetry(1L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
     verify(updateTransactionPort)
         .scheduleRetry(2L, Web3TxFailureReason.KMS_KEY_NOT_ENABLED.code(), retryAt);
+    verifyNoInteractions(web3ContractPort, reserveNoncePort);
+  }
+
+  @Test
+  void processBatch_verifyForSignThrowsTerminalKmsKeyDescribe_terminatesBatch() {
+    when(loadTransactionWorkPort.claimByStatus(
+            eq(Web3TxStatus.CREATED), eq(2), anyString(), any(Duration.class)))
+        .thenReturn(List.of(item(1L, 5L), item(2L, 6L)));
+    when(loadRewardTreasuryWalletPort.load()).thenReturn(Optional.of(walletInfo(true, KMS_KEY_ID)));
+    // Terminal AWS cause (NotFoundException) → classifier returns true → batch must terminate
+    // via failPrevalidate(retryable=false), which calls scheduleRetry(.., null) — sentinel for
+    // terminal. Without the split catch, this would be retried forever as KMS_KEY_NOT_ENABLED.
+    software.amazon.awssdk.services.kms.model.KmsException terminalCause =
+        (software.amazon.awssdk.services.kms.model.KmsException)
+            software.amazon.awssdk.services.kms.model.KmsException.builder()
+                .awsErrorDetails(
+                    software.amazon.awssdk.awscore.exception.AwsErrorDetails.builder()
+                        .errorCode("NotFoundException")
+                        .build())
+                .build();
+    doThrow(new KmsKeyDescribeFailedException("key missing", terminalCause))
+        .when(verifyTreasuryWalletForSignPort)
+        .verify(WALLET_ALIAS);
+
+    worker.processBatch(2);
+
+    verify(updateTransactionPort)
+        .scheduleRetry(1L, Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(), null);
+    verify(updateTransactionPort)
+        .scheduleRetry(2L, Web3TxFailureReason.KMS_DESCRIBE_TERMINAL.code(), null);
     verifyNoInteractions(web3ContractPort, reserveNoncePort);
   }
 

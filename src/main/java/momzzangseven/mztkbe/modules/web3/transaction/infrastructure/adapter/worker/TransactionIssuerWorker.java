@@ -131,12 +131,33 @@ public class TransactionIssuerWorker extends AbstractWeb3Worker {
 
     try {
       verifyTreasuryWalletForSignPort.verify(walletInfo.walletAlias());
-    } catch (TreasuryWalletStateException | KmsKeyDescribeFailedException e) {
+    } catch (TreasuryWalletStateException e) {
       log.warn(
           "Treasury wallet '{}' verify-for-sign failed: {}",
           walletInfo.walletAlias(),
           e.getMessage());
       failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED);
+      return;
+    } catch (KmsKeyDescribeFailedException e) {
+      // Mirrors execute-path KMS classification (#4 / commit 5670c1b3): terminal AWS errors
+      // (AccessDenied, NotFound, Disabled, KeyUnavailable) must terminate the batch with a
+      // non-retryable reason so a broken IAM/key state does not get retried indefinitely. The
+      // existing KMS_KEY_NOT_ENABLED reason is retryable=true and was being applied to *all*
+      // DescribeKey failures, including terminal ones — letting the worker hammer KMS until
+      // manual intervention. Transient throttling/5xx still go through the retryable path.
+      if (KmsClientErrorClassifier.isTerminal(e)) {
+        log.error(
+            "event=ISSUER_KMS_DESCRIBE_TERMINAL alias={} message={}",
+            walletInfo.walletAlias(),
+            e.getMessage());
+        failBatch(items, Web3TxFailureReason.KMS_DESCRIBE_TERMINAL);
+      } else {
+        log.warn(
+            "event=ISSUER_KMS_DESCRIBE_TRANSIENT alias={} message={}",
+            walletInfo.walletAlias(),
+            e.getMessage());
+        failBatch(items, Web3TxFailureReason.KMS_KEY_NOT_ENABLED);
+      }
       return;
     }
 
