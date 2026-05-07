@@ -1,15 +1,12 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirmedExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateConfirmationSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,37 +15,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class QnaQuestionUpdateConfirmationSyncAdapter
     implements QnaQuestionUpdateConfirmationSyncPort {
 
-  private final ExecutionIntentPersistencePort executionIntentPersistencePort;
+  private final ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase;
   private final QnaQuestionUpdateStatePersistencePort statePersistencePort;
-  private final ExecutionActionHandlerPort actionHandler;
 
   public QnaQuestionUpdateConfirmationSyncAdapter(
-      ExecutionIntentPersistencePort executionIntentPersistencePort,
-      QnaQuestionUpdateStatePersistencePort statePersistencePort,
-      @Qualifier("qnaEscrowExecutionActionHandlerAdapter")
-          ExecutionActionHandlerPort actionHandler) {
-    this.executionIntentPersistencePort = executionIntentPersistencePort;
+      ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase,
+      QnaQuestionUpdateStatePersistencePort statePersistencePort) {
+    this.replayConfirmedExecutionIntentUseCase = replayConfirmedExecutionIntentUseCase;
     this.statePersistencePort = statePersistencePort;
-    this.actionHandler = actionHandler;
   }
 
   @Override
   @Transactional
   public boolean syncConfirmedQuestionUpdate(String executionIntentPublicId) {
-    return executionIntentPersistencePort
-        .findByPublicId(executionIntentPublicId)
-        .filter(this::isConfirmedQuestionUpdate)
-        .map(
-            intent -> {
-              actionHandler.afterExecutionConfirmed(intent, actionHandler.buildActionPlan(intent));
-              return isNoLongerReconciliationCandidate(executionIntentPublicId);
-            })
-        .orElse(false);
-  }
-
-  private boolean isConfirmedQuestionUpdate(ExecutionIntent intent) {
-    return intent.getStatus() == ExecutionIntentStatus.CONFIRMED
-        && intent.getActionType() == ExecutionActionType.QNA_QUESTION_UPDATE;
+    boolean replayed =
+        replayConfirmedExecutionIntentUseCase.execute(
+            new ReplayConfirmedExecutionIntentCommand(
+                executionIntentPublicId, QnaExecutionActionType.QNA_QUESTION_UPDATE.name()));
+    return replayed && isNoLongerReconciliationCandidate(executionIntentPublicId);
   }
 
   private boolean isNoLongerReconciliationCandidate(String executionIntentPublicId) {

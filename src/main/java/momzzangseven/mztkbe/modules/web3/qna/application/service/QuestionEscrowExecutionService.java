@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
+import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3PreparationFailureClassifier;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
@@ -288,7 +289,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
         .findQuestionByPostIdForUpdate(postId)
         .orElseThrow(
             () ->
-                new Web3InvalidInputException(
+                new RetryableWeb3PreparationException(
                     "question is not registered onchain yet: postId=" + postId));
   }
 
@@ -297,7 +298,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
         .findAnswerByAnswerIdForUpdate(answerId)
         .orElseThrow(
             () ->
-                new Web3InvalidInputException(
+                new RetryableWeb3PreparationException(
                     "answer is not registered onchain yet: answerId=" + answerId));
   }
 
@@ -341,7 +342,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
       Long postId, QnaExecutionActionType requestedActionType) {
     if (loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(
         QnaExecutionResourceType.QUESTION, String.valueOf(postId), requestedActionType)) {
-      throw new Web3InvalidInputException(
+      throw new RetryableWeb3PreparationException(
           "conflicting active question execution intent exists: postId=" + postId);
     }
   }
@@ -350,7 +351,7 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
       Long answerId, QnaExecutionActionType requestedActionType) {
     if (loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(
         QnaExecutionResourceType.ANSWER, String.valueOf(answerId), requestedActionType)) {
-      throw new Web3InvalidInputException(
+      throw new RetryableWeb3PreparationException(
           "conflicting active answer execution intent exists: answerId=" + answerId);
     }
   }
@@ -362,12 +363,12 @@ public class QuestionEscrowExecutionService implements QuestionEscrowExecutionUs
       String projectedAnswerHash) {
     String localQuestionHash = QnaContentHashFactory.hash(localQuestionContent);
     if (!localQuestionHash.equals(projectedQuestionHash)) {
-      throw new Web3InvalidInputException(
+      throw new RetryableWeb3PreparationException(
           "question content differs from latest onchain projection; recover or wait for sync");
     }
     String localAnswerHash = QnaContentHashFactory.hash(localAnswerContent);
     if (!localAnswerHash.equals(projectedAnswerHash)) {
-      throw new Web3InvalidInputException(
+      throw new RetryableWeb3PreparationException(
           "answer content differs from latest onchain projection; recover or wait for sync");
     }
   }

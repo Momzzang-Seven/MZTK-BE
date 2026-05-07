@@ -18,7 +18,7 @@ import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.post.PostUnauthorizedException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
@@ -109,7 +109,7 @@ class PostProcessServiceTest {
     when(questionLifecycleExecutionPort.prepareQuestionUpdate(
             postId, ownerId, "수정된 질문 내용", 50L, 1L, "update-token"))
         .thenThrow(
-            new Web3InvalidInputException(
+            new RetryableWeb3PreparationException(
                 "conflicting active question execution intent exists: postId=76"));
 
     PostMutationResult result = postProcessService.updatePost(ownerId, postId, command);

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import java.time.Clock;
 import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecutionTerminationHookUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
@@ -78,6 +79,7 @@ class ExecutionIntentServiceConfigTest {
             context -> {
               assertThat(context).hasNotFailed();
               assertThat(context).hasSingleBean(RunExecutionTerminationHookUseCase.class);
+              assertThat(context).hasSingleBean(ReplayConfirmedExecutionIntentUseCase.class);
               assertThat(context.getBean(RunExecutionTerminationHookUseCase.class))
                   .isInstanceOf(RunExecutionTerminationHookService.class);
               assertThat(context).doesNotHaveBean("runExecutionTerminationHookUseCase");

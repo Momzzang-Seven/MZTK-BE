@@ -42,6 +42,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -129,6 +130,111 @@ class QuestionEscrowExecutionServiceTest {
     verify(submitQnaExecutionDraftPort, never()).submit(any());
     verify(qnaQuestionUpdateStatePersistencePort, never())
         .bindExecutionIntent(any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("prepareQuestionUpdate rejects when latest update state is missing")
+  void prepareQuestionUpdate_rejectsWhenLatestUpdateStateMissing() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .willReturn(Optional.empty());
+
+    assertQuestionUpdateSuperseded(
+        () ->
+            service.prepareQuestionUpdate(
+                new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L, 1L, "update-token")));
+
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+    verify(qnaQuestionUpdateStatePersistencePort, never())
+        .bindExecutionIntent(any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("prepareQuestionUpdate rejects when update version or token mismatches")
+  void prepareQuestionUpdate_rejectsWhenVersionTokenMismatches() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .willReturn(
+            Optional.of(
+                updateState("수정된 질문", QnaQuestionUpdateStateStatus.PREPARING).toBuilder()
+                    .updateVersion(2L)
+                    .updateToken("other-token")
+                    .build()));
+
+    assertQuestionUpdateSuperseded(
+        () ->
+            service.prepareQuestionUpdate(
+                new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L, 1L, "update-token")));
+
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+    verify(qnaQuestionUpdateStatePersistencePort, never())
+        .bindExecutionIntent(any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("prepareQuestionUpdate rejects when requester mismatches prepared state")
+  void prepareQuestionUpdate_rejectsWhenRequesterMismatches() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .willReturn(
+            Optional.of(
+                updateState("수정된 질문", QnaQuestionUpdateStateStatus.PREPARING).toBuilder()
+                    .requesterUserId(8L)
+                    .build()));
+
+    assertQuestionUpdateSuperseded(
+        () ->
+            service.prepareQuestionUpdate(
+                new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L, 1L, "update-token")));
+
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+    verify(qnaQuestionUpdateStatePersistencePort, never())
+        .bindExecutionIntent(any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("prepareQuestionUpdate rejects when latest update state is not bindable")
+  void prepareQuestionUpdate_rejectsWhenLatestStateIsNotBindable() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
+        .willReturn(Optional.of(updateState("수정된 질문", QnaQuestionUpdateStateStatus.INTENT_BOUND)));
+
+    assertQuestionUpdateSuperseded(
+        () ->
+            service.prepareQuestionUpdate(
+                new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L, 1L, "update-token")));
+
+    verify(buildQnaExecutionDraftPort, never()).build(any());
+    verify(submitQnaExecutionDraftPort, never()).submit(any());
+    verify(qnaQuestionUpdateStatePersistencePort, never())
+        .bindExecutionIntent(any(), any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("prepareQuestionUpdate rejects when bind CAS loses race")
+  void prepareQuestionUpdate_rejectsWhenBindExecutionIntentReturnsEmpty() {
+    given(qnaProjectionPersistencePort.findQuestionByPostIdForUpdate(101L))
+        .willReturn(Optional.of(questionProjection("온체인 질문", 0)));
+    given(buildQnaExecutionDraftPort.build(any()))
+        .willReturn(draft(QnaExecutionActionType.QNA_QUESTION_UPDATE));
+    given(submitQnaExecutionDraftPort.submit(any()))
+        .willReturn(questionIntent("101", "intent-race", "QNA_QUESTION_UPDATE"));
+    given(
+            qnaQuestionUpdateStatePersistencePort.bindExecutionIntent(
+                101L, 1L, "update-token", "intent-race"))
+        .willReturn(Optional.empty());
+
+    assertQuestionUpdateSuperseded(
+        () ->
+            service.prepareQuestionUpdate(
+                new PrepareQuestionUpdateCommand(101L, 7L, "수정된 질문", 50L, 1L, "update-token")));
   }
 
   @Test
@@ -507,6 +613,13 @@ class QuestionEscrowExecutionServiceTest {
         QnaEscrowIdCodec.answerId(201L),
         22L,
         QnaContentHashFactory.hash(answerContent));
+  }
+
+  private void assertQuestionUpdateSuperseded(ThrowingCallable callable) {
+    assertThatThrownBy(callable)
+        .isInstanceOfSatisfying(
+            PostPublicationStateException.class,
+            exception -> assertThat(exception.getCode()).isEqualTo("POST_012"));
   }
 
   private QnaQuestionUpdateState updateState(

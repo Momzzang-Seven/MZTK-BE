@@ -6,19 +6,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.math.BigInteger;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
-import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ReplayConfirmedExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
@@ -33,87 +24,56 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("QnaQuestionUpdateConfirmationSyncAdapter unit test")
 class QnaQuestionUpdateConfirmationSyncAdapterTest {
 
-  @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
+  @Mock private ReplayConfirmedExecutionIntentUseCase replayConfirmedExecutionIntentUseCase;
   @Mock private QnaQuestionUpdateStatePersistencePort statePersistencePort;
-  @Mock private ExecutionActionHandlerPort actionHandler;
 
   @InjectMocks private QnaQuestionUpdateConfirmationSyncAdapter adapter;
 
   @Test
   @DisplayName("confirmed question update intent is replayed through the qna action handler")
   void syncConfirmedQuestionUpdateReplaysConfirmedQuestionUpdate() {
-    ExecutionIntent intent = confirmedIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
-    ExecutionActionPlan plan =
-        new ExecutionActionPlan(BigInteger.ZERO, ExecutionReferenceType.USER_TO_SERVER, List.of());
-    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
-    when(actionHandler.buildActionPlan(intent)).thenReturn(plan);
+    when(replayConfirmedExecutionIntentUseCase.execute(
+            new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE")))
+        .thenReturn(true);
     when(statePersistencePort.findByExecutionIntentPublicIdForUpdate("intent-1"))
         .thenReturn(Optional.of(state(QnaQuestionUpdateStateStatus.CONFIRMED)));
 
     boolean result = adapter.syncConfirmedQuestionUpdate("intent-1");
 
     assertThat(result).isTrue();
-    verify(actionHandler).afterExecutionConfirmed(intent, plan);
+    verify(replayConfirmedExecutionIntentUseCase)
+        .execute(new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE"));
   }
 
   @Test
   @DisplayName("confirmed question update sync returns false when state stays intent bound")
   void syncConfirmedQuestionUpdateReturnsFalseWhenStillIntentBound() {
-    ExecutionIntent intent = confirmedIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
-    ExecutionActionPlan plan =
-        new ExecutionActionPlan(BigInteger.ZERO, ExecutionReferenceType.USER_TO_SERVER, List.of());
-    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
-    when(actionHandler.buildActionPlan(intent)).thenReturn(plan);
+    when(replayConfirmedExecutionIntentUseCase.execute(
+            new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE")))
+        .thenReturn(true);
     when(statePersistencePort.findByExecutionIntentPublicIdForUpdate("intent-1"))
         .thenReturn(Optional.of(state(QnaQuestionUpdateStateStatus.INTENT_BOUND)));
 
     boolean result = adapter.syncConfirmedQuestionUpdate("intent-1");
 
     assertThat(result).isFalse();
-    verify(actionHandler).afterExecutionConfirmed(intent, plan);
+    verify(replayConfirmedExecutionIntentUseCase)
+        .execute(new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE"));
   }
 
   @Test
-  @DisplayName("non question update intent is skipped")
-  void syncConfirmedQuestionUpdateSkipsOtherAction() {
-    ExecutionIntent intent = confirmedIntent(ExecutionActionType.QNA_QUESTION_DELETE);
-    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+  @DisplayName("non replayed question update intent is skipped")
+  void syncConfirmedQuestionUpdateSkipsWhenReplaySkipped() {
+    when(replayConfirmedExecutionIntentUseCase.execute(
+            new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE")))
+        .thenReturn(false);
 
     boolean result = adapter.syncConfirmedQuestionUpdate("intent-1");
 
     assertThat(result).isFalse();
-    verify(actionHandler, never()).afterExecutionConfirmed(any(), any());
-  }
-
-  private ExecutionIntent confirmedIntent(ExecutionActionType actionType) {
-    return ExecutionIntent.create(
-            "intent-1",
-            "root-1",
-            1,
-            ExecutionResourceType.QUESTION,
-            "101",
-            actionType,
-            7L,
-            null,
-            ExecutionMode.EIP7702,
-            "0x" + "e".repeat(64),
-            "{}",
-            "0x" + "1".repeat(40),
-            1L,
-            "0x" + "2".repeat(40),
-            LocalDateTime.of(2026, 4, 12, 10, 5),
-            "0x" + "3".repeat(64),
-            "0x" + "4".repeat(64),
-            null,
-            null,
-            BigInteger.ZERO,
-            LocalDate.of(2026, 4, 12),
-            LocalDateTime.of(2026, 4, 12, 10, 0))
-        .toBuilder()
-        .submittedTxId(99L)
-        .build()
-        .markPendingOnchain(99L, LocalDateTime.of(2026, 4, 12, 10, 1))
-        .confirm(LocalDateTime.of(2026, 4, 12, 10, 2));
+    verify(replayConfirmedExecutionIntentUseCase)
+        .execute(new ReplayConfirmedExecutionIntentCommand("intent-1", "QNA_QUESTION_UPDATE"));
+    verify(statePersistencePort, never()).findByExecutionIntentPublicIdForUpdate(any());
   }
 
   private QnaQuestionUpdateState state(QnaQuestionUpdateStateStatus status) {

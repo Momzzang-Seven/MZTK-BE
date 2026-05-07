@@ -4,7 +4,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QuestionUpdateStatePreparationResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
@@ -28,12 +28,12 @@ public class BeginQuestionUpdateStateService implements BeginQuestionUpdateState
     QnaQuestionUpdateState latest =
         statePersistencePort.findLatestByPostIdForUpdate(command.postId()).orElse(null);
     if (latest != null && latest.getStatus() == QnaQuestionUpdateStateStatus.INTENT_BOUND) {
-      throw new Web3InvalidInputException(
+      throw new RetryableWeb3PreparationException(
           "question update execution intent is pending; wait for confirmation sync");
     }
     if (loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
         QnaExecutionResourceType.QUESTION, String.valueOf(command.postId()))) {
-      throw new Web3InvalidInputException(
+      throw new RetryableWeb3PreparationException(
           "question has pending onchain mutation; wait for completion or recover first");
     }
 
