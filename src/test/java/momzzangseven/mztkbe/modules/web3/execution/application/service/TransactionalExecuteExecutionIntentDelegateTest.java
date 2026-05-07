@@ -49,6 +49,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolic
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transfer.application.dto.TransferExecutionPayload;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -494,7 +495,9 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                 event ->
                     event.executionIntentId().equals("intent-7702")
                         && event.terminalStatus() == ExecutionIntentStatus.CANCELED
-                        && event.failureReason().equals(ErrorCode.WEB3_KMS_SIGN_FAILED.name())));
+                        && event
+                            .failureReason()
+                            .equals(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.name())));
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
@@ -577,7 +580,7 @@ class TransactionalExecuteExecutionIntentDelegateTest {
                         && event.terminalStatus() == ExecutionIntentStatus.CANCELED
                         && event
                             .failureReason()
-                            .equals(ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.name())));
+                            .equals(Web3TxFailureReason.SIGNATURE_INVALID.name())));
   }
 
   @Test

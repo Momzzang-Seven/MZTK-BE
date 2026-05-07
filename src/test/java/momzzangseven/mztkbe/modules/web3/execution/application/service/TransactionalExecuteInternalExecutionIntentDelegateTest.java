@@ -16,7 +16,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.SignatureRecoveryException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
@@ -43,6 +42,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionRetryPolic
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -347,7 +347,8 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
                 momzzangseven.mztkbe.modules.web3.execution.domain.event
                     .ExecutionIntentTerminatedEvent.class);
     verify(publishExecutionIntentTerminatedPort).publish(captor.capture());
-    assertThat(captor.getValue().failureReason()).isEqualTo(ErrorCode.WEB3_KMS_SIGN_FAILED.name());
+    assertThat(captor.getValue().failureReason())
+        .isEqualTo(Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL.name());
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
     verify(executionTransactionGatewayPort, never()).broadcast(any());
   }
@@ -441,7 +442,7 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
                     .ExecutionIntentTerminatedEvent.class);
     verify(publishExecutionIntentTerminatedPort).publish(captor.capture());
     assertThat(captor.getValue().failureReason())
-        .isEqualTo(ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED.name());
+        .isEqualTo(Web3TxFailureReason.SIGNATURE_INVALID.name());
     verify(executionTransactionGatewayPort, never()).createAndFlush(any());
   }
 

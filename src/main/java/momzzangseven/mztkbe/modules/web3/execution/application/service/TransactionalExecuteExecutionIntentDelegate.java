@@ -37,6 +37,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactio
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionType;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
+import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -259,7 +260,10 @@ public class TransactionalExecuteExecutionIntentDelegate
       releaseAndLogIfGap(sponsorAddress, sponsorNonce, intent.getPublicId());
       if (KmsClientErrorClassifier.isTerminal(e)) {
         cancelEip7702IntentAndCascade(
-            intent, ErrorCode.WEB3_KMS_SIGN_FAILED, SPONSOR_KMS_SIGN_FAILED_TERMINAL);
+            intent,
+            Web3TxFailureReason.KMS_SIGN_FAILED_TERMINAL,
+            ErrorCode.WEB3_KMS_SIGN_FAILED,
+            SPONSOR_KMS_SIGN_FAILED_TERMINAL);
         // unreachable; cancelEip7702IntentAndCascade always throws
       }
       // Transient: rethrow original; @Transactional default rollback keeps the intent in
@@ -273,7 +277,10 @@ public class TransactionalExecuteExecutionIntentDelegate
           e.getMessage());
       releaseAndLogIfGap(sponsorAddress, sponsorNonce, intent.getPublicId());
       cancelEip7702IntentAndCascade(
-          intent, ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED, SPONSOR_SIGNATURE_INVALID);
+          intent,
+          Web3TxFailureReason.SIGNATURE_INVALID,
+          ErrorCode.WEB3_SIGNATURE_RECOVERY_FAILED,
+          SPONSOR_SIGNATURE_INVALID);
       // unreachable; cancelEip7702IntentAndCascade always throws
       throw e;
     }
@@ -573,7 +580,10 @@ public class TransactionalExecuteExecutionIntentDelegate
    * code that satisfies definite-assignment for {@code signedPayload}.
    */
   private void cancelEip7702IntentAndCascade(
-      ExecutionIntent intent, ErrorCode errorCode, String failureReason) {
+      ExecutionIntent intent,
+      Web3TxFailureReason eventReason,
+      ErrorCode errorCode,
+      String failureReason) {
     LocalDateTime now = LocalDateTime.now(appClock);
     ExecutionIntent canceled =
         executionIntentPersistencePort.update(intent.cancel(errorCode.name(), failureReason, now));
@@ -583,7 +593,7 @@ public class TransactionalExecuteExecutionIntentDelegate
           canceled.resolveSponsorUsageDateKst(),
           canceled.getReservedSponsorCostWei());
     }
-    publishTerminated(canceled, ExecutionIntentStatus.CANCELED, errorCode.name());
+    publishTerminated(canceled, ExecutionIntentStatus.CANCELED, eventReason.name());
     throw new ExecutionIntentTerminalException(errorCode, false);
   }
 }
