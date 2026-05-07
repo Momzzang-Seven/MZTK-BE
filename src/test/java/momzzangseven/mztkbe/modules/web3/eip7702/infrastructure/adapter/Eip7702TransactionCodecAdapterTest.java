@@ -123,4 +123,44 @@ class Eip7702TransactionCodecAdapterTest {
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("sponsorSigner is required");
   }
+
+  @Test
+  @DisplayName("SignCommand — authorizationList 가 null 이면 Web3InvalidInputException")
+  void signCommand_throws_whenAuthorizationListNull() {
+    assertThatThrownBy(
+            () ->
+                new Eip7702TransactionCodecPort.SignCommand(
+                    11155111L,
+                    BigInteger.ZERO,
+                    BigInteger.valueOf(1_000_000_000L),
+                    BigInteger.valueOf(2_000_000_000L),
+                    BigInteger.valueOf(120_000),
+                    TO,
+                    BigInteger.ZERO,
+                    DATA,
+                    null,
+                    signer()))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("authorizationList must be non-empty");
+  }
+
+  @Test
+  @DisplayName("SignCommand — authorizationList 가 empty 이면 Web3InvalidInputException")
+  void signCommand_throws_whenAuthorizationListEmpty() {
+    assertThatThrownBy(
+            () ->
+                new Eip7702TransactionCodecPort.SignCommand(
+                    11155111L,
+                    BigInteger.ZERO,
+                    BigInteger.valueOf(1_000_000_000L),
+                    BigInteger.valueOf(2_000_000_000L),
+                    BigInteger.valueOf(120_000),
+                    TO,
+                    BigInteger.ZERO,
+                    DATA,
+                    List.of(),
+                    signer()))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("authorizationList must be non-empty");
+  }
 }
