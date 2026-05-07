@@ -82,7 +82,7 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
       throw new Web3InvalidInputException("execution intent owner mismatch");
     }
 
-    Optional<ExecuteExecutionIntentResult> cached = tryPollingFastPath(command, peeked);
+    Optional<ExecuteExecutionIntentResult> cached = tryPollingFastPath(peeked);
     if (cached.isPresent()) {
       return cached.get();
     }
@@ -123,13 +123,12 @@ public class ExecuteExecutionIntentService implements ExecuteExecutionIntentUseC
     }
   }
 
-  private Optional<ExecuteExecutionIntentResult> tryPollingFastPath(
-      ExecuteExecutionIntentCommand command, ExecutionIntent intent) {
-    if (intent == null || intent.getSubmittedTxId() == null) {
+  private Optional<ExecuteExecutionIntentResult> tryPollingFastPath(ExecutionIntent intent) {
+    // The owner / not-null guards ran in the orchestrator before this is called and the
+    // ExecutionIntent aggregate has no transferOwnership operation, so requesterUserId can
+    // not flip between the peek and here. Only the submittedTxId check stays load-bearing.
+    if (intent.getSubmittedTxId() == null) {
       return Optional.empty();
-    }
-    if (!intent.getRequesterUserId().equals(command.requesterUserId())) {
-      throw new Web3InvalidInputException("execution intent owner mismatch");
     }
     ExecutionTransactionGatewayPort.TransactionRecord transaction =
         executionTransactionGatewayPort
