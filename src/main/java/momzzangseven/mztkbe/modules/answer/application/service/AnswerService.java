@@ -124,6 +124,15 @@ public class AnswerService
     return countAnswersPort.countPublicVisibleAnswers(postId);
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public boolean existsPreparingOrPendingCreateByPostId(Long postId) {
+    if (postId == null) {
+      throw new AnswerInvalidInputException("postId is required.");
+    }
+    return loadAnswerPort.existsPreparingOrPendingCreateByPostId(postId);
+  }
+
   /** Creates a new answer for a question post. */
   @Override
   public CreateAnswerResult execute(CreateAnswerCommand command) {
@@ -376,6 +385,9 @@ public class AnswerService
     Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
     validateVisibleForMutation(answer);
+    if (answerUpdateStatePort.hasBlockingUpdate(answer.getId())) {
+      throw new AnswerPublicationStateException(ErrorCode.ANSWER_UPDATE_ONCHAIN_IN_PROGRESS);
+    }
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
     validatePostWritable(post);
     // Only content changes affect the escrow payload hash. Image-only updates stay local and
@@ -385,9 +397,6 @@ public class AnswerService
     boolean managedUpdate =
         contentChanged
             && answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.UPDATE);
-    if (answerUpdateStatePort.hasBlockingUpdate(answer.getId())) {
-      throw new AnswerPublicationStateException(ErrorCode.ANSWER_UPDATE_ONCHAIN_IN_PROGRESS);
-    }
 
     Answer updatedAnswer = answer.update(command.content(), command.userId(), post.answerLocked());
     AnswerUpdateStatePort.AnswerUpdateState updateState = null;
@@ -492,6 +501,9 @@ public class AnswerService
     Answer answer = loadAnswerForUpdate(command.answerId());
     validateAnswerBelongsToPost(answer, command.postId());
     validateVisibleForMutation(answer);
+    if (answerUpdateStatePort.hasBlockingUpdate(answer.getId())) {
+      throw new AnswerPublicationStateException(ErrorCode.ANSWER_UPDATE_ONCHAIN_IN_PROGRESS);
+    }
     LoadPostPort.PostContext post = loadPost(answer.getPostId());
     validatePostWritable(post);
 

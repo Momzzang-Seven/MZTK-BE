@@ -20,4 +20,9 @@ public class AnswerCountAdapter implements CountAnswersPort {
   public long countPublicVisibleAnswers(Long postId) {
     return countAnswersUseCase.countPublicVisibleAnswers(postId);
   }
+
+  @Override
+  public boolean existsPreparingOrPendingCreateByPostId(Long postId) {
+    return countAnswersUseCase.existsPreparingOrPendingCreateByPostId(postId);
+  }
 }

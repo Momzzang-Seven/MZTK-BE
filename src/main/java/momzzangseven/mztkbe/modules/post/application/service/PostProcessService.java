@@ -207,6 +207,9 @@ public class PostProcessService implements UpdatePostUseCase, DeletePostUseCase 
     if (localAnswerCount > 0) {
       return localAnswerCount;
     }
+    if (countAnswersPort.existsPreparingOrPendingCreateByPostId(post.getId())) {
+      return 1L;
+    }
     return loadAnswerCreateIntentConflictPort.hasActiveAnswerCreateIntent(post.getId()) ? 1L : 0L;
   }
 

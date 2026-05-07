@@ -22,7 +22,7 @@ spring:
       mode: always
 
   jpa:
-    defer-datasource-initialization: false
+    defer-datasource-initialization: true
     open-in-view: false
     show-sql: false
     hibernate:

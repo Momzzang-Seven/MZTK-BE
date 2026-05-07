@@ -5,4 +5,6 @@ public interface CountAnswersUseCase {
   long countAnswers(Long postId);
 
   long countPublicVisibleAnswers(Long postId);
+
+  boolean existsPreparingOrPendingCreateByPostId(Long postId);
 }
