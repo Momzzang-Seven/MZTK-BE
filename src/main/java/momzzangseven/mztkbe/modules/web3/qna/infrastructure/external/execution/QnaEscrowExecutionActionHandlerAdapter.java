@@ -113,13 +113,11 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       return;
     }
     if (payload.actionType() == QnaExecutionActionType.QNA_QUESTION_UPDATE) {
-      if (shouldRollbackPendingState(terminalStatus, failureReason)) {
-        qnaQuestionUpdateStatePersistencePort.markPreparationFailedByExecutionIntentPublicId(
-            intent.getPublicId(),
-            terminalStatus.name(),
-            failureReason,
-            isRetryableTerminalFailure(failureReason));
-      }
+      qnaQuestionUpdateStatePersistencePort.markPreparationFailedByExecutionIntentPublicId(
+          intent.getPublicId(),
+          terminalStatus.name(),
+          failureReason,
+          isRetryableTerminalFailure(failureReason));
       return;
     }
     if (!shouldRollbackPendingState(terminalStatus, failureReason)) {
@@ -219,6 +217,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
       log.warn(
           "Skipping legacy qna question update confirmation without version token: intentId={}",
           intent.getPublicId());
+      qnaQuestionUpdateStatePersistencePort.markStaleByExecutionIntentPublicId(
+          intent.getPublicId());
       return;
     }
     QnaQuestionUpdateState latest =
@@ -235,6 +235,8 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
           intent.getPublicId(),
           payload.postId(),
           payload.questionUpdateVersion());
+      qnaQuestionUpdateStatePersistencePort.markStaleByExecutionIntentPublicId(
+          intent.getPublicId());
       return;
     }
     QnaQuestionProjection question = requireQuestion(payload.postId());

@@ -52,8 +52,34 @@ class QnaQuestionUpdateStateJpaRepositoryTest {
         .containsExactly("confirmed-intent");
   }
 
+  @Test
+  @DisplayName("reconciliation candidates skip stale confirmed question update states")
+  void findConfirmedIntentBoundForReconciliationSkipsStaleStates() {
+    saveState(2000L, 1L, "stale-confirmed-intent", at(11, 0), QnaQuestionUpdateStateStatus.STALE);
+    saveIntent("stale-confirmed-intent", ExecutionIntentStatus.CONFIRMED, at(11, 0));
+
+    List<QnaQuestionUpdateStateEntity> result =
+        stateRepository.findConfirmedIntentBoundForReconciliation(
+            QnaQuestionUpdateStateStatus.INTENT_BOUND,
+            ExecutionIntentStatus.CONFIRMED,
+            ExecutionActionType.QNA_QUESTION_UPDATE,
+            PageRequest.of(0, 1));
+
+    assertThat(result).isEmpty();
+  }
+
   private void saveState(
       Long postId, Long version, String intentPublicId, LocalDateTime updatedAt) {
+    saveState(
+        postId, version, intentPublicId, updatedAt, QnaQuestionUpdateStateStatus.INTENT_BOUND);
+  }
+
+  private void saveState(
+      Long postId,
+      Long version,
+      String intentPublicId,
+      LocalDateTime updatedAt,
+      QnaQuestionUpdateStateStatus status) {
     stateRepository.save(
         QnaQuestionUpdateStateEntity.builder()
             .postId(postId)
@@ -62,7 +88,7 @@ class QnaQuestionUpdateStateJpaRepositoryTest {
             .updateToken("token-" + version)
             .expectedQuestionHash("0x" + "a".repeat(64))
             .executionIntentPublicId(intentPublicId)
-            .status(QnaQuestionUpdateStateStatus.INTENT_BOUND)
+            .status(status)
             .preparationRetryable(true)
             .createdAt(updatedAt)
             .updatedAt(updatedAt)

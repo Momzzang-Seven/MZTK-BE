@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -344,8 +343,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
-  @DisplayName("afterExecutionConfirmed ignores stale question update confirmation")
-  void afterExecutionConfirmed_ignoresStaleQuestionUpdate() throws Exception {
+  @DisplayName("afterExecutionConfirmed marks stale question update confirmation stale")
+  void afterExecutionConfirmed_marksStaleQuestionUpdateStale() throws Exception {
     String questionHash = "0x" + "f".repeat(64);
     when(qnaQuestionUpdateStatePersistencePort.findLatestByPostIdForUpdate(101L))
         .thenReturn(Optional.of(updateState(3L, "token-3", "0x" + "e".repeat(64), "intent-3")));
@@ -360,6 +359,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
 
     verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
     verify(qnaQuestionUpdateStatePersistencePort, never()).markConfirmed(any());
+    verify(qnaQuestionUpdateStatePersistencePort).markStaleByExecutionIntentPublicId("intent-1");
   }
 
   @Test
@@ -376,6 +376,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
 
     verify(qnaQuestionUpdateStatePersistencePort, never()).findLatestByPostIdForUpdate(any());
     verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
+    verify(qnaQuestionUpdateStatePersistencePort).markStaleByExecutionIntentPublicId("intent-1");
   }
 
   @Test
@@ -528,8 +529,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
-  @DisplayName("afterExecutionTerminated keeps question update state for retryable failure")
-  void afterExecutionTerminated_keepsQuestionUpdateStateForRetryableFailure() throws Exception {
+  @DisplayName("afterExecutionTerminated marks question update retryable failure")
+  void afterExecutionTerminated_marksQuestionUpdateRetryableFailure() throws Exception {
     adapter.afterExecutionTerminated(
         intent(
             questionUpdatePayload("0x" + "f".repeat(64), 2L, "token-2"),
@@ -540,8 +541,9 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         ExecutionIntentStatus.FAILED_ONCHAIN,
         "RPC_UNAVAILABLE");
 
-    verify(qnaQuestionUpdateStatePersistencePort, never())
-        .markPreparationFailedByExecutionIntentPublicId(any(), any(), any(), anyBoolean());
+    verify(qnaQuestionUpdateStatePersistencePort)
+        .markPreparationFailedByExecutionIntentPublicId(
+            "intent-1", "FAILED_ONCHAIN", "RPC_UNAVAILABLE", true);
   }
 
   @Test

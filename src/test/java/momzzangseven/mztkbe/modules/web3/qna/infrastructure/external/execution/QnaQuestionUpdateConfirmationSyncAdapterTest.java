@@ -19,6 +19,9 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionReferenceType;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +34,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaQuestionUpdateConfirmationSyncAdapterTest {
 
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
+  @Mock private QnaQuestionUpdateStatePersistencePort statePersistencePort;
   @Mock private ExecutionActionHandlerPort actionHandler;
 
   @InjectMocks private QnaQuestionUpdateConfirmationSyncAdapter adapter;
@@ -43,10 +47,29 @@ class QnaQuestionUpdateConfirmationSyncAdapterTest {
         new ExecutionActionPlan(BigInteger.ZERO, ExecutionReferenceType.USER_TO_SERVER, List.of());
     when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(actionHandler.buildActionPlan(intent)).thenReturn(plan);
+    when(statePersistencePort.findByExecutionIntentPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(state(QnaQuestionUpdateStateStatus.CONFIRMED)));
 
     boolean result = adapter.syncConfirmedQuestionUpdate("intent-1");
 
     assertThat(result).isTrue();
+    verify(actionHandler).afterExecutionConfirmed(intent, plan);
+  }
+
+  @Test
+  @DisplayName("confirmed question update sync returns false when state stays intent bound")
+  void syncConfirmedQuestionUpdateReturnsFalseWhenStillIntentBound() {
+    ExecutionIntent intent = confirmedIntent(ExecutionActionType.QNA_QUESTION_UPDATE);
+    ExecutionActionPlan plan =
+        new ExecutionActionPlan(BigInteger.ZERO, ExecutionReferenceType.USER_TO_SERVER, List.of());
+    when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
+    when(actionHandler.buildActionPlan(intent)).thenReturn(plan);
+    when(statePersistencePort.findByExecutionIntentPublicIdForUpdate("intent-1"))
+        .thenReturn(Optional.of(state(QnaQuestionUpdateStateStatus.INTENT_BOUND)));
+
+    boolean result = adapter.syncConfirmedQuestionUpdate("intent-1");
+
+    assertThat(result).isFalse();
     verify(actionHandler).afterExecutionConfirmed(intent, plan);
   }
 
@@ -91,5 +114,19 @@ class QnaQuestionUpdateConfirmationSyncAdapterTest {
         .build()
         .markPendingOnchain(99L, LocalDateTime.of(2026, 4, 12, 10, 1))
         .confirm(LocalDateTime.of(2026, 4, 12, 10, 2));
+  }
+
+  private QnaQuestionUpdateState state(QnaQuestionUpdateStateStatus status) {
+    return QnaQuestionUpdateState.builder()
+        .postId(101L)
+        .requesterUserId(7L)
+        .updateVersion(1L)
+        .updateToken("token-1")
+        .expectedQuestionHash("0x" + "a".repeat(64))
+        .executionIntentPublicId("intent-1")
+        .status(status)
+        .createdAt(LocalDateTime.of(2026, 4, 12, 10, 0))
+        .updatedAt(LocalDateTime.of(2026, 4, 12, 10, 1))
+        .build();
   }
 }
