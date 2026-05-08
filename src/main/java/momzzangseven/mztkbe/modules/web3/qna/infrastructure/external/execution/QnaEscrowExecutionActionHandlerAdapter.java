@@ -29,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
@@ -112,14 +113,14 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     if (payload.actionType() == QnaExecutionActionType.QNA_QUESTION_CREATE) {
       if (shouldFailQuestionCreate(intent, payload)) {
         qnaQuestionPublicationSyncPort.failQuestionCreate(
-            payload.postId(), intent.getPublicId(), terminalStatus, failureReason);
+            payload.postId(), intent.getPublicId(), toQnaStatus(terminalStatus), failureReason);
       }
       return;
     }
     if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_SUBMIT) {
       if (shouldFailAnswerSubmit(intent, payload)) {
         qnaAnswerPublicationSyncPort.failAnswerSubmit(
-            payload.answerId(), intent.getPublicId(), terminalStatus, failureReason);
+            payload.answerId(), intent.getPublicId(), toQnaStatus(terminalStatus), failureReason);
       }
       return;
     }
@@ -180,6 +181,10 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
     }
     Web3TxFailureReason reason = resolveFailureReason(failureReason);
     return reason != null && reason.isRetryable();
+  }
+
+  private QnaExecutionIntentStatus toQnaStatus(ExecutionIntentStatus status) {
+    return QnaExecutionIntentStatus.valueOf(status.name());
   }
 
   private Web3TxFailureReason resolveFailureReason(String failureReason) {

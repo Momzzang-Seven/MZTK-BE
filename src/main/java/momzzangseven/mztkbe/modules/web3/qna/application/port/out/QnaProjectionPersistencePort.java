@@ -26,4 +26,6 @@ public interface QnaProjectionPersistencePort {
   void deleteAnswerByAnswerId(Long answerId);
 
   void deleteAnswerProjectionsByPostId(Long postId);
+
+  int repairQuestionAnswerCounts();
 }

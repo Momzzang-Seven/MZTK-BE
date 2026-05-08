@@ -9,14 +9,13 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourc
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.stereotype.Component;
 
 /** Bridges shared execution intent persistence into qna-owned conflict/recovery state checks. */
 @Component
 @RequiredArgsConstructor
-@ConditionalOnAnyExecutionEnabled
 public class QnaExecutionIntentStateAdapter implements LoadQnaExecutionIntentStatePort {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
@@ -27,6 +26,11 @@ public class QnaExecutionIntentStateAdapter implements LoadQnaExecutionIntentSta
     return executionIntentPersistencePort
         .findLatestByRootIdempotencyKey(rootIdempotencyKey)
         .map(this::toView);
+  }
+
+  @Override
+  public Optional<QnaExecutionIntentStateView> loadByExecutionIntentId(String executionIntentId) {
+    return executionIntentPersistencePort.findByPublicId(executionIntentId).map(this::toView);
   }
 
   @Override
@@ -85,6 +89,7 @@ public class QnaExecutionIntentStateAdapter implements LoadQnaExecutionIntentSta
     return new QnaExecutionIntentStateView(
         intent.getPublicId(),
         QnaExecutionActionType.valueOf(intent.getActionType().name()),
-        intent.getStatus());
+        QnaExecutionIntentStatus.valueOf(intent.getStatus().name()),
+        intent.getLastErrorReason());
   }
 }

@@ -18,10 +18,11 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerExecutionIntentRefPersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerExecutionIntentRefPersistencePort.QnaAnswerExecutionIntentRef;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,7 +32,7 @@ public class SubmitQnaExecutionIntentAdapter implements SubmitQnaExecutionDraftP
 
   private final CreateExecutionIntentUseCase createExecutionIntentUseCase;
   private final ObjectMapper objectMapper;
-  private final JdbcTemplate jdbcTemplate;
+  private final QnaAnswerExecutionIntentRefPersistencePort refPersistencePort;
 
   @Override
   public QnaExecutionIntentResult submit(QnaExecutionDraft draft) {
@@ -54,30 +55,13 @@ public class SubmitQnaExecutionIntentAdapter implements SubmitQnaExecutionDraftP
     if (payload.postId() == null || payload.answerId() == null) {
       return;
     }
-    jdbcTemplate.update(
-        """
-        INSERT INTO qna_answer_execution_intent_refs (
-            execution_intent_public_id,
-            post_id,
-            answer_id,
-            action_type,
-            status_snapshot,
-            created_at,
-            updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, NOW(), NOW())
-        ON CONFLICT (execution_intent_public_id) DO UPDATE
-        SET post_id = EXCLUDED.post_id,
-            answer_id = EXCLUDED.answer_id,
-            action_type = EXCLUDED.action_type,
-            status_snapshot = EXCLUDED.status_snapshot,
-            updated_at = NOW()
-        """,
-        result.executionIntent().id(),
-        payload.postId(),
-        payload.answerId(),
-        draft.actionType().name(),
-        result.executionIntent().status());
+    refPersistencePort.upsert(
+        new QnaAnswerExecutionIntentRef(
+            result.executionIntent().id(),
+            payload.postId(),
+            payload.answerId(),
+            draft.actionType(),
+            result.executionIntent().status()));
   }
 
   private QnaEscrowExecutionPayload readPayload(String payloadSnapshotJson) {

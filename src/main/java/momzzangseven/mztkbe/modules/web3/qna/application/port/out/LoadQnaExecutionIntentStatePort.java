@@ -13,6 +13,8 @@ public interface LoadQnaExecutionIntentStatePort {
 
   Optional<QnaExecutionIntentStateView> loadLatestByRootIdempotencyKey(String rootIdempotencyKey);
 
+  Optional<QnaExecutionIntentStateView> loadByExecutionIntentId(String executionIntentId);
+
   Optional<QnaExecutionIntentStateView> loadLatestActiveByResource(
       QnaExecutionResourceType resourceType, String resourceId);
 

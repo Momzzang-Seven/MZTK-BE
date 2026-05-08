@@ -13,7 +13,6 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerS
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
@@ -25,6 +24,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
 import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
@@ -151,13 +151,13 @@ class QnaAdminReviewContextAdapterTest {
         new QnaExecutionIntentStateView(
             "intent-local-answer",
             QnaExecutionActionType.QNA_ANSWER_SUBMIT,
-            ExecutionIntentStatus.AWAITING_SIGNATURE));
+            QnaExecutionIntentStatus.AWAITING_SIGNATURE));
     result.put(
         "201",
         new QnaExecutionIntentStateView(
             "intent-projected-answer",
             QnaExecutionActionType.QNA_ANSWER_DELETE,
-            ExecutionIntentStatus.PENDING_ONCHAIN));
+            QnaExecutionIntentStatus.PENDING_ONCHAIN));
     return result;
   }
 

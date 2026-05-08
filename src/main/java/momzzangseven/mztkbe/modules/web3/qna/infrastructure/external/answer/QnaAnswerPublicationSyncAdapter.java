@@ -4,8 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.answer.application.dto.SyncAnswerPublicationStateCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.ConfirmAnswerSubmittedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.FailAnswerSubmitUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerPublicationSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
@@ -58,7 +58,7 @@ public class QnaAnswerPublicationSyncAdapter implements QnaAnswerPublicationSync
   public void failAnswerSubmit(
       Long answerId,
       String executionIntentId,
-      ExecutionIntentStatus terminalStatus,
+      QnaExecutionIntentStatus terminalStatus,
       String failureReason) {
     eventPublisher.publishEvent(
         AnswerPublicationSyncEvent.failed(

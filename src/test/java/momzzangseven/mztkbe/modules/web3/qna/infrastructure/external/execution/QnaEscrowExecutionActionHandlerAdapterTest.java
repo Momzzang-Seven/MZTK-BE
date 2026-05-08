@@ -37,6 +37,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -638,7 +639,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
                 new QnaExecutionIntentStateView(
                     "intent-1",
                     QnaExecutionActionType.QNA_QUESTION_CREATE,
-                    ExecutionIntentStatus.EXPIRED)));
+                    QnaExecutionIntentStatus.EXPIRED)));
 
     adapter.afterExecutionTerminated(
         intent(payload, ExecutionResourceType.QUESTION, "101", 7L),
@@ -647,7 +648,7 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         "expired");
 
     verify(qnaQuestionPublicationSyncPort)
-        .failQuestionCreate(101L, "intent-1", ExecutionIntentStatus.EXPIRED, "expired");
+        .failQuestionCreate(101L, "intent-1", QnaExecutionIntentStatus.EXPIRED, "expired");
   }
 
   private ExecutionIntent intent(

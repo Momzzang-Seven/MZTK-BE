@@ -6,7 +6,7 @@ import static org.mockito.Mockito.verify;
 
 import momzzangseven.mztkbe.modules.answer.application.port.in.ConfirmAnswerSubmittedUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.FailAnswerSubmitUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,7 +67,7 @@ class QnaAnswerPublicationSyncAdapterTest {
             eventPublisher, confirmAnswerSubmittedUseCase, failAnswerSubmitUseCase);
 
     adapter.failAnswerSubmit(
-        100L, "intent-create", ExecutionIntentStatus.FAILED_ONCHAIN, "RPC_UNAVAILABLE");
+        100L, "intent-create", QnaExecutionIntentStatus.FAILED_ONCHAIN, "RPC_UNAVAILABLE");
 
     ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
     verify(eventPublisher).publishEvent(eventCaptor.capture());

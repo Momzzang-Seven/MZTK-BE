@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,11 +22,11 @@ class LoadQnaExecutionIntentStatePortTest {
                 new QnaExecutionIntentStateView(
                     "intent-newer",
                     QnaExecutionActionType.QNA_ANSWER_UPDATE,
-                    ExecutionIntentStatus.AWAITING_SIGNATURE),
+                    QnaExecutionIntentStatus.AWAITING_SIGNATURE),
                 new QnaExecutionIntentStateView(
                     "intent-older",
                     QnaExecutionActionType.QNA_ANSWER_DELETE,
-                    ExecutionIntentStatus.SIGNED)));
+                    QnaExecutionIntentStatus.SIGNED)));
 
     boolean result =
         port.hasConflictingActiveIntent(
@@ -41,6 +41,11 @@ class LoadQnaExecutionIntentStatePortTest {
     @Override
     public Optional<QnaExecutionIntentStateView> loadLatestByRootIdempotencyKey(
         String rootIdempotencyKey) {
+      return Optional.empty();
+    }
+
+    @Override
+    public Optional<QnaExecutionIntentStateView> loadByExecutionIntentId(String executionIntentId) {
       return Optional.empty();
     }
 

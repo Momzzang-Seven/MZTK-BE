@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDeleteCommand;
@@ -34,6 +33,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import org.junit.jupiter.api.BeforeEach;
@@ -140,7 +140,7 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-active",
                     QnaExecutionActionType.QNA_QUESTION_DELETE,
-                    ExecutionIntentStatus.AWAITING_SIGNATURE)));
+                    QnaExecutionIntentStatus.AWAITING_SIGNATURE)));
 
     assertThatThrownBy(
             () -> service.precheckAnswerCreate(new PrecheckAnswerCreateCommand(101L, "온체인 질문")))
@@ -163,7 +163,7 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-terminal",
                     QnaExecutionActionType.QNA_ANSWER_SUBMIT,
-                    ExecutionIntentStatus.EXPIRED)));
+                    QnaExecutionIntentStatus.EXPIRED)));
     given(buildQnaExecutionDraftPort.build(any()))
         .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_SUBMIT));
     given(submitQnaExecutionDraftPort.submit(any()))
@@ -245,7 +245,7 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-terminal",
                     QnaExecutionActionType.QNA_ANSWER_UPDATE,
-                    ExecutionIntentStatus.CANCELED)));
+                    QnaExecutionIntentStatus.CANCELED)));
     given(buildQnaExecutionDraftPort.build(any()))
         .willReturn(draft(QnaExecutionActionType.QNA_ANSWER_UPDATE));
     given(submitQnaExecutionDraftPort.submit(any()))
@@ -270,7 +270,7 @@ class AnswerEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-active",
                     QnaExecutionActionType.QNA_ANSWER_UPDATE,
-                    ExecutionIntentStatus.PENDING_ONCHAIN)));
+                    QnaExecutionIntentStatus.PENDING_ONCHAIN)));
 
     Optional<QnaExecutionIntentResult> result =
         service.recoverAnswerUpdate(

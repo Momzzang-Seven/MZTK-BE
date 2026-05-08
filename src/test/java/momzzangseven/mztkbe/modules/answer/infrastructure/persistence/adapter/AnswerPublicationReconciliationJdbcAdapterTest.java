@@ -32,20 +32,14 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
   }
 
   @Test
-  @DisplayName("terminal answer update intent moves bound update state to failed")
-  void reconcileTerminalUpdateFailuresMarksIntentBoundStateFailed() {
-    insertExecutionIntent(
-        "intent-update-terminal",
-        "ANSWER",
-        "QNA_ANSWER_UPDATE",
-        "FAILED_ONCHAIN",
-        "RPC_UNAVAILABLE");
-    insertExecutionIntent(
-        "intent-update-active", "ANSWER", "QNA_ANSWER_UPDATE", "PENDING_ONCHAIN", null);
+  @DisplayName("terminal answer update marks the current bound update state as failed")
+  void failUpdateIfCurrentMarksIntentBoundStateFailed() {
     insertAnswerUpdateState(1L, 201L, 1L, "intent-update-terminal", "INTENT_BOUND");
     insertAnswerUpdateState(2L, 202L, 1L, "intent-update-active", "INTENT_BOUND");
 
-    int updatedRows = adapter.reconcileTerminalUpdateFailures(100);
+    int updatedRows =
+        adapter.failUpdateIfCurrent(
+            1L, "intent-update-terminal", "FAILED_ONCHAIN", "RPC_UNAVAILABLE");
 
     assertThat(updatedRows).isEqualTo(1);
     assertThat(loadAnswerUpdateStatus(1L)).isEqualTo("FAILED");
@@ -54,20 +48,14 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
   }
 
   @Test
-  @DisplayName("terminal answer delete intent clears pending delete state")
-  void reconcileTerminalDeleteRollbacksClearsPendingDeleteState() {
-    insertExecutionIntent(
-        "intent-delete-terminal",
-        "ANSWER",
-        "QNA_ANSWER_DELETE",
-        "EXPIRED",
-        "EXECUTION_INTENT_EXPIRED");
-    insertExecutionIntent(
-        "intent-delete-active", "ANSWER", "QNA_ANSWER_DELETE", "PENDING_ONCHAIN", null);
+  @DisplayName("terminal answer delete clears the current pending delete state")
+  void rollbackDeleteIfCurrentClearsPendingDeleteState() {
     insertAnswer(301L, "intent-delete-terminal", "PENDING_DELETE");
     insertAnswer(302L, "intent-delete-active", "PENDING_DELETE");
 
-    int updatedRows = adapter.reconcileTerminalDeleteRollbacks(100);
+    int updatedRows =
+        adapter.rollbackDeleteIfCurrent(
+            301L, "intent-delete-terminal", "EXPIRED", "EXECUTION_INTENT_EXPIRED");
 
     assertThat(updatedRows).isEqualTo(1);
     assertThat(loadAnswerDeleteIntentId(301L)).isNull();
@@ -81,22 +69,13 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
   private void createSchema() {
     jdbcTemplate.execute(
         """
-        CREATE TABLE web3_execution_intents (
-            public_id VARCHAR(100) PRIMARY KEY,
-            resource_type VARCHAR(40) NOT NULL,
-            action_type VARCHAR(60) NOT NULL,
-            status VARCHAR(40) NOT NULL,
-            last_error_reason VARCHAR(500)
-        )
-        """);
-    jdbcTemplate.execute(
-        """
         CREATE TABLE qna_answer_update_states (
             id BIGINT PRIMARY KEY,
             answer_id BIGINT NOT NULL,
             update_version BIGINT NOT NULL,
             execution_intent_public_id VARCHAR(100),
             status VARCHAR(40) NOT NULL,
+            error_code VARCHAR(120),
             error_reason VARCHAR(500),
             updated_at TIMESTAMP
         )
@@ -114,25 +93,6 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
             updated_at TIMESTAMP
         )
         """);
-  }
-
-  private void insertExecutionIntent(
-      String publicId, String resourceType, String actionType, String status, String errorReason) {
-    jdbcTemplate.update(
-        """
-        INSERT INTO web3_execution_intents (
-            public_id,
-            resource_type,
-            action_type,
-            status,
-            last_error_reason
-        ) VALUES (?, ?, ?, ?, ?)
-        """,
-        publicId,
-        resourceType,
-        actionType,
-        status,
-        errorReason);
   }
 
   private void insertAnswerUpdateState(
