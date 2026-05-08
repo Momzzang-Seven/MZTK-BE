@@ -4,6 +4,11 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
@@ -13,16 +18,18 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpda
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecutionPort {
 
   private final QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
   private final BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
+  private final CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
+  private final GetExecutionIntentUseCase getExecutionIntentUseCase;
 
   @Override
   public boolean managesAcceptLifecycle() {
@@ -37,6 +44,26 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   @Override
   public boolean hasActiveQuestionIntent(Long postId) {
     return questionEscrowExecutionUseCase.hasActiveQuestionIntent(postId);
+  }
+
+  @Override
+  public boolean cancelSignableIntent(String executionIntentId, String reason) {
+    return cancelExecutionIntentUseCase.cancelIfSignable(
+        new CancelExecutionIntentCommand(
+            executionIntentId, "QUESTION_LIFECYCLE_BIND_FAILED", reason));
+  }
+
+  @Override
+  public Optional<QuestionExecutionWriteView> loadQuestionCreateIntent(
+      Long postId, Long requesterUserId, String executionIntentId) {
+    GetExecutionIntentResult result =
+        getExecutionIntentUseCase.execute(
+            new GetExecutionIntentQuery(requesterUserId, executionIntentId));
+    if (!"QUESTION".equals(result.resourceType().name())
+        || !String.valueOf(postId).equals(result.resourceId())) {
+      return Optional.empty();
+    }
+    return Optional.of(toView(result));
   }
 
   @Override
@@ -156,6 +183,18 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
         result.existing());
+  }
+
+  private QuestionExecutionWriteView toView(GetExecutionIntentResult result) {
+    return new QuestionExecutionWriteView(
+        new QuestionExecutionWriteView.Resource(
+            result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
+        "QNA_QUESTION_CREATE",
+        new QuestionExecutionWriteView.ExecutionIntent(
+            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+        new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
+        toSignRequest(result.signRequest()),
+        true);
   }
 
   private QuestionExecutionWriteView.SignRequest toSignRequest(

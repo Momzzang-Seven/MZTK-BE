@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadAnswerCreateIntentConflictPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
@@ -52,12 +53,126 @@ class RecoverQuestionPostEscrowServiceTest {
   @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
   @Mock private LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
   @Mock private CountAnswersPort countAnswersPort;
+  @Mock private LoadAnswerCreateIntentConflictPort loadAnswerCreateIntentConflictPort;
   @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private LinkTagPort linkTagPort;
   @Spy private PostVisibilityPolicy postVisibilityPolicy = new PostVisibilityPolicy();
 
   @InjectMocks private RecoverQuestionPostEscrowService service;
+
+  @Test
+  @DisplayName("duplicate managed recover-create returns existing awaiting-signature intent")
+  void duplicateManagedRecoverCreateReturnsExistingAwaitingSignatureIntent() {
+    Long ownerId = 7L;
+    Long postId = 89L;
+    Post post = pendingQuestion(ownerId, postId, "intent-2");
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId);
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(activeRecoveryEvidence("intent-2"));
+    when(questionLifecycleExecutionPort.loadQuestionCreateIntent(postId, ownerId, "intent-2"))
+        .thenReturn(Optional.of(web3("intent-2")));
+
+    PostMutationResult result = service.recoverQuestionCreate(command);
+
+    assertThat(result.web3().executionIntent().id()).isEqualTo("intent-2");
+    verify(questionLifecycleExecutionPort, never())
+        .recoverQuestionCreate(any(), any(), any(), any());
+    verifyNoPublicationClaim();
+  }
+
+  @Test
+  @DisplayName("duplicate managed recover-create rejects in-flight non-signable intent")
+  void duplicateManagedRecoverCreateRejectsInFlightNonSignableIntent() {
+    Long ownerId = 7L;
+    Long postId = 88L;
+    Post post = pendingQuestion(ownerId, postId, "intent-2");
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId);
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(activeRecoveryEvidence("intent-2", "PENDING_ONCHAIN"));
+
+    assertThatThrownBy(() -> service.recoverQuestionCreate(command))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_008"));
+
+    verify(questionLifecycleExecutionPort, never()).loadQuestionCreateIntent(any(), any(), any());
+    verify(questionLifecycleExecutionPort, never())
+        .recoverQuestionCreate(any(), any(), any(), any());
+    verifyNoPublicationClaim();
+  }
+
+  @Test
+  @DisplayName("duplicate managed recover-create with mutation fields returns conflict")
+  void duplicateManagedRecoverCreateWithMutationFieldsReturnsConflict() {
+    Long ownerId = 7L;
+    Long postId = 87L;
+    Post post = pendingQuestion(ownerId, postId, "intent-2");
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId, "다른 제목", null, null, null);
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+
+    assertThatThrownBy(() -> service.recoverQuestionCreate(command))
+        .isInstanceOf(PostPublicationStateException.class)
+        .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_010"));
+
+    verifyNoInteractions(loadQuestionPublicationEvidencePort);
+    verify(questionLifecycleExecutionPort, never())
+        .recoverQuestionCreate(any(), any(), any(), any());
+    verifyNoPublicationClaim();
+  }
+
+  @Test
+  @DisplayName("managed recover-create bind miss is idempotent when same intent is already bound")
+  void managedRecoverCreateBindMissIsIdempotentWhenSameIntentAlreadyBound() {
+    Long ownerId = 7L;
+    Long postId = 86L;
+    Post failedPost = failedQuestion(ownerId, postId);
+    Post pendingPost = pendingQuestion(ownerId, postId, "intent-2");
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId);
+
+    when(postPersistencePort.loadPostForUpdate(postId))
+        .thenReturn(
+            Optional.of(failedPost),
+            Optional.of(failedPost),
+            Optional.of(failedPost),
+            Optional.of(pendingPost),
+            Optional.of(pendingPost));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(
+            terminalRecoveryEvidence(),
+            activeRecoveryEvidence("intent-2"),
+            activeRecoveryEvidence("intent-2"));
+    when(questionLifecycleExecutionPort.recoverQuestionCreate(postId, ownerId, "질문 내용", 50L))
+        .thenReturn(Optional.of(web3("intent-2")));
+    when(postPersistencePort.updateQuestionPublicationStateIfExpected(
+            postId,
+            PostPublicationStatus.FAILED,
+            null,
+            null,
+            null,
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null))
+        .thenReturn(0);
+
+    PostMutationResult result = service.recoverQuestionCreate(command);
+
+    assertThat(result.web3().executionIntent().id()).isEqualTo("intent-2");
+    verify(questionLifecycleExecutionPort, never()).cancelSignableIntent(any(), any());
+  }
 
   @Test
   @DisplayName(
@@ -135,7 +250,7 @@ class RecoverQuestionPostEscrowServiceTest {
     when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     stubSuccessfulManagedRecovery(postId, ownerId, "수정 내용", "intent-2");
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     service.recoverQuestionCreate(command);
 
@@ -165,7 +280,7 @@ class RecoverQuestionPostEscrowServiceTest {
     when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     stubSuccessfulManagedRecovery(postId, ownerId, "수정 내용", "intent-2");
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     service.recoverQuestionCreate(command);
 
@@ -186,7 +301,7 @@ class RecoverQuestionPostEscrowServiceTest {
     when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     stubSuccessfulManagedRecovery(postId, ownerId, "질문 내용", "intent-2");
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     service.recoverQuestionCreate(command);
 
@@ -214,7 +329,7 @@ class RecoverQuestionPostEscrowServiceTest {
     when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     stubSuccessfulManagedRecovery(postId, ownerId, "질문 내용", "intent-2");
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     service.recoverQuestionCreate(command);
 
@@ -241,7 +356,7 @@ class RecoverQuestionPostEscrowServiceTest {
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(terminalRecoveryEvidence(), activeRecoveryEvidence("intent-2"));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.recoverQuestionCreate(postId, ownerId, "수정 내용", 50L))
         .thenReturn(Optional.of(web3("intent-2")));
     when(postPersistencePort.updateQuestionPublicationStateIfExpected(
@@ -305,7 +420,7 @@ class RecoverQuestionPostEscrowServiceTest {
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(terminalRecoveryEvidence());
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     doThrow(new PostInvalidInputException("invalid images"))
         .when(validatePostImagesPort)
         .validateAttachableImages(ownerId, postId, PostType.QUESTION, List.of(999L));
@@ -339,7 +454,7 @@ class RecoverQuestionPostEscrowServiceTest {
     when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     stubSuccessfulManagedRecovery(postId, ownerId, "수정 내용", "intent-2");
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     doThrow(new IllegalStateException("tag sync failed after intent"))
         .when(linkTagPort)
         .updateTags(postId, List.of("tag"));
@@ -362,7 +477,7 @@ class RecoverQuestionPostEscrowServiceTest {
             null);
     verify(postPersistencePort).savePost(any(Post.class));
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
-    verify(transactionManager, times(2)).commit(any(TransactionStatus.class));
+    verify(transactionManager, times(3)).commit(any(TransactionStatus.class));
     verify(transactionManager).rollback(any(TransactionStatus.class));
   }
 
@@ -484,7 +599,60 @@ class RecoverQuestionPostEscrowServiceTest {
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(new QuestionPublicationEvidence(true, false, false, true, "EXPIRED"));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(1L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(1L);
+
+    assertThatThrownBy(() -> service.recoverQuestionCreate(command))
+        .isInstanceOf(PostInvalidInputException.class);
+
+    verify(postPersistencePort, never()).savePost(any(Post.class));
+    verifyNoPublicationClaim();
+    verify(questionLifecycleExecutionPort, never())
+        .recoverQuestionCreate(any(), any(), any(), any());
+    verifyNoInteractions(validatePostImagesPort, linkTagPort, updatePostImagesPort);
+  }
+
+  @Test
+  @DisplayName("managed edit recovery blocks active answer create intent without visible answers")
+  void managedEditRecoveryBlocksActiveAnswerCreateIntentWithoutVisibleAnswers() {
+    Long ownerId = 7L;
+    Long postId = 107L;
+    Post post = failedQuestion(ownerId, postId);
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId, null, "수정 내용", null, null);
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(terminalRecoveryEvidence());
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.existsPreparingOrPendingCreateByPostId(postId)).thenReturn(false);
+    when(loadAnswerCreateIntentConflictPort.hasActiveAnswerCreateIntent(postId)).thenReturn(true);
+
+    assertThatThrownBy(() -> service.recoverQuestionCreate(command))
+        .isInstanceOf(PostInvalidInputException.class);
+
+    verify(postPersistencePort, never()).savePost(any(Post.class));
+    verifyNoPublicationClaim();
+    verify(questionLifecycleExecutionPort, never())
+        .recoverQuestionCreate(any(), any(), any(), any());
+    verifyNoInteractions(validatePostImagesPort, linkTagPort, updatePostImagesPort);
+  }
+
+  @Test
+  @DisplayName("managed edit recovery blocks preparing or pending local answer create rows")
+  void managedEditRecoveryBlocksPreparingOrPendingAnswerCreateRows() {
+    Long ownerId = 7L;
+    Long postId = 108L;
+    Post post = failedQuestion(ownerId, postId);
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId, null, "수정 내용", null, null);
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(terminalRecoveryEvidence());
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.existsPreparingOrPendingCreateByPostId(postId)).thenReturn(true);
 
     assertThatThrownBy(() -> service.recoverQuestionCreate(command))
         .isInstanceOf(PostInvalidInputException.class);
@@ -602,8 +770,13 @@ class RecoverQuestionPostEscrowServiceTest {
   }
 
   private QuestionPublicationEvidence activeRecoveryEvidence(String executionIntentId) {
+    return activeRecoveryEvidence(executionIntentId, "AWAITING_SIGNATURE");
+  }
+
+  private QuestionPublicationEvidence activeRecoveryEvidence(
+      String executionIntentId, String executionIntentStatus) {
     return new QuestionPublicationEvidence(
-        true, false, null, true, false, "AWAITING_SIGNATURE", executionIntentId);
+        true, false, null, true, false, executionIntentStatus, executionIntentId);
   }
 
   private Post failedQuestion(Long ownerId, Long postId) {
@@ -617,6 +790,23 @@ class RecoverQuestionPostEscrowServiceTest {
         .reward(50L)
         .status(PostStatus.OPEN)
         .publicationStatus(PostPublicationStatus.FAILED)
+        .createdAt(updatedAt.minusHours(1))
+        .updatedAt(updatedAt)
+        .build();
+  }
+
+  private Post pendingQuestion(Long ownerId, Long postId, String currentCreateExecutionIntentId) {
+    LocalDateTime updatedAt = LocalDateTime.of(2026, 1, 1, 10, 0);
+    return Post.builder()
+        .id(postId)
+        .userId(ownerId)
+        .type(PostType.QUESTION)
+        .title("질문 제목")
+        .content("질문 내용")
+        .reward(50L)
+        .status(PostStatus.OPEN)
+        .publicationStatus(PostPublicationStatus.PENDING)
+        .currentCreateExecutionIntentId(currentCreateExecutionIntentId)
         .createdAt(updatedAt.minusHours(1))
         .updatedAt(updatedAt)
         .build();

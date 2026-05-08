@@ -6,6 +6,15 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 import java.time.LocalDateTime;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
@@ -30,6 +39,8 @@ class QuestionLifecycleExecutionAdapterTest {
 
   @Mock private QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
   @Mock private BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
+  @Mock private CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
+  @Mock private GetExecutionIntentUseCase getExecutionIntentUseCase;
 
   @InjectMocks private QuestionLifecycleExecutionAdapter adapter;
 
@@ -55,6 +66,71 @@ class QuestionLifecycleExecutionAdapterTest {
     assertThat(result).isPresent();
     assertThat(result.orElseThrow().actionType()).isEqualTo("QNA_QUESTION_CREATE");
     assertThat(result.orElseThrow().executionIntent().id()).isEqualTo("intent-create");
+  }
+
+  @Test
+  @DisplayName("cancelSignableIntent delegates to execution cancellation use case")
+  void cancelSignableIntent_delegates() {
+    given(cancelExecutionIntentUseCase.cancelIfSignable(any())).willReturn(true);
+
+    boolean result = adapter.cancelSignableIntent("intent-create", "question create bind failed");
+
+    assertThat(result).isTrue();
+    verify(cancelExecutionIntentUseCase)
+        .cancelIfSignable(
+            new CancelExecutionIntentCommand(
+                "intent-create", "QUESTION_LIFECYCLE_BIND_FAILED", "question create bind failed"));
+  }
+
+  @Test
+  @DisplayName("loadQuestionCreateIntent restores owner-bound execution intent")
+  void loadQuestionCreateIntent_delegates() {
+    given(getExecutionIntentUseCase.execute(any()))
+        .willReturn(
+            new GetExecutionIntentResult(
+                ExecutionResourceType.QUESTION,
+                "10",
+                ExecutionResourceStatus.PENDING_EXECUTION,
+                "intent-create",
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                LocalDateTime.of(2026, 4, 14, 10, 0),
+                ExecutionMode.EIP7702,
+                2,
+                null,
+                null,
+                null,
+                null));
+
+    var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create");
+
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().actionType()).isEqualTo("QNA_QUESTION_CREATE");
+    assertThat(result.orElseThrow().executionIntent().id()).isEqualTo("intent-create");
+    verify(getExecutionIntentUseCase).execute(new GetExecutionIntentQuery(7L, "intent-create"));
+  }
+
+  @Test
+  @DisplayName("loadQuestionCreateIntent rejects non-question resource")
+  void loadQuestionCreateIntentRejectsNonQuestionResource() {
+    given(getExecutionIntentUseCase.execute(any()))
+        .willReturn(
+            new GetExecutionIntentResult(
+                ExecutionResourceType.ANSWER,
+                "10",
+                ExecutionResourceStatus.PENDING_EXECUTION,
+                "intent-create",
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                LocalDateTime.of(2026, 4, 14, 10, 0),
+                ExecutionMode.EIP7702,
+                2,
+                null,
+                null,
+                null,
+                null));
+
+    var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create");
+
+    assertThat(result).isEmpty();
   }
 
   @Test
