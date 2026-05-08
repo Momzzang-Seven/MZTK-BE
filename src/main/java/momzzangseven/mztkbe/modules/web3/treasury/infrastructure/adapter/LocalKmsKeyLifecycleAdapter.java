@@ -59,6 +59,8 @@ public class LocalKmsKeyLifecycleAdapter implements KmsKeyLifecyclePort {
 
   private static UnsupportedOperationException unsupported(String operation) {
     return new UnsupportedOperationException(
-        "KmsKeyLifecyclePort." + operation + " is not available outside the prod profile");
+        "KmsKeyLifecyclePort."
+            + operation
+            + " is not available if web3.kms.enabled is value of false");
   }
 }

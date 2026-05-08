@@ -1,13 +1,12 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import java.util.List;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostDetailResult;
 import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
-import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
@@ -17,10 +16,8 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistenc
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -32,58 +29,17 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
-public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
+public class GetPostService implements GetPostUseCase {
 
   private final PostPersistencePort postPersistencePort;
   private final CountCommentsPort countCommentsPort;
+  private final CountAnswersPort countAnswersPort;
   private final LoadTagPort loadTagPort;
   private final LoadPostWriterPort loadPostWriterPort;
   private final LoadPostImagesPort loadPostImagesPort;
   private final PostLikePersistencePort postLikePersistencePort;
   private final LoadQuestionExecutionResumePort loadQuestionExecutionResumePort;
   private final PostVisibilityPolicy postVisibilityPolicy;
-
-  @Override
-  @Transactional(readOnly = true)
-  public Optional<GetPostContextUseCase.PostContext> getPostContext(Long postId) {
-    return postPersistencePort
-        .loadPost(postId)
-        .map(
-            post ->
-                new GetPostContextUseCase.PostContext(
-                    post.getId(),
-                    post.getUserId(),
-                    post.getIsSolved(),
-                    PostType.QUESTION.equals(post.getType()),
-                    post.getContent(),
-                    post.getReward(),
-                    post.getStatus() != PostStatus.OPEN,
-                    post.getStatus(),
-                    post.getPublicationStatus(),
-                    post.getModerationStatus(),
-                    post.getAcceptedAnswerId()));
-  }
-
-  @Override
-  @Transactional(propagation = Propagation.MANDATORY)
-  public Optional<GetPostContextUseCase.PostContext> getPostContextForUpdate(Long postId) {
-    return postPersistencePort
-        .loadPostForUpdate(postId)
-        .map(
-            post ->
-                new GetPostContextUseCase.PostContext(
-                    post.getId(),
-                    post.getUserId(),
-                    post.getIsSolved(),
-                    PostType.QUESTION.equals(post.getType()),
-                    post.getContent(),
-                    post.getReward(),
-                    post.getStatus() != PostStatus.OPEN,
-                    post.getStatus(),
-                    post.getPublicationStatus(),
-                    post.getModerationStatus(),
-                    post.getAcceptedAnswerId()));
-  }
 
   /** Loads public post detail, enriching optional viewer-specific state when requester is known. */
   @Override
@@ -108,6 +64,8 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
 
     long likeCount = postLikePersistencePort.countByTarget(PostLikeTargetType.POST, postId);
     long commentCount = countCommentsPort.countCommentsByPostId(postId);
+    long answerCount =
+        PostType.QUESTION.equals(post.getType()) ? countAnswersPort.countAnswers(postId) : 0L;
     boolean liked =
         requesterUserId != null
             && postLikePersistencePort.exists(PostLikeTargetType.POST, postId, requesterUserId);
@@ -117,6 +75,14 @@ public class GetPostService implements GetPostUseCase, GetPostContextUseCase {
             : null;
 
     return PostDetailResult.fromDomain(
-        post, likeCount, commentCount, liked, nickname, profileImageUrl, imageSlots, web3Execution);
+        post,
+        likeCount,
+        commentCount,
+        answerCount,
+        liked,
+        nickname,
+        profileImageUrl,
+        imageSlots,
+        web3Execution);
   }
 }

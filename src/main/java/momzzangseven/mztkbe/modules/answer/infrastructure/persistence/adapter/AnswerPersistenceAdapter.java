@@ -1,7 +1,9 @@
 package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.adapter;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
@@ -86,6 +88,20 @@ public class AnswerPersistenceAdapter
   public long countOnchainBlockingAnswers(Long postId) {
     return answerJpaRepository.countByPostIdAndPublicationStatus(
         postId, AnswerPublicationStatus.VISIBLE);
+  }
+
+  @Override
+  public Map<Long, Long> countAnswersByPostIds(List<Long> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+    return answerJpaRepository
+        .countAnswersByPostIds(postIds, AnswerPublicationStatus.VISIBLE)
+        .stream()
+        .collect(
+            Collectors.toMap(
+                AnswerJpaRepository.PostAnswerCount::getPostId,
+                AnswerJpaRepository.PostAnswerCount::getAnswerCount));
   }
 
   @Override

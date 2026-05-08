@@ -53,6 +53,19 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
 
   long countByPostIdAndPublicationStatus(Long postId, AnswerPublicationStatus publicationStatus);
 
+  @Query(
+      """
+      select a.postId as postId, count(a.id) as answerCount
+      from AnswerEntity a
+      where a.postId in :postIds
+        and a.publicationStatus = :visibleStatus
+        and a.pendingDeleteStatus is null
+      group by a.postId
+      """)
+  List<PostAnswerCount> countAnswersByPostIds(
+      @Param("postIds") List<Long> postIds,
+      @Param("visibleStatus") AnswerPublicationStatus visibleStatus);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select a from AnswerEntity a where a.id = :answerId")
   Optional<AnswerEntity> findByIdForUpdate(@Param("answerId") Long answerId);
@@ -234,4 +247,10 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
       @Param("executionIntentId") String executionIntentId,
       @Param("conflictReason") String conflictReason,
       @Param("reconciliationStatus") AnswerPublicationStatus reconciliationStatus);
+
+  interface PostAnswerCount {
+    Long getPostId();
+
+    Long getAnswerCount();
+  }
 }

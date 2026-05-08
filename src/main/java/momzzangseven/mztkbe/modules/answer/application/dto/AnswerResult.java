@@ -22,6 +22,7 @@ public record AnswerResult(
     String deleteFailureReason,
     String reconciliationRequiredReason,
     long likeCount,
+    long commentCount,
     boolean liked,
     List<AnswerImageResult.AnswerImageSlot> images,
     AnswerExecutionResumeView web3Execution,
@@ -52,6 +53,36 @@ public record AnswerResult(
         profileImageUrl,
         content,
         accepted,
+        likeCount,
+        0L,
+        liked,
+        images,
+        web3Execution,
+        createdAt,
+        updatedAt);
+  }
+
+  public AnswerResult(
+      Long answerId,
+      Long userId,
+      String nickname,
+      String profileImageUrl,
+      String content,
+      boolean accepted,
+      long likeCount,
+      long commentCount,
+      boolean liked,
+      List<AnswerImageResult.AnswerImageSlot> images,
+      AnswerExecutionResumeView web3Execution,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this(
+        answerId,
+        userId,
+        nickname,
+        profileImageUrl,
+        content,
+        accepted,
         AnswerPublicationStatus.VISIBLE,
         null,
         null,
@@ -60,6 +91,7 @@ public record AnswerResult(
         null,
         null,
         likeCount,
+        commentCount,
         liked,
         images,
         web3Execution,
@@ -72,6 +104,18 @@ public record AnswerResult(
       String nickname,
       String profileImageUrl,
       long likeCount,
+      boolean liked,
+      List<AnswerImageResult.AnswerImageSlot> images,
+      AnswerExecutionResumeView web3Execution) {
+    return from(answer, nickname, profileImageUrl, likeCount, 0L, liked, images, web3Execution);
+  }
+
+  public static AnswerResult from(
+      Answer answer,
+      String nickname,
+      String profileImageUrl,
+      long likeCount,
+      long commentCount,
       boolean liked,
       List<AnswerImageResult.AnswerImageSlot> images,
       AnswerExecutionResumeView web3Execution) {
@@ -90,6 +134,7 @@ public record AnswerResult(
         answer.getDeleteFailureReason(),
         answer.getReconciliationRequiredReason(),
         likeCount,
+        commentCount,
         liked,
         images,
         web3Execution,

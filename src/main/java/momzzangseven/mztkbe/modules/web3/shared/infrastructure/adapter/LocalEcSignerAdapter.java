@@ -39,6 +39,12 @@ import org.web3j.crypto.Sign;
  * {@code (r, s, v)} directly? To guarantee that the EIP-2 low-s + recovery-id determination path is
  * the <em>same code</em> in non-prod as in prod. We re-encode the freshly produced {@code (r, s)}
  * as a DER signature so the converter performs the identical decode → low-s → ecRecover pipeline.
+ *
+ * <p><b>Retryable signal</b> — Both failure modes thrown here ({@code kmsKeyId} not registered,
+ * BouncyCastle DER-encode failure) are deterministic and not aided by a retry, so the wrapping
+ * {@link KmsSignFailedException} is constructed with {@code retryable=false}. This keeps the
+ * adapter's contract symmetric with {@link KmsSignerAdapter}, which lifts the AWS-side
+ * terminal/transient distinction via {@code KmsClientErrorClassifier.isTerminalCause(...)}.
  */
 @Component
 @ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "false", matchIfMissing = true)
@@ -77,7 +83,7 @@ public class LocalEcSignerAdapter implements KmsSignerPort {
     final BigInteger privateKey = kmsKeyIdToPrivateKey.get(kmsKeyId);
     if (privateKey == null) {
       throw new KmsSignFailedException(
-          "Local signer has no key registered for kmsKeyId=" + kmsKeyId);
+          "Local signer has no key registered for kmsKeyId=" + kmsKeyId, false);
     }
     final ECKeyPair keyPair = ECKeyPair.create(privateKey);
     final Sign.SignatureData rawSignature = Sign.signMessage(digest, keyPair, false);
@@ -87,7 +93,7 @@ public class LocalEcSignerAdapter implements KmsSignerPort {
       derSignature =
           encodeDer(new BigInteger(1, rawSignature.getR()), new BigInteger(1, rawSignature.getS()));
     } catch (IOException ex) {
-      throw new KmsSignFailedException("Failed to DER-encode local secp256k1 signature", ex);
+      throw new KmsSignFailedException("Failed to DER-encode local secp256k1 signature", ex, false);
     }
 
     return DerToVrsConverter.convert(derSignature, digest, expectedAddress);

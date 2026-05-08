@@ -394,8 +394,8 @@ class AdminPageApiE2ETest extends E2ETestBase {
   private Long seedComment(
       Long postId, Long writerId, String content, Long parentId, boolean isDeleted) {
     jdbcTemplate.update(
-        "INSERT INTO comments (post_id, writer_id, content, is_deleted, parent_id, "
-            + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+        "INSERT INTO comments (target_type, post_id, writer_id, content, is_deleted, parent_id, "
+            + "created_at, updated_at) VALUES ('POST', ?, ?, ?, ?, ?, NOW(), NOW())",
         postId,
         writerId,
         content,

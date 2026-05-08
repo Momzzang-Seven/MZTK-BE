@@ -23,6 +23,14 @@ public interface ExecutionTransactionGatewayPort {
 
   long reserveNextNonce(String fromAddress);
 
+  /**
+   * Atomic CAS release of a previously reserved nonce. Returns {@code true} when the cursor was
+   * rolled back; {@code false} when another reservation already advanced past it. The caller logs
+   * {@code NONCE_GAP_DETECTED} on {@code false} so the PR #150 F-1 follow-up (incident table) has a
+   * single grep target.
+   */
+  boolean releaseReservedNonce(String fromAddress, long reservedNonce);
+
   long loadPendingNonce(String fromAddress);
 
   void recordAudit(AuditCommand command);

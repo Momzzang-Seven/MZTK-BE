@@ -1,5 +1,8 @@
 package momzzangseven.mztkbe.modules.post.application.port.out;
 
+import java.util.List;
+import java.util.Map;
+
 public interface CountAnswersPort {
 
   long countAnswers(Long postId);
@@ -9,4 +12,6 @@ public interface CountAnswersPort {
   long countOnchainBlockingAnswers(Long postId);
 
   boolean existsPreparingOrPendingCreateByPostId(Long postId);
+
+  Map<Long, Long> countAnswersByPostIds(List<Long> postIds);
 }

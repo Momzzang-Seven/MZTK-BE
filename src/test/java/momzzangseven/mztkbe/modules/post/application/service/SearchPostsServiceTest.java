@@ -19,6 +19,7 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult.PostIma
 import momzzangseven.mztkbe.modules.post.application.dto.PostSearchCondition;
 import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsCursorResult;
 import momzzangseven.mztkbe.modules.post.application.dto.SearchPostsResult;
+import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountCommentsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostWriterPort;
@@ -43,6 +44,7 @@ class SearchPostsServiceTest {
 
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private CountCommentsPort countCommentsPort;
+  @Mock private CountAnswersPort countAnswersPort;
   @Mock private LoadTagPort loadTagPort;
   @Mock private LoadPostWriterPort loadPostWriterPort;
   @Mock private PostLikePersistencePort postLikePersistencePort;
@@ -55,6 +57,7 @@ class SearchPostsServiceTest {
     PostListEnricher postListEnricher =
         new PostListEnricher(
             countCommentsPort,
+            countAnswersPort,
             loadTagPort,
             loadPostWriterPort,
             postLikePersistencePort,
@@ -185,6 +188,7 @@ class SearchPostsServiceTest {
     when(postPersistencePort.findPostsByCondition(condition, null)).thenReturn(List.of(post));
     when(loadTagPort.findTagsByPostIdsIn(List.of(3L))).thenReturn(Map.of());
     when(countCommentsPort.countCommentsByPostIds(List.of(3L))).thenReturn(Map.of(3L, 2L));
+    when(countAnswersPort.countAnswersByPostIds(List.of(3L))).thenReturn(Map.of(3L, 1L));
     when(loadPostWriterPort.loadWritersByIds(Set.of(1L))).thenReturn(Map.of());
     when(postLikePersistencePort.countByTargetIds(any(), any())).thenReturn(Map.of());
     when(postLikePersistencePort.findLikedTargetIds(any(), any(), any())).thenReturn(Set.of());
@@ -195,6 +199,7 @@ class SearchPostsServiceTest {
     assertThat(results.posts()).hasSize(1);
     assertThat(results.posts().getFirst().isSolved()).isTrue();
     assertThat(results.posts().getFirst().commentCount()).isEqualTo(2L);
+    assertThat(results.posts().getFirst().answerCount()).isEqualTo(1L);
     assertThat(results.hasNext()).isFalse();
   }
 

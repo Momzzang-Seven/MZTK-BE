@@ -56,6 +56,10 @@ public final class CursorScope {
     return hash("root-comments|postId=" + postId + "|sort=COMMENT_CREATED_ASC");
   }
 
+  public static String answerRootComments(Long answerId) {
+    return hash("answer-root-comments|answerId=" + answerId + "|sort=COMMENT_CREATED_ASC");
+  }
+
   public static String replies(Long parentCommentId) {
     return hash("replies|parentCommentId=" + parentCommentId + "|sort=COMMENT_CREATED_ASC");
   }
