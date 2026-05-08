@@ -13,10 +13,15 @@
 --   - booked_class_title is NULL for legacy rows; application falls back similarly.
 
 ALTER TABLE class_reservations
-    ADD COLUMN booked_price_amount INT NULL
-        COMMENT 'Class price in KRW at the time of booking; NULL = legacy record (no snapshot)',
-    ADD COLUMN booked_class_title  VARCHAR(100) NULL
-        COMMENT 'Class title at the time of booking; NULL = legacy record (no snapshot)';
+    ADD COLUMN booked_price_amount INT NULL,
+    ADD COLUMN booked_class_title  VARCHAR(100) NULL;
+
+-- PostgreSQL column comments (separate statements — inline COMMENT is MySQL-only syntax)
+COMMENT ON COLUMN class_reservations.booked_price_amount
+    IS 'Class price in KRW at the time of booking; NULL = legacy record (no snapshot)';
+
+COMMENT ON COLUMN class_reservations.booked_class_title
+    IS 'Class title at the time of booking; NULL = legacy record (no snapshot)';
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- Part 2 — Composite covering indexes for cursor-paginated reservation lists
