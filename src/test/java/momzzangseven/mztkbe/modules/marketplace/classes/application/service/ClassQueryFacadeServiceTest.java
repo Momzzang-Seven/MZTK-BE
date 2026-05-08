@@ -5,14 +5,12 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase.ClassSummaryProjection;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassSlotPort;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.vo.ClassCategory;
 import org.junit.jupiter.api.DisplayName;
@@ -23,33 +21,25 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Unit tests for {@link ClassQueryFacadeService#findBySlotId}.
+ * Unit tests for {@link ClassQueryFacadeService}.
  *
- * <p>This method is the cross-module API surface used by the {@code reservation} module. It now
- * returns {@link ClassSummaryProjection} so that reservation callers never depend on the {@link
- * MarketplaceClass} aggregate. Covering key resolution paths ensures that projection mapping is
- * correct and reservation enrichment does not silently break.
+ * <p>{@code findBySlotId} now delegates to {@link
+ * LoadClassPort#findSummaryProjectionsBySlotIds} (single JOIN query) rather than performing a
+ * 2-hop slot→class lookup. Tests verify the new delegation path and boundary behaviours.
  */
-@DisplayName("ClassQueryFacadeService.findBySlotId() — slot → ClassSummaryProjection 리졸브 테스트")
+@DisplayName("ClassQueryFacadeService — findBySlotId / findById 리졸브 테스트")
 @ExtendWith(MockitoExtension.class)
 class ClassQueryFacadeServiceTest {
 
   @Mock private LoadClassPort loadClassPort;
-  @Mock private LoadClassSlotPort loadClassSlotPort;
+  @Mock private LoadClassSlotPort loadClassSlotPort; // used only by findByIdWithLock
 
   @InjectMocks private ClassQueryFacadeService sut;
 
   // ── helpers ───────────────────────────────────────────────────────────
 
-  private ClassSlot slot(Long slotId, Long classId) {
-    return ClassSlot.builder()
-        .id(slotId)
-        .classId(classId)
-        .daysOfWeek(List.of(DayOfWeek.MONDAY))
-        .startTime(LocalTime.of(10, 0))
-        .capacity(5)
-        .active(true)
-        .build();
+  private ClassSummaryProjection projection(Long classId, String title, int price, boolean active) {
+    return new ClassSummaryProjection(classId, 100L, title, price, active);
   }
 
   private MarketplaceClass cls(Long classId) {
@@ -68,64 +58,49 @@ class ClassQueryFacadeServiceTest {
   // ── findBySlotId ──────────────────────────────────────────────────────
 
   @Test
-  @DisplayName("슬롯과 클래스가 모두 존재하면 ClassSummaryProjection을 반환한다")
-  void findBySlotId_BothExist_ReturnsProjection() {
-    // given
-    given(loadClassSlotPort.findById(3L)).willReturn(Optional.of(slot(3L, 1L)));
-    given(loadClassPort.findById(1L)).willReturn(Optional.of(cls(1L)));
+  @DisplayName("findBySlotId - 슬롯이 존재하면 단건 배치 조회로 Projection을 반환한다")
+  void findBySlotId_SlotExists_ReturnsProjectionViaBatchQuery() {
+    // given — facade calls findSummaryProjectionsBySlotIds(List.of(3L))
+    given(loadClassPort.findSummaryProjectionsBySlotIds(List.of(3L)))
+        .willReturn(Map.of(3L, projection(1L, "요가 기초", 50000, true)));
 
     // when
     Optional<ClassSummaryProjection> result = sut.findBySlotId(3L);
 
-    // then
+    // then — single DB round-trip; no LoadClassSlotPort.findById call
     assertThat(result).isPresent();
-    assertThat(result.get().classId()).isEqualTo(1L);
     assertThat(result.get().title()).isEqualTo("요가 기초");
     assertThat(result.get().priceAmount()).isEqualTo(50000);
     assertThat(result.get().trainerId()).isEqualTo(100L);
     assertThat(result.get().active()).isTrue();
+    verify(loadClassSlotPort, never()).findById(any());
   }
 
   @Test
-  @DisplayName("slotId에 해당하는 슬롯이 없으면 Optional.empty()를 반환한다")
+  @DisplayName("findBySlotId - 슬롯이 존재하지 않으면 Optional.empty()를 반환한다")
   void findBySlotId_SlotNotFound_ReturnsEmpty() {
-    // given
-    given(loadClassSlotPort.findById(999L)).willReturn(Optional.empty());
+    // given — batch query returns empty map (slot not found in JOIN result)
+    given(loadClassPort.findSummaryProjectionsBySlotIds(List.of(999L))).willReturn(Map.of());
 
     // when
     Optional<ClassSummaryProjection> result = sut.findBySlotId(999L);
 
-    // then — slot 없으면 class 조회를 시도해선 안 됨
-    assertThat(result).isEmpty();
-    verify(loadClassPort, never()).findById(any());
-  }
-
-  @Test
-  @DisplayName("슬롯은 존재하지만 연결된 classId로 클래스를 찾을 수 없으면 Optional.empty()를 반환한다")
-  void findBySlotId_SlotExistsButClassNotFound_ReturnsEmpty() {
-    // given
-    given(loadClassSlotPort.findById(3L)).willReturn(Optional.of(slot(3L, 999L)));
-    given(loadClassPort.findById(999L)).willReturn(Optional.empty());
-
-    // when
-    Optional<ClassSummaryProjection> result = sut.findBySlotId(3L);
-
     // then
     assertThat(result).isEmpty();
+    verify(loadClassSlotPort, never()).findById(any());
   }
 
   @Test
-  @DisplayName("비활성 클래스도 projection에 active=false로 담아 반환한다 (active 필터는 caller 책임)")
+  @DisplayName("findBySlotId - 비활성 클래스도 active=false로 Projection에 담아 반환한다 (필터는 caller 책임)")
   void findBySlotId_InactiveClass_ReturnsProjectionWithActiveFalse() {
-    // given — the facade does NOT filter by active; filtering is the caller's responsibility
-    MarketplaceClass inactiveCls = cls(1L).toBuilder().active(false).build();
-    given(loadClassSlotPort.findById(3L)).willReturn(Optional.of(slot(3L, 1L)));
-    given(loadClassPort.findById(1L)).willReturn(Optional.of(inactiveCls));
+    // given — facade does NOT filter; ClassSummaryAdapter handles active filtering
+    given(loadClassPort.findSummaryProjectionsBySlotIds(List.of(3L)))
+        .willReturn(Map.of(3L, projection(1L, "비활성 클래스", 50000, false)));
 
     // when
     Optional<ClassSummaryProjection> result = sut.findBySlotId(3L);
 
-    // then — facade returns projection with active=false; ClassSummaryAdapter handles filtering
+    // then — facade returns projection with active=false unchanged
     assertThat(result).isPresent();
     assertThat(result.get().active()).isFalse();
   }

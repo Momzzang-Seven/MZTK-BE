@@ -175,4 +175,29 @@ class GetTrainerReservationsServiceTest {
     assertThat(result.items().get(0).classTitle()).isEqualTo("스트레칭 심화");
     assertThat(result.items().get(0).thumbnailFinalObjectKey()).isNull();
   }
+
+  @Test
+  @DisplayName("트레이너 수강 신청 목록 조회 - size+1 probe 패턴: hasNext=true이면 nextCursor가 채워진다")
+  void execute_HasNextTrue_NextCursorNotNull() {
+    // given — port returns size+1 rows (probe indicates more pages exist)
+    // Default convenience constructor uses size=20, so we need 21 rows.
+    // We simulate this by building a list with 21 identical reservations.
+    List<Reservation> probe = new java.util.ArrayList<>();
+    for (int i = 0; i < 21; i++) {
+      probe.add(sampleReservation(2L));
+    }
+    given(loadReservationPort.findByTrainerIdCursor(any(), any(), any())).willReturn(probe);
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findById(2L)).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    // when
+    CursorSlice<ReservationSummaryResult> result =
+        sut.execute(new GetTrainerReservationsQuery(2L, null));
+
+    // then — only 20 items returned (probe row trimmed); hasNext=true; cursor present
+    assertThat(result.items()).hasSize(20);
+    assertThat(result.hasNext()).isTrue();
+    assertThat(result.nextCursor()).isNotNull().isNotBlank();
+  }
 }

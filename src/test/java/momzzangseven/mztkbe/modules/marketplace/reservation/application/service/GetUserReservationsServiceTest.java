@@ -141,7 +141,7 @@ class GetUserReservationsServiceTest {
   @Test
   @DisplayName("내 예약 목록 조회 - 스냅샷이 있으면 클래스가 비활성화되어도 title이 유지된다")
   void execute_SnapshotUsed_WhenClassInactive() {
-    // given — reservation with snapshot fields set (bookedPriceAmount > 0)
+    // given — reservation with snapshot fields set (bookedPriceAmount != null)
     Reservation reservation =
         sampleReservation(1L).toBuilder()
             .bookedPriceAmount(50000)
@@ -163,4 +163,79 @@ class GetUserReservationsServiceTest {
     assertThat(result.items().get(0).classTitle()).isEqualTo("필라테스 심화");
     assertThat(result.items().get(0).thumbnailFinalObjectKey()).isNull();
   }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - 스냅샷(bookedPriceAmount != null)이 있으면 snapshot title/price 우선 사용")
+  void execute_SnapshotPresent_UsesSnapshotValues() {
+    // given — reservation with a non-null snapshot
+    Reservation reservation =
+        sampleReservation(1L).toBuilder()
+            .bookedPriceAmount(35000)
+            .bookedClassTitle("요가 기초")
+            .build();
+    // adapter also has a live value; snapshot must win
+    ClassSummary adapterSummary = new ClassSummary("요가 심화 (최신)", 40000, "thumb/yoga.jpg");
+
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(anyList()))
+        .willReturn(Map.of(3L, adapterSummary));
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    // when
+    CursorSlice<ReservationSummaryResult> result =
+        sut.execute(new GetUserReservationsQuery(1L, null));
+
+    // then — snapshot title/price wins; only thumbnail comes from adapter
+    assertThat(result.items()).hasSize(1);
+    assertThat(result.items().get(0).classTitle()).isEqualTo("요가 기초");
+    assertThat(result.items().get(0).priceAmount()).isEqualTo(35000);
+    assertThat(result.items().get(0).thumbnailFinalObjectKey()).isEqualTo("thumb/yoga.jpg");
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - 레거시 레코드(bookedPriceAmount == null)는 어댑터 fallback 사용")
+  void execute_LegacyRecord_FallsBackToAdapter() {
+    // given — reservation with null snapshot (legacy: pre-V065)
+    Reservation reservation = sampleReservation(1L); // bookedPriceAmount == null (default builder)
+    ClassSummary adapterSummary = new ClassSummary("레거시 클래스", 25000, "thumb/legacy.jpg");
+
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(anyList()))
+        .willReturn(Map.of(3L, adapterSummary));
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    // when
+    CursorSlice<ReservationSummaryResult> result =
+        sut.execute(new GetUserReservationsQuery(1L, null));
+
+    // then — title and price come from adapter (live cross-module lookup)
+    assertThat(result.items()).hasSize(1);
+    assertThat(result.items().get(0).classTitle()).isEqualTo("레거시 클래스");
+    assertThat(result.items().get(0).priceAmount()).isEqualTo(25000);
+    assertThat(result.items().get(0).thumbnailFinalObjectKey()).isEqualTo("thumb/legacy.jpg");
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - 레거시 레코드이고 클래스도 없으면 priceAmount는 null")
+  void execute_LegacyRecordNoAdapter_PriceAmountIsNull() {
+    // given — legacy record + adapter returns empty (class deactivated)
+    Reservation reservation = sampleReservation(1L); // bookedPriceAmount == null
+
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    // when
+    CursorSlice<ReservationSummaryResult> result =
+        sut.execute(new GetUserReservationsQuery(1L, null));
+
+    // then — no snapshot, no adapter data → priceAmount is null (not 0)
+    assertThat(result.items()).hasSize(1);
+    assertThat(result.items().get(0).classTitle()).isNull();
+    assertThat(result.items().get(0).priceAmount()).isNull();
+  }
 }
+
