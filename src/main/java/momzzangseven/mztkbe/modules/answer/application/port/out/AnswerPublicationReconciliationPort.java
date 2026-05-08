@@ -4,6 +4,8 @@ import java.util.List;
 
 public interface AnswerPublicationReconciliationPort {
 
+  boolean tryAcquireReconciliationLock();
+
   int reconcileConfirmedSubmits(int batchSize);
 
   int reconcileTerminalSubmitFailures(int batchSize);
@@ -14,7 +16,7 @@ public interface AnswerPublicationReconciliationPort {
 
   List<Long> findConfirmedDeleteAnswerIds(int batchSize);
 
-  int deleteConfirmedDeleteAnswers(List<Long> answerIds);
+  List<Long> deleteConfirmedDeleteAnswers(List<Long> answerIds);
 
   int reconcileTerminalDeleteRollbacks(int batchSize);
 

@@ -5,6 +5,8 @@ import java.util.List;
 
 public interface AnswerPreparationCleanupPort {
 
+  boolean tryAcquirePreparationCleanupLock();
+
   List<Long> findExpiredCreatePreparationAnswerIds(LocalDateTime now, int batchSize);
 
   List<Long> deleteCreatePreparationAnswers(List<Long> answerIds);

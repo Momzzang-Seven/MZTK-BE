@@ -120,7 +120,16 @@ class PostV2CursorE2ETest extends E2ETestBase {
     assertThat(nextCursor).isNotBlank();
 
     JsonNode secondPage =
-        fetchPosts("?type=QUESTION&tag=java&search=form&size=1&cursor=" + nextCursor);
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("tag", "java")
+                .queryParam("search", "form")
+                .queryParam("size", 1)
+                .queryParam("cursor", nextCursor)
+                .build()
+                .encode()
+                .toUri());
 
     assertThat(secondPage.at("/data/posts/0/postId").asLong()).isEqualTo(olderPostId);
   }
@@ -138,7 +147,16 @@ class PostV2CursorE2ETest extends E2ETestBase {
     String nextCursor = firstPage.at("/data/nextCursor").asText();
     assertThat(nextCursor).isNotBlank();
 
-    JsonNode secondPage = fetchPosts("?type=QUESTION&search=mixedcase&size=1&cursor=" + nextCursor);
+    JsonNode secondPage =
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("search", "mixedcase")
+                .queryParam("size", 1)
+                .queryParam("cursor", nextCursor)
+                .build()
+                .encode()
+                .toUri());
 
     assertThat(secondPage.at("/data/posts/0/postId").asLong()).isEqualTo(olderPostId);
   }

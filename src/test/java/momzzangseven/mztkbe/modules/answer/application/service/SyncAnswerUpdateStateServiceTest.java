@@ -31,6 +31,19 @@ class SyncAnswerUpdateStateServiceTest {
   @InjectMocks private SyncAnswerUpdateStateService service;
 
   @Test
+  @DisplayName("failAnswerUpdate marks the current update state failed")
+  void failAnswerUpdate_marksCurrentStateFailed() {
+    SyncAnswerUpdateStateCommand command =
+        new SyncAnswerUpdateStateCommand(
+            100L, 3L, "update-token", "intent-update", "RPC_UNAVAILABLE");
+
+    service.failAnswerUpdate(command);
+
+    verify(answerUpdateStatePort)
+        .markFailedIfCurrent(100L, 3L, "update-token", "intent-update", "RPC_UNAVAILABLE");
+  }
+
+  @Test
   @DisplayName("confirmAnswerUpdate applies pending content and pending images atomically")
   void confirmAnswerUpdate_appliesPendingContentAndImages() {
     SyncAnswerUpdateStateCommand command =

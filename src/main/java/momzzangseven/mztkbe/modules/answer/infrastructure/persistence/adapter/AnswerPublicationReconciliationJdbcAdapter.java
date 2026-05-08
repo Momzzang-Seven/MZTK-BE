@@ -14,6 +14,15 @@ public class AnswerPublicationReconciliationJdbcAdapter
   private final JdbcTemplate jdbcTemplate;
 
   @Override
+  public boolean tryAcquireReconciliationLock() {
+    Boolean acquired =
+        jdbcTemplate.queryForObject(
+            "SELECT pg_try_advisory_xact_lock(hashtext('mztk.answer.publication.reconciliation'))",
+            Boolean.class);
+    return Boolean.TRUE.equals(acquired);
+  }
+
+  @Override
   public int reconcileConfirmedSubmits(int batchSize) {
     return jdbcTemplate.update(
         """
@@ -332,13 +341,15 @@ public class AnswerPublicationReconciliationJdbcAdapter
   }
 
   @Override
-  public int deleteConfirmedDeleteAnswers(List<Long> answerIds) {
+  public List<Long> deleteConfirmedDeleteAnswers(List<Long> answerIds) {
     if (answerIds == null || answerIds.isEmpty()) {
-      return 0;
+      return List.of();
     }
     String placeholders = String.join(",", answerIds.stream().map(id -> "?").toList());
-    return jdbcTemplate.update(
-        "DELETE FROM answers WHERE id IN (" + placeholders + ")", answerIds.toArray());
+    return jdbcTemplate.query(
+        "DELETE FROM answers WHERE id IN (" + placeholders + ") RETURNING id",
+        (rs, rowNum) -> rs.getLong("id"),
+        answerIds.toArray());
   }
 
   @Override

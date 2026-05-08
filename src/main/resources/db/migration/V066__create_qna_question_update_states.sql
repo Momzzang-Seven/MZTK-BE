@@ -1,4 +1,4 @@
-CREATE TABLE qna_question_update_states (
+CREATE TABLE IF NOT EXISTS qna_question_update_states (
     id BIGSERIAL PRIMARY KEY,
     post_id BIGINT NOT NULL,
     requester_user_id BIGINT NOT NULL,
@@ -18,14 +18,12 @@ CREATE TABLE qna_question_update_states (
         CHECK (status IN ('PREPARING','PREPARATION_FAILED','INTENT_BOUND','CONFIRMED','STALE'))
 );
 
-CREATE UNIQUE INDEX uk_qna_question_update_states_intent_public_id
+CREATE UNIQUE INDEX IF NOT EXISTS uk_qna_question_update_states_intent_public_id
     ON qna_question_update_states(execution_intent_public_id)
     WHERE execution_intent_public_id IS NOT NULL;
 
-CREATE INDEX idx_qna_question_update_states_post_latest
+CREATE INDEX IF NOT EXISTS idx_qna_question_update_states_post_latest
     ON qna_question_update_states(post_id, update_version DESC);
 
-CREATE INDEX idx_qna_question_update_states_status_updated_at
+CREATE INDEX IF NOT EXISTS idx_qna_question_update_states_status_updated_at
     ON qna_question_update_states(status, updated_at);
-
--- checksum padding 291: rZJK

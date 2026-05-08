@@ -28,6 +28,9 @@ public class CleanupAnswerPreparationService implements CleanupAnswerPreparation
     if (batchSize <= 0) {
       throw new AnswerInvalidInputException("batchSize must be positive.");
     }
+    if (!answerPreparationCleanupPort.tryAcquirePreparationCleanupLock()) {
+      return new CleanupAnswerPreparationResult(0, 0, 0);
+    }
     List<Long> expiredCreateAnswerIds =
         answerPreparationCleanupPort.findExpiredCreatePreparationAnswerIds(now, batchSize);
     List<Long> deletedCreateAnswerIds =

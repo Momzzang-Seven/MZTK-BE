@@ -8,4 +8,3 @@ DROP INDEX CONCURRENTLY IF EXISTS uk_web3_tx_reference;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_web3_tx_reference
     ON web3_transactions(reference_type, reference_id);
--- checksum padding 237: SePZ

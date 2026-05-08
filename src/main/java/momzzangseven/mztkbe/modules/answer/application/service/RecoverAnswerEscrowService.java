@@ -68,6 +68,9 @@ public class RecoverAnswerEscrowService implements RecoverAnswerEscrowUseCase {
                         .loadAnswerForUpdate(command.answerId())
                         .orElseThrow(
                             momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException::new);
+                if (answer.getPublicationStatus() != AnswerPublicationStatus.FAILED) {
+                  return 0;
+                }
                 String preparationToken = UUID.randomUUID().toString();
                 saveAnswerPort.saveAnswer(
                     answer.reserveCreate(preparationToken, LocalDateTime.now().plusMinutes(15)));

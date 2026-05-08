@@ -15,6 +15,15 @@ public class AnswerPreparationCleanupJdbcAdapter implements AnswerPreparationCle
   private final JdbcTemplate jdbcTemplate;
 
   @Override
+  public boolean tryAcquirePreparationCleanupLock() {
+    Boolean acquired =
+        jdbcTemplate.queryForObject(
+            "SELECT pg_try_advisory_xact_lock(hashtext('mztk.answer.preparation.cleanup'))",
+            Boolean.class);
+    return Boolean.TRUE.equals(acquired);
+  }
+
+  @Override
   public List<Long> findExpiredCreatePreparationAnswerIds(LocalDateTime now, int batchSize) {
     return jdbcTemplate.query(
         """

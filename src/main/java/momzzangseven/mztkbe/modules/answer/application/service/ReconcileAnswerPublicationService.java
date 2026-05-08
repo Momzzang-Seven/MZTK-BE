@@ -23,6 +23,9 @@ public class ReconcileAnswerPublicationService implements ReconcileAnswerPublica
     if (batchSize <= 0) {
       throw new AnswerInvalidInputException("batchSize must be positive.");
     }
+    if (!answerPublicationReconciliationPort.tryAcquireReconciliationLock()) {
+      return new ReconcileAnswerPublicationResult(0, 0, 0, 0, 0, 0);
+    }
     int confirmedSubmits = answerPublicationReconciliationPort.reconcileConfirmedSubmits(batchSize);
     int terminalSubmitFailures =
         answerPublicationReconciliationPort.reconcileTerminalSubmitFailures(batchSize);
@@ -31,9 +34,9 @@ public class ReconcileAnswerPublicationService implements ReconcileAnswerPublica
         answerPublicationReconciliationPort.reconcileTerminalUpdateFailures(batchSize);
     List<Long> confirmedDeleteAnswerIds =
         answerPublicationReconciliationPort.findConfirmedDeleteAnswerIds(batchSize);
-    int confirmedDeletes =
+    List<Long> deletedAnswerIds =
         answerPublicationReconciliationPort.deleteConfirmedDeleteAnswers(confirmedDeleteAnswerIds);
-    confirmedDeleteAnswerIds.forEach(
+    deletedAnswerIds.forEach(
         answerId -> publishAnswerDeletedEventPort.publish(new AnswerDeletedEvent(answerId)));
     int terminalDeleteRollbacks =
         answerPublicationReconciliationPort.reconcileTerminalDeleteRollbacks(batchSize);
@@ -43,7 +46,7 @@ public class ReconcileAnswerPublicationService implements ReconcileAnswerPublica
         terminalSubmitFailures,
         confirmedUpdates,
         terminalUpdateFailures,
-        confirmedDeletes,
+        deletedAnswerIds.size(),
         terminalDeleteRollbacks);
   }
 }
