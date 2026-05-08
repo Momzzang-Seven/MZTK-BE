@@ -282,8 +282,7 @@ sub-modules (`transaction/`, `treasury/`, `eip7702/`, `qna/`, `execution/`, `wal
 `challenge/`, `signature/`, `transfer/`) and select non-web3 modules (`level/`) may import
 from `web3/shared` at any layer — including `application/service`, `application/port/out/`,
 and `application/dto/` — without going through a bridging adapter. This is the established
-pattern (see `EvmAddress`, `Vrs`, `KmsKeyState`, `TreasurySigner`,
-`ExecutionSignerCapabilityView`).
+pattern (see `EvmAddress`, `Vrs`, `KmsKeyState`, `TreasurySigner`).
 
 The exception is justified because:
 - `web3/shared` exposes only stable cross-cutting types (VOs, crypto primitives,
@@ -295,7 +294,7 @@ The exception is justified because:
 - `web3/shared/domain/vo/` — value objects (`EvmAddress`, ...)
 - `web3/shared/domain/crypto/` — crypto primitives (`Vrs`, `KmsKeyState`, ...)
 - `web3/shared/application/dto/` — capability handles carrying no secret material
-  (`TreasurySigner`, `ExecutionSignerCapabilityView`, ...)
+  (`TreasurySigner`, ...)
 - `web3/shared/application/port/in/` — input ports, when calling a `web3/shared` use case
 - `web3/shared/application/util/` — stateless cross-cutting helpers with no business state
   (`Erc20TransferCalldataEncoder`, ...)

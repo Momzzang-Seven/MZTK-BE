@@ -4,13 +4,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerFailureReason;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerSlotStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerFailureReason;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerSlotStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,7 +48,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
         .thenReturn(new ExecutionInternalIssuerPolicy(true, true, true));
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.ready(
+            QnaAdminServerSignerView.ready(
                 "sponsor-treasury", "0x2222222222222222222222222222222222222222"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x1111111111111111111111111111111111111111",
@@ -76,7 +76,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
         .thenReturn(new ExecutionInternalIssuerPolicy(true, true, true));
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.ready(
+            QnaAdminServerSignerView.ready(
                 "sponsor-treasury", "0x2222222222222222222222222222222222222222"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x1111111111111111111111111111111111111111",
@@ -93,10 +93,10 @@ class QnaAdminExecutionConfigurationValidatorTest {
         .thenReturn(new ExecutionInternalIssuerPolicy(true, true, true));
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.unavailable(
+            QnaAdminServerSignerView.unavailable(
                 "sponsor-treasury",
-                ExecutionSignerSlotStatus.UNPROVISIONED,
-                ExecutionSignerFailureReason.NONE));
+                QnaAdminServerSignerSlotStatus.UNPROVISIONED,
+                QnaAdminServerSignerFailureReason.NONE));
 
     assertThatCode(validator::validateConfiguration).doesNotThrowAnyException();
   }

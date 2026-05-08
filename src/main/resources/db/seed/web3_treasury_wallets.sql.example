@@ -62,7 +62,7 @@ where not exists (
   and length('<YOUR_DEV_REWARD_TREASURY_ADDRESS>') = 42;
 
 -- sponsor-treasury (id=2)
---   ProbeExecutionSignerCapabilityService.execute() 가 sponsor-treasury alias 로
+--   ProbeTreasuryWalletCapabilityUseCase.probe("sponsor-treasury") 가 이 alias 로
 --   probe 하므로, 이 row 가 없으면 dev 부팅 시 QnaAdmin Health DOWN 으로 빠진다.
 --   web3.eip7702.sponsor.enabled=true 환경에서는 반드시 채워야 한다.
 update web3_treasury_wallets

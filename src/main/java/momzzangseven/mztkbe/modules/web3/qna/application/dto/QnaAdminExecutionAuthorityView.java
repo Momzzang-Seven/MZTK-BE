@@ -1,10 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
 
 public record QnaAdminExecutionAuthorityView(
-    ExecutionSignerCapabilityView serverSigner,
+    QnaAdminServerSignerView serverSigner,
     boolean relayerRegistered,
     QnaAdminRelayerRegistrationStatus relayerRegistrationStatus,
     boolean requiresUserSignature,

@@ -32,11 +32,11 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRefundRevie
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationItem;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementReviewResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAutoAcceptConfigurationValidator;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -272,7 +272,7 @@ class QnaAdminEscrowControllerTest {
 
   private QnaAdminExecutionAuthorityView authority() {
     return new QnaAdminExecutionAuthorityView(
-        ExecutionSignerCapabilityView.ready(
+        QnaAdminServerSignerView.ready(
             "sponsor-treasury", "0x1111111111111111111111111111111111111111"),
         true,
         QnaAdminRelayerRegistrationStatus.REGISTERED,

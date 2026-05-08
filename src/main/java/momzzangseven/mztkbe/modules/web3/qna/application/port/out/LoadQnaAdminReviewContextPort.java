@@ -3,9 +3,9 @@ package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 import java.util.List;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
 
 public interface LoadQnaAdminReviewContextPort {
 
@@ -37,7 +37,7 @@ public interface LoadQnaAdminReviewContextPort {
   }
 
   record ExecutionAuthority(
-      ExecutionSignerCapabilityView serverSigner,
+      QnaAdminServerSignerView serverSigner,
       boolean relayerRegistered,
       QnaAdminRelayerRegistrationStatus relayerRegistrationStatus) {}
 

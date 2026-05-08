@@ -13,6 +13,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidException;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerFailureReason;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerSlotStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
@@ -20,9 +23,6 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerFailureReason;
-import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerSlotStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,7 +67,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
   void build_adminSettleUsesServerSignerWithoutUserAuthority() {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.ready(
+            QnaAdminServerSignerView.ready(
                 "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     when(loadInternalExecutionEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
     when(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
@@ -135,7 +135,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
   void build_adminRefundFailsWhenSignerIsNotRegisteredRelayer() {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.ready(
+            QnaAdminServerSignerView.ready(
                 "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x3333333333333333333333333333333333333333",
@@ -165,10 +165,10 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
   void build_rejectsUnavailableServerSigner() {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.unavailable(
+            QnaAdminServerSignerView.unavailable(
                 "sponsor-treasury",
-                ExecutionSignerSlotStatus.UNPROVISIONED,
-                ExecutionSignerFailureReason.NONE));
+                QnaAdminServerSignerSlotStatus.UNPROVISIONED,
+                QnaAdminServerSignerFailureReason.NONE));
 
     assertThatThrownBy(
             () ->
@@ -193,7 +193,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
   void build_rejectsWhenRelayerRegistrationCheckFails() {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.ready(
+            QnaAdminServerSignerView.ready(
                 "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x3333333333333333333333333333333333333333",
