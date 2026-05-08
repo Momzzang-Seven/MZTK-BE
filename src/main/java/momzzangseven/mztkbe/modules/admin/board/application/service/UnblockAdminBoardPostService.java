@@ -4,31 +4,31 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardModerationResult;
-import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
-import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardPostUseCase;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.port.in.UnblockAdminBoardPostUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.ChangeAdminBoardPostModerationPort;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Application service for admin post ban requests. */
+/** Application service for admin post unblock requests. */
 @Service
 @RequiredArgsConstructor
-public class BanAdminBoardPostService implements BanAdminBoardPostUseCase {
+public class UnblockAdminBoardPostService implements UnblockAdminBoardPostUseCase {
 
   private final ChangeAdminBoardPostModerationPort changeAdminBoardPostModerationPort;
 
   @Override
   @Transactional
   @AdminOnly(
-      actionType = "ADMIN_BOARD_POST_BAN",
+      actionType = "ADMIN_BOARD_POST_UNBLOCK",
       targetType = AuditTargetType.POST,
       operatorId = "#command.operatorUserId",
       targetId = "#command.postId")
-  public AdminBoardModerationResult execute(BanAdminBoardPostCommand command) {
+  public AdminBoardModerationResult execute(UnblockAdminBoardPostCommand command) {
     command.validate();
     ChangeAdminBoardPostModerationPort.AdminBoardPostModerationChangeResult result =
-        changeAdminBoardPostModerationPort.block(command.operatorUserId(), command.postId());
+        changeAdminBoardPostModerationPort.unblock(command.operatorUserId(), command.postId());
     return new AdminBoardModerationResult(
         result.postId(),
         AdminBoardModerationTargetType.POST,

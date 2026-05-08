@@ -120,6 +120,8 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
         post.postId(),
         post.type(),
         post.status(),
+        post.publicationStatus(),
+        post.moderationStatus(),
         post.title(),
         preview(post.content()),
         post.writerId(),

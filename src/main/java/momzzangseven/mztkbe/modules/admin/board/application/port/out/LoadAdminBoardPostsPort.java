@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.admin.board.application.port.out;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPostSortKey;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 import org.springframework.data.domain.Page;
@@ -27,6 +29,8 @@ public interface LoadAdminBoardPostsPort {
       Long postId,
       AdminBoardPostType type,
       AdminBoardPostStatus status,
+      AdminBoardPostPublicationStatus publicationStatus,
+      AdminBoardPostModerationStatus moderationStatus,
       String title,
       String content,
       Long writerId,

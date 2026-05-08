@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.admin.board.infrastructure.external.post;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostsPort;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 import momzzangseven.mztkbe.modules.post.application.dto.GetManagedBoardPostsPageQuery;
@@ -47,6 +49,8 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
         post.postId(),
         toAdminBoardPostType(post.type()),
         toAdminBoardPostStatus(post.status()),
+        AdminBoardPostPublicationStatus.valueOf(post.publicationStatus().name()),
+        AdminBoardPostModerationStatus.valueOf(post.moderationStatus().name()),
         post.title(),
         post.content(),
         post.writerId(),

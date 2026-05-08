@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 
 /** Request DTO for admin board ban APIs. */
@@ -15,6 +16,14 @@ public record AdminBoardBanRequestDTO(
   public BanAdminBoardPostCommand toPostCommand(Long operatorUserId, Long postId) {
     BanAdminBoardPostCommand command =
         new BanAdminBoardPostCommand(
+            operatorUserId, postId, reasonCode, normalizeReasonDetail(reasonDetail));
+    command.validate();
+    return command;
+  }
+
+  public UnblockAdminBoardPostCommand toUnblockPostCommand(Long operatorUserId, Long postId) {
+    UnblockAdminBoardPostCommand command =
+        new UnblockAdminBoardPostCommand(
             operatorUserId, postId, reasonCode, normalizeReasonDetail(reasonDetail));
     command.validate();
     return command;

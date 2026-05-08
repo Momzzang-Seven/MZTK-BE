@@ -13,6 +13,8 @@ import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPos
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostCommentCountsPort;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostsPort;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardWriterNicknamesPort;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 import org.junit.jupiter.api.DisplayName;
@@ -60,6 +62,10 @@ class GetAdminBoardPostsServiceTest {
     assertThat(result.getContent().get(0).writerNickname()).isEqualTo("beta");
     assertThat(result.getContent().get(0).commentCount()).isEqualTo(5L);
     assertThat(result.getContent().get(0).contentPreview()).hasSize(120);
+    assertThat(result.getContent().get(0).publicationStatus())
+        .isEqualTo(AdminBoardPostPublicationStatus.VISIBLE);
+    assertThat(result.getContent().get(0).moderationStatus())
+        .isEqualTo(AdminBoardPostModerationStatus.NORMAL);
   }
 
   @Test
@@ -233,6 +239,8 @@ class GetAdminBoardPostsServiceTest {
         postId,
         AdminBoardPostType.FREE,
         AdminBoardPostStatus.OPEN,
+        AdminBoardPostPublicationStatus.VISIBLE,
+        AdminBoardPostModerationStatus.NORMAL,
         "title-" + postId,
         content,
         writerId,
