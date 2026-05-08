@@ -53,8 +53,8 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
   /**
    * {@inheritDoc}
    *
-   * <p>Delegates to {@link #findBySlotIds} with a single-element list to reuse the same batch
-   * query path and avoid code duplication.
+   * <p>Delegates to {@link #findBySlotIds} with a single-element list to reuse the same batch query
+   * path and avoid code duplication.
    */
   @Override
   public Optional<ClassSummary> findBySlotId(Long slotId) {

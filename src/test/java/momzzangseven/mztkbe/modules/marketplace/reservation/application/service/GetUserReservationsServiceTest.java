@@ -178,8 +178,7 @@ class GetUserReservationsServiceTest {
 
     given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
         .willReturn(List.of(reservation));
-    given(loadClassSummaryPort.findBySlotIds(anyList()))
-        .willReturn(Map.of(3L, adapterSummary));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of(3L, adapterSummary));
     given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
 
     // when
@@ -202,8 +201,7 @@ class GetUserReservationsServiceTest {
 
     given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
         .willReturn(List.of(reservation));
-    given(loadClassSummaryPort.findBySlotIds(anyList()))
-        .willReturn(Map.of(3L, adapterSummary));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of(3L, adapterSummary));
     given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
 
     // when
@@ -238,4 +236,3 @@ class GetUserReservationsServiceTest {
     assertThat(result.items().get(0).priceAmount()).isNull();
   }
 }
-

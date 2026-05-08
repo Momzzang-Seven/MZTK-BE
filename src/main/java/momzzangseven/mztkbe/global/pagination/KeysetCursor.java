@@ -6,8 +6,8 @@ import momzzangseven.mztkbe.global.error.pagination.InvalidCursorException;
 /**
  * Opaque keyset cursor for stable cursor-based (keyset) pagination.
  *
- * <p>{@code createdAt} is a <b>generic temporal sort key</b> — its semantics depend on the
- * calling context:
+ * <p>{@code createdAt} is a <b>generic temporal sort key</b> — its semantics depend on the calling
+ * context:
  *
  * <ul>
  *   <li>{@code post} module → entity {@code created_at}

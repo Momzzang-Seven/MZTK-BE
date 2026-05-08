@@ -23,9 +23,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 /**
  * Unit tests for {@link ClassQueryFacadeService}.
  *
- * <p>{@code findBySlotId} now delegates to {@link
- * LoadClassPort#findSummaryProjectionsBySlotIds} (single JOIN query) rather than performing a
- * 2-hop slot→class lookup. Tests verify the new delegation path and boundary behaviours.
+ * <p>{@code findBySlotId} now delegates to {@link LoadClassPort#findSummaryProjectionsBySlotIds}
+ * (single JOIN query) rather than performing a 2-hop slot→class lookup. Tests verify the new
+ * delegation path and boundary behaviours.
  */
 @DisplayName("ClassQueryFacadeService — findBySlotId / findById 리졸브 테스트")
 @ExtendWith(MockitoExtension.class)

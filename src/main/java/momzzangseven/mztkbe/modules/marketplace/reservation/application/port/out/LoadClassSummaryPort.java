@@ -15,9 +15,9 @@ public interface LoadClassSummaryPort {
   /**
    * Summary of a class required for reservation display.
    *
-   * <p>{@code priceAmount} must be non-negative — zero is valid for free classes.
-   * A negative value indicates a data-integrity error and throws {@link IllegalStateException}
-   * at construction time to catch corrupt data early at the adapter boundary.
+   * <p>{@code priceAmount} must be non-negative — zero is valid for free classes. A negative value
+   * indicates a data-integrity error and throws {@link IllegalStateException} at construction time
+   * to catch corrupt data early at the adapter boundary.
    *
    * @param title class title
    * @param priceAmount class price in KRW; must be &gt;= 0 (0 = free class)
