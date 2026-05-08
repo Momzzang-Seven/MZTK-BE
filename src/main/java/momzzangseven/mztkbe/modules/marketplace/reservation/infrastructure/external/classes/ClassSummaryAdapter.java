@@ -23,8 +23,10 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li><b>Bulk path ({@link #findBySlotIds}):</b> delegates to {@link
  *       GetClassInfoUseCase#findSummariesBySlotIds}, which issues a single JPQL JOIN query ({@code
- *       class_slots JOIN marketplace_classes}). Only classId, trainerId, title, priceAmount, and
- *       active are projected — no tags, features, store, or image data is loaded.
+ *       class_slots JOIN marketplace_classes}). Title, price, and active flag are projected; then
+ *       {@link GetClassInfoUseCase#loadThumbnailKeysBySlotIds} fetches thumbnail keys in a second
+ *       batch round-trip (slotId → classId → thumbnail) so the listing path no longer returns
+ *       {@code null} for {@code thumbnailFinalObjectKey}.
  *   <li><b>Single path ({@link #findBySlotId}):</b> delegates to the bulk method with a
  *       single-element list to avoid code duplication.
  * </ul>
@@ -76,6 +78,11 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
     Map<Long, ClassSummaryProjection> projections =
         getClassInfoUseCase.findSummariesBySlotIds(slotIds);
 
+    // Batch-fetch thumbnails for all active slots in one round-trip.
+    // Only active projections are retained below, so we can safely pass the full slotIds list;
+    // inactive slots that survive the filter will simply have no entry in thumbnailKeys.
+    Map<Long, String> thumbnailKeys = getClassInfoUseCase.loadThumbnailKeysBySlotIds(slotIds);
+
     Map<Long, ClassSummary> result = new HashMap<>();
     for (Map.Entry<Long, ClassSummaryProjection> entry : projections.entrySet()) {
       Long slotId = entry.getKey();
@@ -90,10 +97,9 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
       }
 
       try {
-        result.put(slotId, new ClassSummary(proj.title(), proj.priceAmount(), null));
-        // thumbnailFinalObjectKey is not part of the bulk projection (requires a separate
-        // image lookup). It is intentionally null here; callers that need thumbnails must
-        // perform a dedicated image batch load (future improvement).
+        result.put(
+            slotId,
+            new ClassSummary(proj.title(), proj.priceAmount(), thumbnailKeys.get(slotId)));
       } catch (IllegalStateException e) {
         log.warn(
             "Skipping ClassSummary for slotId={} classId={} due to invariant violation: {}",

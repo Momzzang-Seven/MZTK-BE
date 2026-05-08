@@ -3,10 +3,12 @@ package momzzangseven.mztkbe.modules.marketplace.classes.application.service;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassImagesPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassSlotPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.ClassSlot;
@@ -28,6 +30,7 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
 
   private final LoadClassPort loadClassPort;
   private final LoadClassSlotPort loadClassSlotPort;
+  private final LoadClassImagesPort loadClassImagesPort;
 
   @Override
   @Transactional(readOnly = true)
@@ -59,6 +62,42 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
   @Transactional(readOnly = true)
   public Map<Long, ClassSummaryProjection> findSummariesBySlotIds(List<Long> slotIds) {
     return loadClassPort.findSummaryProjectionsBySlotIds(slotIds);
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Resolves classIds from the same projection query used by {@link #findSummariesBySlotIds},
+   * then delegates to {@link LoadClassImagesPort#loadThumbnailKeys} for a single batch image
+   * lookup. The result is re-keyed from classId back to slotId so callers never need to handle
+   * the classId indirection.
+   */
+  @Override
+  @Transactional(readOnly = true)
+  public Map<Long, String> loadThumbnailKeysBySlotIds(List<Long> slotIds) {
+    if (slotIds == null || slotIds.isEmpty()) {
+      return Map.of();
+    }
+    // Step 1: slotId → classId (reuse the same JOIN projection, no extra query)
+    Map<Long, ClassSummaryProjection> projections =
+        loadClassPort.findSummaryProjectionsBySlotIds(slotIds);
+    if (projections.isEmpty()) {
+      return Map.of();
+    }
+
+    // Step 2: build slotId → classId lookup and collect distinct classIds
+    Map<Long, Long> slotToClass =
+        projections.entrySet().stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().classId()));
+    List<Long> classIds = slotToClass.values().stream().distinct().toList();
+
+    // Step 3: batch-fetch classId → thumbnailKey (one IN query via image module)
+    Map<Long, String> thumbnailByClass = loadClassImagesPort.loadThumbnailKeys(classIds);
+
+    // Step 4: re-key back to slotId
+    return slotToClass.entrySet().stream()
+        .filter(e -> thumbnailByClass.containsKey(e.getValue()))
+        .collect(Collectors.toMap(Map.Entry::getKey, e -> thumbnailByClass.get(e.getValue())));
   }
 
   @Override

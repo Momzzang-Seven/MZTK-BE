@@ -36,6 +36,18 @@ public interface GetClassInfoUseCase {
   Map<Long, ClassSummaryProjection> findSummariesBySlotIds(List<Long> slotIds);
 
   /**
+   * Batch-load thumbnail final-object-keys keyed by slot ID.
+   *
+   * <p>Resolves the classId for each slot (via the same JOIN query used by {@link
+   * #findSummariesBySlotIds}) and then batch-fetches thumbnail keys from the image module in a
+   * single round-trip. Absent keys in the returned map mean the slot/class has no thumbnail.
+   *
+   * @param slotIds list of slot IDs
+   * @return map of slotId → thumbnail finalObjectKey
+   */
+  Map<Long, String> loadThumbnailKeysBySlotIds(List<Long> slotIds);
+
+  /**
    * Find a class aggregate by its ID.
    *
    * <p><b>Cross-module callers</b>: use {@link #findSummariesBySlotIds} where possible. This method
