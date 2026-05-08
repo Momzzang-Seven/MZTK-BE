@@ -301,8 +301,10 @@ The exception is justified because:
 
 **Still forbidden from `web3/shared/`:**
 - `web3/shared/infrastructure/` — never import directly; use the standard port/adapter
-  pattern. The single `infrastructure/config/` exception (`@ConditionalOnUserExecutionEnabled`)
-  is a Spring annotation, not a class dependency.
+  pattern. Spring conditional annotations under `infrastructure/config/` (e.g.
+  `@ConditionalOnUserExecutionEnabled`, `@ConditionalOnQnaAdminEnabled`,
+  `@ConditionalOnQnaAdminOrAutoAcceptEnabled`, …) are Spring meta-annotations, not class
+  dependencies, and may be referenced from siblings.
 - `web3/shared/application/port/out/` — these are `web3/shared`'s own out-ports; siblings
   must declare their own ports if they need the same capability.
 
