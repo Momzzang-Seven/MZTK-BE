@@ -36,6 +36,12 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>{@code trainerNickname} — single lookup by {@code trainerId} (all rows share one trainer).
  *   <li>{@code userNickname} — batch-loaded so the trainer can identify each booker.
  * </ul>
+ *
+ * <h2>Cursor sort contract</h2>
+ *
+ * <p>Sort order is {@code (reservationDate DESC, reservationTime DESC, id DESC)}. The cursor token
+ * encodes this as {@code KeysetCursor(createdAt = reservationDate.atTime(reservationTime), id)}.
+ * This matches the user-list sort contract so trainers and users see the same temporal ordering.
  */
 @Service
 @RequiredArgsConstructor
@@ -103,7 +109,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
         hasNext
             ? CursorCodec.encode(
                 new KeysetCursor(
-                    page.getLast().getReservationDate().atStartOfDay(),
+                    page.getLast().getReservationDate().atTime(page.getLast().getReservationTime()),
                     page.getLast().getId(),
                     CURSOR_SCOPE))
             : null;

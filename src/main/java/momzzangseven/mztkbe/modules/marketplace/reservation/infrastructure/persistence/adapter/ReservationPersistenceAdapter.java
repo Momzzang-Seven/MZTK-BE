@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.pers
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,17 +128,25 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   @Override
   public List<Reservation> findByUserIdCursor(
       Long userId, ReservationStatus status, CursorPageRequest pageRequest) {
-    // KeysetCursor.createdAt is a generic sort-key field. For reservation pagination it holds
-    // reservationDate.atStartOfDay() — NOT the entity's created_at column.
+    // KeysetCursor.createdAt encodes reservationDate.atTime(reservationTime) — NOT the entity's
+    // created_at column. Both date and time are extracted here for the 3-tuple keyset predicate.
     LocalDate cursorDate =
         pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalDate() : null;
+    LocalTime cursorTime =
+        pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalTime() : null;
     Long cursorId = pageRequest.hasCursor() ? pageRequest.cursor().id() : null;
-    return reservationJpaRepository
-        .findByUserIdCursor(
-            userId, status, cursorDate, cursorId, PageRequest.of(0, pageRequest.limitWithProbe()))
-        .stream()
-        .map(ReservationEntity::toDomain)
-        .toList();
+    PageRequest page = PageRequest.of(0, pageRequest.limitWithProbe());
+
+    // Route to the status-less query when no status filter is specified so that the
+    // (user_id, reservation_date DESC, reservation_time DESC, id DESC) index can be used without
+    // interference from the status column in the status-aware index.
+    List<ReservationEntity> rows =
+        status == null
+            ? reservationJpaRepository.findByUserIdCursorNoStatus(
+                userId, cursorDate, cursorTime, cursorId, page)
+            : reservationJpaRepository.findByUserIdCursor(
+                userId, status, cursorDate, cursorTime, cursorId, page);
+    return rows.stream().map(ReservationEntity::toDomain).toList();
   }
 
   @Override
@@ -150,20 +159,21 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   @Override
   public List<Reservation> findByTrainerIdCursor(
       Long trainerId, ReservationStatus status, CursorPageRequest pageRequest) {
-    // KeysetCursor.createdAt holds reservationDate.atStartOfDay() — see findByUserIdCursor.
+    // KeysetCursor.createdAt encodes reservationDate.atTime(reservationTime) — see findByUserIdCursor.
     LocalDate cursorDate =
         pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalDate() : null;
+    LocalTime cursorTime =
+        pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalTime() : null;
     Long cursorId = pageRequest.hasCursor() ? pageRequest.cursor().id() : null;
-    return reservationJpaRepository
-        .findByTrainerIdCursor(
-            trainerId,
-            status,
-            cursorDate,
-            cursorId,
-            PageRequest.of(0, pageRequest.limitWithProbe()))
-        .stream()
-        .map(ReservationEntity::toDomain)
-        .toList();
+    PageRequest page = PageRequest.of(0, pageRequest.limitWithProbe());
+
+    List<ReservationEntity> rows =
+        status == null
+            ? reservationJpaRepository.findByTrainerIdCursorNoStatus(
+                trainerId, cursorDate, cursorTime, cursorId, page)
+            : reservationJpaRepository.findByTrainerIdCursor(
+                trainerId, status, cursorDate, cursorTime, cursorId, page);
+    return rows.stream().map(ReservationEntity::toDomain).toList();
   }
 
   @Override

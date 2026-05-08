@@ -38,6 +38,13 @@ import org.springframework.transaction.annotation.Transactional;
  *       page.
  *   <li>{@code userNickname} — intentionally {@code null} on the user-list path (self-view).
  * </ul>
+ *
+ * <h2>Cursor sort contract</h2>
+ *
+ * <p>Sort order is {@code (reservationDate DESC, reservationTime DESC, id DESC)}. The cursor token
+ * encodes this as {@code KeysetCursor(createdAt = reservationDate.atTime(reservationTime), id)}.
+ * Using the full datetime (not {@code atStartOfDay()}) ensures that same-date reservations are
+ * paginated in the same time-descending order the user sees in the list.
  */
 @Service
 @RequiredArgsConstructor
@@ -101,7 +108,7 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
         hasNext
             ? CursorCodec.encode(
                 new KeysetCursor(
-                    page.getLast().getReservationDate().atStartOfDay(),
+                    page.getLast().getReservationDate().atTime(page.getLast().getReservationTime()),
                     page.getLast().getId(),
                     CURSOR_SCOPE))
             : null;
