@@ -1,19 +1,62 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.application.port.in;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 
 /**
- * Input port that exposes class aggregate lookup to other modules.
+ * Input port that exposes class read operations to other modules.
  *
  * <p>Cross-module callers (e.g., the {@code reservation} module) must use this interface instead of
  * directly referencing the output port {@code LoadClassPort}. This keeps the dependency direction
  * correct: only {@code application/port/in/} is the public API surface of a module.
+ *
+ * <h2>Cross-module enrichment policy</h2>
+ *
+ * <p>Prefer {@link #findSummariesBySlotIds} for reservation-enrichment use cases. It returns a
+ * lightweight {@link ClassSummaryProjection} that exposes only the fields needed for display,
+ * instead of the full {@link MarketplaceClass} aggregate. This keeps the module boundary thin and
+ * avoids coupling callers to internal aggregate changes.
  */
 public interface GetClassInfoUseCase {
 
   /**
-   * Find a class by its ID.
+   * Lightweight projection of a class used for cross-module enrichment.
+   *
+   * <p>Contains only the fields needed to enrich reservation display. Callers outside the {@code
+   * classes} module should depend on this record, not on {@link MarketplaceClass}.
+   *
+   * @param classId primary key
+   * @param trainerId owning trainer ID
+   * @param title class title (at query time — for snapshot see Reservation.bookedClassTitle)
+   * @param priceAmount price in KRW (at query time — for snapshot see
+   *     Reservation.bookedPriceAmount)
+   * @param active whether the class is currently listed
+   */
+  record ClassSummaryProjection(
+      Long classId, Long trainerId, String title, int priceAmount, boolean active) {}
+
+  /**
+   * Batch-load class summary projections keyed by slot ID.
+   *
+   * <p>Preferred entry point for reservation-enrichment flows. A single JPQL query joins {@code
+   * class_slots} → {@code marketplace_classes} and returns only the columns needed for enrichment —
+   * no tags, features, store, or image data is loaded.
+   *
+   * @param slotIds list of slot IDs to resolve
+   * @return map of slotId → {@link ClassSummaryProjection}; absent key means the slot or class was
+   *     not found
+   */
+  Map<Long, ClassSummaryProjection> findSummariesBySlotIds(List<Long> slotIds);
+
+  /**
+   * Find a class aggregate by its ID.
+   *
+   * <p><b>Cross-module callers</b>: use {@link #findSummariesBySlotIds} where possible. This method
+   * loads the full aggregate (including features/personalItems) and is intended for intra-module
+   * use or when the full aggregate is genuinely needed (e.g., CreateReservationService validating
+   * price and duration).
    *
    * @param classId class ID
    * @return Optional containing the class aggregate if found
@@ -21,16 +64,16 @@ public interface GetClassInfoUseCase {
   Optional<MarketplaceClass> findById(Long classId);
 
   /**
-   * Find the class that owns the given slot, without acquiring a lock.
+   * Find a class summary projection by the given slot ID.
    *
-   * <p>Intended for read-only cross-module enrichment (e.g., the {@code reservation} module
-   * populating classId from a slotId). Uses a plain {@code SELECT} — do not use when you need
-   * concurrent-write protection; use {@link
-   * momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase#findByIdWithLock}
-   * for that.
+   * <p><b>Cross-module callers:</b> this method returns a {@link ClassSummaryProjection} so that
+   * the {@code reservation} module never needs to depend on the {@link
+   * momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass} aggregate. Use
+   * {@link #findSummariesBySlotIds} for bulk enrichment; this method is retained for single-slot
+   * detail lookups (e.g., reservation detail enrichment fallback for legacy records).
    *
    * @param slotId slot ID
-   * @return Optional containing the class aggregate if the slot and its class are found
+   * @return Optional containing the summary projection if the slot and its class are found
    */
-  Optional<MarketplaceClass> findBySlotId(Long slotId);
+  Optional<ClassSummaryProjection> findBySlotId(Long slotId);
 }

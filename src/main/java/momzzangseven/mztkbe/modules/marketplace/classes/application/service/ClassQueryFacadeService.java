@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.application.service;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
@@ -34,10 +36,30 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
 
   @Override
   @Transactional(readOnly = true)
-  public Optional<MarketplaceClass> findBySlotId(Long slotId) {
+  public Optional<ClassSummaryProjection> findBySlotId(Long slotId) {
     return loadClassSlotPort
         .findById(slotId)
-        .flatMap(slot -> loadClassPort.findById(slot.getClassId()));
+        .flatMap(slot -> loadClassPort.findById(slot.getClassId()))
+        .map(
+            cls ->
+                new ClassSummaryProjection(
+                    cls.getId(),
+                    cls.getTrainerId(),
+                    cls.getTitle(),
+                    cls.getPriceAmount(),
+                    cls.isActive()));
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to {@link LoadClassPort#findSummaryProjectionsBySlotIds}, which issues a single
+   * JPQL JOIN query. No full aggregate is loaded; only the five projection fields are returned.
+   */
+  @Override
+  @Transactional(readOnly = true)
+  public Map<Long, ClassSummaryProjection> findSummariesBySlotIds(List<Long> slotIds) {
+    return loadClassPort.findSummaryProjectionsBySlotIds(slotIds);
   }
 
   @Override
