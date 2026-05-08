@@ -9,6 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.global.error.comment.CommentTargetMismatchException;
@@ -55,13 +58,15 @@ public class CommentService
   public CommentMutationResult createComment(CreateCommentCommand command) {
     LoadAnswerPort.AnswerCommentContext answerContext =
         CommentTargetType.ANSWER.equals(command.targetType())
-            ? loadAnswerContextForUpdateOrThrow(command.answerId())
+            ? validateAnswerWritable(command.answerId(), AnswerCommentMutation.CREATE)
             : null;
     Long targetPostId =
         CommentTargetType.ANSWER.equals(command.targetType())
             ? answerContext.postId()
             : command.postId();
-    validatePostWritable(targetPostId);
+    if (!CommentTargetType.ANSWER.equals(command.targetType())) {
+      validatePostWritable(targetPostId);
+    }
 
     // 1-2. 대댓글인 경우 부모 댓글 검증
     if (command.parentId() != null) {
@@ -108,7 +113,7 @@ public class CommentService
   @Transactional
   public CommentMutationResult updateAnswerComment(UpdateAnswerCommentCommand command) {
     Comment comment = loadCommentForUpdateOrThrow(command.commentId());
-    validateAnswerScopedMutationAccess(comment, command.userId());
+    validateAnswerScopedMutationAccess(comment, command.userId(), AnswerCommentMutation.UPDATE);
     validateAnswerCommentTarget(comment, command.answerId());
     comment.updateContent(command.content());
     return CommentMutationResult.from(saveCommentPort.saveComment(comment));
@@ -126,7 +131,7 @@ public class CommentService
   @Transactional
   public void deleteAnswerComment(DeleteAnswerCommentCommand command) {
     Comment comment = loadCommentForUpdateOrThrow(command.commentId());
-    validateAnswerScopedMutationAccess(comment, command.userId());
+    validateAnswerScopedMutationAccess(comment, command.userId(), AnswerCommentMutation.DELETE);
     validateAnswerCommentTarget(comment, command.answerId());
     comment.delete();
     saveCommentPort.saveComment(comment);
@@ -240,7 +245,7 @@ public class CommentService
 
   private CommentMutationResult updateLoadedComment(Comment comment, Long userId, String content) {
     validateCommentNotDeleted(comment);
-    validateCommentTargetWritable(comment);
+    validateCommentTargetWritable(comment, AnswerCommentMutation.UPDATE);
     comment.validateWriter(userId);
     comment.updateContent(content);
     return CommentMutationResult.from(saveCommentPort.saveComment(comment));
@@ -248,16 +253,17 @@ public class CommentService
 
   private void deleteLoadedComment(Comment comment, Long userId) {
     validateCommentNotDeleted(comment);
-    validateCommentTargetWritable(comment);
+    validateCommentTargetWritable(comment, AnswerCommentMutation.DELETE);
     comment.validateWriter(userId);
     comment.delete();
     saveCommentPort.saveComment(comment);
   }
 
-  private void validateAnswerScopedMutationAccess(Comment comment, Long userId) {
+  private void validateAnswerScopedMutationAccess(
+      Comment comment, Long userId, AnswerCommentMutation mutation) {
     validateCommentNotDeleted(comment);
     comment.validateWriter(userId);
-    validateCommentTargetWritable(comment);
+    validateCommentTargetWritable(comment, mutation);
   }
 
   private void validateCommentNotDeleted(Comment comment) {
@@ -269,7 +275,7 @@ public class CommentService
   private void validateAnswerCommentTarget(Comment comment, Long answerId) {
     if (!CommentTargetType.ANSWER.equals(comment.getTargetType())
         || !answerId.equals(comment.getAnswerId())) {
-      throw new CommentPostMismatchException();
+      throw new CommentTargetMismatchException();
     }
   }
 
@@ -321,16 +327,32 @@ public class CommentService
     validatePostReadable(postId, requesterUserId);
   }
 
-  private void validateCommentTargetWritable(Comment comment) {
-    Long postId =
-        CommentTargetType.ANSWER.equals(comment.getTargetType())
-            ? validateAnswerWritable(comment.getAnswerId())
-            : comment.getPostId();
-    validatePostWritable(postId);
+  private void validateCommentTargetWritable(Comment comment, AnswerCommentMutation mutation) {
+    if (CommentTargetType.ANSWER.equals(comment.getTargetType())) {
+      validateAnswerWritable(comment.getAnswerId(), mutation);
+      return;
+    }
+    validatePostWritable(comment.getPostId());
   }
 
-  private Long validateAnswerWritable(Long answerId) {
-    return loadAnswerContextForUpdateOrThrow(answerId).postId();
+  private LoadAnswerPort.AnswerCommentContext validateAnswerWritable(
+      Long answerId, AnswerCommentMutation mutation) {
+    LoadAnswerPort.AnswerCommentContext context = loadAnswerContextForUpdateOrThrow(answerId);
+    validatePostWritable(context.postId());
+    validateAnswerCommentMutationAllowed(context, mutation);
+    return context;
+  }
+
+  private void validateAnswerCommentMutationAllowed(
+      LoadAnswerPort.AnswerCommentContext context, AnswerCommentMutation mutation) {
+    if (!context.answerLocked()) {
+      return;
+    }
+    switch (mutation) {
+      case CREATE -> throw new CannotAnswerSolvedPostException();
+      case UPDATE -> throw new CannotUpdateAnswerOnSolvedPostException();
+      case DELETE -> throw new CannotDeleteAnswerOnSolvedPostException();
+    }
   }
 
   private Long loadAnswerPostIdOrThrow(Long answerId) {
@@ -350,6 +372,12 @@ public class CommentService
     return loadPostPort
         .loadPostVisibilityContext(postId)
         .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+  }
+
+  private enum AnswerCommentMutation {
+    CREATE,
+    UPDATE,
+    DELETE
   }
 
   private Page<CommentResult> toResultPage(Page<Comment> comments, boolean includeReplyCount) {

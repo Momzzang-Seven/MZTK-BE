@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryF
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort.AnswerCommentContext;
+import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +24,7 @@ class CommentAnswerAdapterTest {
 
   @Mock private GetAnswerSummaryUseCase getAnswerSummaryUseCase;
   @Mock private GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  @Mock private GetPostContextUseCase getPostContextUseCase;
 
   @InjectMocks private CommentAnswerAdapter adapter;
 
@@ -37,32 +39,42 @@ class CommentAnswerAdapterTest {
   void loadAnswerCommentContext_usesNonLockingSummary() {
     given(getAnswerSummaryUseCase.getAnswerSummary(300L))
         .willReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(300L, 100L, 200L)));
+    given(getPostContextUseCase.getPostContext(100L))
+        .willReturn(Optional.of(new GetPostContextUseCase.PostContext(100L, 200L, false, true)));
 
     Optional<AnswerCommentContext> result = adapter.loadAnswerCommentContext(300L);
 
     assertThat(result).isPresent();
     assertThat(result.orElseThrow().answerId()).isEqualTo(300L);
     assertThat(result.orElseThrow().postId()).isEqualTo(100L);
+    assertThat(result.orElseThrow().answerLocked()).isFalse();
     verify(getAnswerSummaryUseCase).getAnswerSummary(300L);
+    verify(getPostContextUseCase).getPostContext(100L);
     verifyNoInteractions(getAnswerSummaryForUpdateUseCase);
   }
 
   @Test
-  @DisplayName(
-      "loadAnswerCommentContextForUpdate() uses locking answer summary and ignores accepted state")
-  void loadAnswerCommentContextForUpdate_usesLockingSummaryWithoutAcceptedPolicy() {
+  @DisplayName("loadAnswerCommentContextForUpdate() maps root post answer lock")
+  void loadAnswerCommentContextForUpdate_mapsRootPostAnswerLock() {
     given(getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(300L))
         .willReturn(
             Optional.of(
                 new GetAnswerSummaryUseCase.AnswerSummary(
                     300L, 100L, 200L, "accepted answer", true)));
+    given(getPostContextUseCase.getPostContext(100L))
+        .willReturn(
+            Optional.of(
+                new GetPostContextUseCase.PostContext(
+                    100L, 200L, true, true, "question", 100L, true)));
 
     Optional<AnswerCommentContext> result = adapter.loadAnswerCommentContextForUpdate(300L);
 
     assertThat(result).isPresent();
     assertThat(result.orElseThrow().answerId()).isEqualTo(300L);
     assertThat(result.orElseThrow().postId()).isEqualTo(100L);
+    assertThat(result.orElseThrow().answerLocked()).isTrue();
     verify(getAnswerSummaryForUpdateUseCase).getAnswerSummaryForUpdate(300L);
+    verify(getPostContextUseCase).getPostContext(100L);
     verifyNoInteractions(getAnswerSummaryUseCase);
   }
 
@@ -75,6 +87,7 @@ class CommentAnswerAdapterTest {
 
     assertThat(result).isEmpty();
     verify(getAnswerSummaryUseCase).getAnswerSummary(300L);
+    verifyNoInteractions(getPostContextUseCase);
     verifyNoInteractions(getAnswerSummaryForUpdateUseCase);
   }
 
@@ -88,6 +101,7 @@ class CommentAnswerAdapterTest {
 
     assertThat(result).isEmpty();
     verify(getAnswerSummaryForUpdateUseCase).getAnswerSummaryForUpdate(300L);
+    verifyNoInteractions(getPostContextUseCase);
     verifyNoInteractions(getAnswerSummaryUseCase);
   }
 }

@@ -8,5 +8,10 @@ public interface LoadAnswerPort {
 
   Optional<AnswerCommentContext> loadAnswerCommentContextForUpdate(Long answerId);
 
-  record AnswerCommentContext(Long answerId, Long postId) {}
+  record AnswerCommentContext(Long answerId, Long postId, boolean answerLocked) {
+
+    public AnswerCommentContext(Long answerId, Long postId) {
+      this(answerId, postId, false);
+    }
+  }
 }

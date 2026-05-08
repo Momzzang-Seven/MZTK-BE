@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
 import momzzangseven.mztkbe.global.error.comment.CommentTargetMismatchException;
@@ -159,6 +162,26 @@ class CommentServiceTest {
     verify(loadAnswerPort).loadAnswerCommentContextForUpdate(300L);
     verify(loadAnswerPort, never()).loadAnswerCommentContext(300L);
     verify(loadPostPort, never()).loadPostVisibilityContext(any());
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+    verifyNoInteractions(grantCommentXpPort);
+  }
+
+  @Test
+  @DisplayName("createComment() rejects answer comment when parent question is answer locked")
+  void createComment_answerLocked_throwsCannotAnswerSolvedPost() {
+    CreateCommentCommand command =
+        CreateCommentCommand.forAnswer(300L, 200L, null, "answer comment");
+    given(loadAnswerPort.loadAnswerCommentContextForUpdate(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L, true)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+
+    assertThatThrownBy(() -> commentService.createComment(command))
+        .isInstanceOf(CannotAnswerSolvedPostException.class)
+        .hasMessage(ErrorCode.CANNOT_ANSWER_SOLVED_POST.getMessage());
+
+    verify(loadAnswerPort).loadAnswerCommentContextForUpdate(300L);
+    verify(loadPostPort).loadPostVisibilityContext(100L);
     verify(saveCommentPort, never()).saveComment(any(Comment.class));
     verifyNoInteractions(grantCommentXpPort);
   }
@@ -1086,7 +1109,8 @@ class CommentServiceTest {
             () ->
                 commentService.updateAnswerComment(
                     new UpdateAnswerCommentCommand(301L, 42L, 200L, "after")))
-        .isInstanceOf(CommentPostMismatchException.class);
+        .isInstanceOf(CommentTargetMismatchException.class)
+        .hasMessage(ErrorCode.COMMENT_TARGET_MISMATCH.getMessage());
 
     verify(loadCommentPort).loadCommentForUpdate(42L);
     verify(loadCommentPort, never()).loadComment(42L);
@@ -1125,7 +1149,8 @@ class CommentServiceTest {
             () ->
                 commentService.updateAnswerComment(
                     new UpdateAnswerCommentCommand(300L, 43L, 200L, "after")))
-        .isInstanceOf(CommentPostMismatchException.class);
+        .isInstanceOf(CommentTargetMismatchException.class)
+        .hasMessage(ErrorCode.COMMENT_TARGET_MISMATCH.getMessage());
 
     verify(loadCommentPort).loadCommentForUpdate(43L);
     verify(loadCommentPort, never()).loadComment(43L);
@@ -1273,7 +1298,8 @@ class CommentServiceTest {
     assertThatThrownBy(
             () ->
                 commentService.deleteAnswerComment(new DeleteAnswerCommentCommand(301L, 45L, 200L)))
-        .isInstanceOf(CommentPostMismatchException.class);
+        .isInstanceOf(CommentTargetMismatchException.class)
+        .hasMessage(ErrorCode.COMMENT_TARGET_MISMATCH.getMessage());
 
     verify(loadCommentPort).loadCommentForUpdate(45L);
     verify(loadCommentPort, never()).loadComment(45L);
@@ -1311,7 +1337,8 @@ class CommentServiceTest {
     assertThatThrownBy(
             () ->
                 commentService.deleteAnswerComment(new DeleteAnswerCommentCommand(300L, 46L, 200L)))
-        .isInstanceOf(CommentPostMismatchException.class);
+        .isInstanceOf(CommentTargetMismatchException.class)
+        .hasMessage(ErrorCode.COMMENT_TARGET_MISMATCH.getMessage());
 
     verify(loadCommentPort).loadCommentForUpdate(46L);
     verify(loadCommentPort, never()).loadComment(46L);
@@ -1399,27 +1426,52 @@ class CommentServiceTest {
   }
 
   @Test
-  @DisplayName("updateAnswerComment() keeps comment policy independent from accepted answer state")
-  void updateAnswerComment_acceptedAnswerContextDoesNotBlockByItself() {
+  @DisplayName("updateAnswerComment() rejects when parent question is answer locked")
+  void updateAnswerComment_answerLocked_throwsCannotUpdateAnswerOnSolvedPost() {
     LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
     Comment comment = answerComment(53L, 300L, 200L, null, "before", false, now);
     given(loadCommentPort.loadCommentForUpdate(53L)).willReturn(Optional.of(comment));
     given(loadAnswerPort.loadAnswerCommentContextForUpdate(300L))
-        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L)));
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L, true)));
     given(loadPostPort.loadPostVisibilityContext(100L))
         .willReturn(Optional.of(visiblePostContext(100L)));
-    given(saveCommentPort.saveComment(any(Comment.class)))
-        .willAnswer(invocation -> invocation.getArgument(0));
 
-    CommentMutationResult result =
-        commentService.updateAnswerComment(
-            new UpdateAnswerCommentCommand(300L, 53L, 200L, "after accepted"));
+    assertThatThrownBy(
+            () ->
+                commentService.updateAnswerComment(
+                    new UpdateAnswerCommentCommand(300L, 53L, 200L, "after locked")))
+        .isInstanceOf(CannotUpdateAnswerOnSolvedPostException.class)
+        .hasMessage(ErrorCode.CANNOT_UPDATE_ANSWER_ON_SOLVED_POST.getMessage());
 
-    assertThat(result.content()).isEqualTo("after accepted");
     verify(loadCommentPort).loadCommentForUpdate(53L);
     verify(loadCommentPort, never()).loadComment(53L);
     verify(loadAnswerPort).loadAnswerCommentContextForUpdate(300L);
-    verify(saveCommentPort).saveComment(any(Comment.class));
+    verify(loadPostPort).loadPostVisibilityContext(100L);
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
+  }
+
+  @Test
+  @DisplayName("deleteAnswerComment() rejects when parent question is answer locked")
+  void deleteAnswerComment_answerLocked_throwsCannotDeleteAnswerOnSolvedPost() {
+    LocalDateTime now = LocalDateTime.of(2026, 4, 24, 10, 0);
+    Comment comment = answerComment(54L, 300L, 200L, null, "comment", false, now);
+    given(loadCommentPort.loadCommentForUpdate(54L)).willReturn(Optional.of(comment));
+    given(loadAnswerPort.loadAnswerCommentContextForUpdate(300L))
+        .willReturn(Optional.of(new LoadAnswerPort.AnswerCommentContext(300L, 100L, true)));
+    given(loadPostPort.loadPostVisibilityContext(100L))
+        .willReturn(Optional.of(visiblePostContext(100L)));
+
+    assertThatThrownBy(
+            () ->
+                commentService.deleteAnswerComment(new DeleteAnswerCommentCommand(300L, 54L, 200L)))
+        .isInstanceOf(CannotDeleteAnswerOnSolvedPostException.class)
+        .hasMessage(ErrorCode.CANNOT_DELETE_ANSWER_ON_SOLVED_POST.getMessage());
+
+    verify(loadCommentPort).loadCommentForUpdate(54L);
+    verify(loadCommentPort, never()).loadComment(54L);
+    verify(loadAnswerPort).loadAnswerCommentContextForUpdate(300L);
+    verify(loadPostPort).loadPostVisibilityContext(100L);
+    verify(saveCommentPort, never()).saveComment(any(Comment.class));
   }
 
   @Test
