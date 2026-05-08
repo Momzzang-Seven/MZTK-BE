@@ -108,10 +108,57 @@ class AdminBoardControllerTest {
   }
 
   @Test
+  @DisplayName("GET /admin/boards/posts 상태와 타입 필터를 command 로 전달한다")
+  void getPosts_filters_areMappedToCommand() throws Exception {
+    given(
+            getAdminBoardPostsUseCase.execute(
+                org.mockito.ArgumentMatchers.any(GetAdminBoardPostsCommand.class)))
+        .willReturn(new PageImpl<>(List.of()));
+
+    mockMvc
+        .perform(
+            get("/admin/boards/posts")
+                .param("search", "target")
+                .param("status", "OPEN")
+                .param("type", "QUESTION")
+                .param("publicationStatus", "FAILED")
+                .param("moderationStatus", "BLOCKED")
+                .param("page", "2")
+                .param("size", "30")
+                .param("sort", "type")
+                .with(adminPrincipal(9L)))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<GetAdminBoardPostsCommand> captor =
+        ArgumentCaptor.forClass(GetAdminBoardPostsCommand.class);
+    org.mockito.Mockito.verify(getAdminBoardPostsUseCase).execute(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().search()).isEqualTo("target");
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().status())
+        .isEqualTo(AdminBoardPostStatus.OPEN);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().type())
+        .isEqualTo(AdminBoardPostType.QUESTION);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().publicationStatus())
+        .isEqualTo(AdminBoardPostPublicationStatus.FAILED);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().moderationStatus())
+        .isEqualTo(AdminBoardPostModerationStatus.BLOCKED);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().page()).isEqualTo(2);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().size()).isEqualTo(30);
+  }
+
+  @Test
   @DisplayName("GET /admin/boards/posts whitelist 밖 sort 값이면 400")
   void getPosts_invalidSort_returns400() throws Exception {
     mockMvc
         .perform(get("/admin/boards/posts").param("sort", "title").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/posts enum filter 값이 잘못되면 400")
+  void getPosts_invalidEnumFilter_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/admin/boards/posts").param("publicationStatus", "BAD").with(adminPrincipal(9L)))
         .andExpect(status().isBadRequest());
   }
 
@@ -312,6 +359,18 @@ class AdminBoardControllerTest {
     mockMvc
         .perform(
             post("/admin/boards/posts/{postId}/ban", 21L)
+                .with(userPrincipal(1L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/posts/{postId}/unblock USER 권한이면 403")
+  void unblockPost_userForbidden_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/unblock", 21L)
                 .with(userPrincipal(1L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))

@@ -3,11 +3,15 @@ package momzzangseven.mztkbe.global.security.aspect;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardCommentService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardPostService;
 import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostCommentsService;
 import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostsService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.UnblockAdminBoardPostService;
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
 import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
@@ -72,6 +76,48 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation).isNotNull();
     assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_COMMENT_BAN");
     assertThat(annotation.audit()).isTrue();
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 ban mutation은 moderation 결과 audit detail 표현식을 가진다")
+  void banAdminBoardPostService_recordsModerationResultDetail() throws NoSuchMethodException {
+    AdminOnly annotation =
+        BanAdminBoardPostService.class
+            .getMethod("execute", BanAdminBoardPostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POST_BAN");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId");
+    assertThat(annotation.targetId()).isEqualTo("#command.postId");
+    assertThat(annotation.audit()).isTrue();
+    assertThat(annotation.detail())
+        .containsExactly(
+            "moderated=#result?.moderated()",
+            "publicationStatus=#result?.publicationStatus()",
+            "moderationStatus=#result?.moderationStatus()");
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 unblock mutation은 moderation 결과 audit detail 표현식을 가진다")
+  void unblockAdminBoardPostService_recordsModerationResultDetail() throws NoSuchMethodException {
+    AdminOnly annotation =
+        UnblockAdminBoardPostService.class
+            .getMethod("execute", UnblockAdminBoardPostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POST_UNBLOCK");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId");
+    assertThat(annotation.targetId()).isEqualTo("#command.postId");
+    assertThat(annotation.audit()).isTrue();
+    assertThat(annotation.detail())
+        .containsExactly(
+            "moderated=#result?.moderated()",
+            "publicationStatus=#result?.publicationStatus()",
+            "moderationStatus=#result?.moderationStatus()");
   }
 
   @Test

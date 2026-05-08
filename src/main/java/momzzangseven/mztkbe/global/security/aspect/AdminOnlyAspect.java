@@ -127,6 +127,7 @@ public class AdminOnlyAspect {
       rawDetail.put("method", method.getDeclaringClass().getSimpleName() + "." + method.getName());
       rawDetail.put("failureReason", failureReason);
       rawDetail.put("arguments", sanitizeArguments(method, args));
+      rawDetail.putAll(evaluateAdditionalDetail(adminOnly.detail(), context));
 
       recordAdminAuditPort.record(
           new RecordAdminAuditPort.AuditCommand(
@@ -143,6 +144,29 @@ public class AdminOnlyAspect {
           operatorId,
           auditException);
     }
+  }
+
+  private Map<String, Object> evaluateAdditionalDetail(
+      String[] detailExpressions, StandardEvaluationContext context) {
+    Map<String, Object> detail = new LinkedHashMap<>();
+    for (String detailExpression : detailExpressions) {
+      if (detailExpression == null || detailExpression.isBlank()) {
+        continue;
+      }
+      int separator = detailExpression.indexOf('=');
+      if (separator <= 0) {
+        throw new IllegalArgumentException(
+            "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
+      }
+      String key = detailExpression.substring(0, separator).trim();
+      String expression = detailExpression.substring(separator + 1).trim();
+      if (key.isEmpty() || expression.isEmpty()) {
+        throw new IllegalArgumentException(
+            "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
+      }
+      detail.put(key, SPEL.parseExpression(expression).getValue(context));
+    }
+    return detail;
   }
 
   private void validateAdmin(Long operatorId) {

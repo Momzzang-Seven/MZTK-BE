@@ -14,6 +14,15 @@ import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPo
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardModerationResult;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardPostService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.UnblockAdminBoardPostService;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
 import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -318,6 +327,126 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("관리자 게시글 ban audit detail에는 상태 변경 결과와 최종 상태가 기록된다")
+  void around_forAdminBoardPostBan_recordsModerationResultDetail() throws Throwable {
+    Method method =
+        BanAdminBoardPostService.class.getMethod("execute", BanAdminBoardPostCommand.class);
+    BanAdminBoardPostCommand input =
+        new BanAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+    AdminBoardModerationResult result =
+        new AdminBoardModerationResult(
+            10L,
+            AdminBoardModerationTargetType.POST,
+            AdminBoardModerationReasonCode.POLICY_VIOLATION,
+            true,
+            AdminBoardPostPublicationStatus.VISIBLE,
+            AdminBoardPostModerationStatus.BLOCKED);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenReturn(result);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("ADMIN_BOARD_POST_BAN");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(command.targetId()).isEqualTo("10");
+    assertThat(command.detail()).containsEntry("moderated", true);
+    assertThat(command.detail()).containsEntry("publicationStatus", "VISIBLE");
+    assertThat(command.detail()).containsEntry("moderationStatus", "BLOCKED");
+    assertThat(command.detail()).containsKey("arguments");
+  }
+
+  @Test
+  @DisplayName("이미 BLOCKED 인 게시글 ban no-op audit detail에는 moderated=false 가 기록된다")
+  void around_forAdminBoardPostBanNoOp_recordsNotModeratedResultDetail() throws Throwable {
+    Method method =
+        BanAdminBoardPostService.class.getMethod("execute", BanAdminBoardPostCommand.class);
+    BanAdminBoardPostCommand input =
+        new BanAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+    AdminBoardModerationResult result =
+        new AdminBoardModerationResult(
+            10L,
+            AdminBoardModerationTargetType.POST,
+            AdminBoardModerationReasonCode.POLICY_VIOLATION,
+            false,
+            AdminBoardPostPublicationStatus.FAILED,
+            AdminBoardPostModerationStatus.BLOCKED);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenReturn(result);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.detail()).containsEntry("moderated", false);
+    assertThat(command.detail()).containsEntry("publicationStatus", "FAILED");
+    assertThat(command.detail()).containsEntry("moderationStatus", "BLOCKED");
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 unblock audit detail에는 상태 변경 결과와 최종 상태가 기록된다")
+  void around_forAdminBoardPostUnblock_recordsModerationResultDetail() throws Throwable {
+    Method method =
+        UnblockAdminBoardPostService.class.getMethod("execute", UnblockAdminBoardPostCommand.class);
+    UnblockAdminBoardPostCommand input =
+        new UnblockAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+    AdminBoardModerationResult result =
+        new AdminBoardModerationResult(
+            10L,
+            AdminBoardModerationTargetType.POST,
+            AdminBoardModerationReasonCode.POLICY_VIOLATION,
+            true,
+            AdminBoardPostPublicationStatus.VISIBLE,
+            AdminBoardPostModerationStatus.NORMAL);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenReturn(result);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("ADMIN_BOARD_POST_UNBLOCK");
+    assertThat(command.detail()).containsEntry("moderated", true);
+    assertThat(command.detail()).containsEntry("publicationStatus", "VISIBLE");
+    assertThat(command.detail()).containsEntry("moderationStatus", "NORMAL");
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 ban 실패 audit는 failureReason 을 유지하고 null result detail은 기록하지 않는다")
+  void around_forAdminBoardPostBanFailure_recordsFailureReasonWithoutResultDetail()
+      throws Throwable {
+    Method method =
+        BanAdminBoardPostService.class.getMethod("execute", BanAdminBoardPostCommand.class);
+    BanAdminBoardPostCommand input =
+        new BanAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+    RuntimeException boom = new IllegalStateException("boom");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenThrow(boom);
+    setAuthentication("ROLE_ADMIN");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.success()).isFalse();
+    assertThat(command.detail()).containsEntry("failureReason", "IllegalStateException");
+    assertThat(command.detail())
+        .doesNotContainKeys("moderated", "publicationStatus", "moderationStatus");
+  }
+
+  @Test
   @DisplayName("operatorId SpEL 결과가 0 이하 숫자이면, around 는 UserNotAuthenticatedException 을 던진다")
   void around_whenOperatorIdNonPositive_throwsAuthenticationError() throws Throwable {
     Method method =
@@ -405,6 +534,13 @@ class AdminOnlyAspectTest {
   private void setAuthentication(String authority) {
     SecurityContextHolder.getContext()
         .setAuthentication(new TestingAuthenticationToken("admin", "pw", authority));
+  }
+
+  private RecordAdminAuditPort.AuditCommand captureAuditCommand() {
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    return captor.getValue();
   }
 
   private static class DummyAdminMethods {

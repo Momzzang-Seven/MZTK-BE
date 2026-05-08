@@ -264,6 +264,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
             Map.of("reasonCode", "POLICY_VIOLATION", "reasonDetail", "E2E policy guard again"));
     assertThat(freeRebanResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(data(freeRebanResponse).at("/moderated").asBoolean()).isFalse();
+    assertThat(moderationActionCount("POST", freePostId)).isEqualTo(1L);
 
     ResponseEntity<String> questionBanResponse =
         postWithBearer(
@@ -280,7 +281,8 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(postStatus(questionPostId)).isEqualTo("OPEN");
     assertThat(postPublicationStatus(questionPostId)).isEqualTo("FAILED");
     assertThat(postModerationStatus(questionPostId)).isEqualTo("BLOCKED");
-    assertThat(moderationActionTypeCount("POST")).isZero();
+    assertThat(moderationActionCount("POST", questionPostId)).isEqualTo(1L);
+    assertThat(moderationActionTypeCount("POST")).isEqualTo(2L);
 
     ResponseEntity<String> publicListResponse = getWithBearer("/posts?type=FREE", viewerToken);
     assertThat(publicListResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -315,6 +317,38 @@ class AdminPageApiE2ETest extends E2ETestBase {
         getWithBearer("/posts/" + questionPostId, viewerToken);
     assertThat(failedNormalDetailResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 
+    ResponseEntity<String> freeUnblockResponse =
+        postWithBearer(
+            "/admin/boards/posts/" + freePostId + "/unblock",
+            admin.accessToken(),
+            Map.of("reasonCode", "OTHER", "reasonDetail", "E2E unblock visible free"));
+    assertThat(freeUnblockResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode freeUnblock = data(freeUnblockResponse);
+    assertThat(freeUnblock.at("/moderated").asBoolean()).isTrue();
+    assertThat(freeUnblock.at("/publicationStatus").asText()).isEqualTo("VISIBLE");
+    assertThat(freeUnblock.at("/moderationStatus").asText()).isEqualTo("NORMAL");
+    assertThat(postPublicationStatus(freePostId)).isEqualTo("VISIBLE");
+    assertThat(postModerationStatus(freePostId)).isEqualTo("NORMAL");
+    assertThat(adminActionAuditCount("ADMIN_BOARD_POST_UNBLOCK", String.valueOf(freePostId)))
+        .isEqualTo(1L);
+
+    ResponseEntity<String> restoredPublicListResponse =
+        getWithBearer("/posts?type=FREE", viewerToken);
+    assertThat(restoredPublicListResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode restoredPublicPosts = data(restoredPublicListResponse).path("posts");
+    JsonNode restoredFreePost = findById(restoredPublicPosts, "postId", freePostId);
+    assertThat(restoredFreePost.isMissingNode()).isFalse();
+    assertThat(restoredFreePost.at("/publicationStatus").asText()).isEqualTo("VISIBLE");
+    assertThat(restoredFreePost.at("/moderationStatus").asText()).isEqualTo("NORMAL");
+
+    ResponseEntity<String> restoredFreeDetailResponse =
+        getWithBearer("/posts/" + freePostId, viewerToken);
+    assertThat(restoredFreeDetailResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode restoredFreeDetail = data(restoredFreeDetailResponse);
+    assertThat(restoredFreeDetail.at("/postId").asLong()).isEqualTo(freePostId);
+    assertThat(restoredFreeDetail.at("/publicationStatus").asText()).isEqualTo("VISIBLE");
+    assertThat(restoredFreeDetail.at("/moderationStatus").asText()).isEqualTo("NORMAL");
+
     ResponseEntity<String> alreadyUnblockedResponse =
         postWithBearer(
             "/admin/boards/posts/" + questionPostId + "/unblock",
@@ -322,10 +356,15 @@ class AdminPageApiE2ETest extends E2ETestBase {
             Map.of("reasonCode", "OTHER", "reasonDetail", "E2E unblock again"));
     assertThat(alreadyUnblockedResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(data(alreadyUnblockedResponse).at("/moderated").asBoolean()).isFalse();
+    assertThat(moderationActionTypeCount("POST")).isEqualTo(2L);
 
     ResponseEntity<String> statsResponse =
         getWithBearer("/admin/dashboard/post-stats", admin.accessToken());
-    assertThat(data(statsResponse).at("/targetTypeStats/POST").asLong()).isZero();
+    JsonNode postStats = data(statsResponse);
+    assertThat(postStats.at("/targetTypeStats/POST").asLong()).isEqualTo(2L);
+    assertThat(postStats.at("/postRemovalReasonStats/POLICY_VIOLATION").asLong()).isEqualTo(2L);
+    assertThat(postStats.at("/boardTypeSplit/FREE").asLong()).isEqualTo(1L);
+    assertThat(postStats.at("/boardTypeSplit/QUESTION").asLong()).isEqualTo(1L);
 
     ResponseEntity<String> adminPostsResponse =
         getWithBearer("/admin/boards/posts?page=0&size=10&sort=postId", admin.accessToken());
@@ -334,7 +373,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     JsonNode adminFreePost = findById(adminPosts, "postId", freePostId);
     JsonNode adminQuestionPost = findById(adminPosts, "postId", questionPostId);
     assertThat(adminFreePost.at("/publicationStatus").asText()).isEqualTo("VISIBLE");
-    assertThat(adminFreePost.at("/moderationStatus").asText()).isEqualTo("BLOCKED");
+    assertThat(adminFreePost.at("/moderationStatus").asText()).isEqualTo("NORMAL");
     assertThat(adminQuestionPost.at("/publicationStatus").asText()).isEqualTo("FAILED");
     assertThat(adminQuestionPost.at("/moderationStatus").asText()).isEqualTo("NORMAL");
   }

@@ -41,11 +41,23 @@ class GetAdminBoardPostsServiceTest {
   void execute_combinesAndSortsByCommentCount() {
     GetAdminBoardPostsCommand command =
         new GetAdminBoardPostsCommand(
-            9L, "hello", AdminBoardPostStatus.OPEN, 0, 20, AdminBoardPostSortKey.COMMENT_COUNT);
+            9L,
+            "hello",
+            AdminBoardPostStatus.OPEN,
+            AdminBoardPostType.QUESTION,
+            AdminBoardPostPublicationStatus.FAILED,
+            AdminBoardPostModerationStatus.BLOCKED,
+            0,
+            20,
+            AdminBoardPostSortKey.COMMENT_COUNT);
     given(
             loadAdminBoardPostsPort.load(
                 new LoadAdminBoardPostsPort.AdminBoardPostQuery(
-                    "hello", AdminBoardPostStatus.OPEN)))
+                    "hello",
+                    AdminBoardPostStatus.OPEN,
+                    AdminBoardPostType.QUESTION,
+                    AdminBoardPostPublicationStatus.FAILED,
+                    AdminBoardPostModerationStatus.BLOCKED)))
         .willReturn(
             List.of(
                 post(10L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00")),
@@ -73,12 +85,20 @@ class GetAdminBoardPostsServiceTest {
   void execute_previewTruncatesByCodePoint() {
     GetAdminBoardPostsCommand command =
         new GetAdminBoardPostsCommand(
-            9L, "hello", AdminBoardPostStatus.OPEN, 0, 20, AdminBoardPostSortKey.COMMENT_COUNT);
+            9L,
+            "hello",
+            AdminBoardPostStatus.OPEN,
+            null,
+            null,
+            null,
+            0,
+            20,
+            AdminBoardPostSortKey.COMMENT_COUNT);
     String content = "a".repeat(119) + "😀" + "b";
     given(
             loadAdminBoardPostsPort.load(
                 new LoadAdminBoardPostsPort.AdminBoardPostQuery(
-                    "hello", AdminBoardPostStatus.OPEN)))
+                    "hello", AdminBoardPostStatus.OPEN, null, null, null)))
         .willReturn(List.of(post(10L, 1L, content, LocalDateTime.parse("2025-01-01T00:00:00"))));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(10L))).willReturn(Map.of());
     given(loadAdminBoardWriterNicknamesPort.load(List.of(1L))).willReturn(Map.of(1L, "alpha"));
@@ -95,13 +115,28 @@ class GetAdminBoardPostsServiceTest {
   void execute_postFieldSort_usesPagedPostQuery() {
     GetAdminBoardPostsCommand command =
         new GetAdminBoardPostsCommand(
-            9L, "hello", AdminBoardPostStatus.OPEN, 1, 2, AdminBoardPostSortKey.CREATED_AT);
+            9L,
+            "hello",
+            AdminBoardPostStatus.OPEN,
+            AdminBoardPostType.FREE,
+            AdminBoardPostPublicationStatus.VISIBLE,
+            AdminBoardPostModerationStatus.NORMAL,
+            1,
+            2,
+            AdminBoardPostSortKey.CREATED_AT);
     var first = post(12L, 3L, "first", LocalDateTime.parse("2025-01-03T00:00:00"));
     var second = post(11L, 2L, "second", LocalDateTime.parse("2025-01-02T00:00:00"));
     given(
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
-                    "hello", AdminBoardPostStatus.OPEN, 1, 2, AdminBoardPostSortKey.CREATED_AT)))
+                    "hello",
+                    AdminBoardPostStatus.OPEN,
+                    AdminBoardPostType.FREE,
+                    AdminBoardPostPublicationStatus.VISIBLE,
+                    AdminBoardPostModerationStatus.NORMAL,
+                    1,
+                    2,
+                    AdminBoardPostSortKey.CREATED_AT)))
         .willReturn(new PageImpl<>(List.of(first, second), PageRequest.of(1, 2), 5));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(12L, 11L)))
         .willReturn(Map.of(12L, 2L, 11L, 1L));
@@ -121,12 +156,13 @@ class GetAdminBoardPostsServiceTest {
   @DisplayName("type sort 도 DB paging 경로를 사용한다")
   void execute_typeSort_usesPagedPostQuery() {
     GetAdminBoardPostsCommand command =
-        new GetAdminBoardPostsCommand(9L, null, null, 0, 1, AdminBoardPostSortKey.TYPE);
+        new GetAdminBoardPostsCommand(
+            9L, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.TYPE);
     var post = post(10L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00"));
     given(
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
-                    null, null, 0, 1, AdminBoardPostSortKey.TYPE)))
+                    null, null, null, null, null, 0, 1, AdminBoardPostSortKey.TYPE)))
         .willReturn(new PageImpl<>(List.of(post), PageRequest.of(0, 1), 3));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(10L))).willReturn(Map.of(10L, 4L));
     given(loadAdminBoardWriterNicknamesPort.load(List.of(1L))).willReturn(Map.of(1L, "alpha"));
@@ -142,12 +178,13 @@ class GetAdminBoardPostsServiceTest {
   @DisplayName("postId sort 도 DB paging 경로를 사용한다")
   void execute_postIdSort_usesPagedPostQuery() {
     GetAdminBoardPostsCommand command =
-        new GetAdminBoardPostsCommand(9L, null, null, 0, 1, AdminBoardPostSortKey.POST_ID);
+        new GetAdminBoardPostsCommand(
+            9L, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.POST_ID);
     var post = post(12L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00"));
     given(
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
-                    null, null, 0, 1, AdminBoardPostSortKey.POST_ID)))
+                    null, null, null, null, null, 0, 1, AdminBoardPostSortKey.POST_ID)))
         .willReturn(new PageImpl<>(List.of(post), PageRequest.of(0, 1), 3));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(12L))).willReturn(Map.of(12L, 2L));
     given(loadAdminBoardWriterNicknamesPort.load(List.of(1L))).willReturn(Map.of(1L, "alpha"));
@@ -163,12 +200,13 @@ class GetAdminBoardPostsServiceTest {
   @DisplayName("status sort 도 DB paging 경로를 사용한다")
   void execute_statusSort_usesPagedPostQuery() {
     GetAdminBoardPostsCommand command =
-        new GetAdminBoardPostsCommand(9L, null, null, 0, 1, AdminBoardPostSortKey.STATUS);
+        new GetAdminBoardPostsCommand(
+            9L, null, null, null, null, null, 0, 1, AdminBoardPostSortKey.STATUS);
     var post = post(10L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00"));
     given(
             loadAdminBoardPostsPort.loadPage(
                 new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
-                    null, null, 0, 1, AdminBoardPostSortKey.STATUS)))
+                    null, null, null, null, null, 0, 1, AdminBoardPostSortKey.STATUS)))
         .willReturn(new PageImpl<>(List.of(post), PageRequest.of(0, 1), 3));
     given(loadAdminBoardPostCommentCountsPort.load(List.of(10L))).willReturn(Map.of(10L, 1L));
     given(loadAdminBoardWriterNicknamesPort.load(List.of(1L))).willReturn(Map.of(1L, "alpha"));
@@ -185,10 +223,19 @@ class GetAdminBoardPostsServiceTest {
   void execute_commentCountSortMemoryPagination_returnsRequestedPage() {
     GetAdminBoardPostsCommand command =
         new GetAdminBoardPostsCommand(
-            9L, null, AdminBoardPostStatus.OPEN, 1, 1, AdminBoardPostSortKey.COMMENT_COUNT);
+            9L,
+            null,
+            AdminBoardPostStatus.OPEN,
+            null,
+            null,
+            null,
+            1,
+            1,
+            AdminBoardPostSortKey.COMMENT_COUNT);
     given(
             loadAdminBoardPostsPort.load(
-                new LoadAdminBoardPostsPort.AdminBoardPostQuery(null, AdminBoardPostStatus.OPEN)))
+                new LoadAdminBoardPostsPort.AdminBoardPostQuery(
+                    null, AdminBoardPostStatus.OPEN, null, null, null)))
         .willReturn(
             List.of(
                 post(10L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00")),
@@ -212,12 +259,16 @@ class GetAdminBoardPostsServiceTest {
             9L,
             null,
             AdminBoardPostStatus.OPEN,
+            null,
+            null,
+            null,
             Integer.MAX_VALUE,
             100,
             AdminBoardPostSortKey.COMMENT_COUNT);
     given(
             loadAdminBoardPostsPort.load(
-                new LoadAdminBoardPostsPort.AdminBoardPostQuery(null, AdminBoardPostStatus.OPEN)))
+                new LoadAdminBoardPostsPort.AdminBoardPostQuery(
+                    null, AdminBoardPostStatus.OPEN, null, null, null)))
         .willReturn(
             List.of(
                 post(10L, 1L, "short", LocalDateTime.parse("2025-01-01T00:00:00")),

@@ -7,13 +7,16 @@ import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPos
 import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 
-/** Request DTO for admin board ban APIs. */
-public record AdminBoardBanRequestDTO(
+/**
+ * Request body for admin board moderation actions that require an operator reason, including post
+ * ban, post unblock, and comment ban.
+ */
+public record AdminBoardModerationReasonRequestDTO(
     @NotNull(message = "Reason code is required") AdminBoardModerationReasonCode reasonCode,
     @Size(max = 500, message = "Reason detail must not exceed 500 characters")
         String reasonDetail) {
 
-  public BanAdminBoardPostCommand toPostCommand(Long operatorUserId, Long postId) {
+  public BanAdminBoardPostCommand toBanPostCommand(Long operatorUserId, Long postId) {
     BanAdminBoardPostCommand command =
         new BanAdminBoardPostCommand(
             operatorUserId, postId, reasonCode, normalizeReasonDetail(reasonDetail));
@@ -29,7 +32,7 @@ public record AdminBoardBanRequestDTO(
     return command;
   }
 
-  public BanAdminBoardCommentCommand toCommentCommand(Long operatorUserId, Long commentId) {
+  public BanAdminBoardCommentCommand toBanCommentCommand(Long operatorUserId, Long commentId) {
     BanAdminBoardCommentCommand command =
         new BanAdminBoardCommentCommand(
             operatorUserId, commentId, reasonCode, normalizeReasonDetail(reasonDetail));

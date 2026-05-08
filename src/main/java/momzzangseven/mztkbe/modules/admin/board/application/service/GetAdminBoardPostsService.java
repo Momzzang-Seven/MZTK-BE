@@ -46,7 +46,12 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
 
     List<LoadAdminBoardPostsPort.AdminBoardPostView> posts =
         loadAdminBoardPostsPort.load(
-            new LoadAdminBoardPostsPort.AdminBoardPostQuery(command.search(), command.status()));
+            new LoadAdminBoardPostsPort.AdminBoardPostQuery(
+                command.search(),
+                command.status(),
+                command.type(),
+                command.publicationStatus(),
+                command.moderationStatus()));
     if (posts.isEmpty()) {
       return emptyPage(command.page(), command.size());
     }
@@ -81,6 +86,9 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
             new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
                 command.search(),
                 command.status(),
+                command.type(),
+                command.publicationStatus(),
+                command.moderationStatus(),
                 command.page(),
                 command.size(),
                 command.sortKey()));

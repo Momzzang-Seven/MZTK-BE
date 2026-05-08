@@ -16,11 +16,19 @@ public interface LoadAdminBoardPostsPort {
 
   Page<AdminBoardPostView> loadPage(AdminBoardPostPageQuery query);
 
-  record AdminBoardPostQuery(String search, AdminBoardPostStatus status) {}
+  record AdminBoardPostQuery(
+      String search,
+      AdminBoardPostStatus status,
+      AdminBoardPostType type,
+      AdminBoardPostPublicationStatus publicationStatus,
+      AdminBoardPostModerationStatus moderationStatus) {}
 
   record AdminBoardPostPageQuery(
       String search,
       AdminBoardPostStatus status,
+      AdminBoardPostType type,
+      AdminBoardPostPublicationStatus publicationStatus,
+      AdminBoardPostModerationStatus moderationStatus,
       int page,
       int size,
       AdminBoardPostSortKey sortKey) {}

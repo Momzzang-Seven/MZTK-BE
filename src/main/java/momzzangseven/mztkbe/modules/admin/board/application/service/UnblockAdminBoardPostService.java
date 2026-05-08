@@ -24,7 +24,12 @@ public class UnblockAdminBoardPostService implements UnblockAdminBoardPostUseCas
       actionType = "ADMIN_BOARD_POST_UNBLOCK",
       targetType = AuditTargetType.POST,
       operatorId = "#command.operatorUserId",
-      targetId = "#command.postId")
+      targetId = "#command.postId",
+      detail = {
+        "moderated=#result?.moderated()",
+        "publicationStatus=#result?.publicationStatus()",
+        "moderationStatus=#result?.moderationStatus()"
+      })
   public AdminBoardModerationResult execute(UnblockAdminBoardPostCommand command) {
     command.validate();
     ChangeAdminBoardPostModerationPort.AdminBoardPostModerationChangeResult result =
