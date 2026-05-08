@@ -6,11 +6,11 @@ import static org.mockito.Mockito.when;
 
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerFailureReason;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerFailureReason;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerSlotStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,7 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class QnaAdminExecutionConfigurationValidatorTest {
 
   @Mock private LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
-  @Mock private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  @Mock private ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
 
   private QnaEscrowProperties qnaEscrowProperties;
@@ -36,7 +36,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
     validator =
         new QnaAdminExecutionConfigurationValidator(
             loadExecutionInternalIssuerPolicyPort,
-            probeExecutionSignerCapabilityUseCase,
+            probeSponsorSignerCapabilityPort,
             qnaContractCallSupport,
             qnaEscrowProperties);
   }
@@ -46,7 +46,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
   void validateConfiguration_allowsRelayerRegisteredSigner() {
     when(loadExecutionInternalIssuerPolicyPort.loadPolicy())
         .thenReturn(new ExecutionInternalIssuerPolicy(true, true, true));
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             ExecutionSignerCapabilityView.ready(
                 "sponsor-treasury", "0x2222222222222222222222222222222222222222"));
@@ -74,7 +74,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
   void validateConfiguration_allowsSignerThatIsNotRelayer() {
     when(loadExecutionInternalIssuerPolicyPort.loadPolicy())
         .thenReturn(new ExecutionInternalIssuerPolicy(true, true, true));
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             ExecutionSignerCapabilityView.ready(
                 "sponsor-treasury", "0x2222222222222222222222222222222222222222"));
@@ -91,7 +91,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
   void validateConfiguration_allowsUnavailableSigner() {
     when(loadExecutionInternalIssuerPolicyPort.loadPolicy())
         .thenReturn(new ExecutionInternalIssuerPolicy(true, true, true));
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             ExecutionSignerCapabilityView.unavailable(
                 "sponsor-treasury",

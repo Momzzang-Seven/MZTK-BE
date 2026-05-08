@@ -4,9 +4,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
@@ -16,16 +15,16 @@ import org.springframework.stereotype.Component;
 @Component("qnaAdminExecution")
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminEnabled
-@ConditionalOnBean(ProbeExecutionSignerCapabilityPort.class)
+@ConditionalOnBean(ProbeSponsorSignerCapabilityPort.class)
 public class QnaAdminExecutionHealthIndicator implements HealthIndicator {
 
-  private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  private final ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   private final QnaContractCallSupport qnaContractCallSupport;
   private final QnaEscrowProperties qnaEscrowProperties;
 
   @Override
   public Health health() {
-    var signer = probeExecutionSignerCapabilityUseCase.execute();
+    var signer = probeSponsorSignerCapabilityPort.probe();
     Map<String, Object> details = new LinkedHashMap<>();
     details.put("walletAlias", signer.walletAlias());
     details.put("slotStatus", signer.slotStatus());

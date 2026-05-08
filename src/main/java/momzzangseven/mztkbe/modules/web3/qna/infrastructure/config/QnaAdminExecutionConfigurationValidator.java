@@ -4,9 +4,8 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -15,11 +14,11 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminEnabled
-@ConditionalOnBean(ProbeExecutionSignerCapabilityPort.class)
+@ConditionalOnBean(ProbeSponsorSignerCapabilityPort.class)
 public class QnaAdminExecutionConfigurationValidator {
 
   private final LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
-  private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  private final ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   private final QnaContractCallSupport qnaContractCallSupport;
   private final QnaEscrowProperties qnaEscrowProperties;
 
@@ -44,7 +43,7 @@ public class QnaAdminExecutionConfigurationValidator {
           "QnA admin execution requires web3.execution.internal.action-policy to enable QNA_ADMIN_REFUND");
     }
 
-    var serverSigner = probeExecutionSignerCapabilityUseCase.execute();
+    var serverSigner = probeSponsorSignerCapabilityPort.probe();
     if (!serverSigner.signable() || serverSigner.signerAddress() == null) {
       log.warn(
           "QnA admin execution signer is unavailable at startup: walletAlias={}, slotStatus={}, failureReason={}",

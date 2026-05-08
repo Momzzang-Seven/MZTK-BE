@@ -5,7 +5,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
 
 public interface LoadQnaAdminReviewContextPort {
 

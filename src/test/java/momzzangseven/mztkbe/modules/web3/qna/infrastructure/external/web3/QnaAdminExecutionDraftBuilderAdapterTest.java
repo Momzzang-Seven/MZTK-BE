@@ -15,14 +15,14 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransactionStateInvalidExcepti
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerFailureReason;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerFailureReason;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerSlotStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,7 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class QnaAdminExecutionDraftBuilderAdapterTest {
 
-  @Mock private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  @Mock private ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   @Mock private LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
 
@@ -52,7 +52,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
     adapter =
         new QnaAdminExecutionDraftBuilderAdapter(
-            probeExecutionSignerCapabilityUseCase,
+            probeSponsorSignerCapabilityPort,
             loadInternalExecutionEip1559TtlPort,
             web3CoreProperties,
             qnaEscrowProperties,
@@ -65,7 +65,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
   @Test
   void build_adminSettleUsesServerSignerWithoutUserAuthority() {
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             ExecutionSignerCapabilityView.ready(
                 "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
@@ -133,7 +133,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
   @Test
   void build_adminRefundFailsWhenSignerIsNotRegisteredRelayer() {
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             ExecutionSignerCapabilityView.ready(
                 "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
@@ -163,7 +163,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
   @Test
   void build_rejectsUnavailableServerSigner() {
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             ExecutionSignerCapabilityView.unavailable(
                 "sponsor-treasury",
@@ -191,7 +191,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
 
   @Test
   void build_rejectsWhenRelayerRegistrationCheckFails() {
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             ExecutionSignerCapabilityView.ready(
                 "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));

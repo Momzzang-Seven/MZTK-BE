@@ -25,13 +25,13 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactionStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionState;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -82,7 +82,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
   @MockitoBean private VerifyTreasuryWalletForSignPort verifyTreasuryWalletForSignPort;
   @MockitoBean private ExecutionEip1559SigningPort executionEip1559SigningPort;
   @MockitoBean private ExecutionTransactionGatewayPort executionTransactionGatewayPort;
-  @MockitoBean private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  @MockitoBean private ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
 
   @BeforeEach
   void setUp() {
@@ -91,7 +91,7 @@ class QnaAdminEscrowE2ETest extends E2ETestBase {
             Optional.of(
                 new TreasuryWalletInfo(
                     "test-sponsor", "alias/test-sponsor", SIGNER_ADDRESS, true)));
-    BDDMockito.given(probeExecutionSignerCapabilityUseCase.execute())
+    BDDMockito.given(probeSponsorSignerCapabilityPort.probe())
         .willReturn(ExecutionSignerCapabilityView.ready("test-sponsor", SIGNER_ADDRESS));
     BDDMockito.willDoNothing().given(verifyTreasuryWalletForSignPort).verify(anyString());
     BDDMockito.given(qnaContractCallSupport.isRelayerRegistered(anyString(), anyString()))

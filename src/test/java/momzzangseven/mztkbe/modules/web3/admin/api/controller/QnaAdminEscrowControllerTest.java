@@ -36,7 +36,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminSettlementR
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAdminExecutionConfigurationValidator;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaAutoAcceptConfigurationValidator;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;

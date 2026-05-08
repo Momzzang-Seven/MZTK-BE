@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerCapabilityView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,7 +17,7 @@ import org.springframework.boot.actuate.health.Health;
 @ExtendWith(MockitoExtension.class)
 class QnaAdminExecutionHealthIndicatorTest {
 
-  @Mock private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  @Mock private ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
 
   private QnaEscrowProperties qnaEscrowProperties;
@@ -29,12 +29,12 @@ class QnaAdminExecutionHealthIndicatorTest {
     qnaEscrowProperties.setQnaContractAddress("0x" + "1".repeat(40));
     indicator =
         new QnaAdminExecutionHealthIndicator(
-            probeExecutionSignerCapabilityUseCase, qnaContractCallSupport, qnaEscrowProperties);
+            probeSponsorSignerCapabilityPort, qnaContractCallSupport, qnaEscrowProperties);
   }
 
   @Test
   void health_keepsUpWhenRelayerCheckThrows() {
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(ExecutionSignerCapabilityView.ready("sponsor-treasury", "0x" + "2".repeat(40)));
     when(qnaContractCallSupport.isRelayerRegistered("0x" + "1".repeat(40), "0x" + "2".repeat(40)))
         .thenThrow(new IllegalStateException("rpc down"));
@@ -52,7 +52,7 @@ class QnaAdminExecutionHealthIndicatorTest {
 
   @Test
   void health_reportsRegisteredStatusWhenRelayerIsRegistered() {
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(ExecutionSignerCapabilityView.ready("sponsor-treasury", "0x" + "2".repeat(40)));
     when(qnaContractCallSupport.isRelayerRegistered("0x" + "1".repeat(40), "0x" + "2".repeat(40)))
         .thenReturn(true);
