@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassSlotInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
@@ -34,20 +35,18 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
     return loadClassPort.findById(classId);
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to {@link LoadClassPort#findSummaryProjectionsBySlotIds} with a single-element
+   * list. This avoids the 2-hop query path (slot lookup → class lookup) and reuses the same JOIN
+   * query used for batch enrichment — one DB round-trip regardless of call pattern.
+   */
   @Override
   @Transactional(readOnly = true)
   public Optional<ClassSummaryProjection> findBySlotId(Long slotId) {
-    return loadClassSlotPort
-        .findById(slotId)
-        .flatMap(slot -> loadClassPort.findById(slot.getClassId()))
-        .map(
-            cls ->
-                new ClassSummaryProjection(
-                    cls.getId(),
-                    cls.getTrainerId(),
-                    cls.getTitle(),
-                    cls.getPriceAmount(),
-                    cls.isActive()));
+    return Optional.ofNullable(
+        loadClassPort.findSummaryProjectionsBySlotIds(List.of(slotId)).get(slotId));
   }
 
   /**

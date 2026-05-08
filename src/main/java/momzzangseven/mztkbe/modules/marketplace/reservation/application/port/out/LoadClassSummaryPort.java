@@ -15,12 +15,12 @@ public interface LoadClassSummaryPort {
   /**
    * Summary of a class required for reservation display.
    *
-   * <p>{@code priceAmount} must be positive — the domain invariant enforces {@code priceAmount > 0}
-   * for every published class. An {@link IllegalStateException} is thrown at construction time if
-   * this invariant is violated, catching data-integrity issues early at the adapter boundary.
+   * <p>{@code priceAmount} must be non-negative — zero is valid for free classes.
+   * A negative value indicates a data-integrity error and throws {@link IllegalStateException}
+   * at construction time to catch corrupt data early at the adapter boundary.
    *
    * @param title class title
-   * @param priceAmount class price in KRW; must be &gt; 0
+   * @param priceAmount class price in KRW; must be &gt;= 0 (0 = free class)
    * @param thumbnailFinalObjectKey S3 object key for the thumbnail; {@code null} if not set
    */
   record ClassSummary(String title, int priceAmount, String thumbnailFinalObjectKey) {
@@ -28,9 +28,9 @@ public interface LoadClassSummaryPort {
       if (title == null || title.isBlank()) {
         throw new IllegalStateException("ClassSummary title must not be blank");
       }
-      if (priceAmount <= 0) {
+      if (priceAmount < 0) {
         throw new IllegalStateException(
-            "ClassSummary priceAmount must be > 0, got: " + priceAmount);
+            "ClassSummary priceAmount must be >= 0, got: " + priceAmount);
       }
     }
   }

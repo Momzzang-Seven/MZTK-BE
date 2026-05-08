@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.marketplace.classes.application.port.in;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 
 /**
@@ -20,22 +21,6 @@ import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.Marketplace
  * avoids coupling callers to internal aggregate changes.
  */
 public interface GetClassInfoUseCase {
-
-  /**
-   * Lightweight projection of a class used for cross-module enrichment.
-   *
-   * <p>Contains only the fields needed to enrich reservation display. Callers outside the {@code
-   * classes} module should depend on this record, not on {@link MarketplaceClass}.
-   *
-   * @param classId primary key
-   * @param trainerId owning trainer ID
-   * @param title class title (at query time — for snapshot see Reservation.bookedClassTitle)
-   * @param priceAmount price in KRW (at query time — for snapshot see
-   *     Reservation.bookedPriceAmount)
-   * @param active whether the class is currently listed
-   */
-  record ClassSummaryProjection(
-      Long classId, Long trainerId, String title, int priceAmount, boolean active) {}
 
   /**
    * Batch-load class summary projections keyed by slot ID.

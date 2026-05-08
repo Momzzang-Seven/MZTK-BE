@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassDetailInfo;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassItem;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase.ClassSummaryProjection;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

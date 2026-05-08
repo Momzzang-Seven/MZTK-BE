@@ -19,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.MarketplacePaginationConstants;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassDetailInfo;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassItem;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase.ClassSummaryProjection;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassTagPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort;

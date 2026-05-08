@@ -1,12 +1,13 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.classes;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import org.springframework.stereotype.Component;
 
@@ -49,24 +50,15 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
 
   private final GetClassInfoUseCase getClassInfoUseCase;
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to {@link #findBySlotIds} with a single-element list to reuse the same batch
+   * query path and avoid code duplication.
+   */
   @Override
   public Optional<ClassSummary> findBySlotId(Long slotId) {
-    return getClassInfoUseCase
-        .findBySlotId(slotId)
-        .filter(ClassSummaryProjection::active)
-        .map(
-            proj -> {
-              try {
-                return new ClassSummary(proj.title(), proj.priceAmount(), null);
-              } catch (IllegalStateException e) {
-                log.warn(
-                    "Skipping ClassSummary for slotId={} classId={} due to invariant violation: {}",
-                    slotId,
-                    proj.classId(),
-                    e.getMessage());
-                return null;
-              }
-            });
+    return Optional.ofNullable(findBySlotIds(List.of(slotId)).get(slotId));
   }
 
   /**
@@ -84,7 +76,7 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
     Map<Long, ClassSummaryProjection> projections =
         getClassInfoUseCase.findSummariesBySlotIds(slotIds);
 
-    Map<Long, ClassSummary> result = new java.util.HashMap<>();
+    Map<Long, ClassSummary> result = new HashMap<>();
     for (Map.Entry<Long, ClassSummaryProjection> entry : projections.entrySet()) {
       Long slotId = entry.getKey();
       ClassSummaryProjection proj = entry.getValue();
