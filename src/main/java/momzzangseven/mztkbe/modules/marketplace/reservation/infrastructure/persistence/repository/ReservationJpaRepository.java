@@ -7,6 +7,7 @@ import java.time.LocalTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -116,6 +117,27 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       @Param("userId") Long userId, @Param("status") ReservationStatus status);
 
   /**
+   * Cursor (keyset) paginated query for a user's reservations.
+   *
+   * <p>When {@code cursorDate} and {@code cursorId} are null (first page), all rows are returned up
+   * to the probe limit. On subsequent pages the WHERE clause excludes rows at or before the cursor
+   * position using {@code (date, id)} ordering to guarantee stable, gap-free pages.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.userId = :userId "
+          + "AND (:status IS NULL OR r.status = :status) "
+          + "AND (:cursorDate IS NULL OR r.reservationDate < :cursorDate "
+          + "  OR (r.reservationDate = :cursorDate AND r.id < :cursorId)) "
+          + "ORDER BY r.reservationDate DESC, r.id DESC")
+  List<ReservationEntity> findByUserIdCursor(
+      @Param("userId") Long userId,
+      @Param("status") ReservationStatus status,
+      @Param("cursorDate") LocalDate cursorDate,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
+  /**
    * Fetch reservations assigned to a specific trainer, ordered by reservation_date DESC.
    *
    * <p>If {@code status} is null all statuses are returned; otherwise only the matching status.
@@ -127,4 +149,23 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC")
   List<ReservationEntity> findByTrainerId(
       @Param("trainerId") Long trainerId, @Param("status") ReservationStatus status);
+
+  /**
+   * Cursor (keyset) paginated query for a trainer's reservations.
+   *
+   * <p>Same keyset strategy as {@link #findByUserIdCursor}.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.trainerId = :trainerId "
+          + "AND (:status IS NULL OR r.status = :status) "
+          + "AND (:cursorDate IS NULL OR r.reservationDate < :cursorDate "
+          + "  OR (r.reservationDate = :cursorDate AND r.id < :cursorId)) "
+          + "ORDER BY r.reservationDate DESC, r.id DESC")
+  List<ReservationEntity> findByTrainerIdCursor(
+      @Param("trainerId") Long trainerId,
+      @Param("status") ReservationStatus status,
+      @Param("cursorDate") LocalDate cursorDate,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
 }

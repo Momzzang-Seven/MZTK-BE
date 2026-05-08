@@ -1,22 +1,22 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in;
 
-import java.util.List;
+import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetUserReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 
 /**
- * Input port for fetching a user's own reservation list.
+ * Input port for fetching a user's own reservation list (cursor-paginated).
  *
- * <p>Returns reservations ordered by {@code reservationDate} descending so the most recent session
- * appears first.
+ * <p>Returns a {@link CursorSlice} containing the page items, a {@code hasNext} flag, and a {@code
+ * nextCursor} token that the client can pass on the next request.
  */
 public interface GetUserReservationsUseCase {
 
   /**
-   * Returns a pageable-free list of the user's reservations, optionally filtered by status.
+   * Returns one page of the user's reservations, optionally filtered by status.
    *
-   * @param query contains the authenticated user's ID and an optional status filter
-   * @return list of reservation summaries; empty list if none found
+   * @param query contains the authenticated user's ID, optional status filter, and cursor params
+   * @return slice with items, hasNext flag, and nextCursor token
    */
-  List<ReservationSummaryResult> execute(GetUserReservationsQuery query);
+  CursorSlice<ReservationSummaryResult> execute(GetUserReservationsQuery query);
 }

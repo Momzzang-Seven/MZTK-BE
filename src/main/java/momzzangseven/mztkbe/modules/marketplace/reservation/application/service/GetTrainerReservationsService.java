@@ -3,6 +3,10 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.application.service
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.pagination.CursorCodec;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
+import momzzangseven.mztkbe.global.pagination.CursorSlice;
+import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in.GetTrainerReservationsUseCase;
@@ -16,17 +20,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Returns a list of reservations assigned to the authenticated trainer.
+ * Returns a cursor-paginated list of reservations assigned to the authenticated trainer.
  *
- * <p>Results are ordered by {@code reservationDate} descending (most recent first). An optional
- * status filter can be applied to narrow the results.
+ * <h2>Pagination</h2>
  *
- * <p>Enriches each summary with class title, thumbnail, and trainer nickname via batch cross-module
- * lookups to avoid N+1 calls.
+ * <p>Uses keyset pagination on {@code (reservationDate DESC, id DESC)}. The probe pattern ({@code
+ * size + 1}) determines {@code hasNext} without an extra COUNT query.
+ *
+ * <h2>Enrichment strategy</h2>
+ *
+ * <ul>
+ *   <li>{@code classTitle} — snapshot-first: reads {@code bookedClassTitle} for new records; falls
+ *       back to the cross-module adapter for legacy records ({@code bookedPriceAmount == 0}).
+ *   <li>{@code thumbnailFinalObjectKey} — live lookup (no snapshot; absent for inactive classes).
+ *   <li>{@code trainerNickname} — single lookup by {@code trainerId} (all rows share one trainer).
+ *   <li>{@code userNickname} — batch-loaded so the trainer can identify each booker.
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor
 public class GetTrainerReservationsService implements GetTrainerReservationsUseCase {
+
+  private static final String CURSOR_SCOPE = "trainer-reservations";
 
   private final LoadReservationPort loadReservationPort;
   private final LoadClassSummaryPort loadClassSummaryPort;
@@ -34,22 +49,63 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
 
   @Override
   @Transactional(readOnly = true)
-  public List<ReservationSummaryResult> execute(GetTrainerReservationsQuery query) {
+  public CursorSlice<ReservationSummaryResult> execute(GetTrainerReservationsQuery query) {
     query.validate();
-    List<Reservation> reservations =
-        loadReservationPort.findByTrainerId(query.trainerId(), query.status());
+    CursorPageRequest pageRequest = query.pageRequest();
 
-    List<Long> slotIds = reservations.stream().map(Reservation::getSlotId).toList();
-    List<Long> trainerIds = reservations.stream().map(Reservation::getTrainerId).toList();
+    // Fetch size+1 rows to determine hasNext without a COUNT query.
+    List<Reservation> loaded =
+        loadReservationPort.findByTrainerIdCursor(query.trainerId(), query.status(), pageRequest);
 
+    boolean hasNext = loaded.size() > pageRequest.size();
+    List<Reservation> page = hasNext ? loaded.subList(0, pageRequest.size()) : loaded;
+
+    if (page.isEmpty()) {
+      return new CursorSlice<>(List.of(), false, null);
+    }
+
+    // Bulk-load class summaries in one JOIN query.
+    List<Long> slotIds = page.stream().map(Reservation::getSlotId).toList();
     Map<Long, ClassSummary> classSummaries = loadClassSummaryPort.findBySlotIds(slotIds);
-    Map<Long, UserSummary> trainerSummaries = loadUserSummaryPort.findByIds(trainerIds);
 
-    return reservations.stream()
-        .map(
-            r ->
-                ReservationSummaryResult.from(
-                    r, classSummaries.get(r.getSlotId()), trainerSummaries.get(r.getTrainerId())))
-        .toList();
+    // All reservations on the page belong to the same trainer — single lookup.
+    UserSummary trainerSummary = loadUserSummaryPort.findById(query.trainerId()).orElse(null);
+
+    // Batch-load user (booker) nicknames for the current page.
+    List<Long> userIds = page.stream().map(Reservation::getUserId).distinct().toList();
+    Map<Long, UserSummary> userSummaries = loadUserSummaryPort.findByIds(userIds);
+
+    List<ReservationSummaryResult> items =
+        page.stream()
+            .map(
+                r -> {
+                  ClassSummary cs = classSummaries.get(r.getSlotId());
+                  String classTitle =
+                      r.getBookedPriceAmount() > 0
+                          ? r.getBookedClassTitle()
+                          : (cs != null ? cs.title() : null);
+                  int priceAmount =
+                      r.getBookedPriceAmount() > 0
+                          ? r.getBookedPriceAmount()
+                          : (cs != null ? cs.priceAmount() : 0);
+                  UserSummary userSummary = userSummaries.get(r.getUserId());
+                  return ReservationSummaryResult.from(
+                      r,
+                      classTitle,
+                      priceAmount,
+                      cs != null ? cs.thumbnailFinalObjectKey() : null,
+                      trainerSummary != null ? trainerSummary.nickname() : null,
+                      userSummary != null ? userSummary.nickname() : null);
+                })
+            .toList();
+
+    String nextCursor =
+        hasNext
+            ? CursorCodec.encode(
+                new KeysetCursor(
+                    page.getLast().getCreatedAt(), page.getLast().getId(), CURSOR_SCOPE))
+            : null;
+
+    return new CursorSlice<>(items, hasNext, nextCursor);
   }
 }

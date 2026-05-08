@@ -21,8 +21,16 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Access is granted to both the owning user and the associated trainer. Any other requester
  * receives a {@link MarketplaceUnauthorizedAccessException}.
  *
- * <p>Enriches the result with class title, price, thumbnail, and both participants' nicknames via
- * cross-module lookups.
+ * <p>Enrichment strategy:
+ *
+ * <ul>
+ *   <li>{@code classTitle} and {@code priceAmount} are read from the denormalised snapshot fields
+ *       on the {@link Reservation} domain object (set at booking time), so they remain accurate
+ *       even if the trainer later renames the class or changes the price.
+ *   <li>{@code thumbnailFinalObjectKey} is still resolved live from the {@code classes} module (no
+ *       snapshot exists). If the class is inactive, it may be null.
+ *   <li>Trainer and user nicknames are resolved live from the {@code user} module.
+ * </ul>
  */
 @Service
 @RequiredArgsConstructor
@@ -47,12 +55,42 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
       throw new MarketplaceUnauthorizedAccessException();
     }
 
-    ClassSummary classSummary =
-        loadClassSummaryPort.findBySlotId(reservation.getSlotId()).orElse(null);
+    // Snapshot fields take precedence for price and title (immutable at booking time).
+    // For legacy records (bookedPriceAmount == 0), fall back to cross-module lookup so existing
+    // data is not broken.
+    String classTitle;
+    Integer priceAmount;
+    String thumbnailFinalObjectKey;
+
+    if (reservation.getBookedPriceAmount() > 0) {
+      // New record: use snapshot values; still resolve thumbnail live (not snapshotted).
+      classTitle = reservation.getBookedClassTitle();
+      priceAmount = reservation.getBookedPriceAmount();
+      thumbnailFinalObjectKey =
+          loadClassSummaryPort
+              .findBySlotId(reservation.getSlotId())
+              .map(ClassSummary::thumbnailFinalObjectKey)
+              .orElse(null);
+    } else {
+      // Legacy record (pre-snapshot migration): fall back to full cross-module lookup.
+      ClassSummary classSummary =
+          loadClassSummaryPort.findBySlotId(reservation.getSlotId()).orElse(null);
+      classTitle = classSummary != null ? classSummary.title() : null;
+      priceAmount = classSummary != null ? classSummary.priceAmount() : null;
+      thumbnailFinalObjectKey =
+          classSummary != null ? classSummary.thumbnailFinalObjectKey() : null;
+    }
+
     UserSummary trainerSummary =
         loadUserSummaryPort.findById(reservation.getTrainerId()).orElse(null);
     UserSummary userSummary = loadUserSummaryPort.findById(reservation.getUserId()).orElse(null);
 
-    return GetReservationResult.from(reservation, classSummary, trainerSummary, userSummary);
+    return GetReservationResult.from(
+        reservation,
+        classTitle,
+        priceAmount,
+        thumbnailFinalObjectKey,
+        trainerSummary != null ? trainerSummary.nickname() : null,
+        userSummary != null ? userSummary.nickname() : null);
   }
 }

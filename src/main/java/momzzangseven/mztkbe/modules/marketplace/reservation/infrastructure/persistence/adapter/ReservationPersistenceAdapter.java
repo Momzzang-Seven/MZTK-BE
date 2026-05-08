@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.adapter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -7,12 +8,14 @@ import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.SaveReservationPort;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.repository.ReservationJpaRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -122,8 +125,40 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   }
 
   @Override
+  public List<Reservation> findByUserIdCursor(
+      Long userId, ReservationStatus status, CursorPageRequest pageRequest) {
+    LocalDate cursorDate =
+        pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalDate() : null;
+    Long cursorId = pageRequest.hasCursor() ? pageRequest.cursor().id() : null;
+    return reservationJpaRepository
+        .findByUserIdCursor(
+            userId, status, cursorDate, cursorId, PageRequest.of(0, pageRequest.limitWithProbe()))
+        .stream()
+        .map(ReservationEntity::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status) {
     return reservationJpaRepository.findByTrainerId(trainerId, status).stream()
+        .map(ReservationEntity::toDomain)
+        .toList();
+  }
+
+  @Override
+  public List<Reservation> findByTrainerIdCursor(
+      Long trainerId, ReservationStatus status, CursorPageRequest pageRequest) {
+    LocalDate cursorDate =
+        pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalDate() : null;
+    Long cursorId = pageRequest.hasCursor() ? pageRequest.cursor().id() : null;
+    return reservationJpaRepository
+        .findByTrainerIdCursor(
+            trainerId,
+            status,
+            cursorDate,
+            cursorId,
+            PageRequest.of(0, pageRequest.limitWithProbe()))
+        .stream()
         .map(ReservationEntity::toDomain)
         .toList();
   }

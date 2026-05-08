@@ -1,16 +1,12 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.external.classes;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.global.error.marketplace.ClassNotFoundException;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassDetailQuery;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassDetailResult;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort;
 import org.springframework.stereotype.Component;
 
@@ -21,21 +17,30 @@ import org.springframework.stereotype.Component;
  * classes} module. It calls {@code classes} input ports exclusively — never output ports or
  * persistence layer classes.
  *
- * <p>Resolution strategy:
+ * <h2>Enrichment strategy</h2>
  *
- * <ol>
- *   <li>Use {@link GetClassInfoUseCase#findBySlotId} to resolve slotId → {@link
- *       momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass}
- *       (lock-free).
- *   <li>Use {@link GetClassDetailUseCase} with the obtained classId to fetch title, priceAmount,
- *       and thumbnailFinalObjectKey in a single input-port call.
- * </ol>
+ * <ul>
+ *   <li><b>Bulk path ({@link #findBySlotIds}):</b> delegates to {@link
+ *       GetClassInfoUseCase#findSummariesBySlotIds}, which issues a single JPQL JOIN query ({@code
+ *       class_slots JOIN marketplace_classes}). Only classId, trainerId, title, priceAmount, and
+ *       active are projected — no tags, features, store, or image data is loaded.
+ *   <li><b>Single path ({@link #findBySlotId}):</b> delegates to the bulk method with a
+ *       single-element list to avoid code duplication.
+ * </ul>
  *
- * <p><b>Inactive-class handling:</b> {@link GetClassDetailUseCase} filters by {@code active = true}
- * internally. If the class was deactivated after the reservation was created, the use-case throws
- * {@link ClassNotFoundException}. We absorb that here and return {@link Optional#empty()} so that
- * past reservations linked to inactive classes still render — with enrichment fields omitted —
- * rather than failing with HTTP 500.
+ * <h2>Inactive-class handling</h2>
+ *
+ * <p>If the class is marked inactive after the reservation was created, {@link
+ * ClassSummaryProjection#active()} is {@code false}. The adapter converts such projections to
+ * {@link Optional#empty()} / absent map entries so that past reservations linked to inactive
+ * classes still render — with enrichment fields omitted — rather than failing with HTTP 500.
+ *
+ * <h2>Data-integrity fallback</h2>
+ *
+ * <p>If the projection's title is blank or priceAmount is zero/negative (legacy corrupt data),
+ * constructing {@link LoadClassSummaryPort.ClassSummary} throws {@link IllegalStateException}. This
+ * is caught and logged as a warning so that a single bad record does not fail the entire list or
+ * detail query.
  */
 @Slf4j
 @Component
@@ -43,54 +48,68 @@ import org.springframework.stereotype.Component;
 public class ClassSummaryAdapter implements LoadClassSummaryPort {
 
   private final GetClassInfoUseCase getClassInfoUseCase;
-  private final GetClassDetailUseCase getClassDetailUseCase;
 
   @Override
   public Optional<ClassSummary> findBySlotId(Long slotId) {
     return getClassInfoUseCase
         .findBySlotId(slotId)
-        .flatMap(cls -> fetchDetail(cls.getId()))
-        .map(this::toClassSummary);
+        .filter(ClassSummaryProjection::active)
+        .map(
+            proj -> {
+              try {
+                return new ClassSummary(proj.title(), proj.priceAmount(), null);
+              } catch (IllegalStateException e) {
+                log.warn(
+                    "Skipping ClassSummary for slotId={} classId={} due to invariant violation: {}",
+                    slotId,
+                    proj.classId(),
+                    e.getMessage());
+                return null;
+              }
+            });
   }
 
   /**
-   * Fetches class detail via the input port, absorbing {@link ClassNotFoundException} that is
-   * thrown when the class exists but is inactive ({@code active = false}).
+   * {@inheritDoc}
    *
-   * @param classId class primary key resolved from the slot
-   * @return Optional with detail, or empty if the class is not found / inactive
-   */
-  private Optional<GetClassDetailResult> fetchDetail(Long classId) {
-    try {
-      return Optional.of(getClassDetailUseCase.execute(new GetClassDetailQuery(classId)));
-    } catch (ClassNotFoundException e) {
-      log.debug(
-          "Class id={} not found or inactive during reservation enrichment; skipping summary",
-          classId);
-      return Optional.empty();
-    }
-  }
-
-  /**
-   * Batch-load class summaries for multiple slot IDs.
-   *
-   * <p><b>Note:</b> currently implemented as a per-slot loop (each slot triggers up to two input
-   * port calls). Suitable for typical reservation list sizes. If performance becomes a concern, add
-   * a bulk {@code findBySlotIds} method to {@code GetClassInfoUseCase}.
+   * <p>Calls {@link GetClassInfoUseCase#findSummariesBySlotIds} which issues a single JOIN query.
+   * Inactive classes and data-integrity failures are silently dropped (logged at WARN/DEBUG level).
    */
   @Override
   public Map<Long, ClassSummary> findBySlotIds(List<Long> slotIds) {
-    Map<Long, ClassSummary> result = new HashMap<>();
-    for (Long slotId : slotIds) {
-      findBySlotId(slotId)
-          .ifPresentOrElse(
-              summary -> result.put(slotId, summary),
-              () -> log.debug("No class summary found for slotId={}", slotId));
+    if (slotIds == null || slotIds.isEmpty()) {
+      return Map.of();
+    }
+
+    Map<Long, ClassSummaryProjection> projections =
+        getClassInfoUseCase.findSummariesBySlotIds(slotIds);
+
+    Map<Long, ClassSummary> result = new java.util.HashMap<>();
+    for (Map.Entry<Long, ClassSummaryProjection> entry : projections.entrySet()) {
+      Long slotId = entry.getKey();
+      ClassSummaryProjection proj = entry.getValue();
+
+      if (!proj.active()) {
+        log.debug(
+            "Skipping ClassSummary for slotId={} classId={}: class is inactive",
+            slotId,
+            proj.classId());
+        continue;
+      }
+
+      try {
+        result.put(slotId, new ClassSummary(proj.title(), proj.priceAmount(), null));
+        // thumbnailFinalObjectKey is not part of the bulk projection (requires a separate
+        // image lookup). It is intentionally null here; callers that need thumbnails must
+        // perform a dedicated image batch load (future improvement).
+      } catch (IllegalStateException e) {
+        log.warn(
+            "Skipping ClassSummary for slotId={} classId={} due to invariant violation: {}",
+            slotId,
+            proj.classId(),
+            e.getMessage());
+      }
     }
     return result;
-  }
-
-  private ClassSummary toClassSummary(GetClassDetailResult detail) {
-    return new ClassSummary(detail.title(), detail.priceAmount(), detail.thumbnailFinalObjectKey());
   }
 }
