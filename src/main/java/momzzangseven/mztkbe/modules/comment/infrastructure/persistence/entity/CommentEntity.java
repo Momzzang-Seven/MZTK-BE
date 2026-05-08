@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.*;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 
 @Entity
 @Table(name = "comments")
@@ -19,8 +20,14 @@ public class CommentEntity {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @Column(nullable = false)
-  private Long postId;
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20)
+  @Builder.Default
+  private CommentTargetType targetType = CommentTargetType.POST;
+
+  @Column private Long postId;
+
+  @Column private Long answerId;
 
   @Column(nullable = false)
   private Long writerId;
@@ -48,7 +55,9 @@ public class CommentEntity {
   public static CommentEntity from(Comment comment, CommentEntity parentEntity) {
     return CommentEntity.builder()
         .id(comment.getId())
+        .targetType(comment.getTargetType())
         .postId(comment.getPostId())
+        .answerId(comment.getAnswerId())
         .writerId(comment.getWriterId())
         .content(comment.getContent())
         .isDeleted(comment.isDeleted())
@@ -62,7 +71,9 @@ public class CommentEntity {
   public Comment toDomain() {
     return Comment.builder()
         .id(this.id)
+        .targetType(this.targetType == null ? CommentTargetType.POST : this.targetType)
         .postId(this.postId)
+        .answerId(this.answerId)
         .writerId(this.writerId)
         .parentId(this.parent != null ? this.parent.getId() : null)
         .content(this.content)

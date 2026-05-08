@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
@@ -148,6 +149,73 @@ class PostCommentActivityV2IntegrationTest {
   }
 
   @Test
+  @DisplayName(
+      "GET /v2/users/me/commented-posts includes answer comments by root post without mixing post comment counts")
+  void getMyCommentedPosts_includesAnswerCommentsByRootPostAndKeepsPostCommentCount()
+      throws Exception {
+    UserEntity requester = saveUser("answer-comment-requester@example.com", "answer-requester");
+    UserEntity writer = saveUser("answer-comment-writer@example.com", "answer-writer");
+    LocalDateTime base = LocalDateTime.of(2026, 4, 26, 12, 0);
+    PostEntity latestQuestion =
+        savePost(writer.getId(), PostType.QUESTION, "latest answer activity", "question content");
+    PostEntity secondQuestion =
+        savePost(writer.getId(), PostType.QUESTION, "second answer activity", "question content");
+
+    saveComment(
+        latestQuestion.getId(), requester.getId(), "direct post comment", base.minusMinutes(5));
+    CommentEntity latestAnswerComment =
+        saveAnswerComment(
+            latestQuestion.getId(),
+            9000L,
+            requester.getId(),
+            "latest answer comment",
+            base.minusMinutes(1));
+    CommentEntity secondAnswerComment =
+        saveAnswerComment(
+            secondQuestion.getId(),
+            9001L,
+            requester.getId(),
+            "second answer comment",
+            base.minusMinutes(2));
+
+    MvcResult firstPage =
+        mockMvc
+            .perform(
+                get("/v2/users/me/commented-posts")
+                    .param("type", "QUESTION")
+                    .param("size", "1")
+                    .with(userPrincipal(requester.getId())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.hasNext").value(true))
+            .andExpect(jsonPath("$.data.posts.length()").value(1))
+            .andExpect(jsonPath("$.data.posts[0].postId").value(latestQuestion.getId()))
+            .andExpect(jsonPath("$.data.posts[0].commentCount").value(1))
+            .andReturn();
+
+    String nextCursor =
+        objectMapper
+            .readTree(firstPage.getResponse().getContentAsString())
+            .at("/data/nextCursor")
+            .asText();
+
+    mockMvc
+        .perform(
+            get("/v2/users/me/commented-posts")
+                .param("type", "QUESTION")
+                .param("size", "1")
+                .param("cursor", nextCursor)
+                .with(userPrincipal(requester.getId())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.hasNext").value(false))
+        .andExpect(jsonPath("$.data.posts.length()").value(1))
+        .andExpect(jsonPath("$.data.posts[0].postId").value(secondQuestion.getId()))
+        .andExpect(jsonPath("$.data.posts[0].commentCount").value(0));
+
+    assertThat(latestAnswerComment.getPostId()).isEqualTo(latestQuestion.getId());
+    assertThat(secondAnswerComment.getPostId()).isEqualTo(secondQuestion.getId());
+  }
+
+  @Test
   @DisplayName("GET /v2/users/me/commented-posts searches title inside my commented post refs")
   void getMyCommentedPosts_searchesTitleInsideMyCommentedRefs() throws Exception {
     UserEntity requester = saveUser("search-requester@example.com", "search-requester");
@@ -219,6 +287,21 @@ class PostCommentActivityV2IntegrationTest {
             .writerId(writerId)
             .content(content)
             .isDeleted(deleted)
+            .createdAt(createdAt)
+            .updatedAt(createdAt)
+            .build());
+  }
+
+  private CommentEntity saveAnswerComment(
+      Long postId, Long answerId, Long writerId, String content, LocalDateTime createdAt) {
+    return commentJpaRepository.saveAndFlush(
+        CommentEntity.builder()
+            .targetType(CommentTargetType.ANSWER)
+            .postId(postId)
+            .answerId(answerId)
+            .writerId(writerId)
+            .content(content)
+            .isDeleted(false)
             .createdAt(createdAt)
             .updatedAt(createdAt)
             .build());

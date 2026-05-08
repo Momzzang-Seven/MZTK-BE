@@ -1,9 +1,10 @@
-package momzzangseven.mztkbe.modules.comment.api.event;
+package momzzangseven.mztkbe.modules.comment.infrastructure.event;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
+import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
 import momzzangseven.mztkbe.modules.comment.application.port.in.DeleteCommentUseCase;
 import momzzangseven.mztkbe.modules.post.domain.event.PostDeletedEvent;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
@@ -23,13 +24,14 @@ class CommentEventHandlerTest {
   @InjectMocks private CommentEventHandler commentEventHandler;
 
   @Test
-  @DisplayName("handlePostDeletedEvent() calls deleteCommentsByPostId() with event postId")
-  void handlePostDeletedEvent_callsDeleteCommentsByPostId() {
+  @DisplayName(
+      "handlePostDeletedEvent() calls softDeleteAllCommentsByRootPostId() with event postId")
+  void handlePostDeletedEvent_callsSoftDeleteAllCommentsByRootPostId() {
     PostDeletedEvent event = new PostDeletedEvent(100L, PostType.QUESTION);
 
     commentEventHandler.handlePostDeletedEvent(event);
 
-    verify(deleteCommentUseCase).deleteCommentsByPostId(100L);
+    verify(deleteCommentUseCase).softDeleteAllCommentsByRootPostId(100L);
   }
 
   @Test
@@ -38,10 +40,33 @@ class CommentEventHandlerTest {
     PostDeletedEvent event = new PostDeletedEvent(200L, PostType.FREE);
     doThrow(new RuntimeException("db fail"))
         .when(deleteCommentUseCase)
-        .deleteCommentsByPostId(200L);
+        .softDeleteAllCommentsByRootPostId(200L);
 
     assertThatCode(() -> commentEventHandler.handlePostDeletedEvent(event))
         .doesNotThrowAnyException();
-    verify(deleteCommentUseCase).deleteCommentsByPostId(200L);
+    verify(deleteCommentUseCase).softDeleteAllCommentsByRootPostId(200L);
+  }
+
+  @Test
+  @DisplayName("handleAnswerDeletedEvent() calls deleteCommentsByAnswerId() with event answerId")
+  void handleAnswerDeletedEvent_callsDeleteCommentsByAnswerId() {
+    AnswerDeletedEvent event = new AnswerDeletedEvent(300L);
+
+    commentEventHandler.handleAnswerDeletedEvent(event);
+
+    verify(deleteCommentUseCase).deleteCommentsByAnswerId(300L);
+  }
+
+  @Test
+  @DisplayName("handleAnswerDeletedEvent() swallows exception because cleanup is post-commit")
+  void handleAnswerDeletedEvent_swallowsException() {
+    AnswerDeletedEvent event = new AnswerDeletedEvent(400L);
+    doThrow(new RuntimeException("db fail"))
+        .when(deleteCommentUseCase)
+        .deleteCommentsByAnswerId(400L);
+
+    assertThatCode(() -> commentEventHandler.handleAnswerDeletedEvent(event))
+        .doesNotThrowAnyException();
+    verify(deleteCommentUseCase).deleteCommentsByAnswerId(400L);
   }
 }

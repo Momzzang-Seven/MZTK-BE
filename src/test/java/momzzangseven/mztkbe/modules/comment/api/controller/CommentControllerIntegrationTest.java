@@ -6,6 +6,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -16,6 +17,9 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
+import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
+import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import momzzangseven.mztkbe.modules.level.application.dto.GrantXpResult;
@@ -61,6 +65,9 @@ class CommentControllerIntegrationTest {
 
   @org.springframework.beans.factory.annotation.Autowired
   protected UserJpaRepository userJpaRepository;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  protected AnswerJpaRepository answerJpaRepository;
 
   @MockitoBean
   private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
@@ -114,6 +121,7 @@ class CommentControllerIntegrationTest {
                     .content(json(Map.of("content", "first comment"))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.message").value("Comment created successfully"))
             .andExpect(jsonPath("$.data.content").value("first comment"))
             .andExpect(jsonPath("$.data.writer").doesNotExist())
             .andExpect(jsonPath("$.data.replyCount").doesNotExist())
@@ -148,6 +156,172 @@ class CommentControllerIntegrationTest {
         .andExpect(jsonPath("$.data.content[0].commentId").value(commentId))
         .andExpect(jsonPath("$.data.content[0].isDeleted").value(true))
         .andExpect(jsonPath("$.data.content[0].content").value("삭제된 댓글입니다."));
+  }
+
+  @Test
+  @DisplayName("create answer comment persists root post id and answer id")
+  void createAnswerComment_persistsRootPostIdAndAnswerId() throws Exception {
+    PostEntity question =
+        postJpaRepository.saveAndFlush(
+            PostEntity.builder()
+                .userId(401L)
+                .type(PostType.QUESTION)
+                .title("answer comment question")
+                .content("question body")
+                .reward(100L)
+                .status(PostStatus.OPEN)
+                .build());
+    AnswerEntity answer =
+        answerJpaRepository.saveAndFlush(
+            AnswerEntity.builder()
+                .postId(question.getId())
+                .userId(402L)
+                .content("answer body")
+                .isAccepted(false)
+                .build());
+
+    MvcResult createCommentResult =
+        mockMvc
+            .perform(
+                post("/v2/answers/" + answer.getId() + "/comments")
+                    .with(userPrincipal(403L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "answer comment"))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.message").doesNotExist())
+            .andExpect(jsonPath("$.data.content").value("answer comment"))
+            .andReturn();
+
+    Long commentId = extractLong(createCommentResult, "/data/commentId");
+    CommentEntity saved = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(saved.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(saved.getPostId()).isEqualTo(question.getId());
+    assertThat(saved.getAnswerId()).isEqualTo(answer.getId());
+    assertThat(saved.getWriterId()).isEqualTo(403L);
+  }
+
+  @Test
+  @DisplayName("v2 post comment create persists POST target row")
+  void createPostCommentV2_persistsPostTargetRow() throws Exception {
+    PostEntity savedPost =
+        postJpaRepository.saveAndFlush(
+            PostEntity.builder()
+                .userId(401L)
+                .type(PostType.FREE)
+                .title("v2 post comment")
+                .content("post body")
+                .reward(0L)
+                .status(PostStatus.OPEN)
+                .build());
+
+    MvcResult createCommentResult =
+        mockMvc
+            .perform(
+                post("/v2/posts/" + savedPost.getId() + "/comments")
+                    .with(userPrincipal(403L))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", "v2 post comment"))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.message").doesNotExist())
+            .andExpect(jsonPath("$.data.content").value("v2 post comment"))
+            .andReturn();
+
+    Long commentId = extractLong(createCommentResult, "/data/commentId");
+    CommentEntity saved = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(saved.getTargetType()).isEqualTo(CommentTargetType.POST);
+    assertThat(saved.getPostId()).isEqualTo(savedPost.getId());
+    assertThat(saved.getAnswerId()).isNull();
+    assertThat(saved.getWriterId()).isEqualTo(403L);
+    assertThat(saved.isDeleted()).isFalse();
+  }
+
+  @Test
+  @DisplayName("answer reply parent from different answer returns target mismatch code")
+  void createAnswerComment_parentAnswerMismatch_returnsTargetMismatch() throws Exception {
+    PostEntity question = saveQuestionPost(401L, "answer parent mismatch question");
+    AnswerEntity targetAnswer = saveAnswer(question.getId(), 402L, false);
+    AnswerEntity otherAnswer = saveAnswer(question.getId(), 404L, false);
+    Long otherAnswerCommentId =
+        createAnswerComment(otherAnswer.getId(), 403L, "other answer parent");
+
+    mockMvc
+        .perform(
+            post("/v2/answers/" + targetAnswer.getId() + "/comments")
+                .with(userPrincipal(405L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "wrong parent", "parentId", otherAnswerCommentId))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.status").value("FAIL"))
+        .andExpect(jsonPath("$.code").value("COMMENT_009"))
+        .andExpect(jsonPath("$.message").value("Comment does not belong to the specified target"));
+  }
+
+  @Test
+  @DisplayName("common comment API updates and deletes answer comments with comment policy")
+  void commonCommentApi_updateDeleteAnswerComment_realFlow() throws Exception {
+    PostEntity question = saveQuestionPost(401L, "common answer comment policy");
+    AnswerEntity answer = saveAnswer(question.getId(), 402L, false);
+    Long commentId = createAnswerComment(answer.getId(), 403L, "before common update");
+
+    mockMvc
+        .perform(
+            put("/comments/" + commentId)
+                .with(userPrincipal(403L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "after common update"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content").value("after common update"));
+
+    CommentEntity updated = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(updated.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(updated.getPostId()).isEqualTo(question.getId());
+    assertThat(updated.getAnswerId()).isEqualTo(answer.getId());
+    assertThat(updated.getContent()).isEqualTo("after common update");
+
+    mockMvc
+        .perform(delete("/comments/" + commentId).with(userPrincipal(403L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    CommentEntity deleted = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(deleted.isDeleted()).isTrue();
+  }
+
+  @Test
+  @DisplayName("v2 answer comment API updates and deletes answer comments with same policy")
+  void answerCommentV2Api_updateDeleteAnswerComment_realFlow() throws Exception {
+    PostEntity question = saveQuestionPost(401L, "v2 answer comment policy");
+    AnswerEntity answer = saveAnswer(question.getId(), 402L, true);
+    Long commentId = createAnswerComment(answer.getId(), 403L, "before v2 update");
+
+    mockMvc
+        .perform(
+            put("/v2/answers/" + answer.getId() + "/comments/" + commentId)
+                .with(userPrincipal(403L))
+                .contentType(APPLICATION_JSON)
+                .content(json(Map.of("content", "after v2 update"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.content").value("after v2 update"));
+
+    CommentEntity updated = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(updated.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(updated.getPostId()).isEqualTo(question.getId());
+    assertThat(updated.getAnswerId()).isEqualTo(answer.getId());
+    assertThat(updated.getContent()).isEqualTo("after v2 update");
+
+    mockMvc
+        .perform(
+            delete("/v2/answers/" + answer.getId() + "/comments/" + commentId)
+                .with(userPrincipal(403L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+    CommentEntity deleted = commentJpaRepository.findById(commentId).orElseThrow();
+    assertThat(deleted.isDeleted()).isTrue();
   }
 
   @Test
@@ -366,6 +540,43 @@ class CommentControllerIntegrationTest {
             .andExpect(jsonPath("$.status").value("SUCCESS"))
             .andReturn();
     return extractLong(result, "/data/commentId");
+  }
+
+  private Long createAnswerComment(Long answerId, Long userId, String content) throws Exception {
+    MvcResult result =
+        mockMvc
+            .perform(
+                post("/v2/answers/" + answerId + "/comments")
+                    .with(userPrincipal(userId))
+                    .contentType(APPLICATION_JSON)
+                    .content(json(Map.of("content", content))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("SUCCESS"))
+            .andExpect(jsonPath("$.message").doesNotExist())
+            .andReturn();
+    return extractLong(result, "/data/commentId");
+  }
+
+  private PostEntity saveQuestionPost(Long writerId, String title) {
+    return postJpaRepository.saveAndFlush(
+        PostEntity.builder()
+            .userId(writerId)
+            .type(PostType.QUESTION)
+            .title(title)
+            .content("question body")
+            .reward(100L)
+            .status(PostStatus.OPEN)
+            .build());
+  }
+
+  private AnswerEntity saveAnswer(Long postId, Long writerId, boolean accepted) {
+    return answerJpaRepository.saveAndFlush(
+        AnswerEntity.builder()
+            .postId(postId)
+            .userId(writerId)
+            .content("answer body")
+            .isAccepted(accepted)
+            .build());
   }
 
   private UserEntity saveUser(String nickname, String profileImageUrl) {

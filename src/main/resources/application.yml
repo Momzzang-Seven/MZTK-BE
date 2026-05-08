@@ -98,6 +98,10 @@ comment:
     batch-size: 100
     cron: "0 30 * * * *"
     zone: Asia/Seoul
+  answer-orphan-cleanup:
+    batch-size: 100
+    cron: "0 35 * * * *"
+    zone: Asia/Seoul
 
 answer:
   orphan-cleanup:

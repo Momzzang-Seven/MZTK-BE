@@ -17,13 +17,129 @@ class CommentTest {
   void create_createsCommentWithDefaults() {
     Comment comment = Comment.create(1L, 2L, null, "hello");
 
+    assertThat(comment.getTargetType()).isEqualTo(CommentTargetType.POST);
     assertThat(comment.getPostId()).isEqualTo(1L);
+    assertThat(comment.getAnswerId()).isNull();
     assertThat(comment.getWriterId()).isEqualTo(2L);
     assertThat(comment.getParentId()).isNull();
     assertThat(comment.getContent()).isEqualTo("hello");
     assertThat(comment.isDeleted()).isFalse();
     assertThat(comment.getCreatedAt()).isNotNull();
     assertThat(comment.getUpdatedAt()).isNotNull();
+  }
+
+  @Test
+  @DisplayName("createForAnswer() stores root post id and answer id")
+  void createForAnswer_storesRootPostAndAnswerId() {
+    Comment comment = Comment.createForAnswer(100L, 300L, 2L, null, "answer comment");
+
+    assertThat(comment.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(comment.getPostId()).isEqualTo(100L);
+    assertThat(comment.getAnswerId()).isEqualTo(300L);
+    assertThat(comment.getWriterId()).isEqualTo(2L);
+    assertThat(comment.isDeleted()).isFalse();
+  }
+
+  @Test
+  @DisplayName("builder defaults null targetType to POST target comment")
+  void builder_defaultsNullTargetTypeToPost() {
+    Comment comment = Comment.builder().postId(1L).writerId(2L).content("post comment").build();
+
+    assertThat(comment.getTargetType()).isEqualTo(CommentTargetType.POST);
+    assertThat(comment.getPostId()).isEqualTo(1L);
+    assertThat(comment.getAnswerId()).isNull();
+  }
+
+  @Test
+  @DisplayName("builder creates ANSWER target comment with root post id and answer id")
+  void builder_createsAnswerTargetWithRootPostAndAnswerId() {
+    Comment comment =
+        Comment.builder()
+            .targetType(CommentTargetType.ANSWER)
+            .postId(100L)
+            .answerId(300L)
+            .writerId(2L)
+            .content("answer comment")
+            .build();
+
+    assertThat(comment.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(comment.getPostId()).isEqualTo(100L);
+    assertThat(comment.getAnswerId()).isEqualTo(300L);
+  }
+
+  @Test
+  @DisplayName("builder rejects POST target with answerId")
+  void builder_rejectsPostTargetWithAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Comment.builder()
+                    .targetType(CommentTargetType.POST)
+                    .postId(1L)
+                    .answerId(300L)
+                    .writerId(2L)
+                    .content("post comment")
+                    .build())
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
+  }
+
+  @Test
+  @DisplayName("builder rejects POST target without postId")
+  void builder_rejectsPostTargetWithoutPostId() {
+    assertThatThrownBy(
+            () ->
+                Comment.builder()
+                    .targetType(CommentTargetType.POST)
+                    .writerId(2L)
+                    .content("post comment")
+                    .build())
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
+  }
+
+  @Test
+  @DisplayName("builder rejects ANSWER target without answerId")
+  void builder_rejectsAnswerTargetWithoutAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Comment.builder()
+                    .targetType(CommentTargetType.ANSWER)
+                    .postId(100L)
+                    .writerId(2L)
+                    .content("answer comment")
+                    .build())
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
+  }
+
+  @Test
+  @DisplayName("builder rejects ANSWER target without root postId")
+  void builder_rejectsAnswerTargetWithoutPostId() {
+    assertThatThrownBy(
+            () ->
+                Comment.builder()
+                    .targetType(CommentTargetType.ANSWER)
+                    .answerId(300L)
+                    .writerId(2L)
+                    .content("answer comment")
+                    .build())
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
+  }
+
+  @Test
+  @DisplayName("null targetType defaults to POST and rejects answerId")
+  void builder_rejectsDefaultPostTargetWithAnswerId() {
+    assertThatThrownBy(
+            () ->
+                Comment.builder()
+                    .postId(1L)
+                    .answerId(300L)
+                    .writerId(2L)
+                    .content("post comment")
+                    .build())
+        .isInstanceOf(BusinessException.class)
+        .hasMessage(ErrorCode.INVALID_INPUT.getMessage());
   }
 
   @Test

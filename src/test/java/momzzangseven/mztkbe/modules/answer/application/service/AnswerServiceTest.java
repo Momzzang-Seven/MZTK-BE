@@ -33,6 +33,7 @@ import momzzangseven.mztkbe.modules.answer.application.dto.UpdateAnswerCommand;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerLifecycleExecutionPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswerCommentsPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerExecutionResumePort;
@@ -61,6 +62,7 @@ import org.springframework.context.ApplicationEventPublisher;
 class AnswerServiceTest {
 
   @Mock private CountAnswersPort countAnswersPort;
+  @Mock private CountAnswerCommentsPort countAnswerCommentsPort;
   @Mock private SaveAnswerPort saveAnswerPort;
   @Mock private LoadPostPort loadPostPort;
   @Mock private LoadAnswerPort loadAnswerPort;
@@ -191,6 +193,8 @@ class AnswerServiceTest {
                           new AnswerImageSlot(102L, null)))));
       given(loadAnswerLikePort.countLikeByAnswerIds(List.of(1L, 2L)))
           .willReturn(Map.of(1L, 4L, 2L, 1L));
+      given(countAnswerCommentsPort.countCommentsByAnswerIds(List.of(1L, 2L)))
+          .willReturn(Map.of(1L, 3L, 2L, 5L));
       given(loadAnswerLikePort.loadLikedAnswerIds(List.of(1L, 2L), 999L))
           .willReturn(java.util.Set.of(2L));
 
@@ -200,9 +204,11 @@ class AnswerServiceTest {
       assertThat(result.get(0).answerId()).isEqualTo(1L);
       assertThat(result.get(0).nickname()).isEqualTo("writer-a");
       assertThat(result.get(0).likeCount()).isEqualTo(4L);
+      assertThat(result.get(0).commentCount()).isEqualTo(3L);
       assertThat(result.get(0).liked()).isFalse();
       assertThat(result.get(0).images()).isEmpty();
       assertThat(result.get(1).likeCount()).isEqualTo(1L);
+      assertThat(result.get(1).commentCount()).isEqualTo(5L);
       assertThat(result.get(1).liked()).isTrue();
       assertThat(result.get(1).images())
           .containsExactly(
@@ -448,7 +454,7 @@ class AnswerServiceTest {
     }
 
     @Test
-    @DisplayName("deleteByPostId deletes answers and publishes one event per answer")
+    @DisplayName("deleteByPostId publishes one AnswerDeletedEvent per answer for comment cleanup")
     void deleteByPostId_delegatesToPort_andPublishesEvents() {
       given(loadAnswerPort.loadAnswerIdsByPostId(10L)).willReturn(List.of(100L, 101L));
 
