@@ -127,6 +127,8 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   @Override
   public List<Reservation> findByUserIdCursor(
       Long userId, ReservationStatus status, CursorPageRequest pageRequest) {
+    // KeysetCursor.createdAt is a generic sort-key field. For reservation pagination it holds
+    // reservationDate.atStartOfDay() — NOT the entity's created_at column.
     LocalDate cursorDate =
         pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalDate() : null;
     Long cursorId = pageRequest.hasCursor() ? pageRequest.cursor().id() : null;
@@ -148,6 +150,7 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   @Override
   public List<Reservation> findByTrainerIdCursor(
       Long trainerId, ReservationStatus status, CursorPageRequest pageRequest) {
+    // KeysetCursor.createdAt holds reservationDate.atStartOfDay() — see findByUserIdCursor.
     LocalDate cursorDate =
         pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalDate() : null;
     Long cursorId = pageRequest.hasCursor() ? pageRequest.cursor().id() : null;

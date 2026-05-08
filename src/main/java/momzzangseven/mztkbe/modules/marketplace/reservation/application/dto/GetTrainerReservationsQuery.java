@@ -13,9 +13,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 public record GetTrainerReservationsQuery(
     Long trainerId, ReservationStatus status, CursorPageRequest pageRequest) {
 
+  /** Cursor scope identifier shared across Controller, Query, and Service layers. */
+  public static final String CURSOR_SCOPE = "trainer-reservations";
+
   /** Convenience constructor for tests / callers that do not supply a cursor yet. */
   public GetTrainerReservationsQuery(Long trainerId, ReservationStatus status) {
-    this(trainerId, status, CursorPageRequest.of(null, null, 20, 100, "trainer-reservations"));
+    this(trainerId, status, CursorPageRequest.of(null, null, 20, 100, CURSOR_SCOPE));
   }
 
   public void validate() {

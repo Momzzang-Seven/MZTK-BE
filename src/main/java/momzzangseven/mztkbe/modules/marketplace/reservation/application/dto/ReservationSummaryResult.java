@@ -29,6 +29,8 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
  * @param status current lifecycle status
  * @param userRequest optional note from the user
  * @param classTitle class title (snapshot); {@code null} if unavailable
+ * @param priceAmount booking price in KRW (snapshot); {@code null} if unavailable (legacy record
+ *     with no snapshot and no live adapter data)
  * @param trainerNickname trainer's display nickname; {@code null} if unavailable
  * @param userNickname reserving user's display nickname; populated on trainer-list path, {@code
  *     null} on user-list path
@@ -45,7 +47,7 @@ public record ReservationSummaryResult(
     ReservationStatus status,
     String userRequest,
     String classTitle,
-    int priceAmount,
+    Integer priceAmount,
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey) {
@@ -64,7 +66,7 @@ public record ReservationSummaryResult(
   public static ReservationSummaryResult from(
       Reservation reservation,
       String classTitle,
-      int priceAmount,
+      Integer priceAmount,
       String thumbnailFinalObjectKey,
       String trainerNickname,
       String userNickname) {

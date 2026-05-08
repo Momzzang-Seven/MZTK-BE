@@ -30,7 +30,7 @@ public record ReservationSummaryResponseDTO(
     ReservationStatus status,
     String userRequest,
     String classTitle,
-    int priceAmount,
+    Integer priceAmount,
     String trainerNickname,
     String userNickname,
     String thumbnailFinalObjectKey) {

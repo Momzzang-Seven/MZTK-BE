@@ -32,7 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ul>
  *   <li>{@code classTitle} — snapshot-first: reads {@code bookedClassTitle} for new records; falls
- *       back to the cross-module adapter for legacy records ({@code bookedPriceAmount == 0}).
+ *       back to the cross-module adapter for legacy records ({@code bookedPriceAmount == null}).
  *   <li>{@code thumbnailFinalObjectKey} — live lookup (no snapshot; absent for inactive classes).
  *   <li>{@code trainerNickname} — batch-loaded in one query for all distinct trainer IDs on the
  *       page.
@@ -43,7 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetUserReservationsService implements GetUserReservationsUseCase {
 
-  private static final String CURSOR_SCOPE = "user-reservations";
+  private static final String CURSOR_SCOPE = GetUserReservationsQuery.CURSOR_SCOPE;
 
   private final LoadReservationPort loadReservationPort;
   private final LoadClassSummaryPort loadClassSummaryPort;
@@ -79,13 +79,13 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
                 r -> {
                   ClassSummary cs = classSummaries.get(r.getSlotId());
                   String classTitle =
-                      r.getBookedPriceAmount() > 0
+                      r.getBookedPriceAmount() != null
                           ? r.getBookedClassTitle()
                           : (cs != null ? cs.title() : null);
-                  int priceAmount =
-                      r.getBookedPriceAmount() > 0
+                  Integer priceAmount =
+                      r.getBookedPriceAmount() != null
                           ? r.getBookedPriceAmount()
-                          : (cs != null ? cs.priceAmount() : 0);
+                          : (cs != null ? cs.priceAmount() : null);
                   UserSummary ts = trainerSummaries.get(r.getTrainerId());
                   return ReservationSummaryResult.from(
                       r,
@@ -101,7 +101,9 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
         hasNext
             ? CursorCodec.encode(
                 new KeysetCursor(
-                    page.getLast().getCreatedAt(), page.getLast().getId(), CURSOR_SCOPE))
+                    page.getLast().getReservationDate().atStartOfDay(),
+                    page.getLast().getId(),
+                    CURSOR_SCOPE))
             : null;
 
     return new CursorSlice<>(items, hasNext, nextCursor);

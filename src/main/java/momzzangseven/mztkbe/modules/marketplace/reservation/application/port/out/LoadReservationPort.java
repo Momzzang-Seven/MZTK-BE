@@ -100,7 +100,7 @@ public interface LoadReservationPort {
    * @return list of matching reservations
    * @deprecated Use {@link #findByUserIdCursor} for cursor-based list endpoints.
    */
-  @Deprecated
+  @Deprecated(since = "MOM-403", forRemoval = true)
   List<Reservation> findByUserId(Long userId, ReservationStatus status);
 
   /**
@@ -126,7 +126,7 @@ public interface LoadReservationPort {
    * @return list of matching reservations
    * @deprecated Use {@link #findByTrainerIdCursor} for cursor-based list endpoints.
    */
-  @Deprecated
+  @Deprecated(since = "MOM-403", forRemoval = true)
   List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status);
 
   /**

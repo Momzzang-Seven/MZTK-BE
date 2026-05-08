@@ -107,6 +107,10 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
    * Fetch reservations for a specific user, ordered by reservation_date DESC.
    *
    * <p>If {@code status} is null all statuses are returned; otherwise only the matching status.
+   *
+   * <p><b>Note:</b> Sort order is {@code (reservation_date DESC, reservation_time DESC)}, which
+   * differs from the cursor query's {@code (reservation_date DESC, id DESC)}. Do not use this
+   * method to compare results with the cursor-paginated path.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "
@@ -141,6 +145,10 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
    * Fetch reservations assigned to a specific trainer, ordered by reservation_date DESC.
    *
    * <p>If {@code status} is null all statuses are returned; otherwise only the matching status.
+   *
+   * <p><b>Note:</b> Sort order is {@code (reservation_date DESC, reservation_time DESC)}, which
+   * differs from the cursor query's {@code (reservation_date DESC, id DESC)}. Do not use this
+   * method to compare results with the cursor-paginated path.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "

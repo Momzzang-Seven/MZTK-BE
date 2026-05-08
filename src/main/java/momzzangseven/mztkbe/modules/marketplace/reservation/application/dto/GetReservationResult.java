@@ -17,7 +17,7 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
  *       reflect the values the user agreed to when booking and are <b>immutable</b>: a trainer
  *       changing the class price or title after the fact does <em>not</em> affect past
  *       reservations. Legacy records (created before the snapshot columns were added, identifiable
- *       by {@code bookedPriceAmount == 0}) fall back to a live cross-module lookup via {@code
+ *       by {@code bookedPriceAmount == null}) fall back to a live cross-module lookup via {@code
  *       LoadClassSummaryPort}.
  *   <li>{@code thumbnailFinalObjectKey} — resolved live (no snapshot exists). May be {@code null}
  *       if the class is inactive or the thumbnail has been removed.

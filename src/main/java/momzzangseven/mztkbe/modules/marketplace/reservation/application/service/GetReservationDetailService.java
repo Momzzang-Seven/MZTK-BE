@@ -56,13 +56,13 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
     }
 
     // Snapshot fields take precedence for price and title (immutable at booking time).
-    // For legacy records (bookedPriceAmount == 0), fall back to cross-module lookup so existing
+    // For legacy records (bookedPriceAmount == null), fall back to cross-module lookup so existing
     // data is not broken.
     String classTitle;
     Integer priceAmount;
     String thumbnailFinalObjectKey;
 
-    if (reservation.getBookedPriceAmount() > 0) {
+    if (reservation.getBookedPriceAmount() != null) {
       // New record: use snapshot values; still resolve thumbnail live (not snapshotted).
       classTitle = reservation.getBookedClassTitle();
       priceAmount = reservation.getBookedPriceAmount();

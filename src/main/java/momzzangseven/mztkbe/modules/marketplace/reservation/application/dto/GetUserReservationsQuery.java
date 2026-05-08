@@ -13,9 +13,12 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 public record GetUserReservationsQuery(
     Long userId, ReservationStatus status, CursorPageRequest pageRequest) {
 
+  /** Cursor scope identifier shared across Controller, Query, and Service layers. */
+  public static final String CURSOR_SCOPE = "user-reservations";
+
   /** Convenience constructor for tests / callers that do not supply a cursor yet. */
   public GetUserReservationsQuery(Long userId, ReservationStatus status) {
-    this(userId, status, CursorPageRequest.of(null, null, 20, 100, "user-reservations"));
+    this(userId, status, CursorPageRequest.of(null, null, 20, 100, CURSOR_SCOPE));
   }
 
   public void validate() {

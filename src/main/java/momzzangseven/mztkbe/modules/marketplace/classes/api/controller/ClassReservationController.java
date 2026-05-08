@@ -69,7 +69,7 @@ public class ClassReservationController {
       @RequestParam(required = false) Integer size) {
     requireUserId(userId);
     CursorPageRequest pageRequest =
-        CursorPageRequest.of(cursor, size, 20, 100, "user-reservations");
+        CursorPageRequest.of(cursor, size, 20, 100, GetUserReservationsQuery.CURSOR_SCOPE);
     return ResponseEntity.ok(
         ApiResponse.success(
             ReservationCursorResponse.from(
