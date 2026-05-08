@@ -1,4 +1,4 @@
--- MOM-340 / MOM-391 PR4 cleanup (spec V059, slot V065 after develop V063/V064 reservations).
+-- MOM-340 / MOM-391 PR4 cleanup — finalize the `web3_treasury_wallets` schema for the KMS-only world.
 --
 -- Finalize the `web3_treasury_wallets` schema for the KMS-only world:
 --   * Promote KMS-required columns to NOT NULL (operator backfill must be complete).
@@ -13,7 +13,7 @@
 -- the admin provision endpoint or backfill SQL before deploying this migration in any
 -- environment that still carried legacy rows.
 --
--- Operator pre-deployment check (run on the target DB before applying V065):
+-- Operator pre-deployment check (run on the target DB before applying this migration):
 --   SELECT count(*) AS missing_required
 --   FROM web3_treasury_wallets
 --   WHERE kms_key_id       IS NULL
@@ -49,7 +49,7 @@
 --        ck_web3_treasury_wallets_status,
 --        uk_web3_treasury_wallets_kms_key_id;
 --   3. ALTER TABLE web3_treasury_wallets ALTER COLUMN ... DROP NOT NULL (per column).
--- Do NOT use `flyway:repair` to silently retract V065 in prod — leave the audit trail.
+-- Do NOT use `flyway:repair` to silently retract this migration in prod — leave the audit trail.
 
 ALTER TABLE web3_treasury_wallets
     ALTER COLUMN kms_key_id       SET NOT NULL,

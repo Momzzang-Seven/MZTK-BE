@@ -15,7 +15,7 @@
 --                      서버가 KMS 로 생성한 keypair 의 공개키로부터 derive 한 EVM 주소.
 --   kms_key_id       : 동 endpoint 가 KMS 에서 생성한 CMK 의 keyId (UUID 형식).
 --   status           : 'ACTIVE' (provision 직후 기본값).
---   key_origin       : 'IMPORTED' (KMS Imported key material 만 허용 — V065 CHECK).
+--   key_origin       : 'IMPORTED' (KMS Imported key material 만 허용 — KMS-finalize cleanup CHECK).
 --
 --   provision 절차:
 --     1. POST /admin/web3/treasury-keys/provision { "role": "REWARD" } 또는 { "role": "SPONSOR" }

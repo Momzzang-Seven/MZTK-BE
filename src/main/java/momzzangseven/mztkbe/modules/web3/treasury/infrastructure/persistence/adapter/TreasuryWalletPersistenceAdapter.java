@@ -18,8 +18,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>Projects the {@code TreasuryWallet} aggregate against {@code web3_treasury_wallets}, reading
  * {@code kms_key_id} together with the lifecycle columns ({@code status}, {@code key_origin},
- * {@code disabled_at}). After V065 every row is KMS-backed: {@code treasury_private_key_encrypted}
- * has been dropped and the legacy cipher-backed write path no longer exists.
+ * {@code disabled_at}). After the KMS-finalize cleanup migration every row is KMS-backed: {@code
+ * treasury_private_key_encrypted} has been dropped and the legacy cipher-backed write path no
+ * longer exists.
  */
 @Component
 @RequiredArgsConstructor
@@ -83,9 +84,9 @@ public class TreasuryWalletPersistenceAdapter
   }
 
   private static void applyDomain(Web3TreasuryWalletEntity entity, TreasuryWallet wallet) {
-    // V065 enforces NOT NULL on status / key_origin (and the entity mirrors with nullable=false).
-    // Surfacing the violation at the adapter boundary turns an opaque SQL constraint error into a
-    // domain-level invariant failure that names the offending field.
+    // The KMS-finalize cleanup migration enforces NOT NULL on status / key_origin (and the entity
+    // mirrors with nullable=false). Surfacing the violation at the adapter boundary turns an opaque
+    // SQL constraint error into a domain-level invariant failure that names the offending field.
     requireNonBlank(wallet.getWalletAlias(), "walletAlias");
     requireNonBlank(wallet.getKmsKeyId(), "kmsKeyId");
     requireNonBlank(wallet.getWalletAddress(), "walletAddress");

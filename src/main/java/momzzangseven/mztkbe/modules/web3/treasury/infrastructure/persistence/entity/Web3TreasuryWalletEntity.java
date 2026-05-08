@@ -18,9 +18,9 @@ import lombok.Setter;
 
 /**
  * JPA mapping for {@code web3_treasury_wallets}. Mirrors the {@code TreasuryWallet} aggregate.
- * After V065 every row is KMS-backed: {@code wallet_alias}, {@code treasury_address}, {@code
- * kms_key_id}, {@code status}, {@code key_origin} are all NOT NULL and {@code kms_key_id} is
- * UNIQUE.
+ * After the KMS-finalize cleanup migration every row is KMS-backed: {@code wallet_alias}, {@code
+ * treasury_address}, {@code kms_key_id}, {@code status}, {@code key_origin} are all NOT NULL and
+ * {@code kms_key_id} is UNIQUE.
  *
  * <p>The {@code status} and {@code keyOrigin} columns are persisted as plain strings rather than
  * {@code @Enumerated} domain enums; ARCHITECTURE.md requires the entity to stay free of domain

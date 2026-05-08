@@ -14,8 +14,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * E2E migration invariants for {@code web3_treasury_wallets} (V059..V065) and {@code
- * web3_treasury_kms_audits} (V062).
+ * E2E migration invariants for {@code web3_treasury_wallets} (KMS column additions through the
+ * KMS-finalize cleanup migration) and {@code web3_treasury_kms_audits}.
  *
  * <p>Cases [E-102]..[E-105] from {@code
  * docs/test/refactor-MOM-384-reward-eip-1559-change-to-kms.md}. Uses PostgreSQL-only constructs
@@ -26,7 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * momzzangseven.mztkbe.integration.e2e.support.DatabaseCleaner}; this class explicitly deletes the
  * test wallet rows in {@link #cleanInsertedRows()}.
  */
-@DisplayName("[E2E] Treasury wallets / KMS audits migration invariants (V059..V065)")
+@DisplayName("[E2E] Treasury wallets / KMS audits migration invariants")
 class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
 
   private static final String LEGACY_ALIAS = "legacy-row";
@@ -43,8 +43,8 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-102] V065 — kms_key_id NOT NULL 강제, kms_key_id 미지정 INSERT 가 거부")
-  void v065_kmsKeyIdColumn_isNotNull_legacyInsertRejected() {
+  @DisplayName("[E-102] KMS-finalize cleanup — kms_key_id NOT NULL 강제, kms_key_id 미지정 INSERT 가 거부")
+  void kmsFinalizeCleanup_kmsKeyIdColumn_isNotNull_legacyInsertRejected() {
     String legacyAddress = "0x" + "1".repeat(40);
 
     assertThatThrownBy(
@@ -60,8 +60,8 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-103] V065 — KMS-only row INSERT 가 성공 (legacy 컬럼 DROP 후)")
-  void v065_kmsOnlyRowInsertSucceeds() {
+  @DisplayName("[E-103] KMS-finalize cleanup — KMS-only row INSERT 가 성공 (legacy 컬럼 DROP 후)")
+  void kmsFinalizeCleanup_kmsOnlyRowInsertSucceeds() {
     String kmsAddress = "0xdead000000000000000000000000000000000001";
 
     assertThatCode(
