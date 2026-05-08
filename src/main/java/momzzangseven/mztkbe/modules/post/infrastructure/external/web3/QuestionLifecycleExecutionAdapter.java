@@ -1,7 +1,14 @@
 package momzzangseven.mztkbe.modules.post.infrastructure.external.web3;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
@@ -15,11 +22,18 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAccept
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaEscrowAbiEncoder;
+import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.web3j.utils.Numeric;
 
 @Component
 @RequiredArgsConstructor
@@ -30,6 +44,9 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   private final BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
   private final CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;
+  private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
+  private final QnaEscrowAbiEncoder qnaEscrowAbiEncoder;
+  private final ObjectMapper objectMapper;
 
   @Override
   public boolean managesAcceptLifecycle() {
@@ -55,12 +72,20 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
 
   @Override
   public Optional<QuestionExecutionWriteView> loadQuestionCreateIntent(
-      Long postId, Long requesterUserId, String executionIntentId) {
+      Long postId,
+      Long requesterUserId,
+      String executionIntentId,
+      String questionContent,
+      Long rewardMztk) {
     GetExecutionIntentResult result =
         getExecutionIntentUseCase.execute(
             new GetExecutionIntentQuery(requesterUserId, executionIntentId));
     if (!"QUESTION".equals(result.resourceType().name())
-        || !String.valueOf(postId).equals(result.resourceId())) {
+        || !String.valueOf(postId).equals(result.resourceId())
+        || !"QNA_QUESTION_CREATE".equals(result.actionType().name())
+        || !matchesPayloadHash(result.payloadHash(), result.payloadSnapshotJson())
+        || !matchesQuestionCreatePayload(
+            postId, questionContent, rewardMztk, result.payloadSnapshotJson())) {
       return Optional.empty();
     }
     return Optional.of(toView(result));
@@ -195,6 +220,60 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
         toSignRequest(result.signRequest()),
         true);
+  }
+
+  private boolean matchesQuestionCreatePayload(
+      Long postId, String questionContent, Long rewardMztk, String payloadSnapshotJson) {
+    if (payloadSnapshotJson == null || payloadSnapshotJson.isBlank()) {
+      return false;
+    }
+    try {
+      QnaEscrowExecutionPayload payload =
+          objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
+      LoadQnaRewardTokenConfigPort.RewardTokenConfig rewardTokenConfig =
+          loadQnaRewardTokenConfigPort.loadRewardTokenConfig();
+      String expectedQuestionHash = QnaContentHashFactory.hash(questionContent);
+      BigInteger expectedAmountWei =
+          QnaEscrowIdCodec.toAmountWei(rewardMztk, rewardTokenConfig.decimals());
+      String expectedTokenAddress = EvmAddress.of(rewardTokenConfig.tokenContractAddress()).value();
+      String payloadTokenAddress = EvmAddress.of(payload.tokenAddress()).value();
+      String expectedCallData =
+          qnaEscrowAbiEncoder.encode(
+              QnaExecutionActionType.QNA_QUESTION_CREATE,
+              QnaEscrowIdCodec.questionId(postId),
+              null,
+              expectedTokenAddress,
+              expectedAmountWei,
+              expectedQuestionHash,
+              null);
+      return payload.actionType() == QnaExecutionActionType.QNA_QUESTION_CREATE
+          && postId.equals(payload.postId())
+          && payload.answerId() == null
+          && expectedQuestionHash.equals(payload.questionHash())
+          && payload.contentHash() == null
+          && expectedAmountWei.equals(payload.amountWei())
+          && expectedTokenAddress.equals(payloadTokenAddress)
+          && expectedCallData.equals(payload.callData());
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
+    }
+  }
+
+  private boolean matchesPayloadHash(String payloadHash, String payloadSnapshotJson) {
+    if (payloadHash == null
+        || payloadHash.isBlank()
+        || payloadSnapshotJson == null
+        || payloadSnapshotJson.isBlank()) {
+      return false;
+    }
+    try {
+      byte[] digest =
+          MessageDigest.getInstance("SHA-256")
+              .digest(payloadSnapshotJson.getBytes(StandardCharsets.UTF_8));
+      return payloadHash.equals(Numeric.toHexString(digest));
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 digest is unavailable", e);
+    }
   }
 
   private QuestionExecutionWriteView.SignRequest toSignRequest(

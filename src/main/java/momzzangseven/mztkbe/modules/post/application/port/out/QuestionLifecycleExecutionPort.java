@@ -21,7 +21,11 @@ public interface QuestionLifecycleExecutionPort {
   }
 
   default Optional<QuestionExecutionWriteView> loadQuestionCreateIntent(
-      Long postId, Long requesterUserId, String executionIntentId) {
+      Long postId,
+      Long requesterUserId,
+      String executionIntentId,
+      String questionContent,
+      Long rewardMztk) {
     return Optional.empty();
   }
 

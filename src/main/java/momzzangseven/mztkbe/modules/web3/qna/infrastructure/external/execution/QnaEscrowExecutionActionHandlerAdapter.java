@@ -131,9 +131,6 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
           isRetryableTerminalFailure(failureReason));
       return;
     }
-    if (!shouldRollbackPendingState(terminalStatus, failureReason)) {
-      return;
-    }
     if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_UPDATE
         && payload.answerUpdateVersion() != null
         && payload.answerUpdateToken() != null) {
@@ -143,6 +140,9 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
           payload.answerUpdateToken(),
           intent.getPublicId(),
           failureReason);
+      return;
+    }
+    if (!shouldRollbackPendingState(terminalStatus, failureReason)) {
       return;
     }
     if (payload.actionType() == QnaExecutionActionType.QNA_ANSWER_DELETE) {

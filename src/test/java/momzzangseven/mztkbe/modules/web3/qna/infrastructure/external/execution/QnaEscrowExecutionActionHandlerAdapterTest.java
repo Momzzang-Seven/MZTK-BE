@@ -553,6 +553,19 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
   }
 
   @Test
+  @DisplayName("afterExecutionTerminated marks answer update failure even when retryable")
+  void afterExecutionTerminated_marksAnswerUpdateRetryableFailure() throws Exception {
+    adapter.afterExecutionTerminated(
+        intent(answerUpdatePayload(3L, "answer-token-3"), ExecutionResourceType.ANSWER, "201", 22L),
+        plan(),
+        ExecutionIntentStatus.FAILED_ONCHAIN,
+        "RPC_UNAVAILABLE");
+
+    verify(qnaAnswerUpdateSyncPort)
+        .failAnswerUpdate(201L, 3L, "answer-token-3", "intent-1", "RPC_UNAVAILABLE");
+  }
+
+  @Test
   @DisplayName("afterExecutionTerminated rolls back admin settle pending accept on expire")
   void afterExecutionTerminated_rollsBackAdminSettleOnExpired() throws Exception {
     adapter.afterExecutionTerminated(
@@ -718,6 +731,24 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         updateToken,
         null,
         null);
+  }
+
+  private QnaEscrowExecutionPayload answerUpdatePayload(Long updateVersion, String updateToken) {
+    return new QnaEscrowExecutionPayload(
+        QnaExecutionActionType.QNA_ANSWER_UPDATE,
+        101L,
+        201L,
+        "0x" + "1".repeat(40),
+        "0x" + "2".repeat(40),
+        BigInteger.ZERO,
+        "0x" + "a".repeat(64),
+        "0x" + "b".repeat(64),
+        "0x" + "3".repeat(40),
+        "0x1234",
+        null,
+        null,
+        updateVersion,
+        updateToken);
   }
 
   private QnaQuestionUpdateState updateState(

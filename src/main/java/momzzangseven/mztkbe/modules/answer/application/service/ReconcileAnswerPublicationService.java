@@ -27,14 +27,23 @@ public class ReconcileAnswerPublicationService implements ReconcileAnswerPublica
     int terminalSubmitFailures =
         answerPublicationReconciliationPort.reconcileTerminalSubmitFailures(batchSize);
     int confirmedUpdates = answerPublicationReconciliationPort.reconcileConfirmedUpdates(batchSize);
+    int terminalUpdateFailures =
+        answerPublicationReconciliationPort.reconcileTerminalUpdateFailures(batchSize);
     List<Long> confirmedDeleteAnswerIds =
         answerPublicationReconciliationPort.findConfirmedDeleteAnswerIds(batchSize);
     int confirmedDeletes =
         answerPublicationReconciliationPort.deleteConfirmedDeleteAnswers(confirmedDeleteAnswerIds);
     confirmedDeleteAnswerIds.forEach(
         answerId -> publishAnswerDeletedEventPort.publish(new AnswerDeletedEvent(answerId)));
+    int terminalDeleteRollbacks =
+        answerPublicationReconciliationPort.reconcileTerminalDeleteRollbacks(batchSize);
     answerPublicationReconciliationPort.repairQuestionAnswerCounts();
     return new ReconcileAnswerPublicationResult(
-        confirmedSubmits, terminalSubmitFailures, confirmedUpdates, confirmedDeletes);
+        confirmedSubmits,
+        terminalSubmitFailures,
+        confirmedUpdates,
+        terminalUpdateFailures,
+        confirmedDeletes,
+        terminalDeleteRollbacks);
   }
 }

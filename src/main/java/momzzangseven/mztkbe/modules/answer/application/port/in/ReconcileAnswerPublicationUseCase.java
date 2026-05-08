@@ -8,10 +8,17 @@ public interface ReconcileAnswerPublicationUseCase {
       int confirmedSubmits,
       int terminalSubmitFailures,
       int confirmedUpdates,
-      int confirmedDeletes) {
+      int terminalUpdateFailures,
+      int confirmedDeletes,
+      int terminalDeleteRollbacks) {
 
     public int total() {
-      return confirmedSubmits + terminalSubmitFailures + confirmedUpdates + confirmedDeletes;
+      return confirmedSubmits
+          + terminalSubmitFailures
+          + confirmedUpdates
+          + terminalUpdateFailures
+          + confirmedDeletes
+          + terminalDeleteRollbacks;
     }
   }
 }

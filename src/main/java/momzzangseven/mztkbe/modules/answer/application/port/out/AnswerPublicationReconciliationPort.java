@@ -10,9 +10,13 @@ public interface AnswerPublicationReconciliationPort {
 
   int reconcileConfirmedUpdates(int batchSize);
 
+  int reconcileTerminalUpdateFailures(int batchSize);
+
   List<Long> findConfirmedDeleteAnswerIds(int batchSize);
 
   int deleteConfirmedDeleteAnswers(List<Long> answerIds);
+
+  int reconcileTerminalDeleteRollbacks(int batchSize);
 
   int repairQuestionAnswerCounts();
 }

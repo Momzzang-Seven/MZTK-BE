@@ -1,6 +1,8 @@
 package momzzangseven.mztkbe.modules.post.application.service;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -13,7 +15,9 @@ import momzzangseven.mztkbe.modules.post.application.port.in.RecoverQuestionPost
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAnswerCreateIntentConflictPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
@@ -41,6 +45,8 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
   private final LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
   private final CountAnswersPort countAnswersPort;
   private final LoadAnswerCreateIntentConflictPort loadAnswerCreateIntentConflictPort;
+  private final LoadTagPort loadTagPort;
+  private final LoadPostImagesPort loadPostImagesPort;
   private final ValidatePostImagesPort validatePostImagesPort;
   private final UpdatePostImagesPort updatePostImagesPort;
   private final LinkTagPort linkTagPort;
@@ -91,7 +97,7 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
             return null;
           });
     } catch (RuntimeException ex) {
-      if (isAlreadyBoundToSameCreateIntent(command, preparation, preparedCreateIntentId(web3))) {
+      if (isFinalizedToExpectedCreateIntent(command, preparation, preparedCreateIntentId(web3))) {
         return new PostMutationResult(command.postId(), web3);
       }
       cancelPreparedIntentIfOwned(web3, "question recover create intent bind failed");
@@ -130,7 +136,11 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     QuestionExecutionWriteView web3 =
         questionLifecycleExecutionPort
             .loadQuestionCreateIntent(
-                post.getId(), command.requesterId(), post.getCurrentCreateExecutionIntentId())
+                post.getId(),
+                command.requesterId(),
+                post.getCurrentCreateExecutionIntentId(),
+                post.getContent(),
+                post.getReward())
             .orElseThrow(
                 () ->
                     new PostPublicationStateException(
@@ -202,7 +212,7 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
             null,
             null);
     if (updatedRows == 0) {
-      if (isAlreadyBoundToSameCreateIntent(command, preparation, executionIntentId)) {
+      if (isFinalizedToExpectedCreateIntent(command, preparation, executionIntentId)) {
         return;
       }
       cancelPreparedIntentIfOwned(web3, "question recover create intent bind failed");
@@ -312,11 +322,11 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     return web3.executionIntent().id();
   }
 
-  private boolean isAlreadyBoundToSameCreateIntent(
+  private boolean isFinalizedToExpectedCreateIntent(
       RecoverQuestionPostEscrowCommand command,
       RecoveryPreparation preparation,
       String executionIntentId) {
-    if (executionIntentId == null || command.hasMutationFields()) {
+    if (executionIntentId == null) {
       return false;
     }
     return runInTransaction(
@@ -328,7 +338,7 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
           if (!post.matchesCurrentCreateExecutionIntent(executionIntentId)
               || !post.isPublicationPending()
               || !post.isOwnedBy(command.requesterId())
-              || !preparation.matchesCurrentPayload(post)) {
+              || !matchesExpectedLocalState(command, preparation, post)) {
             return false;
           }
           QuestionPublicationEvidence evidence =
@@ -337,6 +347,42 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
               && evidence.activeCreateIntentExists()
               && evidence.hasLatestCreateExecutionIntent(executionIntentId);
         });
+  }
+
+  private boolean matchesExpectedLocalState(
+      RecoverQuestionPostEscrowCommand command, RecoveryPreparation preparation, Post post) {
+    if (!preparation.matchesCurrentPayload(post)) {
+      return false;
+    }
+    if (command.title() != null && !Objects.equals(command.title(), post.getTitle())) {
+      return false;
+    }
+    if (command.tags() != null
+        && !normalizeTags(command.tags())
+            .equals(normalizeTags(loadTagPort.findTagNamesByPostId(post.getId())))) {
+      return false;
+    }
+    return command.imageIds() == null || command.imageIds().equals(loadCurrentImageIds(post));
+  }
+
+  private List<String> normalizeTags(List<String> tags) {
+    if (tags == null || tags.isEmpty()) {
+      return List.of();
+    }
+    return tags.stream()
+        .filter(Objects::nonNull)
+        .map(String::trim)
+        .map(name -> name.toLowerCase(Locale.ROOT))
+        .filter(name -> !name.isBlank())
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  private List<Long> loadCurrentImageIds(Post post) {
+    return loadPostImagesPort.loadImages(post.getType(), post.getId()).slots().stream()
+        .map(slot -> slot.imageId())
+        .toList();
   }
 
   private void cancelPreparedIntentIfOwned(QuestionExecutionWriteView web3, String reason) {
@@ -381,8 +427,8 @@ public class RecoverQuestionPostEscrowService implements RecoverQuestionPostEscr
     }
 
     private boolean matchesCurrentPayload(Post post) {
-      return java.util.Objects.equals(questionContent, post.getContent())
-          && java.util.Objects.equals(rewardMztk, post.getReward());
+      return Objects.equals(questionContent, post.getContent())
+          && Objects.equals(rewardMztk, post.getReward());
     }
   }
 }

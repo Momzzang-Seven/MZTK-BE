@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -17,12 +18,16 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
+import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult;
+import momzzangseven.mztkbe.modules.post.application.dto.PostImageResult.PostImageSlot;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.RecoverQuestionPostEscrowCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAnswerCreateIntentConflictPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostImagesPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadTagPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionPublicationEvidence;
@@ -54,6 +59,8 @@ class RecoverQuestionPostEscrowServiceTest {
   @Mock private LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
   @Mock private CountAnswersPort countAnswersPort;
   @Mock private LoadAnswerCreateIntentConflictPort loadAnswerCreateIntentConflictPort;
+  @Mock private LoadTagPort loadTagPort;
+  @Mock private LoadPostImagesPort loadPostImagesPort;
   @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private LinkTagPort linkTagPort;
@@ -74,7 +81,8 @@ class RecoverQuestionPostEscrowServiceTest {
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(activeRecoveryEvidence("intent-2"));
-    when(questionLifecycleExecutionPort.loadQuestionCreateIntent(postId, ownerId, "intent-2"))
+    when(questionLifecycleExecutionPort.loadQuestionCreateIntent(
+            postId, ownerId, "intent-2", "질문 내용", 50L))
         .thenReturn(Optional.of(web3("intent-2")));
 
     PostMutationResult result = service.recoverQuestionCreate(command);
@@ -103,7 +111,8 @@ class RecoverQuestionPostEscrowServiceTest {
         .isInstanceOf(PostPublicationStateException.class)
         .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo("POST_008"));
 
-    verify(questionLifecycleExecutionPort, never()).loadQuestionCreateIntent(any(), any(), any());
+    verify(questionLifecycleExecutionPort, never())
+        .loadQuestionCreateIntent(any(), any(), any(), any(), any());
     verify(questionLifecycleExecutionPort, never())
         .recoverQuestionCreate(any(), any(), any(), any());
     verifyNoPublicationClaim();
@@ -477,8 +486,75 @@ class RecoverQuestionPostEscrowServiceTest {
             null);
     verify(postPersistencePort).savePost(any(Post.class));
     verify(updatePostImagesPort, never()).updateImages(any(), any(), any(), any());
-    verify(transactionManager, times(3)).commit(any(TransactionStatus.class));
+    verify(transactionManager, times(4)).commit(any(TransactionStatus.class));
     verify(transactionManager).rollback(any(TransactionStatus.class));
+  }
+
+  @Test
+  @DisplayName("managed edit recovery does not cancel intent when commit propagated after success")
+  void managedEditRecoveryDoesNotCancelIntentWhenCommitPropagatedAfterSuccess() {
+    PlatformTransactionManager transactionManager = mock(PlatformTransactionManager.class);
+    when(transactionManager.getTransaction(any()))
+        .thenAnswer(invocation -> new SimpleTransactionStatus());
+    RuntimeException commitFailure = new RuntimeException("commit result was ambiguous");
+    doNothing()
+        .doNothing()
+        .doNothing()
+        .doThrow(commitFailure)
+        .doNothing()
+        .when(transactionManager)
+        .commit(any(TransactionStatus.class));
+    service.setTransactionManager(transactionManager);
+
+    Long ownerId = 7L;
+    Long postId = 109L;
+    Post failedPost = failedQuestion(ownerId, postId);
+    Post committedPost =
+        pendingQuestion(ownerId, postId, "intent-2").toBuilder()
+            .title("수정 제목")
+            .content("수정 내용")
+            .build();
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(
+            ownerId, postId, "수정 제목", "수정 내용", List.of(1L), List.of("TagA", "TagB"));
+
+    when(postPersistencePort.loadPostForUpdate(postId))
+        .thenReturn(
+            Optional.of(failedPost),
+            Optional.of(failedPost),
+            Optional.of(failedPost),
+            Optional.of(failedPost),
+            Optional.of(committedPost));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(
+            terminalRecoveryEvidence(),
+            activeRecoveryEvidence("intent-2"),
+            activeRecoveryEvidence("intent-2"));
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
+    when(questionLifecycleExecutionPort.recoverQuestionCreate(postId, ownerId, "수정 내용", 50L))
+        .thenReturn(Optional.of(web3("intent-2")));
+    when(postPersistencePort.updateQuestionPublicationStateIfExpected(
+            postId,
+            PostPublicationStatus.FAILED,
+            null,
+            null,
+            null,
+            PostPublicationStatus.PENDING,
+            "intent-2",
+            null,
+            null))
+        .thenReturn(1);
+    when(loadTagPort.findTagNamesByPostId(postId)).thenReturn(List.of("tagb", "taga"));
+    when(loadPostImagesPort.loadImages(PostType.QUESTION, postId))
+        .thenReturn(new PostImageResult(List.of(new PostImageSlot(1L, "image"))));
+
+    PostMutationResult result = service.recoverQuestionCreate(command);
+
+    assertThat(result.web3().executionIntent().id()).isEqualTo("intent-2");
+    verify(questionLifecycleExecutionPort, never()).cancelSignableIntent(any(), any());
+    verify(linkTagPort).updateTags(postId, List.of("TagA", "TagB"));
+    verify(updatePostImagesPort).updateImages(ownerId, postId, PostType.QUESTION, List.of(1L));
   }
 
   @Test

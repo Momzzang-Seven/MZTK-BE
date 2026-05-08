@@ -19,11 +19,13 @@ public class AnswerPublicationReconciliationScheduler {
       var result = reconcileAnswerPublicationUseCase.reconcile(100);
       if (result.total() > 0) {
         log.info(
-            "answer publication reconciliation completed: confirmedSubmits={}, terminalSubmitFailures={}, confirmedUpdates={}, confirmedDeletes={}",
+            "answer publication reconciliation completed: confirmedSubmits={}, terminalSubmitFailures={}, confirmedUpdates={}, terminalUpdateFailures={}, confirmedDeletes={}, terminalDeleteRollbacks={}",
             result.confirmedSubmits(),
             result.terminalSubmitFailures(),
             result.confirmedUpdates(),
-            result.confirmedDeletes());
+            result.terminalUpdateFailures(),
+            result.confirmedDeletes(),
+            result.terminalDeleteRollbacks());
       }
     } catch (Exception e) {
       log.error("answer publication reconciliation failed", e);

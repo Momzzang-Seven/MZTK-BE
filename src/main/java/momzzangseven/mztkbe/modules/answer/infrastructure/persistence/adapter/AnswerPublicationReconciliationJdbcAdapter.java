@@ -196,6 +196,32 @@ public class AnswerPublicationReconciliationJdbcAdapter
     return answersUpdated;
   }
 
+  @Override
+  public int reconcileTerminalUpdateFailures(int batchSize) {
+    return jdbcTemplate.update(
+        """
+        UPDATE qna_answer_update_states s
+        SET status = 'FAILED',
+            error_reason = COALESCE(e.last_error_reason, 'answer update terminal reconciliation'),
+            updated_at = NOW()
+        FROM web3_execution_intents e
+        WHERE s.id IN (
+            SELECT s2.id
+            FROM qna_answer_update_states s2
+            JOIN web3_execution_intents e2
+              ON e2.public_id = s2.execution_intent_public_id
+            WHERE s2.status = 'INTENT_BOUND'
+              AND e2.resource_type = 'ANSWER'
+              AND e2.action_type = 'QNA_ANSWER_UPDATE'
+              AND e2.status IN ('FAILED_ONCHAIN', 'EXPIRED', 'CANCELED', 'NONCE_STALE')
+            ORDER BY s2.answer_id, s2.update_version
+            LIMIT ?
+        )
+          AND e.public_id = s.execution_intent_public_id
+        """,
+        batchSize);
+  }
+
   private void applyConfirmedUpdateImages(int batchSize) {
     jdbcTemplate.update(
         """
@@ -313,6 +339,35 @@ public class AnswerPublicationReconciliationJdbcAdapter
     String placeholders = String.join(",", answerIds.stream().map(id -> "?").toList());
     return jdbcTemplate.update(
         "DELETE FROM answers WHERE id IN (" + placeholders + ")", answerIds.toArray());
+  }
+
+  @Override
+  public int reconcileTerminalDeleteRollbacks(int batchSize) {
+    return jdbcTemplate.update(
+        """
+        UPDATE answers a
+        SET pending_delete_status = NULL,
+            current_delete_execution_intent_id = NULL,
+            delete_preparation_token = NULL,
+            delete_preparation_expires_at = NULL,
+            delete_failure_terminal_status = e.status,
+            delete_failure_reason = COALESCE(e.last_error_reason, 'answer delete terminal reconciliation'),
+            updated_at = NOW()
+        FROM web3_execution_intents e
+        WHERE a.id IN (
+            SELECT a2.id
+            FROM answers a2
+            JOIN web3_execution_intents e2
+              ON e2.public_id = a2.current_delete_execution_intent_id
+            WHERE e2.resource_type = 'ANSWER'
+              AND e2.action_type = 'QNA_ANSWER_DELETE'
+              AND e2.status IN ('FAILED_ONCHAIN', 'EXPIRED', 'CANCELED', 'NONCE_STALE')
+            ORDER BY a2.id
+            LIMIT ?
+        )
+          AND e.public_id = a.current_delete_execution_intent_id
+        """,
+        batchSize);
   }
 
   @Override
