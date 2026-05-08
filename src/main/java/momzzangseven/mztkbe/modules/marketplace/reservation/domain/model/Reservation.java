@@ -71,6 +71,19 @@ public class Reservation {
   /** Most recent on-chain transaction hash associated with this reservation. */
   private final String txHash;
 
+  /**
+   * Class price in KRW at the moment of booking. Denormalised snapshot so that past reservations
+   * always display the price the user actually paid, even if the trainer later changes the class
+   * price.
+   */
+  private final int bookedPriceAmount;
+
+  /**
+   * Class title at the moment of booking. Denormalised snapshot so that past reservations display
+   * the title as it was when the user booked, even if the trainer later renames the class.
+   */
+  private final String bookedClassTitle;
+
   /** JPA optimistic-lock version. Null for unsaved instances. */
   private final Long version;
 
@@ -104,7 +117,9 @@ public class Reservation {
       int durationMinutes,
       String userRequest,
       String orderId,
-      String txHash) {
+      String txHash,
+      int bookedPriceAmount,
+      String bookedClassTitle) {
 
     return Reservation.builder()
         .userId(userId)
@@ -118,6 +133,8 @@ public class Reservation {
         .rejectionReason(null)
         .orderId(orderId)
         .txHash(txHash)
+        .bookedPriceAmount(bookedPriceAmount)
+        .bookedClassTitle(bookedClassTitle)
         .build();
   }
 
