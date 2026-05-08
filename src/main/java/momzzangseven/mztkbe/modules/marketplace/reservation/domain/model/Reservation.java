@@ -75,8 +75,11 @@ public class Reservation {
    * Class price in KRW at the moment of booking. Denormalised snapshot so that past reservations
    * always display the price the user actually paid, even if the trainer later changes the class
    * price.
+   *
+   * <p>{@code null} for legacy records created before this snapshot column was added (pre-V065).
+   * The service layer treats {@code null} as a signal to fall back to a live cross-module lookup.
    */
-  private final int bookedPriceAmount;
+  private final Integer bookedPriceAmount;
 
   /**
    * Class title at the moment of booking. Denormalised snapshot so that past reservations display
@@ -118,7 +121,7 @@ public class Reservation {
       String userRequest,
       String orderId,
       String txHash,
-      int bookedPriceAmount,
+      Integer bookedPriceAmount,
       String bookedClassTitle) {
 
     return Reservation.builder()

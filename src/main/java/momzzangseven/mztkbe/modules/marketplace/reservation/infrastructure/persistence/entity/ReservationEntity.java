@@ -68,9 +68,9 @@ public class ReservationEntity {
   @Column(name = "tx_hash", length = 100)
   private String txHash;
 
-  /** Snapshot of priceAmount at booking time. Zero for legacy records created before this field. */
-  @Column(name = "booked_price_amount", nullable = false)
-  private int bookedPriceAmount;
+  /** Snapshot of priceAmount at booking time. NULL for legacy records created before this field. */
+  @Column(name = "booked_price_amount")
+  private Integer bookedPriceAmount;
 
   /** Snapshot of class title at booking time. Null for legacy records created before this field. */
   @Column(name = "booked_class_title", length = 100)
