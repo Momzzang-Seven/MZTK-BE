@@ -4,7 +4,6 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAddressProjectionPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
@@ -26,7 +25,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 @Slf4j
 public class TreasuryWalletPersistenceAdapter
-    implements LoadTreasuryWalletPort, SaveTreasuryWalletPort, LoadTreasuryAddressProjectionPort {
+    implements LoadTreasuryWalletPort, SaveTreasuryWalletPort {
 
   private final Web3TreasuryWalletJpaRepository repository;
 
@@ -59,18 +58,6 @@ public class TreasuryWalletPersistenceAdapter
     applyDomain(entity, wallet);
     Web3TreasuryWalletEntity saved = repository.save(entity);
     return toDomain(saved);
-  }
-
-  // ----- LoadTreasuryAddressProjectionPort -----
-
-  @Override
-  public Optional<String> loadAddressByAlias(String walletAlias) {
-    requireNonBlank(walletAlias, "walletAlias");
-
-    return repository
-        .findByWalletAlias(walletAlias)
-        .map(Web3TreasuryWalletEntity::getTreasuryAddress)
-        .filter(TreasuryWalletPersistenceAdapter::hasText);
   }
 
   // ----- helpers -----
@@ -134,9 +121,5 @@ public class TreasuryWalletPersistenceAdapter
       return null;
     }
     return TreasuryKeyOrigin.valueOf(value);
-  }
-
-  private static boolean hasText(String value) {
-    return value != null && !value.isBlank();
   }
 }
