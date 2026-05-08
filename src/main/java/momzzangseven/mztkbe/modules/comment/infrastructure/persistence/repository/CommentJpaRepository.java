@@ -61,6 +61,7 @@ public interface CommentJpaRepository extends JpaRepository<CommentEntity, Long>
       "SELECT c.postId AS postId, COUNT(c.id) AS commentCount "
           + "FROM CommentEntity c "
           + "WHERE c.postId IN :postIds "
+          + "AND c.isDeleted = false "
           + "GROUP BY c.postId")
   List<PostCommentCount> countManagedBoardCommentsByPostIds(@Param("postIds") List<Long> postIds);
 
