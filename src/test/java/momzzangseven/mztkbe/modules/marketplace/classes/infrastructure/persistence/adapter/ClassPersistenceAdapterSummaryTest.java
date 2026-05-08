@@ -9,7 +9,6 @@ import java.util.Map;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.ClassSlotEntity;
 import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.entity.MarketplaceClassEntity;
-import momzzangseven.mztkbe.modules.marketplace.classes.infrastructure.persistence.repository.MarketplaceClassJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -23,12 +22,13 @@ import org.springframework.test.context.ActiveProfiles;
  * H2-based adapter test for {@link ClassPersistenceAdapter#findSummaryProjectionsBySlotIds}.
  *
  * <p>Verifies that the JPQL JOIN query ({@code class_slots JOIN marketplace_classes}) returns
- * correct {@link ClassSummaryProjection} records when given various slot ID sets. All other
- * {@link ClassPersistenceAdapter} dependencies (QueryDSL, LoadClassTagPort, LoadTrainerStorePort)
- * are not needed for this query path and are excluded from the test context via a minimal
- * {@link @Import} configuration.
+ * correct {@link ClassSummaryProjection} records when given various slot ID sets. All other {@link
+ * ClassPersistenceAdapter} dependencies (QueryDSL, LoadClassTagPort, LoadTrainerStorePort) are not
+ * needed for this query path and are excluded from the test context via a minimal {@link @Import}
+ * configuration.
  *
  * <p>Test scenarios:
+ *
  * <ul>
  *   <li>Happy path: multiple slot IDs → correct slotId→projection mapping
  *   <li>Missing slot: unknown slotId absent from result map
@@ -51,8 +51,8 @@ class ClassPersistenceAdapterSummaryTest {
   private static final Long TRAINER_ID = 1L;
 
   /**
-   * Persists a {@code marketplace_classes} row and returns its generated ID.
-   * version=0 is required because the entity uses {@code @Version}.
+   * Persists a {@code marketplace_classes} row and returns its generated ID. version=0 is required
+   * because the entity uses {@code @Version}.
    */
   private Long saveClass(String title, int price, boolean active) {
     MarketplaceClassEntity entity =
@@ -105,7 +105,8 @@ class ClassPersistenceAdapterSummaryTest {
       Long classId = saveClass("요가 기초", 50_000, true);
       Long slotId = saveSlot(classId);
 
-      Map<Long, ClassSummaryProjection> result = sut.findSummaryProjectionsBySlotIds(List.of(slotId));
+      Map<Long, ClassSummaryProjection> result =
+          sut.findSummaryProjectionsBySlotIds(List.of(slotId));
 
       assertThat(result).containsOnlyKeys(slotId);
       ClassSummaryProjection proj = result.get(slotId);
@@ -226,8 +227,7 @@ class ClassPersistenceAdapterSummaryTest {
     @Test
     @DisplayName("빈 리스트 → DB 조회 없이 빈 맵을 즉시 반환한다")
     void emptySlotIds_returnsEmptyMapImmediately() {
-      Map<Long, ClassSummaryProjection> result =
-          sut.findSummaryProjectionsBySlotIds(List.of());
+      Map<Long, ClassSummaryProjection> result = sut.findSummaryProjectionsBySlotIds(List.of());
 
       assertThat(result).isEmpty();
     }
@@ -235,8 +235,7 @@ class ClassPersistenceAdapterSummaryTest {
     @Test
     @DisplayName("null 입력 → 빈 맵을 반환한다")
     void nullSlotIds_returnsEmptyMap() {
-      Map<Long, ClassSummaryProjection> result =
-          sut.findSummaryProjectionsBySlotIds(null);
+      Map<Long, ClassSummaryProjection> result = sut.findSummaryProjectionsBySlotIds(null);
 
       assertThat(result).isEmpty();
     }

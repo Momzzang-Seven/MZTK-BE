@@ -98,8 +98,7 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
 
       try {
         result.put(
-            slotId,
-            new ClassSummary(proj.title(), proj.priceAmount(), thumbnailKeys.get(slotId)));
+            slotId, new ClassSummary(proj.title(), proj.priceAmount(), thumbnailKeys.get(slotId)));
       } catch (IllegalStateException e) {
         log.warn(
             "Skipping ClassSummary for slotId={} classId={} due to invariant violation: {}",

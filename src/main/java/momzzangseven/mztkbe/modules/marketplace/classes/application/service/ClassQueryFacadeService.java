@@ -69,8 +69,8 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
    *
    * <p>Resolves classIds from the same projection query used by {@link #findSummariesBySlotIds},
    * then delegates to {@link LoadClassImagesPort#loadThumbnailKeys} for a single batch image
-   * lookup. The result is re-keyed from classId back to slotId so callers never need to handle
-   * the classId indirection.
+   * lookup. The result is re-keyed from classId back to slotId so callers never need to handle the
+   * classId indirection.
    */
   @Override
   @Transactional(readOnly = true)

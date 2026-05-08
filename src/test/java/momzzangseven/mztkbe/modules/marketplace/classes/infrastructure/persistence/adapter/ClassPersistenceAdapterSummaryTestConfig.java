@@ -13,9 +13,9 @@ import org.springframework.context.annotation.Bean;
  * Minimal Spring test configuration for {@link ClassPersistenceAdapterSummaryTest}.
  *
  * <p>{@link ClassPersistenceAdapter} depends on {@link com.querydsl.jpa.impl.JPAQueryFactory},
- * {@link LoadClassTagPort}, and {@link LoadTrainerStorePort} — none of which are used by
- * {@code findSummaryProjectionsBySlotIds}. They are provided as Mockito mocks here so that the
- * adapter can be constructed without wiring the full application context.
+ * {@link LoadClassTagPort}, and {@link LoadTrainerStorePort} — none of which are used by {@code
+ * findSummaryProjectionsBySlotIds}. They are provided as Mockito mocks here so that the adapter can
+ * be constructed without wiring the full application context.
  */
 @TestConfiguration
 class ClassPersistenceAdapterSummaryTestConfig {

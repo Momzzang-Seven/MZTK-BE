@@ -129,8 +129,8 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
    * mirrors the {@code ORDER BY} clause below. This prevents gaps or duplicates when multiple
    * reservations share the same date and preserves the session-time ordering that users expect.
    *
-   * <p><b>Sort contract:</b> {@code reservation_date DESC, reservation_time DESC, id DESC}.
-   * The cursor encodes this as {@code KeysetCursor(createdAt = date.atTime(time), id)}.
+   * <p><b>Sort contract:</b> {@code reservation_date DESC, reservation_time DESC, id DESC}. The
+   * cursor encodes this as {@code KeysetCursor(createdAt = date.atTime(time), id)}.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "
@@ -151,9 +151,9 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   /**
    * Cursor (keyset) paginated query for a user's reservations — no status filter.
    *
-   * <p>Used when {@code status} is {@code null} so that the optimizer can use the
-   * {@code (user_id, reservation_date DESC, reservation_time DESC, id DESC)} index directly.
-   * Sort contract and cursor semantics are identical to {@link #findByUserIdCursor}.
+   * <p>Used when {@code status} is {@code null} so that the optimizer can use the {@code (user_id,
+   * reservation_date DESC, reservation_time DESC, id DESC)} index directly. Sort contract and
+   * cursor semantics are identical to {@link #findByUserIdCursor}.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "
@@ -189,8 +189,8 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   /**
    * Cursor (keyset) paginated query for a trainer's reservations.
    *
-   * <p>Sort contract and cursor semantics are identical to {@link #findByUserIdCursor}:
-   * {@code (reservation_date DESC, reservation_time DESC, id DESC)}.
+   * <p>Sort contract and cursor semantics are identical to {@link #findByUserIdCursor}: {@code
+   * (reservation_date DESC, reservation_time DESC, id DESC)}.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "
@@ -211,9 +211,9 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   /**
    * Cursor (keyset) paginated query for a trainer's reservations — no status filter.
    *
-   * <p>Mirrors {@link #findByUserIdCursorNoStatus} for the trainer path. Used when no status
-   * filter is requested so the {@code (trainer_id, reservation_date DESC, reservation_time DESC,
-   * id DESC)} index can satisfy the sort without a filesort step.
+   * <p>Mirrors {@link #findByUserIdCursorNoStatus} for the trainer path. Used when no status filter
+   * is requested so the {@code (trainer_id, reservation_date DESC, reservation_time DESC, id DESC)}
+   * index can satisfy the sort without a filesort step.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "

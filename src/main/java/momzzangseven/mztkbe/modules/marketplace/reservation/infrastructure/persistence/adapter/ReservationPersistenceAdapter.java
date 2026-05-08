@@ -159,7 +159,8 @@ public class ReservationPersistenceAdapter implements LoadReservationPort, SaveR
   @Override
   public List<Reservation> findByTrainerIdCursor(
       Long trainerId, ReservationStatus status, CursorPageRequest pageRequest) {
-    // KeysetCursor.createdAt encodes reservationDate.atTime(reservationTime) — see findByUserIdCursor.
+    // KeysetCursor.createdAt encodes reservationDate.atTime(reservationTime) — see
+    // findByUserIdCursor.
     LocalDate cursorDate =
         pageRequest.hasCursor() ? pageRequest.cursor().createdAt().toLocalDate() : null;
     LocalTime cursorTime =
