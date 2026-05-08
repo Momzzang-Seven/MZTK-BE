@@ -67,6 +67,26 @@ class ModeratePostServiceTest {
   }
 
   @Test
+  @DisplayName("blockManagedPost reuses block logic without changing publication status")
+  void blockManagedPostSetsBlocked() {
+    Post post = post(PostPublicationStatus.VISIBLE, PostModerationStatus.NORMAL);
+    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
+    when(postPersistencePort.savePost(org.mockito.ArgumentMatchers.any(Post.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    var result = service.blockManagedPost(new ModeratePostCommand(99L, 10L));
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort).savePost(postCaptor.capture());
+    assertThat(postCaptor.getValue().getPublicationStatus())
+        .isEqualTo(PostPublicationStatus.VISIBLE);
+    assertThat(postCaptor.getValue().getModerationStatus()).isEqualTo(PostModerationStatus.BLOCKED);
+    assertThat(result.moderated()).isTrue();
+    assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.VISIBLE);
+    assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.BLOCKED);
+  }
+
+  @Test
   @DisplayName(
       "unblockPost restores moderation status to NORMAL without changing publication status")
   void unblockPostSetsNormal() {
@@ -117,6 +137,26 @@ class ModeratePostServiceTest {
 
     verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
     assertThat(result.moderated()).isFalse();
+    assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.NORMAL);
+  }
+
+  @Test
+  @DisplayName("unblockManagedPost keeps FAILED publication status while unblocking")
+  void unblockManagedPostFailedBlockedKeepsPublicationStatus() {
+    Post post = post(PostPublicationStatus.FAILED, PostModerationStatus.BLOCKED);
+    when(postPersistencePort.loadPostForUpdate(10L)).thenReturn(Optional.of(post));
+    when(postPersistencePort.savePost(org.mockito.ArgumentMatchers.any(Post.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    var result = service.unblockManagedPost(new ModeratePostCommand(99L, 10L));
+
+    ArgumentCaptor<Post> postCaptor = ArgumentCaptor.forClass(Post.class);
+    verify(postPersistencePort).savePost(postCaptor.capture());
+    assertThat(postCaptor.getValue().getPublicationStatus())
+        .isEqualTo(PostPublicationStatus.FAILED);
+    assertThat(postCaptor.getValue().getModerationStatus()).isEqualTo(PostModerationStatus.NORMAL);
+    assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.NORMAL);
   }

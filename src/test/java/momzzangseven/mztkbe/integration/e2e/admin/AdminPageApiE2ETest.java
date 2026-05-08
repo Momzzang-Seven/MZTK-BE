@@ -255,6 +255,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(postModerationStatus(freePostId)).isEqualTo("BLOCKED");
     assertThat(adminActionAuditCount("ADMIN_BOARD_POST_BAN", String.valueOf(freePostId)))
         .isEqualTo(1L);
+    assertThat(adminActionAuditCount("POST_BLOCK", "post:" + freePostId)).isZero();
 
     ResponseEntity<String> freeRebanResponse =
         postWithBearer(
@@ -308,6 +309,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(postModerationStatus(questionPostId)).isEqualTo("NORMAL");
     assertThat(adminActionAuditCount("ADMIN_BOARD_POST_UNBLOCK", String.valueOf(questionPostId)))
         .isEqualTo(1L);
+    assertThat(adminActionAuditCount("POST_UNBLOCK", "post:" + questionPostId)).isZero();
 
     ResponseEntity<String> failedNormalDetailResponse =
         getWithBearer("/posts/" + questionPostId, viewerToken);

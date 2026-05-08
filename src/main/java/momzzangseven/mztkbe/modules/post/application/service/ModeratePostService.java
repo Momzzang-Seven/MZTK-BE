@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.global.security.aspect.AdminOnly;
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostResult;
 import momzzangseven.mztkbe.modules.post.application.port.in.BlockPostUseCase;
+import momzzangseven.mztkbe.modules.post.application.port.in.ModerateManagedPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.UnblockPostUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
@@ -16,7 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class ModeratePostService implements BlockPostUseCase, UnblockPostUseCase {
+public class ModeratePostService
+    implements BlockPostUseCase, UnblockPostUseCase, ModerateManagedPostUseCase {
 
   private final PostPersistencePort postPersistencePort;
 
@@ -28,6 +30,12 @@ public class ModeratePostService implements BlockPostUseCase, UnblockPostUseCase
       operatorId = "#p0.operatorId()",
       targetId = "'post:' + #p0.postId()")
   public ModeratePostResult blockPost(ModeratePostCommand command) {
+    return blockManagedPost(command);
+  }
+
+  @Override
+  @Transactional
+  public ModeratePostResult blockManagedPost(ModeratePostCommand command) {
     command.validate();
     Post post =
         postPersistencePort
@@ -44,6 +52,12 @@ public class ModeratePostService implements BlockPostUseCase, UnblockPostUseCase
       operatorId = "#p0.operatorId()",
       targetId = "'post:' + #p0.postId()")
   public ModeratePostResult unblockPost(ModeratePostCommand command) {
+    return unblockManagedPost(command);
+  }
+
+  @Override
+  @Transactional
+  public ModeratePostResult unblockManagedPost(ModeratePostCommand command) {
     command.validate();
     Post post =
         postPersistencePort

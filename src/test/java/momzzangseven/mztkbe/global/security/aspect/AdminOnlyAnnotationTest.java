@@ -214,4 +214,28 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.operatorId()).isEqualTo("#p0.operatorId()");
     assertThat(annotation.targetId()).isEqualTo("'post:' + #p0.postId()");
   }
+
+  @Test
+  @DisplayName("ModeratePostService.blockManagedPost 는 추가 POST_BLOCK audit 을 남기지 않는다")
+  void moderatePostServiceBlockManagedPost_isNotAnnotatedWithAdminOnly()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ModeratePostService.class
+            .getMethod("blockManagedPost", ModeratePostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNull();
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.unblockManagedPost 는 추가 POST_UNBLOCK audit 을 남기지 않는다")
+  void moderatePostServiceUnblockManagedPost_isNotAnnotatedWithAdminOnly()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ModeratePostService.class
+            .getMethod("unblockManagedPost", ModeratePostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNull();
+  }
 }
