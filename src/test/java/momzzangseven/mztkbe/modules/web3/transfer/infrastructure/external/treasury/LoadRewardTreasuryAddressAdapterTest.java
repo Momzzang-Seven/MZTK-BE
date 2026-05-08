@@ -12,6 +12,8 @@ import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryWalletStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -48,6 +50,17 @@ class LoadRewardTreasuryAddressAdapterTest {
   void loadAddress_propagatesNullAddress_whenViewAddressIsNull() {
     when(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.REWARD))
         .thenReturn(Optional.of(view(null)));
+
+    Optional<String> result = adapter.loadAddress();
+
+    assertThat(result).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", " ", "   "})
+  void loadAddress_returnsEmpty_whenViewAddressIsBlank(String blankAddress) {
+    when(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.REWARD))
+        .thenReturn(Optional.of(view(blankAddress)));
 
     Optional<String> result = adapter.loadAddress();
 

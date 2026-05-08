@@ -28,6 +28,7 @@ public class LoadRewardTreasuryAddressAdapter implements LoadRewardTreasuryAddre
   public Optional<String> loadAddress() {
     return loadTreasuryWalletByRoleUseCase
         .execute(TreasuryRole.REWARD)
-        .map(TreasuryWalletView::walletAddress);
+        .map(TreasuryWalletView::walletAddress)
+        .filter(address -> !address.isBlank());
   }
 }
