@@ -28,6 +28,7 @@ import org.springframework.web.util.UriComponentsBuilder;
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
       "web3.eip7702.enabled=false",
+      "web3.execution.internal.enabled=false",
       "web3.reward-token.enabled=false"
     })
 @DisplayName("[E2E] GET /v2/posts cursor 검색 테스트")
@@ -92,18 +93,18 @@ class PostV2CursorE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody());
   }
 
-  private List<Long> postIds(JsonNode response) {
-    List<Long> ids = new ArrayList<>();
-    response.at("/data/posts").forEach(post -> ids.add(post.at("/postId").asLong()));
-    return ids;
-  }
-
   private JsonNode fetchPosts(URI uri) throws Exception {
     ResponseEntity<String> res =
         restTemplate.exchange(
             uri, HttpMethod.GET, new HttpEntity<>(bearerJsonHeaders(accessToken)), String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
     return objectMapper.readTree(res.getBody());
+  }
+
+  private List<Long> postIds(JsonNode response) {
+    List<Long> ids = new ArrayList<>();
+    response.at("/data/posts").forEach(post -> ids.add(post.at("/postId").asLong()));
+    return ids;
   }
 
   @Test

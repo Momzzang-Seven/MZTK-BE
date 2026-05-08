@@ -31,6 +31,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
       "web3.eip7702.enabled=false",
+      "web3.execution.internal.enabled=false",
       "web3.reward-token.enabled=false"
     })
 @DisplayName("[E2E] Answer publication reconciliation")
@@ -62,12 +63,12 @@ class AnswerReconciliationE2ETest extends E2ETestBase {
             postId, answerer.userId(), "failed submit", "PENDING", "submit-fail", null, null);
     Long confirmedUpdateAnswerId =
         insertAnswer(postId, answerer.userId(), "before update", "VISIBLE", null, null, null);
-    Long failedUpdateAnswerId =
+    final Long failedUpdateAnswerId =
         insertAnswer(postId, answerer.userId(), "failed update", "VISIBLE", null, null, null);
-    Long confirmedDeleteAnswerId =
+    final Long confirmedDeleteAnswerId =
         insertAnswer(
             postId, answerer.userId(), "confirmed delete", "VISIBLE", null, "PENDING", "delete-ok");
-    Long rolledBackDeleteAnswerId =
+    final Long rolledBackDeleteAnswerId =
         insertAnswer(
             postId,
             answerer.userId(),
@@ -152,7 +153,8 @@ class AnswerReconciliationE2ETest extends E2ETestBase {
           PreparedStatement ps =
               conn.prepareStatement(
                   "INSERT INTO posts "
-                      + "(user_id, type, title, content, reward, status, publication_status, moderation_status, created_at, updated_at) "
+                      + "(user_id, type, title, content, reward, status, "
+                      + "publication_status, moderation_status, created_at, updated_at) "
                       + "VALUES (?, 'QUESTION', ?, ?, ?, 'OPEN', 'VISIBLE', 'NORMAL', ?, ?)",
                   new String[] {"id"});
           ps.setLong(1, userId);
@@ -182,8 +184,9 @@ class AnswerReconciliationE2ETest extends E2ETestBase {
           PreparedStatement ps =
               conn.prepareStatement(
                   "INSERT INTO answers "
-                      + "(post_id, user_id, content, is_accepted, publication_status, current_create_execution_intent_id, "
-                      + "pending_delete_status, current_delete_execution_intent_id, created_at, updated_at) "
+                      + "(post_id, user_id, content, is_accepted, publication_status, "
+                      + "current_create_execution_intent_id, pending_delete_status, "
+                      + "current_delete_execution_intent_id, created_at, updated_at) "
                       + "VALUES (?, ?, ?, false, ?, ?, ?, ?, ?, ?)",
                   new String[] {"id"});
           ps.setLong(1, postId);
@@ -227,7 +230,8 @@ class AnswerReconciliationE2ETest extends E2ETestBase {
     Instant now = Instant.now();
     jdbcTemplate.update(
         "INSERT INTO web3_qna_answers "
-            + "(answer_id, post_id, question_id, answer_key, responder_user_id, content_hash, accepted, created_at, updated_at) "
+            + "(answer_id, post_id, question_id, answer_key, responder_user_id, "
+            + "content_hash, accepted, created_at, updated_at) "
             + "VALUES (?, ?, ?, ?, ?, ?, false, ?, ?)",
         answerId,
         postId,
