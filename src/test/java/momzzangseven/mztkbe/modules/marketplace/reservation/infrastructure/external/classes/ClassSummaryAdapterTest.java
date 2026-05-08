@@ -3,16 +3,14 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.exte
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import momzzangseven.mztkbe.global.error.marketplace.ClassNotFoundException;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassDetailQuery;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.GetClassDetailResult;
-import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassDetailUseCase;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase;
-import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassInfoUseCase.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out.LoadClassSummaryPort.ClassSummary;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,24 +19,26 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+/**
+ * Unit tests for {@link ClassSummaryAdapter}.
+ *
+ * <p>The adapter now delegates to {@link GetClassInfoUseCase#findSummariesBySlotIds} — a single
+ * bulk JPQL projection — instead of calling GetClassDetailUseCase per slot. Tests verify the
+ * mapping, inactive-class filtering, and data-integrity fallback behaviours.
+ */
 @ExtendWith(MockitoExtension.class)
 class ClassSummaryAdapterTest {
 
   @Mock private GetClassInfoUseCase getClassInfoUseCase;
-  @Mock private GetClassDetailUseCase getClassDetailUseCase;
 
   @InjectMocks private ClassSummaryAdapter sut;
 
-  /** Minimal MarketplaceClass stub — only id is needed by the adapter. */
-  private MarketplaceClass classWithId(Long classId) {
-    return MarketplaceClass.builder().id(classId).build();
+  private ClassSummaryProjection activeProjection(Long classId, String title, int price) {
+    return new ClassSummaryProjection(classId, 99L, title, price, true);
   }
 
-  /** Minimal GetClassDetailResult stub. */
-  private GetClassDetailResult detailResult(String title, int price, String thumb) {
-    return new GetClassDetailResult(
-        1L, 99L, null, title, null, null, price, thumb, List.of(), List.of(), List.of(), 60, null,
-        List.of());
+  private ClassSummaryProjection inactiveProjection(Long classId) {
+    return new ClassSummaryProjection(classId, 99L, "비활성 클래스", 50000, false);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -49,9 +49,8 @@ class ClassSummaryAdapterTest {
   @DisplayName("findBySlotId - 활성 클래스 슬롯이면 ClassSummary가 채워진다")
   void findBySlotId_ActiveClass_ReturnsSummary() {
     // given
-    given(getClassInfoUseCase.findBySlotId(3L)).willReturn(Optional.of(classWithId(1L)));
-    given(getClassDetailUseCase.execute(new GetClassDetailQuery(1L)))
-        .willReturn(detailResult("요가 기초", 50000, "thumb/key.jpg"));
+    given(getClassInfoUseCase.findBySlotId(3L))
+        .willReturn(Optional.of(activeProjection(1L, "요가 기초", 50000)));
 
     // when
     Optional<ClassSummary> result = sut.findBySlotId(3L);
@@ -60,21 +59,20 @@ class ClassSummaryAdapterTest {
     assertThat(result).isPresent();
     assertThat(result.get().title()).isEqualTo("요가 기초");
     assertThat(result.get().priceAmount()).isEqualTo(50000);
-    assertThat(result.get().thumbnailFinalObjectKey()).isEqualTo("thumb/key.jpg");
+    // thumbnail is not projected in the bulk query — expected null
+    assertThat(result.get().thumbnailFinalObjectKey()).isNull();
   }
 
   @Test
-  @DisplayName("findBySlotId - 비활성 클래스(ClassNotFoundException)이면 Optional.empty() 반환 (500 방지)")
+  @DisplayName("findBySlotId - 비활성 클래스이면 Optional.empty() 반환 (500 방지)")
   void findBySlotId_InactiveClass_ReturnsEmpty() {
-    // given — slot resolves to a class, but GetClassDetailUseCase throws because active=false
-    given(getClassInfoUseCase.findBySlotId(3L)).willReturn(Optional.of(classWithId(1L)));
-    given(getClassDetailUseCase.execute(new GetClassDetailQuery(1L)))
-        .willThrow(new ClassNotFoundException(1L));
+    // given
+    given(getClassInfoUseCase.findBySlotId(3L)).willReturn(Optional.of(inactiveProjection(1L)));
 
     // when
     Optional<ClassSummary> result = sut.findBySlotId(3L);
 
-    // then — exception must be absorbed; must NOT propagate as 500
+    // then — inactive class must NOT cause 500
     assertThat(result).isEmpty();
   }
 
@@ -96,30 +94,32 @@ class ClassSummaryAdapterTest {
   // ──────────────────────────────────────────────────────────────────────────
 
   @Test
-  @DisplayName("findBySlotIds - 여러 슬롯 중 일부는 inactive여도 나머지 슬롯의 summary는 정상 반환")
+  @DisplayName("findBySlotIds - 여러 슬롯 중 inactive 슬롯은 제외하고 active만 반환")
   void findBySlotIds_MixedActiveAndInactive_ReturnsOnlyActive() {
-    // given — slot 3 is active, slot 5's class is inactive
-    given(getClassInfoUseCase.findBySlotId(3L)).willReturn(Optional.of(classWithId(1L)));
-    given(getClassDetailUseCase.execute(new GetClassDetailQuery(1L)))
-        .willReturn(detailResult("요가 기초", 50000, "thumb/a.jpg"));
-
-    given(getClassInfoUseCase.findBySlotId(5L)).willReturn(Optional.of(classWithId(2L)));
-    given(getClassDetailUseCase.execute(new GetClassDetailQuery(2L)))
-        .willThrow(new ClassNotFoundException(2L));
+    // given
+    given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L, 5L)))
+        .willReturn(
+            Map.of(
+                3L, activeProjection(1L, "요가 기초", 50000),
+                5L, inactiveProjection(2L)));
 
     // when
     Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L, 5L));
 
-    // then
+    // then — only slot 3 (active) is included
     assertThat(result).containsOnlyKeys(3L);
     assertThat(result.get(3L).title()).isEqualTo("요가 기초");
   }
 
   @Test
-  @DisplayName("findBySlotIds - 빈 슬롯 목록이면 빈 맵 반환")
+  @DisplayName("findBySlotIds - 빈 슬롯 목록이면 DB 조회 없이 빈 맵 반환")
   void findBySlotIds_EmptyInput_ReturnsEmptyMap() {
+    // when
     Map<Long, ClassSummary> result = sut.findBySlotIds(List.of());
+
+    // then — no port call should be made
     assertThat(result).isEmpty();
+    verify(getClassInfoUseCase, never()).findSummariesBySlotIds(org.mockito.ArgumentMatchers.any());
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -140,5 +140,43 @@ class ClassSummaryAdapterTest {
     assertThatThrownBy(() -> new ClassSummary("요가", -1000, null))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("priceAmount must be > 0");
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // data-integrity fallback (corrupt / legacy data)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  @Test
+  @DisplayName("findBySlotIds - corrupt data(priceAmount=0)가 있어도 500이 아닌 해당 슬롯만 제외")
+  void findBySlotIds_CorruptZeroPrice_SkipsCorruptEntry() {
+    // given — slot 3 has corrupt priceAmount=0 in the projection
+    ClassSummaryProjection corrupt = new ClassSummaryProjection(1L, 99L, "요가", 0, true);
+    ClassSummaryProjection valid = activeProjection(2L, "필라테스", 40000);
+
+    given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L, 7L)))
+        .willReturn(Map.of(3L, corrupt, 7L, valid));
+
+    // when
+    Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L, 7L));
+
+    // then — corrupt slot is skipped; valid slot is still returned
+    assertThat(result).containsOnlyKeys(7L);
+    assertThat(result.get(7L).title()).isEqualTo("필라테스");
+  }
+
+  @Test
+  @DisplayName("findBySlotIds - corrupt data(blank title)가 있어도 해당 슬롯만 제외")
+  void findBySlotIds_BlankTitle_SkipsCorruptEntry() {
+    // given
+    ClassSummaryProjection blankTitle = new ClassSummaryProjection(1L, 99L, "   ", 50000, true);
+
+    given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L)))
+        .willReturn(Map.of(3L, blankTitle));
+
+    // when
+    Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L));
+
+    // then
+    assertThat(result).isEmpty();
   }
 }

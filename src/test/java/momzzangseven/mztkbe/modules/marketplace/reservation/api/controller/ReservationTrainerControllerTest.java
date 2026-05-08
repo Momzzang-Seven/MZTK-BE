@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ApproveReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.RejectReservationResult;
@@ -79,6 +80,14 @@ class ReservationTrainerControllerTest {
 
   // ── fixtures ────────────────────────────────────────────────────────────
 
+  /** Non-null enrichment fixture values — validates the trainer-facing response contract. */
+  private static final String SAMPLE_CLASS_TITLE = "스트레칭 클래스";
+
+  private static final int SAMPLE_PRICE = 30000;
+  private static final String SAMPLE_THUMB = "thumb/stretch.jpg";
+  private static final String SAMPLE_TRAINER_NICK = "trainer-nick";
+  private static final String SAMPLE_USER_NICK = "user-nick";
+
   private ReservationSummaryResult summaryResult() {
     return ReservationSummaryResult.from(
         momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
@@ -92,8 +101,11 @@ class ReservationTrainerControllerTest {
             .status(ReservationStatus.PENDING)
             .userRequest("부탁드립니다")
             .build(),
-        null,
-        null);
+        SAMPLE_CLASS_TITLE,
+        SAMPLE_PRICE,
+        SAMPLE_THUMB,
+        SAMPLE_TRAINER_NICK,
+        SAMPLE_USER_NICK);
   }
 
   private GetReservationResult detailResult() {
@@ -113,9 +125,11 @@ class ReservationTrainerControllerTest {
             .createdAt(java.time.LocalDateTime.now())
             .updatedAt(java.time.LocalDateTime.now())
             .build(),
-        null,
-        null,
-        null);
+        SAMPLE_CLASS_TITLE,
+        SAMPLE_PRICE,
+        SAMPLE_THUMB,
+        SAMPLE_TRAINER_NICK,
+        SAMPLE_USER_NICK);
   }
 
   // ── GET /marketplace/trainer/reservations ──────────────────────────────
@@ -127,14 +141,24 @@ class ReservationTrainerControllerTest {
     @Test
     @DisplayName("[TC-01] 인증된 트레이너는 예약 목록을 조회할 수 있다 — 200 + 목록 반환")
     void getTrainerReservations_authenticated_returns200() throws Exception {
-      given(getTrainerReservationsUseCase.execute(any())).willReturn(List.of(summaryResult()));
+      given(getTrainerReservationsUseCase.execute(any()))
+          .willReturn(new CursorSlice<>(List.of(summaryResult()), false, null));
 
       mockMvc
           .perform(get("/marketplace/trainer/reservations").with(trainerPrincipal(100L)))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data[0].reservationId").value(1))
-          .andExpect(jsonPath("$.data[0].status").value("PENDING"));
+          .andExpect(jsonPath("$.data.reservations[0].reservationId").value(1))
+          .andExpect(jsonPath("$.data.reservations[0].status").value("PENDING"))
+          // enrichment contract — trainer sees class info, own nickname, and booker nickname
+          .andExpect(jsonPath("$.data.reservations[0].classTitle").value(SAMPLE_CLASS_TITLE))
+          .andExpect(jsonPath("$.data.reservations[0].priceAmount").value(SAMPLE_PRICE))
+          .andExpect(jsonPath("$.data.reservations[0].trainerNickname").value(SAMPLE_TRAINER_NICK))
+          .andExpect(jsonPath("$.data.reservations[0].thumbnailFinalObjectKey").value(SAMPLE_THUMB))
+          .andExpect(jsonPath("$.data.reservations[0].userNickname").value(SAMPLE_USER_NICK))
+          // cursor contract
+          .andExpect(jsonPath("$.data.hasNext").value(false))
+          .andExpect(jsonPath("$.data.nextCursor").doesNotExist());
     }
 
     @Test
@@ -156,14 +180,16 @@ class ReservationTrainerControllerTest {
     @Test
     @DisplayName("[TC-04] status 필터 파라미터를 전달하면 필터링 결과를 반환한다 — 200")
     void getTrainerReservations_withStatusFilter_returns200() throws Exception {
-      given(getTrainerReservationsUseCase.execute(any())).willReturn(List.of());
+      given(getTrainerReservationsUseCase.execute(any()))
+          .willReturn(new CursorSlice<>(List.of(), false, null));
 
       mockMvc
           .perform(
               get("/marketplace/trainer/reservations?status=APPROVED").with(trainerPrincipal(100L)))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data").isArray());
+          .andExpect(jsonPath("$.data.reservations").isArray())
+          .andExpect(jsonPath("$.data.hasNext").value(false));
     }
   }
 
@@ -183,7 +209,13 @@ class ReservationTrainerControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
-          .andExpect(jsonPath("$.data.trainerId").value(100));
+          .andExpect(jsonPath("$.data.trainerId").value(100))
+          // enrichment contract
+          .andExpect(jsonPath("$.data.classTitle").value(SAMPLE_CLASS_TITLE))
+          .andExpect(jsonPath("$.data.priceAmount").value(SAMPLE_PRICE))
+          .andExpect(jsonPath("$.data.thumbnailFinalObjectKey").value(SAMPLE_THUMB))
+          .andExpect(jsonPath("$.data.trainerNickname").value(SAMPLE_TRAINER_NICK))
+          .andExpect(jsonPath("$.data.userNickname").value(SAMPLE_USER_NICK));
     }
 
     @Test
