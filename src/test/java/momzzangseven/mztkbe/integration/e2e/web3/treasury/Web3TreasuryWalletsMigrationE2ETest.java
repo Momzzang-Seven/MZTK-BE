@@ -18,11 +18,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * KMS-finalize cleanup migration) and {@code web3_treasury_kms_audits}.
  *
  * <p>Cases [E-102]..[E-105] from {@code
- * docs/test/refactor-MOM-384-reward-eip-1559-change-to-kms.md}. [E-106]..[E-109] cover the
- * KMS-finalize cleanup migration's CHECK constraints (status / key_origin / kms_key_id_required)
- * and the migration body's idempotency on replay. Uses PostgreSQL-only constructs ({@code
- * pg_constraint}, {@code NOW()}, {@code repeat()}) so it must run under the {@code integration}
- * profile.
+ * docs/test/refactor-MOM-384-reward-eip-1559-change-to-kms.md}. [E-106]..[E-111] cover the
+ * KMS-finalize cleanup migration's CHECK constraints (status / key_origin / kms_key_id_required —
+ * NOT NULL, blank, and treasury_address regex) and the migration body's idempotency on replay. Uses
+ * PostgreSQL-only constructs ({@code pg_constraint}, {@code NOW()}, {@code repeat()}) so it must
+ * run under the {@code integration} profile.
  *
  * <p>{@code web3_treasury_wallets} is excluded from {@link
  * momzzangseven.mztkbe.integration.e2e.support.DatabaseCleaner}; this class explicitly deletes the
@@ -36,18 +36,22 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
   private static final String CHECK_REJECT_ALIAS_STATUS = "check-reject-status";
   private static final String CHECK_REJECT_ALIAS_KEY_ORIGIN = "check-reject-key-origin";
   private static final String CHECK_REJECT_ALIAS_KMS_NULL = "check-reject-kms-null";
+  private static final String CHECK_REJECT_ALIAS_KMS_BLANK = "check-reject-kms-blank";
+  private static final String CHECK_REJECT_ALIAS_ADDR_FORMAT = "check-reject-addr-format";
 
   @Autowired private JdbcTemplate jdbcTemplate;
 
   @AfterEach
   void cleanInsertedRows() {
     jdbcTemplate.update(
-        "DELETE FROM web3_treasury_wallets WHERE wallet_alias IN (?, ?, ?, ?, ?)",
+        "DELETE FROM web3_treasury_wallets WHERE wallet_alias IN (?, ?, ?, ?, ?, ?, ?)",
         LEGACY_ALIAS,
         KMS_ONLY_ALIAS,
         CHECK_REJECT_ALIAS_STATUS,
         CHECK_REJECT_ALIAS_KEY_ORIGIN,
-        CHECK_REJECT_ALIAS_KMS_NULL);
+        CHECK_REJECT_ALIAS_KMS_NULL,
+        CHECK_REJECT_ALIAS_KMS_BLANK,
+        CHECK_REJECT_ALIAS_ADDR_FORMAT);
   }
 
   @Test
@@ -223,12 +227,54 @@ class Web3TreasuryWalletsMigrationE2ETest extends E2ETestBase {
               jdbcTemplate.execute(
                   "ALTER TABLE web3_treasury_wallets"
                       + " ADD CONSTRAINT ck_web3_treasury_wallets_kms_key_id_required"
-                      + " CHECK (kms_key_id IS NOT NULL AND treasury_address IS NOT NULL)");
+                      + " CHECK ("
+                      + "   kms_key_id IS NOT NULL"
+                      + "   AND btrim(kms_key_id) <> ''"
+                      + "   AND treasury_address ~ '^0x[0-9a-fA-F]{40}$'"
+                      + " )");
 
               jdbcTemplate.execute(
                   "ALTER TABLE web3_treasury_wallets"
                       + " DROP COLUMN IF EXISTS treasury_private_key_encrypted");
             })
         .doesNotThrowAnyException();
+  }
+
+  @Test
+  @DisplayName("[E-110] KMS-finalize cleanup — kms_key_id 가 blank 문자열이면 거부 (btrim CHECK)")
+  void kmsFinalizeCleanup_kmsKeyIdRequiredCheck_rejectsKmsKeyIdBlank() {
+    String addr = "0x" + "5".repeat(40);
+
+    // NOT NULL 은 통과하지만 strengthened CHECK (btrim(kms_key_id) <> '') 가 거부.
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO web3_treasury_wallets"
+                        + " (wallet_alias, treasury_address, kms_key_id, status, key_origin,"
+                        + " created_at, updated_at)"
+                        + " VALUES (?, ?, '   ', 'ACTIVE', 'IMPORTED', NOW(), NOW())",
+                    CHECK_REJECT_ALIAS_KMS_BLANK,
+                    addr))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test
+  @DisplayName(
+      "[E-111] KMS-finalize cleanup — treasury_address 가 0x+40hex 형식 위반이면 거부 (regex CHECK)")
+  void kmsFinalizeCleanup_kmsKeyIdRequiredCheck_rejectsMalformedTreasuryAddress() {
+    // 41 hex (one extra char) — IS NOT NULL 통과, regex 거부.
+    String malformedAddr = "0x" + "6".repeat(41);
+
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO web3_treasury_wallets"
+                        + " (wallet_alias, treasury_address, kms_key_id, status, key_origin,"
+                        + " created_at, updated_at)"
+                        + " VALUES (?, ?, ?, 'ACTIVE', 'IMPORTED', NOW(), NOW())",
+                    CHECK_REJECT_ALIAS_ADDR_FORMAT,
+                    malformedAddr,
+                    "alias/check-reject-addr-format"))
+        .isInstanceOf(DataIntegrityViolationException.class);
   }
 }

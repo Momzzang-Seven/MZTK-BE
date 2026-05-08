@@ -28,6 +28,23 @@
 --   SELECT status, count(*) FROM web3_treasury_wallets GROUP BY status;
 --   -- expected: only 'ACTIVE' / 'DISABLED' / 'ARCHIVED'
 --
+--   -- Detect duplicate kms_key_id values that would break the new UNIQUE constraint:
+--   SELECT kms_key_id, count(*)
+--   FROM web3_treasury_wallets
+--   WHERE kms_key_id IS NOT NULL
+--   GROUP BY kms_key_id
+--   HAVING count(*) > 1;
+--   -- expected: 0 rows
+--
+--   -- Detect blank kms_key_id and malformed treasury_address values that would
+--   -- pass IS NOT NULL but fail the strengthened ck_web3_treasury_wallets_kms_key_id_required
+--   -- below. Strict shape: kms_key_id non-blank + treasury_address ~ '^0x[0-9a-fA-F]{40}$'.
+--   SELECT count(*) AS blank_kms_or_bad_address
+--   FROM web3_treasury_wallets
+--   WHERE btrim(kms_key_id) = ''
+--      OR treasury_address !~ '^0x[0-9a-fA-F]{40}$';
+--   -- expected: 0
+--
 -- Idempotency
 -- ------------
 -- This migration is written defensively so a manual re-run (e.g. flyway:repair scenarios,
@@ -75,13 +92,19 @@ ALTER TABLE web3_treasury_wallets
     ADD CONSTRAINT ck_web3_treasury_wallets_key_origin
         CHECK (key_origin IN ('IMPORTED'));
 
--- KMS-only row shape: every row must carry both kms_key_id and treasury_address.
+-- KMS-only row shape: every row must carry both kms_key_id and treasury_address,
+-- and both must satisfy the application-side invariants — kms_key_id non-blank +
+-- treasury_address strict 0x + 40 hex (matches EvmAddress.of validation at runtime).
 -- Successor of the V049 ck_web3_treasury_keys_slot_pair CHECK that V061 dropped.
 ALTER TABLE web3_treasury_wallets
     DROP CONSTRAINT IF EXISTS ck_web3_treasury_wallets_kms_key_id_required;
 ALTER TABLE web3_treasury_wallets
     ADD CONSTRAINT ck_web3_treasury_wallets_kms_key_id_required
-        CHECK (kms_key_id IS NOT NULL AND treasury_address IS NOT NULL);
+        CHECK (
+            kms_key_id IS NOT NULL
+            AND btrim(kms_key_id) <> ''
+            AND treasury_address ~ '^0x[0-9a-fA-F]{40}$'
+        );
 
 ALTER TABLE web3_treasury_wallets
     DROP COLUMN IF EXISTS treasury_private_key_encrypted;
