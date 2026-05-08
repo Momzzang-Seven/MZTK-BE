@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.comment.application.dto.BanManagedCommentCom
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,6 +62,28 @@ class BanManagedCommentServiceTest {
     verify(saveCommentPort, never()).saveComment(org.mockito.Mockito.any(Comment.class));
   }
 
+  @Test
+  @DisplayName("answer 댓글 ban 결과는 root question postId를 유지한다")
+  void execute_answerComment_returnsRootPostId() {
+    Comment comment = answerComment(false);
+    given(loadCommentPort.loadCommentForUpdate(31L)).willReturn(Optional.of(comment));
+    given(saveCommentPort.saveComment(org.mockito.Mockito.any(Comment.class)))
+        .willAnswer(invocation -> invocation.getArgument(0));
+
+    var result = service.execute(new BanManagedCommentCommand(31L));
+
+    assertThat(result.commentId()).isEqualTo(31L);
+    assertThat(result.postId()).isEqualTo(21L);
+    assertThat(result.moderated()).isTrue();
+
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    verify(saveCommentPort).saveComment(captor.capture());
+    assertThat(captor.getValue().getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(captor.getValue().getPostId()).isEqualTo(21L);
+    assertThat(captor.getValue().getAnswerId()).isEqualTo(300L);
+    assertThat(captor.getValue().isDeleted()).isTrue();
+  }
+
   private Comment comment(boolean deleted) {
     return Comment.builder()
         .id(31L)
@@ -68,6 +91,21 @@ class BanManagedCommentServiceTest {
         .writerId(7L)
         .parentId(null)
         .content(deleted ? "삭제된 댓글입니다." : "content")
+        .isDeleted(deleted)
+        .createdAt(LocalDateTime.parse("2025-01-01T00:00:00"))
+        .updatedAt(LocalDateTime.parse("2025-01-01T00:00:00"))
+        .build();
+  }
+
+  private Comment answerComment(boolean deleted) {
+    return Comment.builder()
+        .id(31L)
+        .targetType(CommentTargetType.ANSWER)
+        .postId(21L)
+        .answerId(300L)
+        .writerId(7L)
+        .parentId(null)
+        .content(deleted ? "삭제된 댓글입니다." : "answer comment")
         .isDeleted(deleted)
         .createdAt(LocalDateTime.parse("2025-01-01T00:00:00"))
         .updatedAt(LocalDateTime.parse("2025-01-01T00:00:00"))

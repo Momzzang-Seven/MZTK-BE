@@ -79,7 +79,7 @@ public class UpdateClassService implements UpdateClassUseCase {
     // Step 1: Load class + ownership check
     MarketplaceClass marketplaceClass =
         loadClassPort
-            .findById(command.classId())
+            .findByIdForUpdate(command.classId())
             .orElseThrow(() -> new ClassNotFoundException(command.classId()));
 
     if (!marketplaceClass.isOwnedBy(command.trainerId())) {

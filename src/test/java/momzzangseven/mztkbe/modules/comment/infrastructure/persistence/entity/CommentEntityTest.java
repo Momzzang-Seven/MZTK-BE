@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -86,6 +87,73 @@ class CommentEntityTest {
     assertThat(domain.isDeleted()).isTrue();
     assertThat(domain.getCreatedAt()).isEqualTo(createdAt);
     assertThat(domain.getUpdatedAt()).isEqualTo(updatedAt);
+  }
+
+  @Test
+  @DisplayName("toDomain() maps normal POST row")
+  void toDomain_mapsPostTargetRow() {
+    LocalDateTime createdAt = LocalDateTime.now().minusHours(1);
+    LocalDateTime updatedAt = LocalDateTime.now();
+    CommentEntity entity =
+        CommentEntity.builder()
+            .id(1L)
+            .targetType(CommentTargetType.POST)
+            .postId(100L)
+            .writerId(200L)
+            .content("post comment")
+            .isDeleted(false)
+            .createdAt(createdAt)
+            .updatedAt(updatedAt)
+            .build();
+
+    Comment domain = entity.toDomain();
+
+    assertThat(domain.getTargetType()).isEqualTo(CommentTargetType.POST);
+    assertThat(domain.getPostId()).isEqualTo(100L);
+    assertThat(domain.getAnswerId()).isNull();
+  }
+
+  @Test
+  @DisplayName("toDomain() maps normal ANSWER row with root post id")
+  void toDomain_mapsAnswerTargetRow() {
+    LocalDateTime createdAt = LocalDateTime.now().minusHours(1);
+    LocalDateTime updatedAt = LocalDateTime.now();
+    CommentEntity entity =
+        CommentEntity.builder()
+            .id(1L)
+            .targetType(CommentTargetType.ANSWER)
+            .postId(100L)
+            .answerId(300L)
+            .writerId(200L)
+            .content("answer comment")
+            .isDeleted(false)
+            .createdAt(createdAt)
+            .updatedAt(updatedAt)
+            .build();
+
+    Comment domain = entity.toDomain();
+
+    assertThat(domain.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(domain.getPostId()).isEqualTo(100L);
+    assertThat(domain.getAnswerId()).isEqualTo(300L);
+  }
+
+  @Test
+  @DisplayName("from() keeps root post id for answer comments")
+  void from_answerCommentKeepsRootPostId() {
+    LocalDateTime now = LocalDateTime.now();
+    Comment domain = Comment.createForAnswer(100L, 300L, 200L, null, "answer comment");
+
+    CommentEntity entity = CommentEntity.from(domain, null);
+    Comment mapped = entity.toDomain();
+
+    assertThat(entity.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(entity.getPostId()).isEqualTo(100L);
+    assertThat(entity.getAnswerId()).isEqualTo(300L);
+    assertThat(mapped.getTargetType()).isEqualTo(CommentTargetType.ANSWER);
+    assertThat(mapped.getPostId()).isEqualTo(100L);
+    assertThat(mapped.getAnswerId()).isEqualTo(300L);
+    assertThat(mapped.getCreatedAt()).isAfter(now.minusSeconds(1));
   }
 
   @Test

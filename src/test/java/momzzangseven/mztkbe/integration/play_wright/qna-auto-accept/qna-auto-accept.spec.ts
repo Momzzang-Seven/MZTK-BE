@@ -18,7 +18,7 @@ const ENV = {
   WEB3_RPC_URL: process.env.WEB3_RPC_URL ?? "",
   WEB3_ESCROW_QNA_CONTRACT_ADDRESS:
     process.env.WEB3_ESCROW_QNA_CONTRACT_ADDRESS ?? "",
-  WEB3_CHAIN_ID: BigInt(process.env.WEB3_CHAIN_ID ?? "11155111"),
+  WEB3_CHAIN_ID: BigInt(process.env.WEB3_CHAIN_ID ?? "11155420"),
   EXECUTION_SIGNER_ALIAS: process.env.EXECUTION_SIGNER_ALIAS ?? "sponsor-treasury",
 };
 
@@ -153,7 +153,7 @@ async function signUpAndLogin(
 
 async function loadSignerAddress(): Promise<string> {
   const result = await db.query<{ treasury_address: string }>(
-    "select treasury_address from web3_treasury_keys where wallet_alias = $1 limit 1",
+    "select treasury_address from web3_treasury_wallets where wallet_alias = $1 limit 1",
     [ENV.EXECUTION_SIGNER_ALIAS]
   );
   expect(result.rowCount).toBe(1);

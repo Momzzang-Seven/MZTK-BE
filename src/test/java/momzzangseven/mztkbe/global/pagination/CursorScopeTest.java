@@ -57,4 +57,16 @@ class CursorScopeTest {
     assertThat(formSearch).isNotEqualTo(otherSearch);
     assertThat(formSearch).isEqualTo(CursorScope.commentedPosts(1L, "question", "form"));
   }
+
+  @Test
+  @DisplayName("answer root comment scope changes by answer and differs from post root scope")
+  void answerRootCommentsScopeIncludesAnswerIdAndTargetKind() {
+    String answerOne = CursorScope.answerRootComments(1L);
+    String answerTwo = CursorScope.answerRootComments(2L);
+    String postRootOne = CursorScope.rootComments(1L);
+
+    assertThat(answerOne).isNotBlank();
+    assertThat(answerOne).isNotEqualTo(answerTwo);
+    assertThat(answerOne).isNotEqualTo(postRootOne);
+  }
 }

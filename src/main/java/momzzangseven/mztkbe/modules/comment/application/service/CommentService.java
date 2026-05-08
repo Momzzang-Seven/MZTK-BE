@@ -8,20 +8,27 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
+import momzzangseven.mztkbe.global.error.answer.CannotAnswerSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotDeleteAnswerOnSolvedPostException;
+import momzzangseven.mztkbe.global.error.answer.CannotUpdateAnswerOnSolvedPostException;
 import momzzangseven.mztkbe.global.error.comment.CommentNotFoundException;
 import momzzangseven.mztkbe.global.error.comment.CommentPostMismatchException;
+import momzzangseven.mztkbe.global.error.comment.CommentTargetMismatchException;
 import momzzangseven.mztkbe.global.pagination.CursorCodec;
 import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.*;
 import momzzangseven.mztkbe.modules.comment.application.port.in.*;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.GrantCommentXpPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentWriterPort.WriterSummary;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadPostPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +47,7 @@ public class CommentService
   private final LoadCommentPort loadCommentPort;
   private final SaveCommentPort saveCommentPort;
   private final LoadPostPort loadPostPort;
+  private final LoadAnswerPort loadAnswerPort;
   private final DeleteCommentPort deleteCommentPort;
   private final GrantCommentXpPort grantCommentXpPort;
   private final LoadCommentWriterPort loadCommentWriterPort;
@@ -48,16 +56,35 @@ public class CommentService
   @Override
   @Transactional
   public CommentMutationResult createComment(CreateCommentCommand command) {
-    validatePostWritable(command.postId());
+    LoadAnswerPort.AnswerCommentContext answerContext =
+        CommentTargetType.ANSWER.equals(command.targetType())
+            ? validateAnswerWritable(command.answerId(), AnswerCommentMutation.CREATE)
+            : null;
+    Long targetPostId =
+        CommentTargetType.ANSWER.equals(command.targetType())
+            ? answerContext.postId()
+            : command.postId();
+    if (!CommentTargetType.ANSWER.equals(command.targetType())) {
+      validatePostWritable(targetPostId);
+    }
 
     // 1-2. 대댓글인 경우 부모 댓글 검증
     if (command.parentId() != null) {
-      validateParentComment(command.parentId(), command.postId());
+      validateParentComment(
+          command.parentId(), command.targetType(), command.postId(), command.answerId());
     }
 
     // 1-3. 도메인 객체 생성 및 저장
     Comment newComment =
-        Comment.create(command.postId(), command.userId(), command.parentId(), command.content());
+        CommentTargetType.ANSWER.equals(command.targetType())
+            ? Comment.createForAnswer(
+                targetPostId,
+                command.answerId(),
+                command.userId(),
+                command.parentId(),
+                command.content())
+            : Comment.createForPost(
+                command.postId(), command.userId(), command.parentId(), command.content());
 
     Comment savedComment = saveCommentPort.saveComment(newComment);
 
@@ -78,13 +105,17 @@ public class CommentService
   @Override
   @Transactional
   public CommentMutationResult updateComment(UpdateCommentCommand command) {
-    Comment comment = loadCommentOrThrow(command.commentId());
-    validatePostWritable(comment.getPostId());
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
+    return updateLoadedComment(comment, command.userId(), command.content());
+  }
 
-    comment.validateWriter(command.userId());
-
+  @Override
+  @Transactional
+  public CommentMutationResult updateAnswerComment(UpdateAnswerCommentCommand command) {
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
+    validateAnswerScopedMutationAccess(comment, command.userId(), AnswerCommentMutation.UPDATE);
+    validateAnswerCommentTarget(comment, command.answerId());
     comment.updateContent(command.content());
-
     return CommentMutationResult.from(saveCommentPort.saveComment(comment));
   }
 
@@ -92,10 +123,16 @@ public class CommentService
   @Override
   @Transactional
   public void deleteComment(DeleteCommentCommand command) {
-    Comment comment = loadCommentOrThrow(command.commentId());
-    validatePostWritable(comment.getPostId());
-    comment.validateWriter(command.userId());
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
+    deleteLoadedComment(comment, command.userId());
+  }
 
+  @Override
+  @Transactional
+  public void deleteAnswerComment(DeleteAnswerCommentCommand command) {
+    Comment comment = loadCommentForUpdateOrThrow(command.commentId());
+    validateAnswerScopedMutationAccess(comment, command.userId(), AnswerCommentMutation.DELETE);
+    validateAnswerCommentTarget(comment, command.answerId());
     comment.delete();
     saveCommentPort.saveComment(comment);
   }
@@ -103,9 +140,14 @@ public class CommentService
   // 3-2. 삭제 (Delete - 게시글 삭제 이벤트 수신용)
   @Override
   @Transactional(readOnly = false)
-  public void deleteCommentsByPostId(Long postId) {
-    // 해당 게시글의 모든 댓글 일괄 Soft Delete
-    deleteCommentPort.deleteAllByPostId(postId);
+  public void softDeleteAllCommentsByRootPostId(Long postId) {
+    deleteCommentPort.softDeleteAllByRootPostId(postId);
+  }
+
+  @Override
+  @Transactional(readOnly = false)
+  public void deleteCommentsByAnswerId(Long answerId) {
+    deleteCommentPort.deleteAllByAnswerId(answerId);
   }
 
   // 4. 루트 댓글 조회 (Read)
@@ -115,13 +157,21 @@ public class CommentService
     return toResultPage(loadCommentPort.loadRootComments(query.postId(), query.pageable()), true);
   }
 
+  @Override
+  public Page<CommentResult> getAnswerRootComments(GetAnswerRootCommentsQuery query) {
+    Long postId = loadAnswerPostIdOrThrow(query.answerId());
+    validatePostReadable(postId, query.requesterUserId());
+    return toResultPage(
+        loadCommentPort.loadRootCommentsByAnswerId(query.answerId(), query.pageable()), true);
+  }
+
   // 5. 대댓글 조회 (Read)
   @Override
   public Page<CommentResult> getReplies(GetRepliesQuery query) {
     // 부모 댓글이 존재하는지 먼저 확인
     Comment parent =
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
-    validatePostReadable(parent.getPostId(), query.requesterUserId());
+    validateCommentTargetReadable(parent, query.requesterUserId());
     validateParentIsRootComment(parent);
 
     return toResultPage(loadCommentPort.loadReplies(query.parentId(), query.pageable()), false);
@@ -144,10 +194,28 @@ public class CommentService
   }
 
   @Override
+  public GetCommentsCursorResult getAnswerRootCommentsByCursor(
+      GetAnswerRootCommentsCursorQuery query) {
+    Long postId = loadAnswerPostIdOrThrow(query.answerId());
+    validatePostReadable(postId, query.requesterUserId());
+    List<Comment> comments =
+        loadCommentPort.loadRootCommentsByAnswerIdCursor(query.answerId(), query.pageRequest());
+    boolean hasNext = comments.size() > query.pageRequest().size();
+    List<Comment> pageComments =
+        hasNext ? comments.subList(0, query.pageRequest().size()) : comments;
+    String nextCursor =
+        hasNext
+            ? createNextCursor(
+                pageComments.get(pageComments.size() - 1), query.pageRequest().scope())
+            : null;
+    return new GetCommentsCursorResult(toResultList(pageComments, true), hasNext, nextCursor);
+  }
+
+  @Override
   public GetCommentsCursorResult getRepliesByCursor(GetRepliesCursorQuery query) {
     Comment parent =
         loadCommentPort.loadComment(query.parentId()).orElseThrow(CommentNotFoundException::new);
-    validatePostReadable(parent.getPostId(), query.requesterUserId());
+    validateCommentTargetReadable(parent, query.requesterUserId());
     validateParentIsRootComment(parent);
 
     List<Comment> comments =
@@ -169,10 +237,57 @@ public class CommentService
     return loadCommentPort.loadComment(commentId).orElseThrow(CommentNotFoundException::new);
   }
 
-  private void validateParentComment(Long parentId, Long postId) {
+  private Comment loadCommentForUpdateOrThrow(Long commentId) {
+    return loadCommentPort
+        .loadCommentForUpdate(commentId)
+        .orElseThrow(CommentNotFoundException::new);
+  }
+
+  private CommentMutationResult updateLoadedComment(Comment comment, Long userId, String content) {
+    validateCommentNotDeleted(comment);
+    validateCommentTargetWritable(comment, AnswerCommentMutation.UPDATE);
+    comment.validateWriter(userId);
+    comment.updateContent(content);
+    return CommentMutationResult.from(saveCommentPort.saveComment(comment));
+  }
+
+  private void deleteLoadedComment(Comment comment, Long userId) {
+    validateCommentNotDeleted(comment);
+    validateCommentTargetWritable(comment, AnswerCommentMutation.DELETE);
+    comment.validateWriter(userId);
+    comment.delete();
+    saveCommentPort.saveComment(comment);
+  }
+
+  private void validateAnswerScopedMutationAccess(
+      Comment comment, Long userId, AnswerCommentMutation mutation) {
+    validateCommentNotDeleted(comment);
+    comment.validateWriter(userId);
+    validateCommentTargetWritable(comment, mutation);
+  }
+
+  private void validateCommentNotDeleted(Comment comment) {
+    if (comment.isDeleted()) {
+      throw new BusinessException(ErrorCode.CANNOT_UPDATE_DELETED_COMMENT);
+    }
+  }
+
+  private void validateAnswerCommentTarget(Comment comment, Long answerId) {
+    if (!CommentTargetType.ANSWER.equals(comment.getTargetType())
+        || !answerId.equals(comment.getAnswerId())) {
+      throw new CommentTargetMismatchException();
+    }
+  }
+
+  private void validateParentComment(
+      Long parentId, CommentTargetType targetType, Long postId, Long answerId) {
     Comment parent = loadCommentOrThrow(parentId);
 
-    if (!parent.getPostId().equals(postId)) {
+    if (CommentTargetType.ANSWER.equals(targetType)) {
+      if (!parent.getTargetType().equals(targetType) || !parent.getAnswerId().equals(answerId)) {
+        throw new CommentTargetMismatchException();
+      }
+    } else if (!parent.getTargetType().equals(targetType) || !parent.getPostId().equals(postId)) {
       throw new CommentPostMismatchException();
     }
 
@@ -204,10 +319,65 @@ public class CommentService
     }
   }
 
+  private void validateCommentTargetReadable(Comment comment, Long requesterUserId) {
+    Long postId =
+        CommentTargetType.ANSWER.equals(comment.getTargetType())
+            ? loadAnswerPostIdOrThrow(comment.getAnswerId())
+            : comment.getPostId();
+    validatePostReadable(postId, requesterUserId);
+  }
+
+  private void validateCommentTargetWritable(Comment comment, AnswerCommentMutation mutation) {
+    if (CommentTargetType.ANSWER.equals(comment.getTargetType())) {
+      validateAnswerWritable(comment.getAnswerId(), mutation);
+      return;
+    }
+    validatePostWritable(comment.getPostId());
+  }
+
+  private LoadAnswerPort.AnswerCommentContext validateAnswerWritable(
+      Long answerId, AnswerCommentMutation mutation) {
+    LoadAnswerPort.AnswerCommentContext context = loadAnswerContextForUpdateOrThrow(answerId);
+    validatePostWritable(context.postId());
+    validateAnswerCommentMutationAllowed(context, mutation);
+    return context;
+  }
+
+  private void validateAnswerCommentMutationAllowed(
+      LoadAnswerPort.AnswerCommentContext context, AnswerCommentMutation mutation) {
+    if (!context.answerLocked()) {
+      return;
+    }
+    switch (mutation) {
+      case CREATE -> throw new CannotAnswerSolvedPostException();
+      case UPDATE -> throw new CannotUpdateAnswerOnSolvedPostException();
+      case DELETE -> throw new CannotDeleteAnswerOnSolvedPostException();
+    }
+  }
+
+  private Long loadAnswerPostIdOrThrow(Long answerId) {
+    return loadAnswerPort
+        .loadAnswerCommentContext(answerId)
+        .map(LoadAnswerPort.AnswerCommentContext::postId)
+        .orElseThrow(AnswerNotFoundException::new);
+  }
+
+  private LoadAnswerPort.AnswerCommentContext loadAnswerContextForUpdateOrThrow(Long answerId) {
+    return loadAnswerPort
+        .loadAnswerCommentContextForUpdate(answerId)
+        .orElseThrow(AnswerNotFoundException::new);
+  }
+
   private LoadPostPort.PostVisibilityContext loadPostVisibilityOrThrow(Long postId) {
     return loadPostPort
         .loadPostVisibilityContext(postId)
         .orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+  }
+
+  private enum AnswerCommentMutation {
+    CREATE,
+    UPDATE,
+    DELETE
   }
 
   private Page<CommentResult> toResultPage(Page<Comment> comments, boolean includeReplyCount) {

@@ -7,6 +7,8 @@ import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsKeyDescr
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.DescribeKeyRequest;
@@ -41,6 +43,14 @@ public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
   /**
    * Look up the lifecycle state of the supplied KMS key id via {@code DescribeKey}.
    *
+   * <p>Annotated {@link Propagation#NOT_SUPPORTED} so any caller transaction is suspended for the
+   * duration of the AWS round-trip; the JDBC connection returns to the pool while we wait. KMS
+   * throttle / 5xx therefore cannot pin a Hikari connection (and cascade into pool exhaustion) when
+   * the call is reached from a {@code @Transactional} caller such as {@code
+   * QnaAdminReviewContextAdapter} loading review context. The Caffeine cache in {@code
+   * DescribeKmsKeyService} stays a pure in-memory lookup on warm hits and never enters this proxy
+   * boundary, so the suspend cost is paid only on cache misses.
+   *
    * @param kmsKeyId fully-qualified KMS key id or alias to describe
    * @return application-side {@link KmsKeyState} mapped from the AWS {@link KeyState}; {@link
    *     KmsKeyState#UNAVAILABLE} for any state we do not explicitly model (e.g. {@code CREATING},
@@ -49,6 +59,7 @@ public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
    *     fails
    */
   @Override
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
   public KmsKeyState describe(String kmsKeyId) {
     final DescribeKeyRequest request = DescribeKeyRequest.builder().keyId(kmsKeyId).build();
 

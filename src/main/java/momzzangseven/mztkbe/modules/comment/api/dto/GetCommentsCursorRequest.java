@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.comment.api.dto;
 
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.pagination.CursorScope;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetAnswerRootCommentsCursorQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRepliesCursorQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.GetRootCommentsCursorQuery;
 
@@ -21,6 +22,14 @@ public record GetCommentsCursorRequest(String cursor, Integer size) {
 
   public GetRootCommentsCursorQuery toRootQuery(Long postId) {
     return toRootQuery(postId, null);
+  }
+
+  public GetAnswerRootCommentsCursorQuery toAnswerRootQuery(Long answerId, Long requesterUserId) {
+    return new GetAnswerRootCommentsCursorQuery(
+        answerId,
+        requesterUserId,
+        CursorPageRequest.of(
+            cursor, size, ROOT_DEFAULT_SIZE, MAX_SIZE, CursorScope.answerRootComments(answerId)));
   }
 
   public GetRepliesCursorQuery toRepliesQuery(Long parentId, Long requesterUserId) {

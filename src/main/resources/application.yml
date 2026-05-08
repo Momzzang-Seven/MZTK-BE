@@ -98,6 +98,10 @@ comment:
     batch-size: 100
     cron: "0 30 * * * *"
     zone: Asia/Seoul
+  answer-orphan-cleanup:
+    batch-size: 100
+    cron: "0 35 * * * *"
+    zone: Asia/Seoul
 
 answer:
   orphan-cleanup:
@@ -277,6 +281,11 @@ web3:
       delay-seconds: 604800
       batch-size: 50
       cron: "0 17 * * * *"
+      zone: "Asia/Seoul"
+    question-update-reconciliation:
+      enabled: true
+      batch-size: 100
+      cron: "0 */5 * * * *"
       zone: "Asia/Seoul"
   marketplace:
     admin:

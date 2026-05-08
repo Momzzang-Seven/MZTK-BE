@@ -34,11 +34,14 @@ import org.web3j.crypto.ECKeyPair;
 import org.web3j.crypto.Keys;
 import org.web3j.crypto.Sign;
 import org.web3j.utils.Numeric;
+import software.amazon.awssdk.awscore.exception.AwsErrorDetails;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.kms.KmsClient;
+import software.amazon.awssdk.services.kms.model.KmsException;
 import software.amazon.awssdk.services.kms.model.KmsInvalidStateException;
 import software.amazon.awssdk.services.kms.model.MessageType;
+import software.amazon.awssdk.services.kms.model.NotFoundException;
 import software.amazon.awssdk.services.kms.model.SignRequest;
 import software.amazon.awssdk.services.kms.model.SignResponse;
 import software.amazon.awssdk.services.kms.model.SigningAlgorithmSpec;
@@ -171,7 +174,8 @@ class KmsSignerAdapterTest {
     @Test
     @DisplayName("[M-56] signDigest — KmsException → KmsSignFailedException (원인 보존)")
     void signDigest_kmsExceptionThrown_wrapsInKmsSignFailedException() {
-      // given
+      // given — KmsInvalidStateException without awsErrorDetails: classifier cannot read a
+      // terminal error code, so the wrapper falls back to retryable=true.
       var kmsEx = KmsInvalidStateException.builder().message("key is pending deletion").build();
       when(kmsClient.sign(any(SignRequest.class))).thenThrow(kmsEx);
       KmsSignerAdapter adapter = new KmsSignerAdapter(kmsClient);
@@ -185,12 +189,13 @@ class KmsSignerAdapterTest {
                 KmsSignFailedException signEx = (KmsSignFailedException) ex;
                 assertThat(signEx.getCause()).isSameAs(kmsEx);
                 assertThat(signEx.getCode()).isEqualTo("WEB3_017");
+                assertThat(signEx.isRetryable()).isTrue();
               });
     }
 
     @Test
     @DisplayName(
-        "signDigest — SdkClientException(network/timeout/credential) → KmsSignFailedException")
+        "signDigest — SdkClientException(network/timeout/credential) → KmsSignFailedException(retryable=true)")
     void signDigest_sdkClientException_wrapsInKmsSignFailedException() {
       // given — client-side failure (no awsErrorDetails); without SdkException catch, this would
       // escape past the worker's KMS_SIGN_FAILED retry sentinel.
@@ -202,7 +207,84 @@ class KmsSignerAdapterTest {
       assertThatThrownBy(() -> adapter.signDigest(KMS_KEY_ID, new byte[32], "0x" + "a".repeat(40)))
           .isInstanceOf(KmsSignFailedException.class)
           .hasMessageContaining("KMS Sign API failed")
-          .satisfies(ex -> assertThat(((KmsSignFailedException) ex).getCause()).isSameAs(clientEx));
+          .satisfies(
+              ex -> {
+                KmsSignFailedException signEx = (KmsSignFailedException) ex;
+                assertThat(signEx.getCause()).isSameAs(clientEx);
+                assertThat(signEx.isRetryable()).isTrue();
+              });
+    }
+
+    @Test
+    @DisplayName(
+        "signDigest — KmsException(AccessDeniedException) → KmsSignFailedException(retryable=false)")
+    void signDigest_accessDenied_marksKmsSignFailedRetryableFalse() {
+      // given — terminal AWS error code: classifier returns true → retryable=false on wrapper.
+      var kmsEx =
+          KmsException.builder()
+              .awsErrorDetails(AwsErrorDetails.builder().errorCode("AccessDeniedException").build())
+              .message("user is not authorized")
+              .build();
+      when(kmsClient.sign(any(SignRequest.class))).thenThrow(kmsEx);
+      KmsSignerAdapter adapter = new KmsSignerAdapter(kmsClient);
+
+      // when / then
+      assertThatThrownBy(() -> adapter.signDigest(KMS_KEY_ID, new byte[32], "0x" + "a".repeat(40)))
+          .isInstanceOf(KmsSignFailedException.class)
+          .satisfies(
+              ex -> {
+                KmsSignFailedException signEx = (KmsSignFailedException) ex;
+                assertThat(signEx.getCause()).isSameAs(kmsEx);
+                assertThat(signEx.isRetryable()).isFalse();
+              });
+    }
+
+    @Test
+    @DisplayName("signDigest — NotFoundException → KmsSignFailedException(retryable=false)")
+    void signDigest_notFound_marksKmsSignFailedRetryableFalse() {
+      // given — terminal AWS error code on a NotFoundException specifically (e.g. wrong key alias
+      // / region drift between control-plane create and data-plane sign).
+      var kmsEx =
+          NotFoundException.builder()
+              .awsErrorDetails(AwsErrorDetails.builder().errorCode("NotFoundException").build())
+              .message("key not found")
+              .build();
+      when(kmsClient.sign(any(SignRequest.class))).thenThrow(kmsEx);
+      KmsSignerAdapter adapter = new KmsSignerAdapter(kmsClient);
+
+      // when / then
+      assertThatThrownBy(() -> adapter.signDigest(KMS_KEY_ID, new byte[32], "0x" + "a".repeat(40)))
+          .isInstanceOf(KmsSignFailedException.class)
+          .satisfies(
+              ex -> {
+                KmsSignFailedException signEx = (KmsSignFailedException) ex;
+                assertThat(signEx.getCause()).isSameAs(kmsEx);
+                assertThat(signEx.isRetryable()).isFalse();
+              });
+    }
+
+    @Test
+    @DisplayName(
+        "signDigest — KmsException(ThrottlingException) → KmsSignFailedException(retryable=true)")
+    void signDigest_throttling_marksKmsSignFailedRetryableTrue() {
+      // given — non-terminal AWS error code: classifier returns false → retryable=true on wrapper.
+      var kmsEx =
+          KmsException.builder()
+              .awsErrorDetails(AwsErrorDetails.builder().errorCode("ThrottlingException").build())
+              .message("rate exceeded")
+              .build();
+      when(kmsClient.sign(any(SignRequest.class))).thenThrow(kmsEx);
+      KmsSignerAdapter adapter = new KmsSignerAdapter(kmsClient);
+
+      // when / then
+      assertThatThrownBy(() -> adapter.signDigest(KMS_KEY_ID, new byte[32], "0x" + "a".repeat(40)))
+          .isInstanceOf(KmsSignFailedException.class)
+          .satisfies(
+              ex -> {
+                KmsSignFailedException signEx = (KmsSignFailedException) ex;
+                assertThat(signEx.getCause()).isSameAs(kmsEx);
+                assertThat(signEx.isRetryable()).isTrue();
+              });
     }
 
     @Test

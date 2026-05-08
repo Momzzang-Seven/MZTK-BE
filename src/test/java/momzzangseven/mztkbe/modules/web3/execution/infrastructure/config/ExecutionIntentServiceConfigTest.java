@@ -6,13 +6,16 @@ import static org.mockito.Mockito.mock;
 import java.time.Clock;
 import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecutionTerminationHookUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecutionTerminationHookService;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.Eip1559TtlAdapter;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter.ExecutionDraftPolicyValidatorAdapter;
@@ -41,6 +44,11 @@ class ExecutionIntentServiceConfigTest {
               PublishExecutionIntentTerminatedPort.class,
               () -> mock(PublishExecutionIntentTerminatedPort.class))
           .withBean(LoadExecutionChainIdPort.class, () -> mock(LoadExecutionChainIdPort.class))
+          .withBean(
+              LoadSponsorTreasuryWalletPort.class, () -> mock(LoadSponsorTreasuryWalletPort.class))
+          .withBean(
+              VerifyTreasuryWalletForSignPort.class,
+              () -> mock(VerifyTreasuryWalletForSignPort.class))
           .withBean(Clock.class, Clock::systemUTC)
           .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
 
@@ -78,6 +86,7 @@ class ExecutionIntentServiceConfigTest {
             context -> {
               assertThat(context).hasNotFailed();
               assertThat(context).hasSingleBean(RunExecutionTerminationHookUseCase.class);
+              assertThat(context).hasSingleBean(ReplayConfirmedExecutionIntentUseCase.class);
               assertThat(context.getBean(RunExecutionTerminationHookUseCase.class))
                   .isInstanceOf(RunExecutionTerminationHookService.class);
               assertThat(context).doesNotHaveBean("runExecutionTerminationHookUseCase");

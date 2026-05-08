@@ -16,6 +16,11 @@ public interface QuestionLifecycleExecutionPort {
     return false;
   }
 
+  default Optional<QuestionUpdateStatePreparation> beginQuestionUpdateState(
+      Long postId, Long requesterUserId, String questionContent) {
+    return Optional.empty();
+  }
+
   void precheckQuestionCreate(Long requesterUserId, Long rewardMztk);
 
   Optional<QuestionExecutionWriteView> prepareQuestionCreate(
@@ -28,7 +33,12 @@ public interface QuestionLifecycleExecutionPort {
       Long postId, Long requesterUserId, String questionContent, Long rewardMztk);
 
   Optional<QuestionExecutionWriteView> prepareQuestionUpdate(
-      Long postId, Long requesterUserId, String questionContent, Long rewardMztk);
+      Long postId,
+      Long requesterUserId,
+      String questionContent,
+      Long rewardMztk,
+      Long questionUpdateVersion,
+      String questionUpdateToken);
 
   Optional<QuestionExecutionWriteView> prepareQuestionDelete(
       Long postId, Long requesterUserId, String questionContent, Long rewardMztk);
@@ -41,4 +51,7 @@ public interface QuestionLifecycleExecutionPort {
       String questionContent,
       String answerContent,
       Long rewardMztk);
+
+  record QuestionUpdateStatePreparation(
+      Long postId, Long updateVersion, String updateToken, String expectedQuestionHash) {}
 }
