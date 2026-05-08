@@ -7,6 +7,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegi
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,7 +36,8 @@ class QnaAdminExecutionHealthIndicatorTest {
   @Test
   void health_keepsUpWhenRelayerCheckThrows() {
     when(probeSponsorSignerCapabilityPort.probe())
-        .thenReturn(QnaAdminServerSignerView.ready("sponsor-treasury", "0x" + "2".repeat(40)));
+        .thenReturn(
+            QnaAdminServerSignerView.ready(TreasuryRole.SPONSOR.toAlias(), "0x" + "2".repeat(40)));
     when(qnaContractCallSupport.isRelayerRegistered("0x" + "1".repeat(40), "0x" + "2".repeat(40)))
         .thenThrow(new IllegalStateException("rpc down"));
 
@@ -53,7 +55,8 @@ class QnaAdminExecutionHealthIndicatorTest {
   @Test
   void health_reportsRegisteredStatusWhenRelayerIsRegistered() {
     when(probeSponsorSignerCapabilityPort.probe())
-        .thenReturn(QnaAdminServerSignerView.ready("sponsor-treasury", "0x" + "2".repeat(40)));
+        .thenReturn(
+            QnaAdminServerSignerView.ready(TreasuryRole.SPONSOR.toAlias(), "0x" + "2".repeat(40)));
     when(qnaContractCallSupport.isRelayerRegistered("0x" + "1".repeat(40), "0x" + "2".repeat(40)))
         .thenReturn(true);
 

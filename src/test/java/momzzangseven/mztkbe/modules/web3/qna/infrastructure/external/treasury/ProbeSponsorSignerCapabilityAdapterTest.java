@@ -1,9 +1,12 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.treasury;
 
+import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Arrays;
+import java.util.Set;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerFailureReason;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerSlotStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
@@ -11,6 +14,7 @@ import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSigne
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerFailureReason;
 import momzzangseven.mztkbe.modules.web3.treasury.application.dto.ExecutionSignerSlotStatus;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.in.ProbeTreasuryWalletCapabilityUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -22,7 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class ProbeSponsorSignerCapabilityAdapterTest {
 
-  private static final String SPONSOR_ALIAS = "sponsor-treasury";
+  private static final String SPONSOR_ALIAS = TreasuryRole.SPONSOR.toAlias();
   private static final String SIGNER_ADDRESS = "0x" + "a".repeat(40);
 
   @Mock private ProbeTreasuryWalletCapabilityUseCase probeTreasuryWalletCapabilityUseCase;
@@ -80,6 +84,32 @@ class ProbeSponsorSignerCapabilityAdapterTest {
     QnaAdminServerSignerView actual = adapter.probe();
 
     assertThat(actual.failureReason().name()).isEqualTo(failure.name());
+  }
+
+  @Test
+  void slotStatus_mirrorsTreasuryEnumExactly() {
+    Set<String> qna =
+        Arrays.stream(QnaAdminServerSignerSlotStatus.values())
+            .map(Enum::name)
+            .collect(toUnmodifiableSet());
+    Set<String> treasury =
+        Arrays.stream(ExecutionSignerSlotStatus.values())
+            .map(Enum::name)
+            .collect(toUnmodifiableSet());
+    assertThat(qna).isEqualTo(treasury);
+  }
+
+  @Test
+  void failureReason_mirrorsTreasuryEnumExactly() {
+    Set<String> qna =
+        Arrays.stream(QnaAdminServerSignerFailureReason.values())
+            .map(Enum::name)
+            .collect(toUnmodifiableSet());
+    Set<String> treasury =
+        Arrays.stream(ExecutionSignerFailureReason.values())
+            .map(Enum::name)
+            .collect(toUnmodifiableSet());
+    assertThat(qna).isEqualTo(treasury);
   }
 
   private static ExecutionSignerCapabilityView sourceForSlot(ExecutionSignerSlotStatus slot) {

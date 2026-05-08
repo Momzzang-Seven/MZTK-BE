@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +17,8 @@ class QnaAdminExecutionAuthorityViewTest {
     assertThatThrownBy(
             () ->
                 new QnaAdminExecutionAuthorityView(
-                    QnaAdminServerSignerView.ready("sponsor-treasury", "0x" + "1".repeat(40)),
+                    QnaAdminServerSignerView.ready(
+                        TreasuryRole.SPONSOR.toAlias(), "0x" + "1".repeat(40)),
                     false,
                     QnaAdminRelayerRegistrationStatus.REGISTERED,
                     false,
@@ -31,7 +33,8 @@ class QnaAdminExecutionAuthorityViewTest {
     assertThatThrownBy(
             () ->
                 new QnaAdminExecutionAuthorityView(
-                    QnaAdminServerSignerView.ready("sponsor-treasury", "0x" + "1".repeat(40)),
+                    QnaAdminServerSignerView.ready(
+                        TreasuryRole.SPONSOR.toAlias(), "0x" + "1".repeat(40)),
                     false,
                     QnaAdminRelayerRegistrationStatus.UNCHECKED,
                     false,
@@ -46,7 +49,8 @@ class QnaAdminExecutionAuthorityViewTest {
     assertThatCode(
             () ->
                 new QnaAdminExecutionAuthorityView(
-                    QnaAdminServerSignerView.ready("sponsor-treasury", "0x" + "1".repeat(40)),
+                    QnaAdminServerSignerView.ready(
+                        TreasuryRole.SPONSOR.toAlias(), "0x" + "1".repeat(40)),
                     true,
                     QnaAdminRelayerRegistrationStatus.REGISTERED,
                     false,

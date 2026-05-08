@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -138,7 +139,7 @@ class QnaAdminReviewDeciderTest {
             List.of(),
             new ExecutionAuthority(
                 QnaAdminServerSignerView.ready(
-                    "sponsor-treasury", "0x2222222222222222222222222222222222222222"),
+                    TreasuryRole.SPONSOR.toAlias(), "0x2222222222222222222222222222222222222222"),
                 false,
                 QnaAdminRelayerRegistrationStatus.CHECK_FAILED),
             enabledPolicy());
@@ -193,7 +194,7 @@ class QnaAdminReviewDeciderTest {
   private ExecutionAuthority authority() {
     return new ExecutionAuthority(
         QnaAdminServerSignerView.ready(
-            "sponsor-treasury", "0x2222222222222222222222222222222222222222"),
+            TreasuryRole.SPONSOR.toAlias(), "0x2222222222222222222222222222222222222222"),
         true,
         QnaAdminRelayerRegistrationStatus.REGISTERED);
   }

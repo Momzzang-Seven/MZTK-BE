@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,7 +69,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.ready(
-                "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+                TreasuryRole.SPONSOR.toAlias(), "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     when(loadInternalExecutionEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
     when(qnaContractCallSupport.prevalidateContractCall(anyString(), anyString(), anyString()))
         .thenReturn(
@@ -136,7 +137,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.ready(
-                "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+                TreasuryRole.SPONSOR.toAlias(), "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x3333333333333333333333333333333333333333",
             "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
@@ -166,7 +167,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.unavailable(
-                "sponsor-treasury",
+                TreasuryRole.SPONSOR.toAlias(),
                 QnaAdminServerSignerSlotStatus.UNPROVISIONED,
                 QnaAdminServerSignerFailureReason.NONE));
 
@@ -194,7 +195,7 @@ class QnaAdminExecutionDraftBuilderAdapterTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.ready(
-                "sponsor-treasury", "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+                TreasuryRole.SPONSOR.toAlias(), "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x3333333333333333333333333333333333333333",
             "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))

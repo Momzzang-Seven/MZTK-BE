@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionI
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,7 +50,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.ready(
-                "sponsor-treasury", "0x2222222222222222222222222222222222222222"));
+                TreasuryRole.SPONSOR.toAlias(), "0x2222222222222222222222222222222222222222"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x1111111111111111111111111111111111111111",
             "0x2222222222222222222222222222222222222222"))
@@ -77,7 +78,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.ready(
-                "sponsor-treasury", "0x2222222222222222222222222222222222222222"));
+                TreasuryRole.SPONSOR.toAlias(), "0x2222222222222222222222222222222222222222"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x1111111111111111111111111111111111111111",
             "0x2222222222222222222222222222222222222222"))
@@ -94,7 +95,7 @@ class QnaAdminExecutionConfigurationValidatorTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.unavailable(
-                "sponsor-treasury",
+                TreasuryRole.SPONSOR.toAlias(),
                 QnaAdminServerSignerSlotStatus.UNPROVISIONED,
                 QnaAdminServerSignerFailureReason.NONE));
 

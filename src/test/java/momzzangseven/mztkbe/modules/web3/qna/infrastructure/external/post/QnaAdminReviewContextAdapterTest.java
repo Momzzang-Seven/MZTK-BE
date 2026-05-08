@@ -29,6 +29,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -91,7 +92,7 @@ class QnaAdminReviewContextAdapterTest {
     when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
             QnaAdminServerSignerView.ready(
-                "sponsor-treasury", "0x3333333333333333333333333333333333333333"));
+                TreasuryRole.SPONSOR.toAlias(), "0x3333333333333333333333333333333333333333"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x1111111111111111111111111111111111111111",
             "0x3333333333333333333333333333333333333333"))
