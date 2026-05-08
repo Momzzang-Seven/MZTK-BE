@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsSignerPort;
+import momzzangseven.mztkbe.modules.web3.shared.application.util.KmsClientErrorClassifier;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.Vrs;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.crypto.DerToVrsConverter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -38,9 +39,12 @@ import software.amazon.awssdk.services.kms.model.SigningAlgorithmSpec;
  * <p><b>Throttle / retry</b> — Per design §9 this adapter does not retry internally. Any {@link
  * SdkException} (KMS service errors — throttling, 5xx, IAM denial, key state — and client-side
  * failures — network, credential provider, timeout) is wrapped into {@link KmsSignFailedException}
- * and propagated; the upstream caller (e.g. {@code TransactionIssuerWorker} via {@code
- * Web3TxFailureReason.KMS_SIGN_FAILED}) decides whether to retry under its existing
- * exponential-backoff strategy.
+ * and propagated; the {@code retryable} flag on the wrapper is set from {@link
+ * KmsClientErrorClassifier#isTerminalCause(Throwable)} so direct propagators (e.g. {@code
+ * ProvisionTreasuryKeyService} sanity-sign) surface an accurate retry signal without
+ * re-classifying. Quarantine-mapping callers (e.g. {@code TransactionIssuerWorker} via {@code
+ * Web3TxFailureReason.KMS_SIGN_FAILED}) keep their own terminal/transient branch for reason-code
+ * mapping.
  */
 @Component
 @ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "true")
@@ -79,7 +83,8 @@ public class KmsSignerAdapter implements KmsSignerPort {
           kmsKeyId,
           awsErrorCodeOrNa(ex),
           ex.getClass().getSimpleName());
-      throw new KmsSignFailedException("KMS Sign API failed", ex);
+      boolean retryable = !KmsClientErrorClassifier.isTerminalCause(ex);
+      throw new KmsSignFailedException("KMS Sign API failed", ex, retryable);
     }
 
     return DerToVrsConverter.convert(response.signature().asByteArray(), digest, expectedAddress);

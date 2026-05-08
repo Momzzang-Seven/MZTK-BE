@@ -37,6 +37,8 @@ const ENV = {
   ),
   QNA_TEST_ASKER_PRIVATE_KEY: process.env.QNA_TEST_ASKER_PRIVATE_KEY ?? "",
   QNA_TEST_RESPONDER_PRIVATE_KEY: process.env.QNA_TEST_RESPONDER_PRIVATE_KEY ?? "",
+    ADMIN_LOGIN_PASSWORD_HASH: process.env.ADMIN_LOGIN_PASSWORD_HASH ?? "",
+    ADMIN_LOGIN_PASSWORD: process.env.ADMIN_LOGIN_PASSWORD ?? "",
 };
 
 const provider =
@@ -64,9 +66,9 @@ const RECEIPT_TIMEOUT_MS = 180_000;
 const USER_EXECUTE_TIMEOUT_MS = 30_000;
 const USER_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 3_000;
-const ADMIN_LOGIN_PASSWORD = "AdminPass123!";
-const ADMIN_LOGIN_PASSWORD_HASH =
-  "########################################################################"; // bcrypt hash of ADMIN_LOGIN_PASSWORD
+// const ADMIN_LOGIN_PASSWORD = "AdminPass123!";
+// const ADMIN_LOGIN_PASSWORD_HASH =
+//   "$2a$12$grtBS3zwaX5.44kWZ7cLZergKCqLmcHYVWoypCioC.VV0hi0c9ruS"; // bcrypt hash of ADMIN_LOGIN_PASSWORD
 
 test.afterAll(async () => {
   await db.end();
@@ -197,6 +199,7 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
     "[P-1] admin settlement review/settle broadcasts and mines an on-chain admin settle tx",
     { tag: ["@requires-rpc", "@requires-internal-issuer"] },
     async ({ request }) => {
+      test.setTimeout(USER_CONFIRM_TIMEOUT_MS + INTENT_TIMEOUT_MS + RECEIPT_TIMEOUT_MS + 60_000);
       test.skip(
         !hasAnswerInfra(),
         "RPC / QnA contract / reward token / funded asker+responder wallet env is required"
@@ -243,7 +246,10 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
       ).toBe(200);
       const reviewBody = await reviewRes.json();
       expect(reviewBody.status).toBe("SUCCESS");
-      expect(reviewBody.data.processable).toBe(true);
+      expect(
+        reviewBody.data.processable,
+        `settlement review not processable: ${JSON.stringify(reviewBody.data, null, 2)}`
+      ).toBe(true);
       expect(reviewBody.data.authority.relayerRegistrationStatus).toBe(
         "REGISTERED"
       );
@@ -291,6 +297,7 @@ test.describe("QnA Admin Escrow Playwright E2E", () => {
     "[P-2] admin refund review/refund broadcasts and mines an on-chain admin refund tx",
     { tag: ["@requires-rpc", "@requires-internal-issuer"] },
     async ({ request }) => {
+      test.setTimeout(USER_CONFIRM_TIMEOUT_MS + INTENT_TIMEOUT_MS + RECEIPT_TIMEOUT_MS + 60_000);
       test.skip(
         !hasQuestionInfra(),
         "RPC / QnA contract / reward token / funded asker wallet env is required"
@@ -421,7 +428,7 @@ async function createAdminAndLogin(
         updated_at
       )
       values ($1, $2, $3, null, null, null, null, now(), now())`,
-    [localUser.userId, loginId, ADMIN_LOGIN_PASSWORD_HASH]
+    [localUser.userId, loginId, ENV.ADMIN_LOGIN_PASSWORD_HASH]
   );
 
   const loginRes = await request.post(`${ENV.BACKEND_URL}/auth/login`, {
@@ -429,7 +436,7 @@ async function createAdminAndLogin(
     data: {
       provider: "LOCAL_ADMIN",
       loginId,
-      password: ADMIN_LOGIN_PASSWORD,
+      password: ENV.ADMIN_LOGIN_PASSWORD,
     },
   });
   expect(

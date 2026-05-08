@@ -19,6 +19,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAddressMismatchException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletAlreadyProvisionedException;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletStateException;
+import momzzangseven.mztkbe.global.error.web3.KmsSignFailedException;
 import momzzangseven.mztkbe.global.error.web3.TreasuryPrivateKeyInvalidException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
@@ -263,6 +264,71 @@ class ProvisionTreasuryKeyServiceTest {
     assertThatThrownBy(() -> service.execute(command))
         .isInstanceOf(RuntimeException.class)
         .hasMessageContaining("kms unreachable");
+
+    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+    verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+    verify(saveTreasuryWalletPort, never()).save(any(TreasuryWallet.class));
+    verify(applicationEventPublisher, never()).publishEvent(any());
+  }
+
+  @Test
+  void execute_sanitySignTerminalKmsFailure_propagatesNonRetryableException() {
+    // given — adapter classifies AccessDenied as terminal and surfaces retryable=false on the
+    // wrapper. ProvisionTreasuryKeyService re-throws unchanged; the response must carry that
+    // signal so an admin operator does not retry a deterministic configuration error.
+    when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
+    when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
+        .thenReturn(false);
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[] {3});
+    KmsSignFailedException terminal =
+        new KmsSignFailedException("kms denied", new RuntimeException("AccessDenied"), false);
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenThrow(terminal);
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    // when / then
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(KmsSignFailedException.class)
+        .satisfies(ex -> assertThat(((KmsSignFailedException) ex).isRetryable()).isFalse());
+
+    // cleanup still runs — ghost-key prevention is independent of retryable signal.
+    verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
+    verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
+    verify(saveTreasuryWalletPort, never()).save(any(TreasuryWallet.class));
+    verify(applicationEventPublisher, never()).publishEvent(any());
+  }
+
+  @Test
+  void execute_sanitySignTransientKmsFailure_propagatesRetryableException() {
+    // given — adapter sees a throttling-style cause and surfaces retryable=true. Service still
+    // tears the half-created key down (ghost-key prevention) and re-throws so the operator can
+    // retry against a fresh key on the next call.
+    when(loadTreasuryWalletPort.loadByAlias("reward-treasury")).thenReturn(Optional.empty());
+    when(loadTreasuryWalletPort.existsAddressOwnedByOther(anyString(), anyString()))
+        .thenReturn(false);
+    when(kmsKeyLifecyclePort.createKey()).thenReturn("kms-key-id");
+    when(kmsKeyLifecyclePort.getParametersForImport("kms-key-id"))
+        .thenReturn(new KmsKeyLifecyclePort.ImportParams(new byte[] {1}, new byte[] {2}));
+    when(kmsKeyMaterialWrapperPort.wrap(any(byte[].class), any(byte[].class)))
+        .thenReturn(new byte[] {3});
+    KmsSignFailedException transientFailure =
+        new KmsSignFailedException("kms throttled", new RuntimeException("Throttling"), true);
+    when(signDigestPort.signDigest(anyString(), any(byte[].class), anyString()))
+        .thenThrow(transientFailure);
+
+    ProvisionTreasuryKeyCommand command =
+        new ProvisionTreasuryKeyCommand(1L, PRIVATE_KEY_HEX, TreasuryRole.REWARD, DERIVED_ADDRESS);
+
+    // when / then
+    assertThatThrownBy(() -> service.execute(command))
+        .isInstanceOf(KmsSignFailedException.class)
+        .satisfies(ex -> assertThat(((KmsSignFailedException) ex).isRetryable()).isTrue());
 
     verify(kmsKeyLifecyclePort).disableKey("kms-key-id");
     verify(kmsKeyLifecyclePort).scheduleKeyDeletion(eq("kms-key-id"), anyInt());
