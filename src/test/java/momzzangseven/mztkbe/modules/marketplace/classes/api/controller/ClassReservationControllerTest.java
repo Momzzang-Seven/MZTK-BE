@@ -15,6 +15,7 @@ import java.time.LocalTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.in.GetClassReservationInfoUseCase;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationResult;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationResult;
@@ -90,26 +91,67 @@ class ClassReservationControllerTest {
 
   private static final LocalDate FUTURE_DATE = LocalDate.now().plusDays(7);
 
+  /** Non-null class/user summary fixtures to validate the enrichment response contract. */
+  private static final momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
+          .LoadClassSummaryPort.ClassSummary
+      SAMPLE_CLASS_SUMMARY =
+          new momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
+              .LoadClassSummaryPort.ClassSummary("요가 기초", 50000, "thumb/yoga.jpg");
+
+  private static final momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
+          .LoadUserSummaryPort.UserSummary
+      SAMPLE_TRAINER_SUMMARY =
+          new momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
+              .LoadUserSummaryPort.UserSummary(100L, "trainer-nick");
+
+  private static final momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
+          .LoadUserSummaryPort.UserSummary
+      SAMPLE_USER_SUMMARY =
+          new momzzangseven.mztkbe.modules.marketplace.reservation.application.port.out
+              .LoadUserSummaryPort.UserSummary(50L, "user-nick");
+
   private ReservationSummaryResult summaryResult() {
-    return new ReservationSummaryResult(
-        1L, 10L, 100L, 50L, FUTURE_DATE, LocalTime.of(10, 0), 60, ReservationStatus.PENDING, null);
+    return ReservationSummaryResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .slotId(10L)
+            .trainerId(100L)
+            .userId(50L)
+            .reservationDate(FUTURE_DATE)
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.PENDING)
+            .userRequest(null)
+            .build(),
+        SAMPLE_CLASS_SUMMARY.title(),
+        SAMPLE_CLASS_SUMMARY.priceAmount(),
+        SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
+        SAMPLE_TRAINER_SUMMARY.nickname(),
+        null); // userNickname not exposed on user-list path
   }
 
   private GetReservationResult detailResult(Long viewerId) {
-    return new GetReservationResult(
-        1L,
-        viewerId,
-        100L,
-        10L,
-        FUTURE_DATE,
-        LocalTime.of(10, 0),
-        60,
-        ReservationStatus.PENDING,
-        null,
-        "order-abc",
-        null,
-        LocalDateTime.now(),
-        LocalDateTime.now());
+    return GetReservationResult.from(
+        momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation.builder()
+            .id(1L)
+            .userId(viewerId)
+            .trainerId(100L)
+            .slotId(10L)
+            .reservationDate(FUTURE_DATE)
+            .reservationTime(LocalTime.of(10, 0))
+            .durationMinutes(60)
+            .status(ReservationStatus.PENDING)
+            .userRequest(null)
+            .orderId("order-abc")
+            .txHash(null)
+            .createdAt(LocalDateTime.now())
+            .updatedAt(LocalDateTime.now())
+            .build(),
+        SAMPLE_CLASS_SUMMARY.title(),
+        SAMPLE_CLASS_SUMMARY.priceAmount(),
+        SAMPLE_CLASS_SUMMARY.thumbnailFinalObjectKey(),
+        SAMPLE_TRAINER_SUMMARY.nickname(),
+        SAMPLE_USER_SUMMARY.nickname());
   }
 
   /** Minimal valid create-reservation request body. */
@@ -162,14 +204,24 @@ class ClassReservationControllerTest {
     @Test
     @DisplayName("[CR-03] 인증된 사용자는 예약 목록을 조회할 수 있다 — 200 + 목록 반환")
     void getMyReservations_authenticated_returns200() throws Exception {
-      given(getUserReservationsUseCase.execute(any())).willReturn(List.of(summaryResult()));
+      given(getUserReservationsUseCase.execute(any()))
+          .willReturn(new CursorSlice<>(List.of(summaryResult()), false, null));
 
       mockMvc
           .perform(get("/marketplace/me/reservations").with(userPrincipal(50L)))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
-          .andExpect(jsonPath("$.data[0].reservationId").value(1))
-          .andExpect(jsonPath("$.data[0].status").value("PENDING"));
+          .andExpect(jsonPath("$.data.reservations[0].reservationId").value(1))
+          .andExpect(jsonPath("$.data.reservations[0].status").value("PENDING"))
+          // enrichment contract — new fields must be present in the response
+          .andExpect(jsonPath("$.data.reservations[0].classTitle").value("요가 기초"))
+          .andExpect(jsonPath("$.data.reservations[0].priceAmount").value(50000))
+          .andExpect(jsonPath("$.data.reservations[0].trainerNickname").value("trainer-nick"))
+          .andExpect(
+              jsonPath("$.data.reservations[0].thumbnailFinalObjectKey").value("thumb/yoga.jpg"))
+          // cursor contract
+          .andExpect(jsonPath("$.data.hasNext").value(false))
+          .andExpect(jsonPath("$.data.nextCursor").doesNotExist());
     }
 
     @Test
@@ -189,12 +241,14 @@ class ClassReservationControllerTest {
     @Test
     @DisplayName("[CR-06] status 필터 파라미터를 전달하면 필터링 결과를 반환한다 — 200")
     void getMyReservations_withStatusFilter_returns200() throws Exception {
-      given(getUserReservationsUseCase.execute(any())).willReturn(List.of());
+      given(getUserReservationsUseCase.execute(any()))
+          .willReturn(new CursorSlice<>(List.of(), false, null));
 
       mockMvc
           .perform(get("/marketplace/me/reservations?status=APPROVED").with(userPrincipal(50L)))
           .andExpect(status().isOk())
-          .andExpect(jsonPath("$.data").isArray());
+          .andExpect(jsonPath("$.data.reservations").isArray())
+          .andExpect(jsonPath("$.data.hasNext").value(false));
     }
   }
 
@@ -214,7 +268,13 @@ class ClassReservationControllerTest {
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("SUCCESS"))
           .andExpect(jsonPath("$.data.reservationId").value(1))
-          .andExpect(jsonPath("$.data.orderId").value("order-abc"));
+          .andExpect(jsonPath("$.data.orderId").value("order-abc"))
+          // enrichment contract
+          .andExpect(jsonPath("$.data.classTitle").value("요가 기초"))
+          .andExpect(jsonPath("$.data.priceAmount").value(50000))
+          .andExpect(jsonPath("$.data.thumbnailFinalObjectKey").value("thumb/yoga.jpg"))
+          .andExpect(jsonPath("$.data.trainerNickname").value("trainer-nick"))
+          .andExpect(jsonPath("$.data.userNickname").value("user-nick"));
     }
 
     @Test
