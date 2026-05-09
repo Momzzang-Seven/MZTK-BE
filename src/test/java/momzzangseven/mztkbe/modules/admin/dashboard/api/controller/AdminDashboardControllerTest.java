@@ -96,6 +96,9 @@ class AdminDashboardControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.postRemovalReasonStats.SPAM").value(2))
+        .andExpect(jsonPath("$.data.moderationActionReasonStats.SPAM").value(2))
+        .andExpect(jsonPath("$.data.postRemovalReasonStats.OTHER").value(0))
+        .andExpect(jsonPath("$.data.moderationActionReasonStats.OTHER").value(0))
         .andExpect(jsonPath("$.data.boardTypeSplit.FREE").value(2))
         .andExpect(jsonPath("$.data.targetTypeStats.COMMENT").value(2));
   }

@@ -2,8 +2,11 @@ package momzzangseven.mztkbe.global.security.aspect;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.application.AdminAuditDetailNormalizer;
@@ -50,6 +53,16 @@ public class AdminOnlyAspect {
   private static final ExpressionParser SPEL = new SpelExpressionParser();
   private static final DefaultParameterNameDiscoverer PARAM_DISCOVERER =
       new DefaultParameterNameDiscoverer();
+  private static final String METHOD_DETAIL_KEY = "method";
+  private static final String FAILURE_REASON_DETAIL_KEY = "failureReason";
+  private static final String ARGUMENTS_DETAIL_KEY = "arguments";
+  private static final String DETAIL_EVALUATION_ERROR_KEY = "detailEvaluationError";
+  private static final Set<String> RESERVED_DETAIL_KEYS =
+      Set.of(
+          METHOD_DETAIL_KEY,
+          FAILURE_REASON_DETAIL_KEY,
+          ARGUMENTS_DETAIL_KEY,
+          DETAIL_EVALUATION_ERROR_KEY);
 
   private final RecordAdminAuditPort recordAdminAuditPort;
   private final RoleHierarchy roleHierarchy;
@@ -124,14 +137,18 @@ public class AdminOnlyAspect {
       // columns on admin_action_audits — keep them out of detail_json so the row has a single
       // source of truth for those fields.
       Map<String, Object> rawDetail = new LinkedHashMap<>();
-      rawDetail.put("method", method.getDeclaringClass().getSimpleName() + "." + method.getName());
-      rawDetail.put("failureReason", failureReason);
-      rawDetail.put("arguments", sanitizeArguments(method, args));
+      rawDetail.put(
+          METHOD_DETAIL_KEY, method.getDeclaringClass().getSimpleName() + "." + method.getName());
+      rawDetail.put(FAILURE_REASON_DETAIL_KEY, failureReason);
+      rawDetail.put(ARGUMENTS_DETAIL_KEY, sanitizeArguments(method, args));
       AdditionalDetailEvaluation additionalDetail =
           evaluateAdditionalDetail(adminOnly.actionType(), adminOnly.detail(), context);
-      rawDetail.putAll(additionalDetail.detail());
-      if (additionalDetail.errorSummary() != null) {
-        rawDetail.put("detailEvaluationError", additionalDetail.errorSummary());
+      List<String> ignoredReservedKeys =
+          mergeAdditionalDetail(rawDetail, additionalDetail.detail());
+      Map<String, Object> detailEvaluationError =
+          combineDetailEvaluationError(additionalDetail.errorSummary(), ignoredReservedKeys);
+      if (detailEvaluationError != null) {
+        rawDetail.put(DETAIL_EVALUATION_ERROR_KEY, detailEvaluationError);
       }
 
       recordAdminAuditPort.record(
@@ -149,6 +166,36 @@ public class AdminOnlyAspect {
           operatorId,
           auditException);
     }
+  }
+
+  private List<String> mergeAdditionalDetail(
+      Map<String, Object> rawDetail, Map<String, Object> additionalDetail) {
+    List<String> ignoredReservedKeys = new ArrayList<>();
+    for (Map.Entry<String, Object> entry : additionalDetail.entrySet()) {
+      String key = entry.getKey();
+      if (RESERVED_DETAIL_KEYS.contains(key)) {
+        ignoredReservedKeys.add(key);
+        continue;
+      }
+      rawDetail.put(key, entry.getValue());
+    }
+    return ignoredReservedKeys;
+  }
+
+  private Map<String, Object> combineDetailEvaluationError(
+      Map<String, Object> errorSummary, List<String> ignoredReservedKeys) {
+    if ((errorSummary == null || errorSummary.isEmpty()) && ignoredReservedKeys.isEmpty()) {
+      return null;
+    }
+    Map<String, Object> combined = new LinkedHashMap<>();
+    if (errorSummary != null) {
+      combined.putAll(errorSummary);
+    }
+    if (!ignoredReservedKeys.isEmpty()) {
+      combined.put("ignoredReservedKeyCount", ignoredReservedKeys.size());
+      combined.put("ignoredReservedKeys", List.copyOf(ignoredReservedKeys));
+    }
+    return combined;
   }
 
   private AdditionalDetailEvaluation evaluateAdditionalDetail(

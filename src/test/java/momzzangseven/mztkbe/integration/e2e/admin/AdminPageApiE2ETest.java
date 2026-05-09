@@ -216,6 +216,9 @@ class AdminPageApiE2ETest extends E2ETestBase {
     // postRemovalReasonStats counts append-only moderation action rows, including COMMENT targets;
     // it is not a current blocked/deleted post-state count.
     assertThat(stats.at("/postRemovalReasonStats/SPAM").asLong()).isEqualTo(1L);
+    assertThat(stats.at("/moderationActionReasonStats/SPAM").asLong()).isEqualTo(1L);
+    assertThat(stats.at("/moderationActionReasonStats"))
+        .isEqualTo(stats.at("/postRemovalReasonStats"));
     assertThat(stats.at("/targetTypeStats/COMMENT").asLong()).isEqualTo(1L);
     assertThat(stats.at("/targetTypeStats/POST").asLong()).isZero();
 
@@ -371,6 +374,10 @@ class AdminPageApiE2ETest extends E2ETestBase {
     // moderation state are intentionally not counted in admin_board_moderation_actions.
     assertThat(postStats.at("/targetTypeStats/POST").asLong()).isEqualTo(2L);
     assertThat(postStats.at("/postRemovalReasonStats/POLICY_VIOLATION").asLong()).isEqualTo(2L);
+    assertThat(postStats.at("/moderationActionReasonStats/POLICY_VIOLATION").asLong())
+        .isEqualTo(2L);
+    assertThat(postStats.at("/moderationActionReasonStats"))
+        .isEqualTo(postStats.at("/postRemovalReasonStats"));
     assertThat(postStats.at("/boardTypeSplit/FREE").asLong()).isEqualTo(1L);
     assertThat(postStats.at("/boardTypeSplit/QUESTION").asLong()).isEqualTo(1L);
 

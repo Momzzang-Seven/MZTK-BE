@@ -2,17 +2,20 @@ package momzzangseven.mztkbe.integration.e2e.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
@@ -34,31 +37,55 @@ import momzzangseven.mztkbe.modules.post.infrastructure.persistence.repository.P
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** Verifies admin post moderation pessimistic locks against real PostgreSQL row contention. */
 @DisplayName("[E2E] Admin post moderation DB lock concurrency")
+@TestPropertySource(
+    properties = {
+      "spring.jpa.properties.jakarta.persistence.lock.timeout=1000",
+      "spring.datasource.hikari.connection-init-sql=SET lock_timeout = '1000ms'"
+    })
 class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
 
+  private static final String LOCK_1_DISPLAY_NAME =
+      "[LOCK-1] 같은 post 동시 ban 2건은 직렬화되어 1건만 상태를 변경한다";
+  private static final String LOCK_2_DISPLAY_NAME =
+      "[LOCK-2] 동시 ban/unblock은 row lock으로 일관된 최종 상태를 유지한다";
+  private static final String LOCK_3_DISPLAY_NAME =
+      "[LOCK-3] admin board post 동시 ban 2건은 moderation action을 1건만 저장한다";
+  private static final String LOCK_5_DISPLAY_NAME =
+      "[LOCK-5] admin board post unblock API는 post row lock timeout 시 409를 반환한다";
   private static final Duration WORKER_TIMEOUT = Duration.ofSeconds(10);
+  private static final Duration LOCK_HOLDER_MAX_DURATION = Duration.ofSeconds(6);
 
   @Autowired private ModerateManagedPostUseCase moderateManagedPostUseCase;
   @Autowired private BanAdminBoardPostUseCase banAdminBoardPostUseCase;
   @Autowired private GetAdminBoardStatsUseCase getAdminBoardStatsUseCase;
   @Autowired private PostJpaRepository postJpaRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private PlatformTransactionManager transactionManager;
   @Autowired private TransactionTemplate txTemplate;
 
   @MockitoBean private KakaoAuthPort kakaoAuthPort;
   @MockitoBean private GoogleAuthPort googleAuthPort;
 
   @Test
-  @DisplayName("[LOCK-1] 같은 post 동시 ban 2건은 직렬화되어 1건만 상태를 변경한다")
+  @DisplayName(LOCK_1_DISPLAY_NAME)
   void concurrentBlockSamePost_serializesAndOnlyOneChangesState() throws Exception {
     Long userId = signupAndLogin("Mod" + shortToken()).userId();
     Long postId = createFreePost(userId);
@@ -84,7 +111,7 @@ class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[LOCK-2] 같은 post 동시 ban/unblock은 직렬화되어 일관된 최종 상태로 수렴한다")
+  @DisplayName(LOCK_2_DISPLAY_NAME)
   void concurrentBlockAndUnblockSamePost_serializesAndKeepsConsistentState() throws Exception {
     Long userId = signupAndLogin("Mod" + shortToken()).userId();
     Long postId = createFreePost(userId);
@@ -112,7 +139,7 @@ class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[LOCK-3] admin board post 동시 ban 2건은 moderation action을 1건만 저장한다")
+  @DisplayName(LOCK_3_DISPLAY_NAME)
   void concurrentAdminBoardPostBanSamePost_savesOnlyOneModerationAction() throws Exception {
     Long userId = signupAndLogin("Mod" + shortToken()).userId();
     Long postId = createFreePost(userId);
@@ -147,6 +174,31 @@ class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
     } finally {
       shutdown(executor);
     }
+  }
+
+  @Test
+  @DisplayName("[LOCK-4] admin board post ban API는 post row lock timeout 시 409를 반환한다")
+  void adminBoardPostBanEndpoint_whenPostRowLockTimesOut_returnsDatabaseLockTimeout()
+      throws Exception {
+    TestAdmin admin = createAdminAndLogin();
+    Long userId = signupAndLogin("Mod" + shortToken()).userId();
+    Long postId = createFreePost(userId);
+
+    assertAdminPostModerationEndpointLockTimeout(
+        postId, "/admin/boards/posts/" + postId + "/ban", admin.accessToken());
+  }
+
+  @Test
+  @DisplayName(LOCK_5_DISPLAY_NAME)
+  void adminBoardPostUnblockEndpoint_whenPostRowLockTimesOut_returnsDatabaseLockTimeout()
+      throws Exception {
+    TestAdmin admin = createAdminAndLogin();
+    Long userId = signupAndLogin("Mod" + shortToken()).userId();
+    Long postId = createFreePost(userId);
+    markPostModerationStatus(postId, "BLOCKED");
+
+    assertAdminPostModerationEndpointLockTimeout(
+        postId, "/admin/boards/posts/" + postId + "/unblock", admin.accessToken());
   }
 
   private Callable<ModeratePostResult> blockTask(
@@ -187,6 +239,78 @@ class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
     };
   }
 
+  private void assertAdminPostModerationEndpointLockTimeout(
+      Long postId, String path, String accessToken) throws Exception {
+    CountDownLatch lockAcquired = new CountDownLatch(1);
+    CountDownLatch releaseLock = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+    try {
+      final Future<Void> lockHolder =
+          executor.submit(() -> holdPostRowLock(postId, lockAcquired, releaseLock));
+      assertThat(lockAcquired.await(5, TimeUnit.SECONDS)).isTrue();
+
+      Future<ResponseEntity<String>> response =
+          executor.submit(() -> postWithBearer(path, accessToken, moderationReasonBody()));
+
+      assertDatabaseLockTimeoutResponse(await(response));
+      releaseLock.countDown();
+      await(lockHolder);
+    } finally {
+      releaseLock.countDown();
+      shutdown(executor);
+    }
+  }
+
+  private Void holdPostRowLock(
+      Long postId, CountDownLatch lockAcquired, CountDownLatch releaseLock) {
+    requiresNewTransactionTemplate()
+        .execute(
+            status -> {
+              jdbcTemplate.queryForObject(
+                  "SELECT id FROM posts WHERE id = ? FOR UPDATE", Long.class, postId);
+              lockAcquired.countDown();
+              awaitLockRelease(releaseLock);
+              return null;
+            });
+    return null;
+  }
+
+  private void awaitLockRelease(CountDownLatch releaseLock) {
+    try {
+      releaseLock.await(LOCK_HOLDER_MAX_DURATION.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while holding post row lock", e);
+    }
+  }
+
+  private TransactionTemplate requiresNewTransactionTemplate() {
+    TransactionTemplate template = new TransactionTemplate(transactionManager);
+    template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    return template;
+  }
+
+  private ResponseEntity<String> postWithBearer(String path, String accessToken, Object body) {
+    return restTemplate.exchange(
+        baseUrl() + path,
+        HttpMethod.POST,
+        new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
+        String.class);
+  }
+
+  private Map<String, String> moderationReasonBody() {
+    return Map.of("reasonCode", "POLICY_VIOLATION", "reasonDetail", "lock timeout e2e");
+  }
+
+  private void assertDatabaseLockTimeoutResponse(ResponseEntity<String> response) throws Exception {
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    JsonNode body = objectMapper.readTree(response.getBody());
+    assertThat(body.at("/status").asText()).isEqualTo("FAIL");
+    assertThat(body.at("/code").asText()).isEqualTo(ErrorCode.DATABASE_LOCK_TIMEOUT.getCode());
+    assertThat(body.at("/message").asText())
+        .isEqualTo(ErrorCode.DATABASE_LOCK_TIMEOUT.getMessage());
+  }
+
   private <T> T await(Future<T> future) throws Exception {
     return future.get(WORKER_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
   }
@@ -210,6 +334,13 @@ class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
   private PostModerationStatus loadModerationStatus(Long postId) {
     return txTemplate.execute(
         status -> postJpaRepository.findById(postId).orElseThrow().getModerationStatus());
+  }
+
+  private void markPostModerationStatus(Long postId, String moderationStatus) {
+    jdbcTemplate.update(
+        "UPDATE posts SET moderation_status = ?, updated_at = NOW() WHERE id = ?",
+        moderationStatus,
+        postId);
   }
 
   private long adminBoardModerationActionCount(Long postId) {
@@ -248,6 +379,38 @@ class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
     }
   }
 
+  private TestAdmin createAdminAndLogin() throws Exception {
+    String email = "admin-" + shortToken() + "@internal.mztk.local";
+    jdbcTemplate.update(
+        "INSERT INTO users (email, role, nickname, created_at, updated_at) "
+            + "VALUES (?, 'ADMIN_GENERATED', 'AdminLockAdmin', NOW(), NOW())",
+        email);
+    Long userId =
+        jdbcTemplate.queryForObject("SELECT id FROM users WHERE email = ?", Long.class, email);
+    String loginId =
+        String.valueOf(10000000 + Math.floorMod(UUID.randomUUID().hashCode(), 90000000));
+    String password = "AdminP@ss" + shortToken();
+    jdbcTemplate.update(
+        "INSERT INTO admin_accounts (user_id, login_id, password_hash, created_by, "
+            + "last_login_at, password_last_rotated_at, deleted_at, created_at, updated_at) "
+            + "VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NOW(), NOW())",
+        userId,
+        loginId,
+        passwordEncoder.encode(password));
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/auth/login",
+            HttpMethod.POST,
+            new HttpEntity<>(
+                Map.of("provider", "LOCAL_ADMIN", "loginId", loginId, "password", password),
+                jsonOnlyHeaders()),
+            String.class);
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    String accessToken = objectMapper.readTree(response.getBody()).at("/data/accessToken").asText();
+    return new TestAdmin(userId, accessToken);
+  }
+
   private void assertStatsIncreasedByOne(
       AdminBoardStatsResult baselineStats, AdminBoardStatsResult currentStats) {
     // Dashboard post-stats are cumulative moderation action counts, not current blocked-post state.
@@ -279,6 +442,8 @@ class AdminPostModerationConcurrencyE2ETest extends E2ETestBase {
   private String shortToken() {
     return UUID.randomUUID().toString().replace("-", "").substring(0, 6);
   }
+
+  private record TestAdmin(Long userId, String accessToken) {}
 
   private record AdminBoardBanOutcome(
       Long operatorId, String reasonDetail, AdminBoardModerationResult result) {}

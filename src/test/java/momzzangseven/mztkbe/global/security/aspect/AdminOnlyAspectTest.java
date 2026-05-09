@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
@@ -228,8 +229,54 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("@AdminOnly.detail 이 reserved key 를 사용해도 기본 audit detail 을 덮지 않고 충돌 정보를 남긴다")
+  void around_whenAdditionalDetailUsesReservedKeys_ignoresReservedKeysAndKeepsBaseDetail()
+      throws Throwable {
+    Method method =
+        DummyAdminMethods.class.getDeclaredMethod(
+            "reservedDetail", Long.class, String.class, Payload.class);
+    RuntimeException boom = new IllegalStateException("boom");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs())
+        .thenReturn(new Object[] {1L, "target-7", new Payload("grace", "k7", 13)});
+    when(joinPoint.proceed()).thenThrow(boom);
+    setAuthentication("ROLE_ADMIN");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("RESERVED_DETAIL");
+    assertThat(command.success()).isFalse();
+    assertThat(command.detail()).containsEntry("method", "DummyAdminMethods.reservedDetail");
+    assertThat(command.detail()).containsEntry("failureReason", "IllegalStateException");
+    assertThat(command.detail()).containsEntry("targetCopy", "target-7");
+    assertThat(command.detail()).doesNotContainKey("broken");
+    assertThat(command.detail().get("arguments")).isInstanceOf(Map.class);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> arguments = (Map<String, Object>) command.detail().get("arguments");
+    assertThat(arguments).containsEntry("targetId", "target-7");
+    assertThat(arguments.get("payload")).isInstanceOf(Map.class);
+    assertThat(command.detail().get("detailEvaluationError")).isInstanceOf(Map.class);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> detailEvaluationError =
+        (Map<String, Object>) command.detail().get("detailEvaluationError");
+    assertThat(detailEvaluationError)
+        .containsEntry("failedExpressionCount", 1)
+        .containsEntry("firstFailedExpression", "broken=#missing.value")
+        .containsKey("firstErrorType")
+        .containsEntry("ignoredReservedKeyCount", 4)
+        .containsEntry(
+            "ignoredReservedKeys",
+            List.of("method", "arguments", "failureReason", "detailEvaluationError"));
+  }
+
+  @Test
   @DisplayName(
-      "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
+      "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 "
+          + "UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
   void around_whenOperatorExpressionIsNotNumeric_throwsAuthenticationError() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("nonNumericOperator", Long.class);
     when(joinPoint.getSignature()).thenReturn(methodSignature);
@@ -245,7 +292,8 @@ class AdminOnlyAspectTest {
 
   @Test
   @DisplayName(
-      "ROLE_USER 등 비-admin 으로 인증된 호출이면, around 는 BusinessException(Unauthorized) 을 던지고 audit 를 기록하지 않는다")
+      "ROLE_USER 등 비-admin 으로 인증된 호출이면, around 는 BusinessException(Unauthorized) 을 "
+          + "던지고 audit 를 기록하지 않는다")
   void around_whenNonAdminAuthentication_throwsBusinessException() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
@@ -627,6 +675,23 @@ class AdminOnlyAspectTest {
         targetId = "#p1",
         detail = {"targetCopy=#p1", "broken=#missing.value", "payloadName=#p2.name()"})
     String brokenDetail(Long operatorId, String targetId, Payload payload) {
+      return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "RESERVED_DETAIL",
+        targetType = AuditTargetType.POST,
+        operatorId = "#p0",
+        targetId = "#p1",
+        detail = {
+          "method='tampered-method'",
+          "arguments='tampered-arguments'",
+          "failureReason='tampered-failure'",
+          "detailEvaluationError='tampered-error'",
+          "targetCopy=#p1",
+          "broken=#missing.value"
+        })
+    String reservedDetail(Long operatorId, String targetId, Payload payload) {
       return "OK";
     }
 

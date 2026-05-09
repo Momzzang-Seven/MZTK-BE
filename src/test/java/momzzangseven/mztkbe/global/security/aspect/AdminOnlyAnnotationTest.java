@@ -2,6 +2,8 @@ package momzzangseven.mztkbe.global.security.aspect;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
+import java.util.List;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
@@ -35,6 +37,9 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("@AdminOnly 어노테이션 컴파일/리플렉션 가드 테스트")
 class AdminOnlyAnnotationTest {
+
+  private static final List<String> RESERVED_AUDIT_DETAIL_KEYS =
+      List.of("method", "arguments", "failureReason", "detailEvaluationError");
 
   @Test
   @DisplayName("관리자 게시글 목록 조회는 admin guard는 유지하되 audit=false 로 설정한다")
@@ -99,6 +104,7 @@ class AdminOnlyAnnotationTest {
             "moderated=#result?.moderated()",
             "publicationStatus=#result?.publicationStatus()",
             "moderationStatus=#result?.moderationStatus()");
+    assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
   }
 
   @Test
@@ -122,6 +128,7 @@ class AdminOnlyAnnotationTest {
             "moderated=#result?.moderated()",
             "publicationStatus=#result?.publicationStatus()",
             "moderationStatus=#result?.moderationStatus()");
+    assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
   }
 
   @Test
@@ -287,5 +294,14 @@ class AdminOnlyAnnotationTest {
             .getAnnotation(AdminOnly.class);
 
     assertThat(annotation).isNull();
+  }
+
+  private static List<String> detailKeys(AdminOnly annotation) {
+    return Arrays.stream(annotation.detail()).map(AdminOnlyAnnotationTest::detailKey).toList();
+  }
+
+  private static String detailKey(String detailExpression) {
+    int separator = detailExpression.indexOf('=');
+    return separator < 0 ? detailExpression : detailExpression.substring(0, separator).trim();
   }
 }
