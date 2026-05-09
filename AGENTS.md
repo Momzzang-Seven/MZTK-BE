@@ -37,9 +37,6 @@ MZTK-BE is a backend for a workout verification and community platform with Web3
 2. `checkstyleMain` — Checkstyle with `config/checkstyle/google_checks.xml`
 3. `test` — unit/integration tests
 
-**Branch strategy:**
-1. `feat//[JIRA ticket]-xxx-...` → PR to `develop` → PR to `main` (triggers prod deploy)
-
 ## Commands
 
 ```bash
