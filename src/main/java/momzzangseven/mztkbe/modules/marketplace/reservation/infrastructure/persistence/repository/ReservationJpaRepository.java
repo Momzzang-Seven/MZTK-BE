@@ -136,9 +136,11 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.userId = :userId "
           + "AND (:status IS NULL OR r.status = :status) "
-          + "AND (:cursorDate IS NULL OR r.reservationDate < :cursorDate "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
           + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
-          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
   List<ReservationEntity> findByUserIdCursor(
       @Param("userId") Long userId,
@@ -158,9 +160,11 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   @Query(
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.userId = :userId "
-          + "AND (:cursorDate IS NULL OR r.reservationDate < :cursorDate "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
           + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
-          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
   List<ReservationEntity> findByUserIdCursorNoStatus(
       @Param("userId") Long userId,
@@ -196,9 +200,11 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.trainerId = :trainerId "
           + "AND (:status IS NULL OR r.status = :status) "
-          + "AND (:cursorDate IS NULL OR r.reservationDate < :cursorDate "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
           + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
-          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
   List<ReservationEntity> findByTrainerIdCursor(
       @Param("trainerId") Long trainerId,
@@ -218,9 +224,11 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
   @Query(
       "SELECT r FROM ReservationEntity r "
           + "WHERE r.trainerId = :trainerId "
-          + "AND (:cursorDate IS NULL OR r.reservationDate < :cursorDate "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
           + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
-          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
   List<ReservationEntity> findByTrainerIdCursorNoStatus(
       @Param("trainerId") Long trainerId,

@@ -96,7 +96,7 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
 
     // Step 4: re-key back to slotId
     return slotToClass.entrySet().stream()
-        .filter(e -> thumbnailByClass.containsKey(e.getValue()))
+        .filter(e -> thumbnailByClass.get(e.getValue()) != null)
         .collect(Collectors.toMap(Map.Entry::getKey, e -> thumbnailByClass.get(e.getValue())));
   }
 

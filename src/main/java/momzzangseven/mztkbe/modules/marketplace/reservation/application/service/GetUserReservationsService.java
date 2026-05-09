@@ -108,8 +108,10 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
         hasNext
             ? CursorCodec.encode(
                 new KeysetCursor(
-                    page.getLast().getReservationDate().atTime(page.getLast().getReservationTime()),
-                    page.getLast().getId(),
+                    page.get(page.size() - 1)
+                        .getReservationDate()
+                        .atTime(page.get(page.size() - 1).getReservationTime()),
+                    page.get(page.size() - 1).getId(),
                     CURSOR_SCOPE))
             : null;
 
