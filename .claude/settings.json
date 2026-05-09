@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/check-architecture-rules.py",
+            "statusMessage": "ARCHITECTURE.md rule 검사 중..."
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/check-claude-codex-sync.py",
+            "statusMessage": ".claude ↔ .codex sync 정책 검사 중..."
+          }
+        ]
+      }
+    ]
+  }
+}
