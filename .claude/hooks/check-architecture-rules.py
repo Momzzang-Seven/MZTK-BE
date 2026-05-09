@@ -34,12 +34,18 @@ DOMAIN_FORBIDDEN_PREFIXES = (
 
 DOMAIN_ALLOWED_GLOBAL = "momzzangseven.mztkbe.global.error."
 
-WEB3_SHARED_WHITELIST_SUFFIXES = (
-    ".web3.shared.domain.vo.",
-    ".web3.shared.domain.crypto.",
-    ".web3.shared.application.dto.",
-    ".web3.shared.application.port.in.",
-    ".web3.shared.application.util.",
+LAYER_KEYS = ("api", "application", "domain", "infrastructure")
+
+# Suffixes that a sibling sub-module (within the same top-level family) may legitimately
+# import from another sibling. Matches the hexagonal call-via-port convention plus
+# read-only cross-sub-module type sharing observed in admin/marketplace/web3.
+SIBLING_WHITELIST_SUFFIXES = (
+    ".application.port.in.",
+    ".application.dto.",
+    ".application.util.",
+    ".domain.vo.",
+    ".domain.model.",
+    ".domain.crypto.",
 )
 
 PKG_RE = re.compile(r"^\s*package\s+([\w.]+)\s*;", re.MULTILINE)
@@ -52,30 +58,36 @@ def _resolve_path(fp, cwd):
     return fp
 
 
+def _split_module(parts):
+    """Return (module, layer_parts). Treat first segment as a sub-module discriminator
+    when the next segment is not a known layer keyword (covers web3/admin/marketplace).
+    """
+    if not parts:
+        return None, []
+    if len(parts) >= 2 and parts[1] not in LAYER_KEYS:
+        return f"{parts[0]}.{parts[1]}", parts[2:]
+    return parts[0], parts[1:]
+
+
+def _family(module):
+    return module.split(".", 1)[0] if module else None
+
+
 def _layer_of(pkg):
     """Return ('api'|'application'|'application.service'|'domain'|'infrastructure'|None, module_name)."""
     if not pkg.startswith(PACKAGE_PREFIX):
         return None, None
-    rest = pkg[len(PACKAGE_PREFIX):]
-    parts = rest.split(".")
-    if not parts:
+    parts = pkg[len(PACKAGE_PREFIX):].split(".")
+    module, layer_parts = _split_module(parts)
+    if module is None:
         return None, None
-
-    # Detect web3 sub-modules: modules.web3.<sub>.<layer>...
-    if parts[0] == "web3" and len(parts) >= 2:
-        module = "web3." + parts[1]
-        layer_parts = parts[2:]
-    else:
-        module = parts[0]
-        layer_parts = parts[1:]
-
     if not layer_parts:
         return None, module
 
     head = layer_parts[0]
     if head == "application" and len(layer_parts) >= 2 and layer_parts[1] == "service":
         return "application.service", module
-    if head in ("api", "application", "domain", "infrastructure"):
+    if head in LAYER_KEYS:
         return head, module
     return None, module
 
@@ -87,28 +99,18 @@ def _is_module_import(imp):
 def _import_module(imp):
     if not _is_module_import(imp):
         return None
-    rest = imp[len(PACKAGE_PREFIX):]
-    parts = rest.split(".")
-    if not parts:
-        return None
-    if parts[0] == "web3" and len(parts) >= 2:
-        return "web3." + parts[1]
-    return parts[0]
+    parts = imp[len(PACKAGE_PREFIX):].split(".")
+    module, _ = _split_module(parts)
+    return module
 
 
 def _is_module_layer_import(imp, layer):
-    """imp 가 modules.<m>.<layer>.* 형태인지."""
+    """imp 가 modules.<m>[.<sub>].<layer>.* 형태인지."""
     if not _is_module_import(imp):
         return False
-    rest = imp[len(PACKAGE_PREFIX):]
-    parts = rest.split(".")
-    if not parts:
-        return False
-    if parts[0] == "web3" and len(parts) >= 3:
-        return parts[2] == layer
-    if len(parts) >= 2:
-        return parts[1] == layer
-    return False
+    parts = imp[len(PACKAGE_PREFIX):].split(".")
+    _, layer_parts = _split_module(parts)
+    return bool(layer_parts) and layer_parts[0] == layer
 
 
 def _check_api(imports, module):
@@ -134,9 +136,15 @@ def _check_application(imports, module, is_service):
             other = _import_module(imp)
             if other is None or other == module:
                 continue
-            if any(s in imp for s in WEB3_SHARED_WHITELIST_SUFFIXES):
+            same_family = _family(other) == _family(module)
+            if same_family and any(s in imp for s in SIBLING_WHITELIST_SUFFIXES):
                 continue
-            out.append(("rule4", imp, f"foreign module '{other}'"))
+            label = (
+                f"sibling sub-module '{other}'"
+                if same_family
+                else f"foreign module '{other}'"
+            )
+            out.append(("rule4", imp, label))
     return out
 
 
