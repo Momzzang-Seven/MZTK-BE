@@ -770,6 +770,43 @@ class AnswerServiceTest {
     }
 
     @Test
+    @DisplayName("managed create cancels prepared intent when local CAS bind fails")
+    void createAnswer_managedCreateCancelsPreparedIntent_whenBindFails() {
+      CreateAnswerCommand command = new CreateAnswerCommand(10L, 20L, "answer content", null);
+      LoadPostPort.PostContext postContext =
+          new LoadPostPort.PostContext(10L, 30L, false, true, "question content", 50L);
+      Answer savedAnswer = buildAnswer(99L, 10L, 20L, "answer content", false);
+      AnswerExecutionWriteView web3 = createAnswerWeb3("intent-create");
+
+      given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
+      given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.CREATE))
+          .willReturn(true);
+      given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
+      given(
+              answerLifecycleExecutionPort.prepareAnswerCreate(
+                  10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
+          .willReturn(Optional.of(web3));
+      given(
+              saveAnswerPort.bindCreateIntentIfCurrent(
+                  org.mockito.ArgumentMatchers.eq(99L),
+                  org.mockito.ArgumentMatchers.anyString(),
+                  org.mockito.ArgumentMatchers.eq("intent-create")))
+          .willReturn(0);
+
+      assertThatThrownBy(() -> answerService.execute(command))
+          .isInstanceOf(AnswerPublicationStateException.class)
+          .satisfies(
+              ex ->
+                  assertThat(((AnswerPublicationStateException) ex).getCode())
+                      .isEqualTo("ANSWER_014"));
+
+      verify(answerLifecycleExecutionPort)
+          .cancelSignableIntent("intent-create", "answer create intent bind failed");
+      verify(deleteAnswerPort, never()).deleteAnswer(99L);
+    }
+
+    @Test
     @DisplayName("countAnswers() throws when postId is null")
     void countAnswers_throws_whenPostIdIsNull() {
       assertThatThrownBy(() -> answerService.countAnswers(null))
@@ -1002,6 +1039,17 @@ class AnswerServiceTest {
     return new AnswerExecutionWriteView(
         new AnswerExecutionWriteView.Resource("ANSWER", "100", "PENDING_EXECUTION"),
         "QNA_ANSWER_UPDATE",
+        new AnswerExecutionWriteView.ExecutionIntent(
+            executionIntentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(10)),
+        new AnswerExecutionWriteView.Execution("EIP7702", 2),
+        null,
+        false);
+  }
+
+  private AnswerExecutionWriteView createAnswerWeb3(String executionIntentId) {
+    return new AnswerExecutionWriteView(
+        new AnswerExecutionWriteView.Resource("ANSWER", "99", "PENDING_EXECUTION"),
+        "QNA_ANSWER_SUBMIT",
         new AnswerExecutionWriteView.ExecutionIntent(
             executionIntentId, "AWAITING_SIGNATURE", LocalDateTime.now().plusMinutes(10)),
         new AnswerExecutionWriteView.Execution("EIP7702", 2),
