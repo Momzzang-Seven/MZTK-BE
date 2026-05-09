@@ -5,7 +5,6 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.GetQnaQuestionPublicationEvidenceQuery;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
@@ -13,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionP
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,7 +51,7 @@ class GetQnaQuestionPublicationEvidenceServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-1",
                     QnaExecutionActionType.QNA_QUESTION_CREATE,
-                    ExecutionIntentStatus.CONFIRMED)));
+                    QnaExecutionIntentStatus.CONFIRMED)));
 
     var result = service.execute(new GetQnaQuestionPublicationEvidenceQuery(101L, 7L));
 

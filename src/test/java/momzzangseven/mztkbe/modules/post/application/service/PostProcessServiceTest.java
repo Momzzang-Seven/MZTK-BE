@@ -24,6 +24,8 @@ import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadAnswerCreateIntentConflictPort;
+import momzzangseven.mztkbe.modules.post.application.port.out.LoadPostAnswerIdsPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadQuestionPublicationEvidencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
@@ -56,6 +58,8 @@ class PostProcessServiceTest {
   @Mock private ValidatePostImagesPort validatePostImagesPort;
   @Mock private UpdatePostImagesPort updatePostImagesPort;
   @Mock private CountAnswersPort countAnswersPort;
+  @Mock private LoadAnswerCreateIntentConflictPort loadAnswerCreateIntentConflictPort;
+  @Mock private LoadPostAnswerIdsPort loadPostAnswerIdsPort;
   @Mock private QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
   @Mock private LoadQuestionPublicationEvidencePort loadQuestionPublicationEvidencePort;
   @Spy private PostVisibilityPolicy postVisibilityPolicy = new PostVisibilityPolicy();
@@ -100,7 +104,6 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
         .thenReturn(
             Optional.of(
@@ -263,7 +266,26 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(1L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(1L);
+
+    assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
+        .isInstanceOf(PostInvalidInputException.class);
+
+    verify(postPersistencePort, never()).savePost(org.mockito.ArgumentMatchers.any(Post.class));
+    verifyNoInteractions(
+        linkTagPort, validatePostImagesPort, updatePostImagesPort, questionLifecycleExecutionPort);
+  }
+
+  @Test
+  @DisplayName("QUESTION posts cannot be updated while an answer delete is pending on-chain")
+  void updateQuestionPostThrowsWhenAnswerDeleteIsPendingOnchain() {
+    Long ownerId = 7L;
+    Long postId = 700L;
+    Post post = questionPost(ownerId, postId);
+    UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, null);
+
+    when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(1L);
 
     assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
         .isInstanceOf(PostInvalidInputException.class);
@@ -281,7 +303,7 @@ class PostProcessServiceTest {
     Post post = questionPost(ownerId, postId);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(2L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(2L);
 
     assertThatThrownBy(() -> postProcessService.deletePost(ownerId, postId))
         .isInstanceOf(PostInvalidInputException.class);
@@ -300,7 +322,7 @@ class PostProcessServiceTest {
         UpdatePostCommand.of("edited title", "수정된 질문 내용", null, List.of("java"));
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
         .thenReturn(
             Optional.of(
@@ -325,7 +347,6 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
         .thenReturn(
             Optional.of(
@@ -356,7 +377,6 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
         .thenReturn(
             Optional.of(
@@ -384,7 +404,6 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of(null, "수정된 질문 내용", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.beginQuestionUpdateState(postId, ownerId, "수정된 질문 내용"))
         .thenReturn(
             Optional.of(
@@ -409,7 +428,7 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of("edited title", "질문 내용", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L))
         .thenReturn(Optional.empty());
 
@@ -428,7 +447,6 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of("edited title", "질문 내용", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L))
         .thenThrow(new WalletNotConnectedException(ownerId));
 
@@ -451,7 +469,6 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of("edited title", "질문 내용", null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.recoverQuestionUpdate(postId, ownerId, "질문 내용", 50L))
         .thenThrow(new IllegalStateException("bug"));
 
@@ -471,7 +488,7 @@ class PostProcessServiceTest {
     UpdatePostCommand command = UpdatePostCommand.of("edited title", null, null, null);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.hasActiveQuestionIntent(postId)).thenReturn(true);
 
     assertThatThrownBy(() -> postProcessService.updatePost(ownerId, postId, command))
@@ -489,7 +506,7 @@ class PostProcessServiceTest {
     Post post = questionPost(ownerId, postId);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.prepareQuestionDelete(postId, ownerId, "질문 내용", 50L))
         .thenReturn(
             Optional.of(
@@ -512,7 +529,7 @@ class PostProcessServiceTest {
     Post post = questionPost(ownerId, postId);
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.prepareQuestionDelete(postId, ownerId, "질문 내용", 50L))
         .thenReturn(Optional.empty());
 
@@ -660,7 +677,7 @@ class PostProcessServiceTest {
             .build();
 
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     postProcessService.deletePost(ownerId, postId);
 
@@ -685,7 +702,7 @@ class PostProcessServiceTest {
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(new QuestionPublicationEvidence(true, false, false, false, null));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     postProcessService.deletePost(ownerId, postId);
 
@@ -760,7 +777,7 @@ class PostProcessServiceTest {
     when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
     when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
         .thenReturn(new QuestionPublicationEvidence(true, false, false, true, "EXPIRED"));
-    when(countAnswersPort.countAnswers(postId)).thenReturn(0L);
+    when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
 
     postProcessService.deletePost(ownerId, postId);
 

@@ -6,7 +6,7 @@ import static org.mockito.Mockito.verify;
 import momzzangseven.mztkbe.modules.post.application.dto.SyncQuestionPublicationStateCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.ConfirmQuestionCreatedUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.FailQuestionCreateUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.post.QnaQuestionPublicationSyncAdapter.QnaQuestionPublicationSyncEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,7 +58,7 @@ class QnaQuestionPublicationSyncAdapterTest {
   @Test
   @DisplayName("failure sync publishes event instead of invoking post use case inline")
   void failureSyncPublishesEvent() {
-    adapter.failQuestionCreate(101L, "intent-1", ExecutionIntentStatus.EXPIRED, "expired");
+    adapter.failQuestionCreate(101L, "intent-1", QnaExecutionIntentStatus.EXPIRED, "expired");
 
     ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
     verify(eventPublisher).publishEvent(captor.capture());

@@ -28,6 +28,7 @@ import org.springframework.web.util.UriComponentsBuilder;
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
       "web3.eip7702.enabled=false",
+      "web3.execution.internal.enabled=false",
       "web3.reward-token.enabled=false"
     })
 @DisplayName("[E2E] GET /v2/posts cursor 검색 테스트")
@@ -92,18 +93,18 @@ class PostV2CursorE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody());
   }
 
-  private List<Long> postIds(JsonNode response) {
-    List<Long> ids = new ArrayList<>();
-    response.at("/data/posts").forEach(post -> ids.add(post.at("/postId").asLong()));
-    return ids;
-  }
-
   private JsonNode fetchPosts(URI uri) throws Exception {
     ResponseEntity<String> res =
         restTemplate.exchange(
             uri, HttpMethod.GET, new HttpEntity<>(bearerJsonHeaders(accessToken)), String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
     return objectMapper.readTree(res.getBody());
+  }
+
+  private List<Long> postIds(JsonNode response) {
+    List<Long> ids = new ArrayList<>();
+    response.at("/data/posts").forEach(post -> ids.add(post.at("/postId").asLong()));
+    return ids;
   }
 
   @Test
@@ -120,7 +121,16 @@ class PostV2CursorE2ETest extends E2ETestBase {
     assertThat(nextCursor).isNotBlank();
 
     JsonNode secondPage =
-        fetchPosts("?type=QUESTION&tag=java&search=form&size=1&cursor=" + nextCursor);
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("tag", "java")
+                .queryParam("search", "form")
+                .queryParam("size", 1)
+                .queryParam("cursor", nextCursor)
+                .build()
+                .encode()
+                .toUri());
 
     assertThat(secondPage.at("/data/posts/0/postId").asLong()).isEqualTo(olderPostId);
   }
@@ -138,7 +148,16 @@ class PostV2CursorE2ETest extends E2ETestBase {
     String nextCursor = firstPage.at("/data/nextCursor").asText();
     assertThat(nextCursor).isNotBlank();
 
-    JsonNode secondPage = fetchPosts("?type=QUESTION&search=mixedcase&size=1&cursor=" + nextCursor);
+    JsonNode secondPage =
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("search", "mixedcase")
+                .queryParam("size", 1)
+                .queryParam("cursor", nextCursor)
+                .build()
+                .encode()
+                .toUri());
 
     assertThat(secondPage.at("/data/posts/0/postId").asLong()).isEqualTo(olderPostId);
   }

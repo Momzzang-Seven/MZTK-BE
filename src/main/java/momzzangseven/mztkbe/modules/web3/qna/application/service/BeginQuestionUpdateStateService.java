@@ -11,8 +11,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUp
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 
 @RequiredArgsConstructor
 public class BeginQuestionUpdateStateService implements BeginQuestionUpdateStateUseCase {
@@ -27,12 +27,10 @@ public class BeginQuestionUpdateStateService implements BeginQuestionUpdateState
     LocalDateTime now = LocalDateTime.now(appClock);
     QnaQuestionUpdateState latest =
         statePersistencePort.findLatestByPostIdForUpdate(command.postId()).orElse(null);
-    if (latest != null && latest.getStatus() == QnaQuestionUpdateStateStatus.INTENT_BOUND) {
-      throw new RetryableWeb3PreparationException(
-          "question update execution intent is pending; wait for confirmation sync");
-    }
-    if (loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
-        QnaExecutionResourceType.QUESTION, String.valueOf(command.postId()))) {
+    if (loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(
+        QnaExecutionResourceType.QUESTION,
+        String.valueOf(command.postId()),
+        QnaExecutionActionType.QNA_QUESTION_UPDATE)) {
       throw new RetryableWeb3PreparationException(
           "question has pending onchain mutation; wait for completion or recover first");
     }

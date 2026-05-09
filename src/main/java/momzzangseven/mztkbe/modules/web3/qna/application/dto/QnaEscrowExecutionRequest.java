@@ -17,7 +17,9 @@ public record QnaEscrowExecutionRequest(
     String questionHash,
     String contentHash,
     Long questionUpdateVersion,
-    String questionUpdateToken) {
+    String questionUpdateToken,
+    Long answerUpdateVersion,
+    String answerUpdateToken) {
 
   public QnaEscrowExecutionRequest(
       QnaExecutionResourceType resourceType,
@@ -43,6 +45,8 @@ public record QnaEscrowExecutionRequest(
         rewardAmountWei,
         questionHash,
         contentHash,
+        null,
+        null,
         null,
         null);
   }

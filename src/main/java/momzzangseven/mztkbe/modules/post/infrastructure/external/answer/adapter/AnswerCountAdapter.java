@@ -19,6 +19,21 @@ public class AnswerCountAdapter implements CountAnswersPort {
   }
 
   @Override
+  public long countPublicVisibleAnswers(Long postId) {
+    return countAnswersUseCase.countPublicVisibleAnswers(postId);
+  }
+
+  @Override
+  public long countOnchainBlockingAnswers(Long postId) {
+    return countAnswersUseCase.countOnchainBlockingAnswers(postId);
+  }
+
+  @Override
+  public boolean existsPreparingOrPendingCreateByPostId(Long postId) {
+    return countAnswersUseCase.existsPreparingOrPendingCreateByPostId(postId);
+  }
+
+  @Override
   public Map<Long, Long> countAnswersByPostIds(List<Long> postIds) {
     return countAnswersUseCase.countAnswersByPostIds(postIds);
   }

@@ -16,6 +16,19 @@ public interface QuestionLifecycleExecutionPort {
     return false;
   }
 
+  default boolean cancelSignableIntent(String executionIntentId, String reason) {
+    return false;
+  }
+
+  default Optional<QuestionExecutionWriteView> loadQuestionCreateIntent(
+      Long postId,
+      Long requesterUserId,
+      String executionIntentId,
+      String questionContent,
+      Long rewardMztk) {
+    return Optional.empty();
+  }
+
   default Optional<QuestionUpdateStatePreparation> beginQuestionUpdateState(
       Long postId, Long requesterUserId, String questionContent) {
     return Optional.empty();

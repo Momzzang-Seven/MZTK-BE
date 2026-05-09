@@ -7,6 +7,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.entity.QnaAnswerProjectionEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -43,6 +44,9 @@ public interface QnaAnswerProjectionJpaRepository
       "select a from QnaAnswerProjectionEntity a where a.postId = :postId order by a.answerId asc")
   List<QnaAnswerProjectionEntity> findAllByPostIdForUpdate(@Param("postId") Long postId);
 
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  void deleteAllByPostId(Long postId);
+
   @Query(
       value =
           """
@@ -61,6 +65,8 @@ public interface QnaAnswerProjectionJpaRepository
             and p.content is not null
             and btrim(p.content) <> ''
             and ans.is_accepted = false
+            and ans.publication_status = 'VISIBLE'
+            and ans.pending_delete_status is null
             and ans.content is not null
             and btrim(ans.content) <> ''
             and a.accepted = false
