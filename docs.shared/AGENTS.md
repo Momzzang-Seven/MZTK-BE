@@ -75,26 +75,4 @@ Branch Name의 Prefix는 해당 Branch와 매칭되는 Jira 이슈 유형에 따
 
 해당 Branch의 작업을 요약하는 이름을 짓습니다. 반드시 영어로 지어야 하며 단어는 대문자로 시작합니다. 4개 단어를 넘어가지 않게 작성합니다.
 
----
-## docs.local/ 디렉토리 가이드 (informational, 개인 영역)
-
-각자 `docs.local/` 하위에서 다음 컨벤션을 권장한다 (강제 아님). 팀 공유 가치가 분명한 산출물은 `docs.shared/` 하위로 elevate PR 를 분리해 올린다.
-
-- `design_docs/` — feature blueprints (before implementation)
-- `design/` — supplementary design notes referenced from design_docs
-- `implementation_docs/` — commit-by-commit implementation plans
-- `api_docs/` — frontend-facing API specs
-- `test/` — test case documentation
-- `decisions/` — Architecture Decision Records (ADRs); one file per key design decision
-- `analysis/` — ad-hoc investigation memos (perf, incident, postmortem)
-- `refactor/` — refactor plans and migration notes
-- `review/` — code/design review notes and follow-up trackers
-- `security/` — threat models, security review write-ups
-- `ci/` — CI workflow notes (rules, recipes)
-- `cicd/` — full CI/CD pipeline docs (deploy targets, rollout)
-- `runbook/` — operator runbooks (rotation, incident-response procedures)
-- `S3/` — S3 storage / media-asset operational notes
-- `MOM-XXX/` — ticket-scoped working folder (see corresponding JIRA)
-- `pr-description/` — auto-generated PR descriptions; filename = branch name
-
 @AGENTS.local.md

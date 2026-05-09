@@ -20,6 +20,10 @@ hook 이 PostToolUse 시점에 정적 분석으로 잡아 메시지를 띄운다
 - Success: `ApiResponse.success(data)` or `ApiResponse.success(message, data)`
 - Failure: `ApiResponse.error(message, code)` (use ErrorCode.code)
 
+**Controller Layout**
+- 인증 추출: `@AuthenticationPrincipal Long userId`. null 이면 `UserNotAuthenticatedException`
+- 3-step 패턴: `request.toCommand() → UseCase → Response.from(result)`. Controller 는 Application port 외 의존 금지 (domain / infrastructure 직접 의존 ✗)
+
 ## Database Profiles
 
 - **Dev:** Hibernate `ddl-auto: update`, Flyway disabled
