@@ -15,7 +15,7 @@ mode = "workspace-write"
 # .claude/skills/ is the same content via a symlink (POSIX) or directory
 # junction (Windows) created by scripts/agents/setup-skill-links.py.
 
-# --- Hooks (mirror of .claude/settings.json PostToolUse, same scripts) ---
+# --- Hooks (shared with .claude/settings.json — same scripts) ---
 [features]
 codex_hooks = true
 

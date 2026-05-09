@@ -73,7 +73,7 @@ bin/
 ### Personal AGENTS.md override (각 scope 마다) ###
 AGENTS.local.md
 
-### Codex (mirror — config.local.toml only) ###
+### Codex (config.local.toml only) ###
 .codex/config.local.toml
 ############################
 # Environment variables

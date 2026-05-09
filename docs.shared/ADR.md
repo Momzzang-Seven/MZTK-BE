@@ -18,7 +18,7 @@
 |----|------|------|------|
 | [ADR-001](#adr-001-agentsmd-를-단일-ai-컨텍스트-진본으로-채택) | AGENTS.md 를 단일 AI 컨텍스트 진본으로 채택 | Accepted | 2026-05-09 |
 | [ADR-002](#adr-002-docssharedshared--docslocal-분리로-팀-공유-문서-게이팅) | docs.shared/ + docs.local/ 분리로 팀 공유 문서 게이팅 | Accepted | 2026-05-09 |
-| [ADR-003](#adr-003-claude-native-skill-source--단방향-sync-채택) | Claude-native skill source + 단방향 sync 채택 | Accepted | 2026-05-09 |
+| [ADR-003](#adr-003-도구-중립-agentsskills-ssot--환경별-symlink-채택) | 도구 중립 `.agents/skills/` SSoT + 환경별 symlink 채택 | Accepted | 2026-05-09 |
 
 ---
 
@@ -66,29 +66,41 @@
 
 ---
 
-### ADR-003: Claude-native skill source + 단방향 sync 채택
+### ADR-003: 도구 중립 `.agents/skills/` SSoT + 환경별 symlink 채택
 
 **상태**: Accepted (2026-05-09)
 
 **컨텍스트**
 
-각 AI 도구의 skill/custom-command 포맷이 다르다:
-- Claude: `.claude/skills/<name>/SKILL.md` (YAML frontmatter + body)
-- Codex: `.codex/prompts/<name>.md` (slash command)
+각 AI 도구가 자동 검색하는 skill 디렉토리가 다르다:
+- Claude Code: `.claude/skills/<name>/SKILL.md` 만 (한 단계 깊이)
+- Codex CLI: `.agents/skills/` (그리고 `.codex/skills/`) — BFS 재귀 (max depth 6) + symlink follow ([loader.rs](https://github.com/openai/codex/blob/main/codex-rs/core-skills/src/loader.rs))
 
-raewookang 이 Claude 에서 만든 9개 프로젝트 특화 skill 을 Codex 사용자도 동일하게 쓰고 싶다. 직접 양쪽을 손으로 동기화하면 drift 가 즉시 발생한다.
+같은 SKILL.md 본문을 두 도구에서 모두 인식시켜야 한다. 두 디렉토리에 두 벌을 두면 drift 가 즉시 발생한다.
+
+이전(이 ADR 의 첫 버전, 단방향 sync) 안은 `.claude/skills/` 를 source 로 하고 Python 스크립트 (`sync-skills.py`) 가 `.codex/prompts/<name>.md` 를 자동 생성하는 mirror 구조였으나, 다음 비용이 누적됐다:
+- sync-skills.py 자체 + drift 검사 hook (`check-claude-codex-sync.py`) 유지보수
+- skill PR 마다 sync 결과 commit 의무 (체크리스트 의존)
+- Codex CLI 가 실제로는 symlink 와 nested 디렉토리 검색을 모두 지원함이 확인되어 mirror 자체가 불필요했다는 점
 
 **결정**
 
-`.claude/skills/<name>/SKILL.md` 를 단일 source 로 두고, `scripts/agents/sync-skills.py` (Python 표준 라이브러리만 사용) 가 `.codex/prompts/` 를 단방향 자동 생성한다. Codex 사용자는 직접 편집 금지. skill 변경 PR 작성자가 sync 스크립트를 한 번 돌리고 결과를 같은 PR 에 commit 한다 (수동, PR 체크리스트로 강제). CI gate 는 후속 RFC.
+진본 디렉토리를 도구 중립명인 `.agents/skills/<name>/SKILL.md` 로 둔다 (git tracked).
+`.claude/skills` 는 환경별로 `.agents/skills` 를 가리키는 symlink (POSIX) 또는 directory junction (Windows) 으로 만든다 — `scripts/agents/setup-skill-links.py` 가 cross-platform 으로 1회 생성한다 (멱등). git 은 이 link 자체를 추적하지 않는다 (`.gitignore: .claude/skills`). Claude Code 는 `.claude/skills/` 를, Codex CLI 는 `.agents/skills/` 를 직접 자동 검색하지만 **물리적으로 같은 한 벌의 SKILL.md** 를 본다.
 
-대안 — Two-way sync: 도구 표현력 차이로 의미 손실 위험. 거부.
-대안 — Pre-commit hook 자동화: 환경 의존성 (python3 미설치 등) issue 가 잦음. 거부.
+PostToolUse hook 도 양쪽이 같은 스크립트를 호출한다: `.claude/settings.json` 과 `.codex/config.toml` 에 동등한 entry 를 둬서 `scripts/agents/hooks/check-architecture-rules.py` 와 `check-agent-link.py` (link 무결성 검사) 를 발화시킨다.
+
+개인 skill 은 `.agents/skills/private-<name>/` prefix 컨벤션. 이유: Claude Code 가 한 단계 깊이만 검색하므로 `.agents/skills/private/<name>/` 같은 nested 그룹화는 silent 무시된다. prefix 로 통일해 양쪽 도구에서 모두 인식되며, `.gitignore` 의 `.agents/skills/private-*/` glob 한 줄로 일괄 untracked.
+
+대안 — `.claude/skills/` 를 source 로 두고 sync (이전 안): mirror 인프라 유지 비용 ↑, 두 벌 데이터 drift 위험. 거부.
+대안 — `.agents/skills/` 를 git 에 symlink 로 직접 commit: Windows native 사용자 호환성 문제 (POSIX symlink commit 은 Windows checkout 에서 일반 파일로 풀림). 거부.
+대안 — `.agents/skills/private/<sub>/` 디렉토리 그룹화: Claude Code 의 한 단계 검색 한계로 silent 무시. 거부.
 
 **결과**
 
-- (긍정) 한 곳에서 skill 편집 → 모든 도구 사용자가 git pull 만으로 동기 상태
-- (부정) Codex 사용자가 새 skill 을 제안하려면 Claude 사용자가 작성해야 함 (역방향 도구 부재 인정)
-- (추적) sync 미실행 PR 은 reviewer 가 reject. 안정화 후 CI gate 추가 검토.
+- (긍정) 두 도구가 같은 SKILL.md 를 본다 — sync 작업, drift 검증, 충돌 가드 모두 폐기
+- (긍정) 새 AI 도구 도입 시 `.agents/skills/` 를 가리키는 환경별 link 만 추가하면 됨
+- (부정) 신규 합류자는 첫 clone 후 `python3 scripts/agents/setup-skill-links.py` 1회 실행이 필요. 빠뜨리면 Claude 측에서 skill 미인식 — `check-agent-link.py` 가 PostToolUse 에서 안내
+- (추적) Claude Code `/skills` 슬래시 명령이 symlink 안의 skill 목록을 일부 표시 못 함 ([Issue #14836](https://github.com/anthropics/claude-code/issues/14836)). 실제 트리거링/실행은 정상이라 기능 영향 없음. 상위 fix 시 자동 해소.
 
 @AGENTS.local.md
