@@ -81,7 +81,7 @@ Always consider:
 ### Output path
 
 ```
-/docs/test/<branch-name>/<branch-name>.md
+docs.local/test/<branch-name>/<branch-name>.md
 ```
 
 If the file already exists, merge your new cases with the existing content — update outdated cases and append new ones. Do not delete existing cases unless they are clearly wrong or superseded.

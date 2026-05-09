@@ -48,14 +48,14 @@ This exploration is mandatory — do not generate design artifacts based on assu
 ### Step 3 — Generate the Design Document
 
 Produce a single Markdown file following the exact structure in the template below.
-Save it as `docs/design/<feature-name>/<feature-name>.md` (create the `docs/design/<feature-name>` directory if it doesn't exist),
+Save it as `docs.local/design/<feature-name>/<feature-name>.md` (create the `docs.local/design/<feature-name>` directory if it doesn't exist),
 or output it directly in the conversation if the user prefers.
 
 ---
 
 ## Document Template
 
-Follow the structure from `.claude/skills/design-skill/design-format.md` exactly.
+Follow the structure from `.agents/skills/design-skill/design-format.md` exactly.
 The sections and their rules are described below.
 
 ---

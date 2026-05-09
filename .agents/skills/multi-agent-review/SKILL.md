@@ -20,7 +20,7 @@ These three rules override everything else in this document. If any sub-agent or
    - **Java 파일**: `src/main/java/momzzangseven/mztkbe/` 이하의 패키지 경로를 그대로 사용. 즉 `modules/<module>/<sub>/<layer>/<File>.java` 또는 `global/<area>/<File>.java` 형태. `src/main/java/momzzangseven/mztkbe/` 접두사는 생략 가능하지만 그 다음 부터는 끝까지 전부 적는다.
    - **테스트 파일**: `src/test/java/momzzangseven/mztkbe/` 이하 동일한 규칙으로 패키지 경로를 끝까지 적는다.
    - **마이그레이션**: `src/main/resources/db/migration/V###__<name>.sql` 처럼 파일명까지.
-   - **설계/구현 문서**: `docs/design_docs/...` / `docs/implementation_docs/...` 형태로 리포 루트 기준 상대 경로 + 해당 섹션 (`§"섹션 제목"`).
+   - **설계/구현 문서**: `docs.local/design/...` / `docs.local/implementation_docs/...` 형태로 리포 루트 기준 상대 경로 + 해당 섹션 (`§"섹션 제목"`).
    - **라인 번호**: 단일 라인이면 `:42`, 범위면 `:42-58`. 라인을 특정할 수 없는 finding (e.g. "이 파일 전체에 X 가 없음") 은 라인 없이 경로만 적되 그 사실을 본문에 명시한다.
    - 클래스명만 (`ChangeAdminUserStatusService`) 적거나 파일명만 (`ChangeAdminUserStatusService.java`) 적는 것은 금지. 사용자가 grep 한 번 더 해야 하는 형태는 실패로 본다.
 3. **모든 finding 은 실제 diff(또는 파일 내용)에서 추출한 인용을 포함해야 하며, 반환 전에 상위 3개 finding 을 실제 파일로 spot-verify 해야 한다.**
@@ -39,9 +39,9 @@ Ask yourself, and if the answer is unclear ask the user **one** question:
 1. **What is the target?** (current branch diff vs `develop`? a specific PR? a specific design doc path? a specific commit range? a list of files?)
 2. **Is this code review or document review?**
    - **Code review**: Java source under `src/`, migrations under `src/main/resources/db/migration/`, build files, configuration. Includes "review my branch" / "review PR #123" — these are code unless explicitly stated otherwise.
-   - **Document review**: design doc (`docs/design_docs/`), implementation plan (`docs/implementation_docs/`), ADR (`docs/decisions/`), refactor plan (`docs/refactor/`), etc.
+   - **Document review**: design doc (`docs.local/design/`), implementation plan (`docs.local/implementation_docs/`), ADR (`docs.shared/ADR.md` for accepted records, `docs.local/decisions/` for drafts), refactor plan (`docs.local/refactor/`), etc.
    - **Mixed**: code + accompanying docs. Treat as code review and include the docs in the target list.
-3. **Output mode**: did the user explicitly ask for an `.md` file? Phrases like "파일로 만들어줘", "문서로 남겨줘", "save as md", "write to docs/review", "기록 남겨" → file mode. Otherwise default to **inline briefing** (no file).
+3. **Output mode**: did the user explicitly ask for an `.md` file? Phrases like "파일로 만들어줘", "문서로 남겨줘", "save as md", "write to docs.local/review", "기록 남겨" → file mode. Otherwise default to **inline briefing** (no file).
 
 Gather the actual target content using the appropriate tool:
 - Branch diff: `git diff develop...HEAD --stat` then `git diff develop...HEAD` for the full diff. Also `git log develop..HEAD --oneline` for commit context.
@@ -168,7 +168,7 @@ If the user did **not** ask for an `.md` file, respond directly in chat using th
 
 ### File mode — only if explicitly requested
 
-If the user asked for a file, write to `docs/review/<YYYYMMDD>-<short-target-slug>.md` (e.g. `docs/review/20260503-MOM-384-kms-refactor.md`). 본문은 inline briefing 과 동일하게 한국어 + module-relative 전체 경로로 작성한다. 구조는 inline briefing 과 동일하되 추가로:
+If the user asked for a file, write to `docs.local/review/<YYYYMMDD>-<short-target-slug>.md` (e.g. `docs.local/review/20260503-MOM-384-kms-refactor.md`). 본문은 inline briefing 과 동일하게 한국어 + module-relative 전체 경로로 작성한다. 구조는 inline briefing 과 동일하되 추가로:
 - Front matter with target, branch / PR, date, reviewer (multi-agent-review skill)
 - An expanded **Per-agent reports** section reproducing each sub-agent's full output verbatim under its own H2 — this is for the audit trail. (sub-agent 들이 한국어로 응답하도록 prompt 한 결과를 그대로 옮긴다.)
 
@@ -188,8 +188,8 @@ After writing, tell the user the path and give them the inline summary anyway. D
 
 The sub-agent templates already point each agent at the right docs, but for awareness:
 
-- `ARCHITECTURE.md` (repo root) — Hexagonal rules. Agent 1's source of truth.
-- `src/main/CLAUDE.md` — production patterns, DB profiles, security.
-- `src/test/CLAUDE.md` — test tier rules. Agent 3's source of truth.
-- `EXTERNAL_SYSTEM_SYNC.md` (repo root, if present) — DB ↔ external system sync rules. Relevant to Agent 4 when the change touches KMS/S3/RPC.
-- `docs/CLAUDE.md` — commit conventions, doc directory map.
+- `docs.shared/ARCHITECTURE.md` — Hexagonal rules. Agent 1's source of truth.
+- `src/main/AGENTS.md` — production patterns, DB profiles, security.
+- `src/test/AGENTS.md` — test tier rules. Agent 3's source of truth.
+- `docs.shared/EXTERNAL_SYSTEM_SYNC.md` — DB ↔ external system sync rules. Relevant to Agent 4 when the change touches KMS/S3/RPC.
+- `docs.shared/AGENTS.md` — commit conventions.

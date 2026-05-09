@@ -3,7 +3,7 @@ name: impl-docs-skill
 description: >
   MZTK-BE implementation plan document generation skill.
   Reads a design doc and writes a commit-by-commit implementation plan as a Markdown file
-  under docs/implementation_docs/, following Hexagonal Architecture and java-best-practice.
+  under docs.local/implementation_docs/, following Hexagonal Architecture and java-best-practice.
   Always use this skill when the user asks for:
   - "write an implementation plan", "create an impl doc", "plan the implementation", "organize the implementation order"
   - "create an implementation plan from the design doc", "plan based on the design"
@@ -30,7 +30,7 @@ that follows Hexagonal Architecture and java-best-practice conventions.
    git branch --show-current
    # e.g. feature/MOM-330-admin-user-role-management → ticket: MOM-330
    ```
-   Find the directory under `docs/design/` whose name contains the ticket ID.
+   Find the directory under `docs.local/design/` whose name contains the ticket ID.
    Read all `.md` files inside it.
    If no matching directory exists, ask the user to provide the path directly.
 
@@ -46,8 +46,8 @@ Identify the following from the design doc:
 ### Step 3 — Load Reference Files
 
 Always read these files before planning:
-- `ARCHITECTURE.md` — layer dependency rules, package structure
-- `.claude/skills/java-best-practice/SKILL.md` — coding conventions, naming rules
+- `docs.shared/ARCHITECTURE.md` — layer dependency rules, package structure
+- `.agents/skills/java-best-practice/SKILL.md` — coding conventions, naming rules
 
 ### Step 4 — Plan the Commits
 
@@ -78,9 +78,9 @@ Follow the **Output Format** below.
 
 ### Step 6 — Save the File
 
-1. **Determine the save path**: look for an appropriate directory under `docs/implementation_docs/`.
+1. **Determine the save path**: look for an appropriate directory under `docs.local/implementation_docs/`.
    - If a directory matching the Jira ticket or feature name already exists, save there.
-   - Otherwise create a new directory (e.g. `docs/implementation_docs/admin/`).
+   - Otherwise create a new directory (e.g. `docs.local/implementation_docs/admin/`).
 2. **File name**: derive from the H1 title of the design doc.
    - English title: kebab-case + `-impl.md`
    - Title with Korean: ticket ID + summary slug + `-impl.md`
@@ -140,7 +140,7 @@ Design doc: `{relative path to design doc}`
 
 ## Key Architecture Rules Summary
 
-(See `ARCHITECTURE.md` for full details)
+(See `docs.shared/ARCHITECTURE.md` for full details)
 
 - `api` → references `application/port/in` only; direct `infrastructure` imports are forbidden
 - `application/service` → references `domain` + `application/port/out` only; `infrastructure` imports are forbidden

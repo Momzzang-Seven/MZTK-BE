@@ -15,7 +15,7 @@ Generate a well-structured API document for frontend team members based on the c
 1. Read and understand the API endpoint — inspect the controller, request/response DTOs, service, and any relevant exception handling.
 2. Fill in all sections of the document using the exact format defined below.
 3. Cover every edge case in the Response Examples — success cases AND every known exception.
-4. Create Api document in following directory: /Users/raewookang/Captone/MZTK-BE/docs/api_docs.
+4. Create Api document in following directory: `docs.local/api_docs/` (relative to repo root).
 5. Find directory that this API endpoint belongs, then create API document inside of that directory. If the directory doesn't exist, make new directory and create document inside of that directory. 
 
 ---

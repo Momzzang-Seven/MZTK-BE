@@ -22,7 +22,7 @@ following the MZTK-BE project conventions.
 1. Get the current branch name: `git rev-parse --abbrev-ref HEAD`
 2. Read the test case document at:
    ```
-   docs/test/<branch-name>/<branch-name>.md
+   docs.local/test/<branch-name>/<branch-name>.md
    ```
 3. Parse the document sections — each top-level heading maps to a test tier:
    - `## 1. Module Test` (or "Module Test") → unit/H2 integration tests

@@ -14,7 +14,7 @@ Defines the Java coding style and conventions for the MZTK-BE project. Ensures t
 - Base package: `momzzangseven.mztkbe`
 - Per-module: `modules/{module_name}/` (e.g. `web3/challenge`, `user`, `auth`). All web3-related modules must exist under the `web3/` namespace.
 - Global shared layer: `global/` — infrastructure/components shared throughout the application
-- hexagonal architecture: @MZTK-BE/ARCHITECTURE.md
+- hexagonal architecture: @MZTK-BE/docs.shared/ARCHITECTURE.md
 
 ### Folders under global
 

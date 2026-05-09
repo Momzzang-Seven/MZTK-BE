@@ -2,7 +2,7 @@
 name: generate-pr
 description: >
   PR description을 자동으로 생성한다. 현재 브랜치의 git diff와 commit log를 분석하고,
-  docs/design/ 및 docs/test/ 폴더에서 해당 티켓의 설계/테스트 문서를 참조하여
+  docs.local/design/ 및 docs.local/test/ 폴더에서 해당 티켓의 설계/테스트 문서를 참조하여
   .github/pull_request_template.md 양식에 맞는 PR 본문을 작성한다.
   사용자가 "PR 만들어줘", "PR description 작성", "PR 써줘", "generate PR", "PR 본문",
   "PR 내용" 등을 말하거나 PR을 열기 직전인 상황에서 반드시 이 스킬을 사용하라.
@@ -44,10 +44,10 @@ git diff origin/develop...HEAD --name-only # 파일 경로만
 
 ### 3. 설계 문서 탐색
 
-`docs/design/` 하위에서 티켓 번호와 일치하는 디렉터리 또는 파일을 찾는다.
+`docs.local/design/` 하위에서 티켓 번호와 일치하는 디렉터리 또는 파일을 찾는다.
 
 ```bash
-find docs/design -iname "*MOM-351*" -o -iname "*mom-351*" 2>/dev/null
+find docs.local/design -iname "*MOM-351*" -o -iname "*mom-351*" 2>/dev/null
 # 상위 티켓(예: MOM-340)까지 확인할 필요가 있을 경우 함께 검색
 ```
 
@@ -56,10 +56,10 @@ find docs/design -iname "*MOM-351*" -o -iname "*mom-351*" 2>/dev/null
 
 ### 4. 테스트 문서 탐색
 
-`docs/test/` 하위에서 티켓 번호와 일치하는 디렉터리 또는 파일을 찾는다.
+`docs.local/test/` 하위에서 티켓 번호와 일치하는 디렉터리 또는 파일을 찾는다.
 
 ```bash
-find docs/test -iname "*MOM-351*" -o -iname "*mom-351*" 2>/dev/null
+find docs.local/test -iname "*MOM-351*" -o -iname "*mom-351*" 2>/dev/null
 ```
 
 찾은 파일을 읽어 주요 테스트 케이스 목록을 파악한다.
@@ -139,4 +139,4 @@ find docs/test -iname "*MOM-351*" -o -iname "*mom-351*" 2>/dev/null
 
 ## 출력 형식
 
-PR description을 마크다운 형식으로 /Users/raewookang/Captone/MZTK-BE/docs/pr-description 하위에 브랜치 이름으로 .md file을 생성한다. 
+PR description을 마크다운 형식으로 `docs.local/pr-description/` 하위에 브랜치 이름으로 .md file을 생성한다 (경로는 repo root 기준 상대경로).

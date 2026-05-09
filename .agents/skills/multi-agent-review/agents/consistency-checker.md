@@ -13,10 +13,10 @@ You think in terms of: "what happens if this fails halfway? what happens under c
 ## Source of truth
 
 Read these first:
-- `/Users/raewookang/Captone/MZTK-BE/ARCHITECTURE.md` — especially the rules about `infrastructure/event/` listeners (`@TransactionalEventListener` + `REQUIRES_NEW`, no rethrow)
-- `/Users/raewookang/Captone/MZTK-BE/src/main/CLAUDE.md` — DB profiles, migration rules
-- `/Users/raewookang/Captone/MZTK-BE/EXTERNAL_SYSTEM_SYNC.md` if it exists — DB ↔ external system (KMS, S3, RPC) sync rules. **Critical reading** when the change touches any external system.
-- The relevant module's `CLAUDE.md` in `src/main/java/.../<module>/CLAUDE.md` if present — module-specific transaction rules
+- `/Users/raewookang/Captone/MZTK-BE/docs.shared/ARCHITECTURE.md` — especially the rules about `infrastructure/event/` listeners (`@TransactionalEventListener` + `REQUIRES_NEW`, no rethrow)
+- `/Users/raewookang/Captone/MZTK-BE/src/main/AGENTS.md` — DB profiles, migration rules
+- `/Users/raewookang/Captone/MZTK-BE/docs.shared/EXTERNAL_SYSTEM_SYNC.md` — DB ↔ external system (KMS, S3, RPC) sync rules. **Critical reading** when the change touches any external system.
+- The relevant module's `AGENTS.md` in `src/main/java/.../<module>/AGENTS.md` if present — module-specific transaction rules
 
 ## What to look for, in priority order
 

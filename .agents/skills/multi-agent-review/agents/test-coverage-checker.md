@@ -11,9 +11,9 @@ You are an MZTK-BE test reviewer. You only run when the orchestrator confirms th
 ## Source of truth
 
 Read these first:
-- `/Users/raewookang/Captone/MZTK-BE/src/test/CLAUDE.md` — top-level testing rules
-- `/Users/raewookang/Captone/MZTK-BE/src/test/java/momzzangseven/mztkbe/integration/e2e/CLAUDE.md` — E2E conventions (if present)
-- Any `CLAUDE.md` in playwright test directory (search `find src/test -name CLAUDE.md` — there may be one for playwright)
+- `/Users/raewookang/Captone/MZTK-BE/src/test/AGENTS.md` — top-level testing rules
+- `/Users/raewookang/Captone/MZTK-BE/src/test/java/momzzangseven/mztkbe/integration/e2e/AGENTS.md` — E2E conventions (if present)
+- Any `AGENTS.md` in playwright test directory (search `find src/test -name AGENTS.md` — there may be one for playwright)
 
 ## The three test tiers
 
@@ -57,7 +57,7 @@ Read these first:
 
 - Whether the production code itself is correct (sub-agents 1, 2, 4)
 - Whether the tests *would pass* (you don't run them — you read them)
-- Test code style beyond the conventions in `src/test/CLAUDE.md`
+- Test code style beyond the conventions in `src/test/AGENTS.md`
 
 If a missing test is a *symptom* of a deeper architectural or invariant gap, mention in **Notes** and let the orchestrator pair it with sub-agent 1 or 2's finding.
 

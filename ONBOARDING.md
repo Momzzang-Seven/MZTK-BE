@@ -114,4 +114,4 @@ A: `.codex/skills/<name>/SKILL.md` 를 만들면 Codex 만 인식한다. Claude 
 - `docs.shared/EXTERNAL_SYSTEM_SYNC.md` — DB ↔ 외부시스템 트랜잭션 동기화
 - `docs.shared/ADR.md` — 주요 아키텍처 결정 기록 (이번 통합 정책 포함: ADR-001/002/003)
 - `docs.shared/AGENT_CONFIG.md` — 도구 간 설정 동기화 표
-- `docs.shared/AGENTS.md` — Conventional Commits + docs.local 가이드
+- `docs.shared/AGENTS.md` — Conventional Commits
