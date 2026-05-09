@@ -55,7 +55,8 @@ public class ReservationTrainerController {
       @RequestParam(required = false) Integer size) {
     requireTrainerId(trainerId);
     CursorPageRequest pageRequest =
-        CursorPageRequest.of(cursor, size, 20, 100, GetTrainerReservationsQuery.CURSOR_SCOPE);
+        CursorPageRequest.of(
+            cursor, size, 20, 100, GetTrainerReservationsQuery.cursorScope(status));
     return ResponseEntity.ok(
         ApiResponse.success(
             ReservationCursorResponse.from(

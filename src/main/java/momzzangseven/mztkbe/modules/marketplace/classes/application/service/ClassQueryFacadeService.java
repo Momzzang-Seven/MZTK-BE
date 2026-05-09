@@ -89,13 +89,24 @@ public class ClassQueryFacadeService implements GetClassInfoUseCase, GetClassSlo
     Map<Long, Long> slotToClass =
         projections.entrySet().stream()
             .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().classId()));
-    List<Long> classIds = slotToClass.values().stream().distinct().toList();
+    return loadThumbnailKeysBySlotToClassMap(slotToClass);
+  }
 
-    // Step 3: batch-fetch classId → thumbnailKey (one IN query via image module)
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Skips the {@code class_slots JOIN marketplace_classes} query entirely — the caller already
+   * supplies the {@code slotId → classId} mapping. Only the image lookup is executed.
+   */
+  @Override
+  @Transactional(readOnly = true)
+  public Map<Long, String> loadThumbnailKeysBySlotToClassMap(Map<Long, Long> slotToClassId) {
+    if (slotToClassId == null || slotToClassId.isEmpty()) {
+      return Map.of();
+    }
+    List<Long> classIds = slotToClassId.values().stream().distinct().toList();
     Map<Long, String> thumbnailByClass = loadClassImagesPort.loadThumbnailKeys(classIds);
-
-    // Step 4: re-key back to slotId
-    return slotToClass.entrySet().stream()
+    return slotToClassId.entrySet().stream()
         .filter(e -> thumbnailByClass.get(e.getValue()) != null)
         .collect(Collectors.toMap(Map.Entry::getKey, e -> thumbnailByClass.get(e.getValue())));
   }

@@ -56,13 +56,13 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
     }
 
     // Snapshot fields take precedence for price and title (immutable at booking time).
-    // For legacy records (bookedPriceAmount == null), fall back to cross-module lookup so existing
-    // data is not broken.
+    // Both snapshot fields must be present — if only one is populated (partial snapshot)
+    // we fall back to a live cross-module lookup to avoid returning null classTitle or priceAmount.
     String classTitle;
     Integer priceAmount;
     String thumbnailFinalObjectKey;
 
-    if (reservation.getBookedPriceAmount() != null) {
+    if (reservation.getBookedPriceAmount() != null && reservation.getBookedClassTitle() != null) {
       // New record: use snapshot values; still resolve thumbnail live (not snapshotted).
       classTitle = reservation.getBookedClassTitle();
       priceAmount = reservation.getBookedPriceAmount();
@@ -72,7 +72,8 @@ public class GetReservationDetailService implements GetReservationDetailUseCase 
               .map(ClassSummary::thumbnailFinalObjectKey)
               .orElse(null);
     } else {
-      // Legacy record (pre-snapshot migration): fall back to full cross-module lookup.
+      // Legacy record (pre-snapshot migration) or partial snapshot: fall back to full
+      // cross-module lookup so neither field is returned as null.
       ClassSummary classSummary =
           loadClassSummaryPort.findBySlotId(reservation.getSlotId()).orElse(null);
       classTitle = classSummary != null ? classSummary.title() : null;

@@ -42,10 +42,28 @@ public interface GetClassInfoUseCase {
    * #findSummariesBySlotIds}) and then batch-fetches thumbnail keys from the image module in a
    * single round-trip. Absent keys in the returned map mean the slot/class has no thumbnail.
    *
+   * <p><b>Prefer {@link #loadThumbnailKeysBySlotToClassMap} when the caller already holds a {@code
+   * slotId → classId} mapping</b> (e.g., from a preceding {@link #findSummariesBySlotIds} call) to
+   * avoid the redundant JOIN round-trip.
+   *
    * @param slotIds list of slot IDs
    * @return map of slotId → thumbnail finalObjectKey
    */
   Map<Long, String> loadThumbnailKeysBySlotIds(List<Long> slotIds);
+
+  /**
+   * Batch-load thumbnail final-object-keys keyed by slot ID using a caller-supplied {@code slotId →
+   * classId} mapping.
+   *
+   * <p>Use this overload when the caller already possesses the slot-to-class mapping (e.g., from a
+   * preceding {@link #findSummariesBySlotIds} call). Unlike {@link
+   * #loadThumbnailKeysBySlotIds(List)}, this method does <em>not</em> re-execute the {@code
+   * class_slots JOIN marketplace_classes} query, saving one DB round-trip per list request.
+   *
+   * @param slotToClassId map of slotId → classId (pre-resolved by the caller)
+   * @return map of slotId → thumbnail finalObjectKey; absent key means no thumbnail
+   */
+  Map<Long, String> loadThumbnailKeysBySlotToClassMap(Map<Long, Long> slotToClassId);
 
   /**
    * Find a class aggregate by its ID.

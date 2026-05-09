@@ -23,10 +23,10 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li><b>Bulk path ({@link #findBySlotIds}):</b> delegates to {@link
  *       GetClassInfoUseCase#findSummariesBySlotIds}, which issues a single JPQL JOIN query ({@code
- *       class_slots JOIN marketplace_classes}). Title, price, and active flag are projected; then
- *       {@link GetClassInfoUseCase#loadThumbnailKeysBySlotIds} fetches thumbnail keys in a second
- *       batch round-trip (slotId → classId → thumbnail) so the listing path no longer returns
- *       {@code null} for {@code thumbnailFinalObjectKey}.
+ *       class_slots JOIN marketplace_classes}). Title, price, and active flag are projected. The
+ *       resulting {@code slotId → classId} mapping is then passed to {@link
+ *       GetClassInfoUseCase#loadThumbnailKeysBySlotToClassMap} so that thumbnail keys are
+ *       batch-fetched without re-executing the JOIN.
  *   <li><b>Single path ({@link #findBySlotId}):</b> delegates to the bulk method with a
  *       single-element list to avoid code duplication.
  * </ul>
@@ -40,10 +40,10 @@ import org.springframework.stereotype.Component;
  *
  * <h2>Data-integrity fallback</h2>
  *
- * <p>If the projection's title is blank or priceAmount is zero/negative (legacy corrupt data),
- * constructing {@link LoadClassSummaryPort.ClassSummary} throws {@link IllegalStateException}. This
- * is caught and logged as a warning so that a single bad record does not fail the entire list or
- * detail query.
+ * <p>If the projection's title is blank or priceAmount is negative (corrupt data), constructing
+ * {@link LoadClassSummaryPort.ClassSummary} throws {@link IllegalStateException}. This is caught
+ * and logged as a warning so that a single bad record does not fail the entire list or detail
+ * query. Note: {@code priceAmount == 0} is valid for free classes and is not treated as an error.
  */
 @Slf4j
 @Component
@@ -78,10 +78,18 @@ public class ClassSummaryAdapter implements LoadClassSummaryPort {
     Map<Long, ClassSummaryProjection> projections =
         getClassInfoUseCase.findSummariesBySlotIds(slotIds);
 
-    // Batch-fetch thumbnails for all active slots in one round-trip.
-    // Only active projections are retained below, so we can safely pass the full slotIds list;
-    // inactive slots that survive the filter will simply have no entry in thumbnailKeys.
-    Map<Long, String> thumbnailKeys = getClassInfoUseCase.loadThumbnailKeysBySlotIds(slotIds);
+    // Build slotId → classId from the projections we already have, then pass the mapping
+    // to loadThumbnailKeysBySlotToClassMap so the JOIN is not repeated for thumbnail resolution.
+    Map<Long, Long> slotToClassId = new HashMap<>();
+    for (Map.Entry<Long, ClassSummaryProjection> entry : projections.entrySet()) {
+      if (entry.getValue().active()) {
+        slotToClassId.put(entry.getKey(), entry.getValue().classId());
+      }
+    }
+    Map<Long, String> thumbnailKeys =
+        slotToClassId.isEmpty()
+            ? Map.of()
+            : getClassInfoUseCase.loadThumbnailKeysBySlotToClassMap(slotToClassId);
 
     Map<Long, ClassSummary> result = new HashMap<>();
     for (Map.Entry<Long, ClassSummaryProjection> entry : projections.entrySet()) {

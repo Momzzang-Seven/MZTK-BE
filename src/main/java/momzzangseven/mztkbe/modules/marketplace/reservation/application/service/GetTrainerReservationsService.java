@@ -47,7 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetTrainerReservationsService implements GetTrainerReservationsUseCase {
 
-  private static final String CURSOR_SCOPE = GetTrainerReservationsQuery.CURSOR_SCOPE;
+  // CURSOR_SCOPE is now status-dependent; use GetTrainerReservationsQuery.cursorScope(status).
 
   private final LoadReservationPort loadReservationPort;
   private final LoadClassSummaryPort loadClassSummaryPort;
@@ -86,12 +86,15 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
             .map(
                 r -> {
                   ClassSummary cs = classSummaries.get(r.getSlotId());
+                  // Use snapshot values only when both title and price are present.
+                  // A partial snapshot (one field null) falls back to live lookup to avoid
+                  // returning null classTitle or priceAmount on the list response.
+                  boolean hasFullSnapshot =
+                      r.getBookedPriceAmount() != null && r.getBookedClassTitle() != null;
                   String classTitle =
-                      r.getBookedPriceAmount() != null
-                          ? r.getBookedClassTitle()
-                          : (cs != null ? cs.title() : null);
+                      hasFullSnapshot ? r.getBookedClassTitle() : (cs != null ? cs.title() : null);
                   Integer priceAmount =
-                      r.getBookedPriceAmount() != null
+                      hasFullSnapshot
                           ? r.getBookedPriceAmount()
                           : (cs != null ? cs.priceAmount() : null);
                   UserSummary userSummary = userSummaries.get(r.getUserId());
@@ -111,7 +114,7 @@ public class GetTrainerReservationsService implements GetTrainerReservationsUseC
                 new KeysetCursor(
                     page.getLast().getReservationDate().atTime(page.getLast().getReservationTime()),
                     page.getLast().getId(),
-                    CURSOR_SCOPE))
+                    GetTrainerReservationsQuery.cursorScope(query.status())))
             : null;
 
     return new CursorSlice<>(items, hasNext, nextCursor);

@@ -50,7 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class GetUserReservationsService implements GetUserReservationsUseCase {
 
-  private static final String CURSOR_SCOPE = GetUserReservationsQuery.CURSOR_SCOPE;
+  // CURSOR_SCOPE is now status-dependent; use GetUserReservationsQuery.cursorScope(status).
 
   private final LoadReservationPort loadReservationPort;
   private final LoadClassSummaryPort loadClassSummaryPort;
@@ -85,12 +85,15 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
             .map(
                 r -> {
                   ClassSummary cs = classSummaries.get(r.getSlotId());
+                  // Use snapshot values only when both title and price are present.
+                  // A partial snapshot (one field null) falls back to live lookup to avoid
+                  // returning null classTitle or priceAmount on the list response.
+                  boolean hasFullSnapshot =
+                      r.getBookedPriceAmount() != null && r.getBookedClassTitle() != null;
                   String classTitle =
-                      r.getBookedPriceAmount() != null
-                          ? r.getBookedClassTitle()
-                          : (cs != null ? cs.title() : null);
+                      hasFullSnapshot ? r.getBookedClassTitle() : (cs != null ? cs.title() : null);
                   Integer priceAmount =
-                      r.getBookedPriceAmount() != null
+                      hasFullSnapshot
                           ? r.getBookedPriceAmount()
                           : (cs != null ? cs.priceAmount() : null);
                   UserSummary ts = trainerSummaries.get(r.getTrainerId());
@@ -112,7 +115,7 @@ public class GetUserReservationsService implements GetUserReservationsUseCase {
                         .getReservationDate()
                         .atTime(page.get(page.size() - 1).getReservationTime()),
                     page.get(page.size() - 1).getId(),
-                    CURSOR_SCOPE))
+                    GetUserReservationsQuery.cursorScope(query.status())))
             : null;
 
     return new CursorSlice<>(items, hasNext, nextCursor);

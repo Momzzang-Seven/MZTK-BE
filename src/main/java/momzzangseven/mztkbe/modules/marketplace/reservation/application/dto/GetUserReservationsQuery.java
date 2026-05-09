@@ -13,12 +13,32 @@ import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.Reservatio
 public record GetUserReservationsQuery(
     Long userId, ReservationStatus status, CursorPageRequest pageRequest) {
 
-  /** Cursor scope identifier shared across Controller, Query, and Service layers. */
-  public static final String CURSOR_SCOPE = "user-reservations";
+  /**
+   * Base cursor scope prefix. The effective scope is status-aware: {@link
+   * #cursorScope(ReservationStatus)} must be used to construct a fully-qualified scope string so
+   * that a cursor issued for one status filter cannot be replayed against a different filter.
+   */
+  public static final String CURSOR_SCOPE_PREFIX = "user-reservations";
+
+  /**
+   * Returns the cursor scope string that encodes the given status filter.
+   *
+   * <ul>
+   *   <li>{@code null} status (all reservations) → {@code "user-reservations:ALL"}
+   *   <li>specific status → {@code "user-reservations:APPROVED"} etc.
+   * </ul>
+   *
+   * <p>Both the controller (when building {@link CursorPageRequest}) and the service (when encoding
+   * the next-cursor token) must call this method with the same {@code status} value so that the
+   * scope embedded in the token matches the scope expected at decode time.
+   */
+  public static String cursorScope(ReservationStatus status) {
+    return CURSOR_SCOPE_PREFIX + ":" + (status == null ? "ALL" : status.name());
+  }
 
   /** Convenience constructor for tests / callers that do not supply a cursor yet. */
   public GetUserReservationsQuery(Long userId, ReservationStatus status) {
-    this(userId, status, CursorPageRequest.of(null, null, 20, 100, CURSOR_SCOPE));
+    this(userId, status, CursorPageRequest.of(null, null, 20, 100, cursorScope(status)));
   }
 
   public void validate() {
