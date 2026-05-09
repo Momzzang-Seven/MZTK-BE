@@ -1,0 +1,18 @@
+# Codex CLI project config — sync mirror of .claude/settings.json (limited subset).
+# Codex automatically reads /AGENTS.md (and nested AGENTS.md) for project instructions —
+# do not duplicate that here.
+#
+# Personal overrides go in .codex/config.local.toml (gitignored).
+# See docs.shared/AGENT_CONFIG.md for the full Claude ↔ Codex setting map.
+
+# --- Sandbox / permissions ---
+# Mirror of `.claude/settings.json` permissions. Codex hooks are not yet supported,
+# so the PostToolUse architecture-rules hook is Claude-only.
+[sandbox]
+# Default to "workspace-write": allow edits inside the repo, deny outside.
+mode = "workspace-write"
+
+# --- Skill / prompt mirror ---
+# `.codex/prompts/` is auto-generated from `.claude/skills/` by
+# scripts/agents/sync-skills.py. Do not hand-edit; re-run the script after
+# changing the upstream SKILL.md.
