@@ -14,14 +14,12 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaAdminExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadExecutionSignerConfigPort;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminOrAutoAcceptEnabled;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
@@ -31,10 +29,10 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminOrAutoAcceptEnabled
-@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
+@ConditionalOnBean(ProbeSponsorSignerCapabilityPort.class)
 public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecutionDraftPort {
 
-  private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  private final ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   private final LoadInternalExecutionEip1559TtlPort loadInternalExecutionEip1559TtlPort;
   private final Web3CoreProperties web3CoreProperties;
   private final QnaEscrowProperties qnaEscrowProperties;
@@ -55,7 +53,7 @@ public class QnaAdminExecutionDraftBuilderAdapter implements BuildQnaAdminExecut
     String questionId = QnaEscrowIdCodec.questionId(request.postId());
     String answerId =
         request.answerId() == null ? null : QnaEscrowIdCodec.answerId(request.answerId());
-    var serverSigner = probeExecutionSignerCapabilityUseCase.execute();
+    var serverSigner = probeSponsorSignerCapabilityPort.probe();
     if (!serverSigner.signable() || serverSigner.signerAddress() == null) {
       throw new Web3TransactionStateInvalidException(
           QnaAdminReviewValidationCode.SERVER_SIGNER_UNAVAILABLE.name());

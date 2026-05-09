@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.shared.application.dto;
+package momzzangseven.mztkbe.modules.web3.treasury.application.dto;
 
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;

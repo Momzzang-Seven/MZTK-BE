@@ -5,10 +5,10 @@ import java.util.Optional;
 /**
  * Shared boundary for future secret-store access.
  *
- * <p>This port is introduced as part of the ASM-readiness refactor to lock down the package
- * boundary before the actual KEK/secret source migration happens. The current web3 runtime still
- * relies on the existing raw KEK config contract, so this port is intentionally a scaffold for the
- * follow-up integration step.
+ * <p>The legacy config-side secret contract has since been removed, but the secret-store
+ * integration that this port is meant to front (AWS Secrets Manager / SSM) has not yet landed. The
+ * port remains a scaffold so consumers can be wired against the package boundary today and the
+ * implementation can be filled in by the follow-up integration step.
  */
 public interface LoadSecretValuePort {
 
