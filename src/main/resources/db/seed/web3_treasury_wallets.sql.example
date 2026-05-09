@@ -10,36 +10,59 @@
 --   web3_treasury_wallets.sql 은 .gitignore 에 등록되어 있습니다.
 --   절대 실제 값이 담긴 파일을 커밋하지 마세요.
 --
--- [값 생성 방법]
---   treasury_address        : 테스트넷 전용 Ethereum 지갑 주소 (0x로 시작, 42자)
---   treasury_private_key_encrypted :
---       Admin API POST /admin/web3/treasury-keys/provision 를 호출하면
---       서버가 KEK로 암호화한 값을 DB에 직접 저장합니다.
---       또는 로컬에서 ProvisionTreasuryKeyService 를 통해 생성된 암호문을 사용하세요.
+-- [값 생성 방법 — KMS 시대]
+--   provision endpoint 는 운영자가 보유한 secp256k1 raw private key 를 받아
+--   KMS ImportKeyMaterial 흐름으로 등록한다. KMS 가 keypair 를 생성하지 않는다.
+--
+--   treasury_address : provision 응답의 walletAddress — 운영자가 넘긴 raw private key
+--                      에 대응하는 secp256k1 공개키로부터 derive 한 EVM 주소.
+--                      요청의 expectedAddress 와 일치하지 않으면 endpoint 가 거부한다.
+--   kms_key_id       : provision 응답의 kmsKeyId — 동 endpoint 가 KMS 에 생성한
+--                      Imported CMK 의 keyId (UUID 형식).
+--   status           : 'ACTIVE' (provision 직후 기본값).
+--   key_origin       : 'IMPORTED' (KMS Imported key material 만 허용 — KMS-finalize cleanup CHECK).
+--
+--   provision 절차:
+--     1. 운영자 로컬에서 secp256k1 raw private key 를 생성/관리하고 EVM 주소를 미리 계산해 둔다.
+--     2. POST /admin/web3/treasury-keys/provision
+--        body 예시 (REWARD): {
+--          "rawPrivateKey":   "<32-byte hex secp256k1 priv key, no 0x prefix>",
+--          "role":            "REWARD",
+--          "expectedAddress": "0x<derived 40-hex address>"
+--        }
+--        body 예시 (SPONSOR): role 만 "SPONSOR" 로 바꿔 동일 형태로 호출.
+--     3. 응답 body 의 walletAddress / kmsKeyId 를 아래 SQL 의 placeholder 와 교체.
+--     4. dev DB 에 적용.
 
+-- reward-treasury (id=1)
 update web3_treasury_wallets
 set wallet_alias = 'reward-treasury',
-    treasury_address = '<YOUR_DEV_TREASURY_ADDRESS>',
-    treasury_private_key_encrypted = '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>',
+    treasury_address = '<YOUR_DEV_REWARD_TREASURY_ADDRESS>',
+    kms_key_id = '<YOUR_DEV_REWARD_KMS_KEY_ID>',
+    status = 'ACTIVE',
+    key_origin = 'IMPORTED',
     updated_at = current_timestamp
 where id = 1
-  and '<YOUR_DEV_TREASURY_ADDRESS>' like '0x%'
-  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42
-  and position('.' in '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>') > 1;
+  and '<YOUR_DEV_REWARD_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_REWARD_TREASURY_ADDRESS>') = 42;
 
 insert into web3_treasury_wallets (
     id,
     wallet_alias,
     treasury_address,
-    treasury_private_key_encrypted,
+    kms_key_id,
+    status,
+    key_origin,
     created_at,
     updated_at
 )
 select
     1,
     'reward-treasury',
-    '<YOUR_DEV_TREASURY_ADDRESS>',
-    '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>',
+    '<YOUR_DEV_REWARD_TREASURY_ADDRESS>',
+    '<YOUR_DEV_REWARD_KMS_KEY_ID>',
+    'ACTIVE',
+    'IMPORTED',
     current_timestamp,
     current_timestamp
 where not exists (
@@ -47,6 +70,51 @@ where not exists (
     from web3_treasury_wallets
     where id = 1
 )
-  and '<YOUR_DEV_TREASURY_ADDRESS>' like '0x%'
-  and length('<YOUR_DEV_TREASURY_ADDRESS>') = 42
-  and position('.' in '<YOUR_DEV_ENCRYPTED_PRIVATE_KEY>') > 1;
+  and '<YOUR_DEV_REWARD_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_REWARD_TREASURY_ADDRESS>') = 42;
+
+-- sponsor-treasury (id=2)
+--   ProbeSponsorSignerCapabilityPort 가 이 alias 로 probe 하므로, 이 row 가 없으면
+--   sponsor probe 가 slotStatus=SLOT_MISSING / signable=false 로 노출되고 admin
+--   review/execute 가 차단된다. (`/actuator/health` 의 qnaAdminExecution 컴포넌트는
+--   details 만 변할 뿐 status 는 UP 으로 유지된다 — 동작을 DOWN 으로 바꾸려면 별도 작업
+--   필요. startup validator 도 signer unavailable 시 warn 로그만 남기고 boot 는 진행된다.)
+--   따라서 web3.eip7702.sponsor.enabled=true 환경에서 admin 흐름을 정상 사용하려면
+--   이 row 를 채워야 한다.
+update web3_treasury_wallets
+set wallet_alias = 'sponsor-treasury',
+    treasury_address = '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>',
+    kms_key_id = '<YOUR_DEV_SPONSOR_KMS_KEY_ID>',
+    status = 'ACTIVE',
+    key_origin = 'IMPORTED',
+    updated_at = current_timestamp
+where id = 2
+  and '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>') = 42;
+
+insert into web3_treasury_wallets (
+    id,
+    wallet_alias,
+    treasury_address,
+    kms_key_id,
+    status,
+    key_origin,
+    created_at,
+    updated_at
+)
+select
+    2,
+    'sponsor-treasury',
+    '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>',
+    '<YOUR_DEV_SPONSOR_KMS_KEY_ID>',
+    'ACTIVE',
+    'IMPORTED',
+    current_timestamp,
+    current_timestamp
+where not exists (
+    select 1
+    from web3_treasury_wallets
+    where id = 2
+)
+  and '<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>' like '0x%'
+  and length('<YOUR_DEV_SPONSOR_TREASURY_ADDRESS>') = 42;

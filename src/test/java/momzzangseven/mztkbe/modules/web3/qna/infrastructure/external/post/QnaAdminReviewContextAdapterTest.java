@@ -14,9 +14,11 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerS
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaAnswerProjection;
@@ -27,8 +29,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -46,7 +47,7 @@ class QnaAdminReviewContextAdapterTest {
   @Mock private LoadQnaAnswerIdsPort loadQnaAnswerIdsPort;
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
-  @Mock private ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  @Mock private ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   @Mock private QnaContractCallSupport qnaContractCallSupport;
   @Mock private LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
 
@@ -64,7 +65,7 @@ class QnaAdminReviewContextAdapterTest {
             loadQnaAnswerIdsPort,
             qnaProjectionPersistencePort,
             loadQnaExecutionIntentStatePort,
-            probeExecutionSignerCapabilityUseCase,
+            probeSponsorSignerCapabilityPort,
             qnaContractCallSupport,
             loadExecutionInternalIssuerPolicyPort,
             qnaEscrowProperties);
@@ -88,10 +89,10 @@ class QnaAdminReviewContextAdapterTest {
             momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType.QUESTION,
             "101"))
         .thenReturn(Optional.empty());
-    when(probeExecutionSignerCapabilityUseCase.execute())
+    when(probeSponsorSignerCapabilityPort.probe())
         .thenReturn(
-            ExecutionSignerCapabilityView.ready(
-                "sponsor-treasury", "0x3333333333333333333333333333333333333333"));
+            QnaAdminServerSignerView.ready(
+                TreasuryRole.SPONSOR.toAlias(), "0x3333333333333333333333333333333333333333"));
     when(qnaContractCallSupport.isRelayerRegistered(
             "0x1111111111111111111111111111111111111111",
             "0x3333333333333333333333333333333333333333"))

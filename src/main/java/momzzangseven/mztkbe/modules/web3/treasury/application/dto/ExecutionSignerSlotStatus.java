@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.web3.shared.application.dto;
+package momzzangseven.mztkbe.modules.web3.treasury.application.dto;
 
 public enum ExecutionSignerSlotStatus {
   SLOT_MISSING,

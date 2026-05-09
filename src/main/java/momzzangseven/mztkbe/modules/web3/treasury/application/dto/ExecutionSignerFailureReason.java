@@ -1,9 +1,7 @@
-package momzzangseven.mztkbe.modules.web3.shared.application.dto;
+package momzzangseven.mztkbe.modules.web3.treasury.application.dto;
 
 public enum ExecutionSignerFailureReason {
   NONE,
-  KEY_ENCRYPTION_KEY_MISSING,
-  DECRYPT_FAILED,
   CORRUPTED_SLOT,
   ADDRESS_MISMATCH,
   KMS_KEY_ID_MISSING,
