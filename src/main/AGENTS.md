@@ -4,7 +4,7 @@ Read `docs.shared/ARCHITECTURE.md` before designing or modifying production code
 Read `docs.shared/EXTERNAL_SYSTEM_SYNC.md` before designing or modifying any flow that mutates
 both the DB and an external system (AWS KMS, S3, on-chain RPC, third-party APIs).
 
-ARCHITECTURE.md 의 layer dependency rule 위반은 `.claude/hooks/check-architecture-rules.py`
+ARCHITECTURE.md 의 layer dependency rule 위반은 `scripts/agents/hooks/check-architecture-rules.py`
 hook 이 PostToolUse 시점에 정적 분석으로 잡아 메시지를 띄운다 (informational, 차단은 아님).
 
 ## Key Patterns

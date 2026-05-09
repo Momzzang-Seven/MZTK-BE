@@ -58,15 +58,17 @@ bin/
 ### Claude Code (selective sharing) ###
 .claude/*
 !.claude/settings.json
-!.claude/skills/
-!.claude/hooks/
-.claude/skills/improve-token-efficiency/
-.claude/skills/ai-readiness-cartography/
-.claude/hooks/*
-!.claude/hooks/check-architecture-rules.py
-!.claude/hooks/check-claude-codex-sync.py
+# .claude/skills is a symlink/junction to .agents/skills, created per
+# environment by scripts/agents/setup-skill-links.py. Do not commit the link.
+.claude/skills
 .claude/settings.local.json
 .claude/**/.DS_Store
+
+### Shared agent skills (.agents/skills is the SSoT) ###
+# Personal skills follow the `private-` prefix convention so both Claude Code
+# (one-level discovery) and Codex CLI (recursive) detect them, while a single
+# glob keeps them out of git.
+.agents/skills/private-*/
 
 ### Personal AGENTS.md override (각 scope 마다) ###
 AGENTS.local.md

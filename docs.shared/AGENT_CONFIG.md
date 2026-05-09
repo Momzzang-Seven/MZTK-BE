@@ -7,41 +7,41 @@
 
 ## 단일 진실 원천 (SSoT)
 
-| 항목 | SSoT 위치 | 다른 도구 동기화 방식 |
-|------|----------|---------------------|
+| 항목 | SSoT 위치 | 다른 도구에서의 인식 방법 |
+|------|----------|---------------------------|
 | Project instructions | `AGENTS.md` (모든 scope) | 자동 — Claude Code, Codex CLI 모두 직접 읽음 |
-| Skills / Custom commands | `.claude/skills/<name>/SKILL.md` | **단방향 sync** — `scripts/agents/sync-skills.py` 가 `.codex/prompts/<name>.md` 자동 생성 |
-| Project permissions | `.claude/settings.json` | **수동** — `.codex/config.toml` `[sandbox]` 양쪽 동시 갱신 |
-| PostToolUse hooks | `.claude/settings.json` `hooks.PostToolUse` | (Codex 미지원) — Claude 한쪽만 |
+| Skills / Custom commands | `.agents/skills/<name>/SKILL.md` | Codex CLI 는 `.agents/skills/` 자동 검색. Claude Code 는 `.claude/skills/` 만 검색하므로 환경별로 `.claude/skills → .agents/skills` link 를 둠 (POSIX symlink / Windows directory junction) |
+| Project permissions | `.claude/settings.json` (Claude) · `.codex/config.toml` (Codex) | **양쪽이 진본** — permissions/sandbox 변경 시 두 파일 동시 갱신 |
+| PostToolUse hooks | `.claude/settings.json` `hooks.PostToolUse` (Claude) · `.codex/config.toml` `[[hooks.PostToolUse]]` (Codex) | 양쪽이 같은 스크립트 (`scripts/agents/hooks/*.py`) 를 호출. 추가/삭제 시 두 파일 동시 갱신 |
 
-`AGENTS.md` 가 없으면 도구가 컨텍스트를 못 읽고, `.claude/skills/` 가 없으면 sync 가 실패한다 — 두 위치는 PR1 이후 항상 존재한다.
+`.claude/skills/` 는 git 에서 추적하지 않는다. 신규 합류자는 첫 clone 후 1 회 `python3 scripts/agents/setup-skill-links.py` 를 실행해 link 를 만든다 — 그러면 두 도구가 **물리적으로 같은 SKILL.md 한 벌**을 본다.
 
 ---
 
 ## 자동 강제 (PostToolUse hook)
 
-`docs.shared/AGENT_CONFIG.md` 는 정책 문서일 뿐이라 사람이나 AI 가 무시할 수 있다. 이를 보완하기 위해 `.claude/hooks/check-claude-codex-sync.py` 가 PostToolUse 시점에 다음을 자동 검사한다 (informational, 차단 아님):
+`docs.shared/AGENT_CONFIG.md` 는 정책 문서일 뿐이라 사람이나 AI 가 무시할 수 있다. 이를 보완하기 위해 `scripts/agents/hooks/check-agent-link.py` 가 PostToolUse 시점에 다음을 자동 검사한다 (informational, 차단 아님):
 
-- `.claude/skills/<name>/SKILL.md` 또는 `.claude/skills/<name>/agents/*.md` 편집 시 → `sync-skills.py --check` 결과가 stale 이면 즉시 sync 재실행 안내
-- `.claude/settings.json` 편집 시 → permissions/sandbox 변경이면 `.codex/config.toml` 동시 갱신 + 본 정책 표 갱신 안내
+- `.claude/skills` link 가 존재하는가
+- 그 link 가 `.agents/skills` 디렉토리를 가리키며 deref 가능한가
 
-hook 의 알림은 same-turn / same-PR 에서 처리하는 것이 원칙. 무시한 채 commit/PR 을 올리는 것은 reviewer 가 reject 한다.
+위반 시 `additionalContext` 로 `python3 scripts/agents/setup-skill-links.py` 실행 안내. 같은 hook 이 Claude Code (`.claude/settings.json`) 와 Codex CLI (`.codex/config.toml`) 양쪽에서 동일하게 발화한다.
+
+ARCHITECTURE.md 위반은 `scripts/agents/hooks/check-architecture-rules.py` 가 검출 — 자세한 내용은 `src/main/AGENTS.md` 참조.
 
 ---
 
 ## 편집 규칙 (반드시 지켜야 함)
 
-1. **skill 편집은 항상** `.claude/skills/<name>/SKILL.md` **에서만**.
-   `.codex/prompts/` 직접 편집 금지 — sync 가 덮어쓴다.
+1. **skill 편집은 항상** `.agents/skills/<name>/SKILL.md` **에서만**.
+   `.claude/skills/<name>/...` 경로로 편집해도 link 라 결과는 동일하지만, 새 파일 추가/삭제 시 link 를 통한 조작이 plumbing 도구에 따라 어색할 수 있어 직접 `.agents/skills/` 를 수정하는 것을 권장.
 
-2. **skill 변경 PR 마다** 반드시 다음을 PR 체크리스트로 확인:
-   - [ ] `.claude/skills/<name>/SKILL.md` 수정 완료
-   - [ ] `python3 scripts/agents/sync-skills.py` 실행
-   - [ ] `git diff .codex` 결과를 같은 PR 에 commit
+2. **skill 변경 PR**: `.agents/skills/<name>/...` 변경분만 commit 하면 끝. mirror sync · `.codex/prompts/` 갱신 같은 후속 작업 없음.
 
-3. **config 변경 PR 마다**:
+3. **config 변경 PR**:
    - `.claude/settings.json` 의 `permissions` / `sandbox` 변경 → `.codex/config.toml` 도 동시 갱신
-   - hook 변경 → Claude 한쪽만, AGENT_CONFIG.md 의 미지원 표시 유지
+   - PostToolUse hook 추가/삭제/scriptPath 변경 → 두 파일에 동등한 entry 가 있어야 함
+   - 정책 자체 변경 (skill/permission/hook 운영 규칙) → 본 문서 표 갱신
 
 4. **개인 설정**:
    - Claude: `.claude/settings.local.json` (gitignored)
@@ -52,50 +52,30 @@ hook 의 알림은 same-turn / same-PR 에서 처리하는 것이 원칙. 무시
 
 ## 새 skill 을 추가할 때
 
-1. `.claude/skills/<new-name>/SKILL.md` 작성 (frontmatter `name`, `description` 필수).
-2. 필요시 `.claude/skills/<new-name>/agents/<sub>.md` 등 sub-agent 파일.
-3. `python3 scripts/agents/sync-skills.py` 실행 → `.codex/prompts/<new-name>.md` 자동 생성.
-4. PR 본문에 다음 체크리스트:
+1. `.agents/skills/<new-name>/SKILL.md` 작성 (frontmatter `name`, `description` 필수). frontmatter `name` 은 디렉토리 이름과 일치시킨다.
+2. 필요시 `.agents/skills/<new-name>/agents/<sub>.md` 등 sub-agent 파일.
+3. PR 본문에 다음 체크리스트:
    - [ ] 프로젝트 특화인가? (Yes 만 공유; 범용 도구라면 개인 디렉토리)
    - [ ] description trigger 가 다른 skill 과 겹치지 않는가?
    - [ ] 외부 secret/token 을 포함하지 않는가?
    - [ ] 5 명 이상 팀원이 사용 의향이 있는가?
-5. reviewer 1 명 승인.
+4. reviewer 1 명 승인.
 
-개인 skill (sync 안 함) 은 `.claude/skills/improve-token-efficiency/`, `.claude/skills/ai-readiness-cartography/` 처럼 sync 스크립트의 `PERSONAL_SKILLS` set 에 추가하면 mirror 에서 제외되고 `.gitignore` 에서 자동 ignore.
+개인 skill (각자 환경에만 두는 범용 도구) 은 `.agents/skills/private-<name>/` 형태로 만든다. `private-` prefix 가 붙은 디렉토리는 `.gitignore` 의 `.agents/skills/private-*/` glob 한 줄로 자동 ignore 되어 commit 되지 않으면서, 두 도구 모두에서 정상 인식된다 (SKILL.md frontmatter `name` 도 `private-<name>` 으로 디렉토리명과 일치시킬 것).
 
----
-
-## Codex-only prompt 를 추가할 때 (Claude 측 source 없음)
-
-희소한 케이스지만, Codex CLI 에서만 의미 있는 prompt 를 운용해야 한다면:
-
-1. `.codex/prompts/<name>.md` 직접 작성 (frontmatter + body 자유 — sync 가 안 건드림).
-2. `.codex/prompts/CODEX_ONLY.txt` 에 `<name>` 한 줄 추가. 이게 빠지면 다음 sync 에서 silent 삭제된다.
-3. `python3 scripts/agents/sync-skills.py --check` 통과 확인.
-4. PR 본문에 codex-only 인 이유 명시 (왜 Claude SKILL.md 로 만들 수 없는지).
-5. 동일 name 의 `.claude/skills/<name>/SKILL.md` 가 생기면 sync 가 collision error 로 실패한다 — Claude 쪽으로 일원화하거나 다른 name 사용.
+> Why `private-` prefix? Claude Code 의 skill discovery 는 한 단계만 검색하므로 `.agents/skills/private/<name>/SKILL.md` 같은 nested 배치는 silent 무시된다. 반면 Codex CLI 는 BFS 로 재귀 검색해 인식한다 — 이 비대칭을 피하려고 디렉토리 grouping 대신 prefix 컨벤션으로 통일.
 
 ---
 
-## sync-skills.py 의 변환 로직 (참고)
+## Codex-only prompt 가 정말 필요할 때
 
-| Claude `SKILL.md` frontmatter | Codex `prompts/<name>.md` |
-|---|---|
-| `name: <x>` | `name: <x>` 그대로 |
-| `description: <x>` (single-line 또는 `>` 블록) | `description: <x>` 그대로 |
-| body markdown | "GENERATED FROM..." 배너 + body |
-| sub-agent 디렉토리 (`agents/`) 존재 | 생성된 prompt 상단에 "Codex 가 multi-agent dispatch 미지원" NOTE |
-
-특정 skill 만 자동 적용하고 싶다면 SSoT 의 SKILL.md 에 추가 frontmatter 키를 넣고 sync 스크립트를 확장한다 (별도 PR).
+희소한 케이스지만, Codex CLI 에서만 의미 있는 prompt 를 운용해야 한다면 `.codex/skills/<name>/SKILL.md` 에 작성한다 (Codex 가 자동 검색). Claude 와 공유 가치가 있으면 `.agents/skills/` 로 옮기는 게 원칙.
 
 ---
 
-## CI 검증 (후속 RFC)
+## 알려진 이슈
 
-안정화 후 GitHub Actions 에 다음 추가 예정:
-
-```yaml
-- run: python3 scripts/agents/sync-skills.py
-- run: git diff --exit-code .codex || (echo "::error::skill sync 결과를 commit 해주세요"; exit 1)
-```
+| 항목 | 영향 | 비고 |
+|------|------|------|
+| Claude Code `/skills` 슬래시 명령이 symlink 안의 skill 목록 표시를 일부 못함 ([Issue #14836](https://github.com/anthropics/claude-code/issues/14836)) | UI 표시 이슈만, 실제 트리거링/실행은 정상 | 상위 fix 시 자동 해소 |
+| Codex `apply_patch` 에서 hook 신뢰성이 들쭉날쭉하다는 외부 보고 | 일부 편집이 architecture-rules 검사 우회 가능 | git pre-commit `spotlessApply` 가 백업. 향후 PreCommit 단 java rule 검사 추가 검토 (별 PR) |

@@ -1,9 +1,0 @@
-# Codex-only prompts — names listed here are NOT regenerated nor deleted by
-# scripts/agents/sync-skills.py. Use this for prompts that have no Claude
-# SKILL.md counterpart (e.g., codex-specific tooling).
-#
-# Format: one bare name per line (no .md extension). '#' lines are comments.
-# A name listed here MUST NOT also exist as .claude/skills/<name>/SKILL.md —
-# such collisions are caught by sync-skills.py and abort the run.
-#
-# Currently empty. Add a name here to preserve `.codex/prompts/<name>.md`.

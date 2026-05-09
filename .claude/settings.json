@@ -6,13 +6,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/check-architecture-rules.py",
+            "command": "python3 scripts/agents/hooks/check-architecture-rules.py",
             "statusMessage": "ARCHITECTURE.md rule 검사 중..."
           },
           {
             "type": "command",
-            "command": "python3 .claude/hooks/check-claude-codex-sync.py",
-            "statusMessage": ".claude ↔ .codex sync 정책 검사 중..."
+            "command": "python3 scripts/agents/hooks/check-agent-link.py",
+            "statusMessage": "agents skills link 검사 중..."
           }
         ]
       }
