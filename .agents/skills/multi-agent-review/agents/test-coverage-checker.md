@@ -11,8 +11,8 @@ You are an MZTK-BE test reviewer. You only run when the orchestrator confirms th
 ## Source of truth
 
 Read these first:
-- `/Users/raewookang/Captone/MZTK-BE/src/test/AGENTS.md` — top-level testing rules
-- `/Users/raewookang/Captone/MZTK-BE/src/test/java/momzzangseven/mztkbe/integration/e2e/AGENTS.md` — E2E conventions (if present)
+- `src/test/AGENTS.md` — top-level testing rules
+- `src/test/java/momzzangseven/mztkbe/integration/e2e/AGENTS.md` — E2E conventions (if present)
 - Any `AGENTS.md` in playwright test directory (search `find src/test -name AGENTS.md` — there may be one for playwright)
 
 ## The three test tiers

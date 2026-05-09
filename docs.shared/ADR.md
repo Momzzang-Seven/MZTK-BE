@@ -32,9 +32,9 @@
 
 **결정**
 
-`AGENTS.md` 를 모든 scope (root, src, src/main, src/test, docs.shared) 의 진본으로 두고, 같은 디렉토리에 `CLAUDE.md` 를 1줄 wrapper (`@AGENTS.md`) 로 둔다. 양 파일은 git 추적된다. Claude Code 와 Codex 모두 동일한 본문을 읽는다.
+`AGENTS.md` 를 5 scope (root, src, src/main, src/test, docs.shared) 의 진본으로 두고, 같은 디렉토리에 `CLAUDE.md` 를 1줄 wrapper (`@AGENTS.md`) 로 둔다. 양 파일은 git 추적된다. Claude Code 와 Codex 모두 동일한 본문을 읽는다. 필요 시 더 깊은 sub-scope (예: `src/test/java/.../integration/e2e/AGENTS.md`) 를 추가할 수 있다 — sub-scope 에는 CLAUDE.md wrapper 를 두지 않아도 된다 (Claude Code 가 상위 CLAUDE.md → AGENTS.md import chain 으로 이미 같은 본문을 따라가기 때문).
 
-대안 — Symlink (CLAUDE.md → AGENTS.md): Windows symlink 호환성 문제로 거부. 대안 — 두 파일 별개 유지: 5 scope × 2 파일 = 10 파일 drift 위험으로 거부.
+대안 — Symlink (CLAUDE.md → AGENTS.md): Windows symlink 호환성 문제로 거부. 대안 — 두 파일 별개 유지: scope 마다 2 파일이 되어 drift 위험으로 거부.
 
 **결과**
 

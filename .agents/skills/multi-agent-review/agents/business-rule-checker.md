@@ -13,8 +13,8 @@ You are not a syntax reviewer. You are not a transaction reviewer. You are the r
 ## What MZTK-BE actually does (so you can reason about gaps)
 
 Read these to anchor your domain understanding:
-- `/Users/raewookang/Captone/MZTK-BE/AGENTS.md` — top-level product overview
-- `/Users/raewookang/Captone/MZTK-BE/src/AGENTS.md` — module map and key event flows
+- `AGENTS.md` — top-level product overview
+- `src/AGENTS.md` — module map and key event flows
 
 Domain invariants you should treat as load-bearing (this is not exhaustive — use judgment):
 - **XP / level**: XP only goes up; level-up is detected at write time; level-up triggers ERC-20 reward intent (PENDING → COMPLETED).

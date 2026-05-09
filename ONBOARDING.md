@@ -27,7 +27,7 @@ ls scripts/agents/hooks/                        # check-architecture-rules.py, c
 
 | 항목 | 진본 | 절대 직접 수정 금지 |
 |------|------|---------------------|
-| 프로젝트 컨텍스트 | `AGENTS.md` (5 scope: 루트, src, src/main, src/test, docs.shared) | 같은 디렉토리의 `CLAUDE.md` (1 줄 wrapper) |
+| 프로젝트 컨텍스트 | `AGENTS.md` (5 scope + 필요 시 더 깊은 sub-scope: 루트, src, src/main, src/test, docs.shared, 예: `src/test/.../integration/e2e/`) | 같은 디렉토리의 `CLAUDE.md` (1 줄 wrapper, sub-scope 에는 없을 수 있음) |
 | Skills | `.agents/skills/<name>/SKILL.md` | `.claude/skills/` (symlink 또는 junction — 환경별 자동 생성물) |
 | 팀 공용 settings | `.claude/settings.json` (Claude), `.codex/config.toml` (Codex) | 양쪽 모두 진본 — permissions/sandbox 변경 시 동시 갱신 |
 | 팀 공용 hook | `scripts/agents/hooks/check-architecture-rules.py`, `scripts/agents/hooks/check-agent-link.py` | (없음, 직접 편집 가능) |
