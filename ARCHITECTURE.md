@@ -282,8 +282,7 @@ sub-modules (`transaction/`, `treasury/`, `eip7702/`, `qna/`, `execution/`, `wal
 `challenge/`, `signature/`, `transfer/`) and select non-web3 modules (`level/`) may import
 from `web3/shared` at any layer — including `application/service`, `application/port/out/`,
 and `application/dto/` — without going through a bridging adapter. This is the established
-pattern (see `EvmAddress`, `Vrs`, `KmsKeyState`, `TreasurySigner`,
-`ExecutionSignerCapabilityView`).
+pattern (see `EvmAddress`, `Vrs`, `KmsKeyState`, `TreasurySigner`).
 
 The exception is justified because:
 - `web3/shared` exposes only stable cross-cutting types (VOs, crypto primitives,
@@ -295,15 +294,17 @@ The exception is justified because:
 - `web3/shared/domain/vo/` — value objects (`EvmAddress`, ...)
 - `web3/shared/domain/crypto/` — crypto primitives (`Vrs`, `KmsKeyState`, ...)
 - `web3/shared/application/dto/` — capability handles carrying no secret material
-  (`TreasurySigner`, `ExecutionSignerCapabilityView`, ...)
+  (`TreasurySigner`, ...)
 - `web3/shared/application/port/in/` — input ports, when calling a `web3/shared` use case
 - `web3/shared/application/util/` — stateless cross-cutting helpers with no business state
   (`Erc20TransferCalldataEncoder`, ...)
 
 **Still forbidden from `web3/shared/`:**
 - `web3/shared/infrastructure/` — never import directly; use the standard port/adapter
-  pattern. The single `infrastructure/config/` exception (`@ConditionalOnUserExecutionEnabled`)
-  is a Spring annotation, not a class dependency.
+  pattern. Spring conditional annotations under `infrastructure/config/` (e.g.
+  `@ConditionalOnUserExecutionEnabled`, `@ConditionalOnQnaAdminEnabled`,
+  `@ConditionalOnQnaAdminOrAutoAcceptEnabled`, …) are Spring meta-annotations, not class
+  dependencies, and may be referenced from siblings.
 - `web3/shared/application/port/out/` — these are `web3/shared`'s own out-ports; siblings
   must declare their own ports if they need the same capability.
 

@@ -4,15 +4,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerFailureReason;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerSlotStatus;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
-import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.DescribeKmsKeyPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAddressProjectionPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryWalletPort;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryKeyPort;
 import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.SaveTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.model.TreasuryWallet;
 import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryKeyOrigin;
@@ -24,35 +16,21 @@ import org.springframework.stereotype.Component;
 /**
  * Persistence adapter for treasury wallets.
  *
- * <p>Implements two cohorts of ports during the KMS migration window:
- *
- * <ul>
- *   <li><b>New (KMS-backed)</b> — {@link LoadTreasuryWalletPort} / {@link SaveTreasuryWalletPort}
- *       project the {@code TreasuryWallet} aggregate, reading {@code kms_key_id} and the new
- *       lifecycle columns added in V056.
- *   <li><b>Legacy (cipher-backed)</b> — {@link SaveTreasuryKeyPort} continues to back the
- *       historical encrypted-private-key column until V063 drops it in PR4.
- * </ul>
- *
- * <p>Both port families share the same JPA repository / entity; rows that have only legacy columns
- * populated remain readable through the legacy methods, and rows that have only KMS columns
- * populated are visible to the new methods.
+ * <p>Projects the {@code TreasuryWallet} aggregate against {@code web3_treasury_wallets}, reading
+ * {@code kms_key_id} together with the lifecycle columns ({@code status}, {@code key_origin},
+ * {@code disabled_at}). After the KMS-finalize cleanup migration every row is KMS-backed: {@code
+ * treasury_private_key_encrypted} has been dropped and the legacy cipher-backed write path no
+ * longer exists.
  */
-// TODO TreasuryWalletPersistenceAdapter에 너무 많은 책임이 주어져있다. 별도 객체로 분리.
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class TreasuryWalletPersistenceAdapter
-    implements LoadTreasuryWalletPort,
-        SaveTreasuryWalletPort,
-        SaveTreasuryKeyPort,
-        ProbeExecutionSignerCapabilityPort,
-        LoadTreasuryAddressProjectionPort {
+    implements LoadTreasuryWalletPort, SaveTreasuryWalletPort {
 
   private final Web3TreasuryWalletJpaRepository repository;
-  private final DescribeKmsKeyPort describeKmsKeyPort;
 
-  // ----- LoadTreasuryWalletPort / SaveTreasuryWalletPort (new, KMS-backed) -----
+  // ----- LoadTreasuryWalletPort / SaveTreasuryWalletPort (KMS-backed) -----
 
   @Override
   public Optional<TreasuryWallet> loadByAlias(String walletAlias) {
@@ -83,49 +61,6 @@ public class TreasuryWalletPersistenceAdapter
     return toDomain(saved);
   }
 
-  // ----- ProbeExecutionSignerCapabilityPort (KMS-backed probe) -----
-
-  @Override
-  public ExecutionSignerCapabilityView probe(String walletAlias, String keyEncryptionKeyB64) {
-    requireNonBlank(walletAlias, "walletAlias");
-
-    return repository
-        .findByWalletAlias(walletAlias)
-        .map(entity -> mapCapability(entity, keyEncryptionKeyB64))
-        .orElseGet(() -> ExecutionSignerCapabilityView.slotMissing(walletAlias));
-  }
-
-  // ----- LoadTreasuryAddressProjectionPort -----
-
-  @Override
-  public Optional<String> loadAddressByAlias(String walletAlias) {
-    requireNonBlank(walletAlias, "walletAlias");
-
-    return repository
-        .findByWalletAlias(walletAlias)
-        .map(Web3TreasuryWalletEntity::getTreasuryAddress)
-        .filter(TreasuryWalletPersistenceAdapter::hasText);
-  }
-
-  // ----- SaveTreasuryKeyPort (legacy upsert) -----
-
-  @Override
-  public void upsert(
-      String walletAlias, String treasuryAddress, String treasuryPrivateKeyEncrypted) {
-    requireNonBlank(walletAlias, "walletAlias");
-    requireNonBlank(treasuryAddress, "treasuryAddress");
-    requireNonBlank(treasuryPrivateKeyEncrypted, "treasuryPrivateKeyEncrypted");
-
-    Web3TreasuryWalletEntity entity =
-        repository
-            .findByWalletAlias(walletAlias)
-            .orElseGet(() -> Web3TreasuryWalletEntity.builder().build());
-    entity.setWalletAlias(walletAlias);
-    entity.setTreasuryAddress(treasuryAddress);
-    entity.setTreasuryPrivateKeyEncrypted(treasuryPrivateKeyEncrypted);
-    repository.save(entity);
-  }
-
   // ----- helpers -----
 
   private static void requireNonBlank(String value, String fieldName) {
@@ -149,11 +84,23 @@ public class TreasuryWalletPersistenceAdapter
   }
 
   private static void applyDomain(Web3TreasuryWalletEntity entity, TreasuryWallet wallet) {
+    // The KMS-finalize cleanup migration enforces NOT NULL on status / key_origin (and the entity
+    // mirrors with nullable=false). Surfacing the violation at the adapter boundary turns an opaque
+    // SQL constraint error into a domain-level invariant failure that names the offending field.
+    requireNonBlank(wallet.getWalletAlias(), "walletAlias");
+    requireNonBlank(wallet.getKmsKeyId(), "kmsKeyId");
+    requireNonBlank(wallet.getWalletAddress(), "walletAddress");
+    if (wallet.getStatus() == null) {
+      throw new Web3InvalidInputException("status is required");
+    }
+    if (wallet.getKeyOrigin() == null) {
+      throw new Web3InvalidInputException("keyOrigin is required");
+    }
     entity.setWalletAlias(wallet.getWalletAlias());
     entity.setKmsKeyId(wallet.getKmsKeyId());
     entity.setTreasuryAddress(wallet.getWalletAddress());
-    entity.setStatus(wallet.getStatus() == null ? null : wallet.getStatus().name());
-    entity.setKeyOrigin(wallet.getKeyOrigin() == null ? null : wallet.getKeyOrigin().name());
+    entity.setStatus(wallet.getStatus().name());
+    entity.setKeyOrigin(wallet.getKeyOrigin().name());
     entity.setDisabledAt(wallet.getDisabledAt());
     if (wallet.getCreatedAt() != null) {
       entity.setCreatedAt(wallet.getCreatedAt());
@@ -175,76 +122,5 @@ public class TreasuryWalletPersistenceAdapter
       return null;
     }
     return TreasuryKeyOrigin.valueOf(value);
-  }
-
-  // TODO get rid of deprecated KEK fidleds in PR4
-  private ExecutionSignerCapabilityView mapCapability(
-      Web3TreasuryWalletEntity entity, String keyEncryptionKeyB64) {
-    String walletAlias = entity.getWalletAlias();
-    boolean hasAddress = hasText(entity.getTreasuryAddress());
-    boolean hasKmsKeyId = hasText(entity.getKmsKeyId());
-
-    if (!hasAddress && !hasKmsKeyId) {
-      return ExecutionSignerCapabilityView.unprovisioned(walletAlias);
-    }
-    if (hasAddress != hasKmsKeyId) {
-      return ExecutionSignerCapabilityView.unavailable(
-          walletAlias,
-          ExecutionSignerSlotStatus.UNPROVISIONED,
-          ExecutionSignerFailureReason.CORRUPTED_SLOT);
-    }
-    return mapKmsCapability(entity);
-  }
-
-  private ExecutionSignerCapabilityView mapKmsCapability(Web3TreasuryWalletEntity entity) {
-    String walletAlias = entity.getWalletAlias();
-    TreasuryWalletStatus status = parseStatus(entity.getStatus());
-    if (status == TreasuryWalletStatus.DISABLED) {
-      return ExecutionSignerCapabilityView.provisionedUnavailable(
-          walletAlias, ExecutionSignerFailureReason.WALLET_DISABLED);
-    }
-    if (status == TreasuryWalletStatus.ARCHIVED) {
-      return ExecutionSignerCapabilityView.provisionedUnavailable(
-          walletAlias, ExecutionSignerFailureReason.WALLET_ARCHIVED);
-    }
-    if (status != TreasuryWalletStatus.ACTIVE) {
-      return ExecutionSignerCapabilityView.unavailable(
-          walletAlias,
-          ExecutionSignerSlotStatus.UNPROVISIONED,
-          ExecutionSignerFailureReason.KMS_KEY_ID_MISSING);
-    }
-
-    KmsKeyState state;
-    try {
-      state = describeKmsKeyPort.describe(entity.getKmsKeyId());
-    } catch (RuntimeException e) {
-      log.warn(
-          "describeKmsKeyPort failed for alias={} kmsKeyId={}",
-          walletAlias,
-          entity.getKmsKeyId(),
-          e);
-      return ExecutionSignerCapabilityView.provisionedUnavailable(
-          walletAlias, ExecutionSignerFailureReason.KMS_DESCRIBE_FAILED);
-    }
-
-    return switch (state) {
-      case ENABLED -> ExecutionSignerCapabilityView.ready(walletAlias, entity.getTreasuryAddress());
-      case DISABLED ->
-          ExecutionSignerCapabilityView.provisionedUnavailable(
-              walletAlias, ExecutionSignerFailureReason.KMS_KEY_DISABLED);
-      case PENDING_DELETION ->
-          ExecutionSignerCapabilityView.provisionedUnavailable(
-              walletAlias, ExecutionSignerFailureReason.KMS_KEY_PENDING_DELETION);
-      case PENDING_IMPORT ->
-          ExecutionSignerCapabilityView.provisionedUnavailable(
-              walletAlias, ExecutionSignerFailureReason.KMS_KEY_PENDING_IMPORT);
-      case UNAVAILABLE ->
-          ExecutionSignerCapabilityView.provisionedUnavailable(
-              walletAlias, ExecutionSignerFailureReason.KMS_KEY_UNAVAILABLE);
-    };
-  }
-
-  private static boolean hasText(String value) {
-    return value != null && !value.isBlank();
   }
 }

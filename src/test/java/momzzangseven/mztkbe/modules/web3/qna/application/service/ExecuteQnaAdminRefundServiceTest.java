@@ -11,6 +11,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalRefundUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
@@ -23,7 +24,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAdminRefund
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,7 +55,8 @@ class ExecuteQnaAdminRefundServiceTest {
             Optional.empty(),
             List.of(),
             new ExecutionAuthority(
-                ExecutionSignerCapabilityView.ready("sponsor-treasury", "0x" + "2".repeat(40)),
+                QnaAdminServerSignerView.ready(
+                    TreasuryRole.SPONSOR.toAlias(), "0x" + "2".repeat(40)),
                 true,
                 QnaAdminRelayerRegistrationStatus.REGISTERED),
             new LoadExecutionInternalIssuerPolicyPort.ExecutionInternalIssuerPolicy(
