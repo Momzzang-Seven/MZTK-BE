@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPostSo
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostCommentCountsPort;
+import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostListPolicyPort;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostsPort;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardWriterNicknamesPort;
 import org.springframework.data.domain.Page;
@@ -31,6 +32,7 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
   private final LoadAdminBoardPostsPort loadAdminBoardPostsPort;
   private final LoadAdminBoardPostCommentCountsPort loadAdminBoardPostCommentCountsPort;
   private final LoadAdminBoardWriterNicknamesPort loadAdminBoardWriterNicknamesPort;
+  private final LoadAdminBoardPostListPolicyPort loadAdminBoardPostListPolicyPort;
 
   @Override
   @AdminOnly(
@@ -44,12 +46,25 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
       return executePostPaged(command);
     }
 
+    LoadAdminBoardPostsPort.AdminBoardPostQuery postQuery =
+        new LoadAdminBoardPostsPort.AdminBoardPostQuery(
+            command.search(),
+            command.status(),
+            command.type(),
+            command.publicationStatus(),
+            command.moderationStatus());
+    long matchingPostCount = loadAdminBoardPostsPort.count(postQuery);
+    if (matchingPostCount == 0) {
+      return emptyPage(command.page(), command.size());
+    }
+    validateCommentCountSortScanSize(matchingPostCount);
+
     List<LoadAdminBoardPostsPort.AdminBoardPostView> posts =
-        loadAdminBoardPostsPort.load(
-            new LoadAdminBoardPostsPort.AdminBoardPostQuery(command.search(), command.status()));
+        loadAdminBoardPostsPort.load(postQuery);
     if (posts.isEmpty()) {
       return emptyPage(command.page(), command.size());
     }
+    validateCommentCountSortScanSize(posts.size());
 
     List<Long> postIds =
         posts.stream().map(LoadAdminBoardPostsPort.AdminBoardPostView::postId).toList();
@@ -81,6 +96,9 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
             new LoadAdminBoardPostsPort.AdminBoardPostPageQuery(
                 command.search(),
                 command.status(),
+                command.type(),
+                command.publicationStatus(),
+                command.moderationStatus(),
                 command.page(),
                 command.size(),
                 command.sortKey()));
@@ -107,6 +125,23 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
         || sortKey == AdminBoardPostSortKey.TYPE;
   }
 
+  /**
+   * COMMENT_COUNT is supplied by the comment module through a port, so this path cannot use a
+   * post-owned DB-page query without crossing module persistence boundaries.
+   */
+  private void validateCommentCountSortScanSize(long matchingPostCount) {
+    int maxScanSize = loadAdminBoardPostListPolicyPort.maxCommentCountSortScanSize();
+    if (maxScanSize < 1) {
+      throw new IllegalStateException("commentCount sort max scan size must be positive");
+    }
+    if (matchingPostCount > maxScanSize) {
+      throw new IllegalArgumentException(
+          "commentCount sort can scan at most "
+              + maxScanSize
+              + " matching posts; narrow filters or search conditions");
+    }
+  }
+
   private static Collection<Long> writerIds(
       List<LoadAdminBoardPostsPort.AdminBoardPostView> posts) {
     return posts.stream().map(LoadAdminBoardPostsPort.AdminBoardPostView::writerId).toList();
@@ -120,6 +155,8 @@ public class GetAdminBoardPostsService implements GetAdminBoardPostsUseCase {
         post.postId(),
         post.type(),
         post.status(),
+        post.publicationStatus(),
+        post.moderationStatus(),
         post.title(),
         preview(post.content()),
         post.writerId(),

@@ -25,6 +25,11 @@ public class GetManagedBoardPostsService implements GetManagedBoardPostsUseCase 
   }
 
   @Override
+  public long count(GetManagedBoardPostsQuery query) {
+    return loadManagedBoardPostsPort.count(query);
+  }
+
+  @Override
   public Page<ManagedBoardPostView> executePage(GetManagedBoardPostsPageQuery query) {
     return loadManagedBoardPostsPort.loadPage(query);
   }

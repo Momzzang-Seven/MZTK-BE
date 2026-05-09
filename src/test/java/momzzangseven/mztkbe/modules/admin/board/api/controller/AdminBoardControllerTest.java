@@ -8,8 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.global.error.BusinessException;
-import momzzangseven.mztkbe.global.error.ErrorCode;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardCommentResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardModerationResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPostResult;
@@ -17,12 +15,16 @@ import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCom
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardCommentUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardPostUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostsUseCase;
+import momzzangseven.mztkbe.modules.admin.board.application.port.in.UnblockAdminBoardPostUseCase;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 import org.junit.jupiter.api.DisplayName;
@@ -68,6 +70,7 @@ class AdminBoardControllerTest {
   @MockitoBean private GetAdminBoardPostsUseCase getAdminBoardPostsUseCase;
   @MockitoBean private GetAdminBoardPostCommentsUseCase getAdminBoardPostCommentsUseCase;
   @MockitoBean private BanAdminBoardPostUseCase banAdminBoardPostUseCase;
+  @MockitoBean private UnblockAdminBoardPostUseCase unblockAdminBoardPostUseCase;
   @MockitoBean private BanAdminBoardCommentUseCase banAdminBoardCommentUseCase;
 
   @Test
@@ -83,6 +86,8 @@ class AdminBoardControllerTest {
                         21L,
                         AdminBoardPostType.FREE,
                         AdminBoardPostStatus.OPEN,
+                        AdminBoardPostPublicationStatus.VISIBLE,
+                        AdminBoardPostModerationStatus.NORMAL,
                         "title",
                         "content",
                         7L,
@@ -96,8 +101,48 @@ class AdminBoardControllerTest {
         .andExpect(jsonPath("$.status").value("SUCCESS"))
         .andExpect(jsonPath("$.data.content[0].postId").value(21))
         .andExpect(jsonPath("$.data.content[0].type").value("FREE"))
+        .andExpect(jsonPath("$.data.content[0].publicationStatus").value("VISIBLE"))
+        .andExpect(jsonPath("$.data.content[0].moderationStatus").value("NORMAL"))
         .andExpect(jsonPath("$.data.content[0].writerNickname").value("writer"))
         .andExpect(jsonPath("$.data.content[0].commentCount").value(3));
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/posts 상태와 타입 필터를 command 로 전달한다")
+  void getPosts_filters_areMappedToCommand() throws Exception {
+    given(
+            getAdminBoardPostsUseCase.execute(
+                org.mockito.ArgumentMatchers.any(GetAdminBoardPostsCommand.class)))
+        .willReturn(new PageImpl<>(List.of()));
+
+    mockMvc
+        .perform(
+            get("/admin/boards/posts")
+                .param("search", "target")
+                .param("status", "OPEN")
+                .param("type", "QUESTION")
+                .param("publicationStatus", "FAILED")
+                .param("moderationStatus", "BLOCKED")
+                .param("page", "2")
+                .param("size", "30")
+                .param("sort", "type")
+                .with(adminPrincipal(9L)))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<GetAdminBoardPostsCommand> captor =
+        ArgumentCaptor.forClass(GetAdminBoardPostsCommand.class);
+    org.mockito.Mockito.verify(getAdminBoardPostsUseCase).execute(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().search()).isEqualTo("target");
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().status())
+        .isEqualTo(AdminBoardPostStatus.OPEN);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().type())
+        .isEqualTo(AdminBoardPostType.QUESTION);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().publicationStatus())
+        .isEqualTo(AdminBoardPostPublicationStatus.FAILED);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().moderationStatus())
+        .isEqualTo(AdminBoardPostModerationStatus.BLOCKED);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().page()).isEqualTo(2);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().size()).isEqualTo(30);
   }
 
   @Test
@@ -105,6 +150,15 @@ class AdminBoardControllerTest {
   void getPosts_invalidSort_returns400() throws Exception {
     mockMvc
         .perform(get("/admin/boards/posts").param("sort", "title").with(adminPrincipal(9L)))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/posts enum filter 값이 잘못되면 400")
+  void getPosts_invalidEnumFilter_returns400() throws Exception {
+    mockMvc
+        .perform(
+            get("/admin/boards/posts").param("publicationStatus", "BAD").with(adminPrincipal(9L)))
         .andExpect(status().isBadRequest());
   }
 
@@ -151,7 +205,7 @@ class AdminBoardControllerTest {
   }
 
   @Test
-  @DisplayName("POST /admin/boards/comments/{commentId}/ban ADMIN 이면 제재 결과를 반환한다")
+  @DisplayName("POST /admin/boards/comments/{commentId}/ban 응답은 post 상태 필드를 제외한다")
   void banComment_admin_returns200() throws Exception {
     given(
             banAdminBoardCommentUseCase.execute(
@@ -174,7 +228,10 @@ class AdminBoardControllerTest {
         .andExpect(jsonPath("$.data.targetId").value(31))
         .andExpect(jsonPath("$.data.targetType").value("COMMENT"))
         .andExpect(jsonPath("$.data.reasonCode").value("SPAM"))
-        .andExpect(jsonPath("$.data.moderated").value(true));
+        .andExpect(jsonPath("$.data.moderated").value(true))
+        .andExpect(jsonPath("$.data.publicationStatus").doesNotExist())
+        .andExpect(jsonPath("$.data.moderationStatus").doesNotExist())
+        .andExpect(jsonPath("$.data.publiclyVisible").doesNotExist());
   }
 
   @Test
@@ -214,12 +271,19 @@ class AdminBoardControllerTest {
   }
 
   @Test
-  @DisplayName("POST /admin/boards/posts/{postId}/ban 정책 미확정이면 409")
-  void banPost_policyUnconfirmed_returns409() throws Exception {
+  @DisplayName("POST /admin/boards/posts/{postId}/ban 응답은 post 상태 필드를 포함한다")
+  void banPost_admin_returns200WithStatuses() throws Exception {
     given(
             banAdminBoardPostUseCase.execute(
                 org.mockito.ArgumentMatchers.any(BanAdminBoardPostCommand.class)))
-        .willThrow(new BusinessException(ErrorCode.ADMIN_BOARD_POST_BAN_POLICY_UNCONFIRMED));
+        .willReturn(
+            new AdminBoardModerationResult(
+                21L,
+                AdminBoardModerationTargetType.POST,
+                AdminBoardModerationReasonCode.POLICY_VIOLATION,
+                true,
+                AdminBoardPostPublicationStatus.VISIBLE,
+                AdminBoardPostModerationStatus.BLOCKED));
 
     mockMvc
         .perform(
@@ -227,7 +291,80 @@ class AdminBoardControllerTest {
                 .with(adminPrincipal(9L))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
-        .andExpect(status().isConflict());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.targetId").value(21))
+        .andExpect(jsonPath("$.data.targetType").value("POST"))
+        .andExpect(jsonPath("$.data.reasonCode").value("POLICY_VIOLATION"))
+        .andExpect(jsonPath("$.data.moderated").value(true))
+        .andExpect(jsonPath("$.data.publicationStatus").value("VISIBLE"))
+        .andExpect(jsonPath("$.data.moderationStatus").value("BLOCKED"))
+        .andExpect(jsonPath("$.data.publiclyVisible").value(false));
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/posts/{postId}/unblock 응답은 post 상태 필드와 공개 여부 true 를 포함한다")
+  void unblockPost_visibleNormal_returns200WithPubliclyVisibleTrue() throws Exception {
+    given(
+            unblockAdminBoardPostUseCase.execute(
+                org.mockito.ArgumentMatchers.any(UnblockAdminBoardPostCommand.class)))
+        .willReturn(
+            new AdminBoardModerationResult(
+                21L,
+                AdminBoardModerationTargetType.POST,
+                AdminBoardModerationReasonCode.POLICY_VIOLATION,
+                true,
+                AdminBoardPostPublicationStatus.VISIBLE,
+                AdminBoardPostModerationStatus.NORMAL));
+
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/unblock", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.targetId").value(21))
+        .andExpect(jsonPath("$.data.targetType").value("POST"))
+        .andExpect(jsonPath("$.data.reasonCode").value("POLICY_VIOLATION"))
+        .andExpect(jsonPath("$.data.moderated").value(true))
+        .andExpect(jsonPath("$.data.publicationStatus").value("VISIBLE"))
+        .andExpect(jsonPath("$.data.moderationStatus").value("NORMAL"))
+        .andExpect(jsonPath("$.data.publiclyVisible").value(true));
+  }
+
+  @Test
+  @DisplayName(
+      "POST /admin/boards/posts/{postId}/unblock FAILED 응답은 post 상태 필드와 공개 여부 false 를 포함한다")
+  void unblockPost_failedNormal_returns200WithPubliclyVisibleFalse() throws Exception {
+    given(
+            unblockAdminBoardPostUseCase.execute(
+                org.mockito.ArgumentMatchers.any(UnblockAdminBoardPostCommand.class)))
+        .willReturn(
+            new AdminBoardModerationResult(
+                21L,
+                AdminBoardModerationTargetType.POST,
+                AdminBoardModerationReasonCode.POLICY_VIOLATION,
+                true,
+                AdminBoardPostPublicationStatus.FAILED,
+                AdminBoardPostModerationStatus.NORMAL));
+
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/unblock", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.targetId").value(21))
+        .andExpect(jsonPath("$.data.targetType").value("POST"))
+        .andExpect(jsonPath("$.data.reasonCode").value("POLICY_VIOLATION"))
+        .andExpect(jsonPath("$.data.moderated").value(true))
+        .andExpect(jsonPath("$.data.publicationStatus").value("FAILED"))
+        .andExpect(jsonPath("$.data.moderationStatus").value("NORMAL"))
+        .andExpect(jsonPath("$.data.publiclyVisible").value(false));
   }
 
   @Test
@@ -240,6 +377,42 @@ class AdminBoardControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"reasonCode\":null,\"reasonDetail\":\"policy\"}"))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/posts/{postId}/unblock reasonCode 가 null 이면 400")
+  void unblockPost_nullReasonCode_returns400() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/unblock", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":null,\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/posts/{postId}/ban USER 권한이면 403")
+  void banPost_userForbidden_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/ban", 21L)
+                .with(userPrincipal(1L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  @DisplayName("POST /admin/boards/posts/{postId}/unblock USER 권한이면 403")
+  void unblockPost_userForbidden_returns403() throws Exception {
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/unblock", 21L)
+                .with(userPrincipal(1L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isForbidden());
   }
 
   private RequestPostProcessor adminPrincipal(Long userId) {

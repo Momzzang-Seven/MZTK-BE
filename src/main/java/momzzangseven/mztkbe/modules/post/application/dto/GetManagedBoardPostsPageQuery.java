@@ -1,10 +1,20 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 /** Paged query for admin board post list reads. */
 public record GetManagedBoardPostsPageQuery(
-    String search, PostStatus status, int page, int size, String sortKey) {
+    String search,
+    PostStatus status,
+    PostType type,
+    PostPublicationStatus publicationStatus,
+    PostModerationStatus moderationStatus,
+    int page,
+    int size,
+    String sortKey) {
 
   /** Validates page, size, and sort key constraints. */
   public GetManagedBoardPostsPageQuery {

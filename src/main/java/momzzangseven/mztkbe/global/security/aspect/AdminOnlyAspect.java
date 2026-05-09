@@ -2,8 +2,11 @@ package momzzangseven.mztkbe.global.security.aspect;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.audit.application.AdminAuditDetailNormalizer;
@@ -50,6 +53,16 @@ public class AdminOnlyAspect {
   private static final ExpressionParser SPEL = new SpelExpressionParser();
   private static final DefaultParameterNameDiscoverer PARAM_DISCOVERER =
       new DefaultParameterNameDiscoverer();
+  private static final String METHOD_DETAIL_KEY = "method";
+  private static final String FAILURE_REASON_DETAIL_KEY = "failureReason";
+  private static final String ARGUMENTS_DETAIL_KEY = "arguments";
+  private static final String DETAIL_EVALUATION_ERROR_KEY = "detailEvaluationError";
+  private static final Set<String> RESERVED_DETAIL_KEYS =
+      Set.of(
+          METHOD_DETAIL_KEY,
+          FAILURE_REASON_DETAIL_KEY,
+          ARGUMENTS_DETAIL_KEY,
+          DETAIL_EVALUATION_ERROR_KEY);
 
   private final RecordAdminAuditPort recordAdminAuditPort;
   private final RoleHierarchy roleHierarchy;
@@ -124,9 +137,19 @@ public class AdminOnlyAspect {
       // columns on admin_action_audits — keep them out of detail_json so the row has a single
       // source of truth for those fields.
       Map<String, Object> rawDetail = new LinkedHashMap<>();
-      rawDetail.put("method", method.getDeclaringClass().getSimpleName() + "." + method.getName());
-      rawDetail.put("failureReason", failureReason);
-      rawDetail.put("arguments", sanitizeArguments(method, args));
+      rawDetail.put(
+          METHOD_DETAIL_KEY, method.getDeclaringClass().getSimpleName() + "." + method.getName());
+      rawDetail.put(FAILURE_REASON_DETAIL_KEY, failureReason);
+      rawDetail.put(ARGUMENTS_DETAIL_KEY, sanitizeArguments(method, args));
+      AdditionalDetailEvaluation additionalDetail =
+          evaluateAdditionalDetail(adminOnly.actionType(), adminOnly.detail(), context);
+      List<String> ignoredReservedKeys =
+          mergeAdditionalDetail(rawDetail, additionalDetail.detail());
+      Map<String, Object> detailEvaluationError =
+          combineDetailEvaluationError(additionalDetail.errorSummary(), ignoredReservedKeys);
+      if (detailEvaluationError != null) {
+        rawDetail.put(DETAIL_EVALUATION_ERROR_KEY, detailEvaluationError);
+      }
 
       recordAdminAuditPort.record(
           new RecordAdminAuditPort.AuditCommand(
@@ -143,6 +166,104 @@ public class AdminOnlyAspect {
           operatorId,
           auditException);
     }
+  }
+
+  private List<String> mergeAdditionalDetail(
+      Map<String, Object> rawDetail, Map<String, Object> additionalDetail) {
+    List<String> ignoredReservedKeys = new ArrayList<>();
+    for (Map.Entry<String, Object> entry : additionalDetail.entrySet()) {
+      String key = entry.getKey();
+      if (RESERVED_DETAIL_KEYS.contains(key)) {
+        ignoredReservedKeys.add(key);
+        continue;
+      }
+      rawDetail.put(key, entry.getValue());
+    }
+    return ignoredReservedKeys;
+  }
+
+  private Map<String, Object> combineDetailEvaluationError(
+      Map<String, Object> errorSummary, List<String> ignoredReservedKeys) {
+    if ((errorSummary == null || errorSummary.isEmpty()) && ignoredReservedKeys.isEmpty()) {
+      return null;
+    }
+    Map<String, Object> combined = new LinkedHashMap<>();
+    if (errorSummary != null) {
+      combined.putAll(errorSummary);
+    }
+    if (!ignoredReservedKeys.isEmpty()) {
+      combined.put("ignoredReservedKeyCount", ignoredReservedKeys.size());
+      combined.put("ignoredReservedKeys", List.copyOf(ignoredReservedKeys));
+    }
+    return combined;
+  }
+
+  private AdditionalDetailEvaluation evaluateAdditionalDetail(
+      String actionType, String[] detailExpressions, StandardEvaluationContext context) {
+    Map<String, Object> detail = new LinkedHashMap<>();
+    Map<String, Object> firstError = null;
+    int failureCount = 0;
+    for (String detailExpression : detailExpressions) {
+      if (detailExpression == null || detailExpression.isBlank()) {
+        continue;
+      }
+      try {
+        evaluateSingleAdditionalDetail(detailExpression, context, detail);
+      } catch (Exception ex) {
+        failureCount++;
+        if (firstError == null) {
+          firstError = detailEvaluationError(detailExpression, ex);
+        }
+        log.warn(
+            "@AdminOnly detail expression evaluation failed: action={}, expression={}, errorType={}",
+            actionType,
+            summarizeExpression(detailExpression),
+            ex.getClass().getSimpleName());
+      }
+    }
+    return new AdditionalDetailEvaluation(
+        detail, detailEvaluationSummary(firstError, failureCount));
+  }
+
+  private void evaluateSingleAdditionalDetail(
+      String detailExpression, StandardEvaluationContext context, Map<String, Object> detail) {
+    int separator = detailExpression.indexOf('=');
+    if (separator <= 0) {
+      throw new IllegalArgumentException(
+          "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
+    }
+    String key = detailExpression.substring(0, separator).trim();
+    String expression = detailExpression.substring(separator + 1).trim();
+    if (key.isEmpty() || expression.isEmpty()) {
+      throw new IllegalArgumentException(
+          "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
+    }
+    detail.put(key, SPEL.parseExpression(expression).getValue(context));
+  }
+
+  private Map<String, Object> detailEvaluationSummary(
+      Map<String, Object> firstError, int failureCount) {
+    if (failureCount == 0) {
+      return null;
+    }
+    Map<String, Object> summary = new LinkedHashMap<>();
+    summary.put("failedExpressionCount", failureCount);
+    summary.putAll(firstError);
+    return summary;
+  }
+
+  private Map<String, Object> detailEvaluationError(String detailExpression, Exception ex) {
+    Map<String, Object> error = new LinkedHashMap<>();
+    error.put("firstFailedExpression", summarizeExpression(detailExpression));
+    error.put("firstErrorType", ex.getClass().getSimpleName());
+    return error;
+  }
+
+  private String summarizeExpression(String expression) {
+    if (expression == null || expression.length() <= 200) {
+      return expression;
+    }
+    return expression.substring(0, 200);
   }
 
   private void validateAdmin(Long operatorId) {
@@ -237,4 +358,7 @@ public class AdminOnlyAspect {
     }
     return String.valueOf(value);
   }
+
+  private record AdditionalDetailEvaluation(
+      Map<String, Object> detail, Map<String, Object> errorSummary) {}
 }

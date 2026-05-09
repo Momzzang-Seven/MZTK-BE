@@ -349,6 +349,9 @@ lambda:
 
 mztk:
   admin:
+    board:
+      posts:
+        comment-count-sort-max-scan-size: 5000
     bootstrap:
       enabled: true
     seed:

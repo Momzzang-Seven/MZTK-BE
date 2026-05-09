@@ -18,5 +18,7 @@ public @interface AdminOnly {
 
   String targetId() default "";
 
+  String[] detail() default {};
+
   boolean audit() default true;
 }
