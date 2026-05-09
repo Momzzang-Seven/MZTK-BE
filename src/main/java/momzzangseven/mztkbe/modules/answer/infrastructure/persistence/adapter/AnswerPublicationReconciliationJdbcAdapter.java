@@ -28,7 +28,7 @@ public class AnswerPublicationReconciliationJdbcAdapter
         """
         SELECT id, current_create_execution_intent_id
         FROM answers
-        WHERE publication_status <> 'VISIBLE'
+        WHERE publication_status = 'PENDING'
           AND current_create_execution_intent_id IS NOT NULL
         ORDER BY id
         LIMIT ?
@@ -53,7 +53,7 @@ public class AnswerPublicationReconciliationJdbcAdapter
             updated_at = NOW()
         WHERE id = ?
           AND current_create_execution_intent_id = ?
-          AND publication_status <> 'VISIBLE'
+          AND publication_status = 'PENDING'
         """,
         answerId,
         executionIntentId);
@@ -74,7 +74,7 @@ public class AnswerPublicationReconciliationJdbcAdapter
             updated_at = NOW()
         WHERE id = ?
           AND current_create_execution_intent_id = ?
-          AND publication_status <> 'VISIBLE'
+          AND publication_status = 'PENDING'
         """,
         terminalStatus,
         failureReason,
@@ -92,6 +92,8 @@ public class AnswerPublicationReconciliationJdbcAdapter
           ON a.id = s.answer_id
         WHERE s.status = 'INTENT_BOUND'
           AND s.execution_intent_public_id IS NOT NULL
+          AND a.publication_status = 'VISIBLE'
+          AND a.pending_delete_status IS NULL
         ORDER BY s.answer_id, s.update_version
         LIMIT ?
         """,
@@ -114,6 +116,8 @@ public class AnswerPublicationReconciliationJdbcAdapter
         SET content = ?,
             updated_at = NOW()
         WHERE a.id = ?
+          AND a.publication_status = 'VISIBLE'
+          AND a.pending_delete_status IS NULL
           AND EXISTS (
               SELECT 1
               FROM qna_answer_update_states s

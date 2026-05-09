@@ -33,8 +33,87 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
   }
 
   @Test
+  @DisplayName("pending submit candidates include only pending answers with current create intent")
+  void findPendingSubmitCandidatesRequiresPendingPublicationStatus() {
+    insertAnswerWithPublication(101L, "PENDING", null, "intent-submit-pending", "pending");
+    insertAnswerWithPublication(102L, "FAILED", null, "intent-submit-failed", "failed");
+    insertAnswerWithPublication(
+        103L, "RECONCILIATION_REQUIRED", null, "intent-submit-required", "required");
+    insertAnswerWithPublication(104L, "VISIBLE", null, "intent-submit-visible", "visible");
+    insertAnswerWithPublication(105L, "PENDING", null, null, "without-intent");
+
+    assertThat(adapter.findPendingSubmitCandidates(10))
+        .extracting("answerId")
+        .containsExactly(101L);
+  }
+
+  @Test
+  @DisplayName("submit confirmation transitions only current pending answers")
+  void confirmSubmitIfCurrentRequiresPendingPublicationStatus() {
+    insertAnswerWithPublication(111L, "PENDING", null, "intent-submit", "pending");
+    insertAnswerWithPublication(112L, "FAILED", null, "intent-submit", "failed");
+
+    assertThat(adapter.confirmSubmitIfCurrent(111L, "intent-submit")).isEqualTo(1);
+    assertThat(adapter.confirmSubmitIfCurrent(112L, "intent-submit")).isZero();
+    assertThat(loadPublicationStatus(111L)).isEqualTo("VISIBLE");
+    assertThat(loadPublicationStatus(112L)).isEqualTo("FAILED");
+  }
+
+  @Test
+  @DisplayName("submit failure transitions only current pending answers")
+  void failSubmitIfCurrentRequiresPendingPublicationStatus() {
+    insertAnswerWithPublication(121L, "PENDING", null, "intent-submit", "pending");
+    insertAnswerWithPublication(122L, "RECONCILIATION_REQUIRED", null, "intent-submit", "required");
+
+    assertThat(adapter.failSubmitIfCurrent(121L, "intent-submit", "EXPIRED", "timeout"))
+        .isEqualTo(1);
+    assertThat(adapter.failSubmitIfCurrent(122L, "intent-submit", "EXPIRED", "timeout")).isZero();
+    assertThat(loadPublicationStatus(121L)).isEqualTo("FAILED");
+    assertThat(loadPublicationStatus(122L)).isEqualTo("RECONCILIATION_REQUIRED");
+  }
+
+  @Test
+  @DisplayName("intent bound update candidates require visible answers that are not pending delete")
+  void findIntentBoundUpdateCandidatesRequiresPubliclyMutableAnswer() {
+    insertAnswerWithPublication(131L, "VISIBLE", null, null, "visible");
+    insertAnswerWithPublication(132L, "FAILED", null, null, "failed");
+    insertAnswerWithPublication(133L, "VISIBLE", "PENDING", null, "deleting");
+    insertAnswerUpdateState(11L, 131L, 1L, "intent-update-visible", "INTENT_BOUND");
+    insertAnswerUpdateState(12L, 132L, 1L, "intent-update-failed", "INTENT_BOUND");
+    insertAnswerUpdateState(13L, 133L, 1L, "intent-update-deleting", "INTENT_BOUND");
+
+    assertThat(adapter.findIntentBoundUpdateCandidates(10))
+        .extracting("answerId")
+        .containsExactly(131L);
+  }
+
+  @Test
+  @DisplayName(
+      "confirmed update content applies only to visible answers that are not pending delete")
+  void applyConfirmedUpdateContentIfCurrentRequiresPubliclyMutableAnswer() {
+    insertAnswerWithPublication(141L, "VISIBLE", null, null, "old-visible");
+    insertAnswerWithPublication(142L, "FAILED", null, null, "old-failed");
+    insertAnswerWithPublication(143L, "VISIBLE", "PENDING", null, "old-deleting");
+    insertAnswerUpdateState(21L, 141L, 1L, "intent-update", "INTENT_BOUND");
+    insertAnswerUpdateState(22L, 142L, 1L, "intent-update", "INTENT_BOUND");
+    insertAnswerUpdateState(23L, 143L, 1L, "intent-update", "INTENT_BOUND");
+
+    assertThat(adapter.applyConfirmedUpdateContentIfCurrent(21L, 141L, "intent-update", "new"))
+        .isEqualTo(1);
+    assertThat(adapter.applyConfirmedUpdateContentIfCurrent(22L, 142L, "intent-update", "new"))
+        .isZero();
+    assertThat(adapter.applyConfirmedUpdateContentIfCurrent(23L, 143L, "intent-update", "new"))
+        .isZero();
+    assertThat(loadAnswerContent(141L)).isEqualTo("new");
+    assertThat(loadAnswerContent(142L)).isEqualTo("old-failed");
+    assertThat(loadAnswerContent(143L)).isEqualTo("old-deleting");
+  }
+
+  @Test
   @DisplayName("terminal answer update marks the current bound update state as failed")
   void failUpdateIfCurrentMarksIntentBoundStateFailed() {
+    insertAnswerWithPublication(201L, "VISIBLE", null, null, "answer-201");
+    insertAnswerWithPublication(202L, "VISIBLE", null, null, "answer-202");
     insertAnswerUpdateState(1L, 201L, 1L, "intent-update-terminal", "INTENT_BOUND");
     insertAnswerUpdateState(2L, 202L, 1L, "intent-update-active", "INTENT_BOUND");
 
@@ -96,6 +175,7 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
             answer_id BIGINT NOT NULL,
             update_version BIGINT NOT NULL,
             execution_intent_public_id VARCHAR(100),
+            pending_content VARCHAR(1000),
             status VARCHAR(40) NOT NULL,
             error_code VARCHAR(120),
             error_reason VARCHAR(500),
@@ -106,6 +186,14 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
         """
         CREATE TABLE answers (
             id BIGINT PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            content VARCHAR(1000),
+            publication_status VARCHAR(40) NOT NULL,
+            current_create_execution_intent_id VARCHAR(100),
+            create_preparation_token VARCHAR(100),
+            create_preparation_expires_at TIMESTAMP,
+            publication_failure_terminal_status VARCHAR(40),
+            publication_failure_reason VARCHAR(500),
             pending_delete_status VARCHAR(40),
             current_delete_execution_intent_id VARCHAR(100),
             delete_preparation_token VARCHAR(100),
@@ -126,9 +214,10 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
             answer_id,
             update_version,
             execution_intent_public_id,
+            pending_content,
             status,
             updated_at
-        ) VALUES (?, ?, ?, ?, ?, NOW())
+        ) VALUES (?, ?, ?, ?, 'pending-content', ?, NOW())
         """,
         id,
         answerId,
@@ -142,16 +231,46 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
         """
         INSERT INTO answers (
             id,
+            user_id,
+            content,
+            publication_status,
             pending_delete_status,
             current_delete_execution_intent_id,
             delete_preparation_token,
             delete_preparation_expires_at,
             updated_at
-        ) VALUES (?, ?, ?, 'delete-token', NOW(), NOW())
+        ) VALUES (?, 1, 'answer', 'VISIBLE', ?, ?, 'delete-token', NOW(), NOW())
         """,
         id,
         pendingDeleteStatus,
         executionIntentId);
+  }
+
+  private void insertAnswerWithPublication(
+      Long id,
+      String publicationStatus,
+      String pendingDeleteStatus,
+      String currentCreateExecutionIntentId,
+      String content) {
+    jdbcTemplate.update(
+        """
+        INSERT INTO answers (
+            id,
+            user_id,
+            content,
+            publication_status,
+            current_create_execution_intent_id,
+            create_preparation_token,
+            create_preparation_expires_at,
+            pending_delete_status,
+            updated_at
+        ) VALUES (?, 1, ?, ?, ?, 'create-token', NOW(), ?, NOW())
+        """,
+        id,
+        content,
+        publicationStatus,
+        currentCreateExecutionIntentId,
+        pendingDeleteStatus);
   }
 
   private String loadAnswerUpdateStatus(Long stateId) {
@@ -184,6 +303,16 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
   private String loadAnswerDeleteFailureReason(Long answerId) {
     return jdbcTemplate.queryForObject(
         "SELECT delete_failure_reason FROM answers WHERE id = ?", String.class, answerId);
+  }
+
+  private String loadPublicationStatus(Long answerId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT publication_status FROM answers WHERE id = ?", String.class, answerId);
+  }
+
+  private String loadAnswerContent(Long answerId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT content FROM answers WHERE id = ?", String.class, answerId);
   }
 
   private boolean answerExists(Long answerId) {

@@ -101,7 +101,7 @@ class AnswerServiceTest {
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerCreate(
                   10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
@@ -126,7 +126,7 @@ class AnswerServiceTest {
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerCreate(
                   10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
@@ -149,7 +149,7 @@ class AnswerServiceTest {
 
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerCreate(
                   10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))
@@ -311,7 +311,7 @@ class AnswerServiceTest {
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
       given(
               answerLifecycleExecutionPort.prepareAnswerUpdate(
                   10L, 100L, 20L, 30L, "question content", 50L, "updated", 1))
@@ -346,7 +346,7 @@ class AnswerServiceTest {
           .willReturn(true);
       given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
           .willReturn(updateState);
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
       given(
               answerLifecycleExecutionPort.prepareAnswerUpdate(
                   10L, 100L, 20L, 30L, "question content", 50L, "updated", 1, 3L, "update-token"))
@@ -387,7 +387,7 @@ class AnswerServiceTest {
           .willReturn(true);
       given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
           .willReturn(updateState);
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
       given(
               answerLifecycleExecutionPort.prepareAnswerUpdate(
                   10L, 100L, 20L, 30L, "question content", 50L, "updated", 1, 3L, "update-token"))
@@ -424,7 +424,7 @@ class AnswerServiceTest {
           .willReturn(true);
       given(answerUpdateStatePort.createPreparing(any(), any(), any(), any()))
           .willReturn(updateState);
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
       given(
               answerLifecycleExecutionPort.prepareAnswerUpdate(
                   10L, 100L, 20L, 30L, "question content", 50L, "updated", 1, 3L, "update-token"))
@@ -472,7 +472,7 @@ class AnswerServiceTest {
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
       given(
               answerLifecycleExecutionPort.recoverAnswerUpdate(
                   10L, 100L, 20L, 30L, "question content", 50L, "before", 1))
@@ -517,7 +517,7 @@ class AnswerServiceTest {
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(1L);
       given(
               answerLifecycleExecutionPort.prepareAnswerUpdate(
                   10L, 100L, 20L, 30L, "question content", 50L, "updated", 1))
@@ -540,7 +540,7 @@ class AnswerServiceTest {
 
       given(loadAnswerPort.loadAnswerForUpdate(100L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
-      given(countAnswersPort.countAnswers(10L)).willReturn(0L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerDelete(
                   10L, 100L, 20L, 30L, "question content", 50L, 0))
@@ -568,7 +568,7 @@ class AnswerServiceTest {
 
       given(loadAnswerPort.loadAnswerForUpdate(101L)).willReturn(Optional.of(answer));
       given(loadPostPort.loadPost(10L)).willReturn(Optional.of(postContext));
-      given(countAnswersPort.countAnswers(10L)).willReturn(0L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerDelete(
                   10L, 101L, 20L, 30L, "question content", 50L, 0))
@@ -594,7 +594,7 @@ class AnswerServiceTest {
           .willReturn(true);
       given(saveAnswerPort.saveAnswer(any(Answer.class)))
           .willAnswer(invocation -> invocation.getArgument(0));
-      given(countAnswersPort.countAnswers(10L)).willReturn(0L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerDelete(
                   10L, 100L, 20L, 30L, "question content", 50L, 0))
@@ -755,7 +755,7 @@ class AnswerServiceTest {
       given(answerLifecycleExecutionPort.managesAnswerLifecycle(AnswerLifecycleAction.CREATE))
           .willReturn(true);
       given(saveAnswerPort.saveAnswer(any(Answer.class))).willReturn(savedAnswer);
-      given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+      given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
       given(
               answerLifecycleExecutionPort.prepareAnswerCreate(
                   10L, 99L, 20L, 30L, "question content", 50L, "answer content", 1))

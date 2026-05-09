@@ -87,32 +87,21 @@ public class AnswerPublicationReconciliationAdapter implements AnswerPublication
   public int reconcileConfirmedUpdates(int batchSize) {
     int updated = 0;
     for (UpdateCandidate candidate : statePort.findIntentBoundUpdateCandidates(batchSize)) {
+      Optional<QnaAnswerPublicationEvidence> evidence =
+          executeOptional(
+              "answer update evidence lookup",
+              candidate.answerId(),
+              () -> Optional.ofNullable(evidence(candidate)));
+      if (evidence.isEmpty()
+          || !matches(evidence.get(), QnaExecutionActionType.QNA_ANSWER_UPDATE)
+          || !evidence.get().isConfirmed()) {
+        continue;
+      }
       try {
-        updated +=
-            executeInRequiresNew(
-                () -> {
-                  QnaAnswerPublicationEvidence evidence = evidence(candidate);
-                  if (!matches(evidence, QnaExecutionActionType.QNA_ANSWER_UPDATE)
-                      || !evidence.isConfirmed()) {
-                    return 0;
-                  }
-                  int contentUpdated =
-                      statePort.applyConfirmedUpdateContentIfCurrent(
-                          candidate.stateId(),
-                          candidate.answerId(),
-                          candidate.executionIntentId(),
-                          candidate.pendingContent());
-                  if (contentUpdated == 0) {
-                    return 0;
-                  }
-                  answerUpdateImagePort.applyPendingImages(
-                      candidate.stateId(), candidate.answerUserId(), candidate.answerId());
-                  return statePort.markUpdateConfirmedIfCurrent(
-                      candidate.stateId(), candidate.executionIntentId());
-                });
+        updated += executeInRequiresNew(() -> applyConfirmedUpdate(candidate));
       } catch (RuntimeException ex) {
         log.warn(
-            "answer update image reconciliation failed: stateId={}, answerId={}, intentId={}",
+            "answer update local reconciliation failed: stateId={}, answerId={}, intentId={}",
             candidate.stateId(),
             candidate.answerId(),
             candidate.executionIntentId(),
@@ -128,6 +117,22 @@ public class AnswerPublicationReconciliationAdapter implements AnswerPublication
       }
     }
     return updated;
+  }
+
+  private int applyConfirmedUpdate(UpdateCandidate candidate) {
+    int contentUpdated =
+        statePort.applyConfirmedUpdateContentIfCurrent(
+            candidate.stateId(),
+            candidate.answerId(),
+            candidate.executionIntentId(),
+            candidate.pendingContent());
+    if (contentUpdated == 0) {
+      return 0;
+    }
+    answerUpdateImagePort.applyPendingImages(
+        candidate.stateId(), candidate.answerUserId(), candidate.answerId());
+    return statePort.markUpdateConfirmedIfCurrent(
+        candidate.stateId(), candidate.executionIntentId());
   }
 
   @Override
@@ -262,6 +267,11 @@ public class AnswerPublicationReconciliationAdapter implements AnswerPublication
 
   private Optional<DeleteCandidate> executeOptionalCandidate(
       String operation, Long answerId, Supplier<Optional<DeleteCandidate>> action) {
+    return executeOptional(operation, answerId, action);
+  }
+
+  private <T> Optional<T> executeOptional(
+      String operation, Long answerId, Supplier<Optional<T>> action) {
     try {
       return executeInRequiresNew(action);
     } catch (RuntimeException ex) {

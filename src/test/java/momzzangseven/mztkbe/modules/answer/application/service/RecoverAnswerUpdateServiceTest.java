@@ -47,7 +47,7 @@ class RecoverAnswerUpdateServiceTest {
         .willReturn(
             Optional.of(
                 new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, false)));
-    given(countAnswersPort.countAnswers(10L)).willReturn(2L);
+    given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(2L);
     given(
             answerLifecycleExecutionPort.prepareAnswerUpdate(
                 10L, 100L, 20L, 30L, "question", 50L, "updated", 2, 3L, "update-token"))
@@ -72,7 +72,7 @@ class RecoverAnswerUpdateServiceTest {
         .willReturn(
             Optional.of(
                 new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, false)));
-    given(countAnswersPort.countAnswers(10L)).willReturn(2L);
+    given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(2L);
     given(
             answerLifecycleExecutionPort.prepareAnswerUpdate(
                 10L, 100L, 20L, 30L, "question", 50L, "updated", 2, 3L, "update-token"))
@@ -98,7 +98,7 @@ class RecoverAnswerUpdateServiceTest {
         .willReturn(
             Optional.of(
                 new LoadPostPort.PostContext(10L, 30L, false, true, "question", 50L, false)));
-    given(countAnswersPort.countAnswers(10L)).willReturn(2L);
+    given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(2L);
     given(
             answerLifecycleExecutionPort.prepareAnswerUpdate(
                 10L, 100L, 20L, 30L, "question", 50L, "updated", 2, 3L, "update-token"))

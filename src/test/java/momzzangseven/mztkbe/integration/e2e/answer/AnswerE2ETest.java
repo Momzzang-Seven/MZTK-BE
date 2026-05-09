@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
@@ -242,6 +243,59 @@ class AnswerE2ETest extends E2ETestBase {
       assertThat(parse(firstLikeResponse).at("/data/likeCount").asLong()).isEqualTo(1L);
       assertThat(parse(secondLikeResponse).at("/data/likeCount").asLong()).isEqualTo(1L);
       assertThat(countAnswerLikes(answerId)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName(
+        "get answers hides non-success rows from public users but exposes owner recovery rows")
+    void getAnswers_filtersNonSuccessRowsByRequesterOwnership() throws Exception {
+      TestUser author = signupAndLoginAs("visibility-author");
+      TestUser publicAnswerer = signupAndLoginAs("visibility-public");
+      TestUser owner = signupAndLoginAs("visibility-owner");
+      TestUser otherAnswerer = signupAndLoginAs("visibility-other");
+      Long postId =
+          createQuestionPost(author.accessToken(), "Visibility question", "Need filtering", 40L);
+
+      insertAnswerRow(postId, publicAnswerer.userId(), "visible public", "VISIBLE", null, null);
+      insertAnswerRow(postId, owner.userId(), "owner pending", "PENDING", null, null);
+      insertAnswerRow(postId, owner.userId(), "owner failed", "FAILED", null, null);
+      insertAnswerRow(
+          postId, owner.userId(), "owner required", "RECONCILIATION_REQUIRED", null, null);
+      insertAnswerRow(postId, owner.userId(), "owner deleting", "VISIBLE", "PENDING", null);
+      insertAnswerRow(postId, owner.userId(), "owner preparing", "PENDING", null, "prepare-token");
+      insertAnswerRow(postId, otherAnswerer.userId(), "other failed", "FAILED", null, null);
+
+      ResponseEntity<String> publicResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers",
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(author.accessToken())),
+              String.class);
+      JsonNode publicData = parse(publicResponse).at("/data");
+
+      assertThat(publicResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(publicData).hasSize(1);
+      assertThat(publicData.get(0).at("/content").asText()).isEqualTo("visible public");
+      assertThat(publicData.get(0).at("/publicationStatus").asText()).isEqualTo("VISIBLE");
+      assertThat(publicData.get(0).at("/pendingDeleteStatus").isNull()).isTrue();
+
+      ResponseEntity<String> ownerResponse =
+          restTemplate.exchange(
+              baseUrl() + "/questions/" + postId + "/answers",
+              HttpMethod.GET,
+              new HttpEntity<>(bearerJsonHeaders(owner.accessToken())),
+              String.class);
+      Set<String> ownerContents = answerContents(parse(ownerResponse).at("/data"));
+
+      assertThat(ownerResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(ownerContents)
+          .containsExactlyInAnyOrder(
+              "visible public",
+              "owner pending",
+              "owner failed",
+              "owner required",
+              "owner deleting");
+      assertThat(ownerContents).doesNotContain("owner preparing", "other failed");
     }
 
     @Test
@@ -557,6 +611,42 @@ class AnswerE2ETest extends E2ETestBase {
     return parse(response).at("/data/answerId").asLong();
   }
 
+  private Long insertAnswerRow(
+      Long postId,
+      Long userId,
+      String content,
+      String publicationStatus,
+      String pendingDeleteStatus,
+      String createPreparationToken) {
+    Instant now = Instant.now();
+    KeyHolder keyHolder = new GeneratedKeyHolder();
+    jdbcTemplate.update(
+        conn -> {
+          PreparedStatement ps =
+              conn.prepareStatement(
+                  "INSERT INTO answers "
+                      + "(post_id, user_id, content, is_accepted, publication_status, "
+                      + "pending_delete_status, create_preparation_token, created_at, updated_at) "
+                      + "VALUES (?, ?, ?, false, ?, ?, ?, ?, ?)",
+                  new String[] {"id"});
+          ps.setLong(1, postId);
+          ps.setLong(2, userId);
+          ps.setString(3, content);
+          ps.setString(4, publicationStatus);
+          ps.setString(5, pendingDeleteStatus);
+          ps.setString(6, createPreparationToken);
+          ps.setTimestamp(7, Timestamp.from(now));
+          ps.setTimestamp(8, Timestamp.from(now));
+          return ps;
+        },
+        keyHolder);
+    Number generatedKey = keyHolder.getKey();
+    if (generatedKey == null) {
+      throw new IllegalStateException("Failed to insert answer row");
+    }
+    return generatedKey.longValue();
+  }
+
   private void acceptAnswer(Long postId, Long answerId, String accessToken) throws Exception {
     ResponseEntity<String> response =
         restTemplate.exchange(
@@ -694,6 +784,12 @@ class AnswerE2ETest extends E2ETestBase {
 
   private String buildPublicImageUrl(String finalObjectKey) {
     return "https://test-bucket.s3.ap-northeast-2.amazonaws.com/" + finalObjectKey;
+  }
+
+  private Set<String> answerContents(JsonNode answers) {
+    Set<String> contents = new java.util.LinkedHashSet<>();
+    answers.forEach(answer -> contents.add(answer.at("/content").asText()));
+    return contents;
   }
 
   private JsonNode parse(ResponseEntity<String> response) throws Exception {

@@ -189,7 +189,7 @@ public class AnswerService
       throw ex;
     }
 
-    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(savedAnswer.getPostId()));
+    int activeAnswerCount = activeAnswerCountForCreate(savedAnswer.getPostId());
     AnswerExecutionWriteView web3;
     try {
       web3 =
@@ -479,7 +479,7 @@ public class AnswerService
         post.content(),
         post.reward(),
         updatedAnswer.getContent(),
-        Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId())),
+        activeAnswerCountForMutation(answer.getPostId()),
         contentChanged,
         managedUpdate,
         updateState == null ? null : updateState.updateVersion(),
@@ -563,7 +563,7 @@ public class AnswerService
           saveAnswerPort.saveAnswer(
               answer.beginDelete(deletePreparationToken, LocalDateTime.now().plusMinutes(15)));
     }
-    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(answer.getPostId()));
+    int activeAnswerCount = activeAnswerCountForMutation(answer.getPostId());
     return DeletePreparation.web3(
         answer.getPostId(),
         answer.getId(),
@@ -662,6 +662,14 @@ public class AnswerService
 
   private boolean isVisibleForFollowUpMutation(Answer answer) {
     return answer.isPubliclyVisible() && !answerUpdateStatePort.hasBlockingUpdate(answer.getId());
+  }
+
+  private int activeAnswerCountForCreate(Long postId) {
+    return Math.toIntExact(countAnswersPort.countOnchainBlockingAnswers(postId) + 1);
+  }
+
+  private int activeAnswerCountForMutation(Long postId) {
+    return Math.toIntExact(countAnswersPort.countOnchainBlockingAnswers(postId));
   }
 
   private <T> T runInTransaction(java.util.function.Supplier<T> supplier) {

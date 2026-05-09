@@ -109,7 +109,8 @@ public class RecoverAnswerUpdateService implements RecoverAnswerUpdateUseCase {
                         ErrorCode.ANSWER_UPDATE_RECOVERY_UNAVAILABLE));
     LoadPostPort.PostContext post =
         loadPostPort.loadPost(command.postId()).orElseThrow(AnswerPostNotFoundException::new);
-    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(command.postId()));
+    int activeAnswerCount =
+        Math.toIntExact(countAnswersPort.countOnchainBlockingAnswers(command.postId()));
     return new UpdateRecoveryPreparation(
         post.writerId(),
         post.content(),

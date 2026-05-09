@@ -111,7 +111,8 @@ public class RecoverAnswerEscrowService implements RecoverAnswerEscrowUseCase {
     validateAnswerablePost(post);
     validatePostWritable(post);
     answerLifecycleExecutionPort.precheckAnswerCreate(post.postId(), post.content());
-    int activeAnswerCount = Math.toIntExact(countAnswersPort.countAnswers(command.postId()));
+    int activeAnswerCount =
+        Math.toIntExact(countAnswersPort.countOnchainBlockingAnswers(command.postId()) + 1);
     return new RecoveryPreparation(
         post.writerId(),
         post.content(),

@@ -60,7 +60,7 @@ class RecoverAnswerEscrowServiceTest {
     given(loadPostPort.loadPost(10L))
         .willReturn(
             Optional.of(new LoadPostPort.PostContext(10L, 30L, false, true, "질문 본문", 50L, false)));
-    given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+    given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
     given(
             answerLifecycleExecutionPort.recoverAnswerCreate(
                 10L, 99L, 20L, 30L, "질문 본문", 50L, "답변 본문", 1))
@@ -129,7 +129,7 @@ class RecoverAnswerEscrowServiceTest {
     given(loadPostPort.loadPost(10L))
         .willReturn(
             Optional.of(new LoadPostPort.PostContext(10L, 30L, false, true, "질문 본문", 50L, false)));
-    given(countAnswersPort.countAnswers(10L)).willReturn(1L);
+    given(countAnswersPort.countOnchainBlockingAnswers(10L)).willReturn(0L);
     given(
             answerLifecycleExecutionPort.recoverAnswerCreate(
                 10L, 99L, 20L, 30L, "질문 본문", 50L, "답변 본문", 1))

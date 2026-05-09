@@ -20,6 +20,8 @@ import momzzangseven.mztkbe.modules.answer.application.port.in.RecoverAnswerEscr
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerImagesPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerLikePort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.UpdateAnswerImagesPort;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerDeleteStatus;
+import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerPublicationStatus;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.entity.AnswerEntity;
 import momzzangseven.mztkbe.modules.answer.infrastructure.persistence.repository.AnswerJpaRepository;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
@@ -228,6 +230,74 @@ class AnswerControllerIntegrationTest {
           .andExpect(jsonPath("$.data[0].images[1].imageId").value(2))
           .andExpect(
               jsonPath("$.data[0].images[1].imageUrl").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    @DisplayName(
+        "GET answers hides non-success rows from public users but exposes owner recovery rows")
+    void getAnswers_filtersNonSuccessRowsByRequesterOwnership() throws Exception {
+      PostEntity savedPost = savePost(501L, PostType.QUESTION, PostStatus.OPEN, null);
+      Long postId = savedPost.getId();
+      answerJpaRepository.save(buildAnswerEntity(postId, 502L, "visible public", false));
+      answerJpaRepository.save(
+          buildAnswerEntity(
+              postId, 503L, "owner pending", false, AnswerPublicationStatus.PENDING, null, null));
+      answerJpaRepository.save(
+          buildAnswerEntity(
+              postId, 503L, "owner failed", false, AnswerPublicationStatus.FAILED, null, null));
+      answerJpaRepository.save(
+          buildAnswerEntity(
+              postId,
+              503L,
+              "owner required",
+              false,
+              AnswerPublicationStatus.RECONCILIATION_REQUIRED,
+              null,
+              null));
+      answerJpaRepository.save(
+          buildAnswerEntity(
+              postId,
+              503L,
+              "owner deleting",
+              false,
+              AnswerPublicationStatus.VISIBLE,
+              AnswerDeleteStatus.PENDING,
+              null));
+      answerJpaRepository.save(
+          buildAnswerEntity(
+              postId,
+              503L,
+              "owner preparing",
+              false,
+              AnswerPublicationStatus.PENDING,
+              null,
+              "prepare-token"));
+      answerJpaRepository.save(
+          buildAnswerEntity(
+              postId, 504L, "other failed", false, AnswerPublicationStatus.FAILED, null, null));
+
+      mockMvc
+          .perform(get("/questions/" + postId + "/answers").with(userPrincipal(501L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasSize(1)))
+          .andExpect(jsonPath("$.data[0].content").value("visible public"))
+          .andExpect(jsonPath("$.data[0].publicationStatus").value("VISIBLE"))
+          .andExpect(
+              jsonPath("$.data[0].pendingDeleteStatus").value(org.hamcrest.Matchers.nullValue()));
+
+      mockMvc
+          .perform(get("/questions/" + postId + "/answers").with(userPrincipal(503L)))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.data", org.hamcrest.Matchers.hasSize(5)))
+          .andExpect(
+              jsonPath("$.data[*].content")
+                  .value(
+                      org.hamcrest.Matchers.containsInAnyOrder(
+                          "visible public",
+                          "owner pending",
+                          "owner failed",
+                          "owner required",
+                          "owner deleting")));
     }
   }
 
@@ -458,11 +528,26 @@ class AnswerControllerIntegrationTest {
 
   private AnswerEntity buildAnswerEntity(
       Long postId, Long userId, String content, boolean isAccepted) {
+    return buildAnswerEntity(
+        postId, userId, content, isAccepted, AnswerPublicationStatus.VISIBLE, null, null);
+  }
+
+  private AnswerEntity buildAnswerEntity(
+      Long postId,
+      Long userId,
+      String content,
+      boolean isAccepted,
+      AnswerPublicationStatus publicationStatus,
+      AnswerDeleteStatus pendingDeleteStatus,
+      String createPreparationToken) {
     return AnswerEntity.builder()
         .postId(postId)
         .userId(userId)
         .content(content)
         .isAccepted(isAccepted)
+        .publicationStatus(publicationStatus)
+        .pendingDeleteStatus(pendingDeleteStatus)
+        .createPreparationToken(createPreparationToken)
         .build();
   }
 

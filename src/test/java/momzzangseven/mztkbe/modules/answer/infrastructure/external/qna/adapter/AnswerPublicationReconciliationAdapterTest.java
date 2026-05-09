@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.answer.infrastructure.external.qna.adapter;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -95,7 +96,7 @@ class AnswerPublicationReconciliationAdapterTest {
                 true));
     when(statePort.applyConfirmedUpdateContentIfCurrent(1L, 10L, "intent-update", "next"))
         .thenReturn(1);
-    org.mockito.Mockito.doThrow(new RuntimeException("image failed"))
+    doThrow(new RuntimeException("image failed"))
         .when(answerUpdateImagePort)
         .applyPendingImages(1L, 20L, 10L);
 
@@ -104,6 +105,25 @@ class AnswerPublicationReconciliationAdapterTest {
     assertThat(updated).isZero();
     verify(statePort, never()).markUpdateConfirmedIfCurrent(1L, "intent-update");
     verify(statePort)
+        .markUpdateReconciliationRequiredIfCurrent(
+            1L, "intent-update", "confirmed answer update image reconciliation failed");
+  }
+
+  @Test
+  @DisplayName("confirmed update evidence lookup failure stays retryable")
+  void reconcileConfirmedUpdates_evidenceFailureDoesNotMarkReconciliationRequired() {
+    UpdateCandidate candidate = new UpdateCandidate(1L, 10L, 20L, "intent-update", "next");
+    when(statePort.findIntentBoundUpdateCandidates(100)).thenReturn(List.of(candidate));
+    when(evidenceUseCase.getAnswerPublicationEvidence(10L, "intent-update"))
+        .thenThrow(new RuntimeException("evidence unavailable"));
+
+    int updated = adapter.reconcileConfirmedUpdates(100);
+
+    assertThat(updated).isZero();
+    verify(statePort, never())
+        .applyConfirmedUpdateContentIfCurrent(1L, 10L, "intent-update", "next");
+    verify(answerUpdateImagePort, never()).applyPendingImages(1L, 20L, 10L);
+    verify(statePort, never())
         .markUpdateReconciliationRequiredIfCurrent(
             1L, "intent-update", "confirmed answer update image reconciliation failed");
   }
