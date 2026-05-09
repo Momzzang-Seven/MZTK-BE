@@ -176,15 +176,17 @@ class ClassSummaryAdapterTest {
   void classSummary_NegativePriceAmount_ThrowsIllegalState() {
     assertThatThrownBy(() -> new ClassSummary("요가", -1, null))
         .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("priceAmount must be >= 0");
+        .hasMessageContaining("priceAmount must be > 0");
   }
 
   @Test
-  @DisplayName("ClassSummary - priceAmount가 0이면 무료 클래스로 정상 생성 (IllegalState 아님)")
-  void classSummary_ZeroPriceAmount_AllowedForFreeClass() {
-    // free class: priceAmount=0 is now valid
-    ClassSummary free = new ClassSummary("무료 클래스", 0, null);
-    assertThat(free.priceAmount()).isZero();
+  @DisplayName("ClassSummary - priceAmount=0이면 IllegalStateException (도메인 정솵인 priceAmount > 0 위반)")
+  void classSummary_ZeroPriceAmount_ThrowsIllegalState() {
+    // priceAmount=0 is corrupt data; the DB constraint (price_amount > 0) and
+    // MarketplaceClass domain invariant both prohibit free classes.
+    assertThatThrownBy(() -> new ClassSummary("데스트 클래스", 0, null))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("priceAmount must be > 0");
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -192,33 +194,41 @@ class ClassSummaryAdapterTest {
   // ──────────────────────────────────────────────────────────────────────────
 
   @Test
-  @DisplayName("findBySlotIds - priceAmount=0이면 무료 클래스로 정상 포함 (corrupt 아님)")
-  void findBySlotIds_ZeroPrice_IncludedAsFreeClass() {
-    // given — priceAmount=0 is now valid (free class); previously treated as corrupt
-    ClassSummaryProjection freeClass = new ClassSummaryProjection(1L, 99L, "무료 체험", 0, true);
-    ClassSummaryProjection paid = activeProjection(2L, "필라테스", 40000);
+  @DisplayName("findBySlotIds - priceAmount=0인 슬롯은 corrupt data로 해당 슬롯만 제외")
+  void findBySlotIds_ZeroPrice_SkipsCorruptEntry() {
+    // given — priceAmount=0 violates the price_amount > 0 DB constraint → treat as corrupt
+    // Note: the corrupt projection has active=true, so it enters the slotToClassId map;
+    //       it is only discarded when ClassSummary compact constructor throws.
+    ClassSummaryProjection zeroPrice = new ClassSummaryProjection(1L, 99L, "제목없는수업", 0, true);
+    ClassSummaryProjection valid = activeProjection(2L, "필라테스", 40000);
 
     given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L, 7L)))
-        .willReturn(Map.of(3L, freeClass, 7L, paid));
+        .willReturn(Map.of(3L, zeroPrice, 7L, valid));
+    // both active slots are in slotToClassId → thumbnail lookup receives both
+    given(getClassInfoUseCase.loadThumbnailKeysBySlotToClassMap(Map.of(3L, 1L, 7L, 2L)))
+        .willReturn(Map.of());
 
     // when
     Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L, 7L));
 
-    // then — both slots are included (free class is valid)
-    assertThat(result).containsOnlyKeys(3L, 7L);
-    assertThat(result.get(3L).priceAmount()).isZero();
+    // then — zero-price slot is skipped; valid slot is still returned
+    assertThat(result).containsOnlyKeys(7L);
     assertThat(result.get(7L).title()).isEqualTo("필라테스");
   }
 
   @Test
   @DisplayName("findBySlotIds - corrupt data(priceAmount 음수)가 있어도 500이 아닌 해당 슬롯만 제외")
   void findBySlotIds_NegativePrice_SkipsCorruptEntry() {
-    // given — negative priceAmount is still a data-integrity error
+    // given — negative priceAmount violates price_amount > 0 → corrupt data
+    // Note: active=true → slot enters slotToClassId map; discard happens in ClassSummary ctor.
     ClassSummaryProjection corrupt = new ClassSummaryProjection(1L, 99L, "요가", -1, true);
     ClassSummaryProjection valid = activeProjection(2L, "필라테스", 40000);
 
     given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L, 7L)))
         .willReturn(Map.of(3L, corrupt, 7L, valid));
+    // both active slots enter slotToClassId → thumbnail lookup receives both
+    given(getClassInfoUseCase.loadThumbnailKeysBySlotToClassMap(Map.of(3L, 1L, 7L, 2L)))
+        .willReturn(Map.of());
 
     // when
     Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L, 7L));

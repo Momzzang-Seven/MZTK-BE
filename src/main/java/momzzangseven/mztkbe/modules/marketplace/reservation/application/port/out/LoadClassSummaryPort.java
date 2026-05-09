@@ -15,20 +15,19 @@ public interface LoadClassSummaryPort {
   /**
    * Summary of a class required for reservation display.
    *
-   * <p>{@code priceAmount} must be non-negative. Zero is accepted here as a "free class" value for
-   * reservation enrichment purposes. A negative value indicates a data-integrity error and throws
-   * {@link IllegalStateException} at construction time to catch corrupt data early at the adapter
-   * boundary.
+   * <p>{@code priceAmount} must be strictly positive, matching the {@code price_amount > 0} DB
+   * constraint and the {@link
+   * momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass} domain
+   * invariant. A value of zero or below indicates a data-integrity error (e.g. a bug in the class
+   * creation flow or a legacy import) and throws {@link IllegalStateException} at construction time
+   * so corrupt data is caught early at the adapter boundary rather than propagated to callers.
    *
-   * <p><b>Policy note:</b> {@link
-   * momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass} currently
-   * enforces {@code priceAmount > 0} (no free classes). If the product ever introduces free classes
-   * the domain invariant, DTO validation, and the {@code price_amount > 0} DB constraint must be
-   * relaxed in concert. Until then, {@code priceAmount == 0} should not appear in production data
-   * and would indicate a bug in the class creation flow, not a valid free-class scenario.
+   * <p>If the product ever introduces free classes, the class creation/update DTOs, domain
+   * invariant, and the {@code price_amount > 0} DB constraint must be relaxed in concert before
+   * this guard is loosened.
    *
-   * @param title class title
-   * @param priceAmount class price in KRW; must be &gt;= 0
+   * @param title class title; must not be blank
+   * @param priceAmount class price in KRW; must be &gt; 0
    * @param thumbnailFinalObjectKey S3 object key for the thumbnail; {@code null} if not set
    */
   record ClassSummary(String title, int priceAmount, String thumbnailFinalObjectKey) {
@@ -36,9 +35,9 @@ public interface LoadClassSummaryPort {
       if (title == null || title.isBlank()) {
         throw new IllegalStateException("ClassSummary title must not be blank");
       }
-      if (priceAmount < 0) {
+      if (priceAmount <= 0) {
         throw new IllegalStateException(
-            "ClassSummary priceAmount must be >= 0, got: " + priceAmount);
+            "ClassSummary priceAmount must be > 0, got: " + priceAmount);
       }
     }
   }

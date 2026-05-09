@@ -40,10 +40,12 @@ import org.springframework.stereotype.Component;
  *
  * <h2>Data-integrity fallback</h2>
  *
- * <p>If the projection's title is blank or priceAmount is negative (corrupt data), constructing
- * {@link LoadClassSummaryPort.ClassSummary} throws {@link IllegalStateException}. This is caught
- * and logged as a warning so that a single bad record does not fail the entire list or detail
- * query. Note: {@code priceAmount == 0} is valid for free classes and is not treated as an error.
+ * <p>If the projection's title is blank or priceAmount is zero/negative (corrupt data — {@code
+ * price_amount > 0} is enforced by the DB constraint and the {@link
+ * momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass} domain
+ * invariant), constructing {@link LoadClassSummaryPort.ClassSummary} throws {@link
+ * IllegalStateException}. This is caught and logged as a warning so that a single bad record does
+ * not fail the entire list or detail query.
  */
 @Slf4j
 @Component

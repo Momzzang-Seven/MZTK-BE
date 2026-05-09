@@ -1,9 +1,9 @@
--- V071: Rebuild V069 status-filter indexes to include reservation_time between date and id.
+-- V072: Rebuild V070 status-filter indexes to include reservation_time between date and id.
 --
 -- ────────────────────────────────────────────────────────────────────────────
--- Problem (identified in V069 review)
+-- Problem (identified in V070 review)
 -- ────────────────────────────────────────────────────────────────────────────
--- V069 created status-filter covering indexes with the key order:
+-- V070 created status-filter covering indexes with the key order:
 --
 --   (user_id,    status, reservation_date DESC,              id DESC)
 --   (trainer_id, status, reservation_date DESC,              id DESC)
@@ -18,13 +18,15 @@
 -- ────────────────────────────────────────────────────────────────────────────
 -- Solution
 -- ────────────────────────────────────────────────────────────────────────────
--- Drop the V069 indexes and recreate them with reservation_time inserted
+-- Drop the V070 indexes and recreate them with reservation_time inserted
 -- between reservation_date and id, matching the actual ORDER BY contract:
 --
 --   (user_id,    status, reservation_date DESC, reservation_time DESC, id DESC)
 --   (trainer_id, status, reservation_date DESC, reservation_time DESC, id DESC)
 --
--- The V070 no-status indexes already include reservation_time and are unaffected.
+-- The no-status full-scan indexes (idx_reservations_user_date_time,
+-- idx_reservations_trainer_date_time) were created separately and already include
+-- reservation_time; they are not affected by this migration.
 
 -- ── User status-filter index ──────────────────────────────────────────────
 DROP INDEX idx_reservations_user_status_date ON class_reservations;
@@ -39,11 +41,11 @@ CREATE INDEX idx_reservations_trainer_status_date
     ON class_reservations (trainer_id, status, reservation_date DESC, reservation_time DESC, id DESC);
 
 -- ────────────────────────────────────────────────────────────────────────────
--- Index summary after V071
+-- Index summary after V072
 -- ────────────────────────────────────────────────────────────────────────────
 -- Query path                  | Index used
 -- ──────────────────────────────────────────────────────────────────────────────
--- user   + status filter      | idx_reservations_user_status_date    (V071, includes time)
--- user   + no status filter   | idx_reservations_user_date_time      (V070)
--- trainer + status filter     | idx_reservations_trainer_status_date (V071, includes time)
--- trainer + no status filter  | idx_reservations_trainer_date_time   (V070)
+-- user   + status filter      | idx_reservations_user_status_date    (V072, includes time)
+-- user   + no status filter   | idx_reservations_user_date_time      (created elsewhere)
+-- trainer + status filter     | idx_reservations_trainer_status_date (V072, includes time)
+-- trainer + no status filter  | idx_reservations_trainer_date_time   (created elsewhere)
