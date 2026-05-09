@@ -161,4 +161,76 @@ class GetReservationDetailServiceTest {
     assertThatThrownBy(() -> sut.execute(new GetReservationQuery(null, 1L)))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  @Test
+  @DisplayName("예약 상세 조회 - 두 스냅샷 필드가 모두 non-null이면 live fallback 없이 snapshot 값을 사용한다")
+  void execute_FullSnapshot_UsesSnapshotValuesWithoutLiveLookup() {
+    // given — both snapshot fields present
+    Reservation reservation =
+        sampleReservation(1L, 2L).toBuilder()
+            .bookedPriceAmount(35000)
+            .bookedClassTitle("요가 기초 (스냅샷)")
+            .build();
+
+    ClassSummary liveSummary = new ClassSummary("요가 심화 (최신)", 50000, "thumb/live.jpg");
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    // live summary still returned (for thumbnail); title/price must come from snapshot
+    given(loadClassSummaryPort.findBySlotId(3L)).willReturn(Optional.of(liveSummary));
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    // when
+    GetReservationResult result = sut.execute(new GetReservationQuery(10L, 1L));
+
+    // then — snapshot wins for title and price; thumbnail comes from live summary
+    assertThat(result.classTitle()).isEqualTo("요가 기초 (스냅샷)");
+    assertThat(result.priceAmount()).isEqualTo(35000);
+    assertThat(result.thumbnailFinalObjectKey()).isEqualTo("thumb/live.jpg");
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - bookedPriceAmount만 있고 bookedClassTitle이 null인 partial snapshot은 live fallback을 탄다")
+  void execute_PartialSnapshot_PriceOnlyFallsBackToLiveLookup() {
+    // given — partial snapshot: priceAmount set, classTitle null (corrupt/partial write)
+    Reservation reservation =
+        sampleReservation(1L, 2L).toBuilder()
+            .bookedPriceAmount(45000)
+            // bookedClassTitle intentionally NOT set (null)
+            .build();
+
+    ClassSummary liveSummary = new ClassSummary("라이브 클래스 제목", 45000, "thumb/live.jpg");
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(loadClassSummaryPort.findBySlotId(3L)).willReturn(Optional.of(liveSummary));
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    // when
+    GetReservationResult result = sut.execute(new GetReservationQuery(10L, 1L));
+
+    // then — partial snapshot triggers live fallback; classTitle must NOT be null
+    assertThat(result.classTitle()).isEqualTo("라이브 클래스 제목");
+    assertThat(result.priceAmount()).isEqualTo(45000);
+    assertThat(result.thumbnailFinalObjectKey()).isEqualTo("thumb/live.jpg");
+  }
+
+  @Test
+  @DisplayName("예약 상세 조회 - bookedClassTitle만 있고 bookedPriceAmount가 null인 partial snapshot도 live fallback을 탄다")
+  void execute_PartialSnapshot_TitleOnlyFallsBackToLiveLookup() {
+    // given — partial snapshot: classTitle set, priceAmount null
+    Reservation reservation =
+        sampleReservation(1L, 2L).toBuilder()
+            .bookedClassTitle("스냅샷 제목만")
+            // bookedPriceAmount intentionally NOT set (null)
+            .build();
+
+    ClassSummary liveSummary = new ClassSummary("라이브 클래스", 50000, "thumb/live.jpg");
+    given(loadReservationPort.findById(10L)).willReturn(Optional.of(reservation));
+    given(loadClassSummaryPort.findBySlotId(3L)).willReturn(Optional.of(liveSummary));
+    given(loadUserSummaryPort.findById(any())).willReturn(Optional.empty());
+
+    // when
+    GetReservationResult result = sut.execute(new GetReservationQuery(10L, 1L));
+
+    // then — partial snapshot triggers live fallback; priceAmount must NOT be null
+    assertThat(result.classTitle()).isEqualTo("라이브 클래스");
+    assertThat(result.priceAmount()).isEqualTo(50000);
+  }
 }

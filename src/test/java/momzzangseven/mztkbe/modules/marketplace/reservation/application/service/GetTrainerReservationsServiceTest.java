@@ -200,4 +200,46 @@ class GetTrainerReservationsServiceTest {
     assertThat(result.hasNext()).isTrue();
     assertThat(result.nextCursor()).isNotNull().isNotBlank();
   }
+
+  @Test
+  @DisplayName("트레이너 수강 신청 목록 조회 - bookedPriceAmount만 있고 bookedClassTitle이 null인 partial snapshot은 어댑터 fallback 사용")
+  void execute_PartialSnapshot_PriceOnlyFallsBackToAdapter() {
+    // given — partial snapshot: priceAmount set but classTitle null
+    Reservation reservation =
+        sampleReservation(2L).toBuilder()
+            .bookedPriceAmount(30000)
+            // bookedClassTitle intentionally NOT set (null)
+            .build();
+    ClassSummary adapterSummary = new ClassSummary("어댑터 클래스 제목", 30000, "thumb/adapter.jpg");
+
+    given(loadReservationPort.findByTrainerIdCursor(any(), any(), any()))
+        .willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of(3L, adapterSummary));
+    given(loadUserSummaryPort.findById(2L)).willReturn(Optional.empty());
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    // when
+    CursorSlice<ReservationSummaryResult> result =
+        sut.execute(new GetTrainerReservationsQuery(2L, null));
+
+    // then — partial snapshot triggers live fallback; classTitle must NOT be null
+    assertThat(result.items()).hasSize(1);
+    assertThat(result.items().get(0).classTitle()).isEqualTo("어댑터 클래스 제목");
+    assertThat(result.items().get(0).priceAmount()).isEqualTo(30000);
+  }
+
+  @Test
+  @DisplayName("트레이너 수강 신청 목록 조회 - status가 다른 두 cursorScope 값은 서로 달라야 한다")
+  void cursorScope_DifferentStatuses_ProduceDifferentScopes() {
+    String allScope = GetTrainerReservationsQuery.cursorScope(null);
+    String approvedScope = GetTrainerReservationsQuery.cursorScope(ReservationStatus.APPROVED);
+    String pendingScope = GetTrainerReservationsQuery.cursorScope(ReservationStatus.PENDING);
+
+    assertThat(allScope).isNotEqualTo(approvedScope);
+    assertThat(allScope).isNotEqualTo(pendingScope);
+    assertThat(approvedScope).isNotEqualTo(pendingScope);
+    // user scope and trainer scope for same status must also differ
+    assertThat(allScope).doesNotContain("user-reservations");
+    assertThat(allScope).contains("trainer-reservations");
+  }
 }

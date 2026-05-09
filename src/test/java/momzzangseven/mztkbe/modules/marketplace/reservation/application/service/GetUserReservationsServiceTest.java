@@ -235,4 +235,69 @@ class GetUserReservationsServiceTest {
     assertThat(result.items().get(0).classTitle()).isNull();
     assertThat(result.items().get(0).priceAmount()).isNull();
   }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - bookedPriceAmount만 있고 bookedClassTitle이 null인 partial snapshot은 어댑터 fallback 사용")
+  void execute_PartialSnapshot_PriceOnlyFallsBackToAdapter() {
+    // given — partial snapshot: priceAmount set but classTitle null
+    Reservation reservation =
+        sampleReservation(1L).toBuilder()
+            .bookedPriceAmount(35000)
+            // bookedClassTitle intentionally NOT set (null)
+            .build();
+    ClassSummary adapterSummary = new ClassSummary("어댑터 클래스 제목", 35000, "thumb/adapter.jpg");
+
+    given(loadReservationPort.findByUserIdCursor(any(), any(), any()))
+        .willReturn(List.of(reservation));
+    given(loadClassSummaryPort.findBySlotIds(anyList())).willReturn(Map.of(3L, adapterSummary));
+    given(loadUserSummaryPort.findByIds(anyList())).willReturn(Map.of());
+
+    // when
+    CursorSlice<ReservationSummaryResult> result =
+        sut.execute(new GetUserReservationsQuery(1L, null));
+
+    // then — partial snapshot triggers live fallback; classTitle must NOT be null
+    assertThat(result.items()).hasSize(1);
+    assertThat(result.items().get(0).classTitle()).isEqualTo("어댑터 클래스 제목");
+    assertThat(result.items().get(0).priceAmount()).isEqualTo(35000);
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - status 없이 조회한 cursor는 status 필터가 있는 요청에서 InvalidCursorException 발생")
+  void execute_CursorScopeMismatch_ThrowsInvalidCursorException() {
+    // given — encode a cursor with scope "user-reservations:ALL" (no status)
+    momzzangseven.mztkbe.global.pagination.KeysetCursor allCursor =
+        new momzzangseven.mztkbe.global.pagination.KeysetCursor(
+            java.time.LocalDateTime.of(2025, 6, 1, 10, 0),
+            10L,
+            GetUserReservationsQuery.cursorScope(null)); // "user-reservations:ALL"
+    String encodedAllCursor = momzzangseven.mztkbe.global.pagination.CursorCodec.encode(allCursor);
+
+    // when — try to decode that cursor with an APPROVED-scoped page request
+    // then — scope mismatch → InvalidCursorException
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () ->
+                momzzangseven.mztkbe.global.pagination.CursorPageRequest.of(
+                    encodedAllCursor,
+                    20,
+                    20,
+                    100,
+                    GetUserReservationsQuery.cursorScope(ReservationStatus.APPROVED)))
+        .isInstanceOf(momzzangseven.mztkbe.global.error.pagination.InvalidCursorException.class);
+  }
+
+  @Test
+  @DisplayName("내 예약 목록 조회 - status가 다른 두 cursorScope 값은 서로 달라야 한다")
+  void cursorScope_DifferentStatuses_ProduceDifferentScopes() {
+    String allScope = GetUserReservationsQuery.cursorScope(null);
+    String approvedScope = GetUserReservationsQuery.cursorScope(ReservationStatus.APPROVED);
+    String pendingScope = GetUserReservationsQuery.cursorScope(ReservationStatus.PENDING);
+
+    assertThat(allScope).isNotEqualTo(approvedScope);
+    assertThat(allScope).isNotEqualTo(pendingScope);
+    assertThat(approvedScope).isNotEqualTo(pendingScope);
+    // same status always produces the same scope
+    assertThat(GetUserReservationsQuery.cursorScope(ReservationStatus.APPROVED))
+        .isEqualTo(approvedScope);
+  }
 }

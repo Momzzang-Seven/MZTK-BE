@@ -51,6 +51,9 @@ class ClassSummaryAdapterTest {
     // given — findBySlotId delegates to findBySlotIds(List.of(slotId))
     given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L)))
         .willReturn(Map.of(3L, activeProjection(1L, "요가 기초", 50000)));
+    // thumbnail resolved via pre-built slotToClassId map (no duplicate JOIN)
+    given(getClassInfoUseCase.loadThumbnailKeysBySlotToClassMap(Map.of(3L, 1L)))
+        .willReturn(Map.of(3L, "thumb/yoga.jpg"));
 
     // when
     Optional<ClassSummary> result = sut.findBySlotId(3L);
@@ -59,8 +62,7 @@ class ClassSummaryAdapterTest {
     assertThat(result).isPresent();
     assertThat(result.get().title()).isEqualTo("요가 기초");
     assertThat(result.get().priceAmount()).isEqualTo(50000);
-    // thumbnail is not projected in the bulk query — expected null
-    assertThat(result.get().thumbnailFinalObjectKey()).isNull();
+    assertThat(result.get().thumbnailFinalObjectKey()).isEqualTo("thumb/yoga.jpg");
   }
 
   @Test
@@ -103,6 +105,9 @@ class ClassSummaryAdapterTest {
             Map.of(
                 3L, activeProjection(1L, "요가 기초", 50000),
                 5L, inactiveProjection(2L)));
+    // only slot 3 (active, classId=1) is included in the thumbnail lookup
+    given(getClassInfoUseCase.loadThumbnailKeysBySlotToClassMap(Map.of(3L, 1L)))
+        .willReturn(Map.of());
 
     // when
     Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L, 5L));
@@ -110,6 +115,44 @@ class ClassSummaryAdapterTest {
     // then — only slot 3 (active) is included
     assertThat(result).containsOnlyKeys(3L);
     assertThat(result.get(3L).title()).isEqualTo("요가 기초");
+  }
+
+  @Test
+  @DisplayName("findBySlotIds - active 슬롯의 thumbnail이 loadThumbnailKeysBySlotToClassMap을 통해 채워진다")
+  void findBySlotIds_ThumbnailResolved_ViaCachedClassIdMap() {
+    // given — classId=1L for slotId=3L; adapter must NOT re-run the JOIN query
+    given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L)))
+        .willReturn(Map.of(3L, activeProjection(1L, "필라테스", 40000)));
+    given(getClassInfoUseCase.loadThumbnailKeysBySlotToClassMap(Map.of(3L, 1L)))
+        .willReturn(Map.of(3L, "thumb/pilates.jpg"));
+
+    // when
+    Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L));
+
+    // then — thumbnail key resolved without a duplicate JOIN
+    assertThat(result).containsOnlyKeys(3L);
+    assertThat(result.get(3L).thumbnailFinalObjectKey()).isEqualTo("thumb/pilates.jpg");
+    // loadThumbnailKeysBySlotIds (the JOIN-repeating variant) must never be called
+    verify(getClassInfoUseCase, never()).loadThumbnailKeysBySlotIds(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  @DisplayName("findBySlotIds - 전체 슬롯이 inactive이면 thumbnail lookup을 건너뛴다")
+  void findBySlotIds_AllInactive_SkipsThumbnailLookup() {
+    // given — both slots inactive; slotToClassId map will be empty → no thumbnail call
+    given(getClassInfoUseCase.findSummariesBySlotIds(List.of(3L, 5L)))
+        .willReturn(
+            Map.of(
+                3L, inactiveProjection(1L),
+                5L, inactiveProjection(2L)));
+
+    // when
+    Map<Long, ClassSummary> result = sut.findBySlotIds(List.of(3L, 5L));
+
+    // then — result is empty and thumbnail port is never called
+    assertThat(result).isEmpty();
+    verify(getClassInfoUseCase, never())
+        .loadThumbnailKeysBySlotToClassMap(org.mockito.ArgumentMatchers.any());
   }
 
   @Test
