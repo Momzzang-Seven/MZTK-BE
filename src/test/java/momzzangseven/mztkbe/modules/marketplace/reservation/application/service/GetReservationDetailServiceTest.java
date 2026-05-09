@@ -188,7 +188,8 @@ class GetReservationDetailServiceTest {
   }
 
   @Test
-  @DisplayName("예약 상세 조회 - bookedPriceAmount만 있고 bookedClassTitle이 null인 partial snapshot은 live fallback을 탄다")
+  @DisplayName(
+      "예약 상세 조회 - bookedPriceAmount만 있고 bookedClassTitle이 null인 partial snapshot은 live fallback을 탄다")
   void execute_PartialSnapshot_PriceOnlyFallsBackToLiveLookup() {
     // given — partial snapshot: priceAmount set, classTitle null (corrupt/partial write)
     Reservation reservation =
@@ -212,7 +213,8 @@ class GetReservationDetailServiceTest {
   }
 
   @Test
-  @DisplayName("예약 상세 조회 - bookedClassTitle만 있고 bookedPriceAmount가 null인 partial snapshot도 live fallback을 탄다")
+  @DisplayName(
+      "예약 상세 조회 - bookedClassTitle만 있고 bookedPriceAmount가 null인 partial snapshot도 live fallback을 탄다")
   void execute_PartialSnapshot_TitleOnlyFallsBackToLiveLookup() {
     // given — partial snapshot: classTitle set, priceAmount null
     Reservation reservation =

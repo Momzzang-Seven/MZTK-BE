@@ -202,7 +202,8 @@ class GetTrainerReservationsServiceTest {
   }
 
   @Test
-  @DisplayName("트레이너 수강 신청 목록 조회 - bookedPriceAmount만 있고 bookedClassTitle이 null인 partial snapshot은 어댑터 fallback 사용")
+  @DisplayName(
+      "트레이너 수강 신청 목록 조회 - bookedPriceAmount만 있고 bookedClassTitle이 null인 partial snapshot은 어댑터 fallback 사용")
   void execute_PartialSnapshot_PriceOnlyFallsBackToAdapter() {
     // given — partial snapshot: priceAmount set but classTitle null
     Reservation reservation =

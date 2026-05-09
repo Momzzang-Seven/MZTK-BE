@@ -133,7 +133,8 @@ class ClassSummaryAdapterTest {
     assertThat(result).containsOnlyKeys(3L);
     assertThat(result.get(3L).thumbnailFinalObjectKey()).isEqualTo("thumb/pilates.jpg");
     // loadThumbnailKeysBySlotIds (the JOIN-repeating variant) must never be called
-    verify(getClassInfoUseCase, never()).loadThumbnailKeysBySlotIds(org.mockito.ArgumentMatchers.any());
+    verify(getClassInfoUseCase, never())
+        .loadThumbnailKeysBySlotIds(org.mockito.ArgumentMatchers.any());
   }
 
   @Test
