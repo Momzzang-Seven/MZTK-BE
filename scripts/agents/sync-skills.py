@@ -15,6 +15,11 @@ Run after editing any skill SKILL.md:
 Personal-only skills (gitignored, NOT mirrored):
   improve-token-efficiency, ai-readiness-cartography
 
+Codex-only prompts (manifest at .codex/prompts/CODEX_ONLY.txt):
+  Names listed there are preserved across syncs (not generated, not deleted).
+  Use for prompts that have no Claude SKILL.md counterpart. Collisions with a
+  Claude SKILL.md of the same name abort the run.
+
 Multi-agent skills (multi-agent-review): sub-agent files under <skill>/agents/
 are NOT flattened — generated mirror points readers back to the source folder.
 
@@ -30,8 +35,22 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CLAUDE_SKILLS = REPO_ROOT / ".claude" / "skills"
 CODEX_PROMPTS = REPO_ROOT / ".codex" / "prompts"
+CODEX_ONLY_MANIFEST = CODEX_PROMPTS / "CODEX_ONLY.txt"
 
 PERSONAL_SKILLS = {"improve-token-efficiency", "ai-readiness-cartography"}
+
+
+def load_codex_only() -> set[str]:
+    """Read manifest of names to preserve (not generated, not deleted) in .codex/prompts/."""
+    if not CODEX_ONLY_MANIFEST.is_file():
+        return set()
+    out: set[str] = set()
+    for raw in CODEX_ONLY_MANIFEST.read_text(encoding="utf-8").splitlines():
+        s = raw.strip()
+        if not s or s.startswith("#"):
+            continue
+        out.add(s)
+    return out
 
 GENERATED_BANNER = (
     "<!-- GENERATED FROM .claude/skills/{name}/SKILL.md by scripts/agents/sync-skills.py.\n"
@@ -129,19 +148,29 @@ def write_codex(name: str, content: str) -> None:
     out_path.write_text(content, encoding="utf-8")
 
 
-def cleanup_stale_mirrors(shared_skills: set[str], *, dry_run: bool = False) -> list[Path]:
-    """Remove mirrors for skills no longer present (or now personal). Returns list."""
+def cleanup_stale_mirrors(
+    shared_skills: set[str],
+    codex_only: set[str] | None = None,
+    *,
+    dry_run: bool = False,
+) -> list[Path]:
+    """Remove mirrors for skills no longer present (or now personal). Returns list.
+
+    Files whose stem is in `codex_only` are preserved (manifest-managed).
+    """
+    codex_only = codex_only or set()
     removed: list[Path] = []
     if not CODEX_PROMPTS.exists():
         return removed
     for f in CODEX_PROMPTS.iterdir():
         if not f.is_file() or f.suffix != ".md":
             continue
-        if f.stem not in shared_skills:
-            removed.append(f)
-            if not dry_run:
-                f.unlink()
-                print(f"  removed stale mirror: {f.relative_to(REPO_ROOT)}")
+        if f.stem in shared_skills or f.stem in codex_only:
+            continue
+        removed.append(f)
+        if not dry_run:
+            f.unlink()
+            print(f"  removed stale mirror: {f.relative_to(REPO_ROOT)}")
     return removed
 
 
@@ -173,9 +202,32 @@ def collect_sources() -> dict[str, dict[str, object]]:
     return out
 
 
+def _check_collision(sources: dict, codex_only: set[str]) -> int:
+    """Abort if a Claude SKILL.md and CODEX_ONLY manifest entry share a name."""
+    collisions = sorted(set(sources.keys()) & codex_only)
+    if not collisions:
+        return 0
+    print(
+        "error: name collision between .claude/skills/ and .codex/prompts/CODEX_ONLY.txt:",
+        file=sys.stderr,
+    )
+    for name in collisions:
+        print(f"  - {name}", file=sys.stderr)
+    print(
+        "Resolve by removing the manifest entry (Claude is SSoT) or renaming one side.",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def run_check() -> int:
     """Compare on-disk mirrors against in-memory render. Exit 1 with summary on drift."""
     sources = collect_sources()
+    codex_only = load_codex_only()
+    rc = _check_collision(sources, codex_only)
+    if rc != 0:
+        return rc
+
     drift: list[tuple[str, str]] = []  # (kind, name)
     for name, src in sources.items():
         target = CODEX_PROMPTS / f"{name}.md"
@@ -186,8 +238,8 @@ def run_check() -> int:
         actual = target.read_text(encoding="utf-8")
         if actual != expected:
             drift.append(("stale", name))
-    # Stale removals (mirrors that no longer have a source)
-    stale = cleanup_stale_mirrors(set(sources.keys()), dry_run=True)
+    # Stale removals (mirrors that no longer have a source and are not codex-only)
+    stale = cleanup_stale_mirrors(set(sources.keys()), codex_only, dry_run=True)
     for f in stale:
         drift.append(("orphan", f.stem))
 
@@ -211,12 +263,19 @@ def main(argv: list[str]) -> int:
         return 1
 
     sources = collect_sources()
+    codex_only = load_codex_only()
+    rc = _check_collision(sources, codex_only)
+    if rc != 0:
+        return rc
+
     for name, src in sources.items():
         write_codex(name, src["codex_content"])
         suffix = " (with sub-agents)" if src["has_subagents"] else ""
         print(f"  synced: {name}{suffix}")
 
-    cleanup_stale_mirrors(set(sources.keys()))
+    cleanup_stale_mirrors(set(sources.keys()), codex_only)
+    if codex_only:
+        print(f"  preserved (codex-only): {', '.join(sorted(codex_only))}")
     print(f"\nDone. {len(sources)} skill(s) synced to .codex/prompts/.")
     return 0
 

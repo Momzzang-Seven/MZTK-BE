@@ -32,7 +32,7 @@ hook 의 알림은 same-turn / same-PR 에서 처리하는 것이 원칙. 무시
 ## 편집 규칙 (반드시 지켜야 함)
 
 1. **skill 편집은 항상** `.claude/skills/<name>/SKILL.md` **에서만**.
-   `.codex/prompts/`, `.cursor/rules/` 직접 편집 금지 — sync 가 덮어쓴다.
+   `.codex/prompts/` 직접 편집 금지 — sync 가 덮어쓴다.
 
 2. **skill 변경 PR 마다** 반드시 다음을 PR 체크리스트로 확인:
    - [ ] `.claude/skills/<name>/SKILL.md` 수정 완료
@@ -54,7 +54,7 @@ hook 의 알림은 same-turn / same-PR 에서 처리하는 것이 원칙. 무시
 
 1. `.claude/skills/<new-name>/SKILL.md` 작성 (frontmatter `name`, `description` 필수).
 2. 필요시 `.claude/skills/<new-name>/agents/<sub>.md` 등 sub-agent 파일.
-3. `python3 scripts/agents/sync-skills.py` 실행 → `.codex/prompts/<new-name>.md`, `.cursor/rules/<new-name>.mdc` 자동 생성.
+3. `python3 scripts/agents/sync-skills.py` 실행 → `.codex/prompts/<new-name>.md` 자동 생성.
 4. PR 본문에 다음 체크리스트:
    - [ ] 프로젝트 특화인가? (Yes 만 공유; 범용 도구라면 개인 디렉토리)
    - [ ] description trigger 가 다른 skill 과 겹치지 않는가?
@@ -66,24 +66,36 @@ hook 의 알림은 same-turn / same-PR 에서 처리하는 것이 원칙. 무시
 
 ---
 
+## Codex-only prompt 를 추가할 때 (Claude 측 source 없음)
+
+희소한 케이스지만, Codex CLI 에서만 의미 있는 prompt 를 운용해야 한다면:
+
+1. `.codex/prompts/<name>.md` 직접 작성 (frontmatter + body 자유 — sync 가 안 건드림).
+2. `.codex/prompts/CODEX_ONLY.txt` 에 `<name>` 한 줄 추가. 이게 빠지면 다음 sync 에서 silent 삭제된다.
+3. `python3 scripts/agents/sync-skills.py --check` 통과 확인.
+4. PR 본문에 codex-only 인 이유 명시 (왜 Claude SKILL.md 로 만들 수 없는지).
+5. 동일 name 의 `.claude/skills/<name>/SKILL.md` 가 생기면 sync 가 collision error 로 실패한다 — Claude 쪽으로 일원화하거나 다른 name 사용.
+
+---
+
 ## sync-skills.py 의 변환 로직 (참고)
 
-| Claude `SKILL.md` frontmatter | Codex `prompts/<name>.md` | Cursor `rules/<name>.mdc` |
-|---|---|---|
-| `name: <x>` | `name: <x>` 그대로 | (없음) |
-| `description: <x>` (single-line 또는 `>` 블록) | `description: <x>` 그대로 | `description: <x>` 그대로 |
-| body markdown | "GENERATED FROM..." 배너 + body | "GENERATED FROM..." 배너 + `globs`, `alwaysApply: false` + body |
-| sub-agent 디렉토리 (`agents/`) 존재 | 생성된 prompt 상단에 "Codex 가 multi-agent dispatch 미지원" NOTE | 동일 NOTE |
+| Claude `SKILL.md` frontmatter | Codex `prompts/<name>.md` |
+|---|---|
+| `name: <x>` | `name: <x>` 그대로 |
+| `description: <x>` (single-line 또는 `>` 블록) | `description: <x>` 그대로 |
+| body markdown | "GENERATED FROM..." 배너 + body |
+| sub-agent 디렉토리 (`agents/`) 존재 | 생성된 prompt 상단에 "Codex 가 multi-agent dispatch 미지원" NOTE |
 
-Cursor 의 `globs: ['**/*']`, `alwaysApply: false` 는 default 안전값. 특정 skill 만 자동 적용하고 싶다면 SSoT 의 SKILL.md 에 추가 frontmatter 키를 넣고 sync 스크립트를 확장한다 (별도 PR).
+특정 skill 만 자동 적용하고 싶다면 SSoT 의 SKILL.md 에 추가 frontmatter 키를 넣고 sync 스크립트를 확장한다 (별도 PR).
 
 ---
 
 ## CI 검증 (후속 RFC)
 
-본 PR1 에는 포함하지 않음. 안정화 후 GitHub Actions 에 다음 추가 예정:
+안정화 후 GitHub Actions 에 다음 추가 예정:
 
 ```yaml
 - run: python3 scripts/agents/sync-skills.py
-- run: git diff --exit-code .codex .cursor || (echo "::error::skill sync 결과를 commit 해주세요"; exit 1)
+- run: git diff --exit-code .codex || (echo "::error::skill sync 결과를 commit 해주세요"; exit 1)
 ```

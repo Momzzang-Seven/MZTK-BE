@@ -2,7 +2,7 @@
 # Documentation
 ############################
 # 개인 docs. 전환 기간 동안 기존 docs/ 도 같이 ignore (모든 팀원 마이그레이션 후 docs/ 줄 제거).
-docs/
+docs
 docs.local/
 
 ############################
@@ -54,9 +54,6 @@ bin/
 
 ### VS Code ###
 .vscode/
-
-### Cursor (out of sync scope — fully ignored. Cursor users still benefit from AGENTS.md.) ###
-.cursor/
 
 ### Claude Code (selective sharing) ###
 .claude/*

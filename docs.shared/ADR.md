@@ -28,7 +28,7 @@
 
 **컨텍스트**
 
-팀 7명이 각자 Claude Code, Codex CLI, Cursor 중 하나를 사용. 각 도구가 인식하는 진본 파일이 다르다 (Claude → CLAUDE.md, Codex/Cursor/Aider → AGENTS.md). 또한 그동안 모든 컨텍스트 파일이 .gitignore 되어 있어 팀원마다 별개의 컨텍스트를 구축한 상태였다.
+팀이 Claude Code / Codex CLI 를 병행 사용. 각 도구가 인식하는 진본 파일이 다르다 (Claude → CLAUDE.md, Codex → AGENTS.md). 또한 그동안 모든 컨텍스트 파일이 .gitignore 되어 있어 팀원마다 별개의 컨텍스트를 구축한 상태였다.
 
 **결정**
 
@@ -75,13 +75,12 @@
 각 AI 도구의 skill/custom-command 포맷이 다르다:
 - Claude: `.claude/skills/<name>/SKILL.md` (YAML frontmatter + body)
 - Codex: `.codex/prompts/<name>.md` (slash command)
-- Cursor: `.cursor/rules/<name>.mdc` (frontmatter + body)
 
-raewookang 이 Claude 에서 만든 9개 프로젝트 특화 skill 을 Codex/Cursor 사용자도 동일하게 쓰고 싶다. 직접 양쪽을 손으로 동기화하면 drift 가 즉시 발생한다.
+raewookang 이 Claude 에서 만든 9개 프로젝트 특화 skill 을 Codex 사용자도 동일하게 쓰고 싶다. 직접 양쪽을 손으로 동기화하면 drift 가 즉시 발생한다.
 
 **결정**
 
-`.claude/skills/<name>/SKILL.md` 를 단일 source 로 두고, `scripts/agents/sync-skills.py` (Python 표준 라이브러리만 사용) 가 `.codex/prompts/`, `.cursor/rules/` 를 단방향 자동 생성한다. Codex/Cursor 사용자는 직접 편집 금지. skill 변경 PR 작성자가 sync 스크립트를 한 번 돌리고 결과를 같은 PR 에 commit 한다 (수동, PR 체크리스트로 강제). CI gate 는 후속 RFC.
+`.claude/skills/<name>/SKILL.md` 를 단일 source 로 두고, `scripts/agents/sync-skills.py` (Python 표준 라이브러리만 사용) 가 `.codex/prompts/` 를 단방향 자동 생성한다. Codex 사용자는 직접 편집 금지. skill 변경 PR 작성자가 sync 스크립트를 한 번 돌리고 결과를 같은 PR 에 commit 한다 (수동, PR 체크리스트로 강제). CI gate 는 후속 RFC.
 
 대안 — Two-way sync: 도구 표현력 차이로 의미 손실 위험. 거부.
 대안 — Pre-commit hook 자동화: 환경 의존성 (python3 미설치 등) issue 가 잦음. 거부.

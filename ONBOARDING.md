@@ -17,7 +17,6 @@ ls .claude/hooks/       # check-architecture-rules.py, check-claude-codex-sync.p
 이후 도구 별:
 - **Claude Code**: 그냥 `claude` 실행. AGENTS.md 자동 인식.
 - **Codex CLI**: `codex` 실행. AGENTS.md 자동 인식. `.codex/prompts/` 의 9 개 prompt 사용 가능.
-- **Cursor 등 기타 도구**: AGENTS.md 는 그대로 활용 가능. 단 skill / config 자동 sync 는 본 PR1 범위 밖 (개인이 알아서 매핑).
 
 ---
 
@@ -101,6 +100,9 @@ A: GitHub issue 또는 design 단계에서 제안. Claude 사용자가 `.claude/
 
 **Q: hook 이 에러를 내거나 작업을 막는다.**
 A: hook 코드 전체가 try/except 로 감싸져 있어 정상적으로는 silent fail 한다. 작업 막힘이 발생하면 `.claude/hooks/check-architecture-rules.py` 를 일시적으로 `mv check-architecture-rules.py check-architecture-rules.py.bak` 한 뒤 issue 등록.
+
+**Q: Codex 단독으로만 쓸 prompt 를 추가하고 싶다.**
+A: `.codex/prompts/<name>.md` 를 만들고 `.codex/prompts/CODEX_ONLY.txt` 에 `<name>` 한 줄 추가. manifest 등록을 빠뜨리면 다음 sync 에서 silent 삭제된다. Claude 쪽에 동일 name SKILL.md 가 있으면 sync 가 collision 으로 실패해 의도하지 않은 충돌은 즉시 드러난다.
 
 ---
 

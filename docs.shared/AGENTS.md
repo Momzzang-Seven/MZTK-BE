@@ -8,7 +8,7 @@
 - `ARCHITECTURE.md` — Hexagonal Architecture 가이드 (모든 모듈의 레이어/패키지 컨벤션)
 - `EXTERNAL_SYSTEM_SYNC.md` — DB ↔ 외부시스템 (KMS, S3, RPC, 3rd-party API) 트랜잭션 동기화 규칙
 - `ADR.md` — Architecture Decision Records 인덱스
-- `AGENT_CONFIG.md` — AI 도구 (Claude Code, Codex, Cursor) 간 config 동기화 표
+- `AGENT_CONFIG.md` — AI 도구 (Claude Code, Codex) 간 config 동기화 표
 - `AGENTS.md` — 본 파일
 ---
 ## Commit Conventions
