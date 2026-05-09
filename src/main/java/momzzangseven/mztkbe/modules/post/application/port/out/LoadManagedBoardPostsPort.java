@@ -11,5 +11,8 @@ public interface LoadManagedBoardPostsPort {
 
   List<ManagedBoardPostView> load(GetManagedBoardPostsQuery query);
 
+  /** Counts managed board posts matching the query filters. */
+  long count(GetManagedBoardPostsQuery query);
+
   Page<ManagedBoardPostView> loadPage(GetManagedBoardPostsPageQuery query);
 }

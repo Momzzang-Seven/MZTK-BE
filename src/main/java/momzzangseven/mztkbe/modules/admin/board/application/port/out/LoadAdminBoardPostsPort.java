@@ -14,6 +14,11 @@ public interface LoadAdminBoardPostsPort {
 
   List<AdminBoardPostView> load(AdminBoardPostQuery query);
 
+  /**
+   * Counts post-owned rows matching the same filters used by {@link #load(AdminBoardPostQuery)}.
+   */
+  long count(AdminBoardPostQuery query);
+
   Page<AdminBoardPostView> loadPage(AdminBoardPostPageQuery query);
 
   record AdminBoardPostQuery(

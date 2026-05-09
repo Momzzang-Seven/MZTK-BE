@@ -11,5 +11,8 @@ public interface GetManagedBoardPostsUseCase {
 
   List<ManagedBoardPostView> execute(GetManagedBoardPostsQuery query);
 
+  /** Counts managed board posts matching the query filters. */
+  long count(GetManagedBoardPostsQuery query);
+
   Page<ManagedBoardPostView> executePage(GetManagedBoardPostsPageQuery query);
 }

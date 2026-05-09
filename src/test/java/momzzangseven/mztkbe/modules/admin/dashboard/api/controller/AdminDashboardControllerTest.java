@@ -82,7 +82,7 @@ class AdminDashboardControllerTest {
   }
 
   @Test
-  @DisplayName("GET /admin/dashboard/post-stats ADMIN 이면 게시판 제재 통계를 반환한다")
+  @DisplayName("GET /admin/dashboard/post-stats ADMIN 이면 누적 게시판 moderation action 통계를 반환한다")
   void getPostStats_admin_returns200() throws Exception {
     given(getAdminBoardStatsUseCase.execute(9L))
         .willReturn(

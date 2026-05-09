@@ -54,6 +54,17 @@ public class ManagedBoardPostQueryPersistenceAdapter
   }
 
   @Override
+  public long count(GetManagedBoardPostsQuery query) {
+    Long total =
+        queryFactory
+            .select(postEntity.id.count())
+            .from(postEntity)
+            .where(buildWhere(query))
+            .fetchOne();
+    return total == null ? 0L : total;
+  }
+
+  @Override
   public Page<ManagedBoardPostView> loadPage(GetManagedBoardPostsPageQuery query) {
     BooleanBuilder where =
         buildWhere(

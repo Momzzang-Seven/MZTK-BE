@@ -296,6 +296,12 @@ public enum ErrorCode {
   DATA_INTEGRITY_VIOLATION(
       "INTERNAL_004", "A data conflict occurred. Please try again.", HttpStatus.CONFLICT // 409
       ),
+
+  DATABASE_LOCK_TIMEOUT(
+      "INTERNAL_005",
+      "Requested resource is currently locked by another operation. Please try again shortly.",
+      HttpStatus.CONFLICT // 409
+      ),
   // ========================================
   // Post Errors (POST_xxx)
   // ========================================

@@ -11,7 +11,13 @@ import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTa
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Application service for admin post unblock requests. */
+/**
+ * Application service for admin post unblock requests.
+ *
+ * <p>Unblock reasons are recorded in {@code admin_action_audits} via {@link AdminOnly} detail, not
+ * in {@code admin_board_moderation_actions}. The latter feeds ban/comment-ban reason statistics and
+ * must not mix restore reasons with sanction reasons.
+ */
 @Service
 @RequiredArgsConstructor
 public class UnblockAdminBoardPostService implements UnblockAdminBoardPostUseCase {
@@ -26,6 +32,8 @@ public class UnblockAdminBoardPostService implements UnblockAdminBoardPostUseCas
       operatorId = "#command.operatorUserId",
       targetId = "#command.postId",
       detail = {
+        "reasonCode=#command.reasonCode",
+        "reasonDetail=#command.reasonDetail",
         "moderated=#result?.moderated()",
         "publicationStatus=#result?.publicationStatus()",
         "moderationStatus=#result?.moderationStatus()"
@@ -40,6 +48,7 @@ public class UnblockAdminBoardPostService implements UnblockAdminBoardPostUseCas
         command.reasonCode(),
         result.moderated(),
         result.publicationStatus(),
-        result.moderationStatus());
+        result.moderationStatus(),
+        result.publiclyVisible());
   }
 }

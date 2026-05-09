@@ -5,6 +5,7 @@ import static org.mockito.BDDMockito.given;
 
 import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.ChangeAdminBoardPostModerationPort;
+import momzzangseven.mztkbe.modules.admin.board.application.port.out.SaveAdminBoardModerationActionPort;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
@@ -23,6 +24,13 @@ class UnblockAdminBoardPostServiceTest {
   @Mock private ChangeAdminBoardPostModerationPort changeAdminBoardPostModerationPort;
 
   @InjectMocks private UnblockAdminBoardPostService service;
+
+  @Test
+  @DisplayName("게시글 unblock은 제재 사유 통계 저장소에 의존하지 않는다")
+  void execute_policyDoesNotWriteModerationActionStatsStore() {
+    assertThat(UnblockAdminBoardPostService.class.getDeclaredFields())
+        .noneMatch(field -> field.getType().equals(SaveAdminBoardModerationActionPort.class));
+  }
 
   @Test
   @DisplayName("게시글 unblock은 moderationStatus 를 NORMAL 로 변경한 결과를 반환한다")
@@ -45,6 +53,7 @@ class UnblockAdminBoardPostServiceTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(AdminBoardPostPublicationStatus.VISIBLE);
     assertThat(result.moderationStatus()).isEqualTo(AdminBoardPostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isTrue();
   }
 
   @Test
@@ -66,6 +75,7 @@ class UnblockAdminBoardPostServiceTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(AdminBoardPostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(AdminBoardPostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -87,5 +97,6 @@ class UnblockAdminBoardPostServiceTest {
     assertThat(result.moderated()).isFalse();
     assertThat(result.publicationStatus()).isEqualTo(AdminBoardPostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(AdminBoardPostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 }

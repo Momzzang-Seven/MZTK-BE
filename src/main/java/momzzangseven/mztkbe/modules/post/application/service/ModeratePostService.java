@@ -72,10 +72,6 @@ public class ModeratePostService
         targetModerationStatus == PostModerationStatus.BLOCKED ? post.block() : post.unblock();
     boolean moderated = post.getModerationStatus() != changedPost.getModerationStatus();
     Post resultPost = moderated ? postPersistencePort.savePost(changedPost) : post;
-    return new ModeratePostResult(
-        resultPost.getId(),
-        moderated,
-        resultPost.getPublicationStatus(),
-        resultPost.getModerationStatus());
+    return ModeratePostResult.from(resultPost, moderated);
   }
 }

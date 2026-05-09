@@ -36,6 +36,8 @@ public class BanAdminBoardPostService implements BanAdminBoardPostUseCase {
       operatorId = "#command.operatorUserId",
       targetId = "#command.postId",
       detail = {
+        "reasonCode=#command.reasonCode",
+        "reasonDetail=#command.reasonDetail",
         "moderated=#result?.moderated()",
         "publicationStatus=#result?.publicationStatus()",
         "moderationStatus=#result?.moderationStatus()"
@@ -66,6 +68,7 @@ public class BanAdminBoardPostService implements BanAdminBoardPostUseCase {
         command.reasonCode(),
         result.moderated(),
         result.publicationStatus(),
-        result.moderationStatus());
+        result.moderationStatus(),
+        result.publiclyVisible());
   }
 }

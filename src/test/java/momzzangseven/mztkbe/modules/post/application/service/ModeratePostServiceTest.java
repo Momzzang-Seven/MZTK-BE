@@ -50,6 +50,7 @@ class ModeratePostServiceTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.BLOCKED);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -64,6 +65,7 @@ class ModeratePostServiceTest {
     assertThat(result.moderated()).isFalse();
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.VISIBLE);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.BLOCKED);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -84,6 +86,7 @@ class ModeratePostServiceTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.VISIBLE);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.BLOCKED);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -105,6 +108,7 @@ class ModeratePostServiceTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.PENDING);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -125,6 +129,7 @@ class ModeratePostServiceTest {
         .isEqualTo(PostPublicationStatus.FAILED);
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -139,6 +144,7 @@ class ModeratePostServiceTest {
     assertThat(result.moderated()).isFalse();
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -159,6 +165,7 @@ class ModeratePostServiceTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(PostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(PostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test

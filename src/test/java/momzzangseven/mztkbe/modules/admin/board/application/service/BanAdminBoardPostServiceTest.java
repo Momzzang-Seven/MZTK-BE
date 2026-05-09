@@ -68,6 +68,7 @@ class BanAdminBoardPostServiceTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(AdminBoardPostPublicationStatus.VISIBLE);
     assertThat(result.moderationStatus()).isEqualTo(AdminBoardPostModerationStatus.BLOCKED);
+    assertThat(result.publiclyVisible()).isFalse();
 
     ArgumentCaptor<AdminBoardModerationAction> captor =
         ArgumentCaptor.forClass(AdminBoardModerationAction.class);
@@ -107,6 +108,7 @@ class BanAdminBoardPostServiceTest {
     assertThat(result.moderated()).isFalse();
     assertThat(result.publicationStatus()).isEqualTo(AdminBoardPostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(AdminBoardPostModerationStatus.BLOCKED);
+    assertThat(result.publiclyVisible()).isFalse();
     verify(loadAdminBoardPostModerationTargetPort, never()).load(org.mockito.Mockito.anyLong());
     verify(saveAdminBoardModerationActionPort, never())
         .save(org.mockito.Mockito.any(AdminBoardModerationAction.class));

@@ -2,12 +2,15 @@ package momzzangseven.mztkbe.global.error;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
 import java.time.LocalDate;
 import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyCompletedTodayException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.verification.domain.vo.CompletedMethod;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
@@ -78,5 +81,44 @@ class GlobalExceptionHandlerTest {
     assertThat(response.getBody().getData().completedMethod()).isEqualTo(CompletedMethod.LOCATION);
     assertThat(response.getBody().getData().earnedDate()).isEqualTo(LocalDate.of(2026, 3, 13));
     assertThat(response.getBody().getData().grantedXp()).isZero();
+  }
+
+  @Test
+  void handlePessimisticLockingFailureException_returnsConflictPayload_whenJpaLockTimeoutOccurs() {
+    LockTimeoutException ex = new LockTimeoutException("lock wait timeout");
+
+    ResponseEntity<ApiResponse<Void>> response =
+        handler.handlePessimisticLockingFailureException(ex);
+
+    assertDatabaseLockTimeoutResponse(response);
+  }
+
+  @Test
+  void handlePessimisticLockingFailureException_returnsConflictPayload_whenJpaLockFails() {
+    PessimisticLockException ex = new PessimisticLockException("could not obtain lock");
+
+    ResponseEntity<ApiResponse<Void>> response =
+        handler.handlePessimisticLockingFailureException(ex);
+
+    assertDatabaseLockTimeoutResponse(response);
+  }
+
+  @Test
+  void handlePessimisticLockingFailureException_returnsConflictPayload_whenSpringLockFails() {
+    CannotAcquireLockException ex = new CannotAcquireLockException("could not acquire lock");
+
+    ResponseEntity<ApiResponse<Void>> response =
+        handler.handlePessimisticLockingFailureException(ex);
+
+    assertDatabaseLockTimeoutResponse(response);
+  }
+
+  private void assertDatabaseLockTimeoutResponse(ResponseEntity<ApiResponse<Void>> response) {
+    assertThat(response.getStatusCode().value()).isEqualTo(409);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().getStatus()).isEqualTo("FAIL");
+    assertThat(response.getBody().getMessage())
+        .isEqualTo(ErrorCode.DATABASE_LOCK_TIMEOUT.getMessage());
+    assertThat(response.getBody().getCode()).isEqualTo(ErrorCode.DATABASE_LOCK_TIMEOUT.getCode());
   }
 }

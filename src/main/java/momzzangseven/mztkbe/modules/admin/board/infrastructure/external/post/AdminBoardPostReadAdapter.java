@@ -32,6 +32,17 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
   }
 
   @Override
+  public long count(AdminBoardPostQuery query) {
+    return getManagedBoardPostsUseCase.count(
+        new GetManagedBoardPostsQuery(
+            query.search(),
+            AdminBoardPostEnumMapper.toPostStatus(query.status()),
+            AdminBoardPostEnumMapper.toPostType(query.type()),
+            AdminBoardPostEnumMapper.toPostPublicationStatus(query.publicationStatus()),
+            AdminBoardPostEnumMapper.toPostModerationStatus(query.moderationStatus())));
+  }
+
+  @Override
   public Page<AdminBoardPostView> loadPage(AdminBoardPostPageQuery query) {
     return getManagedBoardPostsUseCase
         .executePage(

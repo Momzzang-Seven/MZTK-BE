@@ -42,6 +42,7 @@ class AdminBoardPostModerationAdapterTest {
     assertThat(result.moderated()).isTrue();
     assertThat(result.publicationStatus()).isEqualTo(AdminBoardPostPublicationStatus.VISIBLE);
     assertThat(result.moderationStatus()).isEqualTo(AdminBoardPostModerationStatus.BLOCKED);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 
   @Test
@@ -60,5 +61,6 @@ class AdminBoardPostModerationAdapterTest {
     assertThat(result.moderated()).isFalse();
     assertThat(result.publicationStatus()).isEqualTo(AdminBoardPostPublicationStatus.FAILED);
     assertThat(result.moderationStatus()).isEqualTo(AdminBoardPostModerationStatus.NORMAL);
+    assertThat(result.publiclyVisible()).isFalse();
   }
 }

@@ -127,7 +127,12 @@ public class AdminOnlyAspect {
       rawDetail.put("method", method.getDeclaringClass().getSimpleName() + "." + method.getName());
       rawDetail.put("failureReason", failureReason);
       rawDetail.put("arguments", sanitizeArguments(method, args));
-      rawDetail.putAll(evaluateAdditionalDetail(adminOnly.detail(), context));
+      AdditionalDetailEvaluation additionalDetail =
+          evaluateAdditionalDetail(adminOnly.actionType(), adminOnly.detail(), context);
+      rawDetail.putAll(additionalDetail.detail());
+      if (additionalDetail.errorSummary() != null) {
+        rawDetail.put("detailEvaluationError", additionalDetail.errorSummary());
+      }
 
       recordAdminAuditPort.record(
           new RecordAdminAuditPort.AuditCommand(
@@ -146,27 +151,72 @@ public class AdminOnlyAspect {
     }
   }
 
-  private Map<String, Object> evaluateAdditionalDetail(
-      String[] detailExpressions, StandardEvaluationContext context) {
+  private AdditionalDetailEvaluation evaluateAdditionalDetail(
+      String actionType, String[] detailExpressions, StandardEvaluationContext context) {
     Map<String, Object> detail = new LinkedHashMap<>();
+    Map<String, Object> firstError = null;
+    int failureCount = 0;
     for (String detailExpression : detailExpressions) {
       if (detailExpression == null || detailExpression.isBlank()) {
         continue;
       }
-      int separator = detailExpression.indexOf('=');
-      if (separator <= 0) {
-        throw new IllegalArgumentException(
-            "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
+      try {
+        evaluateSingleAdditionalDetail(detailExpression, context, detail);
+      } catch (Exception ex) {
+        failureCount++;
+        if (firstError == null) {
+          firstError = detailEvaluationError(detailExpression, ex);
+        }
+        log.warn(
+            "@AdminOnly detail expression evaluation failed: action={}, expression={}, errorType={}",
+            actionType,
+            summarizeExpression(detailExpression),
+            ex.getClass().getSimpleName());
       }
-      String key = detailExpression.substring(0, separator).trim();
-      String expression = detailExpression.substring(separator + 1).trim();
-      if (key.isEmpty() || expression.isEmpty()) {
-        throw new IllegalArgumentException(
-            "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
-      }
-      detail.put(key, SPEL.parseExpression(expression).getValue(context));
     }
-    return detail;
+    return new AdditionalDetailEvaluation(
+        detail, detailEvaluationSummary(firstError, failureCount));
+  }
+
+  private void evaluateSingleAdditionalDetail(
+      String detailExpression, StandardEvaluationContext context, Map<String, Object> detail) {
+    int separator = detailExpression.indexOf('=');
+    if (separator <= 0) {
+      throw new IllegalArgumentException(
+          "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
+    }
+    String key = detailExpression.substring(0, separator).trim();
+    String expression = detailExpression.substring(separator + 1).trim();
+    if (key.isEmpty() || expression.isEmpty()) {
+      throw new IllegalArgumentException(
+          "@AdminOnly detail expression must use key=SpEL format: " + detailExpression);
+    }
+    detail.put(key, SPEL.parseExpression(expression).getValue(context));
+  }
+
+  private Map<String, Object> detailEvaluationSummary(
+      Map<String, Object> firstError, int failureCount) {
+    if (failureCount == 0) {
+      return null;
+    }
+    Map<String, Object> summary = new LinkedHashMap<>();
+    summary.put("failedExpressionCount", failureCount);
+    summary.putAll(firstError);
+    return summary;
+  }
+
+  private Map<String, Object> detailEvaluationError(String detailExpression, Exception ex) {
+    Map<String, Object> error = new LinkedHashMap<>();
+    error.put("firstFailedExpression", summarizeExpression(detailExpression));
+    error.put("firstErrorType", ex.getClass().getSimpleName());
+    return error;
+  }
+
+  private String summarizeExpression(String expression) {
+    if (expression == null || expression.length() <= 200) {
+      return expression;
+    }
+    return expression.substring(0, 200);
   }
 
   private void validateAdmin(Long operatorId) {
@@ -261,4 +311,7 @@ public class AdminOnlyAspect {
     }
     return String.valueOf(value);
   }
+
+  private record AdditionalDetailEvaluation(
+      Map<String, Object> detail, Map<String, Object> errorSummary) {}
 }

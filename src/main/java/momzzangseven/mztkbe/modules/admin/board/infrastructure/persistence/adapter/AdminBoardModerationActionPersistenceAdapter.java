@@ -14,6 +14,10 @@ import momzzangseven.mztkbe.modules.admin.dashboard.application.port.out.LoadAdm
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Persists append-only board moderation actions and loads dashboard statistics from those action
+ * rows.
+ */
 @Component
 @RequiredArgsConstructor
 public class AdminBoardModerationActionPersistenceAdapter

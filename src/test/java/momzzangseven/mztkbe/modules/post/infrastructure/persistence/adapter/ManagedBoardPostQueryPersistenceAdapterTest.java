@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.post.application.dto.GetManagedBoardPostsPageQuery;
+import momzzangseven.mztkbe.modules.post.application.dto.GetManagedBoardPostsQuery;
 import momzzangseven.mztkbe.modules.post.application.dto.ManagedBoardPostView;
 import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
@@ -311,6 +312,50 @@ class ManagedBoardPostQueryPersistenceAdapterTest {
     assertThat(page.getContent())
         .extracting(ManagedBoardPostView::postId)
         .containsExactly(matchingId);
+  }
+
+  @Test
+  @DisplayName("count는 load와 동일한 status, publicationStatus, moderationStatus, search 필터를 적용한다")
+  void count_combinesFiltersWithAnd() {
+    ManagedBoardPostQueryPersistenceAdapter adapter = adapter();
+    persistPost(
+        1L,
+        PostType.QUESTION,
+        "target question",
+        "matching content",
+        PostStatus.OPEN,
+        PostPublicationStatus.FAILED,
+        PostModerationStatus.BLOCKED,
+        at("2025-01-01T00:00:00"));
+    persistPost(
+        2L,
+        PostType.QUESTION,
+        "target normal",
+        "matching content",
+        PostStatus.OPEN,
+        PostPublicationStatus.FAILED,
+        PostModerationStatus.NORMAL,
+        at("2025-01-02T00:00:00"));
+    persistPost(
+        3L,
+        PostType.FREE,
+        "other",
+        "other content",
+        PostStatus.OPEN,
+        PostPublicationStatus.FAILED,
+        PostModerationStatus.BLOCKED,
+        at("2025-01-03T00:00:00"));
+
+    long count =
+        adapter.count(
+            new GetManagedBoardPostsQuery(
+                "target",
+                PostStatus.OPEN,
+                PostType.QUESTION,
+                PostPublicationStatus.FAILED,
+                PostModerationStatus.BLOCKED));
+
+    assertThat(count).isEqualTo(1L);
   }
 
   private ManagedBoardPostQueryPersistenceAdapter adapter() {

@@ -205,7 +205,7 @@ class AdminBoardControllerTest {
   }
 
   @Test
-  @DisplayName("POST /admin/boards/comments/{commentId}/ban ADMIN 이면 제재 결과를 반환한다")
+  @DisplayName("POST /admin/boards/comments/{commentId}/ban 응답은 post 상태 필드를 제외한다")
   void banComment_admin_returns200() throws Exception {
     given(
             banAdminBoardCommentUseCase.execute(
@@ -228,7 +228,10 @@ class AdminBoardControllerTest {
         .andExpect(jsonPath("$.data.targetId").value(31))
         .andExpect(jsonPath("$.data.targetType").value("COMMENT"))
         .andExpect(jsonPath("$.data.reasonCode").value("SPAM"))
-        .andExpect(jsonPath("$.data.moderated").value(true));
+        .andExpect(jsonPath("$.data.moderated").value(true))
+        .andExpect(jsonPath("$.data.publicationStatus").doesNotExist())
+        .andExpect(jsonPath("$.data.moderationStatus").doesNotExist())
+        .andExpect(jsonPath("$.data.publiclyVisible").doesNotExist());
   }
 
   @Test
@@ -268,7 +271,7 @@ class AdminBoardControllerTest {
   }
 
   @Test
-  @DisplayName("POST /admin/boards/posts/{postId}/ban 성공 응답에 상태값을 포함한다")
+  @DisplayName("POST /admin/boards/posts/{postId}/ban 응답은 post 상태 필드를 포함한다")
   void banPost_admin_returns200WithStatuses() throws Exception {
     given(
             banAdminBoardPostUseCase.execute(
@@ -295,12 +298,46 @@ class AdminBoardControllerTest {
         .andExpect(jsonPath("$.data.reasonCode").value("POLICY_VIOLATION"))
         .andExpect(jsonPath("$.data.moderated").value(true))
         .andExpect(jsonPath("$.data.publicationStatus").value("VISIBLE"))
-        .andExpect(jsonPath("$.data.moderationStatus").value("BLOCKED"));
+        .andExpect(jsonPath("$.data.moderationStatus").value("BLOCKED"))
+        .andExpect(jsonPath("$.data.publiclyVisible").value(false));
   }
 
   @Test
-  @DisplayName("POST /admin/boards/posts/{postId}/unblock 성공 응답에 상태값을 포함한다")
-  void unblockPost_admin_returns200WithStatuses() throws Exception {
+  @DisplayName("POST /admin/boards/posts/{postId}/unblock 응답은 post 상태 필드와 공개 여부 true 를 포함한다")
+  void unblockPost_visibleNormal_returns200WithPubliclyVisibleTrue() throws Exception {
+    given(
+            unblockAdminBoardPostUseCase.execute(
+                org.mockito.ArgumentMatchers.any(UnblockAdminBoardPostCommand.class)))
+        .willReturn(
+            new AdminBoardModerationResult(
+                21L,
+                AdminBoardModerationTargetType.POST,
+                AdminBoardModerationReasonCode.POLICY_VIOLATION,
+                true,
+                AdminBoardPostPublicationStatus.VISIBLE,
+                AdminBoardPostModerationStatus.NORMAL));
+
+    mockMvc
+        .perform(
+            post("/admin/boards/posts/{postId}/unblock", 21L)
+                .with(adminPrincipal(9L))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reasonCode\":\"POLICY_VIOLATION\",\"reasonDetail\":\"policy\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("SUCCESS"))
+        .andExpect(jsonPath("$.data.targetId").value(21))
+        .andExpect(jsonPath("$.data.targetType").value("POST"))
+        .andExpect(jsonPath("$.data.reasonCode").value("POLICY_VIOLATION"))
+        .andExpect(jsonPath("$.data.moderated").value(true))
+        .andExpect(jsonPath("$.data.publicationStatus").value("VISIBLE"))
+        .andExpect(jsonPath("$.data.moderationStatus").value("NORMAL"))
+        .andExpect(jsonPath("$.data.publiclyVisible").value(true));
+  }
+
+  @Test
+  @DisplayName(
+      "POST /admin/boards/posts/{postId}/unblock FAILED 응답은 post 상태 필드와 공개 여부 false 를 포함한다")
+  void unblockPost_failedNormal_returns200WithPubliclyVisibleFalse() throws Exception {
     given(
             unblockAdminBoardPostUseCase.execute(
                 org.mockito.ArgumentMatchers.any(UnblockAdminBoardPostCommand.class)))
@@ -326,7 +363,8 @@ class AdminBoardControllerTest {
         .andExpect(jsonPath("$.data.reasonCode").value("POLICY_VIOLATION"))
         .andExpect(jsonPath("$.data.moderated").value(true))
         .andExpect(jsonPath("$.data.publicationStatus").value("FAILED"))
-        .andExpect(jsonPath("$.data.moderationStatus").value("NORMAL"));
+        .andExpect(jsonPath("$.data.moderationStatus").value("NORMAL"))
+        .andExpect(jsonPath("$.data.publiclyVisible").value(false));
   }
 
   @Test

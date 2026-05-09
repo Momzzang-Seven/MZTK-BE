@@ -189,6 +189,45 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("@AdminOnly.detail 일부 SpEL 평가가 실패해도 기본 audit와 정상 detail은 저장한다")
+  void around_whenAdditionalDetailExpressionFails_recordsBaseAuditAndRemainingDetail()
+      throws Throwable {
+    Method method =
+        DummyAdminMethods.class.getDeclaredMethod(
+            "brokenDetail", Long.class, String.class, Payload.class);
+    RuntimeException boom = new IllegalStateException("boom");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs())
+        .thenReturn(new Object[] {1L, "target-6", new Payload("frank", "k6", 11)});
+    when(joinPoint.proceed()).thenThrow(boom);
+    setAuthentication("ROLE_ADMIN");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("BROKEN_DETAIL");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(command.targetId()).isEqualTo("target-6");
+    assertThat(command.success()).isFalse();
+    assertThat(command.detail()).containsEntry("method", "DummyAdminMethods.brokenDetail");
+    assertThat(command.detail()).containsEntry("failureReason", "IllegalStateException");
+    assertThat(command.detail()).containsEntry("targetCopy", "target-6");
+    assertThat(command.detail()).containsEntry("payloadName", "frank");
+    assertThat(command.detail()).doesNotContainKey("broken");
+    assertThat(command.detail().get("arguments")).isInstanceOf(Map.class);
+    assertThat(command.detail().get("detailEvaluationError")).isInstanceOf(Map.class);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> detailEvaluationError =
+        (Map<String, Object>) command.detail().get("detailEvaluationError");
+    assertThat(detailEvaluationError)
+        .containsEntry("failedExpressionCount", 1)
+        .containsEntry("firstFailedExpression", "broken=#missing.value")
+        .containsKey("firstErrorType");
+  }
+
+  @Test
   @DisplayName(
       "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
   void around_whenOperatorExpressionIsNotNumeric_throwsAuthenticationError() throws Throwable {
@@ -333,7 +372,7 @@ class AdminOnlyAspectTest {
         BanAdminBoardPostService.class.getMethod("execute", BanAdminBoardPostCommand.class);
     BanAdminBoardPostCommand input =
         new BanAdminBoardPostCommand(
-            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, "policy memo");
     AdminBoardModerationResult result =
         new AdminBoardModerationResult(
             10L,
@@ -354,6 +393,8 @@ class AdminOnlyAspectTest {
     assertThat(command.actionType()).isEqualTo("ADMIN_BOARD_POST_BAN");
     assertThat(command.targetType()).isEqualTo(AuditTargetType.POST);
     assertThat(command.targetId()).isEqualTo("10");
+    assertThat(command.detail()).containsEntry("reasonCode", "POLICY_VIOLATION");
+    assertThat(command.detail()).containsEntry("reasonDetail", "policy memo");
     assertThat(command.detail()).containsEntry("moderated", true);
     assertThat(command.detail()).containsEntry("publicationStatus", "VISIBLE");
     assertThat(command.detail()).containsEntry("moderationStatus", "BLOCKED");
@@ -385,6 +426,7 @@ class AdminOnlyAspectTest {
     aspect.around(joinPoint);
 
     RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.detail()).containsEntry("reasonCode", "POLICY_VIOLATION");
     assertThat(command.detail()).containsEntry("moderated", false);
     assertThat(command.detail()).containsEntry("publicationStatus", "FAILED");
     assertThat(command.detail()).containsEntry("moderationStatus", "BLOCKED");
@@ -397,7 +439,7 @@ class AdminOnlyAspectTest {
         UnblockAdminBoardPostService.class.getMethod("execute", UnblockAdminBoardPostCommand.class);
     UnblockAdminBoardPostCommand input =
         new UnblockAdminBoardPostCommand(
-            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, "restore memo");
     AdminBoardModerationResult result =
         new AdminBoardModerationResult(
             10L,
@@ -416,6 +458,8 @@ class AdminOnlyAspectTest {
 
     RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
     assertThat(command.actionType()).isEqualTo("ADMIN_BOARD_POST_UNBLOCK");
+    assertThat(command.detail()).containsEntry("reasonCode", "POLICY_VIOLATION");
+    assertThat(command.detail()).containsEntry("reasonDetail", "restore memo");
     assertThat(command.detail()).containsEntry("moderated", true);
     assertThat(command.detail()).containsEntry("publicationStatus", "VISIBLE");
     assertThat(command.detail()).containsEntry("moderationStatus", "NORMAL");
@@ -573,6 +617,16 @@ class AdminOnlyAspectTest {
         targetType = AuditTargetType.WEB3_TRANSACTION,
         operatorId = "#p0")
     String web3Action(Long operatorId) {
+      return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "BROKEN_DETAIL",
+        targetType = AuditTargetType.POST,
+        operatorId = "#p0",
+        targetId = "#p1",
+        detail = {"targetCopy=#p1", "broken=#missing.value", "payloadName=#p2.name()"})
+    String brokenDetail(Long operatorId, String targetId, Payload payload) {
       return "OK";
     }
 

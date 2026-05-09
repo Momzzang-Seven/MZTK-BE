@@ -13,5 +13,31 @@ public interface ChangeAdminBoardPostModerationPort {
       Long postId,
       boolean moderated,
       AdminBoardPostPublicationStatus publicationStatus,
-      AdminBoardPostModerationStatus moderationStatus) {}
+      AdminBoardPostModerationStatus moderationStatus,
+      Boolean publiclyVisible) {
+
+    /** Creates a result while deriving public visibility from the returned post states. */
+    public AdminBoardPostModerationChangeResult(
+        Long postId,
+        boolean moderated,
+        AdminBoardPostPublicationStatus publicationStatus,
+        AdminBoardPostModerationStatus moderationStatus) {
+      this(
+          postId,
+          moderated,
+          publicationStatus,
+          moderationStatus,
+          isPubliclyVisible(publicationStatus, moderationStatus));
+    }
+
+    private static Boolean isPubliclyVisible(
+        AdminBoardPostPublicationStatus publicationStatus,
+        AdminBoardPostModerationStatus moderationStatus) {
+      if (publicationStatus == null || moderationStatus == null) {
+        return null;
+      }
+      return publicationStatus == AdminBoardPostPublicationStatus.VISIBLE
+          && moderationStatus == AdminBoardPostModerationStatus.NORMAL;
+    }
+  }
 }

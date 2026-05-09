@@ -32,6 +32,7 @@ public class AdminBoardPostModerationAdapter implements ChangeAdminBoardPostMode
         result.postId(),
         result.moderated(),
         AdminBoardPostEnumMapper.toAdminPublicationStatus(result.publicationStatus()),
-        AdminBoardPostEnumMapper.toAdminModerationStatus(result.moderationStatus()));
+        AdminBoardPostEnumMapper.toAdminModerationStatus(result.moderationStatus()),
+        result.publiclyVisible());
   }
 }

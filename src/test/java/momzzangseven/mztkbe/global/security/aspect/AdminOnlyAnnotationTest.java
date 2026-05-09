@@ -94,6 +94,8 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.audit()).isTrue();
     assertThat(annotation.detail())
         .containsExactly(
+            "reasonCode=#command.reasonCode",
+            "reasonDetail=#command.reasonDetail",
             "moderated=#result?.moderated()",
             "publicationStatus=#result?.publicationStatus()",
             "moderationStatus=#result?.moderationStatus()");
@@ -115,6 +117,8 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.audit()).isTrue();
     assertThat(annotation.detail())
         .containsExactly(
+            "reasonCode=#command.reasonCode",
+            "reasonDetail=#command.reasonDetail",
             "moderated=#result?.moderated()",
             "publicationStatus=#result?.publicationStatus()",
             "moderationStatus=#result?.moderationStatus()");

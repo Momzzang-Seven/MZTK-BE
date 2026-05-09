@@ -213,6 +213,8 @@ class AdminPageApiE2ETest extends E2ETestBase {
     ResponseEntity<String> statsResponse =
         getWithBearer("/admin/dashboard/post-stats", admin.accessToken());
     JsonNode stats = data(statsResponse);
+    // postRemovalReasonStats counts append-only moderation action rows, including COMMENT targets;
+    // it is not a current blocked/deleted post-state count.
     assertThat(stats.at("/postRemovalReasonStats/SPAM").asLong()).isEqualTo(1L);
     assertThat(stats.at("/targetTypeStats/COMMENT").asLong()).isEqualTo(1L);
     assertThat(stats.at("/targetTypeStats/POST").asLong()).isZero();
@@ -251,6 +253,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(freeBan.at("/moderated").asBoolean()).isTrue();
     assertThat(freeBan.at("/publicationStatus").asText()).isEqualTo("VISIBLE");
     assertThat(freeBan.at("/moderationStatus").asText()).isEqualTo("BLOCKED");
+    assertThat(freeBan.at("/publiclyVisible").asBoolean()).isFalse();
     assertThat(postPublicationStatus(freePostId)).isEqualTo("VISIBLE");
     assertThat(postModerationStatus(freePostId)).isEqualTo("BLOCKED");
     assertThat(adminActionAuditCount("ADMIN_BOARD_POST_BAN", String.valueOf(freePostId)))
@@ -276,6 +279,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(questionBan.at("/moderated").asBoolean()).isTrue();
     assertThat(questionBan.at("/publicationStatus").asText()).isEqualTo("FAILED");
     assertThat(questionBan.at("/moderationStatus").asText()).isEqualTo("BLOCKED");
+    assertThat(questionBan.at("/publiclyVisible").asBoolean()).isFalse();
 
     assertThat(postStatus(freePostId)).isEqualTo("OPEN");
     assertThat(postStatus(questionPostId)).isEqualTo("OPEN");
@@ -307,6 +311,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(questionUnblock.at("/moderated").asBoolean()).isTrue();
     assertThat(questionUnblock.at("/publicationStatus").asText()).isEqualTo("FAILED");
     assertThat(questionUnblock.at("/moderationStatus").asText()).isEqualTo("NORMAL");
+    assertThat(questionUnblock.at("/publiclyVisible").asBoolean()).isFalse();
     assertThat(postPublicationStatus(questionPostId)).isEqualTo("FAILED");
     assertThat(postModerationStatus(questionPostId)).isEqualTo("NORMAL");
     assertThat(adminActionAuditCount("ADMIN_BOARD_POST_UNBLOCK", String.valueOf(questionPostId)))
@@ -327,6 +332,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(freeUnblock.at("/moderated").asBoolean()).isTrue();
     assertThat(freeUnblock.at("/publicationStatus").asText()).isEqualTo("VISIBLE");
     assertThat(freeUnblock.at("/moderationStatus").asText()).isEqualTo("NORMAL");
+    assertThat(freeUnblock.at("/publiclyVisible").asBoolean()).isTrue();
     assertThat(postPublicationStatus(freePostId)).isEqualTo("VISIBLE");
     assertThat(postModerationStatus(freePostId)).isEqualTo("NORMAL");
     assertThat(adminActionAuditCount("ADMIN_BOARD_POST_UNBLOCK", String.valueOf(freePostId)))
@@ -361,6 +367,8 @@ class AdminPageApiE2ETest extends E2ETestBase {
     ResponseEntity<String> statsResponse =
         getWithBearer("/admin/dashboard/post-stats", admin.accessToken());
     JsonNode postStats = data(statsResponse);
+    // These stats reflect the two saved POST ban action rows. Unblock requests and current post
+    // moderation state are intentionally not counted in admin_board_moderation_actions.
     assertThat(postStats.at("/targetTypeStats/POST").asLong()).isEqualTo(2L);
     assertThat(postStats.at("/postRemovalReasonStats/POLICY_VIOLATION").asLong()).isEqualTo(2L);
     assertThat(postStats.at("/boardTypeSplit/FREE").asLong()).isEqualTo(1L);
