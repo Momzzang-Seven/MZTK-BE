@@ -1,5 +1,5 @@
 ---
-name: api-documentation
+name: api-documentation-skill
 description: |
   Generates API documentation in a standardized format to share with frontend team members.
   Use this skill whenever the user asks to document an API endpoint, create API docs, write API specification, or generate frontend-facing API documentation.

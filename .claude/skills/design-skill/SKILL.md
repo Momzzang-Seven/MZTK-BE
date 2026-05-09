@@ -1,5 +1,5 @@
 ---
-name: feature-design
+name: design-skill
 description: >
   MZTK-BE 기능 설계 문서 생성 스킬. 팀 노션 공유용 청사진 문서를 자동으로 작성한다.
   다음 상황에서 반드시 이 스킬을 사용하라:
