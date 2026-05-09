@@ -45,8 +45,6 @@ COMMENT ON COLUMN class_reservations.booked_class_title
 -- Note: reservation_date + reservation_time + id is the keyset cursor sort key
 --   (ORDER BY reservation_date DESC, reservation_time DESC, id DESC).
 -- Including id in the index removes a separate id-lookup step on the keyset boundary rows.
--- NOTE: These indexes were later rebuilt by V072 to add reservation_time after V070
---       was found to omit it from the original DDL below.
 
 CREATE INDEX idx_reservations_user_status_date
     ON class_reservations (user_id, status, reservation_date DESC, reservation_time DESC, id DESC);
