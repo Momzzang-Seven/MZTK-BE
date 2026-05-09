@@ -6,6 +6,4 @@ public interface GetQnaAnswerPublicationEvidenceUseCase {
 
   QnaAnswerPublicationEvidence getAnswerPublicationEvidence(
       Long answerId, String executionIntentId);
-
-  int repairQuestionAnswerCounts();
 }

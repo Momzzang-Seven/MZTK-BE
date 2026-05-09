@@ -73,12 +73,21 @@ public interface ImageJpaRepository extends JpaRepository<ImageEntity, Long> {
 
   @Query(
       value =
-          "SELECT i.* FROM images i "
-              + "LEFT JOIN answers a ON a.id = i.reference_id "
-              + "WHERE i.reference_type = 'COMMUNITY_ANSWER' "
-              + "AND i.reference_id IS NOT NULL "
-              + "AND a.id IS NULL "
-              + "ORDER BY i.id "
+          "SELECT orphan.* FROM ("
+              + "  SELECT i.* FROM images i "
+              + "  LEFT JOIN answers a ON a.id = i.reference_id "
+              + "  WHERE i.reference_type = 'COMMUNITY_ANSWER' "
+              + "  AND i.reference_id IS NOT NULL "
+              + "  AND a.id IS NULL "
+              + "  UNION ALL "
+              + "  SELECT i.* FROM images i "
+              + "  LEFT JOIN qna_answer_update_states s ON s.id = i.reference_id "
+              + "  LEFT JOIN answers a ON a.id = s.answer_id "
+              + "  WHERE i.reference_type = 'COMMUNITY_ANSWER_UPDATE' "
+              + "  AND i.reference_id IS NOT NULL "
+              + "  AND (s.id IS NULL OR a.id IS NULL) "
+              + ") orphan "
+              + "ORDER BY orphan.id "
               + "LIMIT :batchSize",
       nativeQuery = true)
   List<ImageEntity> findOrphanAnswerImages(@Param("batchSize") int batchSize);

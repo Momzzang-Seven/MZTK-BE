@@ -121,6 +121,22 @@ public class AnswerPersistenceAdapter
   }
 
   @Override
+  public boolean existsByCurrentCreateExecutionIntentId(String executionIntentId) {
+    return answerJpaRepository.existsByCurrentCreateExecutionIntentId(executionIntentId);
+  }
+
+  @Override
+  public boolean existsFailedAnswerById(Long answerId) {
+    return answerJpaRepository.existsByIdAndPublicationStatus(
+        answerId, AnswerPublicationStatus.FAILED);
+  }
+
+  @Override
+  public boolean existsByCurrentDeleteExecutionIntentId(String executionIntentId) {
+    return answerJpaRepository.existsByCurrentDeleteExecutionIntentId(executionIntentId);
+  }
+
+  @Override
   public void deleteAnswer(Long answerId) {
     answerJpaRepository.deleteById(answerId);
   }

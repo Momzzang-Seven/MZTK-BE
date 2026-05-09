@@ -1,8 +1,9 @@
 package momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.adapter;
 
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerExecutionIntentRefPersistencePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswerExecutionIntentRefPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class QnaAnswerExecutionIntentRefJdbcAdapter
-    implements QnaAnswerExecutionIntentRefPersistencePort {
+    implements ManageQnaAnswerExecutionIntentRefPort {
 
   private final JdbcTemplate jdbcTemplate;
 
@@ -40,6 +41,27 @@ public class QnaAnswerExecutionIntentRefJdbcAdapter
         ref.answerId(),
         ref.actionType().name(),
         ref.statusSnapshot());
+  }
+
+  @Override
+  public Optional<QnaAnswerExecutionIntentRef> findByExecutionIntentId(String executionIntentId) {
+    return jdbcTemplate
+        .query(
+            """
+            SELECT execution_intent_public_id, post_id, answer_id, action_type, status_snapshot
+            FROM qna_answer_execution_intent_refs
+            WHERE execution_intent_public_id = ?
+            """,
+            (rs, rowNum) ->
+                new QnaAnswerExecutionIntentRef(
+                    rs.getString("execution_intent_public_id"),
+                    rs.getLong("post_id"),
+                    rs.getLong("answer_id"),
+                    QnaExecutionActionType.valueOf(rs.getString("action_type")),
+                    rs.getString("status_snapshot")),
+            executionIntentId)
+        .stream()
+        .findFirst();
   }
 
   @Override

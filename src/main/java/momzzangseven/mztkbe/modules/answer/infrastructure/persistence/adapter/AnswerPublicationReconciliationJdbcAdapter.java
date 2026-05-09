@@ -189,6 +189,7 @@ public class AnswerPublicationReconciliationJdbcAdapter
         SELECT id, current_delete_execution_intent_id
         FROM answers
         WHERE current_delete_execution_intent_id IS NOT NULL
+          AND pending_delete_status = 'PENDING'
         ORDER BY id
         LIMIT ?
         """,
@@ -199,15 +200,23 @@ public class AnswerPublicationReconciliationJdbcAdapter
   }
 
   @Override
-  public List<Long> deleteConfirmedDeleteAnswers(List<Long> answerIds) {
-    if (answerIds == null || answerIds.isEmpty()) {
-      return List.of();
+  public Long deleteConfirmedDeleteAnswer(DeleteCandidate candidate) {
+    if (candidate == null
+        || candidate.answerId() == null
+        || candidate.executionIntentId() == null) {
+      return null;
     }
-    String placeholders = String.join(",", answerIds.stream().map(id -> "?").toList());
-    return jdbcTemplate.query(
-        "DELETE FROM answers WHERE id IN (" + placeholders + ") RETURNING id",
-        (rs, rowNum) -> rs.getLong("id"),
-        answerIds.toArray());
+    int deletedRows =
+        jdbcTemplate.update(
+            """
+            DELETE FROM answers
+            WHERE id = ?
+              AND current_delete_execution_intent_id = ?
+              AND pending_delete_status = 'PENDING'
+            """,
+            candidate.answerId(),
+            candidate.executionIntentId());
+    return deletedRows == 1 ? candidate.answerId() : null;
   }
 
   @Override

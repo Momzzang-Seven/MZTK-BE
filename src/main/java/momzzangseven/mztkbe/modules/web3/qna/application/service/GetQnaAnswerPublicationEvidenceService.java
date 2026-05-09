@@ -3,19 +3,22 @@ package momzzangseven.mztkbe.modules.web3.qna.application.service;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAnswerPublicationEvidence;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaAnswerPublicationEvidenceUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RepairQuestionAnswerCountsUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class GetQnaAnswerPublicationEvidenceService
-    implements GetQnaAnswerPublicationEvidenceUseCase {
+    implements GetQnaAnswerPublicationEvidenceUseCase, RepairQuestionAnswerCountsUseCase {
 
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
 
   @Override
+  @Transactional(readOnly = true)
   public QnaAnswerPublicationEvidence getAnswerPublicationEvidence(
       Long answerId, String executionIntentId) {
     boolean projectionExists =
@@ -37,6 +40,7 @@ public class GetQnaAnswerPublicationEvidenceService
   }
 
   @Override
+  @Transactional
   public int repairQuestionAnswerCounts() {
     return qnaProjectionPersistencePort.repairQuestionAnswerCounts();
   }

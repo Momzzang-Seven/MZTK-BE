@@ -24,4 +24,10 @@ public interface LoadAnswerPort {
   List<Long> loadOrphanAnswerIds(int batchSize);
 
   boolean existsPreparingOrPendingCreateByPostId(Long postId);
+
+  boolean existsByCurrentCreateExecutionIntentId(String executionIntentId);
+
+  boolean existsFailedAnswerById(Long answerId);
+
+  boolean existsByCurrentDeleteExecutionIntentId(String executionIntentId);
 }

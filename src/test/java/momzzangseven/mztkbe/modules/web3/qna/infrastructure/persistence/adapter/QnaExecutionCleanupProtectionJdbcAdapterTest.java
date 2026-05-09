@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.adapter
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,80 +34,37 @@ class QnaExecutionCleanupProtectionJdbcAdapterTest {
   }
 
   @Test
-  @DisplayName("failed question create recovery evidence is not deletable")
-  void filterDeletableFinalizedIntentIdsProtectsFailedQuestionCreateIntent() {
-    insertPost(101L, 7L, "QUESTION", "FAILED");
-    insertPost(102L, 7L, "QUESTION", "VISIBLE");
-    insertIntent(1L, "intent-protected", "QUESTION", "101", "QNA_QUESTION_CREATE", 7L);
-    insertIntent(2L, "intent-visible-post", "QUESTION", "102", "QNA_QUESTION_CREATE", 7L);
-    insertIntent(3L, "intent-requester-mismatch", "QUESTION", "101", "QNA_QUESTION_CREATE", 8L);
-    insertIntent(4L, "intent-answer", "ANSWER", "201", "QNA_ANSWER_SUBMIT", 22L);
+  @DisplayName("answer execution intent ref can be loaded by execution intent id")
+  void findAnswerExecutionIntentRefLoadsRef() {
+    insertAnswerIntentRef("intent-answer-ref", 101L, 202L, "QNA_ANSWER_SUBMIT");
 
-    List<Long> result = adapter.filterDeletableFinalizedIntentIds(List.of(1L, 2L, 3L, 4L));
+    var result = adapter.findAnswerExecutionIntentRef("intent-answer-ref");
 
-    assertThat(result).containsExactlyInAnyOrder(2L, 3L, 4L);
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().postId()).isEqualTo(101L);
+    assertThat(result.orElseThrow().answerId()).isEqualTo(202L);
+    assertThat(result.orElseThrow().actionType().name()).isEqualTo("QNA_ANSWER_SUBMIT");
   }
 
   @Test
-  @DisplayName("answer lifecycle recovery evidence is not deletable")
-  void filterDeletableFinalizedIntentIdsProtectsAnswerLifecycleIntent() {
-    insertAnswer(201L, "PENDING", "intent-answer-create", null);
-    insertAnswer(202L, "FAILED", null, null);
-    insertAnswer(203L, "VISIBLE", null, "intent-answer-delete");
-    insertIntent(5L, "intent-answer-create", "ANSWER", "201", "QNA_ANSWER_SUBMIT", 22L);
-    insertIntent(6L, "intent-answer-ref", "ANSWER", "202", "QNA_ANSWER_SUBMIT", 22L);
-    insertIntent(7L, "intent-answer-delete", "ANSWER", "203", "QNA_ANSWER_DELETE", 22L);
-    insertIntent(8L, "intent-answer-update", "ANSWER", "204", "QNA_ANSWER_UPDATE", 22L);
-    insertIntent(9L, "intent-free", "ANSWER", "205", "QNA_ANSWER_SUBMIT", 22L);
-    insertAnswerIntentRef("intent-answer-ref", 202L, "QNA_ANSWER_SUBMIT");
+  @DisplayName("protected answer update states are detected")
+  void hasProtectedAnswerUpdateStateDetectsProtectedStatuses() {
     insertAnswerUpdateState("intent-answer-update", "RECONCILIATION_REQUIRED");
+    insertAnswerUpdateState("intent-confirmed", "CONFIRMED");
 
-    List<Long> result = adapter.filterDeletableFinalizedIntentIds(List.of(5L, 6L, 7L, 8L, 9L));
-
-    assertThat(result).containsExactly(9L);
-  }
-
-  @Test
-  @DisplayName("empty candidates short-circuit")
-  void filterDeletableFinalizedIntentIdsReturnsEmptyForEmptyCandidates() {
-    assertThat(adapter.filterDeletableFinalizedIntentIds(List.of())).isEmpty();
+    assertThat(adapter.hasProtectedAnswerUpdateState("intent-answer-update")).isTrue();
+    assertThat(adapter.hasProtectedAnswerUpdateState("intent-confirmed")).isFalse();
+    assertThat(adapter.hasProtectedAnswerUpdateState("missing")).isFalse();
   }
 
   private void createSchema() {
     jdbcTemplate.execute(
         """
-        CREATE TABLE web3_execution_intents (
-            id BIGINT PRIMARY KEY,
-            public_id VARCHAR(100) NOT NULL,
-            resource_type VARCHAR(40) NOT NULL,
-            resource_id VARCHAR(250) NOT NULL,
-            action_type VARCHAR(60) NOT NULL,
-            requester_user_id BIGINT NOT NULL
-        )
-        """);
-    jdbcTemplate.execute(
-        """
-        CREATE TABLE posts (
-            id BIGINT PRIMARY KEY,
-            user_id BIGINT NOT NULL,
-            type VARCHAR(20) NOT NULL,
-            publication_status VARCHAR(20) NOT NULL
-        )
-        """);
-    jdbcTemplate.execute(
-        """
-        CREATE TABLE answers (
-            id BIGINT PRIMARY KEY,
-            publication_status VARCHAR(32),
-            current_create_execution_intent_id VARCHAR(100),
-            current_delete_execution_intent_id VARCHAR(100)
-        )
-        """);
-    jdbcTemplate.execute(
-        """
         CREATE TABLE qna_answer_execution_intent_refs (
             execution_intent_public_id VARCHAR(100) NOT NULL,
+            post_id BIGINT NOT NULL,
             answer_id BIGINT NOT NULL,
+            status_snapshot VARCHAR(30),
             action_type VARCHAR(60) NOT NULL
         )
         """);
@@ -121,72 +77,20 @@ class QnaExecutionCleanupProtectionJdbcAdapterTest {
         """);
   }
 
-  private void insertPost(Long id, Long userId, String type, String publicationStatus) {
-    jdbcTemplate.update(
-        "INSERT INTO posts (id, user_id, type, publication_status) VALUES (?, ?, ?, ?)",
-        id,
-        userId,
-        type,
-        publicationStatus);
-  }
-
-  private void insertAnswer(
-      Long id,
-      String publicationStatus,
-      String currentCreateIntentId,
-      String currentDeleteIntentId) {
-    jdbcTemplate.update(
-        """
-        INSERT INTO answers (
-            id,
-            publication_status,
-            current_create_execution_intent_id,
-            current_delete_execution_intent_id
-        ) VALUES (?, ?, ?, ?)
-        """,
-        id,
-        publicationStatus,
-        currentCreateIntentId,
-        currentDeleteIntentId);
-  }
-
-  private void insertIntent(
-      Long id,
-      String publicId,
-      String resourceType,
-      String resourceId,
-      String actionType,
-      Long requesterUserId) {
-    jdbcTemplate.update(
-        """
-        INSERT INTO web3_execution_intents (
-            id,
-            public_id,
-            resource_type,
-            resource_id,
-            action_type,
-            requester_user_id
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        id,
-        publicId,
-        resourceType,
-        resourceId,
-        actionType,
-        requesterUserId);
-  }
-
   private void insertAnswerIntentRef(
-      String executionIntentPublicId, Long answerId, String actionType) {
+      String executionIntentPublicId, Long postId, Long answerId, String actionType) {
     jdbcTemplate.update(
         """
         INSERT INTO qna_answer_execution_intent_refs (
             execution_intent_public_id,
+            post_id,
             answer_id,
+            status_snapshot,
             action_type
-        ) VALUES (?, ?, ?)
+        ) VALUES (?, ?, ?, 'CONFIRMED', ?)
         """,
         executionIntentPublicId,
+        postId,
         answerId,
         actionType);
   }

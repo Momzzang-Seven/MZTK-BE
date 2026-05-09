@@ -1,8 +1,11 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
-import java.util.List;
+import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswerExecutionIntentRefPort.QnaAnswerExecutionIntentRef;
 
 public interface QnaExecutionCleanupProtectionQueryPort {
 
-  List<Long> filterDeletableFinalizedIntentIds(List<Long> candidateIntentIds);
+  Optional<QnaAnswerExecutionIntentRef> findAnswerExecutionIntentRef(String executionIntentId);
+
+  boolean hasProtectedAnswerUpdateState(String executionIntentId);
 }

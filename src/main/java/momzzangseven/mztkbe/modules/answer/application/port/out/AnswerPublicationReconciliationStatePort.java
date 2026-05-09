@@ -28,7 +28,7 @@ public interface AnswerPublicationReconciliationStatePort {
 
   List<DeleteCandidate> findPendingDeleteCandidates(int batchSize);
 
-  List<Long> deleteConfirmedDeleteAnswers(List<Long> answerIds);
+  Long deleteConfirmedDeleteAnswer(DeleteCandidate candidate);
 
   int rollbackDeleteIfCurrent(
       Long answerId, String executionIntentId, String terminalStatus, String failureReason);

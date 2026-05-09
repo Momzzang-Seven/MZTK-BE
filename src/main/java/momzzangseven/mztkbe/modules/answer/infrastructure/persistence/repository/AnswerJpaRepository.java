@@ -85,6 +85,12 @@ public interface AnswerJpaRepository extends JpaRepository<AnswerEntity, Long> {
   boolean existsPreparingOrPendingCreateByPostId(
       @Param("postId") Long postId, @Param("pendingStatus") AnswerPublicationStatus pendingStatus);
 
+  boolean existsByCurrentCreateExecutionIntentId(String executionIntentId);
+
+  boolean existsByIdAndPublicationStatus(Long answerId, AnswerPublicationStatus publicationStatus);
+
+  boolean existsByCurrentDeleteExecutionIntentId(String executionIntentId);
+
   @Query("select a.id from AnswerEntity a where a.postId = :postId order by a.id")
   List<Long> findIdsByPostId(@Param("postId") Long postId);
 

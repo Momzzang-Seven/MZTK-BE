@@ -9,13 +9,18 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import java.util.List;
 import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerPublicationReconciliationPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerPublicationReconciliationPort.DeleteCandidate;
 import momzzangseven.mztkbe.modules.answer.application.port.out.PublishAnswerDeletedEventPort;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ReconcileAnswerPublicationService")
@@ -24,7 +29,14 @@ class ReconcileAnswerPublicationServiceTest {
   @Mock private AnswerPublicationReconciliationPort reconciliationPort;
   @Mock private PublishAnswerDeletedEventPort publishAnswerDeletedEventPort;
 
-  @InjectMocks private ReconcileAnswerPublicationService service;
+  private ReconcileAnswerPublicationService service;
+
+  @BeforeEach
+  void setUp() {
+    service =
+        new ReconcileAnswerPublicationService(
+            reconciliationPort, publishAnswerDeletedEventPort, new NoOpTransactionManager());
+  }
 
   @Test
   @DisplayName("reconcile skips the batch when another worker owns the advisory lock")
@@ -46,8 +58,10 @@ class ReconcileAnswerPublicationServiceTest {
     given(reconciliationPort.reconcileTerminalSubmitFailures(100)).willReturn(2);
     given(reconciliationPort.reconcileConfirmedUpdates(100)).willReturn(3);
     given(reconciliationPort.reconcileTerminalUpdateFailures(100)).willReturn(4);
-    given(reconciliationPort.findConfirmedDeleteAnswerIds(100)).willReturn(List.of(10L, 11L));
-    given(reconciliationPort.deleteConfirmedDeleteAnswers(List.of(10L, 11L)))
+    List<DeleteCandidate> deleteCandidates =
+        List.of(new DeleteCandidate(10L, "intent-10"), new DeleteCandidate(11L, "intent-11"));
+    given(reconciliationPort.findConfirmedDeleteCandidates(100)).willReturn(deleteCandidates);
+    given(reconciliationPort.deleteConfirmedDeleteAnswers(deleteCandidates))
         .willReturn(List.of(11L));
     given(reconciliationPort.reconcileTerminalDeleteRollbacks(100)).willReturn(5);
     given(reconciliationPort.repairQuestionAnswerCounts()).willReturn(6);
@@ -64,5 +78,19 @@ class ReconcileAnswerPublicationServiceTest {
     verify(publishAnswerDeletedEventPort, never())
         .publish(argThat(event -> event.answerId().equals(10L)));
     verify(reconciliationPort).repairQuestionAnswerCounts();
+  }
+
+  private static class NoOpTransactionManager implements PlatformTransactionManager {
+
+    @Override
+    public TransactionStatus getTransaction(TransactionDefinition definition) {
+      return new SimpleTransactionStatus();
+    }
+
+    @Override
+    public void commit(TransactionStatus status) {}
+
+    @Override
+    public void rollback(TransactionStatus status) {}
   }
 }

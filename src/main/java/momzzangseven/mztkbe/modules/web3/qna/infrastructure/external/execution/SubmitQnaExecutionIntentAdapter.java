@@ -18,8 +18,8 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerExecutionIntentRefPersistencePort;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAnswerExecutionIntentRefPersistencePort.QnaAnswerExecutionIntentRef;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswerExecutionIntentRefPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswerExecutionIntentRefPort.QnaAnswerExecutionIntentRef;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -32,7 +32,7 @@ public class SubmitQnaExecutionIntentAdapter implements SubmitQnaExecutionDraftP
 
   private final CreateExecutionIntentUseCase createExecutionIntentUseCase;
   private final ObjectMapper objectMapper;
-  private final QnaAnswerExecutionIntentRefPersistencePort refPersistencePort;
+  private final ManageQnaAnswerExecutionIntentRefPort refPersistencePort;
 
   @Override
   public QnaExecutionIntentResult submit(QnaExecutionDraft draft) {

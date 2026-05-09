@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.answer.infrastructure.persistence.adapter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.UUID;
+import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerPublicationReconciliationStatePort.DeleteCandidate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,8 +51,8 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
   @Test
   @DisplayName("terminal answer delete clears the current pending delete state")
   void rollbackDeleteIfCurrentClearsPendingDeleteState() {
-    insertAnswer(301L, "intent-delete-terminal", "PENDING_DELETE");
-    insertAnswer(302L, "intent-delete-active", "PENDING_DELETE");
+    insertAnswer(301L, "intent-delete-terminal", "PENDING");
+    insertAnswer(302L, "intent-delete-active", "PENDING");
 
     int updatedRows =
         adapter.rollbackDeleteIfCurrent(
@@ -63,7 +64,28 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
     assertThat(loadAnswerDeleteFailureTerminalStatus(301L)).isEqualTo("EXPIRED");
     assertThat(loadAnswerDeleteFailureReason(301L)).isEqualTo("EXECUTION_INTENT_EXPIRED");
     assertThat(loadAnswerDeleteIntentId(302L)).isEqualTo("intent-delete-active");
-    assertThat(loadAnswerDeleteStatus(302L)).isEqualTo("PENDING_DELETE");
+    assertThat(loadAnswerDeleteStatus(302L)).isEqualTo("PENDING");
+  }
+
+  @Test
+  @DisplayName("confirmed answer delete requires matching current intent and pending status")
+  void deleteConfirmedDeleteAnswerRequiresCurrentIntentAndPendingStatus() {
+    insertAnswer(401L, "intent-delete", "PENDING");
+    insertAnswer(402L, "intent-other", "PENDING");
+    insertAnswer(403L, "intent-delete", "PREPARING");
+
+    Long deleted = adapter.deleteConfirmedDeleteAnswer(new DeleteCandidate(401L, "intent-delete"));
+    Long staleIntentMiss =
+        adapter.deleteConfirmedDeleteAnswer(new DeleteCandidate(402L, "intent-delete"));
+    Long staleStatusMiss =
+        adapter.deleteConfirmedDeleteAnswer(new DeleteCandidate(403L, "intent-delete"));
+
+    assertThat(deleted).isEqualTo(401L);
+    assertThat(staleIntentMiss).isNull();
+    assertThat(staleStatusMiss).isNull();
+    assertThat(answerExists(401L)).isFalse();
+    assertThat(answerExists(402L)).isTrue();
+    assertThat(answerExists(403L)).isTrue();
   }
 
   private void createSchema() {
@@ -162,5 +184,12 @@ class AnswerPublicationReconciliationJdbcAdapterTest {
   private String loadAnswerDeleteFailureReason(Long answerId) {
     return jdbcTemplate.queryForObject(
         "SELECT delete_failure_reason FROM answers WHERE id = ?", String.class, answerId);
+  }
+
+  private boolean answerExists(Long answerId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM answers WHERE id = ?", Integer.class, answerId);
+    return count != null && count > 0;
   }
 }

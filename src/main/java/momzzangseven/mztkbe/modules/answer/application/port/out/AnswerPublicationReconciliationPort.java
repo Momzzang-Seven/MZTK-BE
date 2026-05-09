@@ -14,11 +14,13 @@ public interface AnswerPublicationReconciliationPort {
 
   int reconcileTerminalUpdateFailures(int batchSize);
 
-  List<Long> findConfirmedDeleteAnswerIds(int batchSize);
+  List<DeleteCandidate> findConfirmedDeleteCandidates(int batchSize);
 
-  List<Long> deleteConfirmedDeleteAnswers(List<Long> answerIds);
+  List<Long> deleteConfirmedDeleteAnswers(List<DeleteCandidate> candidates);
 
   int reconcileTerminalDeleteRollbacks(int batchSize);
 
   int repairQuestionAnswerCounts();
+
+  record DeleteCandidate(Long answerId, String executionIntentId) {}
 }
