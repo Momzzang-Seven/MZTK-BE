@@ -27,6 +27,7 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
   private final LoadAcceptedAnswerPort loadAcceptedAnswerPort;
   private final MarkAcceptedAnswerPort markAcceptedAnswerPort;
   private final QuestionLifecycleExecutionPort questionLifecycleExecutionPort;
+  private final PostVisibilityPolicy postVisibilityPolicy;
 
   @Override
   @Transactional
@@ -44,6 +45,7 @@ public class AcceptAnswerService implements AcceptAnswerUseCase {
 
     validateQuestionPost(post);
     validatePostWriter(post, command.requesterId());
+    postVisibilityPolicy.validateWritable(post);
     validateAnswerBelongsToPost(post, answer);
     Post acceptedPost =
         questionLifecycleExecutionPort.managesAcceptLifecycle()

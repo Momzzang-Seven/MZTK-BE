@@ -18,6 +18,17 @@ public class AnswerReadAssembler {
       long likeCount,
       boolean liked,
       AnswerExecutionResumeView web3Execution) {
+    return assemble(answer, writer, imageResult, likeCount, 0L, liked, web3Execution);
+  }
+
+  public AnswerResult assemble(
+      Answer answer,
+      LoadAnswerWriterPort.WriterSummary writer,
+      AnswerImageResult imageResult,
+      long likeCount,
+      long commentCount,
+      boolean liked,
+      AnswerExecutionResumeView web3Execution) {
     List<AnswerImageResult.AnswerImageSlot> images =
         imageResult == null ? List.of() : imageResult.slots();
 
@@ -26,6 +37,7 @@ public class AnswerReadAssembler {
         writer != null ? writer.nickname() : null,
         writer != null ? writer.profileImageUrl() : null,
         likeCount,
+        commentCount,
         liked,
         images,
         web3Execution);

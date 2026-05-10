@@ -73,6 +73,8 @@ public enum ErrorCode {
 
   USER_WITHDRAWN("USER_004", "User account is withdrawn", HttpStatus.CONFLICT),
 
+  USER_BLOCKED("USER_006", "User account is blocked", HttpStatus.FORBIDDEN),
+
   ACCOUNT_NOT_DELETED(
       "USER_005",
       "Account is not in a deleted state and cannot be reactivated",
@@ -294,6 +296,12 @@ public enum ErrorCode {
   DATA_INTEGRITY_VIOLATION(
       "INTERNAL_004", "A data conflict occurred. Please try again.", HttpStatus.CONFLICT // 409
       ),
+
+  DATABASE_LOCK_TIMEOUT(
+      "INTERNAL_005",
+      "Requested resource is currently locked by another operation. Please try again shortly.",
+      HttpStatus.CONFLICT // 409
+      ),
   // ========================================
   // Post Errors (POST_xxx)
   // ========================================
@@ -314,6 +322,15 @@ public enum ErrorCode {
       "POST_005", "Answer does not belong to the specified post", HttpStatus.BAD_REQUEST),
   POST_ALREADY_SOLVED("POST_006", "Post is already solved", HttpStatus.CONFLICT),
   INVALID_POST_TYPE("POST_007", "Invalid post type for this operation", HttpStatus.BAD_REQUEST),
+  QUESTION_PUBLICATION_PENDING("POST_008", "Question publication is pending", HttpStatus.CONFLICT),
+  QUESTION_CREATE_RECOVERY_REQUIRED(
+      "POST_009", "Question create recovery is required", HttpStatus.CONFLICT),
+  QUESTION_PUBLICATION_STATE_CONFLICT(
+      "POST_010", "Question publication state is inconsistent", HttpStatus.CONFLICT),
+  QUESTION_CREATE_RECOVERY_UNAVAILABLE(
+      "POST_011", "Question create recovery is unavailable", HttpStatus.CONFLICT),
+  QUESTION_UPDATE_SUPERSEDED(
+      "POST_012", "Question update was superseded by a newer content update", HttpStatus.CONFLICT),
   // ========================================
   // Comment Errors (COMMENT_xxx)
   // ========================================
@@ -347,6 +364,11 @@ public enum ErrorCode {
   COMMENT_DEPTH_EXCEEDED(
       "COMMENT_008", "Replies cannot have nested replies", HttpStatus.BAD_REQUEST // 400
       ),
+  COMMENT_TARGET_MISMATCH(
+      "COMMENT_009",
+      "Comment does not belong to the specified target",
+      HttpStatus.BAD_REQUEST // 400
+      ),
   // ========================================
   // Answer Errors (ANSWER_xxx)
   // ========================================
@@ -377,6 +399,23 @@ public enum ErrorCode {
       "ANSWER_009", "Cannot update an answer on a solved post", HttpStatus.BAD_REQUEST),
   CANNOT_DELETE_ANSWER_ON_SOLVED_POST(
       "ANSWER_010", "Cannot delete an answer on a solved post", HttpStatus.BAD_REQUEST),
+  ANSWER_PUBLICATION_PENDING("ANSWER_011", "Answer publication is pending", HttpStatus.CONFLICT),
+  ANSWER_CREATE_RECOVERY_REQUIRED(
+      "ANSWER_012", "Answer create recovery is required", HttpStatus.CONFLICT),
+  ANSWER_CREATE_RECOVERY_UNAVAILABLE(
+      "ANSWER_013", "Answer create recovery is unavailable", HttpStatus.CONFLICT),
+  ANSWER_PUBLICATION_STATE_CONFLICT(
+      "ANSWER_014", "Answer publication state is inconsistent", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_ONCHAIN_IN_PROGRESS(
+      "ANSWER_015", "Answer update onchain mutation is in progress", HttpStatus.CONFLICT),
+  ANSWER_DELETE_ONCHAIN_IN_PROGRESS(
+      "ANSWER_016", "Answer delete onchain mutation is in progress", HttpStatus.CONFLICT),
+  ANSWER_PREPARATION_IN_PROGRESS(
+      "ANSWER_017", "Answer preparation is in progress", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_RECOVERY_UNAVAILABLE(
+      "ANSWER_018", "Answer update recovery is unavailable", HttpStatus.CONFLICT),
+  ANSWER_UPDATE_DISCARD_UNAVAILABLE(
+      "ANSWER_019", "Answer update discard is unavailable", HttpStatus.CONFLICT),
   // ========================================
   // Image Errors (IMAGE_xxx)
   // ========================================
@@ -542,6 +581,8 @@ public enum ErrorCode {
   RECOVERY_DELIVERY_FAILED(
       "ADMIN_008", "Failed to deliver recovery credentials", HttpStatus.INTERNAL_SERVER_ERROR),
   RATE_LIMITED("ADMIN_009", "Too many requests", HttpStatus.TOO_MANY_REQUESTS),
+  ADMIN_BOARD_POST_BAN_POLICY_UNCONFIRMED(
+      "ADMIN_010", "Admin post ban policy is not confirmed", HttpStatus.CONFLICT),
   ;
 
   private final String code;

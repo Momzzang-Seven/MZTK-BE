@@ -1,9 +1,10 @@
 package momzzangseven.mztkbe.global.config;
 
+import org.flywaydb.database.postgresql.PostgreSQLConfigurationExtension;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.flyway.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 
 /**
  * Flyway-JPA 순환 의존성 해결을 위한 설정
@@ -27,7 +28,7 @@ import org.springframework.context.annotation.Profile;
  * @since 1.0
  */
 @Configuration
-@Profile("prod") // prod 프로파일에서만 적용
+@ConditionalOnProperty(name = "spring.flyway.enabled", havingValue = "true")
 public class FlywayConfiguration {
 
   /**
@@ -49,9 +50,18 @@ public class FlywayConfiguration {
   @Bean
   public FlywayMigrationStrategy flywayMigrationStrategy() {
     return flyway -> {
-      // Flyway 마이그레이션을 즉시 실행
-      // - baseline-on-migrate: true 설정으로 기존 DB도 처리 가능
-      // - validate-on-migrate: true 설정으로 마이그레이션 파일 검증
+      PostgreSQLConfigurationExtension postgresqlConfiguration =
+          flyway
+              .getConfiguration()
+              .getPluginRegister()
+              .getPlugin(PostgreSQLConfigurationExtension.class);
+
+      if (postgresqlConfiguration != null) {
+        // CREATE INDEX CONCURRENTLY waits for open transactions; Flyway's default transactional
+        // advisory lock can therefore block non-transactional PostgreSQL migrations indefinitely.
+        postgresqlConfiguration.setTransactionalLock(false);
+      }
+
       flyway.migrate();
     };
   }

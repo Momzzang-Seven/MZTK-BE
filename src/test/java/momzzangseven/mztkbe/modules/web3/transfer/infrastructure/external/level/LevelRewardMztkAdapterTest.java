@@ -21,9 +21,8 @@ import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevel
 import momzzangseven.mztkbe.modules.web3.transaction.application.dto.CreateLevelUpRewardTransactionIntentResult;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.in.CreateLevelUpRewardTransactionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.vo.TransactionStatus;
-import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadRewardTreasurySignerConfigPort;
+import momzzangseven.mztkbe.modules.web3.transfer.application.port.out.LoadRewardTreasuryAddressPort;
 import momzzangseven.mztkbe.modules.web3.transfer.infrastructure.config.TransferRewardTokenProperties;
-import momzzangseven.mztkbe.modules.web3.treasury.application.port.out.LoadTreasuryAddressProjectionPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,8 +39,7 @@ class LevelRewardMztkAdapterTest {
   @Mock
   private CreateLevelUpRewardTransactionIntentUseCase createLevelUpRewardTransactionIntentUseCase;
 
-  @Mock private LoadRewardTreasurySignerConfigPort loadRewardTreasurySignerConfigPort;
-  @Mock private LoadTreasuryAddressProjectionPort loadTreasuryAddressProjectionPort;
+  @Mock private LoadRewardTreasuryAddressPort loadRewardTreasuryAddressPort;
 
   private TransferRewardTokenProperties properties;
   private LevelRewardMztkAdapter adapter;
@@ -50,20 +48,10 @@ class LevelRewardMztkAdapterTest {
   void setUp() {
     properties = new TransferRewardTokenProperties();
     properties.setDecimals(18);
-    lenient()
-        .when(loadRewardTreasurySignerConfigPort.load())
-        .thenReturn(
-            new LoadRewardTreasurySignerConfigPort.RewardTreasurySignerConfig(
-                "reward-treasury", "test-kek"));
-    lenient()
-        .when(loadTreasuryAddressProjectionPort.loadAddressByAlias("reward-treasury"))
-        .thenReturn(Optional.of(TREASURY));
+    lenient().when(loadRewardTreasuryAddressPort.loadAddress()).thenReturn(Optional.of(TREASURY));
     adapter =
         new LevelRewardMztkAdapter(
-            createLevelUpRewardTransactionIntentUseCase,
-            properties,
-            loadRewardTreasurySignerConfigPort,
-            loadTreasuryAddressProjectionPort);
+            createLevelUpRewardTransactionIntentUseCase, properties, loadRewardTreasuryAddressPort);
   }
 
   @Test
@@ -236,8 +224,7 @@ class LevelRewardMztkAdapterTest {
 
   @Test
   void reward_rejectsMissingRewardTreasuryAddressProjection() {
-    when(loadTreasuryAddressProjectionPort.loadAddressByAlias("reward-treasury"))
-        .thenReturn(Optional.empty());
+    when(loadRewardTreasuryAddressPort.loadAddress()).thenReturn(Optional.empty());
     assertThatThrownBy(() -> adapter.reward(validCommand(3)))
         .isInstanceOf(RewardTreasuryAddressInvalidException.class);
   }

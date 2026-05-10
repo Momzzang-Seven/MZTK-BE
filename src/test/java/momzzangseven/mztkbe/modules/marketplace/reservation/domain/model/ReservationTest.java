@@ -23,7 +23,9 @@ class ReservationTest {
         60,
         "Request note",
         "order-123",
-        "tx-123");
+        "tx-123",
+        50000,
+        "요가 기초");
   }
 
   @Test

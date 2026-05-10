@@ -1,23 +1,23 @@
 package momzzangseven.mztkbe.modules.marketplace.reservation.application.port.in;
 
-import java.util.List;
+import momzzangseven.mztkbe.global.pagination.CursorSlice;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ReservationSummaryResult;
 
 /**
- * Input port for fetching incoming reservations assigned to a trainer.
+ * Input port for fetching incoming reservations assigned to a trainer (cursor-paginated).
  *
- * <p>Returns reservations ordered by {@code reservationDate} descending so upcoming or recent
- * sessions appear first.
+ * <p>Returns a {@link CursorSlice} containing the page items, a {@code hasNext} flag, and a {@code
+ * nextCursor} token that the client can pass on the next request.
  */
 public interface GetTrainerReservationsUseCase {
 
   /**
-   * Returns a list of reservations targeting the authenticated trainer, optionally filtered by
+   * Returns one page of reservations targeting the authenticated trainer, optionally filtered by
    * status.
    *
-   * @param query contains the authenticated trainer's ID and an optional status filter
-   * @return list of reservation summaries; empty list if none found
+   * @param query contains the authenticated trainer's ID, optional status filter, and cursor params
+   * @return slice with items, hasNext flag, and nextCursor token
    */
-  List<ReservationSummaryResult> execute(GetTrainerReservationsQuery query);
+  CursorSlice<ReservationSummaryResult> execute(GetTrainerReservationsQuery query);
 }

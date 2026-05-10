@@ -1,0 +1,15 @@
+package momzzangseven.mztkbe.modules.web3.treasury.application.dto;
+
+public enum ExecutionSignerFailureReason {
+  NONE,
+  CORRUPTED_SLOT,
+  ADDRESS_MISMATCH,
+  KMS_KEY_ID_MISSING,
+  KMS_KEY_DISABLED,
+  KMS_KEY_PENDING_DELETION,
+  KMS_KEY_PENDING_IMPORT,
+  KMS_KEY_UNAVAILABLE,
+  KMS_DESCRIBE_FAILED,
+  WALLET_DISABLED,
+  WALLET_ARCHIVED
+}

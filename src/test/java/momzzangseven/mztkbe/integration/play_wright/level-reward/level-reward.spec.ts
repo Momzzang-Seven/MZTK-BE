@@ -19,6 +19,13 @@
  *   - TransactionIssuerWorker 등 워커 스케줄러가 활성화 되어 있어야 함 (Suite D)
  *   - Optimism Sepolia RPC 연결 (Suite D)
  *
+ * Suite D 추가 전제 (KMS 위임 이후):
+ *   - 백엔드는 prod profile 로 기동 (web3.kms.enabled=true,
+ *     web3.reward-token.treasury.provisioning.enabled=true)
+ *   - 머신에 `aws` CLI + KMS 권한 보유한 AWS_PROFILE/AWS_REGION 설정
+ *   - .env 에 TREASURY_E2E_PRIVATE_KEY, TREASURY_E2E_EXPECTED_ADDRESS 존재
+ *     (Suite D 시작 전 reward-treasury 가 미준비 상태일 때 자동 provisioning fallback 용)
+ *
  * XP 설정 전략:
  *   레벨업에 필요한 XP 를 직접 API 로 획득하면 시간이 오래 걸리므로,
  *   pg(node-postgres) 로 user_progress 테이블을 직접 업데이트하여 XP 를 설정합니다.
@@ -29,6 +36,7 @@ import { ethers } from "ethers";
 import { Client } from "pg";
 import * as dotenv from "dotenv";
 import * as path from "path";
+import { ensureRewardTreasuryReady } from "../support/treasury-reward-ready";
 
 dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
@@ -390,6 +398,10 @@ test.describe("Suite A — 사전 조건 오류", () => {
 // Suite B — 정상 레벨업 → rewardTxStatus 초기 상태 검증
 // ────────────────────────────────────────────────────────────────────────────
 test.describe("Suite B — 정상 레벨업 응답 검증", () => {
+  test.beforeAll(async () => {
+    await ensureRewardTreasuryReady();
+  });
+
   // 레벨업 성공 시 rewardTxStatus 는 워커 처리 전이므로 CREATED 이거나
   // 이미 워커가 처리 중이라면 SIGNED/PENDING 일 수도 있습니다.
   const VALID_INITIAL_STATUSES = [
@@ -492,6 +504,10 @@ test.describe("Suite B — 정상 레벨업 응답 검증", () => {
 // Suite C — 중복/멱등 처리
 // ────────────────────────────────────────────────────────────────────────────
 test.describe("Suite C — 중복 레벨업 멱등 처리", () => {
+  test.beforeAll(async () => {
+    await ensureRewardTreasuryReady();
+  });
+
   test(
     "TC-LR-C-01 | 레벨업 성공 후 재요청 → 409 (이미 최고 레벨 또는 레벨업 충돌)",
     async ({ request }) => {
@@ -583,6 +599,10 @@ test.describe("Suite C — 중복 레벨업 멱등 처리", () => {
 // 최대 5분 폴링합니다.
 // ────────────────────────────────────────────────────────────────────────────
 test.describe("Suite D — 온체인 토큰 지급 확인 (폴링)", () => {
+  test.beforeAll(async () => {
+    await ensureRewardTreasuryReady();
+  });
+
   test(
     "TC-LR-D-01 | 레벨업 보상 → 워커 처리 완료 후 rewardTxStatus=SUCCEEDED, txHash 수신",
     async ({ request }) => {

@@ -89,7 +89,9 @@ public class ClassImageModuleAdapter implements UpdateClassImagesPort, LoadClass
     Map<Long, String> thumbnailMap = new java.util.HashMap<>();
     for (Long classId : classIds) {
       List<ImageItem> items = result.itemsByReferenceId().getOrDefault(classId, List.of());
-      thumbnailMap.put(classId, items.isEmpty() ? null : items.get(0).finalObjectKey());
+      if (!items.isEmpty()) {
+        thumbnailMap.put(classId, items.get(0).finalObjectKey());
+      }
     }
     return thumbnailMap;
   }

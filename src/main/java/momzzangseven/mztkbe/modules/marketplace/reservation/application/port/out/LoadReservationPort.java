@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.model.Reservation;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 
@@ -97,8 +98,25 @@ public interface LoadReservationPort {
    * @param userId the user's ID
    * @param status optional status filter; if null, all statuses are returned
    * @return list of matching reservations
+   * @deprecated Use {@link #findByUserIdCursor} for cursor-based list endpoints.
    */
+  @Deprecated(since = "MOM-403", forRemoval = true)
   List<Reservation> findByUserId(Long userId, ReservationStatus status);
+
+  /**
+   * Cursor (keyset) paginated fetch for a user's reservations, ordered by {@code (reservation_date
+   * DESC, id DESC)}.
+   *
+   * <p>Fetches {@code pageRequest.limitWithProbe()} rows (= size + 1) so the caller can determine
+   * {@code hasNext} without an extra COUNT query.
+   *
+   * @param userId the user's ID
+   * @param status optional status filter; null means all statuses
+   * @param pageRequest cursor and page-size parameters
+   * @return up to size+1 rows
+   */
+  List<Reservation> findByUserIdCursor(
+      Long userId, ReservationStatus status, CursorPageRequest pageRequest);
 
   /**
    * Fetch all reservations assigned to the given trainer, ordered by reservation_date DESC.
@@ -106,6 +124,23 @@ public interface LoadReservationPort {
    * @param trainerId the trainer's ID
    * @param status optional status filter; if null, all statuses are returned
    * @return list of matching reservations
+   * @deprecated Use {@link #findByTrainerIdCursor} for cursor-based list endpoints.
    */
+  @Deprecated(since = "MOM-403", forRemoval = true)
   List<Reservation> findByTrainerId(Long trainerId, ReservationStatus status);
+
+  /**
+   * Cursor (keyset) paginated fetch for a trainer's reservations, ordered by {@code
+   * (reservation_date DESC, id DESC)}.
+   *
+   * <p>Fetches {@code pageRequest.limitWithProbe()} rows (= size + 1) so the caller can determine
+   * {@code hasNext} without an extra COUNT query.
+   *
+   * @param trainerId the trainer's ID
+   * @param status optional status filter; null means all statuses
+   * @param pageRequest cursor and page-size parameters
+   * @return up to size+1 rows
+   */
+  List<Reservation> findByTrainerIdCursor(
+      Long trainerId, ReservationStatus status, CursorPageRequest pageRequest);
 }

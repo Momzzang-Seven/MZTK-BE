@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.account.infrastructure.persistence.repository;
 
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -8,6 +9,7 @@ import momzzangseven.mztkbe.modules.account.domain.vo.AuthProvider;
 import momzzangseven.mztkbe.modules.account.infrastructure.persistence.entity.UserAccountEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,10 @@ import org.springframework.data.repository.query.Param;
 public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntity, Long> {
 
   Optional<UserAccountEntity> findByUserId(Long userId);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT ua FROM UserAccountEntity ua WHERE ua.userId = :userId")
+  Optional<UserAccountEntity> findByUserIdForUpdate(@Param("userId") Long userId);
 
   Optional<UserAccountEntity> findByProviderAndProviderUserId(
       AuthProvider provider, String providerUserId);
@@ -47,6 +53,20 @@ public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntit
   List<Long> findUserIdsByStatusAndDeletedAtBefore(
       @Param("status") AccountStatus status, @Param("cutoff") Instant cutoff, Pageable pageable);
 
+  @Query(
+      "SELECT ua.userId AS userId, ua.status AS status "
+          + "FROM UserAccountEntity ua "
+          + "WHERE ua.userId IN :userIds")
+  List<ManagedUserAccountStatusProjection> findManagedUserAccountStatusesByUserIds(
+      @Param("userIds") List<Long> userIds);
+
+  @Query(
+      "SELECT ua.userId AS userId, ua.status AS status "
+          + "FROM UserAccountEntity ua "
+          + "WHERE ua.status = :status")
+  List<ManagedUserAccountStatusProjection> findManagedUserAccountStatusesByStatus(
+      @Param("status") AccountStatus status);
+
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM UserAccountEntity ua WHERE ua.userId = :userId")
   void deleteByUserId(@Param("userId") Long userId);
@@ -54,4 +74,10 @@ public interface UserAccountJpaRepository extends JpaRepository<UserAccountEntit
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM UserAccountEntity ua WHERE ua.userId IN :userIds")
   void deleteByUserIdIn(@Param("userIds") List<Long> userIds);
+
+  interface ManagedUserAccountStatusProjection {
+    Long getUserId();
+
+    AccountStatus getStatus();
+  }
 }

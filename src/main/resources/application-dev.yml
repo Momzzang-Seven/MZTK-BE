@@ -51,6 +51,8 @@ web3:
   challenge:
     eip4361:
       uri: http://localhost:3000
+  kms:
+    enabled: false # dev profile: false
 
   explorer:
     base-url: https://sepolia-optimism.etherscan.io
@@ -61,6 +63,9 @@ web3:
 mztk:
   admin:
     bootstrap:
-      enabled: false
+      enabled: true
+    seed:
+      seed-count: 2
+      delivery-target: mztk/dev/admin/bootstrap-delivery
     recovery:
       anchor: "anchor-only-for-dev"

@@ -7,6 +7,7 @@ import java.time.LocalTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.marketplace.reservation.domain.vo.ReservationStatus;
 import momzzangseven.mztkbe.modules.marketplace.reservation.infrastructure.persistence.entity.ReservationEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -106,6 +107,10 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
    * Fetch reservations for a specific user, ordered by reservation_date DESC.
    *
    * <p>If {@code status} is null all statuses are returned; otherwise only the matching status.
+   *
+   * <p><b>Note:</b> Sort order is {@code (reservation_date DESC, reservation_time DESC)}, which
+   * differs from the cursor query's {@code (reservation_date DESC, id DESC)}. Do not use this
+   * method to compare results with the cursor-paginated path.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "
@@ -116,9 +121,66 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
       @Param("userId") Long userId, @Param("status") ReservationStatus status);
 
   /**
+   * Cursor (keyset) paginated query for a user's reservations.
+   *
+   * <p>When {@code cursorDate} / {@code cursorTime} / {@code cursorId} are null (first page), all
+   * rows are returned up to the probe limit. On subsequent pages the WHERE clause excludes rows at
+   * or before the cursor position using a {@code (date, time, id)} 3-tuple ordering that exactly
+   * mirrors the {@code ORDER BY} clause below. This prevents gaps or duplicates when multiple
+   * reservations share the same date and preserves the session-time ordering that users expect.
+   *
+   * <p><b>Sort contract:</b> {@code reservation_date DESC, reservation_time DESC, id DESC}. The
+   * cursor encodes this as {@code KeysetCursor(createdAt = date.atTime(time), id)}.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.userId = :userId "
+          + "AND (:status IS NULL OR r.status = :status) "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
+          + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
+  List<ReservationEntity> findByUserIdCursor(
+      @Param("userId") Long userId,
+      @Param("status") ReservationStatus status,
+      @Param("cursorDate") LocalDate cursorDate,
+      @Param("cursorTime") LocalTime cursorTime,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
+  /**
+   * Cursor (keyset) paginated query for a user's reservations — no status filter.
+   *
+   * <p>Used when {@code status} is {@code null} so that the optimizer can use the {@code (user_id,
+   * reservation_date DESC, reservation_time DESC, id DESC)} index directly. Sort contract and
+   * cursor semantics are identical to {@link #findByUserIdCursor}.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.userId = :userId "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
+          + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
+  List<ReservationEntity> findByUserIdCursorNoStatus(
+      @Param("userId") Long userId,
+      @Param("cursorDate") LocalDate cursorDate,
+      @Param("cursorTime") LocalTime cursorTime,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
+  /**
    * Fetch reservations assigned to a specific trainer, ordered by reservation_date DESC.
    *
    * <p>If {@code status} is null all statuses are returned; otherwise only the matching status.
+   *
+   * <p><b>Note:</b> Sort order is {@code (reservation_date DESC, reservation_time DESC)}, which
+   * differs from the cursor query's {@code (reservation_date DESC, id DESC)}. Do not use this
+   * method to compare results with the cursor-paginated path.
    */
   @Query(
       "SELECT r FROM ReservationEntity r "
@@ -127,4 +189,51 @@ public interface ReservationJpaRepository extends JpaRepository<ReservationEntit
           + "ORDER BY r.reservationDate DESC, r.reservationTime DESC")
   List<ReservationEntity> findByTrainerId(
       @Param("trainerId") Long trainerId, @Param("status") ReservationStatus status);
+
+  /**
+   * Cursor (keyset) paginated query for a trainer's reservations.
+   *
+   * <p>Sort contract and cursor semantics are identical to {@link #findByUserIdCursor}: {@code
+   * (reservation_date DESC, reservation_time DESC, id DESC)}.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.trainerId = :trainerId "
+          + "AND (:status IS NULL OR r.status = :status) "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
+          + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
+  List<ReservationEntity> findByTrainerIdCursor(
+      @Param("trainerId") Long trainerId,
+      @Param("status") ReservationStatus status,
+      @Param("cursorDate") LocalDate cursorDate,
+      @Param("cursorTime") LocalTime cursorTime,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
+
+  /**
+   * Cursor (keyset) paginated query for a trainer's reservations — no status filter.
+   *
+   * <p>Mirrors {@link #findByUserIdCursorNoStatus} for the trainer path. Used when no status filter
+   * is requested so the {@code (trainer_id, reservation_date DESC, reservation_time DESC, id DESC)}
+   * index can satisfy the sort without a filesort step.
+   */
+  @Query(
+      "SELECT r FROM ReservationEntity r "
+          + "WHERE r.trainerId = :trainerId "
+          + "AND (:cursorDate IS NULL OR ("
+          + "  r.reservationDate < :cursorDate "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime < :cursorTime) "
+          + "  OR (r.reservationDate = :cursorDate AND r.reservationTime = :cursorTime AND r.id < :cursorId)"
+          + ")) "
+          + "ORDER BY r.reservationDate DESC, r.reservationTime DESC, r.id DESC")
+  List<ReservationEntity> findByTrainerIdCursorNoStatus(
+      @Param("trainerId") Long trainerId,
+      @Param("cursorDate") LocalDate cursorDate,
+      @Param("cursorTime") LocalTime cursorTime,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable);
 }

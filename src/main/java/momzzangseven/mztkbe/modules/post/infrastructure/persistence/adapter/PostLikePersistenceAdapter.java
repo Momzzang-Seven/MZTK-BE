@@ -21,6 +21,8 @@ import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistenc
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLike;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import momzzangseven.mztkbe.modules.post.infrastructure.persistence.entity.PostLikeEntity;
@@ -124,6 +126,7 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
             postLikeEntity.targetType.eq(PostLikeTargetType.POST),
             postLikeEntity.targetId.eq(postEntity.id),
             postEntity.type.eq(type),
+            likedPostReadableBy(userId),
             likedSearchPredicate(type, search),
             likedCursorBefore(pageRequest))
         .orderBy(postLikeEntity.createdAt.desc(), postLikeEntity.id.desc())
@@ -164,6 +167,8 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
             .reward(projection.getReward())
             .acceptedAnswerId(projection.getAcceptedAnswerId())
             .status(PostStatus.valueOf(projection.getStatus()))
+            .publicationStatus(PostPublicationStatus.valueOf(projection.getPublicationStatus()))
+            .moderationStatus(PostModerationStatus.valueOf(projection.getModerationStatus()))
             .createdAt(projection.getPostCreatedAt())
             .updatedAt(projection.getPostUpdatedAt())
             .build();
@@ -196,5 +201,17 @@ public class PostLikePersistenceAdapter implements PostLikePersistencePort {
       return null;
     }
     return postEntity.title.lower().like("%" + LikePatternEscaper.escape(search) + "%", '!');
+  }
+
+  private BooleanExpression likedPostReadableBy(Long requesterId) {
+    BooleanExpression publiclyVisible =
+        postEntity
+            .publicationStatus
+            .eq(PostPublicationStatus.VISIBLE)
+            .and(postEntity.moderationStatus.eq(PostModerationStatus.NORMAL));
+    if (requesterId == null) {
+      return publiclyVisible;
+    }
+    return publiclyVisible.or(postEntity.userId.eq(requesterId));
   }
 }

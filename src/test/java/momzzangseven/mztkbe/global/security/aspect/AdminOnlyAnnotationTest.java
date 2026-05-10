@@ -2,7 +2,20 @@ package momzzangseven.mztkbe.global.security.aspect;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
+import java.util.List;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardCommentService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardPostService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostCommentsService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.GetAdminBoardPostsService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.UnblockAdminBoardPostService;
+import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
+import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminRefundCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ExecuteQnaAdminSettlementCommand;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.AdminAuditedExecuteQnaAdminRefundUseCase;
@@ -24,6 +37,99 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("@AdminOnly 어노테이션 컴파일/리플렉션 가드 테스트")
 class AdminOnlyAnnotationTest {
+
+  private static final List<String> RESERVED_AUDIT_DETAIL_KEYS =
+      List.of("method", "arguments", "failureReason", "detailEvaluationError");
+
+  @Test
+  @DisplayName("관리자 게시글 목록 조회는 admin guard는 유지하되 audit=false 로 설정한다")
+  void getAdminBoardPostsService_isGuardedWithoutAudit() throws NoSuchMethodException {
+    AdminOnly annotation =
+        GetAdminBoardPostsService.class
+            .getMethod("execute", GetAdminBoardPostsCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POSTS_VIEW");
+    assertThat(annotation.audit()).isFalse();
+  }
+
+  @Test
+  @DisplayName("관리자 댓글 목록 조회는 admin guard는 유지하되 audit=false 로 설정한다")
+  void getAdminBoardPostCommentsService_isGuardedWithoutAudit() throws NoSuchMethodException {
+    AdminOnly annotation =
+        GetAdminBoardPostCommentsService.class
+            .getMethod("execute", GetAdminBoardPostCommentsCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POST_COMMENTS_VIEW");
+    assertThat(annotation.audit()).isFalse();
+  }
+
+  @Test
+  @DisplayName("관리자 댓글 ban mutation은 audit=true 기본값을 유지한다")
+  void banAdminBoardCommentService_keepsAuditEnabled() throws NoSuchMethodException {
+    AdminOnly annotation =
+        BanAdminBoardCommentService.class
+            .getMethod(
+                "execute",
+                momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand
+                    .class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_COMMENT_BAN");
+    assertThat(annotation.audit()).isTrue();
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 ban mutation은 moderation 결과 audit detail 표현식을 가진다")
+  void banAdminBoardPostService_recordsModerationResultDetail() throws NoSuchMethodException {
+    AdminOnly annotation =
+        BanAdminBoardPostService.class
+            .getMethod("execute", BanAdminBoardPostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POST_BAN");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId");
+    assertThat(annotation.targetId()).isEqualTo("#command.postId");
+    assertThat(annotation.audit()).isTrue();
+    assertThat(annotation.detail())
+        .containsExactly(
+            "reasonCode=#command.reasonCode",
+            "reasonDetail=#command.reasonDetail",
+            "moderated=#result?.moderated()",
+            "publicationStatus=#result?.publicationStatus()",
+            "moderationStatus=#result?.moderationStatus()");
+    assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 unblock mutation은 moderation 결과 audit detail 표현식을 가진다")
+  void unblockAdminBoardPostService_recordsModerationResultDetail() throws NoSuchMethodException {
+    AdminOnly annotation =
+        UnblockAdminBoardPostService.class
+            .getMethod("execute", UnblockAdminBoardPostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("ADMIN_BOARD_POST_UNBLOCK");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(annotation.operatorId()).isEqualTo("#command.operatorUserId");
+    assertThat(annotation.targetId()).isEqualTo("#command.postId");
+    assertThat(annotation.audit()).isTrue();
+    assertThat(annotation.detail())
+        .containsExactly(
+            "reasonCode=#command.reasonCode",
+            "reasonDetail=#command.reasonDetail",
+            "moderated=#result?.moderated()",
+            "publicationStatus=#result?.publicationStatus()",
+            "moderationStatus=#result?.moderationStatus()");
+    assertThat(detailKeys(annotation)).doesNotContainAnyElementsOf(RESERVED_AUDIT_DETAIL_KEYS);
+  }
 
   @Test
   @DisplayName(
@@ -132,5 +238,70 @@ class AdminOnlyAnnotationTest {
     assertThat(annotation.targetType()).isEqualTo(AuditTargetType.QNA_ESCROW_QUESTION);
     assertThat(annotation.operatorId()).isEqualTo("#command.operatorId()");
     assertThat(annotation.targetId()).isEqualTo("'post:' + #command.postId()");
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.blockPost 에는 POST_MODERATION audit 메타데이터가 부착된다")
+  void moderatePostServiceBlockPost_isAnnotatedWithPostModerationTargetType()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ModeratePostService.class
+            .getMethod("blockPost", ModeratePostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("POST_BLOCK");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.POST_MODERATION);
+    assertThat(annotation.operatorId()).isEqualTo("#p0.operatorId()");
+    assertThat(annotation.targetId()).isEqualTo("'post:' + #p0.postId()");
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.unblockPost 에는 POST_MODERATION audit 메타데이터가 부착된다")
+  void moderatePostServiceUnblockPost_isAnnotatedWithPostModerationTargetType()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ModeratePostService.class
+            .getMethod("unblockPost", ModeratePostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNotNull();
+    assertThat(annotation.actionType()).isEqualTo("POST_UNBLOCK");
+    assertThat(annotation.targetType()).isEqualTo(AuditTargetType.POST_MODERATION);
+    assertThat(annotation.operatorId()).isEqualTo("#p0.operatorId()");
+    assertThat(annotation.targetId()).isEqualTo("'post:' + #p0.postId()");
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.blockManagedPost 는 추가 POST_BLOCK audit 을 남기지 않는다")
+  void moderatePostServiceBlockManagedPost_isNotAnnotatedWithAdminOnly()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ModeratePostService.class
+            .getMethod("blockManagedPost", ModeratePostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNull();
+  }
+
+  @Test
+  @DisplayName("ModeratePostService.unblockManagedPost 는 추가 POST_UNBLOCK audit 을 남기지 않는다")
+  void moderatePostServiceUnblockManagedPost_isNotAnnotatedWithAdminOnly()
+      throws NoSuchMethodException {
+    AdminOnly annotation =
+        ModeratePostService.class
+            .getMethod("unblockManagedPost", ModeratePostCommand.class)
+            .getAnnotation(AdminOnly.class);
+
+    assertThat(annotation).isNull();
+  }
+
+  private static List<String> detailKeys(AdminOnly annotation) {
+    return Arrays.stream(annotation.detail()).map(AdminOnlyAnnotationTest::detailKey).toList();
+  }
+
+  private static String detailKey(String detailExpression) {
+    int separator = detailExpression.indexOf('=');
+    return separator < 0 ? detailExpression : detailExpression.substring(0, separator).trim();
   }
 }

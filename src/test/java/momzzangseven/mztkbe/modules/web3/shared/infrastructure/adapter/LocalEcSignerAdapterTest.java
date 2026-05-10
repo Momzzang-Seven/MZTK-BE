@@ -170,18 +170,23 @@ class LocalEcSignerAdapterTest {
   class UnregisteredKey {
 
     @Test
-    @DisplayName("[M-68] signDigest — 미등록 kmsKeyId → KmsSignFailedException (키 id 포함 메시지)")
+    @DisplayName(
+        "[M-68] signDigest — 미등록 kmsKeyId → KmsSignFailedException(retryable=false, 키 id 포함 메시지)")
     void signDigest_unregisteredKey_throwsKmsSignFailedException() {
       // given — adapter has no keys registered
 
-      // when / then
+      // when / then — local-key misregistration is deterministic, retry won't help
       assertThatThrownBy(
               () -> adapter.signDigest("unregistered-key-id", new byte[32], "0x" + "a".repeat(40)))
           .isInstanceOf(KmsSignFailedException.class)
           .hasMessageContaining("Local signer has no key registered")
           .hasMessageContaining("unregistered-key-id")
           .satisfies(
-              ex -> assertThat(((KmsSignFailedException) ex).getCode()).isEqualTo("WEB3_017"));
+              ex -> {
+                KmsSignFailedException signEx = (KmsSignFailedException) ex;
+                assertThat(signEx.getCode()).isEqualTo("WEB3_017");
+                assertThat(signEx.isRetryable()).isFalse();
+              });
     }
   }
 
@@ -194,7 +199,7 @@ class LocalEcSignerAdapterTest {
   class ClearBehavior {
 
     @Test
-    @DisplayName("[M-71] signDigest — clear() 후 이전 등록 키 → KmsSignFailedException")
+    @DisplayName("[M-71] signDigest — clear() 후 이전 등록 키 → KmsSignFailedException(retryable=false)")
     void signDigest_afterClear_registeredKeyThrowsException() {
       // given
       adapter.registerKey("key-to-clear", KEY_1.getPrivateKey());
@@ -205,7 +210,8 @@ class LocalEcSignerAdapterTest {
               () -> adapter.signDigest("key-to-clear", new byte[32], "0x" + "a".repeat(40)))
           .isInstanceOf(KmsSignFailedException.class)
           .hasMessageContaining("Local signer has no key registered")
-          .hasMessageContaining("key-to-clear");
+          .hasMessageContaining("key-to-clear")
+          .satisfies(ex -> assertThat(((KmsSignFailedException) ex).isRetryable()).isFalse());
     }
 
     @Test

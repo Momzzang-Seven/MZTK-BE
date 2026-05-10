@@ -9,16 +9,21 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.persistence.LikePatternEscaper;
 import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
+import momzzangseven.mztkbe.modules.comment.application.dto.GetManagedBoardPostCommentsQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
+import momzzangseven.mztkbe.modules.comment.application.dto.ManagedBoardCommentView;
 import momzzangseven.mztkbe.modules.comment.application.port.out.DeleteCommentPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadCommentPort;
+import momzzangseven.mztkbe.modules.comment.application.port.out.LoadManagedBoardPostCommentsPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.SaveCommentPort;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CommentPersistenceAdapter
-    implements LoadCommentPort, SaveCommentPort, DeleteCommentPort {
+    implements LoadCommentPort,
+        SaveCommentPort,
+        DeleteCommentPort,
+        LoadManagedBoardPostCommentsPort {
 
   private final CommentJpaRepository commentRepository;
 
@@ -55,9 +63,22 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  @Transactional
+  public Optional<Comment> loadCommentForUpdate(Long commentId) {
+    return commentRepository.findByIdForUpdate(commentId).map(CommentEntity::toDomain);
+  }
+
+  @Override
   public Page<Comment> loadRootComments(Long postId, Pageable pageable) {
     return commentRepository
-        .findRootCommentsByPostId(postId, pageable)
+        .findRootCommentsByPostId(CommentTargetType.POST, postId, pageable)
+        .map(CommentEntity::toDomain);
+  }
+
+  @Override
+  public Page<Comment> loadRootCommentsByAnswerId(Long answerId, Pageable pageable) {
+    return commentRepository
+        .findRootCommentsByAnswerId(CommentTargetType.ANSWER, answerId, pageable)
         .map(CommentEntity::toDomain);
   }
 
@@ -72,8 +93,30 @@ public class CommentPersistenceAdapter
     List<CommentEntity> entities =
         pageRequest.hasCursor()
             ? commentRepository.findRootCommentsByPostIdAfterCursor(
-                postId, pageRequest.cursor().createdAt(), pageRequest.cursor().id(), pageable)
-            : commentRepository.findRootCommentsByPostIdFirstPage(postId, pageable);
+                CommentTargetType.POST,
+                postId,
+                pageRequest.cursor().createdAt(),
+                pageRequest.cursor().id(),
+                pageable)
+            : commentRepository.findRootCommentsByPostIdFirstPage(
+                CommentTargetType.POST, postId, pageable);
+    return entities.stream().map(CommentEntity::toDomain).toList();
+  }
+
+  @Override
+  public List<Comment> loadRootCommentsByAnswerIdCursor(
+      Long answerId, CursorPageRequest pageRequest) {
+    Pageable pageable = PageRequest.of(0, pageRequest.limitWithProbe());
+    List<CommentEntity> entities =
+        pageRequest.hasCursor()
+            ? commentRepository.findRootCommentsByAnswerIdAfterCursor(
+                CommentTargetType.ANSWER,
+                answerId,
+                pageRequest.cursor().createdAt(),
+                pageRequest.cursor().id(),
+                pageable)
+            : commentRepository.findRootCommentsByAnswerIdFirstPage(
+                CommentTargetType.ANSWER, answerId, pageable);
     return entities.stream().map(CommentEntity::toDomain).toList();
   }
 
@@ -115,6 +158,52 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public Map<Long, Long> countManagedBoardCommentsByPostIds(List<Long> postIds) {
+    if (postIds == null || postIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countManagedBoardCommentsByPostIds(postIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.PostCommentCount::getPostId,
+                CommentJpaRepository.PostCommentCount::getCommentCount));
+  }
+
+  @Override
+  public Map<Long, Long> countCommentsByAnswerIds(List<Long> answerIds) {
+    if (answerIds == null || answerIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countCommentsByAnswerIds(CommentTargetType.ANSWER, answerIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.AnswerCommentCount::getAnswerId,
+                CommentJpaRepository.AnswerCommentCount::getCommentCount));
+  }
+
+  @Override
+  public Map<Long, Long> countCommentsByUserIds(List<Long> userIds) {
+    if (userIds == null || userIds.isEmpty()) {
+      return Map.of();
+    }
+
+    return commentRepository.countCommentsByUserIds(userIds).stream()
+        .collect(
+            Collectors.toMap(
+                CommentJpaRepository.UserCommentCount::getUserId,
+                CommentJpaRepository.UserCommentCount::getCommentCount));
+  }
+
+  @Override
+  public Page<ManagedBoardCommentView> load(GetManagedBoardPostCommentsQuery query) {
+    Pageable pageable =
+        PageRequest.of(query.page(), query.size(), Sort.by(Sort.Direction.DESC, "createdAt", "id"));
+    return commentRepository.findByPostId(query.postId(), pageable).map(this::toManagedView);
+  }
+
+  @Override
   public List<LatestCommentedPostRef> findCommentedPostRefsByUserCursor(
       FindCommentedPostRefsQuery query) {
     query.validate();
@@ -150,17 +239,49 @@ public class CommentPersistenceAdapter
   }
 
   @Override
+  public long countCommentsByAnswerId(Long answerId) {
+    if (answerId == null) {
+      return 0L;
+    }
+    return commentRepository.countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, answerId);
+  }
+
+  @Override
   public List<Long> loadCommentIdsForDeletion(LocalDateTime cutoff, int batchSize) {
     return commentRepository.findIdsByIsDeletedTrueAndUpdatedAtBefore(
         cutoff, PageRequest.of(0, batchSize));
+  }
+
+  private ManagedBoardCommentView toManagedView(CommentEntity entity) {
+    Comment comment = entity.toDomain();
+    return new ManagedBoardCommentView(
+        comment.getId(),
+        comment.getPostId(),
+        comment.getWriterId(),
+        comment.getContent(),
+        comment.getParentId(),
+        comment.isDeleted(),
+        comment.getCreatedAt());
   }
 
   // ========== DeleteCommentPort Implementation ==========
 
   @Override
   @Transactional(readOnly = false)
-  public void deleteAllByPostId(Long postId) {
-    commentRepository.deleteAllByPostId(postId);
+  public void softDeleteAllByRootPostId(Long postId) {
+    commentRepository.softDeleteAllCommentsByRootPostId(postId);
+  }
+
+  @Override
+  @Transactional(readOnly = false)
+  public void deleteAllByAnswerId(Long answerId) {
+    commentRepository.deleteAllByAnswerId(CommentTargetType.ANSWER, answerId);
+  }
+
+  @Override
+  @Transactional(readOnly = false)
+  public int softDeleteActiveOrphanAnswerComments(int batchSize) {
+    return commentRepository.softDeleteActiveOrphanAnswerComments(batchSize);
   }
 
   @Override

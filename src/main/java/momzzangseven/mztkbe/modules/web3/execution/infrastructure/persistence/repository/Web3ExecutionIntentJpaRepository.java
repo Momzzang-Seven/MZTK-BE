@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.persistence.entity.Web3ExecutionIntentEntity;
@@ -84,6 +85,16 @@ public interface Web3ExecutionIntentJpaRepository
       @Param("statuses") Collection<ExecutionIntentStatus> statuses,
       Pageable pageable);
 
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " and e.status in :statuses"
+          + " order by e.createdAt asc, e.id asc")
+  List<Web3ExecutionIntentEntity> findAllByResourceAndStatusIn(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      @Param("statuses") Collection<ExecutionIntentStatus> statuses);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "select e from Web3ExecutionIntentEntity e"
@@ -97,9 +108,38 @@ public interface Web3ExecutionIntentJpaRepository
       Pageable pageable);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " and e.status in :statuses and e.actionType <> :actionType"
+          + " order by e.createdAt desc, e.id desc")
+  List<Web3ExecutionIntentEntity> findActiveByResourceAndActionTypeNotForUpdate(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      @Param("statuses") Collection<ExecutionIntentStatus> statuses,
+      @Param("actionType") ExecutionActionType actionType,
+      Pageable pageable);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select e from Web3ExecutionIntentEntity e"
+          + " where e.resourceType = :resourceType and e.resourceId = :resourceId"
+          + " and e.status in :statuses"
+          + " order by e.createdAt asc, e.id asc")
+  List<Web3ExecutionIntentEntity> findAllByResourceAndStatusInForUpdate(
+      @Param("resourceType") ExecutionResourceType resourceType,
+      @Param("resourceId") String resourceId,
+      @Param("statuses") Collection<ExecutionIntentStatus> statuses);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select e from Web3ExecutionIntentEntity e where e.id in :ids")
   List<Web3ExecutionIntentEntity> findAllByIdInForUpdate(@Param("ids") Collection<Long> ids);
 
+  // The status / mode / action_type filter must stay in lockstep across the next two queries —
+  // a divergence would let the cron orchestrator either skip work that is actually claimable
+  // (peek=false but claim=present) or run preflight on an empty queue (peek=true but
+  // claim=empty). InternalExecutionIntentClaimQueryTest exercises both queries against the same
+  // fixture so a one-sided change fails CI.
   @Query(
       value =
           """
@@ -115,6 +155,19 @@ public interface Web3ExecutionIntentJpaRepository
       nativeQuery = true)
   Optional<Long> claimNextInternalExecutableIdForUpdate(
       @Param("actionTypes") Collection<String> actionTypes);
+
+  @Query(
+      value =
+          """
+          select 1
+          from web3_execution_intents e
+          where e.status = 'AWAITING_SIGNATURE'
+            and e.mode = 'EIP1559'
+            and e.action_type in :actionTypes
+          limit 1
+          """,
+      nativeQuery = true)
+  Optional<Integer> peekClaimableInternal(@Param("actionTypes") Collection<String> actionTypes);
 
   @Query(
       "select e.id from Web3ExecutionIntentEntity e"

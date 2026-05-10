@@ -1,8 +1,11 @@
 package momzzangseven.mztkbe.modules.marketplace.classes.application.port.out;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassDetailInfo;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassItem;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.domain.model.MarketplaceClass;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +25,8 @@ public interface LoadClassPort {
    * @return Optional containing the domain model if found
    */
   Optional<MarketplaceClass> findById(Long classId);
+
+  Optional<MarketplaceClass> findByIdForUpdate(Long classId);
 
   /**
    * Find all active classes matching the given filters, sorted and paginated.
@@ -65,4 +70,18 @@ public interface LoadClassPort {
    * @return paged list of MarketplaceClass domain models
    */
   Page<MarketplaceClass> findByTrainerId(Long trainerId, Pageable pageable);
+
+  /**
+   * Bulk-load lightweight class projections keyed by slot ID.
+   *
+   * <p>A single query joins {@code class_slots} → {@code marketplace_classes} and projects only
+   * {@code classId, trainerId, title, priceAmount, active}. No tags, features, store, or image data
+   * is loaded. Used by the reservation-enrichment adapter to avoid N+1 calls and the overhead of
+   * loading the full class aggregate.
+   *
+   * @param slotIds list of slot IDs
+   * @return map of slotId → {@link ClassSummaryProjection}; absent means no class found for that
+   *     slot
+   */
+  Map<Long, ClassSummaryProjection> findSummaryProjectionsBySlotIds(List<Long> slotIds);
 }

@@ -235,5 +235,28 @@ class JwtAuthenticationFilterTest {
       verify(filterChain).doFilter(request, response);
       assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
+
+    @Test
+    @DisplayName("BLOCKED 유저이면 403 에러 응답 후 체인 중단")
+    void blockedUser_writesErrorResponseAndStopsChain() throws Exception {
+      StringWriter sw = new StringWriter();
+      PrintWriter pw = new PrintWriter(sw);
+
+      when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn("Bearer blocked-token");
+      when(jwtTokenProvider.validateToken("blocked-token")).thenReturn(true);
+      when(jwtTokenProvider.isAccessToken("blocked-token")).thenReturn(true);
+      when(jwtTokenProvider.getUserIdFromToken("blocked-token")).thenReturn(5L);
+      when(jwtTokenProvider.getRoleFromToken("blocked-token")).thenReturn(UserRole.USER);
+      when(jwtTokenProvider.isStepUpAccessToken("blocked-token")).thenReturn(false);
+      when(checkAccountStatusUseCase.isActive(5L)).thenReturn(false);
+      when(checkAccountStatusUseCase.isDeleted(5L)).thenReturn(false);
+      when(checkAccountStatusUseCase.isBlocked(5L)).thenReturn(true);
+      when(response.getWriter()).thenReturn(pw);
+
+      filter.doFilterInternal(request, response, filterChain);
+
+      verify(filterChain, never()).doFilter(any(), any());
+      verify(response).setStatus(403);
+    }
   }
 }

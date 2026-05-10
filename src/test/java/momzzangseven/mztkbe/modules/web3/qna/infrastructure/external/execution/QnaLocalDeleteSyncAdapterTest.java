@@ -31,8 +31,8 @@ class QnaLocalDeleteSyncAdapterTest {
   @Test
   @DisplayName("answer delete confirmation delegates to the answer module input port")
   void confirmAnswerDeleted_delegatesToAnswerUseCase() {
-    qnaLocalDeleteSyncAdapter.confirmAnswerDeleted(201L);
+    qnaLocalDeleteSyncAdapter.confirmAnswerDeleted(201L, "intent-delete");
 
-    verify(confirmAnswerDeleteSyncUseCase).confirmDeleted(201L);
+    verify(confirmAnswerDeleteSyncUseCase).confirmDeleted(201L, "intent-delete");
   }
 }

@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.global.pagination.KeysetCursor;
 import momzzangseven.mztkbe.modules.comment.application.dto.FindCommentedPostRefsQuery;
 import momzzangseven.mztkbe.modules.comment.application.dto.LatestCommentedPostRef;
 import momzzangseven.mztkbe.modules.comment.domain.model.Comment;
+import momzzangseven.mztkbe.modules.comment.domain.model.CommentTargetType;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.entity.CommentEntity;
 import momzzangseven.mztkbe.modules.comment.infrastructure.persistence.repository.CommentJpaRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -118,8 +119,31 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName(
-      "countCommentsByPostId() delegates to repository count query including soft-deleted rows")
+  @DisplayName("loadCommentForUpdate() uses locked repository query and maps entity to domain")
+  void loadCommentForUpdate_mapsEntityToDomain() {
+    LocalDateTime now = LocalDateTime.now();
+    CommentEntity entity =
+        CommentEntity.builder()
+            .id(1L)
+            .postId(100L)
+            .writerId(200L)
+            .content("hello")
+            .isDeleted(false)
+            .createdAt(now)
+            .updatedAt(now)
+            .build();
+
+    given(commentRepository.findByIdForUpdate(1L)).willReturn(Optional.of(entity));
+
+    Optional<Comment> loaded = adapter.loadCommentForUpdate(1L);
+
+    assertThat(loaded).isPresent();
+    assertThat(loaded.orElseThrow().getId()).isEqualTo(1L);
+    verify(commentRepository).findByIdForUpdate(1L);
+  }
+
+  @Test
+  @DisplayName("countCommentsByPostId() delegates to active POST count repository query")
   void countCommentsByPostId_delegatesToRepository() {
     given(commentRepository.countByPostId(10L)).willReturn(4L);
 
@@ -130,7 +154,7 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("countCommentsByPostIds() maps repository projections including soft-deleted rows")
+  @DisplayName("countCommentsByPostIds() maps active-comment repository projections")
   void countCommentsByPostIds_mapsProjection() {
     CommentJpaRepository.PostCommentCount first = postCommentCount(10L, 3L);
     CommentJpaRepository.PostCommentCount second = postCommentCount(11L, 1L);
@@ -143,10 +167,78 @@ class CommentPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("countManagedBoardCommentsByPostIds() maps managed repository projections")
+  void countManagedBoardCommentsByPostIds_mapsProjection() {
+    CommentJpaRepository.PostCommentCount first = postCommentCount(10L, 3L);
+    CommentJpaRepository.PostCommentCount second = postCommentCount(11L, 1L);
+    given(commentRepository.countManagedBoardCommentsByPostIds(List.of(10L, 11L)))
+        .willReturn(List.of(first, second));
+
+    Map<Long, Long> result = adapter.countManagedBoardCommentsByPostIds(List.of(10L, 11L));
+
+    assertThat(result).containsEntry(10L, 3L).containsEntry(11L, 1L);
+    verify(commentRepository).countManagedBoardCommentsByPostIds(List.of(10L, 11L));
+  }
+
+  @Test
+  @DisplayName("countCommentsByAnswerIds() maps answerId counts separately from post counts")
+  void countCommentsByAnswerIds_mapsProjection() {
+    CommentJpaRepository.AnswerCommentCount first = answerCommentCount(20L, 2L);
+    CommentJpaRepository.AnswerCommentCount second = answerCommentCount(21L, 4L);
+    given(commentRepository.countCommentsByAnswerIds(CommentTargetType.ANSWER, List.of(20L, 21L)))
+        .willReturn(List.of(first, second));
+
+    Map<Long, Long> result = adapter.countCommentsByAnswerIds(List.of(20L, 21L));
+
+    assertThat(result).containsEntry(20L, 2L).containsEntry(21L, 4L);
+    verify(commentRepository).countCommentsByAnswerIds(CommentTargetType.ANSWER, List.of(20L, 21L));
+  }
+
+  @Test
+  @DisplayName("countCommentsByAnswerId() uses answerId target count")
+  void countCommentsByAnswerId_delegatesToAnswerTargetRepository() {
+    given(commentRepository.countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, 20L))
+        .willReturn(2L);
+
+    long result = adapter.countCommentsByAnswerId(20L);
+
+    assertThat(result).isEqualTo(2L);
+    verify(commentRepository).countByTargetTypeAndAnswerId(CommentTargetType.ANSWER, 20L);
+  }
+
+  @Test
+  @DisplayName("deleteAllByAnswerId() soft-deletes ANSWER target comments only")
+  void deleteAllByAnswerId_delegatesToAnswerTargetRepository() {
+    adapter.deleteAllByAnswerId(20L);
+
+    verify(commentRepository).deleteAllByAnswerId(CommentTargetType.ANSWER, 20L);
+  }
+
+  @Test
+  @DisplayName("softDeleteActiveOrphanAnswerComments() delegates to repository")
+  void softDeleteActiveOrphanAnswerComments_delegatesToRepository() {
+    given(commentRepository.softDeleteActiveOrphanAnswerComments(50)).willReturn(3);
+
+    int result = adapter.softDeleteActiveOrphanAnswerComments(50);
+
+    assertThat(result).isEqualTo(3);
+    verify(commentRepository).softDeleteActiveOrphanAnswerComments(50);
+  }
+
+  @Test
   @DisplayName("countCommentsByPostIds() no-ops for null or empty list")
   void countCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
     assertThat(adapter.countCommentsByPostIds(null)).isEmpty();
     assertThat(adapter.countCommentsByPostIds(List.of())).isEmpty();
+
+    verifyNoInteractions(commentRepository);
+  }
+
+  @Test
+  @DisplayName("countManagedBoardCommentsByPostIds() no-ops for null or empty list")
+  void countManagedBoardCommentsByPostIds_nullOrEmpty_returnsEmptyMap() {
+    assertThat(adapter.countManagedBoardCommentsByPostIds(null)).isEmpty();
+    assertThat(adapter.countManagedBoardCommentsByPostIds(List.of())).isEmpty();
 
     verifyNoInteractions(commentRepository);
   }
@@ -283,6 +375,21 @@ class CommentPersistenceAdapterTest {
       @Override
       public Long getPostId() {
         return postId;
+      }
+
+      @Override
+      public Long getCommentCount() {
+        return commentCount;
+      }
+    };
+  }
+
+  private CommentJpaRepository.AnswerCommentCount answerCommentCount(
+      Long answerId, Long commentCount) {
+    return new CommentJpaRepository.AnswerCommentCount() {
+      @Override
+      public Long getAnswerId() {
+        return answerId;
       }
 
       @Override

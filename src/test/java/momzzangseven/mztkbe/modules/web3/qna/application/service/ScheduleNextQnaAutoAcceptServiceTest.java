@@ -10,7 +10,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAdminSettleCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.ScheduleNextQnaAutoAcceptResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.PrepareQnaInternalSettlementUseCase;
@@ -20,8 +19,6 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAutoAcc
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAcceptStateSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaAutoAcceptCandidate;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaExecutionIntentStateView;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -78,12 +75,6 @@ class ScheduleNextQnaAutoAcceptServiceTest {
             Optional.of(
                 new QnaAutoAcceptCandidate(
                     101L, 201L, 7L, 22L, java.time.LocalDateTime.of(2026, 4, 10, 10, 0))));
-    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResourceForUpdate(
-            QnaExecutionResourceType.QUESTION, "101"))
-        .thenReturn(Optional.empty());
-    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResourceForUpdate(
-            QnaExecutionResourceType.ANSWER, "201"))
-        .thenReturn(Optional.empty());
     when(loadQnaAcceptContextPort.loadForUpdate(101L, 201L))
         .thenReturn(
             Optional.of(
@@ -104,14 +95,9 @@ class ScheduleNextQnaAutoAcceptServiceTest {
             Optional.of(
                 new QnaAutoAcceptCandidate(
                     101L, 201L, 7L, 22L, java.time.LocalDateTime.of(2026, 4, 10, 10, 0))));
-    when(loadQnaExecutionIntentStatePort.loadLatestActiveByResourceForUpdate(
+    when(loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
             QnaExecutionResourceType.QUESTION, "101"))
-        .thenReturn(
-            Optional.of(
-                new QnaExecutionIntentStateView(
-                    "intent-1",
-                    QnaExecutionActionType.QNA_ADMIN_SETTLE,
-                    ExecutionIntentStatus.AWAITING_SIGNATURE)));
+        .thenReturn(true);
 
     ScheduleNextQnaAutoAcceptResult result = service.scheduleNext(NOW);
 

@@ -88,7 +88,11 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             request.questionHash(),
             request.contentHash(),
             callTarget,
-            callData);
+            callData,
+            request.questionUpdateVersion(),
+            request.questionUpdateToken(),
+            request.answerUpdateVersion(),
+            request.answerUpdateToken());
 
     return new QnaExecutionDraft(
         request.resourceType(),
@@ -97,8 +101,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         request.actionType(),
         request.requesterUserId(),
         request.counterpartyUserId(),
-        QnaEscrowIdempotencyKeyFactory.create(
-            request.actionType(), request.requesterUserId(), request.postId(), request.answerId()),
+        rootIdempotencyKey(request),
         qnaPayloadSerializer.hashHex(payload),
         qnaPayloadSerializer.serialize(payload),
         List.of(call),
@@ -110,6 +113,26 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         unsignedTxSnapshot,
         qnaUnsignedTxFingerprintFactory.compute(unsignedTxSnapshot),
         LocalDateTime.now(appClock).plusSeconds(draftContext.ttlSeconds()));
+  }
+
+  private String rootIdempotencyKey(QnaEscrowExecutionRequest request) {
+    if (request.actionType() == QnaExecutionActionType.QNA_QUESTION_UPDATE) {
+      return QnaEscrowIdempotencyKeyFactory.createQuestionUpdate(
+          request.requesterUserId(),
+          request.postId(),
+          request.questionUpdateVersion(),
+          request.questionUpdateToken());
+    }
+    if (request.actionType() == QnaExecutionActionType.QNA_ANSWER_UPDATE) {
+      return QnaEscrowIdempotencyKeyFactory.createAnswerUpdate(
+          request.requesterUserId(),
+          request.postId(),
+          request.answerId(),
+          request.answerUpdateVersion(),
+          request.answerUpdateToken());
+    }
+    return QnaEscrowIdempotencyKeyFactory.create(
+        request.actionType(), request.requesterUserId(), request.postId(), request.answerId());
   }
 
   private long requestChainId() {

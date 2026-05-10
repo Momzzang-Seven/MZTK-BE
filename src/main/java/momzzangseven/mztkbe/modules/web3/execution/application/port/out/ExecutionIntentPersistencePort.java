@@ -39,11 +39,27 @@ public interface ExecutionIntentPersistencePort {
   Optional<ExecutionIntent> findLatestActiveByResource(
       ExecutionResourceType resourceType, String resourceId);
 
+  List<ExecutionIntent> findActiveByResource(ExecutionResourceType resourceType, String resourceId);
+
   Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId);
 
+  List<ExecutionIntent> findActiveByResourceForUpdate(
+      ExecutionResourceType resourceType, String resourceId);
+
+  boolean existsActiveByResourceAndActionTypeNotForUpdate(
+      ExecutionResourceType resourceType, String resourceId, ExecutionActionType actionType);
+
   Optional<ExecutionIntent> claimNextInternalExecutableForUpdate(
       List<ExecutionActionType> actionTypes);
+
+  /**
+   * Non-locking peek that returns {@code true} iff at least one row matches the same filter as
+   * {@link #claimNextInternalExecutableForUpdate(List)}. Lets the cron orchestrator skip sponsor
+   * preflight (and the terminal-KMS log line it can produce) when the queue is empty, so
+   * KMS-DescribeKey outages do not produce one ERROR log per scheduler tick.
+   */
+  boolean existsClaimableInternal(List<ExecutionActionType> actionTypes);
 
   Optional<ExecutionIntent> findBySubmittedTxId(Long submittedTxId);
 

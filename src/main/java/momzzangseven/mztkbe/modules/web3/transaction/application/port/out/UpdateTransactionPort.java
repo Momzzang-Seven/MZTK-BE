@@ -8,6 +8,8 @@ public interface UpdateTransactionPort {
 
   void assignNonce(Long transactionId, long nonce);
 
+  void clearNonce(Long transactionId);
+
   void markSigned(Long transactionId, long nonce, String signedRawTx, String txHash);
 
   void markPending(Long transactionId, String txHash);

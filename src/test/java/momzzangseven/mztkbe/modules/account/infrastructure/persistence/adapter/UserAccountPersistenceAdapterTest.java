@@ -70,6 +70,24 @@ class UserAccountPersistenceAdapterTest {
   }
 
   @Nested
+  @DisplayName("findByUserIdForUpdate")
+  class FindByUserIdForUpdate {
+
+    @Test
+    @DisplayName("uses locked repository query and returns mapped domain when entity exists")
+    void returnsDomainWhenExists() {
+      UserAccountEntity entity = activeLocalEntity(1L, 10L);
+      when(userAccountJpaRepository.findByUserIdForUpdate(10L)).thenReturn(Optional.of(entity));
+
+      Optional<UserAccount> result = adapter.findByUserIdForUpdate(10L);
+
+      assertThat(result).isPresent();
+      assertThat(result.get().getUserId()).isEqualTo(10L);
+      verify(userAccountJpaRepository).findByUserIdForUpdate(10L);
+    }
+  }
+
+  @Nested
   @DisplayName("findByProviderAndProviderUserId")
   class FindByProviderAndProviderUserId {
 

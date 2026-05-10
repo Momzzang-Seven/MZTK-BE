@@ -1,0 +1,35 @@
+# Codex CLI project config.
+# Codex automatically reads /AGENTS.md (and nested AGENTS.md) for project
+# instructions — do not duplicate that here.
+#
+# Personal overrides go in .codex/config.local.toml (gitignored).
+# See docs.shared/AGENT_CONFIG.md for the full Claude ↔ Codex setting map.
+
+# --- Sandbox / permissions ---
+[sandbox]
+# Default to "workspace-write": allow edits inside the repo, deny outside.
+mode = "workspace-write"
+
+# --- Skills ---
+# Codex auto-discovers .agents/skills/ from the repo root and follows symlinks.
+# .claude/skills/ is the same content via a symlink (POSIX) or directory
+# junction (Windows) created by scripts/agents/setup-skill-links.py.
+
+# --- Hooks (shared with .claude/settings.json — same scripts) ---
+[features]
+codex_hooks = true
+
+[[hooks.PostToolUse]]
+matcher = "^(Write|Edit|MultiEdit|apply_patch)$"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/scripts/agents/hooks/check-architecture-rules.py"'
+timeout = 30
+statusMessage = "ARCHITECTURE.md rule 검사 중..."
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = 'python3 "$(git rev-parse --show-toplevel)/scripts/agents/hooks/check-agent-link.py"'
+timeout = 30
+statusMessage = "agents skills link 검사 중..."

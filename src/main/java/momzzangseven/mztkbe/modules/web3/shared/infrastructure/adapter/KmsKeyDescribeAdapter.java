@@ -5,8 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.web3.KmsKeyDescribeFailedException;
 import momzzangseven.mztkbe.modules.web3.shared.application.port.out.KmsKeyDescribePort;
 import momzzangseven.mztkbe.modules.web3.shared.domain.crypto.KmsKeyState;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.DescribeKeyRequest;
 import software.amazon.awssdk.services.kms.model.DescribeKeyResponse;
@@ -21,15 +24,16 @@ import software.amazon.awssdk.services.kms.model.KmsException;
  * DescribeKmsKeyService} cache absorbs the per-sign latency, so each {@code
  * TransactionIssuerWorker} batch makes at most one call to this adapter per kmsKeyId per minute.
  *
- * <p>This adapter is gated on the {@code prod} Spring profile so that local / dev / test /
- * integration / E2E environments — which lack the prod-only {@code KmsClient} bean — instead
- * receive {@link LocalKmsKeyDescribeAdapter}, which always reports {@link KmsKeyState#ENABLED}.
+ * <p>This adapter is gated on the {@code web3.kms.enabled=true} property so that environments which
+ * have not opted into real AWS KMS — and therefore lack the {@code KmsClient} bean produced by
+ * {@code AwsKmsConfig} — instead receive {@link LocalKmsKeyDescribeAdapter}, which always reports
+ * {@link KmsKeyState#ENABLED}.
  *
  * <p><b>Logging hygiene</b> — Per design §8 we never log key material; only {@code kmsKeyId} (a
  * non-secret identifier) and the AWS error code are emitted on failure.
  */
 @Component
-@Profile("prod")
+@ConditionalOnProperty(name = "web3.kms.enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
@@ -39,6 +43,14 @@ public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
   /**
    * Look up the lifecycle state of the supplied KMS key id via {@code DescribeKey}.
    *
+   * <p>Annotated {@link Propagation#NOT_SUPPORTED} so any caller transaction is suspended for the
+   * duration of the AWS round-trip; the JDBC connection returns to the pool while we wait. KMS
+   * throttle / 5xx therefore cannot pin a Hikari connection (and cascade into pool exhaustion) when
+   * the call is reached from a {@code @Transactional} caller such as {@code
+   * QnaAdminReviewContextAdapter} loading review context. The Caffeine cache in {@code
+   * DescribeKmsKeyService} stays a pure in-memory lookup on warm hits and never enters this proxy
+   * boundary, so the suspend cost is paid only on cache misses.
+   *
    * @param kmsKeyId fully-qualified KMS key id or alias to describe
    * @return application-side {@link KmsKeyState} mapped from the AWS {@link KeyState}; {@link
    *     KmsKeyState#UNAVAILABLE} for any state we do not explicitly model (e.g. {@code CREATING},
@@ -47,17 +59,19 @@ public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
    *     fails
    */
   @Override
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
   public KmsKeyState describe(String kmsKeyId) {
     final DescribeKeyRequest request = DescribeKeyRequest.builder().keyId(kmsKeyId).build();
 
     final DescribeKeyResponse response;
     try {
       response = kmsClient.describeKey(request);
-    } catch (KmsException ex) {
+    } catch (SdkException ex) {
       log.warn(
-          "AWS KMS DescribeKey failed (kmsKeyId={}, awsErrorCode={})",
+          "AWS KMS DescribeKey failed (kmsKeyId={}, awsErrorCode={}, exception={})",
           kmsKeyId,
-          ex.awsErrorDetails() == null ? "n/a" : ex.awsErrorDetails().errorCode());
+          awsErrorCodeOrNa(ex),
+          ex.getClass().getSimpleName());
       throw new KmsKeyDescribeFailedException("KMS DescribeKey failed", ex);
     }
 
@@ -84,5 +98,12 @@ public class KmsKeyDescribeAdapter implements KmsKeyDescribePort {
       case PENDING_IMPORT -> KmsKeyState.PENDING_IMPORT;
       default -> KmsKeyState.UNAVAILABLE;
     };
+  }
+
+  private static String awsErrorCodeOrNa(SdkException ex) {
+    if (ex instanceof KmsException kex && kex.awsErrorDetails() != null) {
+      return kex.awsErrorDetails().errorCode();
+    }
+    return "n/a";
   }
 }

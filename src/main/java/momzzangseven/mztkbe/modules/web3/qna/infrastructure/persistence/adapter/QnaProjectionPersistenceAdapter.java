@@ -11,6 +11,7 @@ import momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.entity.Q
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.entity.QnaQuestionProjectionEntity;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.repository.QnaAnswerProjectionJpaRepository;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.persistence.repository.QnaQuestionProjectionJpaRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,6 +20,7 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
 
   private final QnaQuestionProjectionJpaRepository qnaQuestionProjectionJpaRepository;
   private final QnaAnswerProjectionJpaRepository qnaAnswerProjectionJpaRepository;
+  private final JdbcTemplate jdbcTemplate;
 
   @Override
   public Optional<QnaQuestionProjection> findQuestionByPostId(Long postId) {
@@ -68,6 +70,30 @@ public class QnaProjectionPersistenceAdapter implements QnaProjectionPersistence
   @Override
   public void deleteAnswerByAnswerId(Long answerId) {
     qnaAnswerProjectionJpaRepository.deleteById(answerId);
+  }
+
+  @Override
+  public void deleteAnswerProjectionsByPostId(Long postId) {
+    qnaAnswerProjectionJpaRepository.deleteAllByPostId(postId);
+  }
+
+  @Override
+  public int repairQuestionAnswerCounts() {
+    return jdbcTemplate.update(
+        """
+        UPDATE web3_qna_questions q
+        SET answer_count = counts.answer_count,
+            updated_at = NOW()
+        FROM (
+            SELECT q2.post_id, COUNT(a.answer_id)::INTEGER AS answer_count
+            FROM web3_qna_questions q2
+            LEFT JOIN web3_qna_answers a
+              ON a.post_id = q2.post_id
+            GROUP BY q2.post_id
+        ) counts
+        WHERE q.post_id = counts.post_id
+          AND q.answer_count <> counts.answer_count
+        """);
   }
 
   private QnaQuestionProjectionEntity toEntity(QnaQuestionProjection questionProjection) {

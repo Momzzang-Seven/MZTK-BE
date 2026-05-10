@@ -2,17 +2,17 @@ package momzzangseven.mztkbe.modules.marketplace.classes.api.controller;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CancelPendingReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CompleteReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CreateReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.CreateReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationCursorResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationDetailResponseDTO;
-import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationSummaryResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CancelPendingReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.CompleteReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
@@ -62,15 +62,19 @@ public class ClassReservationController {
   private final CompleteReservationUseCase completeReservationUseCase;
 
   @GetMapping("/me/reservations")
-  public ResponseEntity<ApiResponse<List<ReservationSummaryResponseDTO>>> getMyReservations(
+  public ResponseEntity<ApiResponse<ReservationCursorResponse>> getMyReservations(
       @AuthenticationPrincipal Long userId,
-      @RequestParam(required = false) ReservationStatus status) {
+      @RequestParam(required = false) ReservationStatus status,
+      @RequestParam(required = false) String cursor,
+      @RequestParam(required = false) Integer size) {
     requireUserId(userId);
-    List<ReservationSummaryResponseDTO> response =
-        getUserReservationsUseCase.execute(new GetUserReservationsQuery(userId, status)).stream()
-            .map(ReservationSummaryResponseDTO::from)
-            .toList();
-    return ResponseEntity.ok(ApiResponse.success(response));
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(cursor, size, 20, 100, GetUserReservationsQuery.cursorScope(status));
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            ReservationCursorResponse.from(
+                getUserReservationsUseCase.execute(
+                    new GetUserReservationsQuery(userId, status, pageRequest)))));
   }
 
   @GetMapping("/reservations/{id}")

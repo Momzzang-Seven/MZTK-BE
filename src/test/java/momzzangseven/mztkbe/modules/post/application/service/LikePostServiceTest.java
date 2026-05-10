@@ -6,22 +6,29 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.answer.AnswerNotFoundException;
 import momzzangseven.mztkbe.global.error.answer.AnswerPostMismatchException;
+import momzzangseven.mztkbe.global.error.post.PostInvalidInputException;
 import momzzangseven.mztkbe.global.error.post.PostNotFoundException;
 import momzzangseven.mztkbe.modules.post.application.dto.LikePostCommand;
 import momzzangseven.mztkbe.modules.post.application.dto.PostLikeResult;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAnswerLikeTargetPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostLikePersistencePort;
 import momzzangseven.mztkbe.modules.post.application.port.out.PostPersistencePort;
+import momzzangseven.mztkbe.modules.post.domain.model.Post;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLike;
 import momzzangseven.mztkbe.modules.post.domain.model.PostLikeTargetType;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,6 +38,7 @@ class LikePostServiceTest {
   @Mock private PostPersistencePort postPersistencePort;
   @Mock private PostLikePersistencePort postLikePersistencePort;
   @Mock private LoadAnswerLikeTargetPort loadAnswerLikeTargetPort;
+  @Spy private PostVisibilityPolicy postVisibilityPolicy = new PostVisibilityPolicy();
 
   @InjectMocks private LikePostService likePostService;
 
@@ -39,7 +47,7 @@ class LikePostServiceTest {
   void like_post_success() {
     LikePostCommand command = LikePostCommand.forPost(10L, 7L);
 
-    when(postPersistencePort.existsPost(10L)).thenReturn(true);
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(post(10L)));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(4L);
 
     PostLikeResult result = likePostService.like(command);
@@ -57,6 +65,7 @@ class LikePostServiceTest {
 
     when(loadAnswerLikeTargetPort.loadAnswerTarget(20L))
         .thenReturn(Optional.of(new LoadAnswerLikeTargetPort.AnswerLikeTarget(20L, 10L)));
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(post(10L)));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.ANSWER, 20L)).thenReturn(1L);
 
     PostLikeResult result = likePostService.unlike(command);
@@ -75,6 +84,7 @@ class LikePostServiceTest {
 
     when(loadAnswerLikeTargetPort.loadAnswerTarget(20L))
         .thenReturn(Optional.of(new LoadAnswerLikeTargetPort.AnswerLikeTarget(20L, 10L)));
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(post(10L)));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.ANSWER, 20L)).thenReturn(3L);
 
     PostLikeResult result = likePostService.like(command);
@@ -90,7 +100,7 @@ class LikePostServiceTest {
   void unlike_post_success() {
     LikePostCommand command = LikePostCommand.forPost(10L, 7L);
 
-    when(postPersistencePort.existsPost(10L)).thenReturn(true);
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(post(10L)));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(4L);
 
     PostLikeResult result = likePostService.unlike(command);
@@ -107,7 +117,7 @@ class LikePostServiceTest {
   void like_post_duplicateInsert_returnsLikedState() {
     LikePostCommand command = LikePostCommand.forPost(10L, 7L);
 
-    when(postPersistencePort.existsPost(10L)).thenReturn(true);
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(post(10L)));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(5L);
 
     PostLikeResult result = likePostService.like(command);
@@ -121,7 +131,7 @@ class LikePostServiceTest {
   void unlike_post_withoutExistingLike_returnsUnlikedState() {
     LikePostCommand command = LikePostCommand.forPost(10L, 7L);
 
-    when(postPersistencePort.existsPost(10L)).thenReturn(true);
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(post(10L)));
     when(postLikePersistencePort.countByTarget(PostLikeTargetType.POST, 10L)).thenReturn(0L);
 
     PostLikeResult result = likePostService.unlike(command);
@@ -134,7 +144,7 @@ class LikePostServiceTest {
   @Test
   @DisplayName("throws when post target does not exist")
   void like_post_notFound() {
-    when(postPersistencePort.existsPost(10L)).thenReturn(false);
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> likePostService.like(LikePostCommand.forPost(10L, 7L)))
         .isInstanceOf(PostNotFoundException.class);
@@ -160,5 +170,30 @@ class LikePostServiceTest {
 
     assertThatThrownBy(() -> likePostService.like(LikePostCommand.forAnswer(10L, 20L, 7L)))
         .isInstanceOf(AnswerPostMismatchException.class);
+  }
+
+  @Test
+  @DisplayName("rejects unlike when post is blocked")
+  void unlikeBlockedPostRejected() {
+    Post blockedPost = post(10L).toBuilder().moderationStatus(PostModerationStatus.BLOCKED).build();
+    when(postPersistencePort.loadPost(10L)).thenReturn(Optional.of(blockedPost));
+
+    assertThatThrownBy(() -> likePostService.unlike(LikePostCommand.forPost(10L, 7L)))
+        .isInstanceOf(PostInvalidInputException.class);
+    verify(postLikePersistencePort, never()).delete(PostLikeTargetType.POST, 10L, 7L);
+  }
+
+  private Post post(Long postId) {
+    LocalDateTime now = LocalDateTime.of(2026, 1, 1, 10, 0);
+    return Post.builder()
+        .id(postId)
+        .userId(1L)
+        .type(PostType.FREE)
+        .content("content")
+        .reward(0L)
+        .status(PostStatus.OPEN)
+        .createdAt(now)
+        .updatedAt(now)
+        .build();
   }
 }

@@ -80,6 +80,20 @@ class PostE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
   }
 
+  private Long createFreePost(String content, List<String> tags) throws Exception {
+    Map<String, Object> body = Map.of("content", content, "imageIds", imageIds, "tags", tags);
+    ResponseEntity<String> res =
+        restTemplate.exchange(
+            baseUrl() + "/posts/free",
+            HttpMethod.POST,
+            new HttpEntity<>(body, bearerJsonHeaders(accessToken)),
+            String.class);
+    assertThat(res.getStatusCode())
+        .as("Free post creation with tags should return 201")
+        .isEqualTo(HttpStatus.CREATED);
+    return objectMapper.readTree(res.getBody()).at("/data/postId").asLong();
+  }
+
   private Long createQuestionPost(String title, String content, long reward) throws Exception {
     Map<String, Object> body = Map.of("title", title, "content", content, "reward", reward);
     ResponseEntity<String> res =
@@ -165,9 +179,28 @@ class PostE2ETest extends E2ETestBase {
     return count == null ? 0 : count;
   }
 
+  private int countPostTagMappings(Long postId) {
+    Integer count =
+        jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM post_tags WHERE post_id = ?", Integer.class, postId);
+    return count == null ? 0 : count;
+  }
+
   private String getPostContentFromDb(Long postId) {
     return jdbcTemplate.queryForObject(
         "SELECT content FROM posts WHERE id = ?", String.class, postId);
+  }
+
+  private String getPostPublicationStatusFromDb(Long postId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT publication_status FROM posts WHERE id = ?", String.class, postId);
+  }
+
+  private void markPostPublicationStatus(Long postId, String publicationStatus) {
+    jdbcTemplate.update(
+        "UPDATE posts SET publication_status = ?, updated_at = NOW() WHERE id = ?",
+        publicationStatus,
+        postId);
   }
 
   private JsonNode parse(ResponseEntity<String> res) throws Exception {
@@ -270,6 +303,25 @@ class PostE2ETest extends E2ETestBase {
     // then - DB 직접 검증
     String savedContent = getPostContentFromDb(postId);
     assertThat(savedContent).isEqualTo("수정 후 내용 E2E");
+  }
+
+  @Test
+  @DisplayName("자유 게시글 동일 태그 유지 수정 시 PostgreSQL unique 충돌 없이 매핑을 유지한다")
+  void updateFreePost_retainingSameTag_keepsSingleMapping() throws Exception {
+    Long postId = createFreePost("태그 유지 원본", List.of("java"));
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId,
+            HttpMethod.PATCH,
+            new HttpEntity<>(
+                Map.of("content", "태그 유지 수정", "tags", List.of("java")),
+                bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(getPostContentFromDb(postId)).isEqualTo("태그 유지 수정");
+    assertThat(countPostTagMappings(postId)).isEqualTo(1);
   }
 
   @Test
@@ -778,6 +830,50 @@ class PostE2ETest extends E2ETestBase {
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
       assertThat(root.at("/code").asText()).isEqualTo("POST_003");
     }
+
+    @Test
+    @DisplayName("publicationStatus=PENDING 질문 수정 시도 → 409 CONFLICT (POST_008)")
+    void updateQuestion_whenPublicationPending_returns409_withPost008() throws Exception {
+      Long postId = createQuestionPost("PENDING 수정 차단 질문", "원본 질문 내용", 30L);
+      markPostPublicationStatus(postId, "PENDING");
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl() + "/posts/" + postId,
+              HttpMethod.PATCH,
+              new HttpEntity<>(
+                  Map.of("content", "수정되면 안 되는 질문 내용"), bearerJsonHeaders(accessToken)),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+      JsonNode root = parse(res);
+      assertThat(root.at("/status").asText()).isEqualTo("FAIL");
+      assertThat(root.at("/code").asText()).isEqualTo("POST_008");
+      assertThat(getPostContentFromDb(postId)).isEqualTo("원본 질문 내용");
+      assertThat(getPostPublicationStatusFromDb(postId)).isEqualTo("PENDING");
+    }
+
+    @Test
+    @DisplayName("publicationStatus=FAILED 질문 일반 수정 시도 → 409 CONFLICT (POST_009)")
+    void updateQuestion_whenPublicationFailed_returns409_withPost009() throws Exception {
+      Long postId = createQuestionPost("FAILED 수정 차단 질문", "원본 실패 질문 내용", 30L);
+      markPostPublicationStatus(postId, "FAILED");
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl() + "/posts/" + postId,
+              HttpMethod.PATCH,
+              new HttpEntity<>(
+                  Map.of("content", "일반 수정으로 바뀌면 안 됨"), bearerJsonHeaders(accessToken)),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+      JsonNode root = parse(res);
+      assertThat(root.at("/status").asText()).isEqualTo("FAIL");
+      assertThat(root.at("/code").asText()).isEqualTo("POST_009");
+      assertThat(getPostContentFromDb(postId)).isEqualTo("원본 실패 질문 내용");
+      assertThat(getPostPublicationStatusFromDb(postId)).isEqualTo("FAILED");
+    }
   }
 
   // ============================================================
@@ -861,6 +957,45 @@ class PostE2ETest extends E2ETestBase {
       JsonNode root = parse(res);
       assertThat(root.at("/status").asText()).isEqualTo("FAIL");
       assertThat(root.at("/code").asText()).isEqualTo("POST_003");
+    }
+
+    @Test
+    @DisplayName("publicationStatus=PENDING 질문 삭제 시도 → 409 CONFLICT (POST_008)")
+    void deleteQuestion_whenPublicationPending_returns409_withPost008() throws Exception {
+      Long postId = createQuestionPost("PENDING 삭제 차단 질문", "삭제 차단 본문", 40L);
+      markPostPublicationStatus(postId, "PENDING");
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl() + "/posts/" + postId,
+              HttpMethod.DELETE,
+              new HttpEntity<>(bearerJsonHeaders(accessToken)),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+      JsonNode root = parse(res);
+      assertThat(root.at("/status").asText()).isEqualTo("FAIL");
+      assertThat(root.at("/code").asText()).isEqualTo("POST_008");
+      assertThat(postExistsInDb(postId)).isTrue();
+      assertThat(getPostPublicationStatusFromDb(postId)).isEqualTo("PENDING");
+    }
+
+    @Test
+    @DisplayName("unmanaged publicationStatus=FAILED 질문 삭제 → 로컬 cleanup 성공")
+    void deleteQuestion_whenPublicationFailedAndUnmanaged_deletesLocalPost() throws Exception {
+      Long postId = createQuestionPost("FAILED 로컬 삭제 질문", "삭제될 실패 질문 본문", 40L);
+      markPostPublicationStatus(postId, "FAILED");
+
+      ResponseEntity<String> res =
+          restTemplate.exchange(
+              baseUrl() + "/posts/" + postId,
+              HttpMethod.DELETE,
+              new HttpEntity<>(bearerJsonHeaders(accessToken)),
+              String.class);
+
+      assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
+      assertThat(parse(res).at("/status").asText()).isEqualTo("SUCCESS");
+      assertThat(postExistsInDb(postId)).isFalse();
     }
   }
 

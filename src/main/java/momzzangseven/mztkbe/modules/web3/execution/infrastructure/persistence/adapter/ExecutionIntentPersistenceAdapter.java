@@ -107,6 +107,22 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public List<ExecutionIntent> findActiveByResource(
+      ExecutionResourceType resourceType, String resourceId) {
+    return repository
+        .findAllByResourceAndStatusIn(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN))
+        .stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public Optional<ExecutionIntent> findLatestActiveByResourceForUpdate(
       ExecutionResourceType resourceType, String resourceId) {
     return repository
@@ -124,6 +140,38 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
   }
 
   @Override
+  public boolean existsActiveByResourceAndActionTypeNotForUpdate(
+      ExecutionResourceType resourceType, String resourceId, ExecutionActionType actionType) {
+    return !repository
+        .findActiveByResourceAndActionTypeNotForUpdate(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN),
+            actionType,
+            PageRequest.of(0, 1))
+        .isEmpty();
+  }
+
+  @Override
+  public List<ExecutionIntent> findActiveByResourceForUpdate(
+      ExecutionResourceType resourceType, String resourceId) {
+    return repository
+        .findAllByResourceAndStatusInForUpdate(
+            resourceType,
+            resourceId,
+            EnumSet.of(
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                ExecutionIntentStatus.SIGNED,
+                ExecutionIntentStatus.PENDING_ONCHAIN))
+        .stream()
+        .map(this::toDomain)
+        .toList();
+  }
+
+  @Override
   public Optional<ExecutionIntent> claimNextInternalExecutableForUpdate(
       List<ExecutionActionType> actionTypes) {
     if (actionTypes == null || actionTypes.isEmpty()) {
@@ -133,6 +181,16 @@ public class ExecutionIntentPersistenceAdapter implements ExecutionIntentPersist
         .claimNextInternalExecutableIdForUpdate(actionTypes.stream().map(Enum::name).toList())
         .flatMap(repository::findById)
         .map(this::toDomain);
+  }
+
+  @Override
+  public boolean existsClaimableInternal(List<ExecutionActionType> actionTypes) {
+    if (actionTypes == null || actionTypes.isEmpty()) {
+      return false;
+    }
+    return repository
+        .peekClaimableInternal(actionTypes.stream().map(Enum::name).toList())
+        .isPresent();
   }
 
   @Override

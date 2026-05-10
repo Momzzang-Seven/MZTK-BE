@@ -16,7 +16,12 @@ class AuditTargetTypeTest {
             AuditTargetType.TREASURY_KEY,
             AuditTargetType.WEB3_TRANSACTION,
             AuditTargetType.ADMIN_ACCOUNT,
-            AuditTargetType.QNA_ESCROW_QUESTION);
+            AuditTargetType.QNA_ESCROW_QUESTION,
+            AuditTargetType.USER_ACCOUNT,
+            AuditTargetType.POST,
+            AuditTargetType.COMMENT,
+            AuditTargetType.DASHBOARD,
+            AuditTargetType.POST_MODERATION);
   }
 
   @Test
@@ -38,13 +43,18 @@ class AuditTargetTypeTest {
   void values_includesAdminAccountAlongsideExistingValues() {
     AuditTargetType[] values = AuditTargetType.values();
 
-    assertThat(values).hasSize(4);
+    assertThat(values).hasSize(9);
     assertThat(values)
         .containsExactlyInAnyOrder(
             AuditTargetType.TREASURY_KEY,
             AuditTargetType.WEB3_TRANSACTION,
             AuditTargetType.ADMIN_ACCOUNT,
-            AuditTargetType.QNA_ESCROW_QUESTION);
+            AuditTargetType.QNA_ESCROW_QUESTION,
+            AuditTargetType.USER_ACCOUNT,
+            AuditTargetType.POST,
+            AuditTargetType.COMMENT,
+            AuditTargetType.DASHBOARD,
+            AuditTargetType.POST_MODERATION);
   }
 
   @Test
@@ -57,5 +67,11 @@ class AuditTargetTypeTest {
   @DisplayName("QNA_ESCROW_QUESTION name() returns expected enum constant")
   void qnaEscrowQuestion_name_returnsExpectedName() {
     assertThat(AuditTargetType.QNA_ESCROW_QUESTION.name()).isEqualTo("QNA_ESCROW_QUESTION");
+  }
+
+  @Test
+  @DisplayName("POST_MODERATION name() returns expected enum constant")
+  void postModeration_name_returnsExpectedName() {
+    assertThat(AuditTargetType.POST_MODERATION.name()).isEqualTo("POST_MODERATION");
   }
 }

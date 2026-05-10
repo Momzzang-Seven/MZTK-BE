@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ExecuteExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
@@ -81,6 +82,9 @@ class ExecutionIntentControllerTest {
                 ExecutionResourceType.QUESTION,
                 "web3:QUESTION:101",
                 ExecutionResourceStatus.PENDING_EXECUTION,
+                ExecutionActionType.QNA_QUESTION_CREATE,
+                "0x" + "f".repeat(64),
+                "{}",
                 INTENT_ID,
                 ExecutionIntentStatus.AWAITING_SIGNATURE,
                 expiresAt,
@@ -122,6 +126,9 @@ class ExecutionIntentControllerTest {
                 ExecutionResourceType.ANSWER,
                 "web3:ANSWER:201",
                 ExecutionResourceStatus.PENDING_EXECUTION,
+                ExecutionActionType.QNA_ANSWER_SUBMIT,
+                "0x" + "f".repeat(64),
+                "{}",
                 INTENT_ID,
                 ExecutionIntentStatus.PENDING_ONCHAIN,
                 LocalDateTime.now().plusMinutes(5),

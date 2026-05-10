@@ -3,6 +3,8 @@ package momzzangseven.mztkbe.modules.post.application.dto;
 import java.time.LocalDateTime;
 import java.util.List;
 import momzzangseven.mztkbe.modules.post.domain.model.Post;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 public record PostListResult(
@@ -12,12 +14,15 @@ public record PostListResult(
     String content,
     long likeCount,
     long commentCount,
+    long answerCount,
     boolean liked,
     Long userId,
     String nickname,
     String profileImageUrl,
     Long reward,
     boolean isSolved,
+    PostPublicationStatus publicationStatus,
+    PostModerationStatus moderationStatus,
     List<String> tags,
     List<PostImageResult.PostImageSlot> images,
     LocalDateTime createdAt,
@@ -25,6 +30,83 @@ public record PostListResult(
 
   public PostListResult {
     images = images == null ? List.of() : images;
+  }
+
+  public PostListResult(
+      Long postId,
+      PostType type,
+      String title,
+      String content,
+      long likeCount,
+      long commentCount,
+      long answerCount,
+      boolean liked,
+      Long userId,
+      String nickname,
+      String profileImageUrl,
+      Long reward,
+      boolean isSolved,
+      List<String> tags,
+      List<PostImageResult.PostImageSlot> images,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this(
+        postId,
+        type,
+        title,
+        content,
+        likeCount,
+        commentCount,
+        answerCount,
+        liked,
+        userId,
+        nickname,
+        profileImageUrl,
+        reward,
+        isSolved,
+        PostPublicationStatus.VISIBLE,
+        PostModerationStatus.NORMAL,
+        tags,
+        images,
+        createdAt,
+        updatedAt);
+  }
+
+  public PostListResult(
+      Long postId,
+      PostType type,
+      String title,
+      String content,
+      long likeCount,
+      long commentCount,
+      boolean liked,
+      Long userId,
+      String nickname,
+      String profileImageUrl,
+      Long reward,
+      boolean isSolved,
+      List<String> tags,
+      List<PostImageResult.PostImageSlot> images,
+      LocalDateTime createdAt,
+      LocalDateTime updatedAt) {
+    this(
+        postId,
+        type,
+        title,
+        content,
+        likeCount,
+        commentCount,
+        0L,
+        liked,
+        userId,
+        nickname,
+        profileImageUrl,
+        reward,
+        isSolved,
+        tags,
+        images,
+        createdAt,
+        updatedAt);
   }
 
   public PostListResult(
@@ -50,12 +132,15 @@ public record PostListResult(
         content,
         likeCount,
         0L,
+        0L,
         liked,
         userId,
         nickname,
         profileImageUrl,
         reward,
         isSolved,
+        PostPublicationStatus.VISIBLE,
+        PostModerationStatus.NORMAL,
         tags,
         images,
         createdAt,
@@ -80,6 +165,18 @@ public record PostListResult(
       String nickname,
       String profileImageUrl,
       List<PostImageResult.PostImageSlot> images) {
+    return fromDomain(post, likeCount, commentCount, 0L, liked, nickname, profileImageUrl, images);
+  }
+
+  public static PostListResult fromDomain(
+      Post post,
+      long likeCount,
+      long commentCount,
+      long answerCount,
+      boolean liked,
+      String nickname,
+      String profileImageUrl,
+      List<PostImageResult.PostImageSlot> images) {
     return new PostListResult(
         post.getId(),
         post.getType(),
@@ -87,12 +184,15 @@ public record PostListResult(
         post.getContent(),
         likeCount,
         commentCount,
+        answerCount,
         liked,
         post.getUserId(),
         nickname,
         profileImageUrl,
         post.getReward(),
         post.getIsSolved(),
+        post.getPublicationStatus(),
+        post.getModerationStatus(),
         post.getTags(),
         images,
         post.getCreatedAt(),

@@ -8,7 +8,7 @@ spring:
 
   # H2 인메모리 DB 사용 (PostgreSQL 대체)
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    url: jdbc:h2:mem:testdb-${random.uuid};DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
     username: sa
     password:
     driver-class-name: org.h2.Driver
@@ -17,13 +17,12 @@ spring:
   flyway:
     enabled: false
 
-  # SQL 초기화 비활성화
   sql:
     init:
-      mode: never
+      mode: always
 
   jpa:
-    defer-datasource-initialization: false
+    defer-datasource-initialization: true
     open-in-view: false
     show-sql: false
     hibernate:
@@ -123,8 +122,6 @@ web3:
     token-contract-address: "0x0000000000000000000000000000000000000001"
     decimals: 18
     treasury:
-      wallet-alias: reward-treasury
-      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk= # gitleaks:allow
       provisioning:
         enabled: false
     prevalidate:
@@ -151,8 +148,6 @@ web3:
       default-receiver-address: "0x0000000000000000000000000000000000000001"
     sponsor:
       enabled: false
-      key-encryption-key-b64: dGVzdC1rZXktZW5jcnlwdGlvbi1rZXk= # gitleaks:allow
-      wallet-alias: sponsor-treasury
       max-gas-limit: 500000
       max-max-fee-gwei: 60
       max-priority-fee-gwei: 2

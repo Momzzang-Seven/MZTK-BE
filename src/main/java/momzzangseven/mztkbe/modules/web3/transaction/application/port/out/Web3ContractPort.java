@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.Collections;
 import java.util.Map;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 
 /** Port for on-chain contract operations used by reward token workers. */
@@ -73,7 +74,7 @@ public interface Web3ContractPort {
   }
 
   record SignTransferCommand(
-      String treasuryPrivateKeyHex,
+      TreasurySigner treasurySigner,
       String tokenContractAddress,
       String toAddress,
       BigInteger amountWei,
@@ -83,7 +84,11 @@ public interface Web3ContractPort {
       BigInteger maxPriorityFeePerGas,
       BigInteger maxFeePerGas) {
 
-    public SignTransferCommand {}
+    public SignTransferCommand {
+      if (treasurySigner == null) {
+        throw new Web3InvalidInputException("treasurySigner is required");
+      }
+    }
   }
 
   record SignedTransaction(String rawTx, String txHash) {

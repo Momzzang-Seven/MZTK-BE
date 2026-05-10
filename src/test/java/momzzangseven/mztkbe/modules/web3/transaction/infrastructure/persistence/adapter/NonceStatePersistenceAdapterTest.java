@@ -258,6 +258,46 @@ class NonceStatePersistenceAdapterTest {
   }
 
   @Test
+  void releaseNonce_throws_whenAddressBlank() {
+    assertThatThrownBy(() -> adapter.releaseNonce(" ", 5L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("fromAddress is required");
+  }
+
+  @Test
+  void releaseNonce_throws_whenAddressNull() {
+    assertThatThrownBy(() -> adapter.releaseNonce(null, 5L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("fromAddress is required");
+  }
+
+  @Test
+  void releaseNonce_throws_whenNonceNegative() {
+    assertThatThrownBy(() -> adapter.releaseNonce("0x" + "a".repeat(40), -1L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("nonce must be >= 0");
+  }
+
+  @Test
+  void releaseNonce_returnsTrue_whenCasMatches() {
+    when(repository.releaseNonceCas("0x" + "a".repeat(40), 7L, 8L, FIXED_NOW)).thenReturn(1);
+
+    boolean released = adapter.releaseNonce("0x" + "A".repeat(40), 7L);
+
+    assertThat(released).isTrue();
+    verify(repository).releaseNonceCas("0x" + "a".repeat(40), 7L, 8L, FIXED_NOW);
+  }
+
+  @Test
+  void releaseNonce_returnsFalse_whenCursorAlreadyAdvanced() {
+    when(repository.releaseNonceCas("0x" + "a".repeat(40), 7L, 8L, FIXED_NOW)).thenReturn(0);
+
+    boolean released = adapter.releaseNonce("0x" + "a".repeat(40), 7L);
+
+    assertThat(released).isFalse();
+  }
+
+  @Test
   void shutdown_closesBothClients_whenInitialized() {
     Web3j mainWeb3j = mock(Web3j.class);
     Web3j subWeb3j = mock(Web3j.class);

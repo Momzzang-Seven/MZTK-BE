@@ -6,21 +6,20 @@ import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAnswerIdsPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ProbeSponsorSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionPersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaContractCallSupport;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.in.ProbeExecutionSignerCapabilityUseCase;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.LoadExecutionSignerConfigPort;
-import momzzangseven.mztkbe.modules.web3.shared.application.port.out.ProbeExecutionSignerCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnQnaAdminEnabled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -31,16 +30,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @RequiredArgsConstructor
 @ConditionalOnQnaAdminEnabled
-@ConditionalOnBean({LoadExecutionSignerConfigPort.class, ProbeExecutionSignerCapabilityPort.class})
+@ConditionalOnBean(ProbeSponsorSignerCapabilityPort.class)
 public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPort {
 
   private final GetPostContextUseCase getPostContextUseCase;
-  private final GetAnswerSummaryUseCase getAnswerSummaryUseCase;
-  private final GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  private final GetVisibleAnswerSummaryUseCase getVisibleAnswerSummaryUseCase;
+  private final GetVisibleAnswerSummaryForUpdateUseCase getVisibleAnswerSummaryForUpdateUseCase;
   private final LoadQnaAnswerIdsPort loadQnaAnswerIdsPort;
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
   private final LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
-  private final ProbeExecutionSignerCapabilityUseCase probeExecutionSignerCapabilityUseCase;
+  private final ProbeSponsorSignerCapabilityPort probeSponsorSignerCapabilityPort;
   private final QnaContractCallSupport qnaContractCallSupport;
   private final LoadExecutionInternalIssuerPolicyPort loadExecutionInternalIssuerPolicyPort;
   private final QnaEscrowProperties qnaEscrowProperties;
@@ -50,7 +49,7 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
   public SettlementContext loadSettlement(Long postId, Long answerId) {
     return new SettlementContext(
         getPostContextUseCase.getPostContext(postId).map(this::toLocalQuestion),
-        getAnswerSummaryUseCase.getAnswerSummary(answerId).map(this::toLocalAnswer),
+        getVisibleAnswerSummaryUseCase.getVisibleAnswerSummary(answerId).map(this::toLocalAnswer),
         qnaProjectionPersistencePort.findQuestionByPostId(postId),
         qnaProjectionPersistencePort.findAnswerByAnswerId(answerId),
         loadQnaExecutionIntentStatePort.loadLatestActiveByResource(
@@ -65,8 +64,8 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
   @Transactional(propagation = Propagation.MANDATORY)
   public SettlementContext loadSettlementForUpdate(Long postId, Long answerId) {
     Optional<LocalAnswer> localAnswer =
-        getAnswerSummaryForUpdateUseCase
-            .getAnswerSummaryForUpdate(answerId)
+        getVisibleAnswerSummaryForUpdateUseCase
+            .getVisibleAnswerSummaryForUpdate(answerId)
             .map(this::toLocalAnswer);
     Optional<LocalQuestion> localQuestion =
         getPostContextUseCase.getPostContextForUpdate(postId).map(this::toLocalQuestion);
@@ -119,7 +118,7 @@ public class QnaAdminReviewContextAdapter implements LoadQnaAdminReviewContextPo
   }
 
   private ExecutionAuthority loadAuthority() {
-    var serverSigner = probeExecutionSignerCapabilityUseCase.execute();
+    var serverSigner = probeSponsorSignerCapabilityPort.probe();
     boolean relayerRegistered = false;
     QnaAdminRelayerRegistrationStatus relayerRegistrationStatus =
         QnaAdminRelayerRegistrationStatus.UNCHECKED;

@@ -43,6 +43,12 @@ public class ClassSlotPersistenceAdapter implements LoadClassSlotPort, SaveClass
   }
 
   @Override
+  public Optional<ClassSlot> findById(Long slotId) {
+    log.debug("Loading slot (no lock) for slotId={}", slotId);
+    return classSlotJpaRepository.findById(slotId).map(ClassSlotEntity::toDomain);
+  }
+
+  @Override
   public Optional<ClassSlot> findByIdWithLock(Long slotId) {
     log.debug("Loading slot with pessimistic lock for slotId={}", slotId);
     return classSlotJpaRepository.findByIdWithLock(slotId).map(ClassSlotEntity::toDomain);

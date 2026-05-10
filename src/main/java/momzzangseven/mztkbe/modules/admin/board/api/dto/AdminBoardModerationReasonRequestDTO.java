@@ -1,0 +1,49 @@
+package momzzangseven.mztkbe.modules.admin.board.api.dto;
+
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
+
+/**
+ * Request body for admin board moderation actions that require an operator reason, including post
+ * ban, post unblock, and comment ban.
+ */
+public record AdminBoardModerationReasonRequestDTO(
+    @NotNull(message = "Reason code is required") AdminBoardModerationReasonCode reasonCode,
+    @Size(max = 500, message = "Reason detail must not exceed 500 characters")
+        String reasonDetail) {
+
+  public BanAdminBoardPostCommand toBanPostCommand(Long operatorUserId, Long postId) {
+    BanAdminBoardPostCommand command =
+        new BanAdminBoardPostCommand(
+            operatorUserId, postId, reasonCode, normalizeReasonDetail(reasonDetail));
+    command.validate();
+    return command;
+  }
+
+  public UnblockAdminBoardPostCommand toUnblockPostCommand(Long operatorUserId, Long postId) {
+    UnblockAdminBoardPostCommand command =
+        new UnblockAdminBoardPostCommand(
+            operatorUserId, postId, reasonCode, normalizeReasonDetail(reasonDetail));
+    command.validate();
+    return command;
+  }
+
+  public BanAdminBoardCommentCommand toBanCommentCommand(Long operatorUserId, Long commentId) {
+    BanAdminBoardCommentCommand command =
+        new BanAdminBoardCommentCommand(
+            operatorUserId, commentId, reasonCode, normalizeReasonDetail(reasonDetail));
+    command.validate();
+    return command;
+  }
+
+  private static String normalizeReasonDetail(String reasonDetail) {
+    if (reasonDetail == null || reasonDetail.trim().isBlank()) {
+      return null;
+    }
+    return reasonDetail.trim();
+  }
+}

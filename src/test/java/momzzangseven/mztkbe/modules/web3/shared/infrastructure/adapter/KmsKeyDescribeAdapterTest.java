@@ -17,6 +17,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.kms.model.DescribeKeyRequest;
 import software.amazon.awssdk.services.kms.model.DescribeKeyResponse;
@@ -155,6 +156,23 @@ class KmsKeyDescribeAdapterTest {
                 assertThat(descEx.getCause()).isSameAs(kmsEx);
                 assertThat(descEx.getCode()).isEqualTo("WEB3_018");
               });
+    }
+
+    @Test
+    @DisplayName(
+        "describe — SdkClientException(network/timeout/credential) → KmsKeyDescribeFailedException")
+    void describe_sdkClientException_wrapsInKmsKeyDescribeFailedException() {
+      // given — without SdkException catch, this would propagate past processBatchItems and
+      // abort the batch with no per-row audit trail.
+      var clientEx = SdkClientException.create("Unable to execute HTTP request: connect timeout");
+      when(kmsClient.describeKey(any(DescribeKeyRequest.class))).thenThrow(clientEx);
+      KmsKeyDescribeAdapter adapter = new KmsKeyDescribeAdapter(kmsClient);
+
+      // when / then
+      assertThatThrownBy(() -> adapter.describe(KEY_ARN))
+          .isInstanceOf(KmsKeyDescribeFailedException.class)
+          .hasMessageContaining("KMS DescribeKey failed")
+          .satisfies(ex -> assertThat(ex.getCause()).isSameAs(clientEx));
     }
 
     @Test

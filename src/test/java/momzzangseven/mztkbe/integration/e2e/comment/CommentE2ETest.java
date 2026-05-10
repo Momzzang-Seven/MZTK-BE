@@ -94,6 +94,17 @@ class CommentE2ETest extends E2ETestBase {
         "comment:create:" + targetCommentId);
   }
 
+  private void blockPost(Long targetPostId) {
+    jdbcTemplate.update(
+        "UPDATE posts SET moderation_status = 'BLOCKED', updated_at = NOW() WHERE id = ?",
+        targetPostId);
+  }
+
+  private Boolean isCommentDeleted(Long targetCommentId) {
+    return jdbcTemplate.queryForObject(
+        "SELECT is_deleted FROM comments WHERE id = ?", Boolean.class, targetCommentId);
+  }
+
   @BeforeEach
   void setUp() throws Exception {
     accessToken = signupAndLogin("comment-e2e-user").accessToken();
@@ -199,6 +210,24 @@ class CommentE2ETest extends E2ETestBase {
 
   @Test
   @Order(6)
+  @DisplayName("deleting a comment on a blocked post returns 400 and keeps the comment")
+  void deleteComment_blockedParentPost_returns400AndKeepsComment() throws Exception {
+    commentId = createComment(postId, "comment on blocked post", null);
+    blockPost(postId);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/comments/" + commentId,
+            HttpMethod.DELETE,
+            new HttpEntity<>(bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(isCommentDeleted(commentId)).isFalse();
+  }
+
+  @Test
+  @Order(7)
   @DisplayName("reply creation with parentId succeeds")
   void createReply_withParentId_success() throws Exception {
     commentId = createComment(postId, "parent comment", null);
@@ -219,7 +248,7 @@ class CommentE2ETest extends E2ETestBase {
   }
 
   @Test
-  @Order(7)
+  @Order(8)
   @DisplayName("reply query includes the created reply")
   void getReplies_afterCreateReply_includesReply() throws Exception {
     commentId = createComment(postId, "parent for reply query", null);
@@ -241,7 +270,7 @@ class CommentE2ETest extends E2ETestBase {
   }
 
   @Test
-  @Order(8)
+  @Order(9)
   @DisplayName("unauthenticated comment creation returns 401")
   void createComment_withoutAuth_returns401() {
     Map<String, Object> body = Map.of("content", "unauthenticated comment");
@@ -257,7 +286,7 @@ class CommentE2ETest extends E2ETestBase {
   }
 
   @Test
-  @Order(9)
+  @Order(10)
   @DisplayName("blank comment content returns 400 and does not grant XP")
   void createComment_withBlankContent_returns400() {
     Map<String, Object> body = Map.of("content", "");
@@ -279,7 +308,7 @@ class CommentE2ETest extends E2ETestBase {
   }
 
   @Test
-  @Order(10)
+  @Order(11)
   @DisplayName("updating another user's comment returns a client error")
   void updateComment_byOtherUser_returnsError() throws Exception {
     commentId = createComment(postId, "comment owned by original user", null);
@@ -298,7 +327,7 @@ class CommentE2ETest extends E2ETestBase {
   }
 
   @Test
-  @Order(11)
+  @Order(12)
   @DisplayName("querying comments for a missing post returns 404")
   void getRootComments_missingPost_returns404() {
     ResponseEntity<String> response =

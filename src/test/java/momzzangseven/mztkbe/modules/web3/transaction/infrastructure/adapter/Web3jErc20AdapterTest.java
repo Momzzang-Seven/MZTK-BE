@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.shared.application.dto.TreasurySigner;
 import momzzangseven.mztkbe.modules.web3.transaction.application.port.out.Web3ContractPort;
 import momzzangseven.mztkbe.modules.web3.transaction.domain.model.Web3TxFailureReason;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.TransactionRewardTokenProperties;
@@ -52,6 +53,7 @@ class Web3jErc20AdapterTest {
 
   private TransactionRewardTokenProperties rewardTokenProperties;
   private DefaultGasFeeCalculator gasFeeStrategy;
+  private Eip1559TxSigningAdapter eip1559TxSigningAdapter;
   private Web3j mainWeb3j;
   private Web3j subWeb3j;
   private Web3jErc20Adapter adapter;
@@ -68,12 +70,38 @@ class Web3jErc20AdapterTest {
     coreProperties.getRpc().setSub("http://localhost:8546");
 
     gasFeeStrategy = mock(DefaultGasFeeCalculator.class);
-    adapter = new Web3jErc20Adapter(rewardTokenProperties, coreProperties, gasFeeStrategy);
+    eip1559TxSigningAdapter = mock(Eip1559TxSigningAdapter.class);
+    adapter =
+        new Web3jErc20Adapter(
+            rewardTokenProperties, coreProperties, gasFeeStrategy, eip1559TxSigningAdapter);
 
     mainWeb3j = mock(Web3j.class, RETURNS_DEEP_STUBS);
     subWeb3j = mock(Web3j.class, RETURNS_DEEP_STUBS);
     ReflectionTestUtils.setField(adapter, "mainWeb3j", mainWeb3j);
     ReflectionTestUtils.setField(adapter, "subWeb3j", subWeb3j);
+  }
+
+  @Test
+  void signTransfer_delegatesToEip1559TxSigningAdapter() {
+    Web3ContractPort.SignTransferCommand command =
+        new Web3ContractPort.SignTransferCommand(
+            new TreasurySigner("reward-treasury", "alias/reward-treasury", FROM),
+            TOKEN_CONTRACT,
+            TO,
+            BigInteger.valueOf(1_000),
+            7L,
+            10L,
+            BigInteger.valueOf(60_000),
+            BigInteger.valueOf(1_000_000_000L),
+            BigInteger.valueOf(2_000_000_000L));
+    Web3ContractPort.SignedTransaction canned =
+        new Web3ContractPort.SignedTransaction("0xdeadbeef", "0x" + "d".repeat(64));
+    when(eip1559TxSigningAdapter.signTransfer(command)).thenReturn(canned);
+
+    Web3ContractPort.SignedTransaction result = adapter.signTransfer(command);
+
+    assertThat(result).isSameAs(canned);
+    verify(eip1559TxSigningAdapter).signTransfer(command);
   }
 
   @Test

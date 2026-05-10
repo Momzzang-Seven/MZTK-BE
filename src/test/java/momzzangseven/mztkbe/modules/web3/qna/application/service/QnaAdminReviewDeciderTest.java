@@ -5,9 +5,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminRelayerRegistrationStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminReviewValidationCode;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaAdminServerSignerView;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadExecutionInternalIssuerPolicyPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.ExecutionAuthority;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaAdminReviewContextPort.LocalAnswer;
@@ -21,7 +21,8 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionProjection;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.shared.application.dto.ExecutionSignerCapabilityView;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
+import momzzangseven.mztkbe.modules.web3.treasury.domain.vo.TreasuryRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -137,8 +138,8 @@ class QnaAdminReviewDeciderTest {
             Optional.empty(),
             List.of(),
             new ExecutionAuthority(
-                ExecutionSignerCapabilityView.ready(
-                    "sponsor-treasury", "0x2222222222222222222222222222222222222222"),
+                QnaAdminServerSignerView.ready(
+                    TreasuryRole.SPONSOR.toAlias(), "0x2222222222222222222222222222222222222222"),
                 false,
                 QnaAdminRelayerRegistrationStatus.CHECK_FAILED),
             enabledPolicy());
@@ -187,13 +188,13 @@ class QnaAdminReviewDeciderTest {
 
   private QnaExecutionIntentStateView activeIntent(String id, QnaExecutionActionType actionType) {
     return new QnaExecutionIntentStateView(
-        id, actionType, ExecutionIntentStatus.AWAITING_SIGNATURE);
+        id, actionType, QnaExecutionIntentStatus.AWAITING_SIGNATURE);
   }
 
   private ExecutionAuthority authority() {
     return new ExecutionAuthority(
-        ExecutionSignerCapabilityView.ready(
-            "sponsor-treasury", "0x2222222222222222222222222222222222222222"),
+        QnaAdminServerSignerView.ready(
+            TreasuryRole.SPONSOR.toAlias(), "0x2222222222222222222222222222222222222222"),
         true,
         QnaAdminRelayerRegistrationStatus.REGISTERED);
   }

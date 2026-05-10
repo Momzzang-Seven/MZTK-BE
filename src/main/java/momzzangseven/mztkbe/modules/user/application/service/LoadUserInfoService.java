@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.user.application.service;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.user.application.dto.UserInfo;
@@ -24,6 +26,14 @@ public class LoadUserInfoService implements LoadUserInfoUseCase {
   @Override
   public Optional<UserInfo> loadUserByEmail(String email) {
     return loadUserPort.loadUserByEmail(email).map(UserInfo::from);
+  }
+
+  @Override
+  public List<UserInfo> loadUsersByIds(Collection<Long> userIds) {
+    if (userIds == null || userIds.isEmpty()) {
+      return List.of();
+    }
+    return loadUserPort.loadUsersByIds(userIds).stream().map(UserInfo::from).toList();
   }
 
   @Override

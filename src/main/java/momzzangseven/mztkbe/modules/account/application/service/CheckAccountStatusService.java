@@ -24,4 +24,9 @@ public class CheckAccountStatusService implements CheckAccountStatusUseCase {
   public boolean isDeleted(Long userId) {
     return loadUserAccountPort.findByUserId(userId).map(UserAccount::isDeleted).orElse(false);
   }
+
+  @Override
+  public boolean isBlocked(Long userId) {
+    return loadUserAccountPort.findByUserId(userId).map(UserAccount::isBlocked).orElse(false);
+  }
 }

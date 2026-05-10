@@ -98,6 +98,10 @@ comment:
     batch-size: 100
     cron: "0 30 * * * *"
     zone: Asia/Seoul
+  answer-orphan-cleanup:
+    batch-size: 100
+    cron: "0 35 * * * *"
+    zone: Asia/Seoul
 
 answer:
   orphan-cleanup:
@@ -186,8 +190,6 @@ web3:
 
     # 임계치/워커 튜닝은 yml 상수 유지
     treasury:
-      wallet-alias: reward-treasury
-      key-encryption-key-b64: ${TREASURY_KEY_ENCRYPTION_KEY_B64}
       provisioning:
         enabled: ${WEB3_TREASURY_PROVISIONING_ENABLED}
 
@@ -219,8 +221,6 @@ web3:
 
     sponsor:
       enabled: true
-      key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
-      wallet-alias: sponsor-treasury
 
       # 안전장치는 yml 상수 유지(운영 중 급변할 값 아니면)
       max-gas-limit: 500000
@@ -266,9 +266,6 @@ web3:
       zone: Asia/Seoul
       eip1559-ttl-seconds: 90
       action-policy: ${WEB3_EXECUTION_INTERNAL_ACTION_POLICY}
-      signer:
-        key-encryption-key-b64: ${SPONSOR_KEY_ENCRYPTION_KEY_B64}
-        wallet-alias: sponsor-treasury
   qna:
     admin:
       enabled: ${WEB3_QNA_ADMIN_ENABLED}
@@ -277,6 +274,11 @@ web3:
       delay-seconds: 604800
       batch-size: 50
       cron: "0 17 * * * *"
+      zone: "Asia/Seoul"
+    question-update-reconciliation:
+      enabled: true
+      batch-size: 100
+      cron: "0 */5 * * * *"
       zone: "Asia/Seoul"
   marketplace:
     admin:
@@ -347,6 +349,9 @@ lambda:
 
 mztk:
   admin:
+    board:
+      posts:
+        comment-count-sort-max-scan-size: 5000
     bootstrap:
       enabled: true
     seed:

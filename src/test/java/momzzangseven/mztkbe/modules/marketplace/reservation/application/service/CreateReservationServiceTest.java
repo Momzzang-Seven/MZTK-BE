@@ -146,7 +146,9 @@ class CreateReservationServiceTest {
               60,
               null,
               "order-1",
-              "ESCROW_DISPATCH_PENDING");
+              "ESCROW_DISPATCH_PENDING",
+              PRICE,
+              "테스트 클래스");
       given(saveReservationPort.save(any())).willReturn(saved);
 
       // when

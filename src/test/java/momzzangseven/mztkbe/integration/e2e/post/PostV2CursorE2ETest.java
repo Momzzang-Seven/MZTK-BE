@@ -28,6 +28,7 @@ import org.springframework.web.util.UriComponentsBuilder;
       "web3.chain-id=1337",
       "web3.eip712.chain-id=1337",
       "web3.eip7702.enabled=false",
+      "web3.execution.internal.enabled=false",
       "web3.reward-token.enabled=false"
     })
 @DisplayName("[E2E] GET /v2/posts cursor 검색 테스트")
@@ -92,18 +93,18 @@ class PostV2CursorE2ETest extends E2ETestBase {
     return objectMapper.readTree(res.getBody());
   }
 
-  private List<Long> postIds(JsonNode response) {
-    List<Long> ids = new ArrayList<>();
-    response.at("/data/posts").forEach(post -> ids.add(post.at("/postId").asLong()));
-    return ids;
-  }
-
   private JsonNode fetchPosts(URI uri) throws Exception {
     ResponseEntity<String> res =
         restTemplate.exchange(
             uri, HttpMethod.GET, new HttpEntity<>(bearerJsonHeaders(accessToken)), String.class);
     assertThat(res.getStatusCode()).isEqualTo(HttpStatus.OK);
     return objectMapper.readTree(res.getBody());
+  }
+
+  private List<Long> postIds(JsonNode response) {
+    List<Long> ids = new ArrayList<>();
+    response.at("/data/posts").forEach(post -> ids.add(post.at("/postId").asLong()));
+    return ids;
   }
 
   @Test
@@ -120,7 +121,16 @@ class PostV2CursorE2ETest extends E2ETestBase {
     assertThat(nextCursor).isNotBlank();
 
     JsonNode secondPage =
-        fetchPosts("?type=QUESTION&tag=java&search=form&size=1&cursor=" + nextCursor);
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("tag", "java")
+                .queryParam("search", "form")
+                .queryParam("size", 1)
+                .queryParam("cursor", nextCursor)
+                .build()
+                .encode()
+                .toUri());
 
     assertThat(secondPage.at("/data/posts/0/postId").asLong()).isEqualTo(olderPostId);
   }
@@ -138,7 +148,16 @@ class PostV2CursorE2ETest extends E2ETestBase {
     String nextCursor = firstPage.at("/data/nextCursor").asText();
     assertThat(nextCursor).isNotBlank();
 
-    JsonNode secondPage = fetchPosts("?type=QUESTION&search=mixedcase&size=1&cursor=" + nextCursor);
+    JsonNode secondPage =
+        fetchPosts(
+            UriComponentsBuilder.fromHttpUrl(baseUrl() + "/v2/posts")
+                .queryParam("type", "QUESTION")
+                .queryParam("search", "mixedcase")
+                .queryParam("size", 1)
+                .queryParam("cursor", nextCursor)
+                .build()
+                .encode()
+                .toUri());
 
     assertThat(secondPage.at("/data/posts/0/postId").asLong()).isEqualTo(olderPostId);
   }
@@ -186,25 +205,23 @@ class PostV2CursorE2ETest extends E2ETestBase {
   }
 
   @Test
-  @DisplayName("[E-5] type 생략 검색은 FREE를 유지하고 QUESTION 제목에만 search를 적용한다")
-  void getPostsV2_withoutTypeAndSearch_keepsFreeAndFiltersQuestionTitle() throws Exception {
-    Long nonMatchingQuestionId = createQuestionPost("other nulltypea question", List.of());
+  @DisplayName("[E-5] type 생략 검색은 QUESTION 제목에만 search를 적용하고 FREE는 제외한다")
+  void getPostsV2_withoutTypeAndSearch_filtersQuestionTitleOnly() throws Exception {
+    Long nonMatchingQuestionId = createQuestionPost("other topic question", List.of());
     Long matchingQuestionId = createQuestionPost("NULLTYPEA question match", List.of());
     Long freePostId = createFreePost("nulltypea free content", List.of());
 
     JsonNode response = fetchPosts("?search=nulltypea&size=50");
 
-    assertThat(postIds(response))
-        .contains(freePostId, matchingQuestionId)
-        .doesNotContain(nonMatchingQuestionId);
+    assertThat(postIds(response)).contains(matchingQuestionId);
+    assertThat(postIds(response)).doesNotContain(freePostId, nonMatchingQuestionId);
   }
 
   @Test
-  @DisplayName("[E-6] type 생략 태그 검색은 FREE를 유지하고 QUESTION 제목에만 search를 적용한다")
-  void getPostsV2_withTagWithoutTypeAndSearch_keepsTaggedFreeAndFiltersQuestionTitle()
-      throws Exception {
+  @DisplayName("[E-6] type 생략 태그 검색은 QUESTION 제목에만 search를 적용하고 FREE는 제외한다")
+  void getPostsV2_withTagWithoutTypeAndSearch_filtersQuestionTitleOnly() throws Exception {
     String tag = "nulltype-tag";
-    Long nonMatchingQuestionId = createQuestionPost("other nulltypeb question", List.of(tag));
+    Long nonMatchingQuestionId = createQuestionPost("other topic tagged question", List.of(tag));
     Long matchingQuestionId = createQuestionPost("NULLTYPEB question match", List.of(tag));
     Long otherTagQuestionId =
         createQuestionPost("NULLTYPEB other tag question", List.of("other-tag"));
@@ -212,8 +229,8 @@ class PostV2CursorE2ETest extends E2ETestBase {
 
     JsonNode response = fetchPosts("?tag=" + tag + "&search=nulltypeb&size=50");
 
+    assertThat(postIds(response)).contains(matchingQuestionId);
     assertThat(postIds(response))
-        .contains(freePostId, matchingQuestionId)
-        .doesNotContain(nonMatchingQuestionId, otherTagQuestionId);
+        .doesNotContain(freePostId, nonMatchingQuestionId, otherTagQuestionId);
   }
 }

@@ -1,7 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 
 /**
  * Lightweight qna-owned view of the latest shared execution intent state.
@@ -10,12 +10,20 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
  * question/answer can recreate its missing on-chain create intent.
  */
 public record QnaExecutionIntentStateView(
-    String executionIntentId, QnaExecutionActionType actionType, ExecutionIntentStatus status) {
+    String executionIntentId,
+    QnaExecutionActionType actionType,
+    QnaExecutionIntentStatus status,
+    String failureReason) {
+
+  public QnaExecutionIntentStateView(
+      String executionIntentId,
+      QnaExecutionActionType actionType,
+      QnaExecutionIntentStatus status) {
+    this(executionIntentId, actionType, status, null);
+  }
 
   public boolean isActive() {
-    return status == ExecutionIntentStatus.AWAITING_SIGNATURE
-        || status == ExecutionIntentStatus.SIGNED
-        || status == ExecutionIntentStatus.PENDING_ONCHAIN;
+    return status != null && status.isActive();
   }
 
   public boolean isTerminal() {

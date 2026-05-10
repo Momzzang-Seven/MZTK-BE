@@ -16,6 +16,11 @@ public class CommentCountService implements CountCommentsUseCase {
   private final LoadCommentPort loadCommentPort;
 
   @Override
+  public Map<Long, Long> countCommentsByUserIds(List<Long> userIds) {
+    return loadCommentPort.countCommentsByUserIds(userIds);
+  }
+
+  @Override
   public Map<Long, Long> countCommentsByPostIds(List<Long> postIds) {
     return loadCommentPort.countCommentsByPostIds(postIds);
   }
@@ -23,5 +28,15 @@ public class CommentCountService implements CountCommentsUseCase {
   @Override
   public long countCommentsByPostId(Long postId) {
     return loadCommentPort.countCommentsByPostId(postId);
+  }
+
+  @Override
+  public Map<Long, Long> countCommentsByAnswerIds(List<Long> answerIds) {
+    return loadCommentPort.countCommentsByAnswerIds(answerIds);
+  }
+
+  @Override
+  public long countCommentsByAnswerId(Long answerId) {
+    return loadCommentPort.countCommentsByAnswerId(answerId);
   }
 }

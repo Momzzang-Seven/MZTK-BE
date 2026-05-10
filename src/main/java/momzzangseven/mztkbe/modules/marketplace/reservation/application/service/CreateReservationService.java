@@ -166,7 +166,9 @@ public class CreateReservationService implements CreateReservationUseCase {
             cls.getDurationMinutes(),
             command.userRequest(),
             orderId,
-            "ESCROW_DISPATCH_PENDING");
+            "ESCROW_DISPATCH_PENDING",
+            cls.getPriceAmount(), // snapshot: price at booking time
+            cls.getTitle()); // snapshot: title at booking time
 
     Reservation saved = saveReservationPort.save(reservation);
 

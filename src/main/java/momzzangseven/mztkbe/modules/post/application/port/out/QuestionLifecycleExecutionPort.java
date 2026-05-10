@@ -8,8 +8,30 @@ public interface QuestionLifecycleExecutionPort {
     return false;
   }
 
+  default boolean managesQuestionCreateLifecycle() {
+    return false;
+  }
+
   default boolean hasActiveQuestionIntent(Long postId) {
     return false;
+  }
+
+  default boolean cancelSignableIntent(String executionIntentId, String reason) {
+    return false;
+  }
+
+  default Optional<QuestionExecutionWriteView> loadQuestionCreateIntent(
+      Long postId,
+      Long requesterUserId,
+      String executionIntentId,
+      String questionContent,
+      Long rewardMztk) {
+    return Optional.empty();
+  }
+
+  default Optional<QuestionUpdateStatePreparation> beginQuestionUpdateState(
+      Long postId, Long requesterUserId, String questionContent) {
+    return Optional.empty();
   }
 
   void precheckQuestionCreate(Long requesterUserId, Long rewardMztk);
@@ -24,7 +46,12 @@ public interface QuestionLifecycleExecutionPort {
       Long postId, Long requesterUserId, String questionContent, Long rewardMztk);
 
   Optional<QuestionExecutionWriteView> prepareQuestionUpdate(
-      Long postId, Long requesterUserId, String questionContent, Long rewardMztk);
+      Long postId,
+      Long requesterUserId,
+      String questionContent,
+      Long rewardMztk,
+      Long questionUpdateVersion,
+      String questionUpdateToken);
 
   Optional<QuestionExecutionWriteView> prepareQuestionDelete(
       Long postId, Long requesterUserId, String questionContent, Long rewardMztk);
@@ -37,4 +64,7 @@ public interface QuestionLifecycleExecutionPort {
       String questionContent,
       String answerContent,
       Long rewardMztk);
+
+  record QuestionUpdateStatePreparation(
+      Long postId, Long updateVersion, String updateToken, String expectedQuestionHash) {}
 }

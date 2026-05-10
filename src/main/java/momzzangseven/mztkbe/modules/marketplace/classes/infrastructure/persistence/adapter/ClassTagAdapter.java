@@ -4,10 +4,12 @@ import static momzzangseven.mztkbe.modules.tag.infrastructure.persistence.entity
 
 import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassTagPort;
@@ -46,22 +48,28 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
   @Override
   @Transactional(propagation = Propagation.MANDATORY)
   public void linkTagsToClass(Long classId, List<String> tagNames) {
-    if (tagNames == null || tagNames.isEmpty()) {
+    List<Long> requestedTagIds = resolveTagIds(normalizeTagNames(tagNames));
+    if (requestedTagIds.isEmpty()) {
       return;
     }
-    persistTagLinks(classId, tagNames);
+    Set<Long> existing = new LinkedHashSet<>(classTagJpaRepository.findTagIdsByClassId(classId));
+    List<Long> toInsert =
+        requestedTagIds.stream().filter(tagId -> !existing.contains(tagId)).toList();
+    saveClassTagMappings(classId, toInsert);
   }
 
   @Override
   @Transactional(propagation = Propagation.MANDATORY)
   public void updateTags(Long classId, List<String> tagNames) {
-    classTagJpaRepository.deleteByClassId(classId);
-    if (tagNames != null && !tagNames.isEmpty()) {
-      // Call persistTagLinks directly (not via linkTagsToClass) to avoid Spring proxy
-      // self-invocation.
-      // Self-invocation bypasses the proxy and would lose the outer transaction.
-      persistTagLinks(classId, tagNames);
-    }
+    List<Long> requestedTagIds = resolveTagIds(normalizeTagNames(tagNames));
+    Set<Long> requested = new LinkedHashSet<>(requestedTagIds);
+    Set<Long> existing = new LinkedHashSet<>(classTagJpaRepository.findTagIdsByClassId(classId));
+
+    List<Long> toDelete = existing.stream().filter(tagId -> !requested.contains(tagId)).toList();
+    List<Long> toInsert = requested.stream().filter(tagId -> !existing.contains(tagId)).toList();
+
+    deleteClassTagMappings(classId, toDelete);
+    saveClassTagMappings(classId, toInsert);
   }
 
   @Transactional
@@ -108,57 +116,40 @@ public class ClassTagAdapter implements ManageClassTagPort, LoadClassTagPort {
   // Private helpers
   // ============================================
 
-  /**
-   * Core tag-link logic shared by {@link #linkTagsToClass} and {@link #updateTags}.
-   *
-   * <p>Extracted to a private method so that both callers can invoke it without going through the
-   * Spring proxy (which would cause self-invocation to bypass the active transaction).
-   *
-   * <ol>
-   *   <li>Normalise tag names (trim, lowercase, deduplicate, filter blank)
-   *   <li>Load already-persisted tags
-   *   <li>Create missing tags via {@link SaveTagPort}
-   *   <li>Insert rows into {@code class_tags}
-   * </ol>
-   *
-   * @param classId target class ID
-   * @param tagNames raw tag names from the caller
-   */
-  private void persistTagLinks(Long classId, List<String> tagNames) {
-    // 1. Normalise (lowercase, trim, deduplicate, filter blank)
-    List<String> distinctNames =
-        tagNames.stream()
-            .filter(Objects::nonNull)
-            .map(String::trim)
-            .map(String::toLowerCase)
-            .filter(name -> !name.isBlank())
-            .distinct()
-            .toList();
+  private List<String> normalizeTagNames(List<String> tagNames) {
+    if (tagNames == null || tagNames.isEmpty()) {
+      return List.of();
+    }
+    return tagNames.stream()
+        .filter(Objects::nonNull)
+        .map(String::trim)
+        .map(name -> name.toLowerCase(Locale.ROOT))
+        .filter(name -> !name.isBlank())
+        .distinct()
+        .toList();
+  }
 
+  private List<Long> resolveTagIds(List<String> distinctNames) {
     if (distinctNames.isEmpty()) {
+      return List.of();
+    }
+    saveTagPort.saveTagNamesIfAbsent(distinctNames);
+    return loadTagPort.loadTagsByNames(distinctNames).stream().map(Tag::getId).toList();
+  }
+
+  private void saveClassTagMappings(Long classId, List<Long> tagIds) {
+    if (tagIds == null || tagIds.isEmpty()) {
       return;
     }
-
-    // 2. Load already-persisted tags
-    List<Tag> existing = loadTagPort.loadTagsByNames(distinctNames);
-    List<String> existingNames = existing.stream().map(Tag::getName).toList();
-
-    // 3. Create missing tags
-    List<Tag> newTags =
-        distinctNames.stream()
-            .filter(name -> !existingNames.contains(name))
-            .map(Tag::create)
-            .toList();
-
-    List<Tag> savedNew = newTags.isEmpty() ? List.of() : saveTagPort.saveTags(newTags);
-
-    // 4. Insert rows into class_tags
-    List<Long> allTagIds = new ArrayList<>();
-    allTagIds.addAll(existing.stream().map(Tag::getId).toList());
-    allTagIds.addAll(savedNew.stream().map(Tag::getId).toList());
-
     List<ClassTagEntity> mappings =
-        allTagIds.stream().map(tagId -> new ClassTagEntity(classId, tagId)).toList();
+        tagIds.stream().map(tagId -> new ClassTagEntity(classId, tagId)).toList();
     classTagJpaRepository.saveAll(mappings);
+  }
+
+  private void deleteClassTagMappings(Long classId, List<Long> tagIds) {
+    if (tagIds == null || tagIds.isEmpty()) {
+      return;
+    }
+    classTagJpaRepository.deleteByClassIdAndTagIdIn(classId, tagIds);
   }
 }

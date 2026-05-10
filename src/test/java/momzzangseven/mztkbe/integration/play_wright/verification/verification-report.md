@@ -128,7 +128,7 @@ npx playwright test verification/verification.spec.ts --grep "Suite D"
 
 ```bash
 set -a
-source /Users/nutria/ERICA/Capston/MZTK-BE/.env
+source "$(git rev-parse --show-toplevel)/.env"
 set +a
 DB_NAME=mztk_verification_prod_pw_20260314_003352 \
   npx playwright test verification/verification.spec.ts

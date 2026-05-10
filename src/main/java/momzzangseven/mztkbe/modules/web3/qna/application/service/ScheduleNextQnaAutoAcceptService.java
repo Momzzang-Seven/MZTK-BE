@@ -77,8 +77,7 @@ public class ScheduleNextQnaAutoAcceptService implements ScheduleNextQnaAutoAcce
   }
 
   private boolean hasActiveIntent(QnaExecutionResourceType resourceType, Long resourceId) {
-    return loadQnaExecutionIntentStatePort
-        .loadLatestActiveByResourceForUpdate(resourceType, String.valueOf(resourceId))
-        .isPresent();
+    return loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
+        resourceType, String.valueOf(resourceId));
   }
 }

@@ -120,6 +120,25 @@ public class UserAccount {
         .build();
   }
 
+  /**
+   * Changes the account status for admin-managed suspension workflows.
+   *
+   * @param targetStatus status requested by an admin
+   * @return updated UserAccount with the requested status
+   */
+  public UserAccount changeManagedStatus(AccountStatus targetStatus) {
+    if (targetStatus != AccountStatus.ACTIVE && targetStatus != AccountStatus.BLOCKED) {
+      throw new IllegalArgumentException("Managed account status must be ACTIVE or BLOCKED");
+    }
+    if (status != AccountStatus.ACTIVE && status != AccountStatus.BLOCKED) {
+      throw new IllegalArgumentException("Only ACTIVE or BLOCKED accounts can be managed");
+    }
+    if (status == targetStatus) {
+      return this;
+    }
+    return this.toBuilder().status(targetStatus).updatedAt(Instant.now()).build();
+  }
+
   // ============================================
   // Status Checks
   // ============================================

@@ -12,6 +12,9 @@ public interface LoadUserAccountPort {
   /** Returns the account for the given user, regardless of status. */
   Optional<UserAccount> findByUserId(Long userId);
 
+  /** Returns the account for the given user under a write lock, regardless of status. */
+  Optional<UserAccount> findByUserIdForUpdate(Long userId);
+
   /** Returns the account matching the given OAuth provider and provider-specific user ID. */
   Optional<UserAccount> findByProviderAndProviderUserId(
       AuthProvider provider, String providerUserId);
