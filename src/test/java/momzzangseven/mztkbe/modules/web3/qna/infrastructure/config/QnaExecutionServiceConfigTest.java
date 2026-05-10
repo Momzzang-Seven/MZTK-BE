@@ -18,6 +18,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaProjectionP
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateConfirmationSyncPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.service.AnswerEscrowExecutionService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.BeginQuestionUpdateStateService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowExecutionService;
 import org.junit.jupiter.api.DisplayName;
@@ -63,12 +64,13 @@ class QnaExecutionServiceConfigTest {
         .run(
             context -> {
               assertThat(context).hasSingleBean(QuestionEscrowExecutionService.class);
+              assertThat(context).hasSingleBean(AnswerEscrowExecutionService.class);
               assertThat(context).hasSingleBean(BeginQuestionUpdateStateService.class);
-              assertThat(context).hasSingleBean(AnswerEscrowExecutionUseCase.class);
               assertThat(context).hasSingleBean(GetQnaExecutionResumeViewUseCase.class);
               assertThat(context).hasSingleBean(RunQnaQuestionUpdateReconciliationUseCase.class);
               assertThat(context).hasBean("questionEscrowExecutionUseCase");
               assertThat(context).hasBean("beginQuestionUpdateStateUseCase");
+              assertThat(context).hasBean("answerEscrowExecutionUseCase");
               assertThat(
                       context.getBean(
                           "questionEscrowExecutionUseCase", QuestionEscrowExecutionUseCase.class))
@@ -77,6 +79,11 @@ class QnaExecutionServiceConfigTest {
                       context.getBean(
                           "beginQuestionUpdateStateUseCase", BeginQuestionUpdateStateUseCase.class))
                   .isNotSameAs(context.getBean(BeginQuestionUpdateStateService.class));
+              assertThat(context).hasBean("answerEscrowExecutionUseCase");
+              assertThat(
+                      context.getBean(
+                          "answerEscrowExecutionUseCase", AnswerEscrowExecutionUseCase.class))
+                  .isNotSameAs(context.getBean(AnswerEscrowExecutionService.class));
             });
   }
 

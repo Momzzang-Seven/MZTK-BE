@@ -4,9 +4,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
-import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardBanRequestDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardCommentResponseDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardCommentSearchResponseDTO;
+import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardModerationReasonRequestDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardModerationResponseDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardPostResponseDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.GetAdminBoardCommentsRequestDTO;
@@ -21,11 +21,13 @@ import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPos
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardCommentUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardPostUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostsUseCase;
+import momzzangseven.mztkbe.modules.admin.board.application.port.in.UnblockAdminBoardPostUseCase;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -47,6 +49,7 @@ public class AdminBoardController {
   private final GetAdminBoardCommentsUseCase getAdminBoardCommentsUseCase;
   private final GetAdminBoardPostCommentsUseCase getAdminBoardPostCommentsUseCase;
   private final BanAdminBoardPostUseCase banAdminBoardPostUseCase;
+  private final UnblockAdminBoardPostUseCase unblockAdminBoardPostUseCase;
   private final BanAdminBoardCommentUseCase banAdminBoardCommentUseCase;
 
   /** Returns admin board post rows. */
@@ -84,15 +87,28 @@ public class AdminBoardController {
     return ResponseEntity.ok(ApiResponse.success(result.map(AdminBoardCommentResponseDTO::from)));
   }
 
-  /** Rejects post ban requests until the post moderation policy is confirmed. */
+  /** Blocks a post from public visibility by changing moderation status only. */
   @PostMapping("/posts/{postId}/ban")
   public ResponseEntity<ApiResponse<AdminBoardModerationResponseDTO>> banPost(
       @AuthenticationPrincipal Long operatorUserId,
       @PathVariable Long postId,
-      @Valid @RequestBody AdminBoardBanRequestDTO request) {
+      @Valid @RequestBody AdminBoardModerationReasonRequestDTO request) {
     Long validatedOperatorUserId = requireUserId(operatorUserId);
-    BanAdminBoardPostCommand command = request.toPostCommand(validatedOperatorUserId, postId);
+    BanAdminBoardPostCommand command = request.toBanPostCommand(validatedOperatorUserId, postId);
     AdminBoardModerationResult result = banAdminBoardPostUseCase.execute(command);
+    return ResponseEntity.ok(ApiResponse.success(AdminBoardModerationResponseDTO.from(result)));
+  }
+
+  /** Restores a post's moderation status without changing publication status. */
+  @PostMapping("/posts/{postId}/unblock")
+  public ResponseEntity<ApiResponse<AdminBoardModerationResponseDTO>> unblockPost(
+      @AuthenticationPrincipal Long operatorUserId,
+      @PathVariable Long postId,
+      @Valid @RequestBody AdminBoardModerationReasonRequestDTO request) {
+    Long validatedOperatorUserId = requireUserId(operatorUserId);
+    UnblockAdminBoardPostCommand command =
+        request.toUnblockPostCommand(validatedOperatorUserId, postId);
+    AdminBoardModerationResult result = unblockAdminBoardPostUseCase.execute(command);
     return ResponseEntity.ok(ApiResponse.success(AdminBoardModerationResponseDTO.from(result)));
   }
 
@@ -101,10 +117,10 @@ public class AdminBoardController {
   public ResponseEntity<ApiResponse<AdminBoardModerationResponseDTO>> banComment(
       @AuthenticationPrincipal Long operatorUserId,
       @PathVariable Long commentId,
-      @Valid @RequestBody AdminBoardBanRequestDTO request) {
+      @Valid @RequestBody AdminBoardModerationReasonRequestDTO request) {
     Long validatedOperatorUserId = requireUserId(operatorUserId);
     BanAdminBoardCommentCommand command =
-        request.toCommentCommand(validatedOperatorUserId, commentId);
+        request.toBanCommentCommand(validatedOperatorUserId, commentId);
     AdminBoardModerationResult result = banAdminBoardCommentUseCase.execute(command);
     return ResponseEntity.ok(ApiResponse.success(AdminBoardModerationResponseDTO.from(result)));
   }

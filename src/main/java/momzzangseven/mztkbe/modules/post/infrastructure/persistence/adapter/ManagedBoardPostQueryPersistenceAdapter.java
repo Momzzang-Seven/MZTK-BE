@@ -16,7 +16,10 @@ import momzzangseven.mztkbe.modules.post.application.dto.ManagedBoardPostTargetV
 import momzzangseven.mztkbe.modules.post.application.dto.ManagedBoardPostView;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadManagedBoardPostPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadManagedBoardPostsPort;
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -39,6 +42,8 @@ public class ManagedBoardPostQueryPersistenceAdapter
                 postEntity.id,
                 postEntity.type,
                 postEntity.status,
+                postEntity.publicationStatus,
+                postEntity.moderationStatus,
                 postEntity.title,
                 postEntity.content,
                 postEntity.userId,
@@ -49,9 +54,27 @@ public class ManagedBoardPostQueryPersistenceAdapter
   }
 
   @Override
+  public long count(GetManagedBoardPostsQuery query) {
+    Long total =
+        queryFactory
+            .select(postEntity.id.count())
+            .from(postEntity)
+            .where(buildWhere(query))
+            .fetchOne();
+    return total == null ? 0L : total;
+  }
+
+  @Override
   public Page<ManagedBoardPostView> loadPage(GetManagedBoardPostsPageQuery query) {
     BooleanBuilder where =
-        buildWhere(query.search(), query.postId(), query.userId(), query.status());
+        buildWhere(
+            query.search(),
+            query.postId(),
+            query.userId(),
+            query.status(),
+            query.type(),
+            query.publicationStatus(),
+            query.moderationStatus());
     List<ManagedBoardPostView> content =
         queryFactory
             .select(
@@ -60,6 +83,8 @@ public class ManagedBoardPostQueryPersistenceAdapter
                     postEntity.id,
                     postEntity.type,
                     postEntity.status,
+                    postEntity.publicationStatus,
+                    postEntity.moderationStatus,
                     postEntity.title,
                     postEntity.content,
                     postEntity.userId,
@@ -94,10 +119,24 @@ public class ManagedBoardPostQueryPersistenceAdapter
   }
 
   private BooleanBuilder buildWhere(GetManagedBoardPostsQuery query) {
-    return buildWhere(query.search(), query.postId(), query.userId(), query.status());
+    return buildWhere(
+        query.search(),
+        query.postId(),
+        query.userId(),
+        query.status(),
+        query.type(),
+        query.publicationStatus(),
+        query.moderationStatus());
   }
 
-  private BooleanBuilder buildWhere(String search, Long postId, Long userId, PostStatus status) {
+  private BooleanBuilder buildWhere(
+      String search,
+      Long postId,
+      Long userId,
+      PostStatus status,
+      PostType type,
+      PostPublicationStatus publicationStatus,
+      PostModerationStatus moderationStatus) {
     BooleanBuilder where = new BooleanBuilder();
     if (postId != null) {
       where.and(postEntity.id.eq(postId));
@@ -107,6 +146,15 @@ public class ManagedBoardPostQueryPersistenceAdapter
     }
     if (status != null) {
       where.and(postEntity.status.eq(status));
+    }
+    if (type != null) {
+      where.and(postEntity.type.eq(type));
+    }
+    if (publicationStatus != null) {
+      where.and(postEntity.publicationStatus.eq(publicationStatus));
+    }
+    if (moderationStatus != null) {
+      where.and(postEntity.moderationStatus.eq(moderationStatus));
     }
     if (search != null) {
       String escaped = "%" + LikePatternEscaper.escape(search.toLowerCase()) + "%";

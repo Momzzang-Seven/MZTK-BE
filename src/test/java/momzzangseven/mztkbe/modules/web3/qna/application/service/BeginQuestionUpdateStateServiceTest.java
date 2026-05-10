@@ -17,6 +17,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdate
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionUpdateStatePersistencePort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
 import org.junit.jupiter.api.DisplayName;
@@ -79,32 +80,31 @@ class BeginQuestionUpdateStateServiceTest {
   }
 
   @Test
-  @DisplayName("begin rejects while a previous update intent is bound")
-  void beginRejectsIntentBoundState() {
+  @DisplayName("begin can supersede a previous bound question update intent")
+  void beginSupersedesIntentBoundState() {
     BeginQuestionUpdateStateService service =
         new BeginQuestionUpdateStateService(
             statePersistencePort, loadQnaExecutionIntentStatePort, CLOCK);
     when(statePersistencePort.findLatestByPostIdForUpdate(101L))
         .thenReturn(Optional.of(existingState(2L, QnaQuestionUpdateStateStatus.INTENT_BOUND)));
+    when(statePersistencePort.save(org.mockito.ArgumentMatchers.any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
-    assertThatThrownBy(
-            () -> service.begin(new BeginQuestionUpdateStateCommand(101L, 7L, hash("b"))))
-        .isInstanceOf(Web3InvalidInputException.class)
-        .hasMessageContaining("wait for confirmation sync");
+    var result = service.begin(new BeginQuestionUpdateStateCommand(101L, 7L, hash("b")));
 
-    verify(statePersistencePort, never()).markSupersedableStaleByPostId(any());
-    verify(statePersistencePort, never()).save(any());
+    assertThat(result.updateVersion()).isEqualTo(3L);
+    verify(statePersistencePort).markSupersedableStaleByPostId(101L);
   }
 
   @Test
-  @DisplayName("begin rejects while an active question execution intent exists")
-  void beginRejectsActiveQuestionIntent() {
+  @DisplayName("begin rejects while a conflicting active question execution intent exists")
+  void beginRejectsConflictingActiveQuestionIntent() {
     BeginQuestionUpdateStateService service =
         new BeginQuestionUpdateStateService(
             statePersistencePort, loadQnaExecutionIntentStatePort, CLOCK);
     when(statePersistencePort.findLatestByPostIdForUpdate(101L)).thenReturn(Optional.empty());
-    when(loadQnaExecutionIntentStatePort.hasActiveIntentForUpdate(
-            QnaExecutionResourceType.QUESTION, "101"))
+    when(loadQnaExecutionIntentStatePort.hasConflictingActiveIntent(
+            QnaExecutionResourceType.QUESTION, "101", QnaExecutionActionType.QNA_QUESTION_UPDATE))
         .thenReturn(true);
 
     assertThatThrownBy(

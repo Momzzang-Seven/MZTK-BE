@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.global.error;
 
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
@@ -9,8 +11,10 @@ import momzzangseven.mztkbe.global.error.token.TokenException;
 import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyCompletedTodayException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
@@ -311,6 +315,28 @@ public class GlobalExceptionHandler {
       DataIntegrityViolationException ex) {
     log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
     ErrorCode errorCode = ErrorCode.DATA_INTEGRITY_VIOLATION;
+    return ResponseEntity.status(errorCode.getHttpStatus())
+        .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
+  }
+
+  /**
+   * Handle pessimistic lock conflicts/timeouts.
+   *
+   * <p>JPA providers may surface lock wait failures as {@link LockTimeoutException} or {@link
+   * PessimisticLockException}; Spring's exception translation commonly wraps those as {@link
+   * PessimisticLockingFailureException} or {@link CannotAcquireLockException}. Return 409 so
+   * clients can retry instead of treating the conflict as an unexpected server error.
+   */
+  @ExceptionHandler({
+    LockTimeoutException.class,
+    PessimisticLockException.class,
+    PessimisticLockingFailureException.class,
+    CannotAcquireLockException.class
+  })
+  public ResponseEntity<ApiResponse<Void>> handlePessimisticLockingFailureException(
+      RuntimeException ex) {
+    log.warn("Pessimistic lock conflict: {}", ex.getMessage());
+    ErrorCode errorCode = ErrorCode.DATABASE_LOCK_TIMEOUT;
     return ResponseEntity.status(errorCode.getHttpStatus())
         .body(ApiResponse.error(errorCode.getMessage(), errorCode.getCode()));
   }

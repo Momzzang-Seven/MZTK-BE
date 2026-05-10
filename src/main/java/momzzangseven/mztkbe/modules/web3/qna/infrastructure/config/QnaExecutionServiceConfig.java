@@ -4,8 +4,12 @@ import java.time.Clock;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerCreateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDeleteCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
@@ -92,7 +96,7 @@ public class QnaExecutionServiceConfig {
   }
 
   @Bean
-  AnswerEscrowExecutionUseCase answerEscrowExecutionUseCase(
+  AnswerEscrowExecutionService answerEscrowExecutionService(
       QnaProjectionPersistencePort qnaProjectionPersistencePort,
       LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort,
       BuildQnaExecutionDraftPort buildQnaExecutionDraftPort,
@@ -102,6 +106,13 @@ public class QnaExecutionServiceConfig {
         loadQnaExecutionIntentStatePort,
         buildQnaExecutionDraftPort,
         submitQnaExecutionDraftPort);
+  }
+
+  @Bean
+  AnswerEscrowExecutionUseCase answerEscrowExecutionUseCase(
+      AnswerEscrowExecutionService delegate, PlatformTransactionManager transactionManager) {
+    TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+    return new TransactionalAnswerEscrowExecutionUseCase(delegate, transactionTemplate);
   }
 
   @Bean
@@ -171,6 +182,47 @@ public class QnaExecutionServiceConfig {
     @Override
     public QuestionUpdateStatePreparationResult begin(BeginQuestionUpdateStateCommand command) {
       return transactionTemplate.execute(status -> delegate.begin(command));
+    }
+  }
+
+  private record TransactionalAnswerEscrowExecutionUseCase(
+      AnswerEscrowExecutionService delegate, TransactionTemplate transactionTemplate)
+      implements AnswerEscrowExecutionUseCase {
+
+    @Override
+    public boolean hasActiveAnswerIntent(Long answerId) {
+      return transactionTemplate.execute(status -> delegate.hasActiveAnswerIntent(answerId));
+    }
+
+    @Override
+    public void precheckAnswerCreate(PrecheckAnswerCreateCommand command) {
+      transactionTemplate.executeWithoutResult(status -> delegate.precheckAnswerCreate(command));
+    }
+
+    @Override
+    public QnaExecutionIntentResult prepareAnswerCreate(PrepareAnswerCreateCommand command) {
+      return transactionTemplate.execute(status -> delegate.prepareAnswerCreate(command));
+    }
+
+    @Override
+    public QnaExecutionIntentResult recoverAnswerCreate(PrepareAnswerCreateCommand command) {
+      return transactionTemplate.execute(status -> delegate.recoverAnswerCreate(command));
+    }
+
+    @Override
+    public Optional<QnaExecutionIntentResult> recoverAnswerUpdate(
+        PrepareAnswerUpdateCommand command) {
+      return transactionTemplate.execute(status -> delegate.recoverAnswerUpdate(command));
+    }
+
+    @Override
+    public QnaExecutionIntentResult prepareAnswerUpdate(PrepareAnswerUpdateCommand command) {
+      return transactionTemplate.execute(status -> delegate.prepareAnswerUpdate(command));
+    }
+
+    @Override
+    public QnaExecutionIntentResult prepareAnswerDelete(PrepareAnswerDeleteCommand command) {
+      return transactionTemplate.execute(status -> delegate.prepareAnswerDelete(command));
     }
   }
 }

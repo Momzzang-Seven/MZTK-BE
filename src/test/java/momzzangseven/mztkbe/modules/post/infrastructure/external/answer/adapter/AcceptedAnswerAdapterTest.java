@@ -5,8 +5,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.MarkAnswerAcceptedUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAcceptedAnswerPort;
 import org.junit.jupiter.api.DisplayName;
@@ -20,8 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("AcceptedAnswerAdapter unit test")
 class AcceptedAnswerAdapterTest {
 
-  @Mock private GetAnswerSummaryUseCase getAnswerSummaryUseCase;
-  @Mock private GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  @Mock private GetVisibleAnswerSummaryUseCase getVisibleAnswerSummaryUseCase;
+  @Mock private GetVisibleAnswerSummaryForUpdateUseCase getVisibleAnswerSummaryForUpdateUseCase;
   @Mock private MarkAnswerAcceptedUseCase markAnswerAcceptedUseCase;
 
   @InjectMocks private AcceptedAnswerAdapter acceptedAnswerAdapter;
@@ -29,7 +30,7 @@ class AcceptedAnswerAdapterTest {
   @Test
   @DisplayName("maps answer module domain object to accepted answer info")
   void loadAcceptedAnswer_mapsAnswer() {
-    when(getAnswerSummaryUseCase.getAnswerSummary(20L))
+    when(getVisibleAnswerSummaryUseCase.getVisibleAnswerSummary(20L))
         .thenReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(20L, 10L, 2L)));
 
     Optional<LoadAcceptedAnswerPort.AcceptedAnswerInfo> result =
@@ -44,7 +45,7 @@ class AcceptedAnswerAdapterTest {
   @Test
   @DisplayName("maps locked answer summary to accepted answer info")
   void loadAcceptedAnswerForUpdate_mapsAnswer() {
-    when(getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(20L))
+    when(getVisibleAnswerSummaryForUpdateUseCase.getVisibleAnswerSummaryForUpdate(20L))
         .thenReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(20L, 10L, 2L)));
 
     Optional<LoadAcceptedAnswerPort.AcceptedAnswerInfo> result =

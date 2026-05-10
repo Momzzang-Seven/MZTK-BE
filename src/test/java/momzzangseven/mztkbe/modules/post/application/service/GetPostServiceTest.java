@@ -295,7 +295,7 @@ class GetPostServiceTest {
     when(loadPostImagesPort.loadImages(PostType.QUESTION, 30L))
         .thenReturn(new PostImageResult(List.of()));
     when(postLikePersistencePort.countByTarget(any(), any())).thenReturn(1L);
-    when(countAnswersPort.countAnswers(30L)).thenReturn(7L);
+    when(countAnswersPort.countPublicVisibleAnswers(30L)).thenReturn(7L);
     when(loadQuestionExecutionResumePort.loadLatest(30L)).thenReturn(Optional.empty());
 
     PostDetailResult result = getPostService.getPost(30L, 99L);

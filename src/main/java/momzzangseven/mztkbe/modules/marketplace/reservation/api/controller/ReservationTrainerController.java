@@ -2,16 +2,16 @@ package momzzangseven.mztkbe.modules.marketplace.reservation.api.controller;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.global.pagination.CursorPageRequest;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ApproveReservationResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationRequestDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.RejectReservationResponseDTO;
+import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationCursorResponse;
 import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationDetailResponseDTO;
-import momzzangseven.mztkbe.modules.marketplace.reservation.api.dto.ReservationSummaryResponseDTO;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.ApproveReservationCommand;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetReservationQuery;
 import momzzangseven.mztkbe.modules.marketplace.reservation.application.dto.GetTrainerReservationsQuery;
@@ -48,17 +48,20 @@ public class ReservationTrainerController {
   private final RejectReservationUseCase rejectReservationUseCase;
 
   @GetMapping
-  public ResponseEntity<ApiResponse<List<ReservationSummaryResponseDTO>>> getTrainerReservations(
+  public ResponseEntity<ApiResponse<ReservationCursorResponse>> getTrainerReservations(
       @AuthenticationPrincipal Long trainerId,
-      @RequestParam(required = false) ReservationStatus status) {
+      @RequestParam(required = false) ReservationStatus status,
+      @RequestParam(required = false) String cursor,
+      @RequestParam(required = false) Integer size) {
     requireTrainerId(trainerId);
-    List<ReservationSummaryResponseDTO> response =
-        getTrainerReservationsUseCase
-            .execute(new GetTrainerReservationsQuery(trainerId, status))
-            .stream()
-            .map(ReservationSummaryResponseDTO::from)
-            .toList();
-    return ResponseEntity.ok(ApiResponse.success(response));
+    CursorPageRequest pageRequest =
+        CursorPageRequest.of(
+            cursor, size, 20, 100, GetTrainerReservationsQuery.cursorScope(status));
+    return ResponseEntity.ok(
+        ApiResponse.success(
+            ReservationCursorResponse.from(
+                getTrainerReservationsUseCase.execute(
+                    new GetTrainerReservationsQuery(trainerId, status, pageRequest)))));
   }
 
   @GetMapping("/{id}")

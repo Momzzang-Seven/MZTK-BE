@@ -4,8 +4,9 @@ import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.answer.application.port.in.ConfirmAnswerDeleteSyncUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.out.DeleteAnswerPort;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.PublishAnswerDeletedEventPort;
+import momzzangseven.mztkbe.modules.answer.application.port.out.SaveAnswerPort;
 import momzzangseven.mztkbe.modules.answer.domain.event.AnswerDeletedEvent;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,18 +21,34 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConfirmAnswerDeleteSyncService implements ConfirmAnswerDeleteSyncUseCase {
 
   private final LoadAnswerPort loadAnswerPort;
+  private final SaveAnswerPort saveAnswerPort;
   private final DeleteAnswerPort deleteAnswerPort;
-  private final ApplicationEventPublisher eventPublisher;
+  private final PublishAnswerDeletedEventPort publishAnswerDeletedEventPort;
 
   @Override
   @Transactional
-  public void confirmDeleted(Long answerId) {
+  public void confirmDeleted(Long answerId, String executionIntentId) {
     loadAnswerPort
         .loadAnswerForUpdate(answerId)
         .ifPresent(
             answer -> {
-              deleteAnswerPort.deleteAnswer(answerId);
-              eventPublisher.publishEvent(new AnswerDeletedEvent(answerId));
+              if (answer.matchesCurrentDeleteExecutionIntent(executionIntentId)) {
+                deleteAnswerPort.deleteAnswer(answerId);
+                publishAnswerDeletedEventPort.publish(new AnswerDeletedEvent(answerId));
+                return;
+              }
+              saveAnswerPort.saveAnswer(
+                  answer.markReconciliationRequired(
+                      "answer delete confirmation did not match current local delete intent",
+                      executionIntentId));
             });
+  }
+
+  @Override
+  @Transactional
+  public void rollbackDelete(
+      Long answerId, String executionIntentId, String terminalStatus, String failureReason) {
+    saveAnswerPort.rollbackDeleteIfCurrent(
+        answerId, executionIntentId, terminalStatus, failureReason);
   }
 }

@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
@@ -12,10 +13,18 @@ public interface LoadQnaExecutionIntentStatePort {
 
   Optional<QnaExecutionIntentStateView> loadLatestByRootIdempotencyKey(String rootIdempotencyKey);
 
+  Optional<QnaExecutionIntentStateView> loadByExecutionIntentId(String executionIntentId);
+
   Optional<QnaExecutionIntentStateView> loadLatestActiveByResource(
       QnaExecutionResourceType resourceType, String resourceId);
 
+  List<QnaExecutionIntentStateView> loadActiveByResource(
+      QnaExecutionResourceType resourceType, String resourceId);
+
   Optional<QnaExecutionIntentStateView> loadLatestActiveByResourceForUpdate(
+      QnaExecutionResourceType resourceType, String resourceId);
+
+  List<QnaExecutionIntentStateView> loadActiveByResourceForUpdate(
       QnaExecutionResourceType resourceType, String resourceId);
 
   default Map<String, QnaExecutionIntentStateView> loadLatestActiveByResources(
@@ -48,13 +57,12 @@ public interface LoadQnaExecutionIntentStatePort {
       QnaExecutionResourceType resourceType,
       String resourceId,
       QnaExecutionActionType requestedActionType) {
-    return loadLatestActiveByResourceForUpdate(resourceType, resourceId)
-        .filter(intent -> !intent.matchesAction(requestedActionType))
-        .isPresent();
+    return loadActiveByResourceForUpdate(resourceType, resourceId).stream()
+        .anyMatch(intent -> !intent.matchesAction(requestedActionType));
   }
 
   default boolean hasActiveIntentForUpdate(
       QnaExecutionResourceType resourceType, String resourceId) {
-    return loadLatestActiveByResourceForUpdate(resourceType, resourceId).isPresent();
+    return !loadActiveByResourceForUpdate(resourceType, resourceId).isEmpty();
   }
 }

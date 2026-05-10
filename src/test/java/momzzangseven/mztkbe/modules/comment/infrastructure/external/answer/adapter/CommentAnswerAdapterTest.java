@@ -6,8 +6,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import java.util.Optional;
-import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryForUpdateUseCase;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryForUpdateUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort;
 import momzzangseven.mztkbe.modules.comment.application.port.out.LoadAnswerPort.AnswerCommentContext;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetPostContextUseCase;
@@ -22,8 +23,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("CommentAnswerAdapter unit test")
 class CommentAnswerAdapterTest {
 
-  @Mock private GetAnswerSummaryUseCase getAnswerSummaryUseCase;
-  @Mock private GetAnswerSummaryForUpdateUseCase getAnswerSummaryForUpdateUseCase;
+  @Mock private GetVisibleAnswerSummaryUseCase getVisibleAnswerSummaryUseCase;
+  @Mock private GetVisibleAnswerSummaryForUpdateUseCase getVisibleAnswerSummaryForUpdateUseCase;
   @Mock private GetPostContextUseCase getPostContextUseCase;
 
   @InjectMocks private CommentAnswerAdapter adapter;
@@ -35,9 +36,9 @@ class CommentAnswerAdapterTest {
   }
 
   @Test
-  @DisplayName("loadAnswerCommentContext() uses non-locking answer summary for reads")
-  void loadAnswerCommentContext_usesNonLockingSummary() {
-    given(getAnswerSummaryUseCase.getAnswerSummary(300L))
+  @DisplayName("loadAnswerCommentContext() uses visible answer summary for reads")
+  void loadAnswerCommentContext_usesVisibleSummary() {
+    given(getVisibleAnswerSummaryUseCase.getVisibleAnswerSummary(300L))
         .willReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(300L, 100L, 200L)));
     given(getPostContextUseCase.getPostContext(100L))
         .willReturn(Optional.of(new GetPostContextUseCase.PostContext(100L, 200L, false, true)));
@@ -48,15 +49,15 @@ class CommentAnswerAdapterTest {
     assertThat(result.orElseThrow().answerId()).isEqualTo(300L);
     assertThat(result.orElseThrow().postId()).isEqualTo(100L);
     assertThat(result.orElseThrow().answerLocked()).isFalse();
-    verify(getAnswerSummaryUseCase).getAnswerSummary(300L);
+    verify(getVisibleAnswerSummaryUseCase).getVisibleAnswerSummary(300L);
     verify(getPostContextUseCase).getPostContext(100L);
-    verifyNoInteractions(getAnswerSummaryForUpdateUseCase);
+    verifyNoInteractions(getVisibleAnswerSummaryForUpdateUseCase);
   }
 
   @Test
   @DisplayName("loadAnswerCommentContextForUpdate() maps root post answer lock")
   void loadAnswerCommentContextForUpdate_mapsRootPostAnswerLock() {
-    given(getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(300L))
+    given(getVisibleAnswerSummaryForUpdateUseCase.getVisibleAnswerSummaryForUpdate(300L))
         .willReturn(
             Optional.of(
                 new GetAnswerSummaryUseCase.AnswerSummary(
@@ -73,35 +74,36 @@ class CommentAnswerAdapterTest {
     assertThat(result.orElseThrow().answerId()).isEqualTo(300L);
     assertThat(result.orElseThrow().postId()).isEqualTo(100L);
     assertThat(result.orElseThrow().answerLocked()).isTrue();
-    verify(getAnswerSummaryForUpdateUseCase).getAnswerSummaryForUpdate(300L);
+    verify(getVisibleAnswerSummaryForUpdateUseCase).getVisibleAnswerSummaryForUpdate(300L);
     verify(getPostContextUseCase).getPostContext(100L);
-    verifyNoInteractions(getAnswerSummaryUseCase);
+    verifyNoInteractions(getVisibleAnswerSummaryUseCase);
   }
 
   @Test
   @DisplayName("loadAnswerCommentContext() maps missing answer summary to empty context")
   void loadAnswerCommentContext_returnsEmptyWhenSummaryMissing() {
-    given(getAnswerSummaryUseCase.getAnswerSummary(300L)).willReturn(Optional.empty());
+    given(getVisibleAnswerSummaryUseCase.getVisibleAnswerSummary(300L))
+        .willReturn(Optional.empty());
 
     Optional<AnswerCommentContext> result = adapter.loadAnswerCommentContext(300L);
 
     assertThat(result).isEmpty();
-    verify(getAnswerSummaryUseCase).getAnswerSummary(300L);
+    verify(getVisibleAnswerSummaryUseCase).getVisibleAnswerSummary(300L);
     verifyNoInteractions(getPostContextUseCase);
-    verifyNoInteractions(getAnswerSummaryForUpdateUseCase);
+    verifyNoInteractions(getVisibleAnswerSummaryForUpdateUseCase);
   }
 
   @Test
   @DisplayName("loadAnswerCommentContextForUpdate() maps missing answer summary to empty context")
   void loadAnswerCommentContextForUpdate_returnsEmptyWhenSummaryMissing() {
-    given(getAnswerSummaryForUpdateUseCase.getAnswerSummaryForUpdate(300L))
+    given(getVisibleAnswerSummaryForUpdateUseCase.getVisibleAnswerSummaryForUpdate(300L))
         .willReturn(Optional.empty());
 
     Optional<AnswerCommentContext> result = adapter.loadAnswerCommentContextForUpdate(300L);
 
     assertThat(result).isEmpty();
-    verify(getAnswerSummaryForUpdateUseCase).getAnswerSummaryForUpdate(300L);
+    verify(getVisibleAnswerSummaryForUpdateUseCase).getVisibleAnswerSummaryForUpdate(300L);
     verifyNoInteractions(getPostContextUseCase);
-    verifyNoInteractions(getAnswerSummaryUseCase);
+    verifyNoInteractions(getVisibleAnswerSummaryUseCase);
   }
 }

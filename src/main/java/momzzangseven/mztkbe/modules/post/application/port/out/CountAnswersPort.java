@@ -7,5 +7,11 @@ public interface CountAnswersPort {
 
   long countAnswers(Long postId);
 
+  long countPublicVisibleAnswers(Long postId);
+
+  long countOnchainBlockingAnswers(Long postId);
+
+  boolean existsPreparingOrPendingCreateByPostId(Long postId);
+
   Map<Long, Long> countAnswersByPostIds(List<Long> postIds);
 }

@@ -21,7 +21,7 @@ public class AnswerPostDeletedEventHandler {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void handle(PostDeletedEvent event) {
     try {
-      deleteAnswersByPostUseCase.deleteByPostId(event.postId());
+      deleteAnswersByPostUseCase.deleteByPostId(event.postId(), event.answerIds());
       log.debug("Successfully deleted answers for deleted post: postId={}", event.postId());
     } catch (Exception e) {
       log.error(

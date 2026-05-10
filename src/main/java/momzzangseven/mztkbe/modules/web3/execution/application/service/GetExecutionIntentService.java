@@ -1,12 +1,15 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionIntentCleanupView;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentCleanupViewUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
@@ -25,7 +28,8 @@ import org.web3j.utils.Numeric;
  * <p>The result includes execution mode, sign count, conditional sign request payload, and linked
  * transaction summary when available.
  */
-public class GetExecutionIntentService implements GetExecutionIntentUseCase {
+public class GetExecutionIntentService
+    implements GetExecutionIntentUseCase, GetExecutionIntentCleanupViewUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
@@ -57,6 +61,9 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
         intent.getResourceType(),
         intent.getResourceId(),
         ExecutionIntentViewMapper.toResourceStatus(intent.getStatus()),
+        intent.getActionType(),
+        intent.getPayloadHash(),
+        intent.getPayloadSnapshotJson(),
         intent.getPublicId(),
         intent.getStatus(),
         intent.getExpiresAt(),
@@ -66,6 +73,24 @@ public class GetExecutionIntentService implements GetExecutionIntentUseCase {
         transactionView.transactionId(),
         transactionView.transactionStatus(),
         transactionView.txHash());
+  }
+
+  @Override
+  public List<ExecutionIntentCleanupView> getCleanupViewsByIds(List<Long> intentIds) {
+    if (intentIds == null || intentIds.isEmpty()) {
+      return List.of();
+    }
+    return executionIntentPersistencePort.findAllByIdsForUpdate(intentIds).stream()
+        .map(
+            intent ->
+                new ExecutionIntentCleanupView(
+                    intent.getId(),
+                    intent.getPublicId(),
+                    intent.getResourceType(),
+                    intent.getResourceId(),
+                    intent.getActionType(),
+                    intent.getRequesterUserId()))
+        .toList();
   }
 
   private SignRequestBundle buildSignRequest(ExecutionIntent intent) {

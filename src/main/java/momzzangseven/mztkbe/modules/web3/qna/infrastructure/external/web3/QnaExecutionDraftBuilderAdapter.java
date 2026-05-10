@@ -90,7 +90,9 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             callTarget,
             callData,
             request.questionUpdateVersion(),
-            request.questionUpdateToken());
+            request.questionUpdateToken(),
+            request.answerUpdateVersion(),
+            request.answerUpdateToken());
 
     return new QnaExecutionDraft(
         request.resourceType(),
@@ -120,6 +122,14 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
           request.postId(),
           request.questionUpdateVersion(),
           request.questionUpdateToken());
+    }
+    if (request.actionType() == QnaExecutionActionType.QNA_ANSWER_UPDATE) {
+      return QnaEscrowIdempotencyKeyFactory.createAnswerUpdate(
+          request.requesterUserId(),
+          request.postId(),
+          request.answerId(),
+          request.answerUpdateVersion(),
+          request.answerUpdateToken());
     }
     return QnaEscrowIdempotencyKeyFactory.create(
         request.actionType(), request.requesterUserId(), request.postId(), request.answerId());

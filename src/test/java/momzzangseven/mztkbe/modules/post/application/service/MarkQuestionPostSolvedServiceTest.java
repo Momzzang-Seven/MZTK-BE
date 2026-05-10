@@ -28,13 +28,13 @@ class MarkQuestionPostSolvedServiceTest {
   @DisplayName("returns repository update count when answers exist")
   void executeReturnsUpdatedCount() {
     MarkQuestionPostSolvedCommand command = new MarkQuestionPostSolvedCommand(1L);
-    when(countAnswersPort.countAnswers(1L)).thenReturn(5L);
+    when(countAnswersPort.countPublicVisibleAnswers(1L)).thenReturn(5L);
     when(postPersistencePort.markQuestionPostSolved(1L)).thenReturn(1);
 
     int updated = markQuestionPostSolvedService.execute(command);
 
     assertThat(updated).isEqualTo(1);
-    verify(countAnswersPort).countAnswers(1L);
+    verify(countAnswersPort).countPublicVisibleAnswers(1L);
     verify(postPersistencePort).markQuestionPostSolved(1L);
   }
 
@@ -42,12 +42,12 @@ class MarkQuestionPostSolvedServiceTest {
   @DisplayName("returns zero and bypasses update when no answers exist")
   void executeReturnsZeroWhenNoAnswers() {
     MarkQuestionPostSolvedCommand command = new MarkQuestionPostSolvedCommand(1L);
-    when(countAnswersPort.countAnswers(1L)).thenReturn(0L);
+    when(countAnswersPort.countPublicVisibleAnswers(1L)).thenReturn(0L);
 
     int updated = markQuestionPostSolvedService.execute(command);
 
     assertThat(updated).isZero();
-    verify(countAnswersPort).countAnswers(1L);
+    verify(countAnswersPort).countPublicVisibleAnswers(1L);
     verifyNoInteractions(postPersistencePort);
   }
 
@@ -55,13 +55,13 @@ class MarkQuestionPostSolvedServiceTest {
   @DisplayName("returns zero when repository update returns zero even with answers")
   void executeReturnsZeroWhenAlreadySolvedOrNotQuestion() {
     MarkQuestionPostSolvedCommand command = new MarkQuestionPostSolvedCommand(2L);
-    when(countAnswersPort.countAnswers(2L)).thenReturn(1L);
+    when(countAnswersPort.countPublicVisibleAnswers(2L)).thenReturn(1L);
     when(postPersistencePort.markQuestionPostSolved(2L)).thenReturn(0);
 
     int updated = markQuestionPostSolvedService.execute(command);
 
     assertThat(updated).isZero();
-    verify(countAnswersPort).countAnswers(2L);
+    verify(countAnswersPort).countPublicVisibleAnswers(2L);
     verify(postPersistencePort).markQuestionPostSolved(2L);
   }
 }

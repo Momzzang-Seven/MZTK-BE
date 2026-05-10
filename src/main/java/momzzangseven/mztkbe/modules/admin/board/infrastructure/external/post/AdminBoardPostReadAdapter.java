@@ -3,14 +3,10 @@ package momzzangseven.mztkbe.modules.admin.board.infrastructure.external.post;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.modules.admin.board.application.port.out.LoadAdminBoardPostsPort;
-import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
-import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 import momzzangseven.mztkbe.modules.post.application.dto.GetManagedBoardPostsPageQuery;
 import momzzangseven.mztkbe.modules.post.application.dto.GetManagedBoardPostsQuery;
 import momzzangseven.mztkbe.modules.post.application.dto.ManagedBoardPostView;
 import momzzangseven.mztkbe.modules.post.application.port.in.GetManagedBoardPostsUseCase;
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
-import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 
@@ -25,10 +21,29 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
     return getManagedBoardPostsUseCase
         .execute(
             new GetManagedBoardPostsQuery(
-                query.search(), query.postId(), query.userId(), toPostStatus(query.status())))
+                query.search(),
+                query.postId(),
+                query.userId(),
+                AdminBoardPostEnumMapper.toPostStatus(query.status()),
+                AdminBoardPostEnumMapper.toPostType(query.type()),
+                AdminBoardPostEnumMapper.toPostPublicationStatus(query.publicationStatus()),
+                AdminBoardPostEnumMapper.toPostModerationStatus(query.moderationStatus())))
         .stream()
         .map(this::toAdminBoardPostView)
         .toList();
+  }
+
+  @Override
+  public long count(AdminBoardPostQuery query) {
+    return getManagedBoardPostsUseCase.count(
+        new GetManagedBoardPostsQuery(
+            query.search(),
+            query.postId(),
+            query.userId(),
+            AdminBoardPostEnumMapper.toPostStatus(query.status()),
+            AdminBoardPostEnumMapper.toPostType(query.type()),
+            AdminBoardPostEnumMapper.toPostPublicationStatus(query.publicationStatus()),
+            AdminBoardPostEnumMapper.toPostModerationStatus(query.moderationStatus())));
   }
 
   @Override
@@ -39,7 +54,10 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
                 query.search(),
                 query.postId(),
                 query.userId(),
-                toPostStatus(query.status()),
+                AdminBoardPostEnumMapper.toPostStatus(query.status()),
+                AdminBoardPostEnumMapper.toPostType(query.type()),
+                AdminBoardPostEnumMapper.toPostPublicationStatus(query.publicationStatus()),
+                AdminBoardPostEnumMapper.toPostModerationStatus(query.moderationStatus()),
                 query.page(),
                 query.size(),
                 query.sortKey().name()))
@@ -49,23 +67,13 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
   private AdminBoardPostView toAdminBoardPostView(ManagedBoardPostView post) {
     return new AdminBoardPostView(
         post.postId(),
-        toAdminBoardPostType(post.type()),
-        toAdminBoardPostStatus(post.status()),
+        AdminBoardPostEnumMapper.toAdminPostType(post.type()),
+        AdminBoardPostEnumMapper.toAdminPostStatus(post.status()),
+        AdminBoardPostEnumMapper.toAdminPublicationStatus(post.publicationStatus()),
+        AdminBoardPostEnumMapper.toAdminModerationStatus(post.moderationStatus()),
         post.title(),
         post.content(),
         post.writerId(),
         post.createdAt());
-  }
-
-  private PostStatus toPostStatus(AdminBoardPostStatus status) {
-    return status == null ? null : PostStatus.valueOf(status.name());
-  }
-
-  private AdminBoardPostType toAdminBoardPostType(PostType type) {
-    return AdminBoardPostType.valueOf(type.name());
-  }
-
-  private AdminBoardPostStatus toAdminBoardPostStatus(PostStatus status) {
-    return AdminBoardPostStatus.valueOf(status.name());
   }
 }

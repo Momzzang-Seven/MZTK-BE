@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentCleanupProtectionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionCleanupPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExecutionIntentCleanupService {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
+  private final ExecutionIntentCleanupProtectionPort executionIntentCleanupProtectionPort;
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final LoadExecutionCleanupPolicyPort loadExecutionCleanupPolicyPort;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
@@ -56,10 +58,13 @@ public class ExecutionIntentCleanupService {
     List<Long> retainedIntentIds =
         executionIntentPersistencePort.findRetainedFinalizedIds(
             retainedCutoff, cleanupPolicy.batchSize());
+    List<Long> deletableRetainedIntentIds =
+        executionIntentCleanupProtectionPort.filterDeletableFinalizedIntentIds(retainedIntentIds);
     int deletedIntentCount =
-        retainedIntentIds.isEmpty()
+        deletableRetainedIntentIds.isEmpty()
             ? 0
-            : Math.toIntExact(executionIntentPersistencePort.deleteByIds(retainedIntentIds));
+            : Math.toIntExact(
+                executionIntentPersistencePort.deleteByIds(deletableRetainedIntentIds));
 
     List<Long> usageIds =
         sponsorDailyUsagePersistencePort.findUsageIdsForCleanup(

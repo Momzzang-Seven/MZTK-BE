@@ -4,8 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.post.application.dto.SyncQuestionPublicationStateCommand;
 import momzzangseven.mztkbe.modules.post.application.port.in.ConfirmQuestionCreatedUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.in.FailQuestionCreateUseCase;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaQuestionPublicationSyncPort;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
@@ -59,7 +59,7 @@ public class QnaQuestionPublicationSyncAdapter implements QnaQuestionPublication
   public void failQuestionCreate(
       Long postId,
       String executionIntentId,
-      ExecutionIntentStatus terminalStatus,
+      QnaExecutionIntentStatus terminalStatus,
       String failureReason) {
     eventPublisher.publishEvent(
         QnaQuestionPublicationSyncEvent.failed(

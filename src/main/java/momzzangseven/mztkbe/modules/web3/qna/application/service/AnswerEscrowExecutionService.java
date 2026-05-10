@@ -22,10 +22,8 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
-import org.springframework.transaction.annotation.Transactional;
 
 @RequiredArgsConstructor
-@Transactional
 public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCase {
 
   private final QnaProjectionPersistencePort qnaProjectionPersistencePort;
@@ -38,9 +36,9 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
     if (answerId == null) {
       return false;
     }
-    return loadQnaExecutionIntentStatePort
-        .loadLatestActiveByResource(QnaExecutionResourceType.ANSWER, String.valueOf(answerId))
-        .isPresent();
+    return !loadQnaExecutionIntentStatePort
+        .loadActiveByResource(QnaExecutionResourceType.ANSWER, String.valueOf(answerId))
+        .isEmpty();
   }
 
   @Override
@@ -131,7 +129,11 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
             rewardContext.tokenAddress(),
             rewardContext.amountWei(),
             question.getQuestionHash(),
-            answerHash));
+            answerHash,
+            null,
+            null,
+            command.updateVersion(),
+            command.updateToken()));
   }
 
   @Override
@@ -160,7 +162,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
 
   private QnaQuestionProjection requireQuestionProjection(Long postId) {
     return qnaProjectionPersistencePort
-        .findQuestionByPostIdForUpdate(postId)
+        .findQuestionByPostId(postId)
         .orElseThrow(
             () ->
                 new RetryableWeb3PreparationException(
@@ -169,7 +171,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
 
   private QnaAnswerProjection requireAnswerProjection(Long answerId) {
     return qnaProjectionPersistencePort
-        .findAnswerByAnswerIdForUpdate(answerId)
+        .findAnswerByAnswerId(answerId)
         .orElseThrow(
             () ->
                 new RetryableWeb3PreparationException(
@@ -181,7 +183,7 @@ public class AnswerEscrowExecutionService implements AnswerEscrowExecutionUseCas
   }
 
   private void ensureAnswerCreateRecoverable(Long postId, Long answerId, Long requesterUserId) {
-    if (qnaProjectionPersistencePort.findAnswerByAnswerIdForUpdate(answerId).isPresent()) {
+    if (qnaProjectionPersistencePort.findAnswerByAnswerId(answerId).isPresent()) {
       throw new Web3InvalidInputException(
           "answer is already registered onchain: answerId=" + answerId);
     }

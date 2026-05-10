@@ -10,6 +10,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.MarketplacePaginationConstants;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassDetailInfo;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassItem;
+import momzzangseven.mztkbe.modules.marketplace.classes.application.dto.ClassSummaryProjection;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadClassTagPort;
 import momzzangseven.mztkbe.modules.marketplace.classes.application.port.out.LoadTrainerStorePort;
@@ -369,6 +371,48 @@ public class ClassPersistenceAdapter implements LoadClassPort, SaveClassPort {
     MarketplaceClassEntity saved = classJpaRepository.save(entity);
     log.debug("Class saved with id={}", saved.getId());
     return saved.toDomainWithTags(marketplaceClass.getTags());
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Issues a single JPQL query that joins {@code class_slots} → {@code marketplace_classes} and
+   * projects only the five columns needed for reservation enrichment. This avoids the cost of
+   * loading tags, features, store information, and detail images that {@link #findById} incurs.
+   *
+   * <p>If {@code slotIds} is empty, returns an empty map immediately (no DB round-trip).
+   */
+  @Override
+  public Map<Long, ClassSummaryProjection> findSummaryProjectionsBySlotIds(List<Long> slotIds) {
+    if (slotIds == null || slotIds.isEmpty()) {
+      return Map.of();
+    }
+
+    // Single query: class_slots JOIN marketplace_classes — projects only what enrichment needs.
+    @SuppressWarnings("unchecked")
+    List<Object[]> rows =
+        entityManager
+            .createQuery(
+                """
+                SELECT s.id, c.id, c.trainerId, c.title, c.priceAmount, c.active
+                FROM ClassSlotEntity s
+                JOIN MarketplaceClassEntity c ON c.id = s.classId
+                WHERE s.id IN :slotIds
+                """)
+            .setParameter("slotIds", slotIds)
+            .getResultList();
+
+    Map<Long, ClassSummaryProjection> result = new HashMap<>();
+    for (Object[] row : rows) {
+      Long slotId = ((Number) row[0]).longValue();
+      Long classId = ((Number) row[1]).longValue();
+      Long trainerId = ((Number) row[2]).longValue();
+      String title = (String) row[3];
+      int price = ((Number) row[4]).intValue();
+      boolean active = (boolean) row[5];
+      result.put(slotId, new ClassSummaryProjection(classId, trainerId, title, price, active));
+    }
+    return result;
   }
 
   // ============================================

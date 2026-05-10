@@ -9,11 +9,21 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.Map;
 import momzzangseven.mztkbe.global.audit.application.port.out.RecordAdminAuditPort;
 import momzzangseven.mztkbe.global.audit.domain.vo.AuditTargetType;
 import momzzangseven.mztkbe.global.error.BusinessException;
 import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardModerationResult;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.UnblockAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.service.BanAdminBoardPostService;
+import momzzangseven.mztkbe.modules.admin.board.application.service.UnblockAdminBoardPostService;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationReasonCode;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardModerationTargetType;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
 import momzzangseven.mztkbe.modules.post.application.service.ModeratePostService;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -180,8 +190,93 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("@AdminOnly.detail 일부 SpEL 평가가 실패해도 기본 audit와 정상 detail은 저장한다")
+  void around_whenAdditionalDetailExpressionFails_recordsBaseAuditAndRemainingDetail()
+      throws Throwable {
+    Method method =
+        DummyAdminMethods.class.getDeclaredMethod(
+            "brokenDetail", Long.class, String.class, Payload.class);
+    RuntimeException boom = new IllegalStateException("boom");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs())
+        .thenReturn(new Object[] {1L, "target-6", new Payload("frank", "k6", 11)});
+    when(joinPoint.proceed()).thenThrow(boom);
+    setAuthentication("ROLE_ADMIN");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("BROKEN_DETAIL");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(command.targetId()).isEqualTo("target-6");
+    assertThat(command.success()).isFalse();
+    assertThat(command.detail()).containsEntry("method", "DummyAdminMethods.brokenDetail");
+    assertThat(command.detail()).containsEntry("failureReason", "IllegalStateException");
+    assertThat(command.detail()).containsEntry("targetCopy", "target-6");
+    assertThat(command.detail()).containsEntry("payloadName", "frank");
+    assertThat(command.detail()).doesNotContainKey("broken");
+    assertThat(command.detail().get("arguments")).isInstanceOf(Map.class);
+    assertThat(command.detail().get("detailEvaluationError")).isInstanceOf(Map.class);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> detailEvaluationError =
+        (Map<String, Object>) command.detail().get("detailEvaluationError");
+    assertThat(detailEvaluationError)
+        .containsEntry("failedExpressionCount", 1)
+        .containsEntry("firstFailedExpression", "broken=#missing.value")
+        .containsKey("firstErrorType");
+  }
+
+  @Test
+  @DisplayName("@AdminOnly.detail 이 reserved key 를 사용해도 기본 audit detail 을 덮지 않고 충돌 정보를 남긴다")
+  void around_whenAdditionalDetailUsesReservedKeys_ignoresReservedKeysAndKeepsBaseDetail()
+      throws Throwable {
+    Method method =
+        DummyAdminMethods.class.getDeclaredMethod(
+            "reservedDetail", Long.class, String.class, Payload.class);
+    RuntimeException boom = new IllegalStateException("boom");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs())
+        .thenReturn(new Object[] {1L, "target-7", new Payload("grace", "k7", 13)});
+    when(joinPoint.proceed()).thenThrow(boom);
+    setAuthentication("ROLE_ADMIN");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("RESERVED_DETAIL");
+    assertThat(command.success()).isFalse();
+    assertThat(command.detail()).containsEntry("method", "DummyAdminMethods.reservedDetail");
+    assertThat(command.detail()).containsEntry("failureReason", "IllegalStateException");
+    assertThat(command.detail()).containsEntry("targetCopy", "target-7");
+    assertThat(command.detail()).doesNotContainKey("broken");
+    assertThat(command.detail().get("arguments")).isInstanceOf(Map.class);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> arguments = (Map<String, Object>) command.detail().get("arguments");
+    assertThat(arguments).containsEntry("targetId", "target-7");
+    assertThat(arguments.get("payload")).isInstanceOf(Map.class);
+    assertThat(command.detail().get("detailEvaluationError")).isInstanceOf(Map.class);
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> detailEvaluationError =
+        (Map<String, Object>) command.detail().get("detailEvaluationError");
+    assertThat(detailEvaluationError)
+        .containsEntry("failedExpressionCount", 1)
+        .containsEntry("firstFailedExpression", "broken=#missing.value")
+        .containsKey("firstErrorType")
+        .containsEntry("ignoredReservedKeyCount", 4)
+        .containsEntry(
+            "ignoredReservedKeys",
+            List.of("method", "arguments", "failureReason", "detailEvaluationError"));
+  }
+
+  @Test
   @DisplayName(
-      "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
+      "operatorId SpEL 표현식이 숫자가 아닌 값으로 평가되면, around 는 "
+          + "UserNotAuthenticatedException 을 던지고 audit 를 기록하지 않는다")
   void around_whenOperatorExpressionIsNotNumeric_throwsAuthenticationError() throws Throwable {
     Method method = DummyAdminMethods.class.getDeclaredMethod("nonNumericOperator", Long.class);
     when(joinPoint.getSignature()).thenReturn(methodSignature);
@@ -197,7 +292,8 @@ class AdminOnlyAspectTest {
 
   @Test
   @DisplayName(
-      "ROLE_USER 등 비-admin 으로 인증된 호출이면, around 는 BusinessException(Unauthorized) 을 던지고 audit 를 기록하지 않는다")
+      "ROLE_USER 등 비-admin 으로 인증된 호출이면, around 는 BusinessException(Unauthorized) 을 "
+          + "던지고 audit 를 기록하지 않는다")
   void around_whenNonAdminAuthentication_throwsBusinessException() throws Throwable {
     Method method =
         DummyAdminMethods.class.getDeclaredMethod(
@@ -318,6 +414,131 @@ class AdminOnlyAspectTest {
   }
 
   @Test
+  @DisplayName("관리자 게시글 ban audit detail에는 상태 변경 결과와 최종 상태가 기록된다")
+  void around_forAdminBoardPostBan_recordsModerationResultDetail() throws Throwable {
+    Method method =
+        BanAdminBoardPostService.class.getMethod("execute", BanAdminBoardPostCommand.class);
+    BanAdminBoardPostCommand input =
+        new BanAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, "policy memo");
+    AdminBoardModerationResult result =
+        new AdminBoardModerationResult(
+            10L,
+            AdminBoardModerationTargetType.POST,
+            AdminBoardModerationReasonCode.POLICY_VIOLATION,
+            true,
+            AdminBoardPostPublicationStatus.VISIBLE,
+            AdminBoardPostModerationStatus.BLOCKED);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenReturn(result);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("ADMIN_BOARD_POST_BAN");
+    assertThat(command.targetType()).isEqualTo(AuditTargetType.POST);
+    assertThat(command.targetId()).isEqualTo("10");
+    assertThat(command.detail()).containsEntry("reasonCode", "POLICY_VIOLATION");
+    assertThat(command.detail()).containsEntry("reasonDetail", "policy memo");
+    assertThat(command.detail()).containsEntry("moderated", true);
+    assertThat(command.detail()).containsEntry("publicationStatus", "VISIBLE");
+    assertThat(command.detail()).containsEntry("moderationStatus", "BLOCKED");
+    assertThat(command.detail()).containsKey("arguments");
+  }
+
+  @Test
+  @DisplayName("이미 BLOCKED 인 게시글 ban no-op audit detail에는 moderated=false 가 기록된다")
+  void around_forAdminBoardPostBanNoOp_recordsNotModeratedResultDetail() throws Throwable {
+    Method method =
+        BanAdminBoardPostService.class.getMethod("execute", BanAdminBoardPostCommand.class);
+    BanAdminBoardPostCommand input =
+        new BanAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+    AdminBoardModerationResult result =
+        new AdminBoardModerationResult(
+            10L,
+            AdminBoardModerationTargetType.POST,
+            AdminBoardModerationReasonCode.POLICY_VIOLATION,
+            false,
+            AdminBoardPostPublicationStatus.FAILED,
+            AdminBoardPostModerationStatus.BLOCKED);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenReturn(result);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.detail()).containsEntry("reasonCode", "POLICY_VIOLATION");
+    assertThat(command.detail()).containsEntry("moderated", false);
+    assertThat(command.detail()).containsEntry("publicationStatus", "FAILED");
+    assertThat(command.detail()).containsEntry("moderationStatus", "BLOCKED");
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 unblock audit detail에는 상태 변경 결과와 최종 상태가 기록된다")
+  void around_forAdminBoardPostUnblock_recordsModerationResultDetail() throws Throwable {
+    Method method =
+        UnblockAdminBoardPostService.class.getMethod("execute", UnblockAdminBoardPostCommand.class);
+    UnblockAdminBoardPostCommand input =
+        new UnblockAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, "restore memo");
+    AdminBoardModerationResult result =
+        new AdminBoardModerationResult(
+            10L,
+            AdminBoardModerationTargetType.POST,
+            AdminBoardModerationReasonCode.POLICY_VIOLATION,
+            true,
+            AdminBoardPostPublicationStatus.VISIBLE,
+            AdminBoardPostModerationStatus.NORMAL);
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenReturn(result);
+    setAuthentication("ROLE_ADMIN");
+
+    aspect.around(joinPoint);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.actionType()).isEqualTo("ADMIN_BOARD_POST_UNBLOCK");
+    assertThat(command.detail()).containsEntry("reasonCode", "POLICY_VIOLATION");
+    assertThat(command.detail()).containsEntry("reasonDetail", "restore memo");
+    assertThat(command.detail()).containsEntry("moderated", true);
+    assertThat(command.detail()).containsEntry("publicationStatus", "VISIBLE");
+    assertThat(command.detail()).containsEntry("moderationStatus", "NORMAL");
+  }
+
+  @Test
+  @DisplayName("관리자 게시글 ban 실패 audit는 failureReason 을 유지하고 null result detail은 기록하지 않는다")
+  void around_forAdminBoardPostBanFailure_recordsFailureReasonWithoutResultDetail()
+      throws Throwable {
+    Method method =
+        BanAdminBoardPostService.class.getMethod("execute", BanAdminBoardPostCommand.class);
+    BanAdminBoardPostCommand input =
+        new BanAdminBoardPostCommand(
+            99L, 10L, AdminBoardModerationReasonCode.POLICY_VIOLATION, null);
+    RuntimeException boom = new IllegalStateException("boom");
+    when(joinPoint.getSignature()).thenReturn(methodSignature);
+    when(methodSignature.getMethod()).thenReturn(method);
+    when(joinPoint.getArgs()).thenReturn(new Object[] {input});
+    when(joinPoint.proceed()).thenThrow(boom);
+    setAuthentication("ROLE_ADMIN");
+
+    assertThatThrownBy(() -> aspect.around(joinPoint)).isSameAs(boom);
+
+    RecordAdminAuditPort.AuditCommand command = captureAuditCommand();
+    assertThat(command.success()).isFalse();
+    assertThat(command.detail()).containsEntry("failureReason", "IllegalStateException");
+    assertThat(command.detail())
+        .doesNotContainKeys("moderated", "publicationStatus", "moderationStatus");
+  }
+
+  @Test
   @DisplayName("operatorId SpEL 결과가 0 이하 숫자이면, around 는 UserNotAuthenticatedException 을 던진다")
   void around_whenOperatorIdNonPositive_throwsAuthenticationError() throws Throwable {
     Method method =
@@ -407,6 +628,13 @@ class AdminOnlyAspectTest {
         .setAuthentication(new TestingAuthenticationToken("admin", "pw", authority));
   }
 
+  private RecordAdminAuditPort.AuditCommand captureAuditCommand() {
+    ArgumentCaptor<RecordAdminAuditPort.AuditCommand> captor =
+        ArgumentCaptor.forClass(RecordAdminAuditPort.AuditCommand.class);
+    verify(recordAdminAuditPort).record(captor.capture());
+    return captor.getValue();
+  }
+
   private static class DummyAdminMethods {
 
     @AdminOnly(
@@ -437,6 +665,33 @@ class AdminOnlyAspectTest {
         targetType = AuditTargetType.WEB3_TRANSACTION,
         operatorId = "#p0")
     String web3Action(Long operatorId) {
+      return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "BROKEN_DETAIL",
+        targetType = AuditTargetType.POST,
+        operatorId = "#p0",
+        targetId = "#p1",
+        detail = {"targetCopy=#p1", "broken=#missing.value", "payloadName=#p2.name()"})
+    String brokenDetail(Long operatorId, String targetId, Payload payload) {
+      return "OK";
+    }
+
+    @AdminOnly(
+        actionType = "RESERVED_DETAIL",
+        targetType = AuditTargetType.POST,
+        operatorId = "#p0",
+        targetId = "#p1",
+        detail = {
+          "method='tampered-method'",
+          "arguments='tampered-arguments'",
+          "failureReason='tampered-failure'",
+          "detailEvaluationError='tampered-error'",
+          "targetCopy=#p1",
+          "broken=#missing.value"
+        })
+    String reservedDetail(Long operatorId, String targetId, Payload payload) {
       return "OK";
     }
 

@@ -27,7 +27,14 @@ public class QnaLocalDeleteSyncAdapter implements QnaLocalDeleteSyncPort {
   }
 
   @Override
-  public void confirmAnswerDeleted(Long answerId) {
-    confirmAnswerDeleteSyncUseCase.confirmDeleted(answerId);
+  public void confirmAnswerDeleted(Long answerId, String executionIntentId) {
+    confirmAnswerDeleteSyncUseCase.confirmDeleted(answerId, executionIntentId);
+  }
+
+  @Override
+  public void rollbackAnswerDelete(
+      Long answerId, String executionIntentId, String terminalStatus, String failureReason) {
+    confirmAnswerDeleteSyncUseCase.rollbackDelete(
+        answerId, executionIntentId, terminalStatus, failureReason);
   }
 }

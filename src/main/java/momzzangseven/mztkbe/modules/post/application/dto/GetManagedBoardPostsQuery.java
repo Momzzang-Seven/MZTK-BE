@@ -1,10 +1,19 @@
 package momzzangseven.mztkbe.modules.post.application.dto;
 
+import momzzangseven.mztkbe.modules.post.domain.model.PostModerationStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostPublicationStatus;
 import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
+import momzzangseven.mztkbe.modules.post.domain.model.PostType;
 
 /** Query for admin board post list reads. */
 public record GetManagedBoardPostsQuery(
-    String search, Long postId, Long userId, PostStatus status) {
+    String search,
+    Long postId,
+    Long userId,
+    PostStatus status,
+    PostType type,
+    PostPublicationStatus publicationStatus,
+    PostModerationStatus moderationStatus) {
 
   public GetManagedBoardPostsQuery {
     if (postId != null && postId <= 0) {

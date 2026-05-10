@@ -3,7 +3,10 @@ package momzzangseven.mztkbe.modules.admin.board.api.dto;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPagePolicies;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPostSortKey;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostModerationStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostPublicationStatus;
 import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostType;
 import momzzangseven.mztkbe.modules.admin.common.application.dto.AdminPageQuery;
 import momzzangseven.mztkbe.modules.admin.common.application.dto.AdminPageQueryNormalizer;
 
@@ -13,6 +16,9 @@ public record GetAdminBoardPostsRequestDTO(
     Long postId,
     Long userId,
     AdminBoardPostStatus status,
+    AdminBoardPostType type,
+    AdminBoardPostPublicationStatus publicationStatus,
+    AdminBoardPostModerationStatus moderationStatus,
     Integer page,
     Integer size,
     String sort) {
@@ -26,6 +32,9 @@ public record GetAdminBoardPostsRequestDTO(
         postId,
         userId,
         status,
+        type,
+        publicationStatus,
+        moderationStatus,
         pageQuery.page(),
         pageQuery.size(),
         AdminBoardPostSortKey.from(pageQuery.sort()));

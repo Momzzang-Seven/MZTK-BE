@@ -16,7 +16,8 @@ class GetAdminBoardRequestsDTOTest {
   @DisplayName("게시글 request 는 blank search 와 기본 page/size/sort 를 정규화한다")
   void postRequest_toCommand_normalizesDefaults() {
     GetAdminBoardPostsCommand command =
-        new GetAdminBoardPostsRequestDTO("   ", 10L, 20L, null, null, null, null).toCommand(9L);
+        new GetAdminBoardPostsRequestDTO("   ", 10L, 20L, null, null, null, null, null, null, null)
+            .toCommand(9L);
 
     assertThat(command.search()).isNull();
     assertThat(command.postId()).isEqualTo(10L);
@@ -30,7 +31,10 @@ class GetAdminBoardRequestsDTOTest {
   @DisplayName("게시글 request 는 양수가 아닌 postId 를 거부한다")
   void postRequest_toCommand_nonPositivePostIdThrows() {
     assertThatThrownBy(
-            () -> new GetAdminBoardPostsRequestDTO(null, 0L, null, null, 0, 20, null).toCommand(9L))
+            () ->
+                new GetAdminBoardPostsRequestDTO(
+                        null, 0L, null, null, null, null, null, 0, 20, null)
+                    .toCommand(9L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("postId must be positive");
   }

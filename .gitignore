@@ -1,7 +1,9 @@
 ############################
 # Documentation
 ############################
-docs/
+# 개인 docs. 전환 기간 동안 기존 docs/ 도 같이 ignore (모든 팀원 마이그레이션 후 docs/ 줄 제거).
+docs
+docs.local/
 
 ############################
 # Gradle
@@ -53,9 +55,26 @@ bin/
 ### VS Code ###
 .vscode/
 
-### Cursor ###
-.cursor/
-.claude/
+### Claude Code (selective sharing) ###
+.claude/*
+!.claude/settings.json
+# .claude/skills is a symlink/junction to .agents/skills, created per
+# environment by scripts/agents/setup-skill-links.py. Do not commit the link.
+.claude/skills
+.claude/settings.local.json
+.claude/**/.DS_Store
+
+### Shared agent skills (.agents/skills is the SSoT) ###
+# Personal skills follow the `private-` prefix convention so both Claude Code
+# (one-level discovery) and Codex CLI (recursive) detect them, while a single
+# glob keeps them out of git.
+.agents/skills/private-*/
+
+### Personal AGENTS.md override (각 scope 마다) ###
+AGENTS.local.md
+
+### Codex (config.local.toml only) ###
+.codex/config.local.toml
 ############################
 # Environment variables
 ############################
@@ -82,9 +101,9 @@ Thumbs.db
 src/main/generated/
 
 ############################
-# CLAUDE.md
+# AI agent local-only files
 ############################
-CLAUDE.md
+# CLAUDE.md / AGENTS.md 는 git 추적. 개인 override 는 위 AGENTS.local.md 컨벤션 사용.
 .mcp.json
 
 ############################

@@ -17,7 +17,6 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
@@ -39,6 +38,7 @@ import momzzangseven.mztkbe.modules.web3.qna.domain.model.QnaQuestionUpdateState
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionIntentStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaQuestionUpdateStateStatus;
@@ -410,7 +410,7 @@ class QuestionEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-terminal",
                     QnaExecutionActionType.QNA_QUESTION_CREATE,
-                    ExecutionIntentStatus.CANCELED)));
+                    QnaExecutionIntentStatus.CANCELED)));
     given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
         .willReturn(
             new LoadQnaRewardTokenConfigPort.RewardTokenConfig(
@@ -439,7 +439,7 @@ class QuestionEscrowExecutionServiceTest {
                 new QnaExecutionIntentStateView(
                     "intent-active",
                     QnaExecutionActionType.QNA_QUESTION_CREATE,
-                    ExecutionIntentStatus.AWAITING_SIGNATURE)));
+                    QnaExecutionIntentStatus.AWAITING_SIGNATURE)));
 
     assertThatThrownBy(
             () ->

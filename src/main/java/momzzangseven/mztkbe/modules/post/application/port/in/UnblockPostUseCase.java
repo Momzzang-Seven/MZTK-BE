@@ -1,8 +1,9 @@
 package momzzangseven.mztkbe.modules.post.application.port.in;
 
 import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostCommand;
+import momzzangseven.mztkbe.modules.post.application.dto.ModeratePostResult;
 
 public interface UnblockPostUseCase {
 
-  void unblockPost(ModeratePostCommand command);
+  ModeratePostResult unblockPost(ModeratePostCommand command);
 }

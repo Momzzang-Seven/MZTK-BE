@@ -68,6 +68,14 @@ public class ReservationEntity {
   @Column(name = "tx_hash", length = 100)
   private String txHash;
 
+  /** Snapshot of priceAmount at booking time. NULL for legacy records created before this field. */
+  @Column(name = "booked_price_amount")
+  private Integer bookedPriceAmount;
+
+  /** Snapshot of class title at booking time. Null for legacy records created before this field. */
+  @Column(name = "booked_class_title", length = 100)
+  private String bookedClassTitle;
+
   @Version
   @Column(nullable = false)
   private Long version;
@@ -94,6 +102,8 @@ public class ReservationEntity {
         .rejectionReason(domain.getRejectionReason())
         .orderId(domain.getOrderId())
         .txHash(domain.getTxHash())
+        .bookedPriceAmount(domain.getBookedPriceAmount())
+        .bookedClassTitle(domain.getBookedClassTitle())
         .version(domain.getVersion())
         .build();
   }
@@ -112,6 +122,8 @@ public class ReservationEntity {
         .rejectionReason(this.rejectionReason)
         .orderId(this.orderId)
         .txHash(this.txHash)
+        .bookedPriceAmount(this.bookedPriceAmount)
+        .bookedClassTitle(this.bookedClassTitle)
         .version(this.version)
         .createdAt(this.createdAt)
         .updatedAt(this.updatedAt)

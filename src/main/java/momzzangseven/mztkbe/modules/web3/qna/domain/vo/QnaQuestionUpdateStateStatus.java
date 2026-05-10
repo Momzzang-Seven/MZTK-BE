@@ -22,7 +22,7 @@ public enum QnaQuestionUpdateStateStatus {
   }
 
   public boolean isSupersedableByNewPreparation() {
-    return isBindable();
+    return isNonTerminal();
   }
 
   public static EnumSet<QnaQuestionUpdateStateStatus> nonTerminalStatuses() {
@@ -34,6 +34,6 @@ public enum QnaQuestionUpdateStateStatus {
   }
 
   public static EnumSet<QnaQuestionUpdateStateStatus> supersedableByNewPreparationStatuses() {
-    return EnumSet.of(PREPARING, PREPARATION_FAILED);
+    return EnumSet.of(PREPARING, PREPARATION_FAILED, INTENT_BOUND);
   }
 }

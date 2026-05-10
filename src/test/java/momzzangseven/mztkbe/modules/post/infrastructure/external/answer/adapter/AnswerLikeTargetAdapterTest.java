@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.answer.application.port.in.GetAnswerSummaryUseCase;
+import momzzangseven.mztkbe.modules.answer.application.port.in.GetVisibleAnswerSummaryUseCase;
 import momzzangseven.mztkbe.modules.post.application.port.out.LoadAnswerLikeTargetPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,14 +18,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @DisplayName("AnswerLikeTargetAdapter unit test")
 class AnswerLikeTargetAdapterTest {
 
-  @Mock private GetAnswerSummaryUseCase getAnswerSummaryUseCase;
+  @Mock private GetVisibleAnswerSummaryUseCase getVisibleAnswerSummaryUseCase;
 
   @InjectMocks private AnswerLikeTargetAdapter answerLikeTargetAdapter;
 
   @Test
   @DisplayName("maps answer summary to answer like target")
   void loadAnswerTarget_mapsAnswerSummary() {
-    when(getAnswerSummaryUseCase.getAnswerSummary(20L))
+    when(getVisibleAnswerSummaryUseCase.getVisibleAnswerSummary(20L))
         .thenReturn(Optional.of(new GetAnswerSummaryUseCase.AnswerSummary(20L, 10L, 2L)));
 
     Optional<LoadAnswerLikeTargetPort.AnswerLikeTarget> result =
@@ -38,7 +39,7 @@ class AnswerLikeTargetAdapterTest {
   @Test
   @DisplayName("returns empty when answer summary is missing")
   void loadAnswerTarget_returnsEmptyWhenMissing() {
-    when(getAnswerSummaryUseCase.getAnswerSummary(20L)).thenReturn(Optional.empty());
+    when(getVisibleAnswerSummaryUseCase.getVisibleAnswerSummary(20L)).thenReturn(Optional.empty());
 
     Optional<LoadAnswerLikeTargetPort.AnswerLikeTarget> result =
         answerLikeTargetAdapter.loadAnswerTarget(20L);
