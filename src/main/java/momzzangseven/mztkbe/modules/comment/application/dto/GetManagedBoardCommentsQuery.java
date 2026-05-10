@@ -11,6 +11,7 @@ public record GetManagedBoardCommentsQuery(
     String sortKey) {
 
   public GetManagedBoardCommentsQuery {
+    search = normalizeSearch(search);
     if (commentId != null && commentId <= 0) {
       throw new IllegalArgumentException("commentId must be positive");
     }
@@ -26,5 +27,13 @@ public record GetManagedBoardCommentsQuery(
     if (sortKey == null || sortKey.isBlank()) {
       throw new IllegalArgumentException("sortKey is required");
     }
+  }
+
+  private static String normalizeSearch(String search) {
+    if (search == null) {
+      return null;
+    }
+    String trimmed = search.trim();
+    return trimmed.isBlank() ? null : trimmed;
   }
 }

@@ -47,6 +47,27 @@ class ManagedBoardCommentQueryPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("blank search 는 직접 query 로 들어와도 필터 없음과 동일하게 동작한다")
+  void load_blankSearchBehavesLikeNoSearchFilter() {
+    ManagedBoardCommentQueryPersistenceAdapter adapter = adapter();
+    LocalDateTime base = LocalDateTime.parse("2025-01-01T00:00:00");
+    Long firstId =
+        persistComment(CommentTargetType.POST, 21L, null, 7L, "first comment", false, base);
+    Long secondId =
+        persistComment(
+            CommentTargetType.POST, 21L, null, 7L, "second comment", false, base.plusMinutes(1));
+
+    var page =
+        adapter.load(
+            new GetManagedBoardCommentsQuery("   ", null, null, null, 0, 20, "CREATED_AT"));
+
+    assertThat(page.getTotalElements()).isEqualTo(2L);
+    assertThat(page.getContent())
+        .extracting(ManagedBoardCommentSearchView::commentId)
+        .containsExactly(secondId, firstId);
+  }
+
+  @Test
   @DisplayName("load는 content/commentId/userId/targetType 조건을 AND 로 적용한다")
   void load_appliesContentCommentIdUserIdAndTargetTypeAsAndConditions() {
     ManagedBoardCommentQueryPersistenceAdapter adapter = adapter();

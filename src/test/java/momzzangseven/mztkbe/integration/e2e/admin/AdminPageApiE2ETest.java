@@ -142,9 +142,13 @@ class AdminPageApiE2ETest extends E2ETestBase {
     Long questionPostId =
         seedPost(
             trainer.userId(), "QUESTION", "OPEN", "Alpha Question", "Alpha question body", 100L);
+    Long answerId = seedAnswer(questionPostId, user.userId(), "Alpha answer body");
     Long rootComment = seedComment(freePostId, trainer.userId(), "Root comment", null, false);
     Long reply = seedComment(freePostId, user.userId(), "Reply comment", rootComment, false);
     Long deletedComment = seedComment(freePostId, trainer.userId(), "Deleted comment", null, true);
+    Long answerComment =
+        seedAnswerComment(
+            questionPostId, answerId, trainer.userId(), "Answer scoped comment", false);
 
     ResponseEntity<String> postsResponse =
         getWithBearer(
@@ -188,6 +192,82 @@ class AdminPageApiE2ETest extends E2ETestBase {
 
     JsonNode deletedNode = findById(comments, "commentId", deletedComment);
     assertThat(deletedNode.at("/isDeleted").asBoolean()).isTrue();
+
+    ResponseEntity<String> globalCommentsResponse =
+        getWithBearer("/admin/boards/comments?page=0&size=20&sort=commentId", admin.accessToken());
+    assertThat(globalCommentsResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode globalComments = data(globalCommentsResponse).path("content");
+    JsonNode globalRoot = findById(globalComments, "commentId", rootComment);
+    assertHasFields(
+        globalRoot,
+        "commentId",
+        "postId",
+        "answerId",
+        "targetType",
+        "userId",
+        "nickname",
+        "content",
+        "isDeleted",
+        "createdAt",
+        "updatedAt");
+    assertThat(globalRoot.at("/targetType").asText()).isEqualTo("POST");
+    assertThat(globalRoot.at("/postId").asLong()).isEqualTo(freePostId);
+    assertThat(globalRoot.path("answerId").isNull()).isTrue();
+    assertThat(globalRoot.at("/userId").asLong()).isEqualTo(trainer.userId());
+    assertThat(globalRoot.at("/nickname").asText()).isEqualTo(trainer.nickname());
+    assertThat(globalRoot.at("/content").asText()).isEqualTo("Root comment");
+    assertThat(globalRoot.at("/isDeleted").asBoolean()).isFalse();
+    assertThat(globalRoot.at("/createdAt").asText()).isNotBlank();
+    assertThat(globalRoot.at("/updatedAt").asText()).isNotBlank();
+
+    JsonNode globalAnswer = findById(globalComments, "commentId", answerComment);
+    assertHasFields(
+        globalAnswer,
+        "commentId",
+        "postId",
+        "answerId",
+        "targetType",
+        "userId",
+        "nickname",
+        "content",
+        "isDeleted",
+        "createdAt",
+        "updatedAt");
+    assertThat(globalAnswer.at("/targetType").asText()).isEqualTo("ANSWER");
+    assertThat(globalAnswer.at("/postId").asLong()).isEqualTo(questionPostId);
+    assertThat(globalAnswer.at("/answerId").asLong()).isEqualTo(answerId);
+    assertThat(globalAnswer.at("/userId").asLong()).isEqualTo(trainer.userId());
+    assertThat(globalAnswer.at("/nickname").asText()).isEqualTo(trainer.nickname());
+    assertThat(globalAnswer.at("/content").asText()).isEqualTo("Answer scoped comment");
+    assertThat(globalAnswer.at("/isDeleted").asBoolean()).isFalse();
+
+    JsonNode globalDeleted = findById(globalComments, "commentId", deletedComment);
+    assertThat(globalDeleted.at("/isDeleted").asBoolean()).isTrue();
+
+    ResponseEntity<String> postTargetCommentsResponse =
+        getWithBearer(
+            "/admin/boards/comments?targetType=POST&page=0&size=20&sort=commentId",
+            admin.accessToken());
+    assertThat(postTargetCommentsResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode postTargetComments = data(postTargetCommentsResponse).path("content");
+    assertThat(findById(postTargetComments, "commentId", rootComment).isMissingNode()).isFalse();
+    assertThat(findById(postTargetComments, "commentId", deletedComment).isMissingNode()).isFalse();
+    assertThat(findById(postTargetComments, "commentId", answerComment).isMissingNode()).isTrue();
+
+    ResponseEntity<String> answerTargetCommentsResponse =
+        getWithBearer(
+            "/admin/boards/comments?targetType=ANSWER&page=0&size=20&sort=commentId",
+            admin.accessToken());
+    assertThat(answerTargetCommentsResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode answerTargetComments = data(answerTargetCommentsResponse).path("content");
+    assertThat(findById(answerTargetComments, "commentId", answerComment).isMissingNode())
+        .isFalse();
+    assertThat(findById(answerTargetComments, "commentId", rootComment).isMissingNode()).isTrue();
+
+    String userToken = loginUser(user.email(), DEFAULT_TEST_PASSWORD);
+    ResponseEntity<String> forbiddenGlobalCommentsResponse =
+        getWithBearer("/admin/boards/comments", userToken);
+    assertThat(forbiddenGlobalCommentsResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
   }
 
   @Test
@@ -507,6 +587,13 @@ class AdminPageApiE2ETest extends E2ETestBase {
         .orElse(MissingNode.getInstance());
   }
 
+  private void assertHasFields(JsonNode node, String... fieldNames) {
+    assertThat(node.isMissingNode()).isFalse();
+    for (String fieldName : fieldNames) {
+      assertThat(node.has(fieldName)).as("Expected field %s", fieldName).isTrue();
+    }
+  }
+
   private Long seedPost(
       Long writerId, String type, String status, String title, String content, Long reward) {
     jdbcTemplate.update(
@@ -532,6 +619,32 @@ class AdminPageApiE2ETest extends E2ETestBase {
         content,
         isDeleted,
         parentId);
+    return jdbcTemplate.queryForObject(
+        "SELECT id FROM comments WHERE content = ? ORDER BY id DESC LIMIT 1", Long.class, content);
+  }
+
+  private Long seedAnswer(Long postId, Long writerId, String content) {
+    jdbcTemplate.update(
+        "INSERT INTO answers (post_id, user_id, content, is_accepted, created_at, updated_at) "
+            + "VALUES (?, ?, ?, false, NOW(), NOW())",
+        postId,
+        writerId,
+        content);
+    return jdbcTemplate.queryForObject(
+        "SELECT id FROM answers WHERE content = ? ORDER BY id DESC LIMIT 1", Long.class, content);
+  }
+
+  private Long seedAnswerComment(
+      Long postId, Long answerId, Long writerId, String content, boolean isDeleted) {
+    jdbcTemplate.update(
+        "INSERT INTO comments (target_type, post_id, answer_id, writer_id, content, is_deleted, "
+            + "parent_id, created_at, updated_at) VALUES ('ANSWER', ?, ?, ?, ?, ?, NULL, NOW(), "
+            + "NOW())",
+        postId,
+        answerId,
+        writerId,
+        content,
+        isDeleted);
     return jdbcTemplate.queryForObject(
         "SELECT id FROM comments WHERE content = ? ORDER BY id DESC LIMIT 1", Long.class, content);
   }

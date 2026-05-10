@@ -66,6 +66,41 @@ class ManagedBoardPostQueryPersistenceAdapterTest {
   }
 
   @Test
+  @DisplayName("blank search 는 직접 query 로 들어와도 필터 없음과 동일하게 동작한다")
+  void loadPage_blankSearchBehavesLikeNoSearchFilter() {
+    ManagedBoardPostQueryPersistenceAdapter adapter = adapter();
+    Long firstId =
+        persistPost(
+            1L,
+            PostType.FREE,
+            "first",
+            "first content",
+            PostStatus.OPEN,
+            at("2025-01-01T00:00:00"));
+    Long secondId =
+        persistPost(
+            2L,
+            PostType.FREE,
+            "second",
+            "second content",
+            PostStatus.OPEN,
+            at("2025-01-02T00:00:00"));
+
+    var page =
+        adapter.loadPage(
+            new GetManagedBoardPostsPageQuery(
+                "   ", null, null, null, null, null, null, 0, 10, "CREATED_AT"));
+    long count =
+        adapter.count(new GetManagedBoardPostsQuery("   ", null, null, null, null, null, null));
+
+    assertThat(page.getTotalElements()).isEqualTo(2L);
+    assertThat(page.getContent())
+        .extracting(ManagedBoardPostView::postId)
+        .containsExactly(secondId, firstId);
+    assertThat(count).isEqualTo(2L);
+  }
+
+  @Test
   @DisplayName("loadPage는 status/content search 필터와 type sort를 함께 DB query로 적용한다")
   void loadPage_appliesStatusContentSearchFilterAndTypeSort() {
     ManagedBoardPostQueryPersistenceAdapter adapter = adapter();

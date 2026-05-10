@@ -16,11 +16,20 @@ public record GetManagedBoardPostsQuery(
     PostModerationStatus moderationStatus) {
 
   public GetManagedBoardPostsQuery {
+    search = normalizeSearch(search);
     if (postId != null && postId <= 0) {
       throw new IllegalArgumentException("postId must be positive");
     }
     if (userId != null && userId <= 0) {
       throw new IllegalArgumentException("userId must be positive");
     }
+  }
+
+  private static String normalizeSearch(String search) {
+    if (search == null) {
+      return null;
+    }
+    String trimmed = search.trim();
+    return trimmed.isBlank() ? null : trimmed;
   }
 }
