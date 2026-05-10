@@ -161,7 +161,9 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(freePost.at("/contentPreview").asText()).isEqualTo("Alpha free body");
     assertThat(freePost.at("/writerId").asLong()).isEqualTo(user.userId());
     assertThat(freePost.at("/writerNickname").asText()).isEqualTo(user.nickname());
-    assertThat(freePost.at("/commentCount").asLong()).isEqualTo(2L);
+    assertThat(freePost.at("/commentCount").asLong())
+        .as("Admin comment count includes soft-deleted comments")
+        .isEqualTo(3L);
 
     ResponseEntity<String> commentsResponse =
         getWithBearer(
