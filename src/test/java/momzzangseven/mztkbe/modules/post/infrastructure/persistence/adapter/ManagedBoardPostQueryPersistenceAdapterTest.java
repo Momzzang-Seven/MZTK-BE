@@ -51,7 +51,9 @@ class ManagedBoardPostQueryPersistenceAdapterTest {
             PostStatus.RESOLVED,
             at("2025-01-03T00:00:00"));
 
-    var page = adapter.loadPage(new GetManagedBoardPostsPageQuery(null, null, 0, 2, "CREATED_AT"));
+    var page =
+        adapter.loadPage(
+            new GetManagedBoardPostsPageQuery(null, null, null, null, 0, 2, "CREATED_AT"));
 
     assertThat(page.getTotalElements()).isEqualTo(3L);
     assertThat(page.getContent())
@@ -60,8 +62,8 @@ class ManagedBoardPostQueryPersistenceAdapterTest {
   }
 
   @Test
-  @DisplayName("loadPage는 status/search 필터와 type sort를 함께 DB query로 적용한다")
-  void loadPage_appliesStatusSearchFilterAndTypeSort() {
+  @DisplayName("loadPage는 status/content search 필터와 type sort를 함께 DB query로 적용한다")
+  void loadPage_appliesStatusContentSearchFilterAndTypeSort() {
     ManagedBoardPostQueryPersistenceAdapter adapter = adapter();
     Long freeId =
         persistPost(
@@ -93,10 +95,18 @@ class ManagedBoardPostQueryPersistenceAdapterTest {
         "other content",
         PostStatus.OPEN,
         at("2025-01-04T00:00:00"));
+    persistPost(
+        5L,
+        PostType.QUESTION,
+        "target title only",
+        "title-only content",
+        PostStatus.OPEN,
+        at("2025-01-05T00:00:00"));
 
     var page =
         adapter.loadPage(
-            new GetManagedBoardPostsPageQuery("target", PostStatus.OPEN, 0, 10, "TYPE"));
+            new GetManagedBoardPostsPageQuery(
+                "target", null, null, PostStatus.OPEN, 0, 10, "TYPE"));
 
     assertThat(page.getTotalElements()).isEqualTo(2L);
     assertThat(page.getContent())
@@ -125,11 +135,91 @@ class ManagedBoardPostQueryPersistenceAdapterTest {
             PostStatus.OPEN,
             at("2025-01-02T00:00:00"));
 
-    var page = adapter.loadPage(new GetManagedBoardPostsPageQuery(null, null, 0, 2, "POST_ID"));
+    var page =
+        adapter.loadPage(
+            new GetManagedBoardPostsPageQuery(null, null, null, null, 0, 2, "POST_ID"));
 
     assertThat(page.getContent())
         .extracting(ManagedBoardPostView::postId)
         .containsExactly(secondId, firstId);
+  }
+
+  @Test
+  @DisplayName("loadPage는 postId/userId/content search 조건을 AND 로 적용한다")
+  void loadPage_appliesPostIdUserIdAndContentSearchAsAndConditions() {
+    ManagedBoardPostQueryPersistenceAdapter adapter = adapter();
+    Long targetId =
+        persistPost(
+            10L,
+            PostType.FREE,
+            "ignored title",
+            "needle content",
+            PostStatus.OPEN,
+            at("2025-01-01T00:00:00"));
+    persistPost(
+        10L,
+        PostType.FREE,
+        "ignored title",
+        "other content",
+        PostStatus.OPEN,
+        at("2025-01-02T00:00:00"));
+    persistPost(
+        11L,
+        PostType.FREE,
+        "ignored title",
+        "needle content",
+        PostStatus.OPEN,
+        at("2025-01-03T00:00:00"));
+
+    var page =
+        adapter.loadPage(
+            new GetManagedBoardPostsPageQuery("needle", targetId, 10L, null, 0, 10, "CREATED_AT"));
+
+    assertThat(page.getTotalElements()).isEqualTo(1L);
+    assertThat(page.getContent())
+        .extracting(ManagedBoardPostView::postId)
+        .containsExactly(targetId);
+  }
+
+  @Test
+  @DisplayName("loadPage는 content search 의 LIKE wildcard 문자를 literal 로 처리한다")
+  void loadPage_escapesLikeWildcardsInContentSearch() {
+    ManagedBoardPostQueryPersistenceAdapter adapter = adapter();
+    LocalDateTime base = at("2025-01-06T00:00:00");
+    Long percentId =
+        persistPost(
+            10L, PostType.FREE, "ignored title", "literal 100% done", PostStatus.OPEN, base);
+    persistPost(10L, PostType.FREE, "ignored title", "literal 1000 done", PostStatus.OPEN, base);
+    Long underscoreId =
+        persistPost(10L, PostType.FREE, "ignored title", "code a_b literal", PostStatus.OPEN, base);
+    persistPost(10L, PostType.FREE, "ignored title", "code axb literal", PostStatus.OPEN, base);
+    Long bangId =
+        persistPost(10L, PostType.FREE, "ignored title", "wow! literal", PostStatus.OPEN, base);
+    persistPost(10L, PostType.FREE, "ignored title", "wow literal", PostStatus.OPEN, base);
+
+    assertThat(
+            adapter
+                .loadPage(
+                    new GetManagedBoardPostsPageQuery(
+                        "100%", null, null, null, 0, 10, "CREATED_AT"))
+                .getContent())
+        .extracting(ManagedBoardPostView::postId)
+        .containsExactly(percentId);
+    assertThat(
+            adapter
+                .loadPage(
+                    new GetManagedBoardPostsPageQuery("a_b", null, null, null, 0, 10, "CREATED_AT"))
+                .getContent())
+        .extracting(ManagedBoardPostView::postId)
+        .containsExactly(underscoreId);
+    assertThat(
+            adapter
+                .loadPage(
+                    new GetManagedBoardPostsPageQuery(
+                        "wow!", null, null, null, 0, 10, "CREATED_AT"))
+                .getContent())
+        .extracting(ManagedBoardPostView::postId)
+        .containsExactly(bangId);
   }
 
   private ManagedBoardPostQueryPersistenceAdapter adapter() {

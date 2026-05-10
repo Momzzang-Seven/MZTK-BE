@@ -23,7 +23,9 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
   @Override
   public List<AdminBoardPostView> load(AdminBoardPostQuery query) {
     return getManagedBoardPostsUseCase
-        .execute(new GetManagedBoardPostsQuery(query.search(), toPostStatus(query.status())))
+        .execute(
+            new GetManagedBoardPostsQuery(
+                query.search(), query.postId(), query.userId(), toPostStatus(query.status())))
         .stream()
         .map(this::toAdminBoardPostView)
         .toList();
@@ -35,6 +37,8 @@ public class AdminBoardPostReadAdapter implements LoadAdminBoardPostsPort {
         .executePage(
             new GetManagedBoardPostsPageQuery(
                 query.search(),
+                query.postId(),
+                query.userId(),
                 toPostStatus(query.status()),
                 query.page(),
                 query.size(),

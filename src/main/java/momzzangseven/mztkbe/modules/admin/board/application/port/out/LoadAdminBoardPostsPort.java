@@ -14,10 +14,13 @@ public interface LoadAdminBoardPostsPort {
 
   Page<AdminBoardPostView> loadPage(AdminBoardPostPageQuery query);
 
-  record AdminBoardPostQuery(String search, AdminBoardPostStatus status) {}
+  record AdminBoardPostQuery(
+      String search, Long postId, Long userId, AdminBoardPostStatus status) {}
 
   record AdminBoardPostPageQuery(
       String search,
+      Long postId,
+      Long userId,
       AdminBoardPostStatus status,
       int page,
       int size,

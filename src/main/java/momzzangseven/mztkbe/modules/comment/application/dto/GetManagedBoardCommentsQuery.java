@@ -1,21 +1,18 @@
-package momzzangseven.mztkbe.modules.post.application.dto;
+package momzzangseven.mztkbe.modules.comment.application.dto;
 
-import momzzangseven.mztkbe.modules.post.domain.model.PostStatus;
-
-/** Paged query for admin board post list reads. */
-public record GetManagedBoardPostsPageQuery(
+/** Query for admin board global comment search reads. */
+public record GetManagedBoardCommentsQuery(
     String search,
-    Long postId,
+    Long commentId,
     Long userId,
-    PostStatus status,
+    ManagedBoardCommentTargetType targetType,
     int page,
     int size,
     String sortKey) {
 
-  /** Validates page, size, and sort key constraints. */
-  public GetManagedBoardPostsPageQuery {
-    if (postId != null && postId <= 0) {
-      throw new IllegalArgumentException("postId must be positive");
+  public GetManagedBoardCommentsQuery {
+    if (commentId != null && commentId <= 0) {
+      throw new IllegalArgumentException("commentId must be positive");
     }
     if (userId != null && userId <= 0) {
       throw new IllegalArgumentException("userId must be positive");

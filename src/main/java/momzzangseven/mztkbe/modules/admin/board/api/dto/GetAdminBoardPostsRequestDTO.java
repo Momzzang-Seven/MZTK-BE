@@ -9,7 +9,13 @@ import momzzangseven.mztkbe.modules.admin.common.application.dto.AdminPageQueryN
 
 /** Query DTO for {@code GET /admin/boards/posts}. */
 public record GetAdminBoardPostsRequestDTO(
-    String search, AdminBoardPostStatus status, Integer page, Integer size, String sort) {
+    String search,
+    Long postId,
+    Long userId,
+    AdminBoardPostStatus status,
+    Integer page,
+    Integer size,
+    String sort) {
 
   public GetAdminBoardPostsCommand toCommand(Long operatorUserId) {
     AdminPageQuery pageQuery =
@@ -17,6 +23,8 @@ public record GetAdminBoardPostsRequestDTO(
     return new GetAdminBoardPostsCommand(
         operatorUserId,
         pageQuery.search(),
+        postId,
+        userId,
         status,
         pageQuery.page(),
         pageQuery.size(),

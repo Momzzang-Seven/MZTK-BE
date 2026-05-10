@@ -1,24 +1,24 @@
 package momzzangseven.mztkbe.modules.admin.board.application.dto;
 
-import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardPostStatus;
+import momzzangseven.mztkbe.modules.admin.board.domain.vo.AdminBoardCommentTargetType;
 
-/** Command for admin board post list reads. */
-public record GetAdminBoardPostsCommand(
+/** Command for admin board global comment search reads. */
+public record GetAdminBoardCommentsCommand(
     Long operatorUserId,
     String search,
-    Long postId,
+    Long commentId,
     Long userId,
-    AdminBoardPostStatus status,
+    AdminBoardCommentTargetType targetType,
     int page,
     int size,
-    AdminBoardPostSortKey sortKey) {
+    AdminBoardCommentSortKey sortKey) {
 
-  public GetAdminBoardPostsCommand {
+  public GetAdminBoardCommentsCommand {
     if (operatorUserId == null || operatorUserId <= 0) {
       throw new IllegalArgumentException("operatorUserId must be positive");
     }
-    if (postId != null && postId <= 0) {
-      throw new IllegalArgumentException("postId must be positive");
+    if (commentId != null && commentId <= 0) {
+      throw new IllegalArgumentException("commentId must be positive");
     }
     if (userId != null && userId <= 0) {
       throw new IllegalArgumentException("userId must be positive");

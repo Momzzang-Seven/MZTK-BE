@@ -6,19 +6,24 @@ import momzzangseven.mztkbe.global.error.auth.UserNotAuthenticatedException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardBanRequestDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardCommentResponseDTO;
+import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardCommentSearchResponseDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardModerationResponseDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.AdminBoardPostResponseDTO;
+import momzzangseven.mztkbe.modules.admin.board.api.dto.GetAdminBoardCommentsRequestDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.GetAdminBoardPostCommentsRequestDTO;
 import momzzangseven.mztkbe.modules.admin.board.api.dto.GetAdminBoardPostsRequestDTO;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardCommentResult;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardCommentSearchResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardModerationResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.AdminBoardPostResult;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardCommentCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.BanAdminBoardPostCommand;
+import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostCommentsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.dto.GetAdminBoardPostsCommand;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardCommentUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.BanAdminBoardPostUseCase;
+import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostCommentsUseCase;
 import momzzangseven.mztkbe.modules.admin.board.application.port.in.GetAdminBoardPostsUseCase;
 import org.springframework.data.domain.Page;
@@ -39,6 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminBoardController {
 
   private final GetAdminBoardPostsUseCase getAdminBoardPostsUseCase;
+  private final GetAdminBoardCommentsUseCase getAdminBoardCommentsUseCase;
   private final GetAdminBoardPostCommentsUseCase getAdminBoardPostCommentsUseCase;
   private final BanAdminBoardPostUseCase banAdminBoardPostUseCase;
   private final BanAdminBoardCommentUseCase banAdminBoardCommentUseCase;
@@ -52,6 +58,18 @@ public class AdminBoardController {
     GetAdminBoardPostsCommand command = request.toCommand(validatedOperatorUserId);
     Page<AdminBoardPostResult> result = getAdminBoardPostsUseCase.execute(command);
     return ResponseEntity.ok(ApiResponse.success(result.map(AdminBoardPostResponseDTO::from)));
+  }
+
+  /** Returns admin board global comment search rows. */
+  @GetMapping("/comments")
+  public ResponseEntity<ApiResponse<Page<AdminBoardCommentSearchResponseDTO>>> getAllComments(
+      @AuthenticationPrincipal Long operatorUserId,
+      @ModelAttribute GetAdminBoardCommentsRequestDTO request) {
+    Long validatedOperatorUserId = requireUserId(operatorUserId);
+    GetAdminBoardCommentsCommand command = request.toCommand(validatedOperatorUserId);
+    Page<AdminBoardCommentSearchResult> result = getAdminBoardCommentsUseCase.execute(command);
+    return ResponseEntity.ok(
+        ApiResponse.success(result.map(AdminBoardCommentSearchResponseDTO::from)));
   }
 
   /** Returns comments for one post in the admin board view. */
