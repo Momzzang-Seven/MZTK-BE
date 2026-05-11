@@ -71,6 +71,22 @@ public class QnaEscrowExecutionActionHandlerAdapter implements ExecutionActionHa
   }
 
   @Override
+  public boolean supports(ExecutionIntent intent) {
+    if (!supports(intent.getActionType())) {
+      return false;
+    }
+    if (intent.getActionType() != ExecutionActionType.QNA_ANSWER_ACCEPT) {
+      return true;
+    }
+    try {
+      QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
+      return payload.actionType() == QnaExecutionActionType.QNA_ANSWER_ACCEPT;
+    } catch (RuntimeException e) {
+      return false;
+    }
+  }
+
+  @Override
   public ExecutionActionPlan buildActionPlan(ExecutionIntent intent) {
     QnaEscrowExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
     return new ExecutionActionPlan(

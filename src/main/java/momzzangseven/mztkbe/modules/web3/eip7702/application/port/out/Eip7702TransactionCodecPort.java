@@ -11,7 +11,11 @@ public interface Eip7702TransactionCodecPort {
 
   String hashCalls(List<BatchCall> calls);
 
-  String encodeExecute(List<BatchCall> calls, byte[] executionSignature);
+  String encodeExecute(
+      List<BatchCall> calls,
+      String prepareId,
+      BigInteger deadlineEpochSeconds,
+      byte[] executionSignature);
 
   SignedPayload signAndEncode(SignCommand command);
 
@@ -25,11 +29,9 @@ public interface Eip7702TransactionCodecPort {
    * domain-layer encoder ({@code Eip7702TxEncoder.Eip7702Fields}). Repeating it here is
    * intentional: this record is the codec port boundary every adapter crosses, so a missing {@code
    * authorizationList} surfaces as a domain-shaped {@code Web3InvalidInputException} instead of a
-   * downstream NPE inside {@link
-   * momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.adapter.Eip7702TransactionCodecAdapter}.
-   * In current production flows the upstream DTO already guards this invariant, so the check fires
-   * defensively only — but the contract is spec-bound (length-0 type-4 transactions are invalid by
-   * EIP-7702), not caller-shape-bound.
+   * downstream NPE inside the codec adapter. In current production flows the upstream DTO already
+   * guards this invariant, so the check fires defensively only — but the contract is spec-bound
+   * (length-0 type-4 transactions are invalid by EIP-7702), not caller-shape-bound.
    */
   record SignCommand(
       long chainId,

@@ -4,7 +4,6 @@ import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
@@ -12,6 +11,7 @@ import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
@@ -49,6 +49,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private final LoadSponsorPolicyPort loadSponsorPolicyPort;
   private final LoadEip1559TtlPort loadEip1559TtlPort;
   private final BuildExecutionDigestPort buildExecutionDigestPort;
+  private final BuildExecutionCallHashPort buildExecutionCallHashPort;
   private final ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
   private final ExecutionModeSelector executionModeSelector;
   private final PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
@@ -92,8 +93,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
               buildExecutionDigestPort.buildExecutionDigestHex(
                   command.draft().authorityAddress(),
                   publicId,
-                  hashDraftCalls(command),
-                  BigInteger.valueOf(expiresAt.toEpochSecond(ZoneOffset.UTC))));
+                  buildExecutionCallHashPort.hashCalls(command.draft().calls()),
+                  ExecutionDeadlineEpoch.toEpochSeconds(expiresAt, appClock)));
     }
     ExecutionIntent created =
         ExecutionIntent.create(
@@ -257,23 +258,6 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
         new ExecutionIntentTerminatedEvent(intent.getPublicId(), terminalStatus, failureReason));
   }
 
-  private String hashDraftCalls(CreateExecutionIntentCommand command) {
-    StringBuilder canonical = new StringBuilder();
-    command
-        .draft()
-        .calls()
-        .forEach(
-            call ->
-                canonical
-                    .append(call.toAddress().toLowerCase())
-                    .append('|')
-                    .append(call.valueWei().toString())
-                    .append('|')
-                    .append(call.data().toLowerCase())
-                    .append(';'));
-    return org.web3j.crypto.Hash.sha3String(canonical.toString());
-  }
-
   private LocalDateTime selectedExpiresAt(
       CreateExecutionIntentCommand command, ExecutionMode mode, LocalDateTime now) {
     if (mode == ExecutionMode.EIP7702) {
@@ -322,7 +306,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
               intent.getAuthorityNonce(),
               intent.getAuthorizationPayloadHash()),
           new SignRequestBundle.SubmitSignRequest(
-              intent.getExecutionDigest(), intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC)));
+              intent.getExecutionDigest(),
+              ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock)));
     }
 
     return SignRequestBundle.forEip1559(

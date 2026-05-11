@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.RunExecutionTerminationHookCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecutionTerminationHookUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.event.ExecutionIntentTerminatedEvent;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
+import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.ConditionalOnExecutionModeEnabled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,7 +15,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnAnyExecutionEnabled
+@ConditionalOnExecutionModeEnabled
 public class ExecutionIntentTerminatedEventHandler {
 
   private final RunExecutionTerminationHookUseCase runExecutionTerminationHookUseCase;

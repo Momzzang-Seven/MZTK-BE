@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.port.out;
 
+import java.util.List;
+import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionActionPlan;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
@@ -9,6 +11,10 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionTransactio
 public interface ExecutionActionHandlerPort {
 
   boolean supports(ExecutionActionType actionType);
+
+  default boolean supports(ExecutionIntent intent) {
+    return supports(intent.getActionType());
+  }
 
   ExecutionActionPlan buildActionPlan(ExecutionIntent intent);
 
@@ -29,4 +35,35 @@ public interface ExecutionActionHandlerPort {
       ExecutionActionPlan actionPlan,
       ExecutionIntentStatus terminalStatus,
       String failureReason) {}
+
+  static Optional<ExecutionActionHandlerPort> findMatching(
+      List<ExecutionActionHandlerPort> handlers, ExecutionIntent intent) {
+    if (handlers == null || handlers.isEmpty()) {
+      return Optional.empty();
+    }
+
+    List<ExecutionActionHandlerPort> actionTypeMatches =
+        handlers.stream().filter(handler -> handler.supports(intent.getActionType())).toList();
+
+    List<ExecutionActionHandlerPort> intentMatches =
+        actionTypeMatches.stream().filter(handler -> handler.supports(intent)).toList();
+    if (intentMatches.size() == 1) {
+      return Optional.of(intentMatches.get(0));
+    }
+    if (intentMatches.isEmpty()) {
+      return Optional.empty();
+    }
+
+    throw new IllegalStateException(
+        "ambiguous execution action handlers for actionType="
+            + intent.getActionType()
+            + ", resourceType="
+            + intent.getResourceType()
+            + ", resourceId="
+            + intent.getResourceId()
+            + ", matches="
+            + actionTypeMatches.size()
+            + ", intentMatches="
+            + intentMatches.size());
+  }
 }

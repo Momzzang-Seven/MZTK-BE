@@ -3,7 +3,6 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -201,7 +200,7 @@ public class TransactionalExecuteExecutionIntentDelegate
 
     // Verify Execution(Submit) Signature
     BigInteger deadlineEpochSeconds =
-        BigInteger.valueOf(intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC));
+        ExecutionDeadlineEpoch.toEpochSeconds(intent.getExpiresAt(), appClock);
     if (!executionEip7702GatewayPort.verifyExecutionSignature(
         intent.getAuthorityAddress(),
         intent.getPublicId(),
@@ -213,7 +212,8 @@ public class TransactionalExecuteExecutionIntentDelegate
 
     // Encode Execution(Submit) Signature
     String executeCallData =
-        executionEip7702GatewayPort.encodeExecute(calls, command.submitSignature());
+        executionEip7702GatewayPort.encodeExecute(
+            calls, intent.getPublicId(), deadlineEpochSeconds, command.submitSignature());
 
     // Estimate gas, load fee plan via eip7702 module
     BigInteger estimatedGas =
@@ -535,9 +535,7 @@ public class TransactionalExecuteExecutionIntentDelegate
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {
-    return executionActionHandlerPorts.stream()
-        .filter(handler -> handler.supports(intent.getActionType()))
-        .findFirst()
+    return ExecutionActionHandlerPort.findMatching(executionActionHandlerPorts, intent)
         .orElseThrow(
             () ->
                 new IllegalStateException(

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -25,6 +26,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecuti
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraftCall;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
@@ -66,6 +68,7 @@ class CreateExecutionIntentServiceTest {
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
   @Mock private LoadEip1559TtlPort loadEip1559TtlPort;
   @Mock private BuildExecutionDigestPort buildExecutionDigestPort;
+  @Mock private BuildExecutionCallHashPort buildExecutionCallHashPort;
   @Mock private ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
@@ -85,6 +88,7 @@ class CreateExecutionIntentServiceTest {
             loadSponsorPolicyPort,
             loadEip1559TtlPort,
             buildExecutionDigestPort,
+            buildExecutionCallHashPort,
             validateExecutionDraftPolicyPort,
             executionModeSelector,
             publishExecutionIntentTerminatedPort,
@@ -93,6 +97,8 @@ class CreateExecutionIntentServiceTest {
 
   @Test
   void execute_createsEip7702Intent_whenSponsorEligible() {
+    BigInteger expectedDeadlineEpoch =
+        BigInteger.valueOf(FIXED_NOW.plusSeconds(300).atZone(APP_ZONE).toEpochSecond());
     when(loadSponsorPolicyPort.loadSponsorPolicy())
         .thenReturn(
             new SponsorPolicy(
@@ -103,6 +109,7 @@ class CreateExecutionIntentServiceTest {
         .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
     when(buildExecutionDigestPort.buildExecutionDigestHex(any(), any(), any(), any()))
         .thenReturn("0x" + "d".repeat(64));
+    when(buildExecutionCallHashPort.hashCalls(any())).thenReturn("0x" + "9".repeat(64));
     when(loadExecutionChainIdPort.loadChainId()).thenReturn(11155111L);
     when(executionIntentPersistencePort.create(any()))
         .thenAnswer(invocation -> withId(invocation.getArgument(0), 1L));
@@ -116,8 +123,13 @@ class CreateExecutionIntentServiceTest {
     assertThat(result.signCount()).isEqualTo(2);
     assertThat(result.signRequest().authorization()).isNotNull();
     assertThat(result.signRequest().submit()).isNotNull();
+    assertThat(result.signRequest().submit().deadlineEpochSeconds())
+        .isEqualTo(expectedDeadlineEpoch.longValueExact());
     verify(validateExecutionDraftPolicyPort).validate(any(), any());
-    verify(buildExecutionDigestPort).buildExecutionDigestHex(any(), any(), any(), any());
+    verify(buildExecutionCallHashPort).hashCalls(any());
+    verify(buildExecutionDigestPort)
+        .buildExecutionDigestHex(
+            any(), any(), eq("0x" + "9".repeat(64)), eq(expectedDeadlineEpoch));
     verify(sponsorDailyUsagePersistencePort).update(any());
     verify(executionIntentPersistencePort)
         .create(argThat(intent -> intent.getSponsorUsageDateKst().equals(FIXED_DATE)));

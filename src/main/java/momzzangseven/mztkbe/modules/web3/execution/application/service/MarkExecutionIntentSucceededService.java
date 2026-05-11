@@ -67,9 +67,7 @@ public class MarkExecutionIntentSucceededService implements MarkExecutionIntentS
   }
 
   private ExecutionActionHandlerPort resolveActionHandler(ExecutionIntent intent) {
-    return executionActionHandlerPorts.stream()
-        .filter(candidate -> candidate.supports(intent.getActionType()))
-        .findFirst()
+    return ExecutionActionHandlerPort.findMatching(executionActionHandlerPorts, intent)
         .orElseThrow(
             () ->
                 new IllegalStateException(

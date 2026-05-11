@@ -98,6 +98,9 @@ class TransactionalExecuteInternalExecutionIntentDelegateTest {
         .when(executionActionHandlerPort.supports(ExecutionActionType.QNA_ADMIN_SETTLE))
         .thenReturn(true);
     lenient()
+        .when(executionActionHandlerPort.supports(any(ExecutionIntent.class)))
+        .thenReturn(true);
+    lenient()
         .when(executionActionHandlerPort.buildActionPlan(any()))
         .thenReturn(
             new ExecutionActionPlan(

@@ -111,6 +111,9 @@ class TransactionalExecuteExecutionIntentDelegateBoundaryTest {
         .when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND))
         .thenReturn(true);
     lenient()
+        .when(executionActionHandlerPort.supports(any(ExecutionIntent.class)))
+        .thenReturn(true);
+    lenient()
         .when(executionActionHandlerPort.buildActionPlan(any()))
         .thenReturn(
             new ExecutionActionPlan(
