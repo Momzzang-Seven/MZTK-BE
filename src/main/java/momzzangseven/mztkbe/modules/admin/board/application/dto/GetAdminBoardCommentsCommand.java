@@ -29,6 +29,9 @@ public record GetAdminBoardCommentsCommand(
     if (size <= 0) {
       throw new IllegalArgumentException("size must be positive");
     }
+    if (size > AdminBoardPagePolicies.COMMENTS.maxSize()) {
+      throw new IllegalArgumentException("size must be less than or equal to 100");
+    }
     if (sortKey == null) {
       throw new IllegalArgumentException("sortKey is required");
     }

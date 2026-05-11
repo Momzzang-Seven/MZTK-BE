@@ -23,6 +23,7 @@ public interface LoadAdminBoardCommentsPort {
       Long commentId,
       Long postId,
       Long answerId,
+      Long parentId,
       AdminBoardCommentTargetType targetType,
       Long userId,
       String content,

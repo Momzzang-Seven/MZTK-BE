@@ -58,6 +58,7 @@ class GetAdminBoardCommentsServiceTest {
                         31L,
                         21L,
                         41L,
+                        30L,
                         AdminBoardCommentTargetType.ANSWER,
                         7L,
                         "comment",
@@ -71,6 +72,7 @@ class GetAdminBoardCommentsServiceTest {
     assertThat(result.getContent().get(0).commentId()).isEqualTo(31L);
     assertThat(result.getContent().get(0).postId()).isEqualTo(21L);
     assertThat(result.getContent().get(0).answerId()).isEqualTo(41L);
+    assertThat(result.getContent().get(0).parentId()).isEqualTo(30L);
     assertThat(result.getContent().get(0).targetType())
         .isEqualTo(AdminBoardCommentTargetType.ANSWER);
     assertThat(result.getContent().get(0).userId()).isEqualTo(7L);

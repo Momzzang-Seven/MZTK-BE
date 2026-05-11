@@ -201,6 +201,7 @@ class AdminBoardControllerTest {
                         31L,
                         21L,
                         41L,
+                        30L,
                         AdminBoardCommentTargetType.ANSWER,
                         7L,
                         "writer",
@@ -216,10 +217,46 @@ class AdminBoardControllerTest {
         .andExpect(jsonPath("$.data.content[0].commentId").value(31))
         .andExpect(jsonPath("$.data.content[0].postId").value(21))
         .andExpect(jsonPath("$.data.content[0].answerId").value(41))
+        .andExpect(jsonPath("$.data.content[0].parentId").value(30))
         .andExpect(jsonPath("$.data.content[0].targetType").value("ANSWER"))
         .andExpect(jsonPath("$.data.content[0].userId").value(7))
         .andExpect(jsonPath("$.data.content[0].nickname").value("writer"))
         .andExpect(jsonPath("$.data.content[0].isDeleted").value(true));
+  }
+
+  @Test
+  @DisplayName("GET /admin/boards/comments 검색 필터와 페이지 조건을 command 로 전달한다")
+  void getAllComments_withSearchFilters_passesCommand() throws Exception {
+    given(
+            getAdminBoardCommentsUseCase.execute(
+                org.mockito.ArgumentMatchers.any(GetAdminBoardCommentsCommand.class)))
+        .willReturn(new PageImpl<>(List.of()));
+
+    mockMvc
+        .perform(
+            get("/admin/boards/comments")
+                .param("search", "  comment  ")
+                .param("commentId", "31")
+                .param("userId", "7")
+                .param("targetType", "ANSWER")
+                .param("page", "2")
+                .param("size", "30")
+                .param("sort", "commentId")
+                .with(adminPrincipal(9L)))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<GetAdminBoardCommentsCommand> captor =
+        ArgumentCaptor.forClass(GetAdminBoardCommentsCommand.class);
+    org.mockito.Mockito.verify(getAdminBoardCommentsUseCase).execute(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().search()).isEqualTo("comment");
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().commentId()).isEqualTo(31L);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().userId()).isEqualTo(7L);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().targetType())
+        .isEqualTo(AdminBoardCommentTargetType.ANSWER);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().page()).isEqualTo(2);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().size()).isEqualTo(30);
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().sortKey().name())
+        .isEqualTo("COMMENT_ID");
   }
 
   @Test

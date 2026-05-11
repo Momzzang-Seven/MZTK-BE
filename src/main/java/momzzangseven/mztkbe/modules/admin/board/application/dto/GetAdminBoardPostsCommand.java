@@ -35,6 +35,9 @@ public record GetAdminBoardPostsCommand(
     if (size <= 0) {
       throw new IllegalArgumentException("size must be positive");
     }
+    if (size > AdminBoardPagePolicies.POSTS.maxSize()) {
+      throw new IllegalArgumentException("size must be less than or equal to 100");
+    }
     if (sortKey == null) {
       throw new IllegalArgumentException("sortKey is required");
     }

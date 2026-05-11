@@ -33,6 +33,7 @@ public class AdminBoardCommentReadAdapter implements LoadAdminBoardCommentsPort 
                     comment.commentId(),
                     comment.postId(),
                     comment.answerId(),
+                    comment.parentId(),
                     toAdminBoardCommentTargetType(comment.targetType()),
                     comment.writerId(),
                     comment.content(),
@@ -43,11 +44,20 @@ public class AdminBoardCommentReadAdapter implements LoadAdminBoardCommentsPort 
 
   private ManagedBoardCommentTargetType toCommentTargetType(
       AdminBoardCommentTargetType targetType) {
-    return targetType == null ? null : ManagedBoardCommentTargetType.valueOf(targetType.name());
+    if (targetType == null) {
+      return null;
+    }
+    return switch (targetType) {
+      case POST -> ManagedBoardCommentTargetType.POST;
+      case ANSWER -> ManagedBoardCommentTargetType.ANSWER;
+    };
   }
 
   private AdminBoardCommentTargetType toAdminBoardCommentTargetType(
       ManagedBoardCommentTargetType targetType) {
-    return AdminBoardCommentTargetType.valueOf(targetType.name());
+    return switch (targetType) {
+      case POST -> AdminBoardCommentTargetType.POST;
+      case ANSWER -> AdminBoardCommentTargetType.ANSWER;
+    };
   }
 }

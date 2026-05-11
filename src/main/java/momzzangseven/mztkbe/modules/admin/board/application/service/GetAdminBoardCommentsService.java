@@ -54,6 +54,7 @@ public class GetAdminBoardCommentsService implements GetAdminBoardCommentsUseCas
         comment.commentId(),
         comment.postId(),
         comment.answerId(),
+        comment.parentId(),
         comment.targetType(),
         comment.userId(),
         nicknames.get(comment.userId()),

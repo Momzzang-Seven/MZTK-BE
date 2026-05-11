@@ -203,6 +203,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
         "commentId",
         "postId",
         "answerId",
+        "parentId",
         "targetType",
         "userId",
         "nickname",
@@ -213,6 +214,7 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(globalRoot.at("/targetType").asText()).isEqualTo("POST");
     assertThat(globalRoot.at("/postId").asLong()).isEqualTo(freePostId);
     assertThat(globalRoot.path("answerId").isNull()).isTrue();
+    assertThat(globalRoot.path("parentId").isNull()).isTrue();
     assertThat(globalRoot.at("/userId").asLong()).isEqualTo(trainer.userId());
     assertThat(globalRoot.at("/nickname").asText()).isEqualTo(trainer.nickname());
     assertThat(globalRoot.at("/content").asText()).isEqualTo("Root comment");
@@ -220,12 +222,16 @@ class AdminPageApiE2ETest extends E2ETestBase {
     assertThat(globalRoot.at("/createdAt").asText()).isNotBlank();
     assertThat(globalRoot.at("/updatedAt").asText()).isNotBlank();
 
+    JsonNode globalReply = findById(globalComments, "commentId", reply);
+    assertThat(globalReply.at("/parentId").asLong()).isEqualTo(rootComment);
+
     JsonNode globalAnswer = findById(globalComments, "commentId", answerComment);
     assertHasFields(
         globalAnswer,
         "commentId",
         "postId",
         "answerId",
+        "parentId",
         "targetType",
         "userId",
         "nickname",

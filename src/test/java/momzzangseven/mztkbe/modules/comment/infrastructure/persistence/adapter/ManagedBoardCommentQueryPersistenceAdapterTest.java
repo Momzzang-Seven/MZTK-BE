@@ -169,6 +169,41 @@ class ManagedBoardCommentQueryPersistenceAdapterTest {
         .containsExactly(secondId, firstId);
   }
 
+  @Test
+  @DisplayName("load는 root 댓글 parentId null 과 대댓글 parentId 를 반환한다")
+  void load_returnsNullableParentId() {
+    ManagedBoardCommentQueryPersistenceAdapter adapter = adapter();
+    LocalDateTime createdAt = LocalDateTime.parse("2025-01-06T00:00:00");
+    Long rootId =
+        persistComment(CommentTargetType.POST, 21L, null, 7L, "root comment", false, createdAt);
+    Long replyId =
+        persistComment(
+            CommentTargetType.POST,
+            21L,
+            null,
+            8L,
+            "reply comment",
+            false,
+            createdAt.plusMinutes(1),
+            rootId);
+
+    var page =
+        adapter.load(new GetManagedBoardCommentsQuery(null, null, null, null, 0, 20, "COMMENT_ID"));
+
+    ManagedBoardCommentSearchView root =
+        page.getContent().stream()
+            .filter(comment -> comment.commentId().equals(rootId))
+            .findFirst()
+            .orElseThrow();
+    ManagedBoardCommentSearchView reply =
+        page.getContent().stream()
+            .filter(comment -> comment.commentId().equals(replyId))
+            .findFirst()
+            .orElseThrow();
+    assertThat(root.parentId()).isNull();
+    assertThat(reply.parentId()).isEqualTo(rootId);
+  }
+
   private ManagedBoardCommentQueryPersistenceAdapter adapter() {
     return new ManagedBoardCommentQueryPersistenceAdapter(
         new JPAQueryFactory(em.getEntityManager()));
@@ -182,6 +217,19 @@ class ManagedBoardCommentQueryPersistenceAdapterTest {
       String content,
       boolean isDeleted,
       LocalDateTime createdAt) {
+    return persistComment(
+        targetType, postId, answerId, writerId, content, isDeleted, createdAt, null);
+  }
+
+  private Long persistComment(
+      CommentTargetType targetType,
+      Long postId,
+      Long answerId,
+      Long writerId,
+      String content,
+      boolean isDeleted,
+      LocalDateTime createdAt,
+      Long parentId) {
     CommentEntity entity =
         CommentEntity.builder()
             .targetType(targetType)
@@ -190,6 +238,7 @@ class ManagedBoardCommentQueryPersistenceAdapterTest {
             .writerId(writerId)
             .content(content)
             .isDeleted(isDeleted)
+            .parent(parentId == null ? null : em.find(CommentEntity.class, parentId))
             .createdAt(createdAt)
             .updatedAt(createdAt.plusMinutes(10))
             .build();

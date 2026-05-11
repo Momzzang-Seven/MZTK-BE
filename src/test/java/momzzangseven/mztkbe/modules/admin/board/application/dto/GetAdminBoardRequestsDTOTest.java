@@ -40,6 +40,27 @@ class GetAdminBoardRequestsDTOTest {
   }
 
   @Test
+  @DisplayName("게시글 command 는 max size 초과를 거부한다")
+  void postCommand_sizeOverMaxThrows() {
+    assertThatThrownBy(
+            () ->
+                new GetAdminBoardPostsCommand(
+                    9L,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    101,
+                    AdminBoardPostSortKey.CREATED_AT))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("size must be less than or equal to 100");
+  }
+
+  @Test
   @DisplayName("댓글 request 는 blank search 와 기본 page/size/sort 를 정규화한다")
   void commentRequest_toCommand_normalizesDefaults() {
     GetAdminBoardCommentsCommand command =
@@ -65,5 +86,16 @@ class GetAdminBoardRequestsDTOTest {
                     .toCommand(9L))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Unsupported sort value");
+  }
+
+  @Test
+  @DisplayName("댓글 command 는 max size 초과를 거부한다")
+  void commentCommand_sizeOverMaxThrows() {
+    assertThatThrownBy(
+            () ->
+                new GetAdminBoardCommentsCommand(
+                    9L, null, null, null, null, 0, 101, AdminBoardCommentSortKey.CREATED_AT))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("size must be less than or equal to 100");
   }
 }

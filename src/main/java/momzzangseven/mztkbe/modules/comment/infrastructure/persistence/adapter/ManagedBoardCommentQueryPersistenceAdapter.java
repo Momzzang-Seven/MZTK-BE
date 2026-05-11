@@ -35,6 +35,7 @@ public class ManagedBoardCommentQueryPersistenceAdapter implements LoadManagedBo
                 commentEntity.id,
                 commentEntity.postId,
                 commentEntity.answerId,
+                commentEntity.parent.id,
                 commentEntity.targetType,
                 commentEntity.writerId,
                 commentEntity.content,
@@ -91,6 +92,7 @@ public class ManagedBoardCommentQueryPersistenceAdapter implements LoadManagedBo
         row.get(commentEntity.id),
         row.get(commentEntity.postId),
         row.get(commentEntity.answerId),
+        row.get(commentEntity.parent.id),
         toManagedTargetType(row.get(commentEntity.targetType)),
         row.get(commentEntity.writerId),
         row.get(commentEntity.content),
@@ -100,10 +102,16 @@ public class ManagedBoardCommentQueryPersistenceAdapter implements LoadManagedBo
   }
 
   private CommentTargetType toDomainTargetType(ManagedBoardCommentTargetType targetType) {
-    return CommentTargetType.valueOf(targetType.name());
+    return switch (targetType) {
+      case POST -> CommentTargetType.POST;
+      case ANSWER -> CommentTargetType.ANSWER;
+    };
   }
 
   private ManagedBoardCommentTargetType toManagedTargetType(CommentTargetType targetType) {
-    return ManagedBoardCommentTargetType.valueOf(targetType.name());
+    return switch (targetType) {
+      case POST -> ManagedBoardCommentTargetType.POST;
+      case ANSWER -> ManagedBoardCommentTargetType.ANSWER;
+    };
   }
 }

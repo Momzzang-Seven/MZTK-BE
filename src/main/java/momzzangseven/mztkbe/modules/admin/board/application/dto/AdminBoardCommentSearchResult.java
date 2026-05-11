@@ -8,6 +8,7 @@ public record AdminBoardCommentSearchResult(
     Long commentId,
     Long postId,
     Long answerId,
+    Long parentId,
     AdminBoardCommentTargetType targetType,
     Long userId,
     String nickname,
