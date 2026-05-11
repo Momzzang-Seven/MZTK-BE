@@ -23,6 +23,8 @@ public interface LoadAdminBoardPostsPort {
 
   record AdminBoardPostQuery(
       String search,
+      Long postId,
+      Long userId,
       AdminBoardPostStatus status,
       AdminBoardPostType type,
       AdminBoardPostPublicationStatus publicationStatus,
@@ -30,6 +32,8 @@ public interface LoadAdminBoardPostsPort {
 
   record AdminBoardPostPageQuery(
       String search,
+      Long postId,
+      Long userId,
       AdminBoardPostStatus status,
       AdminBoardPostType type,
       AdminBoardPostPublicationStatus publicationStatus,

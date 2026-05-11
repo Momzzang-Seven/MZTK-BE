@@ -69,6 +69,8 @@ public class ManagedBoardPostQueryPersistenceAdapter
     BooleanBuilder where =
         buildWhere(
             query.search(),
+            query.postId(),
+            query.userId(),
             query.status(),
             query.type(),
             query.publicationStatus(),
@@ -119,6 +121,8 @@ public class ManagedBoardPostQueryPersistenceAdapter
   private BooleanBuilder buildWhere(GetManagedBoardPostsQuery query) {
     return buildWhere(
         query.search(),
+        query.postId(),
+        query.userId(),
         query.status(),
         query.type(),
         query.publicationStatus(),
@@ -127,11 +131,19 @@ public class ManagedBoardPostQueryPersistenceAdapter
 
   private BooleanBuilder buildWhere(
       String search,
+      Long postId,
+      Long userId,
       PostStatus status,
       PostType type,
       PostPublicationStatus publicationStatus,
       PostModerationStatus moderationStatus) {
     BooleanBuilder where = new BooleanBuilder();
+    if (postId != null) {
+      where.and(postEntity.id.eq(postId));
+    }
+    if (userId != null) {
+      where.and(postEntity.userId.eq(userId));
+    }
     if (status != null) {
       where.and(postEntity.status.eq(status));
     }
@@ -145,14 +157,8 @@ public class ManagedBoardPostQueryPersistenceAdapter
       where.and(postEntity.moderationStatus.eq(moderationStatus));
     }
     if (search != null) {
-      // TODO(MOM-242): Confirm whether admin board search should include writer fields.
       String escaped = "%" + LikePatternEscaper.escape(search.toLowerCase()) + "%";
-      where.and(
-          postEntity
-              .title
-              .lower()
-              .like(escaped, '!')
-              .or(postEntity.content.lower().like(escaped, '!')));
+      where.and(postEntity.content.lower().like(escaped, '!'));
     }
     return where;
   }
