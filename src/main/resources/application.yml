@@ -181,6 +181,23 @@ web3:
       batch-size: 200
       cron: "0 0 4 * * *"
       zone: "Asia/Seoul"
+    registration:
+      session:
+        ttl-seconds: 1800
+      recovery:
+        batch-size: 100
+        cron: "0 */5 * * * *"
+        zone: "Asia/Seoul"
+      finalization:
+        retry-backoff-seconds: 60
+      approval:
+        enabled: true
+        chain-id: ${WEB3_CHAIN_ID}
+        delegation-batch-impl-address: ${WEB3_EIP7702_BATCH_IMPL_ADDRESS}
+        token-contract-address: ${MZTK_TOKEN_CONTRACT_ADDRESS}
+        qna-escrow-spender-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+        marketplace-escrow-spender-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+        ttl-seconds: 300
 
   # 보상 토큰(트레저리 → 유저)
   reward-token:

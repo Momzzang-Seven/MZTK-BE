@@ -167,6 +167,11 @@ public enum ErrorCode {
       "WALLET_007", "Requested wallet is in block", HttpStatus.BAD_REQUEST // 400
       ),
 
+  WALLET_APPROVAL_UNAVAILABLE(
+      "WALLET_008",
+      "Wallet approval flow is currently unavailable",
+      HttpStatus.SERVICE_UNAVAILABLE),
+
   // ========================================
   // Web3 Errors (WEB3_xxx)
   // ========================================

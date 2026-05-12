@@ -1,12 +1,14 @@
 package momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config;
 
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.ManageExecutionEip7702UseCase;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.PrepareEip7702AuthorizationUseCase;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.in.PrepareTokenTransferExecutionSupportUseCase;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.VerifyExecutionSignaturePort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.service.ManageExecutionEip7702Service;
+import momzzangseven.mztkbe.modules.web3.eip7702.application.service.PrepareEip7702AuthorizationService;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.service.PrepareTokenTransferExecutionSupportService;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.context.annotation.Bean;
@@ -36,5 +38,11 @@ public class Eip7702ExecutionServiceConfig {
       Eip7702TransactionCodecPort eip7702TransactionCodecPort) {
     return new PrepareTokenTransferExecutionSupportService(
         eip7702ChainPort, eip7702AuthorizationPort, eip7702TransactionCodecPort);
+  }
+
+  @Bean
+  PrepareEip7702AuthorizationUseCase prepareEip7702AuthorizationUseCase(
+      Eip7702ChainPort eip7702ChainPort, Eip7702AuthorizationPort eip7702AuthorizationPort) {
+    return new PrepareEip7702AuthorizationService(eip7702ChainPort, eip7702AuthorizationPort);
   }
 }

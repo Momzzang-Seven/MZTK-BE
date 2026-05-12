@@ -6,6 +6,7 @@ import jakarta.persistence.LockTimeoutException;
 import jakarta.persistence.PessimisticLockException;
 import java.time.LocalDate;
 import momzzangseven.mztkbe.global.error.verification.VerificationAlreadyCompletedTodayException;
+import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.global.response.ApiResponse;
 import momzzangseven.mztkbe.modules.verification.domain.vo.CompletedMethod;
 import org.junit.jupiter.api.BeforeEach;
@@ -111,6 +112,19 @@ class GlobalExceptionHandlerTest {
         handler.handlePessimisticLockingFailureException(ex);
 
     assertDatabaseLockTimeoutResponse(response);
+  }
+
+  @Test
+  void handleBusinessException_returnsServiceUnavailableForWalletApprovalUnavailable() {
+    WalletApprovalUnavailableException ex = new WalletApprovalUnavailableException("not ready");
+
+    var response = handler.handleBusinessException(ex);
+
+    assertThat(response.getStatusCode().value()).isEqualTo(503);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().getStatus()).isEqualTo("FAIL");
+    assertThat(response.getBody().getCode()).isEqualTo("WALLET_008");
+    assertThat(response.getBody().getMessage()).isEqualTo("not ready");
   }
 
   private void assertDatabaseLockTimeoutResponse(ResponseEntity<ApiResponse<Void>> response) {

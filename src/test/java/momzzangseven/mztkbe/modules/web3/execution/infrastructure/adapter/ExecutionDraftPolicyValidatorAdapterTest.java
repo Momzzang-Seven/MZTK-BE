@@ -135,6 +135,25 @@ class ExecutionDraftPolicyValidatorAdapterTest {
   }
 
   @Test
+  @DisplayName("validate throws when approve spender allowlist is empty")
+  void validate_throws_whenApproveSpenderAllowlistIsEmpty() {
+    properties.getExecution().setBlockedFunctionSelectors(List.of());
+    properties.getExecution().setAllowedApproveSpenders(List.of());
+
+    assertThatThrownBy(
+            () ->
+                adapter.validate(
+                    BATCH_IMPL,
+                    List.of(
+                        new ExecutionDraftCall(
+                            TOKEN_CONTRACT,
+                            BigInteger.ZERO,
+                            approveData(QNA_CONTRACT, maxWord())))))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("approve spender is not allowlisted");
+  }
+
+  @Test
   @DisplayName("validate throws when approve amount is not uint256 max")
   void validate_throws_whenApproveAmountIsNotMax() {
     properties.getExecution().setBlockedFunctionSelectors(List.of());

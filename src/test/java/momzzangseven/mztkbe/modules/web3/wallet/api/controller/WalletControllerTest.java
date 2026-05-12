@@ -6,6 +6,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.securityContext;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -13,79 +15,69 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.time.Instant;
-import java.util.Arrays;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import momzzangseven.mztkbe.global.error.GlobalExceptionHandler;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.UnlinkWalletCommand;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionWriteView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.UnlinkWalletUseCase;
-import org.junit.jupiter.api.BeforeEach;
+import momzzangseven.mztkbe.modules.web3.wallet.domain.model.WalletRegistrationSession;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
-import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.transaction.annotation.Transactional;
 
-@ExtendWith(MockitoExtension.class)
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
 @DisplayName("WalletController 컨트롤러 계약 테스트")
 class WalletControllerTest {
 
-  private static final String AUTH_ATTR = WalletControllerTest.class.getName() + ".authentication";
+  private static final LocalDateTime NOW = LocalDateTime.parse("2026-05-13T10:00:00");
 
-  @Mock private RegisterWalletUseCase registerWalletUseCase;
-  @Mock private UnlinkWalletUseCase unlinkWalletUseCase;
+  @Autowired private MockMvc mockMvc;
+  @Autowired private ObjectMapper objectMapper;
 
-  private MockMvc mockMvc;
-  private ObjectMapper objectMapper;
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.application.port.in
+          .MarkTransactionSucceededUseCase
+      txMarkTransactionSucceededUseCase;
 
-  @BeforeEach
-  void setUp() {
-    objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
+          .TransactionReceiptWorker
+      txTransactionReceiptWorker;
 
-    LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
-    validator.afterPropertiesSet();
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
+          .TransactionIssuerWorker
+      txTransactionIssuerWorker;
 
-    WalletController controller = new WalletController(registerWalletUseCase, unlinkWalletUseCase);
+  @MockitoBean
+  private momzzangseven.mztkbe.modules.web3.transaction.infrastructure.adapter.worker
+          .SignedRecoveryWorker
+      txSignedRecoveryWorker;
 
-    mockMvc =
-        MockMvcBuilders.standaloneSetup(controller)
-            .setControllerAdvice(new GlobalExceptionHandler())
-            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-            .setValidator(validator)
-            .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
-            .addFilters(new SecurityContextInjectionFilter())
-            .build();
-  }
+  @MockitoBean private RegisterWalletUseCase registerWalletUseCase;
+  @MockitoBean private UnlinkWalletUseCase unlinkWalletUseCase;
 
   @Test
   @DisplayName("POST /web3/wallets 성공")
   void registerWallet_success() throws Exception {
     given(registerWalletUseCase.execute(any(RegisterWalletCommand.class)))
-        .willReturn(
-            new RegisterWalletResult(
-                1L, "0x1111111111111111111111111111111111111111", Instant.now()));
+        .willReturn(RegisterWalletResult.pending(pendingSession(), web3View()));
 
     mockMvc
         .perform(
@@ -100,11 +92,18 @@ class WalletControllerTest {
                                 "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                                     + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                             "nonce", "nonce-1"))))
-        .andExpect(status().isCreated())
+        .andExpect(status().isAccepted())
         .andExpect(jsonPath("$.status").value("SUCCESS"))
-        .andExpect(jsonPath("$.data.id").value(1))
+        .andExpect(jsonPath("$.data.registrationId").value("registration-1"))
+        .andExpect(jsonPath("$.data.status").value("APPROVAL_REQUIRED"))
+        .andExpect(jsonPath("$.data.walletId").doesNotExist())
         .andExpect(
-            jsonPath("$.data.walletAddress").value("0x1111111111111111111111111111111111111111"));
+            jsonPath("$.data.walletAddress").value("0x1111111111111111111111111111111111111111"))
+        .andExpect(jsonPath("$.data.web3.executionIntent.id").value("intent-1"))
+        .andExpect(jsonPath("$.data.web3.signRequest.authorization.chainId").value(10))
+        .andExpect(
+            jsonPath("$.data.web3.signRequest.submit.executionDigest")
+                .value("0x" + "2".repeat(64)));
 
     verify(registerWalletUseCase).execute(any(RegisterWalletCommand.class));
   }
@@ -315,45 +314,55 @@ class WalletControllerTest {
   }
 
   private RequestPostProcessor userPrincipal(Long userId) {
-    return authentication(userId, "ROLE_USER");
+    return authentication(
+        new UsernamePasswordAuthenticationToken(
+            userId,
+            null,
+            List.of(
+                new SimpleGrantedAuthority("ROLE_USER"),
+                new SimpleGrantedAuthority("ROLE_STEP_UP"))));
   }
 
   private RequestPostProcessor nullUserPrincipal() {
-    return authentication(null, "ROLE_USER");
-  }
-
-  private RequestPostProcessor authentication(Long userId, String... authorities) {
-    return request -> {
-      List<SimpleGrantedAuthority> grantedAuthorities =
-          Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList();
-      Authentication authentication =
-          new UsernamePasswordAuthenticationToken(userId, null, grantedAuthorities);
-      request.setAttribute(AUTH_ATTR, authentication);
-      return request;
-    };
+    SecurityContext context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(
+        new UsernamePasswordAuthenticationToken(
+            null,
+            null,
+            List.of(
+                new SimpleGrantedAuthority("ROLE_USER"),
+                new SimpleGrantedAuthority("ROLE_STEP_UP"))));
+    return securityContext(context);
   }
 
   private String json(Object value) throws JsonProcessingException {
     return objectMapper.writeValueAsString(value);
   }
 
-  private static final class SecurityContextInjectionFilter extends OncePerRequestFilter {
+  private static WalletRegistrationSession pendingSession() {
+    return WalletRegistrationSession.create(
+            "registration-1",
+            1L,
+            "0x1111111111111111111111111111111111111111",
+            "nonce-1",
+            NOW.plusMinutes(30),
+            NOW)
+        .attachApprovalIntent("intent-1", NOW.plusMinutes(30), NOW.plusSeconds(1));
+  }
 
-    @Override
-    protected void doFilterInternal(
-        HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-        throws ServletException, IOException {
-      SecurityContext context = SecurityContextHolder.createEmptyContext();
-      Authentication authentication = (Authentication) request.getAttribute(AUTH_ATTR);
-      if (authentication != null) {
-        context.setAuthentication(authentication);
-      }
-      SecurityContextHolder.setContext(context);
-      try {
-        filterChain.doFilter(request, response);
-      } finally {
-        SecurityContextHolder.clearContext();
-      }
-    }
+  private static WalletApprovalExecutionWriteView web3View() {
+    return new WalletApprovalExecutionWriteView(
+        new WalletApprovalExecutionWriteView.Resource(
+            "WALLET_REGISTRATION", "registration-1", "PENDING_EXECUTION"),
+        "WALLET_ESCROW_APPROVE",
+        new WalletApprovalExecutionWriteView.ExecutionIntent(
+            "intent-1", "AWAITING_SIGNATURE", NOW.plusMinutes(5)),
+        new WalletApprovalExecutionWriteView.Execution("EIP7702", 2),
+        new WalletApprovalExecutionWriteView.SignRequest(
+            new WalletApprovalExecutionWriteView.Authorization(
+                10L, "0x" + "d".repeat(40), 7L, "0x" + "1".repeat(64)),
+            new WalletApprovalExecutionWriteView.Submit("0x" + "2".repeat(64), 123L),
+            null),
+        false);
   }
 }
