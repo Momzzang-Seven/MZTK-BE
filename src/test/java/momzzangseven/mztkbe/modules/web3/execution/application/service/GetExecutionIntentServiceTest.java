@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionTransactionSummary;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
@@ -29,6 +32,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class GetExecutionIntentServiceTest {
 
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(Instant.parse("2026-04-05T03:00:00Z"), APP_ZONE);
+
   @Mock private ExecutionIntentPersistencePort executionIntentPersistencePort;
   @Mock private LoadExecutionTransactionPort loadExecutionTransactionPort;
   @Mock private LoadExecutionChainIdPort loadExecutionChainIdPort;
@@ -39,7 +46,10 @@ class GetExecutionIntentServiceTest {
   void setUp() {
     service =
         new GetExecutionIntentService(
-            executionIntentPersistencePort, loadExecutionTransactionPort, loadExecutionChainIdPort);
+            executionIntentPersistencePort,
+            loadExecutionTransactionPort,
+            loadExecutionChainIdPort,
+            FIXED_CLOCK);
   }
 
   @Test
@@ -78,6 +88,8 @@ class GetExecutionIntentServiceTest {
     assertThat(result.signRequest()).isNotNull();
     assertThat(result.signRequest().authorization()).isNotNull();
     assertThat(result.signRequest().submit()).isNotNull();
+    assertThat(result.signRequest().submit().deadlineEpochSeconds())
+        .isEqualTo(LocalDateTime.of(2026, 4, 5, 12, 0).atZone(APP_ZONE).toEpochSecond());
     assertThat(result.transactionId()).isNull();
   }
 

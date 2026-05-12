@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
-import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -28,7 +27,6 @@ public class Eip7702Properties {
   @Valid private Delegation delegation = new Delegation();
   @Valid private Sponsor sponsor = new Sponsor();
   @Valid private Authorization authorization = new Authorization();
-  @Valid private Execution execution = new Execution();
   @Valid private Cleanup cleanup = new Cleanup();
 
   @Getter
@@ -82,15 +80,6 @@ public class Eip7702Properties {
 
     @Min(1)
     private int maxAuthListLength;
-  }
-
-  @Getter
-  @Setter
-  public static class Execution {
-    @NotNull private List<String> allowedDelegateTargets = List.of();
-    @NotNull private List<String> allowedCallTargets = List.of();
-    @NotNull private List<String> allowedTargetContracts = List.of();
-    @NotNull private List<String> blockedFunctionSelectors = List.of();
   }
 
   @Getter

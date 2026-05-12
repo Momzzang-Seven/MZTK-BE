@@ -186,6 +186,8 @@ class SponsorKmsSigningE2ETest extends E2ETestBase {
     BDDMockito.given(
             qnaEscrowExecutionActionHandlerAdapter.supports(ExecutionActionType.QNA_ADMIN_SETTLE))
         .willReturn(true);
+    BDDMockito.given(qnaEscrowExecutionActionHandlerAdapter.supports(any(ExecutionIntent.class)))
+        .willReturn(true);
     BDDMockito.given(
             qnaEscrowExecutionActionHandlerAdapter.buildActionPlan(any(ExecutionIntent.class)))
         .willReturn(

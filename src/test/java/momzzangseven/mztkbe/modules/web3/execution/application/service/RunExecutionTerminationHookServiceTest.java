@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
@@ -49,6 +50,7 @@ class RunExecutionTerminationHookServiceTest {
 
     when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.supports(any(ExecutionIntent.class))).thenReturn(true);
     when(executionActionHandlerPort.buildActionPlan(intent)).thenReturn(actionPlan);
 
     service.execute(
@@ -73,6 +75,7 @@ class RunExecutionTerminationHookServiceTest {
 
     when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.supports(any(ExecutionIntent.class))).thenReturn(true);
     when(executionActionHandlerPort.buildActionPlan(intent)).thenReturn(actionPlan);
 
     service.execute(

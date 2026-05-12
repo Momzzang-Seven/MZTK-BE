@@ -1,6 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
-import java.time.ZoneOffset;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +34,7 @@ public class GetExecutionIntentService
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
+  private final Clock appClock;
 
   /** Loads an execution intent visible to the requester and maps it to read DTO contract. */
   @Override
@@ -102,7 +103,8 @@ public class GetExecutionIntentService
               intent.getAuthorityNonce(),
               intent.getAuthorizationPayloadHash()),
           new SignRequestBundle.SubmitSignRequest(
-              intent.getExecutionDigest(), intent.getExpiresAt().toEpochSecond(ZoneOffset.UTC)));
+              intent.getExecutionDigest(),
+              ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock)));
     }
 
     if (intent.getUnsignedTxSnapshot() == null) {

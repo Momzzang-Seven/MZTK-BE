@@ -29,7 +29,11 @@ public interface ExecutionEip7702GatewayPort {
 
   String hashCalls(List<BatchCall> calls);
 
-  String encodeExecute(List<BatchCall> calls, String executionSignatureHex);
+  String encodeExecute(
+      List<BatchCall> calls,
+      String prepareId,
+      BigInteger deadlineEpochSeconds,
+      String executionSignatureHex);
 
   SignedPayload signAndEncode(SignCommand command);
 

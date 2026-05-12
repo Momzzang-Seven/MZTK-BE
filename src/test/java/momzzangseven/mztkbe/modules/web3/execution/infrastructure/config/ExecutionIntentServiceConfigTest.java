@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import java.time.Clock;
-import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CreateExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecutionTerminationHookUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
@@ -33,7 +33,6 @@ class ExecutionIntentServiceConfigTest {
           .withUserConfiguration(
               ExecutionIntentServiceConfig.class,
               ExecutionEip7702Properties.class,
-              Eip7702Properties.class,
               Eip1559TtlAdapter.class,
               SponsorPolicyAdapter.class,
               ExecutionDraftPolicyValidatorAdapter.class)
@@ -68,9 +67,9 @@ class ExecutionIntentServiceConfigTest {
                   .isInstanceOf(CreateExecutionIntentUseCase.class);
               assertThat(context).hasSingleBean(LoadSponsorPolicyPort.class);
               assertThat(context).hasSingleBean(LoadEip1559TtlPort.class);
+              assertThat(context).hasSingleBean(BuildExecutionCallHashPort.class);
               assertThat(context).hasSingleBean(ValidateExecutionDraftPolicyPort.class);
               assertThat(context).doesNotHaveBean(ExecutionEip7702Properties.class);
-              assertThat(context).doesNotHaveBean(Eip7702Properties.class);
             });
   }
 

@@ -330,9 +330,7 @@ public class TransactionalExecuteInternalExecutionIntentDelegate
   }
 
   private java.util.Optional<ExecutionActionHandlerPort> findActionHandler(ExecutionIntent intent) {
-    return executionActionHandlerPorts.stream()
-        .filter(handler -> handler.supports(intent.getActionType()))
-        .findFirst();
+    return ExecutionActionHandlerPort.findMatching(executionActionHandlerPorts, intent);
   }
 
   private ExecuteInternalExecutionIntentResult quarantineInvalidIntent(

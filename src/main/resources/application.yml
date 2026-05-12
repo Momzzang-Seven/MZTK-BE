@@ -245,6 +245,7 @@ web3:
         - ${MZTK_TOKEN_CONTRACT_ADDRESS}
         - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
         - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+      allowed-approve-spenders: []              # approve는 spender allowlist + uint256.max 정책으로 검증
       allowed-target-contracts: []               # deprecated fallback. use split allowlists above
       blocked-function-selectors: []             # prod에서만 채우는 것을 권장
 
