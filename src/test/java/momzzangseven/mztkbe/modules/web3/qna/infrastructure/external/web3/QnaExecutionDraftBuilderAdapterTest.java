@@ -23,12 +23,14 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SignQnaServerSigPort;
+import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -494,5 +496,136 @@ class QnaExecutionDraftBuilderAdapterTest {
       QnaServerSigPreimage preimage) {
     assertThat(preimage).isInstanceOf(QnaServerSigPreimage.CreateQuestionPreimage.class);
     return (QnaServerSigPreimage.CreateQuestionPreimage) preimage;
+  }
+
+  // --- Phase B6 prevalidation-alignment tests ---
+  //
+  // §2-1 sequence: sign → encode (9-arg, server-sig embedded) → prevalidate via eth_call. The
+  // encoder is invoked once and the captured `callData` flows unchanged into the prevalidation
+  // mock. Future refactors that accidentally call the encoder twice, or pass pre-signature
+  // calldata into prevalidation, will fail these tests.
+
+  @Test
+  @DisplayName("[P-1301] build_questionCreate_passesEncodedCallDataIntoPrevalidation")
+  void build_questionCreate_passesEncodedCallDataIntoPrevalidation() {
+    stubHappyPath();
+    String tokenAddress = "0x4444444444444444444444444444444444444444";
+    BigInteger amount = new BigInteger("50000000000000000000");
+    String questionHash = "0x" + "a".repeat(64);
+
+    adapter.build(
+        new QnaEscrowExecutionRequest(
+            QnaExecutionResourceType.QUESTION,
+            "101",
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            7L,
+            null,
+            101L,
+            null,
+            tokenAddress,
+            amount,
+            questionHash,
+            null));
+
+    ArgumentCaptor<String> callDataCaptor = ArgumentCaptor.forClass(String.class);
+    verify(qnaContractCallSupport, times(1))
+        .prevalidateContractCall(anyString(), anyString(), callDataCaptor.capture());
+    String captured = callDataCaptor.getValue();
+    String expected =
+        qnaEscrowAbiEncoder.encode(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            QnaEscrowIdCodec.questionId(101L),
+            null,
+            tokenAddress,
+            amount,
+            questionHash,
+            null,
+            MOCK_SIGNED_AT,
+            mockSignatureBytes());
+    assertThat(captured).isEqualTo(expected);
+    // The signature bytes appear as raw hex within the calldata dynamic-bytes tail.
+    assertThat(captured).contains(Numeric.toHexString(mockSignatureBytes()).substring(2));
+  }
+
+  @Test
+  @DisplayName("[P-1302] build_answerSubmit_passesEncodedCallDataIntoPrevalidation")
+  void build_answerSubmit_passesEncodedCallDataIntoPrevalidation() {
+    stubHappyPath();
+    String tokenAddress = "0x4444444444444444444444444444444444444444";
+    String contentHash = "0x" + "d".repeat(64);
+
+    adapter.build(
+        new QnaEscrowExecutionRequest(
+            QnaExecutionResourceType.ANSWER,
+            "201",
+            QnaExecutionActionType.QNA_ANSWER_SUBMIT,
+            7L,
+            22L,
+            101L,
+            201L,
+            tokenAddress,
+            BigInteger.ZERO,
+            null,
+            contentHash));
+
+    ArgumentCaptor<String> callDataCaptor = ArgumentCaptor.forClass(String.class);
+    verify(qnaContractCallSupport, times(1))
+        .prevalidateContractCall(anyString(), anyString(), callDataCaptor.capture());
+    String captured = callDataCaptor.getValue();
+    String expected =
+        qnaEscrowAbiEncoder.encode(
+            QnaExecutionActionType.QNA_ANSWER_SUBMIT,
+            QnaEscrowIdCodec.questionId(101L),
+            QnaEscrowIdCodec.answerId(201L),
+            tokenAddress,
+            BigInteger.ZERO,
+            null,
+            contentHash,
+            MOCK_SIGNED_AT,
+            mockSignatureBytes());
+    assertThat(captured).isEqualTo(expected);
+    assertThat(captured).contains(Numeric.toHexString(mockSignatureBytes()).substring(2));
+  }
+
+  @Test
+  @DisplayName("[P-1303] build_answerAccept_passesEncodedCallDataIntoPrevalidation")
+  void build_answerAccept_passesEncodedCallDataIntoPrevalidation() {
+    stubHappyPath();
+    String tokenAddress = "0x4444444444444444444444444444444444444444";
+    BigInteger amount = new BigInteger("50000000000000000000");
+    String questionHash = "0x" + "a".repeat(64);
+    String contentHash = "0x" + "b".repeat(64);
+
+    adapter.build(
+        new QnaEscrowExecutionRequest(
+            QnaExecutionResourceType.QUESTION,
+            "101",
+            QnaExecutionActionType.QNA_ANSWER_ACCEPT,
+            7L,
+            22L,
+            101L,
+            201L,
+            tokenAddress,
+            amount,
+            questionHash,
+            contentHash));
+
+    ArgumentCaptor<String> callDataCaptor = ArgumentCaptor.forClass(String.class);
+    verify(qnaContractCallSupport, times(1))
+        .prevalidateContractCall(anyString(), anyString(), callDataCaptor.capture());
+    String captured = callDataCaptor.getValue();
+    String expected =
+        qnaEscrowAbiEncoder.encode(
+            QnaExecutionActionType.QNA_ANSWER_ACCEPT,
+            QnaEscrowIdCodec.questionId(101L),
+            QnaEscrowIdCodec.answerId(201L),
+            tokenAddress,
+            amount,
+            questionHash,
+            contentHash,
+            MOCK_SIGNED_AT,
+            mockSignatureBytes());
+    assertThat(captured).isEqualTo(expected);
+    assertThat(captured).contains(Numeric.toHexString(mockSignatureBytes()).substring(2));
   }
 }
