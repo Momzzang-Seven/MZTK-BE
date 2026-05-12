@@ -731,6 +731,8 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         updateVersion,
         updateToken,
         null,
+        null,
+        null,
         null);
   }
 
@@ -749,7 +751,9 @@ class QnaEscrowExecutionActionHandlerAdapterTest {
         null,
         null,
         updateVersion,
-        updateToken);
+        updateToken,
+        null,
+        null);
   }
 
   private QnaQuestionUpdateState updateState(

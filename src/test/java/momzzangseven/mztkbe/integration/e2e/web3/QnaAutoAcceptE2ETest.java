@@ -429,6 +429,7 @@ class QnaAutoAcceptE2ETest extends E2ETestBase {
             BigInteger.valueOf(2_000_000_000L),
             BigInteger.valueOf(30_000_000_000L)),
         "0x" + "b".repeat(64),
+        null,
         LocalDateTime.ofInstant(NOW, APP_ZONE).plusMinutes(5));
   }
 

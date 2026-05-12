@@ -15,6 +15,9 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigPreimage;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigResult;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SignQnaServerSigPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
@@ -25,6 +28,7 @@ import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.Conditiona
 import momzzangseven.mztkbe.modules.web3.transaction.infrastructure.config.Web3CoreProperties;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.GetActiveWalletAddressUseCase;
 import org.springframework.stereotype.Component;
+import org.web3j.utils.Numeric;
 
 @Component
 @RequiredArgsConstructor
@@ -41,6 +45,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
   private final QnaContractCallSupport qnaContractCallSupport;
   private final QnaPayloadSerializer qnaPayloadSerializer;
   private final QnaUnsignedTxFingerprintFactory qnaUnsignedTxFingerprintFactory;
+  private final SignQnaServerSigPort signQnaServerSigPort;
   private final Clock appClock;
 
   @Override
@@ -51,6 +56,15 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         request.answerId() == null ? null : QnaEscrowIdCodec.answerId(request.answerId());
     DraftContext draftContext = resolveDraftContext(request);
 
+    // §5-2 ordering invariant: sign FIRST, encode SECOND, so that the exact same
+    // (signedAt, signatureBytes) tuple flows into both the calldata and the payload
+    // snapshot. KMS sign is invoked exactly once per build(...) call.
+    QnaServerSigPreimage preimage =
+        toPreimage(request.actionType(), draftContext.fromAddress(), questionId, answerId, request);
+    QnaServerSigResult signResult = signQnaServerSigPort.sign(preimage);
+    long signedAt = signResult.signedAt();
+    byte[] signatureBytes = signResult.signatureBytes();
+
     String callData =
         qnaEscrowAbiEncoder.encode(
             request.actionType(),
@@ -59,7 +73,9 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             request.tokenAddress(),
             request.rewardAmountWei(),
             request.questionHash(),
-            request.contentHash());
+            request.contentHash(),
+            signedAt,
+            signatureBytes);
     QnaExecutionDraftCall call = new QnaExecutionDraftCall(callTarget, BigInteger.ZERO, callData);
     QnaContractCallSupport.QnaCallPrevalidationResult prevalidation =
         qnaContractCallSupport.prevalidateContractCall( // 외부 RPC call
@@ -92,7 +108,9 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             request.questionUpdateVersion(),
             request.questionUpdateToken(),
             request.answerUpdateVersion(),
-            request.answerUpdateToken());
+            request.answerUpdateToken(),
+            signedAt,
+            Numeric.toHexString(signatureBytes));
 
     return new QnaExecutionDraft(
         request.resourceType(),
@@ -112,6 +130,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         draftContext.authorizationPayloadHash(),
         unsignedTxSnapshot,
         qnaUnsignedTxFingerprintFactory.compute(unsignedTxSnapshot),
+        signedAt,
         LocalDateTime.now(appClock).plusSeconds(draftContext.ttlSeconds()));
   }
 
@@ -179,6 +198,48 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         authorityNonce,
         eip7702Properties.getAuthorization().getTtlSeconds(),
         authorizationPayloadHash);
+  }
+
+  /**
+   * Dispatch helper. Builds the {@link QnaServerSigPreimage} subtype that matches {@code
+   * actionType}. The {@code actor} is always {@code draftContext.fromAddress()} since the user's
+   * wallet is {@code msg.sender} for all 7 server-sig actions (asker for question/accept, responder
+   * for answer flows).
+   */
+  private QnaServerSigPreimage toPreimage(
+      QnaExecutionActionType actionType,
+      String actor,
+      String questionIdHex,
+      String answerIdHex,
+      QnaEscrowExecutionRequest request) {
+    return switch (actionType) {
+      case QNA_QUESTION_CREATE ->
+          new QnaServerSigPreimage.CreateQuestionPreimage(
+              actor,
+              questionIdHex,
+              request.tokenAddress(),
+              request.rewardAmountWei(),
+              request.questionHash());
+      case QNA_QUESTION_UPDATE ->
+          new QnaServerSigPreimage.UpdateQuestionPreimage(
+              actor, questionIdHex, request.questionHash());
+      case QNA_QUESTION_DELETE ->
+          new QnaServerSigPreimage.DeleteQuestionPreimage(actor, questionIdHex);
+      case QNA_ANSWER_SUBMIT ->
+          new QnaServerSigPreimage.SubmitAnswerPreimage(
+              actor, questionIdHex, answerIdHex, request.contentHash());
+      case QNA_ANSWER_UPDATE ->
+          new QnaServerSigPreimage.UpdateAnswerPreimage(
+              actor, questionIdHex, answerIdHex, request.contentHash());
+      case QNA_ANSWER_DELETE ->
+          new QnaServerSigPreimage.DeleteAnswerPreimage(actor, questionIdHex, answerIdHex);
+      case QNA_ANSWER_ACCEPT ->
+          new QnaServerSigPreimage.AcceptAnswerPreimage(
+              actor, questionIdHex, answerIdHex, request.questionHash(), request.contentHash());
+      default ->
+          throw new IllegalStateException(
+              "server-sig draft builder does not support " + actionType);
+    };
   }
 
   private record DraftContext(

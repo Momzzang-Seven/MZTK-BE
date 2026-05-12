@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswe
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.ManageQnaAnswerExecutionIntentRefPort.QnaAnswerExecutionIntentRef;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.SubmitQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
@@ -33,14 +34,18 @@ public class SubmitQnaExecutionIntentAdapter implements SubmitQnaExecutionDraftP
   private final CreateExecutionIntentUseCase createExecutionIntentUseCase;
   private final ObjectMapper objectMapper;
   private final ManageQnaAnswerExecutionIntentRefPort refPersistencePort;
+  private final QnaEscrowProperties qnaEscrowProperties;
 
   @Override
   public QnaExecutionIntentResult submit(QnaExecutionDraft draft) {
     CreateExecutionIntentResult result =
         createExecutionIntentUseCase.execute(
             new CreateExecutionIntentCommand(toExecutionDraft(draft)));
+    Integer sigValidityDuration =
+        draft.signedAt() == null ? null : qnaEscrowProperties.getSigValidityDuration();
     QnaExecutionIntentResult qnaResult =
-        QnaExecutionIntentResult.from(draft.actionType().name(), result);
+        QnaExecutionIntentResult.from(
+            draft.actionType().name(), result, draft.signedAt(), sigValidityDuration);
     upsertAnswerExecutionRef(draft, qnaResult);
     return qnaResult;
   }

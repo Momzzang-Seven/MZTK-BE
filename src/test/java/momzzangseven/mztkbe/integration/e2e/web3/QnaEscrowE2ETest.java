@@ -138,6 +138,7 @@ class QnaEscrowE2ETest extends E2ETestBase {
                   "0x" + "b".repeat(64),
                   null,
                   "0x" + "c".repeat(64),
+                  null,
                   LocalDateTime.now().plusMinutes(30));
             });
 

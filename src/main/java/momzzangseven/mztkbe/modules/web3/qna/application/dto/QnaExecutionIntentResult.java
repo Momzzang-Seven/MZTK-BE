@@ -11,7 +11,8 @@ public record QnaExecutionIntentResult(
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequestBundle signRequest,
-    boolean existing) {
+    boolean existing,
+    SignatureMeta signatureMeta) {
 
   public QnaExecutionIntentResult {
     if (resource == null) {
@@ -28,8 +29,46 @@ public record QnaExecutionIntentResult(
     }
   }
 
+  /**
+   * Backward-compatible 6-arg constructor that leaves {@code signatureMeta} null. Used by admin
+   * paths and legacy test fixtures that don't carry server-sig info.
+   */
+  public QnaExecutionIntentResult(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequestBundle signRequest,
+      boolean existing) {
+    this(resource, actionType, executionIntent, execution, signRequest, existing, null);
+  }
+
+  /** Backward-compatible factory used by admin path (no signature meta). */
   public static QnaExecutionIntentResult from(
       String actionType, CreateExecutionIntentResult result) {
+    return from(actionType, result, null, null);
+  }
+
+  /**
+   * Server-sig aware factory. If {@code signedAt} is null, {@code signatureMeta} is null. If {@code
+   * signedAt} is non-null but {@code sigValidityDuration} is null, a {@link
+   * Web3InvalidInputException} is thrown.
+   */
+  public static QnaExecutionIntentResult from(
+      String actionType,
+      CreateExecutionIntentResult result,
+      Long signedAt,
+      Integer sigValidityDuration) {
+    SignatureMeta signatureMeta;
+    if (signedAt == null) {
+      signatureMeta = null;
+    } else {
+      if (sigValidityDuration == null) {
+        throw new Web3InvalidInputException(
+            "sigValidityDuration is required when signedAt is present");
+      }
+      signatureMeta = new SignatureMeta(signedAt, signedAt + sigValidityDuration);
+    }
     return new QnaExecutionIntentResult(
         new Resource(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
@@ -38,7 +77,8 @@ public record QnaExecutionIntentResult(
             result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
         new Execution(result.mode().name(), result.signCount()),
         result.signRequest(),
-        result.existing());
+        result.existing(),
+        signatureMeta);
   }
 
   public record Resource(String type, String id, String status) {
@@ -79,6 +119,22 @@ public record QnaExecutionIntentResult(
       }
       if (signCount <= 0) {
         throw new Web3InvalidInputException("execution.signCount must be positive");
+      }
+    }
+  }
+
+  /**
+   * Server-sig metadata surfaced to the API client. Both fields must be either both null (admin /
+   * absent) or both non-null (server-sig). Mixed states are rejected.
+   */
+  public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {
+
+    public SignatureMeta {
+      boolean signedAtAbsent = signedAt == null;
+      boolean expiresAtAbsent = signatureExpiresAt == null;
+      if (signedAtAbsent != expiresAtAbsent) {
+        throw new Web3InvalidInputException(
+            "signatureMeta requires both signedAt and signatureExpiresAt to be null or non-null");
       }
     }
   }

@@ -17,7 +17,9 @@ public record QnaEscrowExecutionPayload(
     Long questionUpdateVersion,
     String questionUpdateToken,
     Long answerUpdateVersion,
-    String answerUpdateToken) {
+    String answerUpdateToken,
+    Long signedAt,
+    String signatureHex) {
 
   public QnaEscrowExecutionPayload(
       QnaExecutionActionType actionType,
@@ -41,6 +43,8 @@ public record QnaEscrowExecutionPayload(
         contentHash,
         callTarget,
         callData,
+        null,
+        null,
         null,
         null,
         null,
