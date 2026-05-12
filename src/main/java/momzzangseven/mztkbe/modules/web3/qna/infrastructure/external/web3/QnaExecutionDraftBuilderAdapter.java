@@ -62,7 +62,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
             request.contentHash());
     QnaExecutionDraftCall call = new QnaExecutionDraftCall(callTarget, BigInteger.ZERO, callData);
     QnaContractCallSupport.QnaCallPrevalidationResult prevalidation =
-        qnaContractCallSupport.prevalidateContractCall(
+        qnaContractCallSupport.prevalidateContractCall( // 외부 RPC call
             draftContext.fromAddress(), callTarget, callData);
 
     QnaUnsignedTxSnapshot unsignedTxSnapshot =
@@ -164,7 +164,7 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
     String delegateTarget =
         EvmAddress.of(eip7702Properties.getDelegation().getBatchImplAddress()).value();
     long authorityNonce =
-        eip7702ChainPort.loadPendingAccountNonce(authorityAddress).longValueExact();
+        eip7702ChainPort.loadPendingAccountNonce(authorityAddress).longValueExact(); // 이미 transaction 안에서 PESSIMISTIC LOCK 획득 후 외부 RPC call 존재.
     String authorizationPayloadHash =
         eip7702AuthorizationPort.buildSigningHashHex(
             requestChainId(), delegateTarget, BigInteger.valueOf(authorityNonce));
