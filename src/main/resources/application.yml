@@ -201,6 +201,7 @@ web3:
       default-gas-limit: 120000
       default-max-priority-fee-per-gas-wei: 1000000000
       max-fee-multiplier: 2
+      estimated-gas-buffer-percent: 130
 
     worker:
       claim-ttl-seconds: 120
