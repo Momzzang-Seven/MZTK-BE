@@ -205,7 +205,17 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
         new AnswerExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
-        result.existing());
+        result.existing(),
+        toSignatureMeta(result.signatureMeta()));
+  }
+
+  private AnswerExecutionWriteView.SignatureMeta toSignatureMeta(
+      momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult.SignatureMeta
+          meta) {
+    if (meta == null) {
+      return null;
+    }
+    return new AnswerExecutionWriteView.SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
   }
 
   private AnswerExecutionWriteView.SignRequest toSignRequest(

@@ -207,7 +207,17 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         new QuestionExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
-        result.existing());
+        result.existing(),
+        toSignatureMeta(result.signatureMeta()));
+  }
+
+  private QuestionExecutionWriteView.SignatureMeta toSignatureMeta(
+      momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult.SignatureMeta
+          meta) {
+    if (meta == null) {
+      return null;
+    }
+    return new QuestionExecutionWriteView.SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
   }
 
   private QuestionExecutionWriteView toView(GetExecutionIntentResult result) {

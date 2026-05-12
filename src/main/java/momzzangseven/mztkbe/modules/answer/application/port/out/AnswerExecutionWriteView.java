@@ -14,7 +14,19 @@ public record AnswerExecutionWriteView(
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
-    boolean existing) {
+    boolean existing,
+    SignatureMeta signatureMeta) {
+
+  /** Backward-compatible 6-arg constructor for callers that don't carry server-sig metadata. */
+  public AnswerExecutionWriteView(
+      Resource resource,
+      String actionType,
+      ExecutionIntent executionIntent,
+      Execution execution,
+      SignRequest signRequest,
+      boolean existing) {
+    this(resource, actionType, executionIntent, execution, signRequest, existing, null);
+  }
 
   public record Resource(String type, String id, String status) {}
 
@@ -23,6 +35,13 @@ public record AnswerExecutionWriteView(
   public record Execution(String mode, int signCount) {}
 
   public record SignRequest(Authorization authorization, Submit submit, Transaction transaction) {}
+
+  /**
+   * Server-sig metadata surfaced to the API client. Carries the epoch-second timestamp used in the
+   * embedded EIP-712 signature and the derived expiry, so the FE can detect imminent expiry and
+   * trigger a re-prepare without ABI-decoding the calldata.
+   */
+  public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {}
 
   public record Authorization(
       Long chainId, String delegateTarget, Long authorityNonce, String payloadHashToSign) {}
