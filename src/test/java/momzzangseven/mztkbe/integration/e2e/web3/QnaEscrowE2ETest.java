@@ -648,6 +648,8 @@ class QnaEscrowE2ETest extends E2ETestBase {
 
     Long answerId = insertOnchainReadyAnswer(onchainPostId, answerOwner.userId(), "E-501 답변");
     markQuestionStateAnswered(onchainPostId);
+    expireQuestionUpdateIntent(onchainPostId);
+    syncQuestionProjectionHash(onchainPostId, "E-501 update 본문");
     ResponseEntity<String> acceptResponse =
         restTemplate.exchange(
             baseUrl() + "/posts/" + onchainPostId + "/answers/" + answerId + "/accept",
@@ -665,8 +667,9 @@ class QnaEscrowE2ETest extends E2ETestBase {
   @DisplayName(
       "[E-701] BuildQnaExecutionDraftPort 가 RuntimeException 던지면 question intent 행이 남지 않는다")
   void buildExecutionDraftPort_throws_questionTransactionRollsBack() throws Exception {
-    BDDMockito.given(buildQnaExecutionDraftPort.build(any()))
-        .willThrow(new IllegalStateException("E-701 simulated KMS failure"));
+    BDDMockito.willThrow(new IllegalStateException("E-701 simulated KMS failure"))
+        .given(buildQnaExecutionDraftPort)
+        .build(any());
 
     ResponseEntity<String> response =
         restTemplate.exchange(
@@ -1061,6 +1064,28 @@ class QnaEscrowE2ETest extends E2ETestBase {
                 + "WHERE resource_type = 'QUESTION' "
                 + "AND resource_id = ? AND action_type = 'QNA_QUESTION_CREATE'",
             postId.toString());
+    assertThat(updated).isEqualTo(1);
+  }
+
+  private void expireQuestionUpdateIntent(Long postId) {
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE web3_execution_intents "
+                + "SET status = 'EXPIRED', last_error_code = 'AUTH_EXPIRED', "
+                + "last_error_reason = 'expired for e2e', updated_at = NOW() "
+                + "WHERE resource_type = 'QUESTION' "
+                + "AND resource_id = ? AND action_type = 'QNA_QUESTION_UPDATE'",
+            postId.toString());
+    assertThat(updated).isPositive();
+  }
+
+  private void syncQuestionProjectionHash(Long postId, String content) {
+    int updated =
+        jdbcTemplate.update(
+            "UPDATE web3_qna_questions SET question_hash = ?, updated_at = NOW() "
+                + "WHERE post_id = ?",
+            QnaContentHashFactory.hash(content),
+            postId);
     assertThat(updated).isEqualTo(1);
   }
 
