@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletNotProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigResult;
@@ -486,7 +487,8 @@ class SignQnaServerSigAdapterTest {
   class FailFast {
 
     @Test
-    @DisplayName("F-701: signer row missing → IllegalStateException, signer never called")
+    @DisplayName(
+        "F-701: signer row missing → TreasuryWalletNotProvisionedException, signer never called")
     void f701_missingSignerRow() {
       when(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.QNA_SIGNER))
           .thenReturn(Optional.empty());
@@ -495,7 +497,7 @@ class SignQnaServerSigAdapterTest {
               () ->
                   adapter.sign(
                       new QnaServerSigPreimage.DeleteQuestionPreimage(ASKER_ADDR, QUESTION_ID)))
-          .isInstanceOf(IllegalStateException.class)
+          .isInstanceOf(TreasuryWalletNotProvisionedException.class)
           .hasMessageContaining("QNA_SIGNER misconfigured")
           .hasMessageContaining("no row");
 
@@ -503,7 +505,9 @@ class SignQnaServerSigAdapterTest {
     }
 
     @Test
-    @DisplayName("F-702: signer row status DISABLED → IllegalStateException, signer never called")
+    @DisplayName(
+        "F-702: signer row status DISABLED → TreasuryWalletNotProvisionedException, signer never"
+            + " called")
     void f702_disabledSigner() {
       TreasuryWalletView disabled =
           new TreasuryWalletView(
@@ -522,7 +526,7 @@ class SignQnaServerSigAdapterTest {
               () ->
                   adapter.sign(
                       new QnaServerSigPreimage.DeleteQuestionPreimage(ASKER_ADDR, QUESTION_ID)))
-          .isInstanceOf(IllegalStateException.class)
+          .isInstanceOf(TreasuryWalletNotProvisionedException.class)
           .hasMessageContaining("QNA_SIGNER misconfigured")
           .hasMessageContaining("DISABLED");
 

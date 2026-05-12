@@ -52,7 +52,7 @@ web3:
     eip4361:
       uri: http://localhost:3000
   kms:
-    enabled: false # dev profile: false
+    enabled: true # dev profile: false
 
   explorer:
     base-url: https://sepolia-optimism.etherscan.io

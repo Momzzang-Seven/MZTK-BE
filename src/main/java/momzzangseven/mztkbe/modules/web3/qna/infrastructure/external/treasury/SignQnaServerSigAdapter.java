@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
+import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletNotProvisionedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigPreimage;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigResult;
@@ -114,9 +115,12 @@ public class SignQnaServerSigAdapter implements SignQnaServerSigPort {
     TreasuryWalletView signer =
         loadTreasuryWalletByRoleUseCase
             .execute(TreasuryRole.QNA_SIGNER)
-            .orElseThrow(() -> new IllegalStateException("QNA_SIGNER misconfigured: no row"));
+            .orElseThrow(
+                () ->
+                    new TreasuryWalletNotProvisionedException("QNA_SIGNER misconfigured: no row"));
     if (signer.status() != TreasuryWalletStatus.ACTIVE) {
-      throw new IllegalStateException("QNA_SIGNER misconfigured: status=" + signer.status());
+      throw new TreasuryWalletNotProvisionedException(
+          "QNA_SIGNER misconfigured: status=" + signer.status());
     }
     String normalizedWalletAddress = EvmAddress.of(signer.walletAddress()).value();
 
