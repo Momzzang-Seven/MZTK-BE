@@ -10,7 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.Map;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecuteExecutionIntentResult;
@@ -42,6 +42,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class ExecutionIntentControllerTest {
 
   private static final String INTENT_ID = "intent-abc-123";
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
 
   @Autowired private MockMvc mockMvc;
 
@@ -94,7 +95,7 @@ class ExecutionIntentControllerTest {
                     new SignRequestBundle.AuthorizationSignRequest(
                         11155420L, "0x" + "1".repeat(40), 0L, "0x" + "a".repeat(64)),
                     new SignRequestBundle.SubmitSignRequest(
-                        "0x" + "b".repeat(64), expiresAt.toEpochSecond(ZoneOffset.UTC))),
+                        "0x" + "b".repeat(64), expiresAt.atZone(APP_ZONE).toEpochSecond())),
                 null,
                 null,
                 null));

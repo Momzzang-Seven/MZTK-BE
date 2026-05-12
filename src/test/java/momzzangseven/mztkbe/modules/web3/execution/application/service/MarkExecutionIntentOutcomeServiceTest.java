@@ -63,6 +63,7 @@ class MarkExecutionIntentOutcomeServiceTest {
   @Test
   void markSucceeded_confirmsPendingIntent() {
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.supports(any(ExecutionIntent.class))).thenReturn(true);
     when(executionActionHandlerPort.buildActionPlan(
             argThat(intent -> intent.getSubmittedTxId().equals(12L))))
         .thenReturn(
@@ -163,6 +164,7 @@ class MarkExecutionIntentOutcomeServiceTest {
   @DisplayName("핸들러 예외가 발생해도 CONFIRMED 상태는 먼저 저장된다")
   void markSucceeded_handlerThrows_stillPersistsConfirmedState() {
     when(executionActionHandlerPort.supports(ExecutionActionType.TRANSFER_SEND)).thenReturn(true);
+    when(executionActionHandlerPort.supports(any(ExecutionIntent.class))).thenReturn(true);
     when(executionActionHandlerPort.buildActionPlan(any()))
         .thenReturn(
             new ExecutionActionPlan(

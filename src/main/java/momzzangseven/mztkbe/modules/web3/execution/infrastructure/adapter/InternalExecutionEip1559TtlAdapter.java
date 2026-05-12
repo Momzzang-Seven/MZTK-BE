@@ -2,11 +2,11 @@ package momzzangseven.mztkbe.modules.web3.execution.infrastructure.adapter;
 
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadInternalExecutionEip1559TtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.infrastructure.config.InternalExecutionIssuerProperties;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnInternalExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnInternalExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.execution.internal", name = "enabled", havingValue = "true")
 public class InternalExecutionEip1559TtlAdapter implements LoadInternalExecutionEip1559TtlPort {
 
   private final InternalExecutionIssuerProperties internalExecutionIssuerProperties;

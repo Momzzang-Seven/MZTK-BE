@@ -43,6 +43,7 @@ class ReplayConfirmedExecutionIntentServiceTest {
     when(executionIntentPersistencePort.findByPublicId("intent-1")).thenReturn(Optional.of(intent));
     when(executionActionHandlerPort.supports(ExecutionActionType.QNA_QUESTION_UPDATE))
         .thenReturn(true);
+    when(executionActionHandlerPort.supports(intent)).thenReturn(true);
     when(executionActionHandlerPort.buildActionPlan(intent)).thenReturn(actionPlan);
 
     boolean result =

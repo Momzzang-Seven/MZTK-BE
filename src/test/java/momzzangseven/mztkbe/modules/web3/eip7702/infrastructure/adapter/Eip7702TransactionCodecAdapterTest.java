@@ -26,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class Eip7702TransactionCodecAdapterTest {
 
   private static final String TO = "0x" + "a".repeat(40);
+  private static final String SECOND_TO = "0x" + "b".repeat(40);
   private static final String DATA = "0xdeadbeef";
 
   @Mock private SignEip7702TxPort signEip7702TxPort;
@@ -162,5 +163,32 @@ class Eip7702TransactionCodecAdapterTest {
                     signer()))
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("authorizationList must be non-empty");
+  }
+
+  @Test
+  @DisplayName("encodeExecute — prepareId/deadline/signature 를 새 BatchImplementation ABI 에 전달")
+  void encodeExecute_usesNewBatchImplementationAbi() {
+    String encoded =
+        adapter.encodeExecute(
+            List.of(
+                new Eip7702TransactionCodecPort.BatchCall(
+                    TO, BigInteger.ZERO, new byte[] {(byte) 0xde, (byte) 0xad}),
+                new Eip7702TransactionCodecPort.BatchCall(
+                    SECOND_TO, BigInteger.valueOf(7), new byte[] {0x12, 0x34})),
+            "intent-123",
+            BigInteger.valueOf(1_700_000_000L),
+            new byte[] {1, 2, 3});
+
+    assertThat(encoded).startsWith(Eip7702ExecuteCalldataAssert.executeSelector());
+    Eip7702ExecuteCalldataAssert.assertExecuteArguments(
+        encoded,
+        List.of(
+            new Eip7702ExecuteCalldataAssert.ExpectedCall(
+                TO, BigInteger.ZERO, new byte[] {(byte) 0xde, (byte) 0xad}),
+            new Eip7702ExecuteCalldataAssert.ExpectedCall(
+                SECOND_TO, BigInteger.valueOf(7), new byte[] {0x12, 0x34})),
+        "intent-123",
+        BigInteger.valueOf(1_700_000_000L),
+        new byte[] {1, 2, 3});
   }
 }

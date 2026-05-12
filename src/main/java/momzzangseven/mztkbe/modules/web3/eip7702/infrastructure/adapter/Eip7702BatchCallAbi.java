@@ -11,15 +11,20 @@ import org.web3j.abi.datatypes.DynamicBytes;
 import org.web3j.abi.datatypes.DynamicStruct;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
+import org.web3j.abi.datatypes.Utf8String;
 import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.Hash;
 
-/** ABI helper for BatchImplementation.execute(Call[], bytes). */
+/** ABI helper for BatchImplementation.execute(Call[], string, uint256, bytes). */
 public final class Eip7702BatchCallAbi {
 
   private Eip7702BatchCallAbi() {}
 
-  public static String encodeExecute(List<Call> calls, byte[] executionSignature) {
+  public static String encodeExecute(
+      List<Call> calls,
+      String prepareId,
+      BigInteger deadlineEpochSeconds,
+      byte[] executionSignature) {
     DynamicStruct[] callStructs =
         calls == null
             ? new DynamicStruct[0]
@@ -31,7 +36,11 @@ public final class Eip7702BatchCallAbi {
     Function function =
         new Function(
             "execute",
-            Arrays.asList(callArray, new DynamicBytes(executionSignature)),
+            Arrays.asList(
+                callArray,
+                new Utf8String(prepareId),
+                new Uint256(deadlineEpochSeconds),
+                new DynamicBytes(executionSignature)),
             Collections.emptyList());
 
     return FunctionEncoder.encode(function);

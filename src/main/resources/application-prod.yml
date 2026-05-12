@@ -77,9 +77,11 @@ web3:
         - ${MZTK_TOKEN_CONTRACT_ADDRESS}
         - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
         - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
+      allowed-approve-spenders:
+        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
       allowed-target-contracts: []
-      blocked-function-selectors:
-        - 0x095ea7b3                # approve (예시)
+      blocked-function-selectors: []
 mztk:
   admin:
     bootstrap:

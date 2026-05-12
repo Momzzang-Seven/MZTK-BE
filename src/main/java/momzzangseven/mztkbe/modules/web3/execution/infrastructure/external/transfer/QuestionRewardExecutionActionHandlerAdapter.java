@@ -40,6 +40,21 @@ public class QuestionRewardExecutionActionHandlerAdapter implements ExecutionAct
   }
 
   @Override
+  public boolean supports(ExecutionIntent intent) {
+    if (!supports(intent.getActionType())) {
+      return false;
+    }
+    try {
+      QuestionRewardExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
+      return payload.postId() != null
+          && payload.tokenContractAddress() != null
+          && payload.transferData() != null;
+    } catch (RuntimeException e) {
+      return false;
+    }
+  }
+
+  @Override
   public ExecutionActionPlan buildActionPlan(ExecutionIntent intent) {
     QuestionRewardExecutionPayload payload = readPayload(intent.getPayloadSnapshotJson());
     return new ExecutionActionPlan(

@@ -13,6 +13,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecu
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentPendingOnchainUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.MarkExecutionIntentSucceededUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.ReplayConfirmedExecutionIntentUseCase;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Eip1559TransactionCodecPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
@@ -42,8 +43,6 @@ import momzzangseven.mztkbe.modules.web3.execution.application.service.RunExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate;
 import momzzangseven.mztkbe.modules.web3.execution.application.util.SponsorWalletPreflight;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.SponsorDailyUsage;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnAnyExecutionEnabled;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -53,7 +52,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnAnyExecutionEnabled
+@ConditionalOnExecutionModeEnabled
 public class ExecutionIntentServiceConfig {
 
   @Bean
@@ -61,6 +60,14 @@ public class ExecutionIntentServiceConfig {
   BuildExecutionDigestPort fallbackBuildExecutionDigestPort() {
     return (authorityAddress, executionIntentId, callDataHash, deadlineEpochSeconds) -> {
       throw new IllegalStateException("EIP-7702 execution digest is unavailable");
+    };
+  }
+
+  @Bean
+  @ConditionalOnMissingBean(BuildExecutionCallHashPort.class)
+  BuildExecutionCallHashPort fallbackBuildExecutionCallHashPort() {
+    return calls -> {
+      throw new IllegalStateException("EIP-7702 execution call hash is unavailable");
     };
   }
 
@@ -162,6 +169,7 @@ public class ExecutionIntentServiceConfig {
       LoadSponsorPolicyPort loadSponsorPolicyPort,
       LoadEip1559TtlPort loadEip1559TtlPort,
       BuildExecutionDigestPort buildExecutionDigestPort,
+      BuildExecutionCallHashPort buildExecutionCallHashPort,
       ValidateExecutionDraftPolicyPort validateExecutionDraftPolicyPort,
       ExecutionModeSelector executionModeSelector,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
@@ -173,6 +181,7 @@ public class ExecutionIntentServiceConfig {
         loadSponsorPolicyPort,
         loadEip1559TtlPort,
         buildExecutionDigestPort,
+        buildExecutionCallHashPort,
         validateExecutionDraftPolicyPort,
         executionModeSelector,
         publishExecutionIntentTerminatedPort,
@@ -187,17 +196,21 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
-  @ConditionalOnUserExecutionEnabled
+  @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
   GetExecutionIntentService getExecutionIntentUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       LoadExecutionTransactionPort loadExecutionTransactionPort,
-      LoadExecutionChainIdPort loadExecutionChainIdPort) {
+      LoadExecutionChainIdPort loadExecutionChainIdPort,
+      Clock appClock) {
     return new GetExecutionIntentService(
-        executionIntentPersistencePort, loadExecutionTransactionPort, loadExecutionChainIdPort);
+        executionIntentPersistencePort,
+        loadExecutionTransactionPort,
+        loadExecutionChainIdPort,
+        appClock);
   }
 
   @Bean
-  @ConditionalOnUserExecutionEnabled
+  @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
   TransactionalExecuteExecutionIntentDelegate transactionalExecuteExecutionIntentDelegate(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
@@ -231,7 +244,7 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
-  @ConditionalOnUserExecutionEnabled
+  @ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
   ExecuteExecutionIntentUseCase executeExecutionIntentUseCase(
       ExecuteTransactionalExecutionIntentDelegatePort
           executeTransactionalExecutionIntentDelegatePort,
