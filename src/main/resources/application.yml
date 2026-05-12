@@ -286,6 +286,10 @@ web3:
   escrow:
     marketplace-contract-address: ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
     qna-contract-address: ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+    eip712-domain-name: "QnAEscrow"
+    eip712-domain-version: "1"
+    signed-at-skew-seconds: 0
+    sig-validity-duration: 900
   transfer:
     legacy-question-reward-handler-enabled: false
 
