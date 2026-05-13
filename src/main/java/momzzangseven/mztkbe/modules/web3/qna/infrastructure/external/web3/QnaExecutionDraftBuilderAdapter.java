@@ -131,7 +131,10 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         unsignedTxSnapshot,
         qnaUnsignedTxFingerprintFactory.compute(unsignedTxSnapshot),
         signedAt,
-        LocalDateTime.now(appClock).plusSeconds(draftContext.ttlSeconds()));
+        // §MOM-393 — derive expiresAt from the exact same Instant the sign call read, so
+        // signedAt + sigValidityDuration and expiresAt cannot drift on sub-second clock reads.
+        LocalDateTime.ofInstant(
+            signResult.signingInstant().plusSeconds(draftContext.ttlSeconds()), appClock.getZone()));
   }
 
   private String rootIdempotencyKey(QnaEscrowExecutionRequest request) {

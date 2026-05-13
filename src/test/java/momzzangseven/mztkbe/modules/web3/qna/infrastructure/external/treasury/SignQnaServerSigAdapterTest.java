@@ -197,6 +197,10 @@ class SignQnaServerSigAdapterTest {
     System.arraycopy(CANNED_S, 0, expectedSig, 32, 32);
     expectedSig[64] = CANNED_V;
     assertThat(sig).isEqualTo(expectedSig);
+    // §MOM-393 — signingInstant is the raw clock instant (no skew applied), while signedAt is
+    // skew-subtracted. With SKEW=0 the two epoch seconds coincide.
+    assertThat(result.signingInstant()).isEqualTo(Instant.ofEpochSecond(CLOCK_EPOCH_SECONDS));
+    assertThat(result.signingInstant().getEpochSecond()).isEqualTo(result.signedAt() + SKEW);
   }
 
   private void assertCommandIdentity(SignDigestCommand cmd, byte[] expectedDigest) {
@@ -621,6 +625,83 @@ class SignQnaServerSigAdapterTest {
       String expectedNormalized = EvmAddress.of(mixedCaseAddress).value();
       assertThat(cmd.expectedAddress()).isEqualTo(expectedNormalized);
       assertThat(cmd.expectedAddress()).isNotEqualTo(mixedCaseAddress);
+    }
+  }
+
+  // --- Section K: clock skew correction -----------------------------------
+
+  /**
+   * §MOM-393 Suggestion 4 — the SKEW=0 fixture used by every other test never exercises the
+   * skew-subtraction branch in {@link SignQnaServerSigAdapter#sign}. This nested class spins up an
+   * adapter with a non-zero skew and pins down (a) {@code signedAt = epochSecond − skew}, (b) the
+   * digest reflects the skewed signedAt, and (c) {@code signingInstant} stays at the raw clock
+   * (unscaled by skew) so callers can derive deadlines from the original instant.
+   */
+  @Nested
+  @DisplayName("Section K — Clock skew correction")
+  class ClockSkew {
+
+    private static final int SKEW_BACKWARD = 60;
+
+    private SignQnaServerSigAdapter skewedAdapter;
+
+    @BeforeEach
+    void setUpSkewedAdapter() {
+      QnaEscrowProperties properties = new QnaEscrowProperties();
+      properties.setQnaContractAddress(VERIFYING_CONTRACT);
+      properties.setEip712DomainName(DOMAIN_NAME);
+      properties.setEip712DomainVersion(DOMAIN_VERSION);
+      properties.setSignedAtSkewSeconds(SKEW_BACKWARD);
+
+      Web3CoreProperties web3CoreProperties = new Web3CoreProperties();
+      web3CoreProperties.setChainId(CHAIN_ID);
+
+      Clock appClock = Clock.fixed(Instant.ofEpochSecond(CLOCK_EPOCH_SECONDS), ZoneOffset.UTC);
+
+      skewedAdapter =
+          new SignQnaServerSigAdapter(
+              properties,
+              web3CoreProperties,
+              appClock,
+              signDigestUseCase,
+              loadTreasuryWalletByRoleUseCase);
+    }
+
+    @Test
+    @DisplayName(
+        "K-1101: positive skew subtracts from epochSecond; digest reflects skewed signedAt; signingInstant stays at raw clock")
+    void k1101_positiveSkew_subtractsFromEpoch() {
+      when(loadTreasuryWalletByRoleUseCase.execute(TreasuryRole.QNA_SIGNER))
+          .thenReturn(Optional.of(activeQnaSignerView()));
+      when(signDigestUseCase.execute(any(SignDigestCommand.class)))
+          .thenReturn(new SignDigestResult(CANNED_R, CANNED_S, CANNED_V));
+
+      QnaServerSigResult result =
+          skewedAdapter.sign(
+              new QnaServerSigPreimage.CreateQuestionPreimage(
+                  CREATOR_ADDR, QUESTION_ID, TOKEN_ADDR, REWARD_AMOUNT_WEI, QUESTION_HASH));
+
+      long expectedSignedAt = CLOCK_EPOCH_SECONDS - SKEW_BACKWARD;
+      assertThat(result.signedAt()).isEqualTo(expectedSignedAt);
+      assertThat(result.signingInstant()).isEqualTo(Instant.ofEpochSecond(CLOCK_EPOCH_SECONDS));
+      assertThat(result.signingInstant().getEpochSecond() - SKEW_BACKWARD)
+          .isEqualTo(result.signedAt());
+
+      SignDigestCommand cmd = captureSignedCommand();
+      byte[] expectedStruct =
+          Hash.sha3(
+              concat(
+                  keccak(
+                      "CreateQuestion(address creator,bytes32 questionId,address token,"
+                          + "uint256 rewardAmount,bytes32 questionHash,uint256 signedAt)"),
+                  encAddress(CREATOR_ADDR),
+                  encBytes32(QUESTION_ID),
+                  encAddress(TOKEN_ADDR),
+                  encUint256(REWARD_AMOUNT_WEI),
+                  encBytes32(QUESTION_HASH),
+                  encUint256(BigInteger.valueOf(expectedSignedAt))));
+      byte[] expectedDigest = eip712Digest(domainSeparatorExpected(), expectedStruct);
+      assertCommandIdentity(cmd, expectedDigest);
     }
   }
 }

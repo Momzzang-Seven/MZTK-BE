@@ -147,10 +147,10 @@ public record QnaExecutionIntentResult(
    *
    * <p>{@code signedAt} is the epoch second embedded into the on-chain calldata via the 9-arg
    * `createQuestion` overload. {@code signatureExpiresAt = signedAt + sigValidityDuration} (default
-   * 900s) is the on-chain mining deadline: the broadcast tx must be included in a block before
-   * this epoch second or {@code _verifyServerSig} reverts with {@code SignatureExpired}. FE
-   * typically surfaces {@link ExecutionIntent#expiresAt()} as the user-facing countdown and uses
-   * {@code signatureExpiresAt} only to detect mining-stage delays after broadcast.
+   * 900s) is the on-chain mining deadline: the broadcast tx must be included in a block before this
+   * epoch second or {@code _verifyServerSig} reverts with {@code SignatureExpired}. FE typically
+   * surfaces {@link ExecutionIntent#expiresAt()} as the user-facing countdown and uses {@code
+   * signatureExpiresAt} only to detect mining-stage delays after broadcast.
    */
   public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {
 

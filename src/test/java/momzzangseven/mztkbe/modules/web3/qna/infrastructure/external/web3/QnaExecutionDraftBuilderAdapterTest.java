@@ -200,9 +200,9 @@ class QnaExecutionDraftBuilderAdapterTest {
   }
 
   /**
-   * §MOM-393 — payload snapshot 의 jackson round-trip 이 record level 에서도 무손실임을 보장. Commit 1 의 fix
-   * 가 {@code matchesPayloadHash} 의 SHA-256 무결성 + record 의 signedAt/signatureHex 필드를 신뢰하므로, 그
-   * 신뢰의 토대를 별 case 로 명시 고정.
+   * §MOM-393 — payload snapshot 의 jackson round-trip 이 record level 에서도 무손실임을 보장. Commit 1 의 fix 가
+   * {@code matchesPayloadHash} 의 SHA-256 무결성 + record 의 signedAt/signatureHex 필드를 신뢰하므로, 그 신뢰의 토대를
+   * 별 case 로 명시 고정.
    */
   @Test
   void build_payloadSnapshotRoundTripsServerSigFields() throws Exception {
@@ -224,8 +224,7 @@ class QnaExecutionDraftBuilderAdapterTest {
                 null));
 
     QnaEscrowExecutionPayload payload =
-        new ObjectMapper()
-            .readValue(draft.payloadSnapshotJson(), QnaEscrowExecutionPayload.class);
+        new ObjectMapper().readValue(draft.payloadSnapshotJson(), QnaEscrowExecutionPayload.class);
     assertThat(payload.signedAt()).isEqualTo(MOCK_SIGNED_AT);
     assertThat(payload.signatureHex()).isEqualTo(Numeric.toHexString(mockSignatureBytes()));
   }

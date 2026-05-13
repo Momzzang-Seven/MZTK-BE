@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.treasury;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.treasury.TreasuryWalletNotProvisionedException;
@@ -127,8 +128,12 @@ public class SignQnaServerSigAdapter implements SignQnaServerSigPort {
     }
     String normalizedWalletAddress = EvmAddress.of(signer.walletAddress()).value();
 
+    // §MOM-393 — capture a single Instant for both digest assembly and downstream deadline
+    // derivation. Callers (e.g. QnaExecutionDraftBuilderAdapter) reuse signingInstant to compute
+    // expiresAt, so the two never drift across sub-second clock reads.
+    Instant signingInstant = appClock.instant();
     long signedAt =
-        appClock.instant().getEpochSecond() - qnaEscrowProperties.getSignedAtSkewSeconds();
+        signingInstant.getEpochSecond() - qnaEscrowProperties.getSignedAtSkewSeconds();
 
     byte[] structHash = buildStructHash(preimage, signedAt);
     byte[] domainSeparator = resolveDomainSeparator();
@@ -138,7 +143,7 @@ public class SignQnaServerSigAdapter implements SignQnaServerSigPort {
         signDigestUseCase.execute(
             new SignDigestCommand(signer.kmsKeyId(), digest, normalizedWalletAddress));
 
-    return new QnaServerSigResult(signedAt, signed.toCanonical65Bytes());
+    return new QnaServerSigResult(signedAt, signed.toCanonical65Bytes(), signingInstant);
   }
 
   private byte[] buildStructHash(QnaServerSigPreimage preimage, long signedAt) {
