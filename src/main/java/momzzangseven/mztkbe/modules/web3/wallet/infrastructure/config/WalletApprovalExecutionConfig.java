@@ -1,14 +1,17 @@
 package momzzangseven.mztkbe.modules.web3.wallet.infrastructure.config;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalCapability;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSponsorPolicy;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.BuildWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.CancelWalletApprovalExecutionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionSupportPort;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SubmitWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SyncWalletApprovalExecutionSuccessPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -40,6 +43,13 @@ public class WalletApprovalExecutionConfig {
   @ConditionalOnMissingBean(LoadWalletApprovalCapabilityPort.class)
   LoadWalletApprovalCapabilityPort fallbackLoadWalletApprovalCapabilityPort() {
     return () -> WalletApprovalCapability.unavailable(DISABLED_REASON);
+  }
+
+  @Bean
+  @ConditionalOnMissingBean(LoadWalletApprovalSponsorPolicyPort.class)
+  LoadWalletApprovalSponsorPolicyPort fallbackLoadWalletApprovalSponsorPolicyPort() {
+    return () ->
+        new WalletApprovalSponsorPolicy(false, 21_000L, 1L, BigDecimal.ZERO, BigDecimal.ZERO);
   }
 
   @Bean

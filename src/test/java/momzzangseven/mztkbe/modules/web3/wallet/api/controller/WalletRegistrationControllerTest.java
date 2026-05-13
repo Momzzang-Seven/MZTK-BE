@@ -82,6 +82,23 @@ class WalletRegistrationControllerTest {
   }
 
   @Test
+  void getStatus_whenSignRequestUnavailable_exposesReason() throws Exception {
+    given(getStatusUseCase.execute(any(GetWalletRegistrationStatusQuery.class)))
+        .willReturn(deadlineTooCloseResult());
+
+    mockMvc
+        .perform(get("/web3/wallet-registrations/registration-1").with(userPrincipal(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.nextAction").value("RETRY_APPROVAL"))
+        .andExpect(
+            jsonPath("$.data.signRequestUnavailableReason").value("EIP7702_DEADLINE_TOO_CLOSE"))
+        .andExpect(jsonPath("$.data.web3.signRequest").doesNotExist())
+        .andExpect(
+            jsonPath("$.data.web3.signRequestUnavailableReason")
+                .value("EIP7702_DEADLINE_TOO_CLOSE"));
+  }
+
+  @Test
   void getStatus_wrongUser_returns404WithoutRetryInteraction() throws Exception {
     given(getStatusUseCase.execute(any(GetWalletRegistrationStatusQuery.class)))
         .willThrow(new WalletNotFoundException());
@@ -137,8 +154,26 @@ class WalletRegistrationControllerTest {
         null,
         null,
         null,
+        null,
         WalletRegistrationNextAction.SIGN_APPROVAL,
         web3);
+  }
+
+  private static WalletRegistrationStatusResult deadlineTooCloseResult() {
+    return new WalletRegistrationStatusResult(
+        "registration-1",
+        WalletRegistrationStatus.APPROVAL_REQUIRED,
+        "0x" + "a".repeat(40),
+        null,
+        "intent-1",
+        "AWAITING_SIGNATURE",
+        NOW.plusMinutes(30),
+        null,
+        null,
+        null,
+        "EIP7702_DEADLINE_TOO_CLOSE",
+        WalletRegistrationNextAction.RETRY_APPROVAL,
+        deadlineTooCloseWeb3View());
   }
 
   private static WalletApprovalExecutionWriteView web3View() {
@@ -155,6 +190,19 @@ class WalletRegistrationControllerTest {
             new WalletApprovalExecutionWriteView.Submit("0x" + "d".repeat(64), 123L),
             null),
         null,
+        true);
+  }
+
+  private static WalletApprovalExecutionWriteView deadlineTooCloseWeb3View() {
+    return new WalletApprovalExecutionWriteView(
+        new WalletApprovalExecutionWriteView.Resource(
+            "WALLET_REGISTRATION", "registration-1", "PENDING_EXECUTION"),
+        "WALLET_ESCROW_APPROVE",
+        new WalletApprovalExecutionWriteView.ExecutionIntent(
+            "intent-1", "AWAITING_SIGNATURE", NOW.plusMinutes(5), 1L),
+        new WalletApprovalExecutionWriteView.Execution("EIP7702", 2),
+        null,
+        "EIP7702_DEADLINE_TOO_CLOSE",
         true);
   }
 }

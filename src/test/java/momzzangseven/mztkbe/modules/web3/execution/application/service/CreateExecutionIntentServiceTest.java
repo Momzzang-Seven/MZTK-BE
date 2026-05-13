@@ -167,6 +167,8 @@ class CreateExecutionIntentServiceTest {
                 true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
     when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
         .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
     doThrow(new Web3TransferException(ErrorCode.DELEGATE_NOT_ALLOWLISTED, false))
         .when(validateExecutionDraftPolicyPort)
         .validate(any(), any());
@@ -175,7 +177,6 @@ class CreateExecutionIntentServiceTest {
         .isInstanceOf(Web3TransferException.class)
         .hasMessageContaining(ErrorCode.DELEGATE_NOT_ALLOWLISTED.getMessage());
 
-    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
     verify(sponsorDailyUsagePersistencePort, never()).update(any());
     verify(executionIntentPersistencePort, never()).create(any());
   }
@@ -188,6 +189,8 @@ class CreateExecutionIntentServiceTest {
                 true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
     when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
         .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
 
     assertThatThrownBy(
             () ->
@@ -197,7 +200,6 @@ class CreateExecutionIntentServiceTest {
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("EIP-7702 expiresAt must be in the future");
 
-    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
     verify(sponsorDailyUsagePersistencePort, never()).update(any());
     verify(buildExecutionDigestPort, never()).buildExecutionDigestHex(any(), any(), any(), any());
     verify(executionIntentPersistencePort, never()).create(any());
@@ -211,6 +213,8 @@ class CreateExecutionIntentServiceTest {
                 true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("1")));
     when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
         .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(SponsorDailyUsage.create(7L, FIXED_DATE));
     when(loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds()).thenReturn(30L);
 
     assertThatThrownBy(
@@ -221,10 +225,36 @@ class CreateExecutionIntentServiceTest {
         .isInstanceOf(Web3InvalidInputException.class)
         .hasMessageContaining("at least 30 seconds");
 
-    verify(sponsorDailyUsagePersistencePort, never()).getOrCreateForUpdate(any(), any());
     verify(sponsorDailyUsagePersistencePort, never()).update(any());
     verify(buildExecutionDigestPort, never()).buildExecutionDigestHex(any(), any(), any(), any());
     verify(executionIntentPersistencePort, never()).create(any());
+  }
+
+  @Test
+  void execute_fallsBackToEip1559_whenSponsorReservationRaceAndEip7702DeadlineTooClose() {
+    lenient().when(loadEip1559TtlPort.loadTtlSeconds()).thenReturn(90L);
+    when(loadSponsorPolicyPort.loadSponsorPolicy())
+        .thenReturn(
+            new SponsorPolicy(
+                true, 500_000L, 60L, 2L, new BigDecimal("0.05"), new BigDecimal("0.05")));
+    when(sponsorDailyUsagePersistencePort.find(7L, FIXED_DATE))
+        .thenReturn(Optional.of(SponsorDailyUsage.create(7L, FIXED_DATE)));
+    when(sponsorDailyUsagePersistencePort.getOrCreateForUpdate(7L, FIXED_DATE))
+        .thenReturn(
+            SponsorDailyUsage.create(7L, FIXED_DATE).reserve(new BigInteger("50000000000000000")));
+    when(executionIntentPersistencePort.create(any()))
+        .thenAnswer(invocation -> withId(invocation.getArgument(0), 1L));
+
+    CreateExecutionIntentResult result =
+        service.execute(
+            new CreateExecutionIntentCommand(
+                transferDraftWithExpiresAt(true, FIXED_NOW.plusSeconds(29))));
+
+    assertThat(result.mode()).isEqualTo(ExecutionMode.EIP1559);
+    assertThat(result.expiresAt()).isEqualTo(FIXED_NOW.plusSeconds(90));
+    verify(validateExecutionDraftPolicyPort, never()).validate(any(), any());
+    verify(loadEip7702AuthorizationTtlPort, never()).loadMinimumRemainingSeconds();
+    verify(sponsorDailyUsagePersistencePort, never()).update(any());
   }
 
   @Test

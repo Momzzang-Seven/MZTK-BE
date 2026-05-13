@@ -244,9 +244,9 @@ web3:
       max-max-fee-gwei: 60
       max-priority-fee-gwei: 2
       max-transfer-amount-eth: 5000
-      per-tx-cap-eth: 0.002
+      per-tx-cap-eth: 0.05
       daily-sponsor-cap-eth: 0.5
-      per-day-user-cap-eth: 0.02
+      per-day-user-cap-eth: 0.1
 
     authorization:
       ttl-seconds: 300
@@ -263,7 +263,9 @@ web3:
         - ${MZTK_TOKEN_CONTRACT_ADDRESS}
         - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
         - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
-      allowed-approve-spenders: []              # approve는 spender allowlist + uint256.max 정책으로 검증
+      allowed-approve-spenders:                 # approve는 spender allowlist + uint256.max 정책으로 검증
+        - ${WEB3_ESCROW_QNA_CONTRACT_ADDRESS}
+        - ${WEB3_ESCROW_MARKETPLACE_CONTRACT_ADDRESS}
       allowed-target-contracts: []               # deprecated fallback. use split allowlists above
       blocked-function-selectors: []             # prod에서만 채우는 것을 권장
 

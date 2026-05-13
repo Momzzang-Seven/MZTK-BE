@@ -30,6 +30,7 @@ class RegisterWalletResultTest {
     assertThat(result.status()).isEqualTo(WalletRegistrationStatus.REGISTERED);
     assertThat(result.walletAddress()).isEqualTo("0x" + "a".repeat(40));
     assertThat(result.registeredAt()).isEqualTo(registeredAt);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.DONE);
   }
 
   @Test
@@ -47,5 +48,6 @@ class RegisterWalletResultTest {
     assertThat(result.walletId()).isNull();
     assertThat(result.registeredAt()).isNull();
     assertThat(result.walletAddress()).isEqualTo("0x" + "b".repeat(40));
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.RETRY_APPROVAL);
   }
 }

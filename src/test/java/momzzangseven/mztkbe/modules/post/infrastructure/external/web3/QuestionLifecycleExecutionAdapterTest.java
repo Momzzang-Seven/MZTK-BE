@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -130,6 +131,7 @@ class QuestionLifecycleExecutionAdapterTest {
     assertThat(result).isPresent();
     assertThat(result.orElseThrow().actionType()).isEqualTo("QNA_QUESTION_CREATE");
     assertThat(result.orElseThrow().executionIntent().id()).isEqualTo("intent-create");
+    assertThat(result.orElseThrow().signRequestUnavailableReason()).isNull();
     verify(getExecutionIntentUseCase).execute(new GetExecutionIntentQuery(7L, "intent-create"));
     ArgumentCaptor<MatchQuestionCreatePayloadCommand> commandCaptor =
         ArgumentCaptor.forClass(MatchQuestionCreatePayloadCommand.class);
@@ -140,6 +142,40 @@ class QuestionLifecycleExecutionAdapterTest {
     assertThat(command.rewardMztk()).isEqualTo(50L);
     assertThat(command.payload().postId()).isEqualTo(10L);
     assertThat(command.payload().tokenAddress()).isEqualTo(TOKEN_ADDRESS);
+  }
+
+  @Test
+  @DisplayName("loadQuestionCreateIntent exposes hidden sign request reason")
+  void loadQuestionCreateIntent_exposesSignRequestUnavailableReason() {
+    String payloadSnapshotJson = questionCreatePayload("질문 내용");
+    given(getExecutionIntentUseCase.execute(any()))
+        .willReturn(
+            new GetExecutionIntentResult(
+                ExecutionResourceType.QUESTION,
+                "10",
+                ExecutionResourceStatus.PENDING_EXECUTION,
+                ExecutionActionType.QNA_QUESTION_CREATE,
+                payloadHash(payloadSnapshotJson),
+                payloadSnapshotJson,
+                "intent-create",
+                ExecutionIntentStatus.AWAITING_SIGNATURE,
+                LocalDateTime.of(2026, 4, 14, 10, 0),
+                1_776_129_600L,
+                ExecutionMode.EIP7702,
+                2,
+                null,
+                SignRequestUnavailableReason.EIP7702_DEADLINE_TOO_CLOSE,
+                null,
+                null,
+                null));
+    given(questionEscrowExecutionUseCase.matchesQuestionCreatePayload(any())).willReturn(true);
+
+    var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
+
+    assertThat(result).isPresent();
+    assertThat(result.orElseThrow().signRequest()).isNull();
+    assertThat(result.orElseThrow().signRequestUnavailableReason())
+        .isEqualTo("EIP7702_DEADLINE_TOO_CLOSE");
   }
 
   @Test

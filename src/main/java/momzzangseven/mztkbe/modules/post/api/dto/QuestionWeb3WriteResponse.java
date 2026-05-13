@@ -9,6 +9,7 @@ public record QuestionWeb3WriteResponse(
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
+    String signRequestUnavailableReason,
     boolean existing) {
 
   /** Returns {@code null} when no new question execution intent was prepared. */
@@ -26,6 +27,7 @@ public record QuestionWeb3WriteResponse(
             view.executionIntent().expiresAtEpochSeconds()),
         new Execution(view.execution().mode(), view.execution().signCount()),
         SignRequest.from(view.signRequest()),
+        view.signRequestUnavailableReason(),
         view.existing());
   }
 

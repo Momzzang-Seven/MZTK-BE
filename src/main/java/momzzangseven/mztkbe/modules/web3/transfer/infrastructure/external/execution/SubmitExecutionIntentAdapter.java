@@ -53,6 +53,7 @@ public class SubmitExecutionIntentAdapter implements SubmitExecutionDraftPort {
         TransferExecutionMode.valueOf(result.mode().name()),
         result.signCount(),
         toTransferSignRequest(result.signRequest()),
+        null,
         result.existing(),
         null,
         null,

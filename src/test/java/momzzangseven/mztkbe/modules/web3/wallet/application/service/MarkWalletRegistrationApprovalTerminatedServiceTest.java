@@ -46,9 +46,25 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
   }
 
   @Test
-  void execute_whenFailedOnchain_marksApprovalFailed() {
+  void execute_whenFailedOnchainAndSessionTtlRemains_marksRetryable() {
     when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
         .thenReturn(Optional.of(signedSession()));
+
+    service.execute(command("FAILED_ONCHAIN", "reverted"));
+
+    ArgumentCaptor<WalletRegistrationSession> captor =
+        ArgumentCaptor.forClass(WalletRegistrationSession.class);
+    verify(saveSessionPort).save(captor.capture());
+    assertThat(captor.getValue().getStatus())
+        .isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
+    assertThat(captor.getValue().getLastErrorCode()).isEqualTo("FAILED_ONCHAIN");
+    assertThat(captor.getValue().getLastErrorReason()).isEqualTo("reverted");
+  }
+
+  @Test
+  void execute_whenFailedOnchainAndSessionTtlElapsed_marksApprovalFailed() {
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(expiredTtlSignedSession()));
 
     service.execute(command("FAILED_ONCHAIN", "reverted"));
 
@@ -132,5 +148,9 @@ class MarkWalletRegistrationApprovalTerminatedServiceTest {
   private static WalletRegistrationSession signedSession() {
     return approvalRequiredSession()
         .markApprovalSigned(INTENT_ID, 10L, "0x" + "b".repeat(64), "SIGNED", NOW.plusSeconds(2));
+  }
+
+  private static WalletRegistrationSession expiredTtlSignedSession() {
+    return signedSession().toBuilder().approvalExpiresAt(NOW.minusSeconds(1)).build();
   }
 }

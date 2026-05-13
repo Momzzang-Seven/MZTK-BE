@@ -52,7 +52,10 @@ public class WalletRegistrationRecoveryScheduler {
       skipped += result.skipped();
       failed += result.failed();
 
-      if (result.scanned() <= 0 || result.scanned() < batchSize || result.failed() > 0) {
+      if (result.scanned() <= 0
+          || result.scanned() < batchSize
+          || result.failed() > 0
+          || result.recovered() <= 0) {
         break;
       }
     }

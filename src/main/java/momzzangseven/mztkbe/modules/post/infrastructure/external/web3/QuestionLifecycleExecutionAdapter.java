@@ -201,6 +201,7 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         new QuestionExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
+        null,
         result.existing());
   }
 
@@ -216,6 +217,9 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             result.expiresAtEpochSeconds()),
         new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
         toSignRequest(result.signRequest()),
+        result.signRequestUnavailableReason() == null
+            ? null
+            : result.signRequestUnavailableReason().name(),
         true);
   }
 

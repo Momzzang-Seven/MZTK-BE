@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,14 +15,18 @@ import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyLinkedException;
 import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.global.error.wallet.WalletBlackListException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ExpireWalletRegistrationSessionCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalCapability;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionWriteView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationChallengeView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolution;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolutionType;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWalletRegistrationSessionUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletApprovalAttemptUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
@@ -54,7 +60,9 @@ public class RegisterWalletService implements RegisterWalletUseCase {
   private final LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
   private final LoadWalletApprovalExecutionStatePort loadWalletApprovalExecutionStatePort;
   private final WalletRegistrationSessionDuplicateResolver duplicateResolver;
-  private final RegisterWalletApprovalAttemptService approvalAttemptService;
+  private final RegisterWalletApprovalAttemptUseCase approvalAttemptUseCase;
+  private final ExpireWalletRegistrationSessionUseCase expireSessionUseCase;
+  private final Clock appClock;
 
   @Override
   public RegisterWalletResult execute(RegisterWalletCommand command) {
@@ -72,7 +80,7 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     validateLocalWalletEligibility(command);
 
     WalletRegistrationDuplicateResolution currentDuplicate =
-        duplicateResolver.resolveCurrent(command.userId(), command.walletAddress());
+        resolveCurrentAfterExpiringElapsed(command.userId(), command.walletAddress());
     if (currentDuplicate.shouldReuse()) {
       markChallengeUsed(challenge);
       return toPendingResult(currentDuplicate.session());
@@ -80,10 +88,13 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     rejectDuplicateConflict(command, currentDuplicate);
 
     try {
-      return approvalAttemptService.createPendingApproval(command);
+      return approvalAttemptUseCase.createPendingApproval(command);
     } catch (DuplicateWalletRegistrationSessionException exception) {
       WalletRegistrationDuplicateResolution raceResolution =
-          duplicateResolver.resolveAfterCreateRace(command.userId(), command.walletAddress());
+          resolveAfterCreateRaceAfterExpiringElapsed(command.userId(), command.walletAddress());
+      if (raceResolution.type() == WalletRegistrationDuplicateResolutionType.CREATE_NEW) {
+        return approvalAttemptUseCase.createPendingApproval(command);
+      }
       if (raceResolution.shouldReuse()) {
         markChallengeUsed(challenge);
         return toPendingResult(raceResolution.session());
@@ -171,6 +182,41 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     throw new WalletAlreadyExistsException(command.walletAddress());
   }
 
+  private WalletRegistrationDuplicateResolution resolveCurrentAfterExpiringElapsed(
+      Long userId, String walletAddress) {
+    WalletRegistrationDuplicateResolution resolution =
+        duplicateResolver.resolveCurrent(userId, walletAddress);
+    if (expireElapsedDuplicate(resolution)) {
+      return duplicateResolver.resolveCurrent(userId, walletAddress);
+    }
+    return resolution;
+  }
+
+  private WalletRegistrationDuplicateResolution resolveAfterCreateRaceAfterExpiringElapsed(
+      Long userId, String walletAddress) {
+    WalletRegistrationDuplicateResolution resolution =
+        duplicateResolver.resolveAfterCreateRace(userId, walletAddress);
+    if (expireElapsedDuplicate(resolution)) {
+      return duplicateResolver.resolveCurrent(userId, walletAddress);
+    }
+    return resolution;
+  }
+
+  private boolean expireElapsedDuplicate(WalletRegistrationDuplicateResolution resolution) {
+    WalletRegistrationSession session = resolution.session();
+    if (session == null || !isApprovalTtlElapsed(session)) {
+      return false;
+    }
+    expireSessionUseCase.execute(new ExpireWalletRegistrationSessionCommand(session.getPublicId()));
+    return true;
+  }
+
+  private boolean isApprovalTtlElapsed(WalletRegistrationSession session) {
+    return session.getStatus().isPreSubmissionExpirable()
+        && session.getApprovalExpiresAt() != null
+        && !session.getApprovalExpiresAt().isAfter(LocalDateTime.now(appClock));
+  }
+
   private RegisterWalletResult toPendingResult(WalletRegistrationSession session) {
     if (session.getStatus() != WalletRegistrationStatus.APPROVAL_REQUIRED
         || session.getLatestExecutionIntentId() == null) {
@@ -179,11 +225,15 @@ public class RegisterWalletService implements RegisterWalletUseCase {
     WalletApprovalExecutionWriteView web3 =
         loadWalletApprovalExecutionStatePort
             .loadByExecutionIntentId(session.getUserId(), session.getLatestExecutionIntentId())
-            .filter(state -> "AWAITING_SIGNATURE".equals(state.executionIntentStatus()))
-            .filter(state -> state.signRequest() != null)
+            .filter(this::isRecoverableApprovalState)
             .map(WalletApprovalExecutionWriteView::from)
             .orElse(null);
     return RegisterWalletResult.pending(session, web3);
+  }
+
+  private boolean isRecoverableApprovalState(WalletApprovalExecutionStateView state) {
+    return "AWAITING_SIGNATURE".equals(state.executionIntentStatus())
+        && (state.signRequest() != null || state.signRequestUnavailableReason() != null);
   }
 
   private void markChallengeUsed(WalletRegistrationChallengeView challenge) {

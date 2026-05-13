@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalEx
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionWriteView;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletApprovalAttemptUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.BuildWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.CreateWalletRegistrationSessionPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletRegistrationPolicyPort;
@@ -22,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 /** Transactional attempt that creates the approval intent and pending registration session. */
 @Service
 @RequiredArgsConstructor
-public class RegisterWalletApprovalAttemptService {
+public class RegisterWalletApprovalAttemptService implements RegisterWalletApprovalAttemptUseCase {
 
   private final BuildWalletApprovalExecutionDraftPort buildWalletApprovalExecutionDraftPort;
   private final SubmitWalletApprovalExecutionDraftPort submitWalletApprovalExecutionDraftPort;
@@ -32,6 +33,7 @@ public class RegisterWalletApprovalAttemptService {
   private final Clock appClock;
 
   /** Creates the pending session and approval intent atomically. */
+  @Override
   @Transactional
   public RegisterWalletResult createPendingApproval(RegisterWalletCommand command) {
     String registrationId = UUID.randomUUID().toString();

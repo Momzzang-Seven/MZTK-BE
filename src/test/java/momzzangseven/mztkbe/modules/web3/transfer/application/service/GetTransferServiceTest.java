@@ -48,6 +48,7 @@ class GetTransferServiceTest {
             TransferExecutionMode.EIP1559,
             1,
             null,
+            null,
             false,
             12L,
             TransferTransactionStatus.PENDING,

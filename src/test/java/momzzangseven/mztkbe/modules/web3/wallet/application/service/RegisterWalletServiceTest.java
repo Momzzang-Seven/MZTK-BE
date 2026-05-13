@@ -9,8 +9,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.challenge.ChallengeAlreadyUsedException;
 import momzzangseven.mztkbe.global.error.challenge.ChallengeMismatchWalletAddressException;
@@ -20,6 +22,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyExistsException;
 import momzzangseven.mztkbe.global.error.wallet.WalletAlreadyLinkedException;
 import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.global.error.wallet.WalletBlackListException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.ExpireWalletRegistrationSessionCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletCommand;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.RegisterWalletResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalCapability;
@@ -28,7 +31,10 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalEx
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationChallengeView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationDuplicateResolution;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationNextAction;
 import momzzangseven.mztkbe.modules.web3.wallet.application.exception.DuplicateWalletRegistrationSessionException;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.ExpireWalletRegistrationSessionUseCase;
+import momzzangseven.mztkbe.modules.web3.wallet.application.port.in.RegisterWalletApprovalAttemptUseCase;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalCapabilityPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletPort;
@@ -56,7 +62,10 @@ class RegisterWalletServiceTest {
   private static final String VALID_WALLET_ADDRESS = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
   private static final String VALID_SIGNATURE = "0x" + "a".repeat(130);
   private static final String VALID_NONCE = "550e8400-e29b-41d4-a716-446655440000";
+  private static final String EIP7702_DEADLINE_TOO_CLOSE = "EIP7702_DEADLINE_TOO_CLOSE";
   private static final LocalDateTime NOW = LocalDateTime.parse("2026-05-13T10:00:00");
+  private static final Clock FIXED_CLOCK =
+      Clock.fixed(NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
 
   @Mock private LoadWalletRegistrationChallengePort loadChallengePort;
   @Mock private MarkWalletRegistrationChallengeUsedPort markChallengeUsedPort;
@@ -66,7 +75,8 @@ class RegisterWalletServiceTest {
   @Mock private LoadWalletApprovalCapabilityPort loadWalletApprovalCapabilityPort;
   @Mock private LoadWalletApprovalExecutionStatePort loadWalletApprovalExecutionStatePort;
   @Mock private WalletRegistrationSessionDuplicateResolver duplicateResolver;
-  @Mock private RegisterWalletApprovalAttemptService approvalAttemptService;
+  @Mock private RegisterWalletApprovalAttemptUseCase approvalAttemptService;
+  @Mock private ExpireWalletRegistrationSessionUseCase expireSessionUseCase;
 
   private RegisterWalletService registerWalletService;
   private WalletRegistrationChallengeView validChallenge;
@@ -84,7 +94,9 @@ class RegisterWalletServiceTest {
             loadWalletApprovalCapabilityPort,
             loadWalletApprovalExecutionStatePort,
             duplicateResolver,
-            approvalAttemptService);
+            approvalAttemptService,
+            expireSessionUseCase,
+            FIXED_CLOCK);
   }
 
   @Test
@@ -147,6 +159,113 @@ class RegisterWalletServiceTest {
     assertThat(result.web3()).isNotNull();
     verify(markChallengeUsedPort).markUsed(VALID_NONCE);
     verifyNoInteractions(approvalAttemptService);
+  }
+
+  @Test
+  @DisplayName("same user and wallet deadline-too-close session is reused with unavailable reason")
+  void execute_DuplicateSameUserWalletDeadlineTooClose_ReusesSessionWithReason() {
+    RegisterWalletCommand command = validCommand();
+    WalletRegistrationSession existing = pendingSession();
+    givenValidOwnership(command);
+    when(loadWalletPort.countWalletsByUserIdAndStatus(VALID_USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(0);
+    when(loadWalletPort.findByWalletAddress(VALID_WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(duplicateResolver.resolveCurrent(VALID_USER_ID, VALID_WALLET_ADDRESS))
+        .thenReturn(WalletRegistrationDuplicateResolution.reuse(existing));
+    when(loadWalletApprovalExecutionStatePort.loadByExecutionIntentId(VALID_USER_ID, "intent-1"))
+        .thenReturn(Optional.of(deadlineTooCloseExecutionState()));
+
+    RegisterWalletResult result = registerWalletService.execute(command);
+
+    assertThat(result.web3()).isNotNull();
+    assertThat(result.web3().signRequest()).isNull();
+    assertThat(result.web3().signRequestUnavailableReason()).isEqualTo(EIP7702_DEADLINE_TOO_CLOSE);
+    verify(markChallengeUsedPort).markUsed(VALID_NONCE);
+    verifyNoInteractions(approvalAttemptService);
+  }
+
+  @Test
+  @DisplayName("same user and wallet retryable session is reused with retry nextAction")
+  void execute_DuplicateRetryableSession_ReturnsRetryAction() {
+    RegisterWalletCommand command = validCommand();
+    WalletRegistrationSession existing = retryableSession();
+    givenValidOwnership(command);
+    when(loadWalletPort.countWalletsByUserIdAndStatus(VALID_USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(0);
+    when(loadWalletPort.findByWalletAddress(VALID_WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(duplicateResolver.resolveCurrent(VALID_USER_ID, VALID_WALLET_ADDRESS))
+        .thenReturn(WalletRegistrationDuplicateResolution.reuse(existing));
+
+    RegisterWalletResult result = registerWalletService.execute(command);
+
+    assertThat(result.registrationId()).isEqualTo("registration-1");
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_RETRYABLE);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.RETRY_APPROVAL);
+    assertThat(result.web3()).isNull();
+    verify(markChallengeUsedPort).markUsed(VALID_NONCE);
+    verifyNoInteractions(approvalAttemptService);
+    verify(loadWalletApprovalExecutionStatePort, never()).loadByExecutionIntentId(any(), any());
+  }
+
+  @Test
+  @DisplayName("same user and wallet expired duplicate is expired before creating new approval")
+  void execute_DuplicateSameUserWalletExpired_ExpiresAndCreatesNewSession() {
+    RegisterWalletCommand command = validCommand();
+    WalletRegistrationSession expired = expiredPendingSession();
+    RegisterWalletResult pendingResult = RegisterWalletResult.pending(pendingSession(), web3View());
+    givenValidOwnership(command);
+    when(loadWalletPort.countWalletsByUserIdAndStatus(VALID_USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(0);
+    when(loadWalletPort.findByWalletAddress(VALID_WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(duplicateResolver.resolveCurrent(VALID_USER_ID, VALID_WALLET_ADDRESS))
+        .thenReturn(WalletRegistrationDuplicateResolution.reuse(expired))
+        .thenReturn(WalletRegistrationDuplicateResolution.createNew());
+    when(expireSessionUseCase.execute(
+            new ExpireWalletRegistrationSessionCommand(expired.getPublicId())))
+        .thenReturn(true);
+    when(approvalAttemptService.createPendingApproval(command)).thenReturn(pendingResult);
+
+    RegisterWalletResult result = registerWalletService.execute(command);
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.APPROVAL_REQUIRED);
+    assertThat(result.web3()).isNotNull();
+    verify(expireSessionUseCase)
+        .execute(new ExpireWalletRegistrationSessionCommand(expired.getPublicId()));
+    verify(approvalAttemptService).createPendingApproval(command);
+    verify(markChallengeUsedPort, never()).markUsed(VALID_NONCE);
+  }
+
+  @Test
+  @DisplayName(
+      "expired duplicate found after create race is expired and the approval attempt retries")
+  void execute_DuplicateRaceExpired_ExpiresAndRetriesApprovalAttempt() {
+    RegisterWalletCommand command = validCommand();
+    WalletRegistrationSession expired = expiredPendingSession();
+    RegisterWalletResult pendingResult = RegisterWalletResult.pending(pendingSession(), web3View());
+    givenValidOwnership(command);
+    when(loadWalletPort.countWalletsByUserIdAndStatus(VALID_USER_ID, WalletStatus.ACTIVE))
+        .thenReturn(0);
+    when(loadWalletPort.findByWalletAddress(VALID_WALLET_ADDRESS)).thenReturn(Optional.empty());
+    when(duplicateResolver.resolveCurrent(VALID_USER_ID, VALID_WALLET_ADDRESS))
+        .thenReturn(WalletRegistrationDuplicateResolution.createNew())
+        .thenReturn(WalletRegistrationDuplicateResolution.createNew());
+    when(approvalAttemptService.createPendingApproval(command))
+        .thenThrow(
+            new DuplicateWalletRegistrationSessionException(
+                VALID_USER_ID, VALID_WALLET_ADDRESS, new RuntimeException("duplicate")))
+        .thenReturn(pendingResult);
+    when(duplicateResolver.resolveAfterCreateRace(VALID_USER_ID, VALID_WALLET_ADDRESS))
+        .thenReturn(WalletRegistrationDuplicateResolution.reuse(expired));
+    when(expireSessionUseCase.execute(
+            new ExpireWalletRegistrationSessionCommand(expired.getPublicId())))
+        .thenReturn(true);
+
+    RegisterWalletResult result = registerWalletService.execute(command);
+
+    assertThat(result.registrationId()).isEqualTo("registration-1");
+    verify(expireSessionUseCase)
+        .execute(new ExpireWalletRegistrationSessionCommand(expired.getPublicId()));
+    verify(approvalAttemptService, org.mockito.Mockito.times(2)).createPendingApproval(command);
   }
 
   @Test
@@ -394,9 +513,25 @@ class RegisterWalletServiceTest {
         .attachApprovalIntent("intent-1", NOW.plusMinutes(30), NOW.plusSeconds(1));
   }
 
+  private static WalletRegistrationSession expiredPendingSession() {
+    return WalletRegistrationSession.create(
+            "registration-expired",
+            VALID_USER_ID,
+            VALID_WALLET_ADDRESS,
+            VALID_NONCE,
+            NOW.minusSeconds(1),
+            NOW.minusMinutes(31))
+        .attachApprovalIntent("intent-expired", NOW.minusSeconds(1), NOW.minusMinutes(30));
+  }
+
   private static WalletRegistrationSession signedSession() {
     return pendingSession()
         .markApprovalSigned("intent-1", 11L, "0x" + "c".repeat(64), "SIGNED", NOW.plusSeconds(2));
+  }
+
+  private static WalletRegistrationSession retryableSession() {
+    return pendingSession()
+        .markApprovalRetryable("FAILED_ONCHAIN", "approval failed", NOW.plusSeconds(2));
   }
 
   private static WalletApprovalExecutionWriteView web3View() {
@@ -420,6 +555,25 @@ class RegisterWalletServiceTest {
                 10L, "0x" + "d".repeat(40), 7L, "0x" + "1".repeat(64)),
             new WalletApprovalSignRequestBundle.SubmitSignRequest("0x" + "2".repeat(64), 123L)),
         null,
+        null,
+        null,
+        null);
+  }
+
+  private static WalletApprovalExecutionStateView deadlineTooCloseExecutionState() {
+    return new WalletApprovalExecutionStateView(
+        "WALLET_REGISTRATION",
+        "registration-1",
+        "PENDING_EXECUTION",
+        "WALLET_ESCROW_APPROVE",
+        "intent-1",
+        "AWAITING_SIGNATURE",
+        NOW.plusMinutes(5),
+        1L,
+        "EIP7702",
+        2,
+        null,
+        EIP7702_DEADLINE_TOO_CLOSE,
         null,
         null,
         null);

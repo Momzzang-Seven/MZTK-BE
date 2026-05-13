@@ -19,6 +19,7 @@ public record TransferExecutionIntentResult(
     TransferExecutionMode mode,
     int signCount,
     TransferSignRequestBundle signRequest,
+    String signRequestUnavailableReason,
     boolean existing,
     Long transactionId,
     TransferTransactionStatus transactionStatus,

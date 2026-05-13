@@ -99,6 +99,7 @@ class WalletControllerTest {
         .andExpect(jsonPath("$.data.walletId").doesNotExist())
         .andExpect(
             jsonPath("$.data.walletAddress").value("0x1111111111111111111111111111111111111111"))
+        .andExpect(jsonPath("$.data.nextAction").value("SIGN_APPROVAL"))
         .andExpect(jsonPath("$.data.web3.executionIntent.id").value("intent-1"))
         .andExpect(jsonPath("$.data.web3.signRequest.authorization.chainId").value(10))
         .andExpect(

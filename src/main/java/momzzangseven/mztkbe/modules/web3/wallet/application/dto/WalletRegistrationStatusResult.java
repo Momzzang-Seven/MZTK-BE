@@ -16,29 +16,39 @@ public record WalletRegistrationStatusResult(
     WalletRegistrationTransactionSummary transaction,
     String lastErrorCode,
     String lastErrorReason,
+    String signRequestUnavailableReason,
     WalletRegistrationNextAction nextAction,
     WalletApprovalExecutionWriteView web3) {
 
   public static WalletRegistrationStatusResult from(
       WalletRegistrationSession session, WalletApprovalExecutionStateView executionState) {
-    WalletApprovalExecutionWriteView web3 = recoverableWeb3(session, executionState);
-    return from(session, executionState, web3);
+    return from(session, executionState, null);
+  }
+
+  public static WalletRegistrationStatusResult from(
+      WalletRegistrationSession session,
+      WalletApprovalExecutionStateView executionState,
+      LocalDateTime now) {
+    WalletRegistrationStatus effectiveStatus = effectiveStatus(session, now);
+    WalletApprovalExecutionWriteView web3 = recoverableWeb3(effectiveStatus, executionState);
+    return from(session, effectiveStatus, executionState, web3);
   }
 
   public static WalletRegistrationStatusResult from(
       WalletRegistrationSession session, WalletApprovalExecutionWriteView web3) {
-    return from(session, null, web3);
+    return from(session, session.getStatus(), null, web3);
   }
 
   private static WalletRegistrationStatusResult from(
       WalletRegistrationSession session,
+      WalletRegistrationStatus effectiveStatus,
       WalletApprovalExecutionStateView executionState,
       WalletApprovalExecutionWriteView web3) {
     WalletRegistrationTransactionSummary transaction = transactionSummary(session, executionState);
     String latestExecutionStatus = latestExecutionStatus(session, executionState, web3);
     return new WalletRegistrationStatusResult(
         session.getPublicId(),
-        session.getStatus(),
+        effectiveStatus,
         session.getWalletAddress(),
         session.getRegisteredWalletId(),
         session.getLatestExecutionIntentId(),
@@ -47,19 +57,43 @@ public record WalletRegistrationStatusResult(
         transaction,
         session.getLastErrorCode(),
         session.getLastErrorReason(),
-        nextAction(session.getStatus(), web3),
+        signRequestUnavailableReason(executionState, web3),
+        nextAction(effectiveStatus, executionState, web3),
         web3);
   }
 
   private static WalletApprovalExecutionWriteView recoverableWeb3(
-      WalletRegistrationSession session, WalletApprovalExecutionStateView executionState) {
-    if (session.getStatus() != WalletRegistrationStatus.APPROVAL_REQUIRED
+      WalletRegistrationStatus effectiveStatus, WalletApprovalExecutionStateView executionState) {
+    if (effectiveStatus != WalletRegistrationStatus.APPROVAL_REQUIRED
         || executionState == null
-        || executionState.signRequest() == null
+        || (executionState.signRequest() == null
+            && executionState.signRequestUnavailableReason() == null)
         || !"AWAITING_SIGNATURE".equals(executionState.executionIntentStatus())) {
       return null;
     }
     return WalletApprovalExecutionWriteView.from(executionState);
+  }
+
+  private static WalletRegistrationStatus effectiveStatus(
+      WalletRegistrationSession session, LocalDateTime now) {
+    if (now != null
+        && session.getStatus().isPreSubmissionExpirable()
+        && session.getApprovalExpiresAt() != null
+        && !session.getApprovalExpiresAt().isAfter(now)) {
+      return WalletRegistrationStatus.EXPIRED;
+    }
+    return session.getStatus();
+  }
+
+  private static String signRequestUnavailableReason(
+      WalletApprovalExecutionStateView executionState, WalletApprovalExecutionWriteView web3) {
+    if (executionState != null) {
+      return executionState.signRequestUnavailableReason();
+    }
+    if (web3 != null) {
+      return web3.signRequestUnavailableReason();
+    }
+    return null;
   }
 
   private static WalletRegistrationTransactionSummary transactionSummary(
@@ -90,12 +124,11 @@ public record WalletRegistrationStatusResult(
   }
 
   private static WalletRegistrationNextAction nextAction(
-      WalletRegistrationStatus status, WalletApprovalExecutionWriteView web3) {
+      WalletRegistrationStatus status,
+      WalletApprovalExecutionStateView executionState,
+      WalletApprovalExecutionWriteView web3) {
     return switch (status) {
-      case APPROVAL_REQUIRED ->
-          web3 == null
-              ? WalletRegistrationNextAction.RETRY_APPROVAL
-              : WalletRegistrationNextAction.SIGN_APPROVAL;
+      case APPROVAL_REQUIRED -> nextActionForApprovalRequired(executionState, web3);
       case APPROVAL_SIGNED, APPROVAL_PENDING_ONCHAIN ->
           WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION;
       case APPROVAL_RETRYABLE -> WalletRegistrationNextAction.RETRY_APPROVAL;
@@ -103,5 +136,26 @@ public record WalletRegistrationStatusResult(
       case FINALIZATION_FAILED, LOCAL_CONFLICT -> WalletRegistrationNextAction.CONTACT_SUPPORT;
       case APPROVAL_FAILED, EXPIRED, CANCELED -> WalletRegistrationNextAction.NONE;
     };
+  }
+
+  private static WalletRegistrationNextAction nextActionForApprovalRequired(
+      WalletApprovalExecutionStateView executionState, WalletApprovalExecutionWriteView web3) {
+    if (isSubmitted(executionState)) {
+      return WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION;
+    }
+    if (web3 == null || web3.signRequest() == null) {
+      return WalletRegistrationNextAction.RETRY_APPROVAL;
+    }
+    return WalletRegistrationNextAction.SIGN_APPROVAL;
+  }
+
+  private static boolean isSubmitted(WalletApprovalExecutionStateView executionState) {
+    if (executionState == null) {
+      return false;
+    }
+    return "SIGNED".equals(executionState.executionIntentStatus())
+        || "PENDING_ONCHAIN".equals(executionState.executionIntentStatus())
+        || "SIGNED".equals(executionState.transactionStatus())
+        || "PENDING".equals(executionState.transactionStatus());
   }
 }

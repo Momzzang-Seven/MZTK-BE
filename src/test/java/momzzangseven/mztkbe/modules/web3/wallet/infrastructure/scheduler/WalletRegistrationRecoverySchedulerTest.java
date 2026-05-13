@@ -50,4 +50,14 @@ class WalletRegistrationRecoverySchedulerTest {
 
     verify(recoveryBatchUseCase, times(2)).execute(argThat(command -> command.batchSize() == 25));
   }
+
+  @Test
+  void run_stopsWhenFullBatchMakesNoProgress() {
+    when(recoveryBatchUseCase.execute(any()))
+        .thenReturn(new RunWalletRegistrationRecoveryBatchResult(25, 0, 25, 0));
+
+    scheduler.run();
+
+    verify(recoveryBatchUseCase).execute(argThat(command -> command.batchSize() == 25));
+  }
 }

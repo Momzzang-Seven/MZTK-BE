@@ -113,6 +113,26 @@ class ReconcileWalletRegistrationSessionServiceTest {
   }
 
   @Test
+  void execute_whenTransactionFailedWhileIntentPending_marksTerminatedBeforeSubmitted() {
+    when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
+        .thenReturn(Optional.of(pendingOnchainSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(1L, INTENT_ID))
+        .thenReturn(
+            Optional.of(state("PENDING_ONCHAIN", "FAILED_ONCHAIN", 10L, NOW.plusMinutes(5))));
+
+    service.execute(command());
+
+    verify(markTerminatedUseCase)
+        .execute(
+            new MarkWalletRegistrationApprovalTerminatedCommand(
+                REGISTRATION_ID,
+                INTENT_ID,
+                "FAILED_ONCHAIN",
+                "approval transaction failed on-chain"));
+    verify(markSubmittedUseCase, never()).execute(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
   void execute_whenSignRequestExpired_marksTerminatedAsExpired() {
     when(loadSessionPort.loadByPublicId(REGISTRATION_ID))
         .thenReturn(Optional.of(approvalRequiredSession()));

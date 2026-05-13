@@ -93,6 +93,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
                 new TransferSignRequestBundle.SubmitSignRequest(
                     "0x" + "5".repeat(64),
                     LocalDateTime.now().plusMinutes(5).toEpochSecond(ZoneOffset.UTC))),
+            null,
             false,
             null,
             null,

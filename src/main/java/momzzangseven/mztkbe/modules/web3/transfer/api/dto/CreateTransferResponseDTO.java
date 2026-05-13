@@ -10,6 +10,7 @@ public record CreateTransferResponseDTO(
     ExecutionIntentDTO executionIntent,
     ExecutionDTO execution,
     TransferSignRequestBundle signRequest,
+    String signRequestUnavailableReason,
     boolean existing) {
 
   /** Maps transfer execution create result into transfer API response contract. */
@@ -24,6 +25,7 @@ public record CreateTransferResponseDTO(
             result.expiresAtEpochSeconds()),
         new ExecutionDTO(result.mode().name(), result.signCount()),
         result.signRequest(),
+        result.signRequestUnavailableReason(),
         result.existing());
   }
 

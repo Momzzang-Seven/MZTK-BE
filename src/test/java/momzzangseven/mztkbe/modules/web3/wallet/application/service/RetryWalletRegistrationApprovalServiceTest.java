@@ -22,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalEx
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionStateView;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSignRequestBundle;
+import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationNextAction;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletRegistrationStatusResult;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.BuildWalletApprovalExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.LoadWalletApprovalExecutionStatePort;
@@ -50,6 +51,7 @@ class RetryWalletRegistrationApprovalServiceTest {
   private static final String REGISTRATION_ID = "registration-1";
   private static final String INTENT_ID = "intent-1";
   private static final String RETRY_INTENT_ID = "intent-2";
+  private static final String EIP7702_DEADLINE_TOO_CLOSE = "EIP7702_DEADLINE_TOO_CLOSE";
   private static final Long USER_ID = 1L;
 
   @Mock private LockWalletRegistrationSessionPort lockSessionPort;
@@ -110,6 +112,31 @@ class RetryWalletRegistrationApprovalServiceTest {
     verify(buildDraftPort, never()).build(any());
     verify(submitDraftPort, never()).submit(any());
     verify(saveSessionPort, never()).save(any());
+  }
+
+  @Test
+  void execute_whenApprovalRequiredDeadlineTooClose_createsNewApprovalIntent() {
+    when(lockSessionPort.lockByPublicIdForUpdate(REGISTRATION_ID))
+        .thenReturn(Optional.of(approvalRequiredSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(
+            Optional.of(
+                state(
+                    "AWAITING_SIGNATURE",
+                    null,
+                    null,
+                    NOW.plusMinutes(5),
+                    EIP7702_DEADLINE_TOO_CLOSE)));
+    when(buildDraftPort.build(any())).thenReturn(draft());
+    when(submitDraftPort.submit(any())).thenReturn(intentResult(RETRY_INTENT_ID));
+    when(saveSessionPort.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    WalletRegistrationStatusResult result = service.execute(command(USER_ID));
+
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.SIGN_APPROVAL);
+    assertThat(result.web3()).isNotNull();
+    assertThat(result.web3().executionIntent().id()).isEqualTo(RETRY_INTENT_ID);
+    verify(submitDraftPort).submit(any());
   }
 
   @Test
@@ -203,6 +230,15 @@ class RetryWalletRegistrationApprovalServiceTest {
       String transactionStatus,
       WalletApprovalSignRequestBundle signRequest,
       LocalDateTime expiresAt) {
+    return state(executionStatus, transactionStatus, signRequest, expiresAt, null);
+  }
+
+  private static WalletApprovalExecutionStateView state(
+      String executionStatus,
+      String transactionStatus,
+      WalletApprovalSignRequestBundle signRequest,
+      LocalDateTime expiresAt,
+      String signRequestUnavailableReason) {
     return new WalletApprovalExecutionStateView(
         "WALLET_REGISTRATION",
         REGISTRATION_ID,
@@ -215,7 +251,7 @@ class RetryWalletRegistrationApprovalServiceTest {
         "EIP7702",
         2,
         signRequest,
-        null,
+        signRequestUnavailableReason,
         null,
         transactionStatus,
         null);

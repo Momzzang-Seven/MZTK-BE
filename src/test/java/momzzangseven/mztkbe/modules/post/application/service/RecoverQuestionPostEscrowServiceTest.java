@@ -94,6 +94,33 @@ class RecoverQuestionPostEscrowServiceTest {
   }
 
   @Test
+  @DisplayName("duplicate managed recover-create returns existing hidden sign request reason")
+  void duplicateManagedRecoverCreateReturnsExistingSignRequestUnavailableReason() {
+    Long ownerId = 7L;
+    Long postId = 90L;
+    Post post = pendingQuestion(ownerId, postId, "intent-2");
+    RecoverQuestionPostEscrowCommand command =
+        new RecoverQuestionPostEscrowCommand(ownerId, postId);
+
+    when(postPersistencePort.loadPostForUpdate(postId)).thenReturn(Optional.of(post));
+    when(questionLifecycleExecutionPort.managesQuestionCreateLifecycle()).thenReturn(true);
+    when(loadQuestionPublicationEvidencePort.loadEvidence(postId, ownerId))
+        .thenReturn(activeRecoveryEvidence("intent-2"));
+    when(questionLifecycleExecutionPort.loadQuestionCreateIntent(
+            postId, ownerId, "intent-2", "질문 내용", 50L))
+        .thenReturn(Optional.of(web3("intent-2", "EIP7702_DEADLINE_TOO_CLOSE")));
+
+    PostMutationResult result = service.recoverQuestionCreate(command);
+
+    assertThat(result.web3().signRequest()).isNull();
+    assertThat(result.web3().signRequestUnavailableReason())
+        .isEqualTo("EIP7702_DEADLINE_TOO_CLOSE");
+    verify(questionLifecycleExecutionPort, never())
+        .recoverQuestionCreate(any(), any(), any(), any());
+    verifyNoPublicationClaim();
+  }
+
+  @Test
   @DisplayName("duplicate managed recover-create rejects in-flight non-signable intent")
   void duplicateManagedRecoverCreateRejectsInFlightNonSignableIntent() {
     Long ownerId = 7L;
@@ -890,6 +917,11 @@ class RecoverQuestionPostEscrowServiceTest {
 
   private momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView web3(
       String executionIntentId) {
+    return web3(executionIntentId, null);
+  }
+
+  private momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView web3(
+      String executionIntentId, String signRequestUnavailableReason) {
     return new momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView(
         null,
         "QNA_QUESTION_CREATE",
@@ -897,6 +929,7 @@ class RecoverQuestionPostEscrowServiceTest {
             .ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null, 1L),
         null,
         null,
+        signRequestUnavailableReason,
         false);
   }
 }

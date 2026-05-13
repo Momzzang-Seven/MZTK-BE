@@ -36,13 +36,13 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTy
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SponsorPolicy;
 
-@RequiredArgsConstructor
 /**
  * Creates a new {@link ExecutionIntent} from a domain-provided draft.
  *
  * <p>This service applies idempotency reuse rules, selects execution mode (EIP-7702 or EIP-1559),
  * reserves sponsor exposure when required, and returns the sign request contract used by clients.
  */
+@RequiredArgsConstructor
 public class CreateExecutionIntentService implements CreateExecutionIntentUseCase {
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
@@ -84,14 +84,12 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
 
     ExecutionModeSelector.ExecutionModeSelection preliminarySelection =
         executionModeSelector.select(command);
-    if (preliminarySelection.mode() == ExecutionMode.EIP7702) {
-      validateExecutionDraftPolicyPort.validate(
-          command.draft().delegateTarget(), command.draft().calls());
-      validateEip7702ExpiresAt(command.draft().expiresAt(), now);
-    }
     ModeDecision modeDecision = finalizeModeDecision(command, preliminarySelection);
     LocalDateTime expiresAt = selectedExpiresAt(command, modeDecision.mode(), now);
     if (modeDecision.mode() == ExecutionMode.EIP7702) {
+      validateExecutionDraftPolicyPort.validate(
+          command.draft().delegateTarget(), command.draft().calls());
+      validateEip7702ExpiresAt(expiresAt, now);
       modeDecision =
           modeDecision.withExecutionDigest(
               buildExecutionDigestPort.buildExecutionDigestHex(
@@ -99,6 +97,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
                   publicId,
                   buildExecutionCallHashPort.hashCalls(command.draft().calls()),
                   ExecutionDeadlineEpoch.toEpochSeconds(expiresAt, appClock)));
+      reserveSponsorExposure(modeDecision);
     }
     ExecutionIntent created =
         ExecutionIntent.create(
@@ -186,12 +185,15 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     if (modeSelection.mode() == ExecutionMode.EIP7702) {
       BigInteger reservedCostWei = modeSelection.reservedSponsorCostWei();
       LocalDate usageDateKst = modeSelection.sponsorUsageDateKst();
+      SponsorDailyUsage sponsorUsageToReserve = null;
       if (reservedCostWei.signum() > 0
-          && !reserveSponsorExposureIfEligible(
-              command.draft().requesterUserId(),
-              usageDateKst,
-              reservedCostWei,
-              loadSponsorPolicyPort.loadSponsorPolicy())) {
+          && (sponsorUsageToReserve =
+                  lockSponsorUsageIfEligible(
+                      command.draft().requesterUserId(),
+                      usageDateKst,
+                      reservedCostWei,
+                      loadSponsorPolicyPort.loadSponsorPolicy()))
+              == null) {
         if (command.draft().fallbackAllowed() && command.draft().unsignedTxSnapshot() != null) {
           return finalizeModeDecision(
               command,
@@ -200,13 +202,15 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
         }
         throw new Web3TransferException(ErrorCode.SPONSOR_DAILY_LIMIT_EXCEEDED, true);
       }
+      return selectMode(command, modeSelection, sponsorUsageToReserve);
     }
-    return selectMode(command, modeSelection);
+    return selectMode(command, modeSelection, null);
   }
 
   private ModeDecision selectMode(
       CreateExecutionIntentCommand command,
-      ExecutionModeSelector.ExecutionModeSelection modeSelection) {
+      ExecutionModeSelector.ExecutionModeSelection modeSelection,
+      SponsorDailyUsage sponsorUsageToReserve) {
     if (modeSelection.mode() == ExecutionMode.EIP7702) {
       return new ModeDecision(
           ExecutionMode.EIP7702,
@@ -217,7 +221,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
           null,
           null,
           null,
-          modeSelection.reservedSponsorCostWei());
+          modeSelection.reservedSponsorCostWei(),
+          sponsorUsageToReserve);
     }
     return new ModeDecision(
         ExecutionMode.EIP1559,
@@ -228,10 +233,11 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
         null,
         command.draft().unsignedTxSnapshot(),
         command.draft().unsignedTxFingerprint(),
-        BigInteger.ZERO);
+        BigInteger.ZERO,
+        null);
   }
 
-  private boolean reserveSponsorExposureIfEligible(
+  private SponsorDailyUsage lockSponsorUsageIfEligible(
       Long userId,
       LocalDate usageDateKst,
       BigInteger reservedCostWei,
@@ -243,10 +249,18 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
             .add(reservedCostWei)
             .compareTo(sponsorPolicy.perDayUserCapEth().movePointRight(18).toBigIntegerExact())
         > 0) {
-      return false;
+      return null;
     }
-    sponsorDailyUsagePersistencePort.update(usage.reserve(reservedCostWei));
-    return true;
+    return usage;
+  }
+
+  private void reserveSponsorExposure(ModeDecision modeDecision) {
+    if (modeDecision.sponsorUsageToReserve() == null
+        || modeDecision.reservedSponsorCostWei().signum() <= 0) {
+      return;
+    }
+    sponsorDailyUsagePersistencePort.update(
+        modeDecision.sponsorUsageToReserve().reserve(modeDecision.reservedSponsorCostWei()));
   }
 
   private void releaseSponsorExposure(
@@ -361,7 +375,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
       String executionDigest,
       momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot unsignedTxSnapshot,
       String unsignedTxFingerprint,
-      BigInteger reservedSponsorCostWei) {
+      BigInteger reservedSponsorCostWei,
+      SponsorDailyUsage sponsorUsageToReserve) {
 
     private ModeDecision withExecutionDigest(String newExecutionDigest) {
       return new ModeDecision(
@@ -373,7 +388,8 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
           newExecutionDigest,
           unsignedTxSnapshot,
           unsignedTxFingerprint,
-          reservedSponsorCostWei);
+          reservedSponsorCostWei,
+          sponsorUsageToReserve);
     }
   }
 }

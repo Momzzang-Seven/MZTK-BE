@@ -300,9 +300,10 @@ public class ExecutionIntentServiceConfig {
   MarkExecutionIntentSucceededUseCase markExecutionIntentSucceededUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new MarkExecutionIntentSucceededService(
-        executionIntentPersistencePort, executionActionHandlerPorts, appClock);
+        executionIntentPersistencePort, executionActionHandlerPorts, runAfterCommitPort, appClock);
   }
 
   @Bean

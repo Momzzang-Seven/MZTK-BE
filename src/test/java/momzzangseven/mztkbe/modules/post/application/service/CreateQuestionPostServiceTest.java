@@ -323,6 +323,7 @@ class CreateQuestionPostServiceTest {
             .ExecutionIntent(executionIntentId, "AWAITING_SIGNATURE", null, 1L),
         null,
         null,
+        null,
         existing);
   }
 }

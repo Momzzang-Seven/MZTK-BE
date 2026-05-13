@@ -9,6 +9,7 @@ public record GetTransferResponseDTO(
     ExecutionIntentDTO executionIntent,
     ExecutionDTO execution,
     TransferSignRequestBundle signRequest,
+    String signRequestUnavailableReason,
     TransactionDTO transaction) {
 
   public static GetTransferResponseDTO from(TransferExecutionIntentResult result) {
@@ -22,6 +23,7 @@ public record GetTransferResponseDTO(
             result.expiresAtEpochSeconds()),
         new ExecutionDTO(result.mode().name(), result.signCount()),
         result.signRequest(),
+        result.signRequestUnavailableReason(),
         result.transactionId() == null
             ? null
             : new TransactionDTO(

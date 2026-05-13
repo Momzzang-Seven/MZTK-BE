@@ -10,6 +10,7 @@ public record RegisterWalletResponseDTO(
     Long walletId,
     String walletAddress,
     Instant registeredAt,
+    String nextAction,
     Web3 web3) {
 
   public static RegisterWalletResponseDTO from(RegisterWalletResult result) {
@@ -19,6 +20,7 @@ public record RegisterWalletResponseDTO(
         result.walletId(),
         result.walletAddress(),
         result.registeredAt(),
+        result.nextAction().name(),
         Web3.from(result.web3()));
   }
 

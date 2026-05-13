@@ -32,6 +32,7 @@ public class RetryWalletRegistrationApprovalService
 
   private static final String RETRY_ERROR_CODE = "APPROVAL_RETRY_REQUESTED";
   private static final String RETRY_ERROR_REASON = "approval retry requested";
+  private static final String EIP7702_DEADLINE_TOO_CLOSE = "EIP7702_DEADLINE_TOO_CLOSE";
 
   private final LockWalletRegistrationSessionPort lockSessionPort;
   private final SaveWalletRegistrationSessionPort saveSessionPort;
@@ -113,7 +114,8 @@ public class RetryWalletRegistrationApprovalService
   }
 
   private boolean canMoveRequiredSessionToRetryable(WalletApprovalExecutionStateView state) {
-    return isTerminalExecutionStatus(state.executionIntentStatus())
+    return EIP7702_DEADLINE_TOO_CLOSE.equals(state.signRequestUnavailableReason())
+        || isTerminalExecutionStatus(state.executionIntentStatus())
         || ("AWAITING_SIGNATURE".equals(state.executionIntentStatus())
             && state.expiresAt() != null
             && !state.expiresAt().isAfter(now()));

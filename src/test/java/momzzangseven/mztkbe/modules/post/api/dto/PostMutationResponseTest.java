@@ -28,11 +28,14 @@ class PostMutationResponseTest {
                         1_776_129_600L),
                     new QuestionExecutionWriteView.Execution("EIP7702", 2),
                     null,
+                    "EIP7702_DEADLINE_TOO_CLOSE",
                     false)));
 
     assertThat(response.postId()).isEqualTo(10L);
     assertThat(response.web3()).isNotNull();
     assertThat(response.web3().actionType()).isEqualTo("QNA_QUESTION_UPDATE");
+    assertThat(response.web3().signRequestUnavailableReason())
+        .isEqualTo("EIP7702_DEADLINE_TOO_CLOSE");
     assertThat(response.web3().executionIntent().expiresAtEpochSeconds()).isEqualTo(1_776_129_600L);
     assertThat(response.questionUpdate()).isNull();
   }

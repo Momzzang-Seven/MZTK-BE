@@ -6,7 +6,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotFoundException;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.GetWalletRegistrationStatusQuery;
@@ -28,8 +30,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class GetWalletRegistrationStatusServiceTest {
 
   private static final LocalDateTime NOW = LocalDateTime.parse("2026-05-13T10:00:00");
+  private static final ZoneId APP_ZONE = ZoneId.of("Asia/Seoul");
+  private static final Clock FIXED_CLOCK = Clock.fixed(NOW.atZone(APP_ZONE).toInstant(), APP_ZONE);
   private static final String REGISTRATION_ID = "registration-1";
   private static final String INTENT_ID = "intent-1";
+  private static final String EIP7702_DEADLINE_TOO_CLOSE = "EIP7702_DEADLINE_TOO_CLOSE";
   private static final Long USER_ID = 1L;
 
   @Mock private LoadWalletRegistrationSessionPort loadSessionPort;
@@ -39,7 +44,9 @@ class GetWalletRegistrationStatusServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new GetWalletRegistrationStatusService(loadSessionPort, loadExecutionStatePort);
+    service =
+        new GetWalletRegistrationStatusService(
+            loadSessionPort, loadExecutionStatePort, FIXED_CLOCK);
   }
 
   @Test
@@ -89,10 +96,80 @@ class GetWalletRegistrationStatusServiceTest {
     assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.RETRY_APPROVAL);
   }
 
+  @Test
+  void execute_whenApprovalRequiredDeadlineTooClose_exposesRetryReason() {
+    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+        .thenReturn(Optional.of(approvalRequiredSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(deadlineTooCloseState()));
+
+    WalletRegistrationStatusResult result =
+        service.execute(new GetWalletRegistrationStatusQuery(USER_ID, REGISTRATION_ID));
+
+    assertThat(result.web3()).isNotNull();
+    assertThat(result.web3().signRequest()).isNull();
+    assertThat(result.signRequestUnavailableReason()).isEqualTo(EIP7702_DEADLINE_TOO_CLOSE);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.RETRY_APPROVAL);
+  }
+
+  @Test
+  void execute_whenApprovalRequiredSessionTtlElapsed_returnsExpiredView() {
+    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+        .thenReturn(Optional.of(expiredApprovalRequiredSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(signableState()));
+
+    WalletRegistrationStatusResult result =
+        service.execute(new GetWalletRegistrationStatusQuery(USER_ID, REGISTRATION_ID));
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.EXPIRED);
+    assertThat(result.web3()).isNull();
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.NONE);
+  }
+
+  @Test
+  void execute_whenApprovalRetryableSessionTtlElapsed_returnsExpiredView() {
+    WalletRegistrationSession session =
+        approvalRequiredSession()
+            .markApprovalRetryable("EXPIRED", "retryable but ttl elapsed", NOW.minusSeconds(5))
+            .toBuilder()
+            .approvalExpiresAt(NOW.minusSeconds(1))
+            .build();
+    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+        .thenReturn(Optional.of(session));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(expiredState()));
+
+    WalletRegistrationStatusResult result =
+        service.execute(new GetWalletRegistrationStatusQuery(USER_ID, REGISTRATION_ID));
+
+    assertThat(result.status()).isEqualTo(WalletRegistrationStatus.EXPIRED);
+    assertThat(result.nextAction()).isEqualTo(WalletRegistrationNextAction.NONE);
+  }
+
+  @Test
+  void execute_whenApprovalRequiredButExecutionSubmitted_waitsForTransaction() {
+    when(loadSessionPort.loadByPublicIdAndUserId(REGISTRATION_ID, USER_ID))
+        .thenReturn(Optional.of(approvalRequiredSession()));
+    when(loadExecutionStatePort.loadByExecutionIntentId(USER_ID, INTENT_ID))
+        .thenReturn(Optional.of(submittedState()));
+
+    WalletRegistrationStatusResult result =
+        service.execute(new GetWalletRegistrationStatusQuery(USER_ID, REGISTRATION_ID));
+
+    assertThat(result.web3()).isNull();
+    assertThat(result.nextAction())
+        .isEqualTo(WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION);
+  }
+
   private static WalletRegistrationSession approvalRequiredSession() {
     return WalletRegistrationSession.create(
             REGISTRATION_ID, USER_ID, "0x" + "a".repeat(40), "nonce-1", NOW.plusMinutes(30), NOW)
         .attachApprovalIntent(INTENT_ID, NOW.plusMinutes(30), NOW.plusSeconds(1));
+  }
+
+  private static WalletRegistrationSession expiredApprovalRequiredSession() {
+    return approvalRequiredSession().toBuilder().approvalExpiresAt(NOW.minusSeconds(1)).build();
   }
 
   private static WalletApprovalExecutionStateView signableState() {
@@ -109,10 +186,26 @@ class GetWalletRegistrationStatusServiceTest {
     return state("EXPIRED", null, null);
   }
 
+  private static WalletApprovalExecutionStateView deadlineTooCloseState() {
+    return state("AWAITING_SIGNATURE", null, null, EIP7702_DEADLINE_TOO_CLOSE);
+  }
+
+  private static WalletApprovalExecutionStateView submittedState() {
+    return state("SIGNED", "SIGNED", null);
+  }
+
   private static WalletApprovalExecutionStateView state(
       String executionStatus,
       String transactionStatus,
       WalletApprovalSignRequestBundle signRequest) {
+    return state(executionStatus, transactionStatus, signRequest, null);
+  }
+
+  private static WalletApprovalExecutionStateView state(
+      String executionStatus,
+      String transactionStatus,
+      WalletApprovalSignRequestBundle signRequest,
+      String signRequestUnavailableReason) {
     return new WalletApprovalExecutionStateView(
         "WALLET_REGISTRATION",
         REGISTRATION_ID,
@@ -125,7 +218,7 @@ class GetWalletRegistrationStatusServiceTest {
         "EIP7702",
         2,
         signRequest,
-        null,
+        signRequestUnavailableReason,
         null,
         transactionStatus,
         null);

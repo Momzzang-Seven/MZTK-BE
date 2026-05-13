@@ -86,14 +86,6 @@ public class ReconcileWalletRegistrationSessionService
               session.getPublicId(), executionState.executionIntentId()));
       return ReconcileWalletRegistrationSessionResult.recoveredResult();
     }
-    if (isSubmitted(executionState)) {
-      markSubmittedUseCase.execute(
-          new MarkWalletRegistrationApprovalSubmittedCommand(
-              session.getPublicId(),
-              executionState.executionIntentId(),
-              executionState.transactionStatus()));
-      return ReconcileWalletRegistrationSessionResult.recoveredResult();
-    }
     if (isExpiredSignRequest(executionState) || isTerminalApprovalStatus(executionState)) {
       markTerminatedUseCase.execute(
           new MarkWalletRegistrationApprovalTerminatedCommand(
@@ -101,6 +93,14 @@ public class ReconcileWalletRegistrationSessionService
               executionState.executionIntentId(),
               resolvedTerminalStatus(executionState),
               resolvedTerminalReason(executionState)));
+      return ReconcileWalletRegistrationSessionResult.recoveredResult();
+    }
+    if (isSubmitted(executionState)) {
+      markSubmittedUseCase.execute(
+          new MarkWalletRegistrationApprovalSubmittedCommand(
+              session.getPublicId(),
+              executionState.executionIntentId(),
+              executionState.transactionStatus()));
       return ReconcileWalletRegistrationSessionResult.recoveredResult();
     }
     return ReconcileWalletRegistrationSessionResult.skippedResult();

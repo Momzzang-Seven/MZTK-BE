@@ -11,12 +11,19 @@ public record RegisterWalletResult(
     Long walletId,
     String walletAddress,
     Instant registeredAt,
+    WalletRegistrationNextAction nextAction,
     WalletApprovalExecutionWriteView web3) {
 
   public static RegisterWalletResult pending(
       WalletRegistrationSession session, WalletApprovalExecutionWriteView web3) {
     return new RegisterWalletResult(
-        session.getPublicId(), session.getStatus(), null, session.getWalletAddress(), null, web3);
+        session.getPublicId(),
+        session.getStatus(),
+        null,
+        session.getWalletAddress(),
+        null,
+        nextAction(session.getStatus(), web3),
+        web3);
   }
 
   public static RegisterWalletResult from(UserWallet wallet) {
@@ -26,6 +33,28 @@ public record RegisterWalletResult(
         wallet.getId(),
         wallet.getWalletAddress(),
         wallet.getRegisteredAt(),
+        WalletRegistrationNextAction.DONE,
         null);
+  }
+
+  private static WalletRegistrationNextAction nextAction(
+      WalletRegistrationStatus status, WalletApprovalExecutionWriteView web3) {
+    return switch (status) {
+      case APPROVAL_REQUIRED -> nextActionForApprovalRequired(web3);
+      case APPROVAL_SIGNED, APPROVAL_PENDING_ONCHAIN ->
+          WalletRegistrationNextAction.WAIT_FOR_APPROVAL_TRANSACTION;
+      case APPROVAL_RETRYABLE -> WalletRegistrationNextAction.RETRY_APPROVAL;
+      case REGISTERED -> WalletRegistrationNextAction.DONE;
+      case FINALIZATION_FAILED, LOCAL_CONFLICT -> WalletRegistrationNextAction.CONTACT_SUPPORT;
+      case APPROVAL_FAILED, EXPIRED, CANCELED -> WalletRegistrationNextAction.NONE;
+    };
+  }
+
+  private static WalletRegistrationNextAction nextActionForApprovalRequired(
+      WalletApprovalExecutionWriteView web3) {
+    if (web3 != null && web3.signRequest() != null) {
+      return WalletRegistrationNextAction.SIGN_APPROVAL;
+    }
+    return WalletRegistrationNextAction.RETRY_APPROVAL;
   }
 }

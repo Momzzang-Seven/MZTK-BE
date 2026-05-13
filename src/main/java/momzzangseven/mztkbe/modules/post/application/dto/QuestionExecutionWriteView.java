@@ -14,6 +14,7 @@ public record QuestionExecutionWriteView(
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
+    String signRequestUnavailableReason,
     boolean existing) {
 
   public record Resource(String type, String id, String status) {}

@@ -1,5 +1,7 @@
 package momzzangseven.mztkbe.modules.web3.wallet.application.service;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotFoundException;
@@ -20,6 +22,7 @@ public class GetWalletRegistrationStatusService implements GetWalletRegistration
 
   private final LoadWalletRegistrationSessionPort loadSessionPort;
   private final LoadWalletApprovalExecutionStatePort loadExecutionStatePort;
+  private final Clock appClock;
 
   @Override
   @Transactional(readOnly = true)
@@ -29,7 +32,8 @@ public class GetWalletRegistrationStatusService implements GetWalletRegistration
             .loadByPublicIdAndUserId(query.registrationId(), query.requesterUserId())
             .orElseThrow(WalletNotFoundException::new);
     Optional<WalletApprovalExecutionStateView> executionState = loadExecutionState(session);
-    return WalletRegistrationStatusResult.from(session, executionState.orElse(null));
+    return WalletRegistrationStatusResult.from(
+        session, executionState.orElse(null), LocalDateTime.now(appClock));
   }
 
   private Optional<WalletApprovalExecutionStateView> loadExecutionState(

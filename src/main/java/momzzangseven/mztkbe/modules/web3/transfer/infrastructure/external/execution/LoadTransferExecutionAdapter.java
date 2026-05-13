@@ -39,6 +39,9 @@ public class LoadTransferExecutionAdapter implements LoadTransferExecutionPort {
         TransferExecutionMode.valueOf(result.mode().name()),
         result.signCount(),
         toTransferSignRequest(result.signRequest()),
+        result.signRequestUnavailableReason() == null
+            ? null
+            : result.signRequestUnavailableReason().name(),
         false,
         result.transactionId(),
         result.transactionStatus() == null

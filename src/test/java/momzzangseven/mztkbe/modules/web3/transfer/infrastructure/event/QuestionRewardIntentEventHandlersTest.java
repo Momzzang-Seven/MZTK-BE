@@ -68,6 +68,7 @@ class QuestionRewardIntentEventHandlersTest {
                         LocalDateTime.now()
                             .plusMinutes(5)
                             .toEpochSecond(java.time.ZoneOffset.UTC))),
+                null,
                 false,
                 null,
                 null,

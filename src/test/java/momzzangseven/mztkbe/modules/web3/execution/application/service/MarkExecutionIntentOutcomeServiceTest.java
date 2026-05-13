@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.ExecutionDraf
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionActionHandlerPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntent;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionIntentStatus;
@@ -47,14 +49,27 @@ class MarkExecutionIntentOutcomeServiceTest {
   @Mock private ExecutionActionHandlerPort executionActionHandlerPort;
   @Mock private PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort;
 
+  @Mock(lenient = true)
+  private RunAfterCommitPort runAfterCommitPort;
+
   private MarkExecutionIntentSucceededService succeededService;
   private MarkExecutionIntentFailedOnchainService failedOnchainService;
 
   @BeforeEach
   void setUp() {
+    doAnswer(
+            invocation -> {
+              invocation.<Runnable>getArgument(0).run();
+              return null;
+            })
+        .when(runAfterCommitPort)
+        .runAfterCommit(any());
     succeededService =
         new MarkExecutionIntentSucceededService(
-            executionIntentPersistencePort, List.of(executionActionHandlerPort), FIXED_CLOCK);
+            executionIntentPersistencePort,
+            List.of(executionActionHandlerPort),
+            runAfterCommitPort,
+            FIXED_CLOCK);
     failedOnchainService =
         new MarkExecutionIntentFailedOnchainService(
             executionIntentPersistencePort, publishExecutionIntentTerminatedPort, FIXED_CLOCK);
@@ -102,6 +117,7 @@ class MarkExecutionIntentOutcomeServiceTest {
                         && plan.referenceType() == ExecutionReferenceType.USER_TO_SERVER
                         && plan.calls().size() == 1
                         && "0x1234".equals(plan.calls().get(0).data())));
+    verify(runAfterCommitPort).runAfterCommit(any());
   }
 
   @Test

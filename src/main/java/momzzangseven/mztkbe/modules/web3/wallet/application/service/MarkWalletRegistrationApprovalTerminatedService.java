@@ -41,9 +41,7 @@ public class MarkWalletRegistrationApprovalTerminatedService
     LocalDateTime now = LocalDateTime.now(appClock);
     WalletRegistrationSession updated =
         switch (command.terminalExecutionStatus()) {
-          case "FAILED_ONCHAIN" ->
-              session.markApprovalFailed(
-                  "APPROVAL_FAILED", failureReason(command.failureReason()), now);
+          case "FAILED_ONCHAIN" -> failOrRetry(session, command.failureReason(), now);
           case "EXPIRED" -> expireOrRetry(session, command.failureReason(), now);
           case "CANCELED", "NONCE_STALE" ->
               session.markApprovalRetryable(
@@ -53,6 +51,14 @@ public class MarkWalletRegistrationApprovalTerminatedService
     if (updated != session) {
       saveSessionPort.save(updated);
     }
+  }
+
+  private WalletRegistrationSession failOrRetry(
+      WalletRegistrationSession session, String failureReason, LocalDateTime now) {
+    if (session.getApprovalExpiresAt() != null && session.getApprovalExpiresAt().isAfter(now)) {
+      return session.markApprovalRetryable("FAILED_ONCHAIN", failureReason(failureReason), now);
+    }
+    return session.markApprovalFailed("APPROVAL_FAILED", failureReason(failureReason), now);
   }
 
   private WalletRegistrationSession expireOrRetry(
