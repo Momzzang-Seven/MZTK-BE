@@ -161,6 +161,15 @@ public record QnaExecutionIntentResult(
         throw new Web3InvalidInputException(
             "signatureMeta requires both signedAt and signatureExpiresAt to be null or non-null");
       }
+      if (!signedAtAbsent) {
+        if (signedAt < 0) {
+          throw new Web3InvalidInputException("signedAt must be >= 0");
+        }
+        if (signatureExpiresAt <= signedAt) {
+          throw new Web3InvalidInputException(
+              "signatureExpiresAt must be strictly greater than signedAt");
+        }
+      }
     }
   }
 }

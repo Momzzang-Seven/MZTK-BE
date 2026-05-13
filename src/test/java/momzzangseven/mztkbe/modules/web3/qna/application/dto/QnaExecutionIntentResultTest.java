@@ -89,4 +89,34 @@ class QnaExecutionIntentResultTest {
     assertThatThrownBy(() -> new QnaExecutionIntentResult.SignatureMeta(null, 456L))
         .isInstanceOf(Web3InvalidInputException.class);
   }
+
+  @Test
+  void signatureMeta_negativeSignedAt_isRejected() {
+    assertThatThrownBy(() -> new QnaExecutionIntentResult.SignatureMeta(-1L, 100L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("signedAt");
+  }
+
+  @Test
+  void signatureMeta_expiresAtEqualToSignedAt_isRejected() {
+    assertThatThrownBy(() -> new QnaExecutionIntentResult.SignatureMeta(100L, 100L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("signatureExpiresAt");
+  }
+
+  @Test
+  void signatureMeta_expiresAtBeforeSignedAt_isRejected() {
+    assertThatThrownBy(() -> new QnaExecutionIntentResult.SignatureMeta(100L, 50L))
+        .isInstanceOf(Web3InvalidInputException.class)
+        .hasMessageContaining("signatureExpiresAt");
+  }
+
+  @Test
+  void signatureMeta_zeroSignedAtWithPositiveExpiry_isAllowed() {
+    QnaExecutionIntentResult.SignatureMeta meta =
+        new QnaExecutionIntentResult.SignatureMeta(0L, 1L);
+
+    assertThat(meta.signedAt()).isEqualTo(0L);
+    assertThat(meta.signatureExpiresAt()).isEqualTo(1L);
+  }
 }
