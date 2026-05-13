@@ -247,7 +247,21 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
           QnaEscrowIdCodec.toAmountWei(rewardMztk, rewardTokenConfig.decimals());
       String expectedTokenAddress = EvmAddress.of(rewardTokenConfig.tokenContractAddress()).value();
       String payloadTokenAddress = EvmAddress.of(payload.tokenAddress()).value();
-      String expectedCallData =
+      // §MOM-393 — broadcast callData (9-arg, server-sig 봉입) 와 comparison baseline (7-arg,
+      // server-sig-free) 의 책임 분리. stored payload 의 사용자-입력 필드로 7-arg baseline 을
+      // 재인코딩하여 expected 7-arg baseline 과 byte-equal 비교하면, server-managed 필드
+      // (signedAt/signatureBytes) 도입 여부에 둔감한 의미 검증이 성립한다. payload 자체의
+      // 무결성은 matchesPayloadHash 가 SHA-256 으로 cover.
+      String storedBaselineCallData =
+          qnaEscrowAbiEncoder.encode(
+              QnaExecutionActionType.QNA_QUESTION_CREATE,
+              QnaEscrowIdCodec.questionId(payload.postId()),
+              null,
+              payloadTokenAddress,
+              payload.amountWei(),
+              payload.questionHash(),
+              null);
+      String expectedBaselineCallData =
           qnaEscrowAbiEncoder.encode(
               QnaExecutionActionType.QNA_QUESTION_CREATE,
               QnaEscrowIdCodec.questionId(postId),
@@ -263,7 +277,7 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
           && payload.contentHash() == null
           && expectedAmountWei.equals(payload.amountWei())
           && expectedTokenAddress.equals(payloadTokenAddress)
-          && expectedCallData.equals(payload.callData());
+          && expectedBaselineCallData.equals(storedBaselineCallData);
     } catch (JsonProcessingException e) {
       throw new Web3InvalidInputException("invalid qna question create payload snapshot");
     }

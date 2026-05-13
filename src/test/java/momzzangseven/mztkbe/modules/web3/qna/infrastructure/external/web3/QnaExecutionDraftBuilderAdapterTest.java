@@ -151,6 +151,53 @@ class QnaExecutionDraftBuilderAdapterTest {
         .isEqualTo("0x3333333333333333333333333333333333333333");
   }
 
+  /**
+   * §MOM-393 invariant — broadcast callData 는 항상 9-arg `createQuestion` selector 로 시작하고, payload
+   * snapshot 의 {@code signedAt}/{@code signatureHex} 는 non-null 이어야 한다. 누군가 9-arg encode 를 7-arg 로
+   * 롤백하거나 payload 에 server-sig 필드를 누락하면 본 케이스가 즉시 fail — MOM-393 의 broadcast/baseline 책임 분리 회귀 가드.
+   */
+  @Test
+  void build_broadcastCallDataIncludesNineArgServerSig() throws Exception {
+    stubHappyPath();
+
+    QnaExecutionDraft draft =
+        adapter.build(
+            new QnaEscrowExecutionRequest(
+                QnaExecutionResourceType.QUESTION,
+                "101",
+                QnaExecutionActionType.QNA_QUESTION_CREATE,
+                7L,
+                null,
+                101L,
+                null,
+                "0x4444444444444444444444444444444444444444",
+                new BigInteger("50000000000000000000"),
+                "0x" + "a".repeat(64),
+                null));
+
+    String nineArgSelector =
+        qnaEscrowAbiEncoder
+            .encode(
+                QnaExecutionActionType.QNA_QUESTION_CREATE,
+                QnaEscrowIdCodec.questionId(101L),
+                null,
+                "0x4444444444444444444444444444444444444444",
+                new BigInteger("50000000000000000000"),
+                "0x" + "a".repeat(64),
+                null,
+                MOCK_SIGNED_AT,
+                mockSignatureBytes())
+            .substring(0, 10);
+    assertThat(draft.calls().getFirst().data()).startsWith(nineArgSelector);
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    JsonNode payload = objectMapper.readTree(draft.payloadSnapshotJson());
+    assertThat(payload.get("signedAt").asLong()).isEqualTo(MOCK_SIGNED_AT);
+    assertThat(payload.get("signatureHex").asText())
+        .isEqualTo(Numeric.toHexString(mockSignatureBytes()));
+    assertThat(payload.get("callData").asText()).startsWith(nineArgSelector);
+  }
+
   @Test
   void build_rejectsAdminAction() {
     assertThatThrownBy(

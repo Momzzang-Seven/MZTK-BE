@@ -403,6 +403,43 @@ class QnaEscrowE2ETest extends E2ETestBase {
     assertThat(countQuestionCreateIntents(postId)).isEqualTo(2);
   }
 
+  /**
+   * §MOM-393 회귀 가드 — AWAITING_SIGNATURE intent 가 그대로 살아있는 상태에서 mutation 없이 recover-create 를 호출하는
+   * 시나리오 ({@code RecoverQuestionPostEscrowService#tryManagedDuplicateRecovery} 의 happy path). 이 분기가
+   * {@link
+   * momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort#loadQuestionCreateIntent}
+   * 의 callData 비교 로직을 실제로 trigger 하는 유일한 production 경로이며, MOM-393 의 broadcast/baseline 책임 분리 버그는
+   * 정확히 이 경로에서 5xx 로 노출된다.
+   */
+  @Test
+  @Order(29)
+  @DisplayName(
+      "POST /posts/{postId}/web3/recover-create — AWAITING_SIGNATURE intent 가 살아있고 mutation 없으면 동일 intent reload")
+  void recoverFailedQuestion_withAwaitingSignatureIntent_reloadsSameIntent() throws Exception {
+    Long postId = createQuestionPostId("새로고침 재요청 질문", "새로고침 재요청 본문", 35L);
+    String originalIntentId = getPostCurrentCreateExecutionIntentId(postId);
+
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl() + "/posts/" + postId + "/web3/recover-create",
+            HttpMethod.POST,
+            new HttpEntity<>(Map.of(), bearerJsonHeaders(accessToken)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    JsonNode data = objectMapper.readTree(response.getBody()).path("data");
+    assertThat(data.path("postId").asLong()).isEqualTo(postId);
+    assertThat(data.path("web3").path("actionType").asText()).isEqualTo("QNA_QUESTION_CREATE");
+    assertThat(data.path("web3").path("executionIntent").path("id").asText())
+        .isEqualTo(originalIntentId);
+    assertThat(data.path("web3").path("executionIntent").path("status").asText())
+        .isEqualTo("AWAITING_SIGNATURE");
+    assertThat(data.path("web3").path("signatureMeta").path("signedAt").asLong())
+        .isEqualTo(STUB_SIGNED_AT);
+    assertThat(getPostPublicationStatus(postId)).isEqualTo("PENDING");
+    assertThat(countQuestionCreateIntents(postId)).isEqualTo(1);
+  }
+
   @Test
   @Order(9)
   @DisplayName("POST /posts/{postId}/web3/recover-create — active create intent가 있으면 POST_008")

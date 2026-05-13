@@ -52,6 +52,8 @@ class QuestionLifecycleExecutionAdapterTest {
 
   private static final String TOKEN_ADDRESS = "0x2222222222222222222222222222222222222222";
   private static final String OTHER_TOKEN_ADDRESS = "0x4444444444444444444444444444444444444444";
+  private static final long MOCK_SIGNED_AT = 1_700_000_000L;
+  private static final byte[] MOCK_SIGNATURE_BYTES = new byte[65];
 
   @Mock private QuestionEscrowExecutionUseCase questionEscrowExecutionUseCase;
   @Mock private BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
@@ -193,7 +195,7 @@ class QuestionLifecycleExecutionAdapterTest {
   @DisplayName("loadQuestionCreateIntent rejects mismatched reward amount")
   void loadQuestionCreateIntentRejectsMismatchedRewardAmount() {
     stubRewardTokenConfig();
-    String payloadSnapshotJson = questionCreatePayload("질문 내용", 51L, TOKEN_ADDRESS, null);
+    String payloadSnapshotJson = questionCreatePayload("질문 내용", 51L, TOKEN_ADDRESS);
     given(getExecutionIntentUseCase.execute(any()))
         .willReturn(questionCreateIntentResult(payloadSnapshotJson));
 
@@ -206,7 +208,7 @@ class QuestionLifecycleExecutionAdapterTest {
   @DisplayName("loadQuestionCreateIntent rejects mismatched reward token")
   void loadQuestionCreateIntentRejectsMismatchedRewardToken() {
     stubRewardTokenConfig();
-    String payloadSnapshotJson = questionCreatePayload("질문 내용", 50L, OTHER_TOKEN_ADDRESS, null);
+    String payloadSnapshotJson = questionCreatePayload("질문 내용", 50L, OTHER_TOKEN_ADDRESS);
     given(getExecutionIntentUseCase.execute(any()))
         .willReturn(questionCreateIntentResult(payloadSnapshotJson));
 
@@ -216,14 +218,15 @@ class QuestionLifecycleExecutionAdapterTest {
   }
 
   @Test
-  @DisplayName("loadQuestionCreateIntent rejects mismatched call data")
-  void loadQuestionCreateIntentRejectsMismatchedCallData() {
+  @DisplayName(
+      "loadQuestionCreateIntent rejects user content that does not match stored question hash")
+  void loadQuestionCreateIntentRejectsMismatchedContentHash() {
     stubRewardTokenConfig();
-    String payloadSnapshotJson = questionCreatePayload("질문 내용", 50L, TOKEN_ADDRESS, "0x1234");
+    String payloadSnapshotJson = questionCreatePayload("원본 질문 내용");
     given(getExecutionIntentUseCase.execute(any()))
         .willReturn(questionCreateIntentResult(payloadSnapshotJson));
 
-    var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
+    var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "변경된 질문 내용", 50L);
 
     assertThat(result).isEmpty();
   }
@@ -317,25 +320,27 @@ class QuestionLifecycleExecutionAdapterTest {
   }
 
   private String questionCreatePayload(String questionContent) {
-    return questionCreatePayload(questionContent, 50L, TOKEN_ADDRESS, null);
+    return questionCreatePayload(questionContent, 50L, TOKEN_ADDRESS);
   }
 
   private String questionCreatePayload(
-      String questionContent, Long rewardMztk, String tokenAddress, String callDataOverride) {
+      String questionContent, Long rewardMztk, String tokenAddress) {
     try {
       String questionHash = QnaContentHashFactory.hash(questionContent);
       BigInteger amountWei = BigInteger.valueOf(rewardMztk);
+      // §MOM-393 — production realism: broadcast callData 는 9-arg (server-sig 봉입) 형식.
+      // fixture 가 7-arg 로 만들던 시절에는 stored vs expected 비교가 거짓 통과했다.
       String callData =
-          callDataOverride == null
-              ? qnaEscrowAbiEncoder.encode(
-                  QnaExecutionActionType.QNA_QUESTION_CREATE,
-                  QnaEscrowIdCodec.questionId(10L),
-                  null,
-                  tokenAddress,
-                  amountWei,
-                  questionHash,
-                  null)
-              : callDataOverride;
+          qnaEscrowAbiEncoder.encode(
+              QnaExecutionActionType.QNA_QUESTION_CREATE,
+              QnaEscrowIdCodec.questionId(10L),
+              null,
+              tokenAddress,
+              amountWei,
+              questionHash,
+              null,
+              MOCK_SIGNED_AT,
+              MOCK_SIGNATURE_BYTES);
       return new ObjectMapper()
           .writeValueAsString(
               new QnaEscrowExecutionPayload(
@@ -348,7 +353,13 @@ class QuestionLifecycleExecutionAdapterTest {
                   questionHash,
                   null,
                   "0x" + "3".repeat(40),
-                  callData));
+                  callData,
+                  null,
+                  null,
+                  null,
+                  null,
+                  MOCK_SIGNED_AT,
+                  Numeric.toHexString(MOCK_SIGNATURE_BYTES)));
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new IllegalStateException(e);
     }
