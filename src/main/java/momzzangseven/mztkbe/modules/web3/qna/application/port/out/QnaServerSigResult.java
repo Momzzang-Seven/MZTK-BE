@@ -4,14 +4,16 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * {@link SignQnaServerSigPort#sign} 의 결과 carrier.
+ * Result carrier for {@link SignQnaServerSigPort#sign}.
  *
- * <p>{@code signedAt} 은 digest 조립에 사용된 epoch-second clock 값이며, contract calldata 에 그대로 들어간다. {@code
- * signatureBytes} 는 canonical {@code (r ‖ s ‖ v)} 65-byte 서명이다.
+ * <p>{@code signedAt} is the epoch-second clock value used to assemble the digest, and is passed
+ * verbatim into the contract calldata. {@code signatureBytes} is the canonical {@code (r ‖ s ‖ v)}
+ * 65-byte signature.
  *
- * <p>{@code signatureBytes} 는 생성 시점과 accessor 호출 시점 모두에서 defensively cloned 되며, {@link #equals},
- * {@link #hashCode}, {@link #toString} 은 byte[] content equality 기반으로 재정의되어 있다. ({@code
- * SignDigestResult} 와 동일한 convention: defensive copy + content-equal overrides.)
+ * <p>{@code signatureBytes} is defensively cloned both at construction and at accessor call time,
+ * and {@link #equals}, {@link #hashCode}, {@link #toString} are overridden based on byte[] content
+ * equality. (Same convention as {@code SignDigestResult}: defensive copy + content-equal
+ * overrides.)
  */
 @SuppressWarnings("ArrayRecordComponent")
 public record QnaServerSigResult(long signedAt, byte[] signatureBytes) {
