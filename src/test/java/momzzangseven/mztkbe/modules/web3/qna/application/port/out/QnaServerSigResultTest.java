@@ -2,6 +2,7 @@ package momzzangseven.mztkbe.modules.web3.qna.application.port.out;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -130,10 +131,11 @@ class QnaServerSigResultTest {
     }
 
     @Test
-    @DisplayName("[E-308] toString 에 signedAt 값과 signatureBytes 표현이 포함됨")
-    void toString_includesSignedAtAndHexSignature() {
+    @DisplayName("[E-308] toString 에 signedAt 값이 포함되고 signatureBytes 는 길이만 노출 (raw 미노출)")
+    void toString_includesSignedAt_andRedactsSignatureBytes() {
       // given
-      QnaServerSigResult result = new QnaServerSigResult(1_700_000_000L, new byte[] {1, 2, 3});
+      byte[] rawBytes = new byte[] {1, 2, 3};
+      QnaServerSigResult result = new QnaServerSigResult(1_700_000_000L, rawBytes);
 
       // when
       String str = result.toString();
@@ -142,8 +144,23 @@ class QnaServerSigResultTest {
       assertThat(str).contains("signedAt");
       assertThat(str).contains("1700000000");
       assertThat(str).contains("signatureBytes");
-      // Arrays.toString style — matches the SignDigestResult precedent
-      assertThat(str).contains("[");
+      assertThat(str).contains("<redacted len=3>");
+      // raw byte array representation must not leak into the toString output.
+      assertThat(str).doesNotContain(Arrays.toString(rawBytes));
+    }
+
+    @Test
+    @DisplayName("[E-309] signatureBytes 가 null 인 경우 toString 은 <null> 토큰으로 표기")
+    void toString_nullSignatureBytes_printsNullToken() {
+      // given
+      QnaServerSigResult result = new QnaServerSigResult(0L, null);
+
+      // when
+      String str = result.toString();
+
+      // then
+      assertThat(str).contains("signatureBytes=<null>");
+      assertThat(str).doesNotContain("<redacted");
     }
   }
 }

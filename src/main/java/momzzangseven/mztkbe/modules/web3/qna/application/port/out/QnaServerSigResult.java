@@ -16,9 +16,13 @@ import java.util.Objects;
  * signedAtSkewSeconds}, so the two are not interchangeable.
  *
  * <p>{@code signatureBytes} is defensively cloned both at construction and at accessor call time,
- * and {@link #equals}, {@link #hashCode}, {@link #toString} are overridden based on byte[] content
- * equality. (Same convention as {@code SignDigestResult}: defensive copy + content-equal
- * overrides.)
+ * and {@link #equals} / {@link #hashCode} are content-based (same convention as {@code
+ * SignDigestResult}: defensive copy + content-equal overrides). {@link #toString} deliberately
+ * diverges from that convention and redacts the raw bytes — it prints {@code <redacted len=N>}
+ * instead of {@code Arrays.toString(...)} so the signature does not leak through logs, APM, or test
+ * failure messages. The signature is a calldata-bound authorization token valid until {@code
+ * signatureExpiresAt}, so observability redaction is a defense-in-depth measure even though the
+ * value itself is not a secret key.
  */
 @SuppressWarnings("ArrayRecordComponent")
 public record QnaServerSigResult(long signedAt, byte[] signatureBytes, Instant signingInstant) {
@@ -64,7 +68,7 @@ public record QnaServerSigResult(long signedAt, byte[] signatureBytes, Instant s
     return "QnaServerSigResult[signedAt="
         + signedAt
         + ", signatureBytes="
-        + Arrays.toString(signatureBytes)
+        + (signatureBytes == null ? "<null>" : "<redacted len=" + signatureBytes.length + ">")
         + ", signingInstant="
         + signingInstant
         + "]";
