@@ -18,6 +18,7 @@ import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702AuthorizationPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.Eip7702ChainPort;
 import momzzangseven.mztkbe.modules.web3.eip7702.infrastructure.config.Eip7702Properties;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.QnaServerSigPreimage;
@@ -196,6 +197,37 @@ class QnaExecutionDraftBuilderAdapterTest {
     assertThat(payload.get("signatureHex").asText())
         .isEqualTo(Numeric.toHexString(mockSignatureBytes()));
     assertThat(payload.get("callData").asText()).startsWith(nineArgSelector);
+  }
+
+  /**
+   * §MOM-393 — payload snapshot 의 jackson round-trip 이 record level 에서도 무손실임을 보장. Commit 1 의 fix
+   * 가 {@code matchesPayloadHash} 의 SHA-256 무결성 + record 의 signedAt/signatureHex 필드를 신뢰하므로, 그
+   * 신뢰의 토대를 별 case 로 명시 고정.
+   */
+  @Test
+  void build_payloadSnapshotRoundTripsServerSigFields() throws Exception {
+    stubHappyPath();
+
+    QnaExecutionDraft draft =
+        adapter.build(
+            new QnaEscrowExecutionRequest(
+                QnaExecutionResourceType.QUESTION,
+                "101",
+                QnaExecutionActionType.QNA_QUESTION_CREATE,
+                7L,
+                null,
+                101L,
+                null,
+                "0x4444444444444444444444444444444444444444",
+                new BigInteger("50000000000000000000"),
+                "0x" + "a".repeat(64),
+                null));
+
+    QnaEscrowExecutionPayload payload =
+        new ObjectMapper()
+            .readValue(draft.payloadSnapshotJson(), QnaEscrowExecutionPayload.class);
+    assertThat(payload.signedAt()).isEqualTo(MOCK_SIGNED_AT);
+    assertThat(payload.signatureHex()).isEqualTo(Numeric.toHexString(mockSignatureBytes()));
   }
 
   @Test
