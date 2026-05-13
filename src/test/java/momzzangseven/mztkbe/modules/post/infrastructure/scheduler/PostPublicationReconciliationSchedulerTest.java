@@ -8,6 +8,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
@@ -35,11 +40,17 @@ class PostPublicationReconciliationSchedulerTest {
   @Mock private RunPostPublicationReconciliationUseCase reconciliationUseCase;
 
   private ExecutorService executorService;
+  private Logger schedulerLogger;
+  private ListAppender<ILoggingEvent> logAppender;
 
   @AfterEach
   void tearDown() {
     if (executorService != null) {
       executorService.shutdownNow();
+    }
+    if (schedulerLogger != null && logAppender != null) {
+      schedulerLogger.detachAppender(logAppender);
+      logAppender.stop();
     }
   }
 
@@ -160,6 +171,55 @@ class PostPublicationReconciliationSchedulerTest {
   }
 
   @Test
+  @DisplayName("attention warning includes needs-review and stale post ids")
+  void attentionWarningIncludesPostIds() {
+    attachLogAppender();
+    PostPublicationReconciliationScheduler scheduler = scheduler(properties(100, true, 10));
+    when(reconciliationUseCase.run(any()))
+        .thenReturn(resultWithAttention(20, 30L, 2, 1, List.of(101L, 102L), List.of(201L)));
+
+    scheduler.run();
+
+    assertThat(formattedLogMessages())
+        .anySatisfy(
+            message ->
+                assertThat(message)
+                    .contains("post publication reconciliation batch requires attention")
+                    .contains("needsReview=2")
+                    .contains("needsReviewPostIds=[101, 102]")
+                    .contains("staleSkipped=1")
+                    .contains("staleSkippedPostIds=[201]"));
+  }
+
+  @Test
+  @DisplayName("completed summary log reports accumulated totals")
+  void completedSummaryLogReportsAccumulatedTotals() {
+    attachLogAppender();
+    PostPublicationReconciliationScheduler scheduler = scheduler(properties(100, true, 10));
+    when(reconciliationUseCase.run(any()))
+        .thenReturn(
+            resultWithCounts(100, 1, 2, 3, 4, 1, 2, 10L, List.of(11L), List.of(21L, 22L)),
+            resultWithCounts(
+                20, 5, 6, 7, 8, 3, 4, 30L, List.of(31L, 32L, 33L), List.of(41L, 42L, 43L, 44L)));
+
+    scheduler.run();
+
+    assertThat(formattedLogMessages())
+        .anySatisfy(
+            message ->
+                assertThat(message)
+                    .contains("post publication reconciliation completed")
+                    .contains("processed=120")
+                    .contains("unchanged=6")
+                    .contains("changed=30")
+                    .contains("changedToPending=8")
+                    .contains("changedToVisible=10")
+                    .contains("changedToFailed=12")
+                    .contains("needsReview=4")
+                    .contains("staleSkipped=6"));
+  }
+
+  @Test
   @DisplayName("use case failure is swallowed by scheduler")
   void useCaseFailureIsSwallowed() {
     PostPublicationReconciliationScheduler scheduler = scheduler(properties(100, true, 10));
@@ -222,13 +282,71 @@ class PostPublicationReconciliationSchedulerTest {
 
   private RunPostPublicationReconciliationResult result(int scannedCount, Long lastScannedPostId) {
     return new RunPostPublicationReconciliationResult(
-        scannedCount, 0, 0, 0, 0, 0, 0, lastScannedPostId, true);
+        scannedCount, 0, 0, 0, 0, 0, 0, lastScannedPostId, true, List.of(), List.of());
   }
 
   private RunPostPublicationReconciliationResult resultWithAttention(
       int scannedCount, Long lastScannedPostId, int needsReviewCount, int staleSkippedCount) {
+    return resultWithAttention(
+        scannedCount, lastScannedPostId, needsReviewCount, staleSkippedCount, List.of(), List.of());
+  }
+
+  private RunPostPublicationReconciliationResult resultWithAttention(
+      int scannedCount,
+      Long lastScannedPostId,
+      int needsReviewCount,
+      int staleSkippedCount,
+      List<Long> needsReviewPostIds,
+      List<Long> staleSkippedPostIds) {
     return new RunPostPublicationReconciliationResult(
-        scannedCount, 0, 0, 0, 0, needsReviewCount, staleSkippedCount, lastScannedPostId, true);
+        scannedCount,
+        0,
+        0,
+        0,
+        0,
+        needsReviewCount,
+        staleSkippedCount,
+        lastScannedPostId,
+        true,
+        needsReviewPostIds,
+        staleSkippedPostIds);
+  }
+
+  private RunPostPublicationReconciliationResult resultWithCounts(
+      int scannedCount,
+      int unchangedCount,
+      int changedToPendingCount,
+      int changedToVisibleCount,
+      int changedToFailedCount,
+      int needsReviewCount,
+      int staleSkippedCount,
+      Long lastScannedPostId,
+      List<Long> needsReviewPostIds,
+      List<Long> staleSkippedPostIds) {
+    return new RunPostPublicationReconciliationResult(
+        scannedCount,
+        unchangedCount,
+        changedToPendingCount,
+        changedToVisibleCount,
+        changedToFailedCount,
+        needsReviewCount,
+        staleSkippedCount,
+        lastScannedPostId,
+        true,
+        needsReviewPostIds,
+        staleSkippedPostIds);
+  }
+
+  private void attachLogAppender() {
+    schedulerLogger =
+        (Logger) LoggerFactory.getLogger(PostPublicationReconciliationScheduler.class);
+    logAppender = new ListAppender<>();
+    logAppender.start();
+    schedulerLogger.addAppender(logAppender);
+  }
+
+  private List<String> formattedLogMessages() {
+    return logAppender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
   }
 
   @Configuration

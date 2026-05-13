@@ -73,6 +73,7 @@ class PostPublicationReconciliationServiceTest {
     var result = service.run(new RunPostPublicationReconciliationCommand(null, 10, false));
 
     assertThat(result.needsReviewCount()).isEqualTo(1);
+    assertThat(result.needsReviewPostIds()).containsExactly(13L);
     assertThat(result.staleSkippedCount()).isZero();
   }
 
@@ -108,6 +109,7 @@ class PostPublicationReconciliationServiceTest {
     assertThat(result.changedToPendingCount()).isZero();
     assertThat(result.changedToFailedCount()).isZero();
     assertThat(result.staleSkippedCount()).isEqualTo(1);
+    assertThat(result.staleSkippedPostIds()).containsExactly(14L);
   }
 
   @Test
@@ -126,6 +128,7 @@ class PostPublicationReconciliationServiceTest {
     var result = service.run(new RunPostPublicationReconciliationCommand(null, 10, false));
 
     assertThat(result.needsReviewCount()).isEqualTo(1);
+    assertThat(result.needsReviewPostIds()).containsExactly(14L);
     assertThat(result.changedToVisibleCount()).isEqualTo(1);
     assertThat(result.lastScannedPostId()).isEqualTo(15L);
   }

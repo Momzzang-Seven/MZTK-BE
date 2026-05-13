@@ -64,11 +64,13 @@ public class PostPublicationReconciliationScheduler {
 
         if (result.needsReviewCount() > 0 || result.staleSkippedCount() > 0) {
           log.warn(
-              "post publication reconciliation batch requires attention: afterPostId={}, scanned={}, needsReview={}, staleSkipped={}, lastPostId={}, dryRun={}",
+              "post publication reconciliation batch requires attention: afterPostId={}, scanned={}, needsReview={}, needsReviewPostIds={}, staleSkipped={}, staleSkippedPostIds={}, lastPostId={}, dryRun={}",
               afterPostId,
               result.scannedCount(),
               result.needsReviewCount(),
+              result.needsReviewPostIds(),
               result.staleSkippedCount(),
+              result.staleSkippedPostIds(),
               result.lastScannedPostId(),
               result.dryRun());
         }
