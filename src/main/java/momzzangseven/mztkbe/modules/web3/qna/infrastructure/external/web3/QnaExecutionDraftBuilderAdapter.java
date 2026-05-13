@@ -134,7 +134,8 @@ public class QnaExecutionDraftBuilderAdapter implements BuildQnaExecutionDraftPo
         // §MOM-393 — derive expiresAt from the exact same Instant the sign call read, so
         // signedAt + sigValidityDuration and expiresAt cannot drift on sub-second clock reads.
         LocalDateTime.ofInstant(
-            signResult.signingInstant().plusSeconds(draftContext.ttlSeconds()), appClock.getZone()));
+            signResult.signingInstant().plusSeconds(draftContext.ttlSeconds()),
+            appClock.getZone()));
   }
 
   private String rootIdempotencyKey(QnaEscrowExecutionRequest request) {

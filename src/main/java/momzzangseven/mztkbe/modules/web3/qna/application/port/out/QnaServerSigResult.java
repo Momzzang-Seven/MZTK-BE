@@ -10,10 +10,10 @@ import java.util.Objects;
  * <p>{@code signedAt} is the epoch-second clock value used to assemble the digest, and is passed
  * verbatim into the contract calldata. {@code signatureBytes} is the canonical {@code (r ‖ s ‖ v)}
  * 65-byte signature. {@code signingInstant} is the raw {@link Instant} the adapter captured from
- * {@code appClock} at sign time — exposed so callers can derive other deadlines (e.g.
- * {@code expiresAt}) from the same instant the digest was assembled at, avoiding sub-second drift
- * between separate {@code appClock.now()} calls. Note: {@code signedAt = signingInstant.epochSecond
- * − signedAtSkewSeconds}, so the two are not interchangeable.
+ * {@code appClock} at sign time — exposed so callers can derive other deadlines (e.g. {@code
+ * expiresAt}) from the same instant the digest was assembled at, avoiding sub-second drift between
+ * separate {@code appClock.now()} calls. Note: {@code signedAt = signingInstant.epochSecond −
+ * signedAtSkewSeconds}, so the two are not interchangeable.
  *
  * <p>{@code signatureBytes} is defensively cloned both at construction and at accessor call time,
  * and {@link #equals}, {@link #hashCode}, {@link #toString} are overridden based on byte[] content

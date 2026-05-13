@@ -132,8 +132,7 @@ public class SignQnaServerSigAdapter implements SignQnaServerSigPort {
     // derivation. Callers (e.g. QnaExecutionDraftBuilderAdapter) reuse signingInstant to compute
     // expiresAt, so the two never drift across sub-second clock reads.
     Instant signingInstant = appClock.instant();
-    long signedAt =
-        signingInstant.getEpochSecond() - qnaEscrowProperties.getSignedAtSkewSeconds();
+    long signedAt = signingInstant.getEpochSecond() - qnaEscrowProperties.getSignedAtSkewSeconds();
 
     byte[] structHash = buildStructHash(preimage, signedAt);
     byte[] domainSeparator = resolveDomainSeparator();
