@@ -36,6 +36,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardT
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaEscrowAbiEncoder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,6 +62,7 @@ class QuestionLifecycleExecutionAdapterTest {
   @Mock private GetExecutionIntentUseCase getExecutionIntentUseCase;
   @Mock private LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
   @Spy private QnaEscrowAbiEncoder qnaEscrowAbiEncoder = new QnaEscrowAbiEncoder();
+  @Spy private QnaEscrowProperties qnaEscrowProperties = new QnaEscrowProperties();
   @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
   @InjectMocks private QuestionLifecycleExecutionAdapter adapter;
@@ -132,6 +134,12 @@ class QuestionLifecycleExecutionAdapterTest {
     assertThat(result).isPresent();
     assertThat(result.orElseThrow().actionType()).isEqualTo("QNA_QUESTION_CREATE");
     assertThat(result.orElseThrow().executionIntent().id()).isEqualTo("intent-create");
+    // §MOM-393 AWAITING_SIGNATURE reload must surface the stored signedAt so the FE can keep
+    // signing the existing intent without going through a fresh prepare.
+    assertThat(result.orElseThrow().signatureMeta()).isNotNull();
+    assertThat(result.orElseThrow().signatureMeta().signedAt()).isEqualTo(MOCK_SIGNED_AT);
+    assertThat(result.orElseThrow().signatureMeta().signatureExpiresAt())
+        .isEqualTo(MOCK_SIGNED_AT + qnaEscrowProperties.getSigValidityDuration());
     verify(getExecutionIntentUseCase).execute(new GetExecutionIntentQuery(7L, "intent-create"));
   }
 

@@ -5,6 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -14,6 +16,7 @@ import java.util.Map;
 import momzzangseven.mztkbe.integration.e2e.support.E2ETestBase;
 import momzzangseven.mztkbe.modules.account.application.port.out.GoogleAuthPort;
 import momzzangseven.mztkbe.modules.account.application.port.out.KakaoAuthPort;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
@@ -41,6 +44,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.web3j.utils.Numeric;
 
 /**
  * QnA Escrow 전체 흐름 E2E 테스트 (Local Server + Real PostgreSQL).
@@ -82,6 +86,12 @@ class QnaEscrowE2ETest extends E2ETestBase {
 
   private static final String FAKE_DELEGATE_TARGET = "0x0000000000000000000000000000000000000001";
   private static final String FAKE_CALL_TARGET = "0x0000000000000000000000000000000000000002";
+  private static final String FAKE_AUTHORITY_ADDRESS = "0x" + "f".repeat(40);
+  private static final String FAKE_REWARD_TOKEN_ADDRESS =
+      "0x0000000000000000000000000000000000000000";
+  private static final String FAKE_CALLDATA = "0x1234abcd";
+  private static final String FAKE_SIGNATURE_HEX = "0x" + "00".repeat(65);
+  private static final int FAKE_REWARD_TOKEN_DECIMALS = 18;
 
   /**
    * Deterministic stub for the server-sig {@code signedAt} epoch second. Combined with the
@@ -128,6 +138,34 @@ class QnaEscrowE2ETest extends E2ETestBase {
                           req.questionUpdateToken())
                       : QnaEscrowIdempotencyKeyFactory.create(
                           req.actionType(), req.requesterUserId(), req.postId(), req.answerId());
+              // Production-realistic payload snapshot — required so that
+              // QuestionLifecycleExecutionAdapter#matchesQuestionCreatePayload can re-encode the
+              // 7-arg baseline from the stored payload and pass the AWAITING_SIGNATURE recover
+              // happy-path check (Order=29). The fields here mirror QnaExecutionDraftBuilderAdapter
+              // production output for the request inputs.
+              QnaEscrowExecutionPayload payloadSnapshot =
+                  new QnaEscrowExecutionPayload(
+                      req.actionType(),
+                      req.postId(),
+                      req.answerId(),
+                      FAKE_AUTHORITY_ADDRESS,
+                      req.tokenAddress(),
+                      amountForAction(req.actionType(), req.rewardAmountWei()),
+                      req.questionHash(),
+                      req.contentHash(),
+                      FAKE_CALL_TARGET,
+                      FAKE_CALLDATA,
+                      req.questionUpdateVersion(),
+                      req.questionUpdateToken(),
+                      req.answerUpdateVersion(),
+                      req.answerUpdateToken(),
+                      STUB_SIGNED_AT,
+                      FAKE_SIGNATURE_HEX);
+              String payloadJson = objectMapper.writeValueAsString(payloadSnapshot);
+              String payloadHashHex =
+                  Numeric.toHexString(
+                      MessageDigest.getInstance("SHA-256")
+                          .digest(payloadJson.getBytes(StandardCharsets.UTF_8)));
               return new QnaExecutionDraft(
                   req.resourceType(),
                   req.resourceId(),
@@ -136,12 +174,12 @@ class QnaEscrowE2ETest extends E2ETestBase {
                   req.requesterUserId(),
                   req.counterpartyUserId(),
                   rootIdempotencyKey,
-                  "0x" + "a".repeat(64),
-                  "{}",
+                  payloadHashHex,
+                  payloadJson,
                   List.of(
-                      new QnaExecutionDraftCall(FAKE_CALL_TARGET, BigInteger.ZERO, "0x1234abcd")),
+                      new QnaExecutionDraftCall(FAKE_CALL_TARGET, BigInteger.ZERO, FAKE_CALLDATA)),
                   true,
-                  "0x" + "f".repeat(40),
+                  FAKE_AUTHORITY_ADDRESS,
                   0L,
                   FAKE_DELEGATE_TARGET,
                   "0x" + "b".repeat(64),
@@ -152,6 +190,15 @@ class QnaEscrowE2ETest extends E2ETestBase {
             });
 
     BDDMockito.doNothing().when(precheckQuestionFundingPort).precheck(any());
+  }
+
+  /** Mirrors {@code QnaExecutionDraftBuilderAdapter#amountForAction} for mock payload realism. */
+  private static BigInteger amountForAction(
+      QnaExecutionActionType actionType, BigInteger rewardAmountWei) {
+    return switch (actionType) {
+      case QNA_QUESTION_CREATE, QNA_QUESTION_DELETE, QNA_ANSWER_ACCEPT -> rewardAmountWei;
+      default -> BigInteger.ZERO;
+    };
   }
 
   @Test

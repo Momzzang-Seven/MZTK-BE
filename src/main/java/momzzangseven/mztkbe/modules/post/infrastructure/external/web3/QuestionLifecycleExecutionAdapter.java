@@ -30,6 +30,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardT
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
+import momzzangseven.mztkbe.modules.web3.qna.infrastructure.config.QnaEscrowProperties;
 import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaEscrowAbiEncoder;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -47,6 +48,7 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;
   private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
   private final QnaEscrowAbiEncoder qnaEscrowAbiEncoder;
+  private final QnaEscrowProperties qnaEscrowProperties;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -89,7 +91,20 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             postId, questionContent, rewardMztk, result.payloadSnapshotJson())) {
       return Optional.empty();
     }
-    return Optional.of(toView(result));
+    return Optional.of(toView(result, extractSignedAt(result.payloadSnapshotJson())));
+  }
+
+  private Long extractSignedAt(String payloadSnapshotJson) {
+    if (payloadSnapshotJson == null || payloadSnapshotJson.isBlank()) {
+      return null;
+    }
+    try {
+      return objectMapper
+          .readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class)
+          .signedAt();
+    } catch (JsonProcessingException e) {
+      throw new Web3InvalidInputException("invalid qna question create payload snapshot");
+    }
   }
 
   @Override
@@ -220,7 +235,12 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
     return new QuestionExecutionWriteView.SignatureMeta(meta.signedAt(), meta.signatureExpiresAt());
   }
 
-  private QuestionExecutionWriteView toView(GetExecutionIntentResult result) {
+  private QuestionExecutionWriteView toView(GetExecutionIntentResult result, Long signedAt) {
+    QuestionExecutionWriteView.SignatureMeta signatureMeta =
+        signedAt == null
+            ? null
+            : new QuestionExecutionWriteView.SignatureMeta(
+                signedAt, signedAt + qnaEscrowProperties.getSigValidityDuration());
     return new QuestionExecutionWriteView(
         new QuestionExecutionWriteView.Resource(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
@@ -229,7 +249,8 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
         new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
         toSignRequest(result.signRequest()),
-        true);
+        true,
+        signatureMeta);
   }
 
   private boolean matchesQuestionCreatePayload(
