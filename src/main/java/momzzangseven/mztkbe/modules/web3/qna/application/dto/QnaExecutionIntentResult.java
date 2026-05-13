@@ -100,11 +100,13 @@ public record QnaExecutionIntentResult(
    * Execution intent metadata.
    *
    * <p>{@code expiresAt} is the BE-side deadline by which the user must submit their user-sign to
-   * the BE. Past this point {@link
+   * the BE. <b>Type: {@link LocalDateTime} in KST</b> — the BE wall-clock, not an epoch second and
+   * not UTC. Past this point {@link
    * momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate}
    * refuses to broadcast and terminates the intent with {@code EXECUTION_INTENT_EXPIRED}. It is
    * independent from {@link SignatureMeta#signatureExpiresAt()}, which applies at a different phase
-   * (on-chain mining).
+   * (on-chain mining) and uses a different time domain (epoch seconds on the contract clock). FE
+   * surfaces this value as the user-facing countdown for signature submission.
    */
   public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
 
@@ -137,12 +139,18 @@ public record QnaExecutionIntentResult(
    * Server-sig metadata surfaced to the API client. Both fields must be either both null (admin /
    * absent) or both non-null (server-sig). Mixed states are rejected.
    *
-   * <p>{@code signatureExpiresAt} is the on-chain mining deadline: the broadcast tx must be
-   * included in a block before this epoch second or {@code _verifyServerSig} reverts with {@code
-   * SignatureExpired}. It is independent from {@link ExecutionIntent#expiresAt()}, which applies
-   * earlier at user-sign submission. FE typically surfaces {@code ExecutionIntent.expiresAt} as the
-   * user-facing countdown and uses {@code signatureExpiresAt} only to detect mining-stage delays
-   * after broadcast.
+   * <p>Both fields use <b>epoch seconds in the smart-contract clock domain</b> (raw {@code Long},
+   * not {@link LocalDateTime}). They are deliberately asymmetric with {@link
+   * ExecutionIntent#expiresAt()}, which uses BE wall-clock {@link LocalDateTime} in KST — the two
+   * values apply at different phases of the flow and live in different time domains; do not unify
+   * them.
+   *
+   * <p>{@code signedAt} is the epoch second embedded into the on-chain calldata via the 9-arg
+   * `createQuestion` overload. {@code signatureExpiresAt = signedAt + sigValidityDuration} (default
+   * 900s) is the on-chain mining deadline: the broadcast tx must be included in a block before
+   * this epoch second or {@code _verifyServerSig} reverts with {@code SignatureExpired}. FE
+   * typically surfaces {@link ExecutionIntent#expiresAt()} as the user-facing countdown and uses
+   * {@code signatureExpiresAt} only to detect mining-stage delays after broadcast.
    */
   public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {
 
