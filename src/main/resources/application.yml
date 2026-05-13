@@ -109,6 +109,15 @@ answer:
     cron: "0 30 * * * *"
     zone: Asia/Seoul
 
+post:
+  publication-reconciliation:
+    enabled: false
+    cron: "0 */10 * * * *"
+    zone: "Asia/Seoul"
+    batch-size: 100
+    dry-run: true
+    max-batches-per-run: 10
+
 logging:
   level:
     root: INFO
