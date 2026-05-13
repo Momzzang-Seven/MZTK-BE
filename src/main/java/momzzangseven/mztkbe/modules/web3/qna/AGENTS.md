@@ -71,13 +71,36 @@ capping / 통합하지 말 것:
   된 tx 가 chain 에 포함되어야 할 deadline. 초과 시 on-chain `_verifyServerSig` 가
   `SignatureExpired` revert. FE 는 broadcast 후 mining 지연 모니터링용으로만 활용.
 
-## lock-held 외부 호출
+## lock-held 외부 호출 — Rule 1 예외 (calldata-bound server signature)
 
 `prepare*` 7 액션은 `TransactionalQuestion/AnswerEscrowExecutionUseCase` decorator 의
 트랜잭션 안에서 동작하며, update / delete / accept 는 projection 행에
 PESSIMISTIC_WRITE lock 을 보유한다. 같은 lock window 안에서 KMS 호출 1회 + RPC 호출
-2회 가 발생한다. KMS 장애 / rate-limit hit 시 cascading 위험 → 모니터링과 대응 절차는
-`docs.local/runbook/qna-prepare-kms-degradation.md`.
+2회 가 발생한다.
+
+### 왜 `docs.shared/EXTERNAL_SYSTEM_SYNC.md` Rule 1 예외인가
+
+Rule 1 default 인 "DB writes 만 트랜잭션 내, 외부 mutation 은 AFTER_COMMIT" 를 그대로
+적용하면 `signedAt` / `signatureBytes` 가 calldata `Uint256` 에 직접 봉입되는 본 흐름이
+무너진다. AFTER_COMMIT 으로 sign 을 미루면 DB 에는 calldata 가 미완성 (server-sig 가
+누락된 7-arg) 으로 저장되고, broadcast 시 9-arg contract 시그너처와 어긋나 즉시 revert.
+즉 KMS sign 이 **calldata 직렬화 직전** 시점에 동기 호출되어야 하는 ordering 제약이
+설계의 기둥이다 (`QnaEscrowAbiEncoder.java:21-39` docstring, `QnaExecutionDraftBuilderAdapter:62-82`).
+
+### Trade-off
+
+KMS sign 자체는 **idempotent / read-only** — 새 키를 만들지도, 외부 상태를 변경하지도
+않는 EIP-712 digest signing 1회. DB rollback 시 KMS 측에는 어떤 mutation 도 남지 않으며
+"orphan signature" 는 트래픽 측면에서만 의미가 있다. Rule 2 의 `TransactionSynchronization`
+cleanup 등록도 필요 없다 (정리할 외부 상태가 없음). Rule 5 ("idempotent recovery") 가
+trivially 충족.
+
+### 운영 모니터링
+
+KMS 5xx / throttle 비율은 `docs.local/runbook/qna-prepare-kms-degradation.md` 의 임계값을
+따른다. cascading 장애 가능성 (KMS 응답 지연 → tx hold → DB lock hold) 이 실재하므로,
+운영 환경에서는 KMS `Latency` / `ThrottledRequests` / `SigningFailures` 메트릭을 prepare
+QPS 와 함께 추적한다.
 
 ## 테스트 진입점
 
