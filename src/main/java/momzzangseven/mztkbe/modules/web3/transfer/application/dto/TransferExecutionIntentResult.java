@@ -15,6 +15,7 @@ public record TransferExecutionIntentResult(
     String executionIntentId,
     TransferExecutionIntentStatus executionIntentStatus,
     LocalDateTime expiresAt,
+    long expiresAtEpochSeconds,
     TransferExecutionMode mode,
     int signCount,
     TransferSignRequestBundle signRequest,

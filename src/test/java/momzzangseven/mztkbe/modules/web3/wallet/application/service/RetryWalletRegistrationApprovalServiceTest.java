@@ -211,9 +211,11 @@ class RetryWalletRegistrationApprovalServiceTest {
         INTENT_ID,
         executionStatus,
         expiresAt,
+        1L,
         "EIP7702",
         2,
         signRequest,
+        null,
         null,
         transactionStatus,
         null);
@@ -256,7 +258,7 @@ class RetryWalletRegistrationApprovalServiceTest {
             "WALLET_REGISTRATION", REGISTRATION_ID, "PENDING_EXECUTION"),
         "WALLET_ESCROW_APPROVE",
         new WalletApprovalExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", NOW.plusMinutes(5)),
+            intentId, "AWAITING_SIGNATURE", NOW.plusMinutes(5), 1L),
         new WalletApprovalExecutionIntentResult.Execution("EIP7702", 2),
         signRequest(),
         false);

@@ -35,6 +35,7 @@ public class LoadTransferExecutionAdapter implements LoadTransferExecutionPort {
         result.executionIntentId(),
         TransferExecutionIntentStatus.valueOf(result.executionIntentStatus().name()),
         result.expiresAt(),
+        result.expiresAtEpochSeconds(),
         TransferExecutionMode.valueOf(result.mode().name()),
         result.signCount(),
         toTransferSignRequest(result.signRequest()),

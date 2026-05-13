@@ -2,7 +2,6 @@ package momzzangseven.mztkbe.modules.answer.application.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerDeleteStatus;
 import momzzangseven.mztkbe.modules.answer.domain.vo.AnswerPublicationStatus;

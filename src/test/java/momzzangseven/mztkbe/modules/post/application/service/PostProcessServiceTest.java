@@ -21,6 +21,7 @@ import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.RetryableWeb3PreparationException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.post.application.dto.PostMutationResult;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.dto.UpdatePostCommand;
 import momzzangseven.mztkbe.modules.post.application.port.out.CountAnswersPort;
 import momzzangseven.mztkbe.modules.post.application.port.out.LinkTagPort;
@@ -508,11 +509,7 @@ class PostProcessServiceTest {
     when(postPersistencePort.loadPost(postId)).thenReturn(Optional.of(post));
     when(countAnswersPort.countOnchainBlockingAnswers(postId)).thenReturn(0L);
     when(questionLifecycleExecutionPort.prepareQuestionDelete(postId, ownerId, "질문 내용", 50L))
-        .thenReturn(
-            Optional.of(
-                org.mockito.Mockito.mock(
-                    momzzangseven.mztkbe.modules.post.application.port.out
-                        .QuestionExecutionWriteView.class)));
+        .thenReturn(Optional.of(org.mockito.Mockito.mock(QuestionExecutionWriteView.class)));
 
     postProcessService.deletePost(ownerId, postId);
 

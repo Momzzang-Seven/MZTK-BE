@@ -12,6 +12,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryQuery;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetLatestExecutionIntentSummaryResult;
+import momzzangseven.mztkbe.modules.web3.execution.application.dto.SignRequestUnavailableReason;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionActionType;
@@ -59,6 +60,7 @@ class WalletApprovalExecutionStateAdapterTest {
     assertThat(result).isPresent();
     assertThat(result.get().executionIntentStatus()).isEqualTo("AWAITING_SIGNATURE");
     assertThat(result.get().signRequest().authorization().authorityNonce()).isEqualTo(12L);
+    assertThat(result.get().signRequestUnavailableReason()).isNull();
   }
 
   @Test
@@ -97,6 +99,17 @@ class WalletApprovalExecutionStateAdapterTest {
         .isEqualTo("0x" + "1".repeat(40));
   }
 
+  @Test
+  void loadByExecutionIntentId_mapsSignRequestUnavailableReason() {
+    when(getExecutionIntentUseCase.execute(any())).thenReturn(unavailableResult());
+
+    var result = adapter.loadByExecutionIntentId(7L, "intent-1");
+
+    assertThat(result).isPresent();
+    assertThat(result.get().signRequest()).isNull();
+    assertThat(result.get().signRequestUnavailableReason()).isEqualTo("EIP7702_DEADLINE_TOO_CLOSE");
+  }
+
   private static GetExecutionIntentResult getResult() {
     return new GetExecutionIntentResult(
         ExecutionResourceType.WALLET_REGISTRATION,
@@ -108,12 +121,14 @@ class WalletApprovalExecutionStateAdapterTest {
         "intent-1",
         ExecutionIntentStatus.AWAITING_SIGNATURE,
         EXPIRES_AT,
+        123L,
         ExecutionMode.EIP7702,
         2,
         SignRequestBundle.forEip7702(
             new SignRequestBundle.AuthorizationSignRequest(
                 11155111L, "0x" + "2".repeat(40), 12L, "0x" + "a".repeat(64)),
             new SignRequestBundle.SubmitSignRequest("0x" + "b".repeat(64), 123L)),
+        null,
         11L,
         ExecutionTransactionStatus.SIGNED,
         "0x" + "c".repeat(64));
@@ -128,6 +143,7 @@ class WalletApprovalExecutionStateAdapterTest {
         "intent-1",
         ExecutionIntentStatus.PENDING_ONCHAIN,
         EXPIRES_AT,
+        1L,
         ExecutionMode.EIP7702,
         2,
         11L,
@@ -146,6 +162,7 @@ class WalletApprovalExecutionStateAdapterTest {
         "intent-1",
         ExecutionIntentStatus.AWAITING_SIGNATURE,
         EXPIRES_AT,
+        123L,
         ExecutionMode.EIP1559,
         1,
         SignRequestBundle.forEip1559(
@@ -160,6 +177,28 @@ class WalletApprovalExecutionStateAdapterTest {
                 "0x1",
                 "0x2",
                 1L)),
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private static GetExecutionIntentResult unavailableResult() {
+    return new GetExecutionIntentResult(
+        ExecutionResourceType.WALLET_REGISTRATION,
+        "registration-1",
+        ExecutionResourceStatus.PENDING_EXECUTION,
+        ExecutionActionType.WALLET_ESCROW_APPROVE,
+        "0x" + "1".repeat(64),
+        "{}",
+        "intent-1",
+        ExecutionIntentStatus.AWAITING_SIGNATURE,
+        EXPIRES_AT,
+        123L,
+        ExecutionMode.EIP7702,
+        2,
+        null,
+        SignRequestUnavailableReason.EIP7702_DEADLINE_TOO_CLOSE,
         null,
         null,
         null);

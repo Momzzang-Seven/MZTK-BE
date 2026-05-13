@@ -17,13 +17,16 @@ import java.util.Optional;
 import momzzangseven.mztkbe.global.error.post.PostPublicationStateException;
 import momzzangseven.mztkbe.global.error.wallet.WalletNotConnectedException;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionRequest;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
@@ -62,6 +65,7 @@ class QuestionEscrowExecutionServiceTest {
   @Mock private QnaProjectionPersistencePort qnaProjectionPersistencePort;
   @Mock private QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort;
   @Mock private LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort;
+  @Mock private BuildQnaEscrowCallDataPort buildQnaEscrowCallDataPort;
   @Mock private BuildQnaExecutionDraftPort buildQnaExecutionDraftPort;
   @Mock private SubmitQnaExecutionDraftPort submitQnaExecutionDraftPort;
 
@@ -110,6 +114,80 @@ class QuestionEscrowExecutionServiceTest {
     verify(qnaProjectionPersistencePort, never()).saveQuestion(any());
     verify(qnaProjectionPersistencePort, never()).saveAnswer(any());
     assertThat(result.executionIntent().id()).isEqualTo("intent-1");
+  }
+
+  @Test
+  @DisplayName("matchesQuestionCreatePayload accepts exact reward token amount and calldata")
+  void matchesQuestionCreatePayload_acceptsExactPayload() {
+    String tokenAddress = "0x1111111111111111111111111111111111111111";
+    String expectedCallData = "0xexpected";
+    String questionHash = QnaContentHashFactory.hash("질문 본문");
+    given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
+        .willReturn(new LoadQnaRewardTokenConfigPort.RewardTokenConfig(tokenAddress, 0));
+    given(buildQnaEscrowCallDataPort.encode(any(), any(), any(), any(), any(), any(), any()))
+        .willReturn(expectedCallData);
+
+    boolean result =
+        service.matchesQuestionCreatePayload(
+            new MatchQuestionCreatePayloadCommand(
+                101L,
+                "질문 본문",
+                50L,
+                questionCreatePayload(
+                    tokenAddress, BigInteger.valueOf(50), questionHash, expectedCallData)));
+
+    assertThat(result).isTrue();
+    verify(buildQnaEscrowCallDataPort)
+        .encode(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            QnaEscrowIdCodec.questionId(101L),
+            null,
+            tokenAddress,
+            BigInteger.valueOf(50),
+            questionHash,
+            null);
+  }
+
+  @Test
+  @DisplayName("matchesQuestionCreatePayload rejects mismatched reward token amount or calldata")
+  void matchesQuestionCreatePayload_rejectsMismatchedPayload() {
+    String tokenAddress = "0x1111111111111111111111111111111111111111";
+    String questionHash = QnaContentHashFactory.hash("질문 본문");
+    given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
+        .willReturn(new LoadQnaRewardTokenConfigPort.RewardTokenConfig(tokenAddress, 0));
+    given(buildQnaEscrowCallDataPort.encode(any(), any(), any(), any(), any(), any(), any()))
+        .willReturn("0xexpected");
+
+    assertThat(
+            service.matchesQuestionCreatePayload(
+                new MatchQuestionCreatePayloadCommand(
+                    101L,
+                    "질문 본문",
+                    50L,
+                    questionCreatePayload(
+                        tokenAddress, BigInteger.valueOf(51), questionHash, "0xexpected"))))
+        .isFalse();
+    assertThat(
+            service.matchesQuestionCreatePayload(
+                new MatchQuestionCreatePayloadCommand(
+                    101L,
+                    "질문 본문",
+                    50L,
+                    questionCreatePayload(
+                        "0x2222222222222222222222222222222222222222",
+                        BigInteger.valueOf(50),
+                        questionHash,
+                        "0xexpected"))))
+        .isFalse();
+    assertThat(
+            service.matchesQuestionCreatePayload(
+                new MatchQuestionCreatePayloadCommand(
+                    101L,
+                    "질문 본문",
+                    50L,
+                    questionCreatePayload(
+                        tokenAddress, BigInteger.valueOf(50), questionHash, "0xother"))))
+        .isFalse();
   }
 
   @Test
@@ -588,7 +666,7 @@ class QuestionEscrowExecutionServiceTest {
         new QnaExecutionIntentResult.Resource("QUESTION", resourceId, "PENDING_EXECUTION"),
         actionType,
         new QnaExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0), 1_776_129_600L),
         new QnaExecutionIntentResult.Execution("EIP7702", 2),
         null,
         false);
@@ -613,6 +691,21 @@ class QuestionEscrowExecutionServiceTest {
         QnaEscrowIdCodec.answerId(201L),
         22L,
         QnaContentHashFactory.hash(answerContent));
+  }
+
+  private QnaEscrowExecutionPayload questionCreatePayload(
+      String tokenAddress, BigInteger amountWei, String questionHash, String callData) {
+    return new QnaEscrowExecutionPayload(
+        QnaExecutionActionType.QNA_QUESTION_CREATE,
+        101L,
+        null,
+        "0x3333333333333333333333333333333333333333",
+        tokenAddress,
+        amountWei,
+        questionHash,
+        null,
+        "0x4444444444444444444444444444444444444444",
+        callData);
   }
 
   private void assertQuestionUpdateSuperseded(ThrowingCallable callable) {

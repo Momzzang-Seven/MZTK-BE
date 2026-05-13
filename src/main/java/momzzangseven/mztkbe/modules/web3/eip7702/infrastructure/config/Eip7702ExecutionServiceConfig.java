@@ -10,12 +10,12 @@ import momzzangseven.mztkbe.modules.web3.eip7702.application.port.out.VerifyExec
 import momzzangseven.mztkbe.modules.web3.eip7702.application.service.ManageExecutionEip7702Service;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.service.PrepareEip7702AuthorizationService;
 import momzzangseven.mztkbe.modules.web3.eip7702.application.service.PrepareTokenTransferExecutionSupportService;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class Eip7702ExecutionServiceConfig {
 
   @Bean

@@ -323,7 +323,7 @@ class PostControllerQnaEscrowIntegrationTest {
         new QnaExecutionIntentResult.Resource("QUESTION", "1", "PENDING_EXECUTION"),
         actionType,
         new QnaExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0), 1_776_129_600L),
         new QnaExecutionIntentResult.Execution("EIP7702", 2),
         null,
         false);

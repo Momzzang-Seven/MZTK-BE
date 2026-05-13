@@ -35,7 +35,10 @@ public record QnaExecutionIntentResult(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         actionType,
         new ExecutionIntent(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new Execution(result.mode().name(), result.signCount()),
         result.signRequest(),
         result.existing());
@@ -56,7 +59,8 @@ public record QnaExecutionIntentResult(
     }
   }
 
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {
 
     public ExecutionIntent {
       if (id == null || id.isBlank()) {
@@ -67,6 +71,9 @@ public record QnaExecutionIntentResult(
       }
       if (expiresAt == null) {
         throw new Web3InvalidInputException("executionIntent.expiresAt is required");
+      }
+      if (expiresAtEpochSeconds <= 0) {
+        throw new Web3InvalidInputException("executionIntent.expiresAtEpochSeconds is required");
       }
     }
   }

@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.execution.application.service;
 
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +23,7 @@ public class GetLatestExecutionIntentSummaryService
 
   private final ExecutionIntentPersistencePort executionIntentPersistencePort;
   private final LoadExecutionTransactionPort loadExecutionTransactionPort;
+  private final Clock appClock;
 
   @Override
   public Optional<GetLatestExecutionIntentSummaryResult> execute(
@@ -32,7 +34,7 @@ public class GetLatestExecutionIntentSummaryService
         .map(
             intent ->
                 ExecutionIntentViewMapper.toLatestSummary(
-                    intent, loadTransaction(intent.getSubmittedTxId())));
+                    intent, loadTransaction(intent.getSubmittedTxId()), appClock));
   }
 
   @Override
@@ -57,7 +59,9 @@ public class GetLatestExecutionIntentSummaryService
             results.put(
                 resourceId,
                 ExecutionIntentViewMapper.toLatestSummary(
-                    intent, loadTransaction(transactionsById, intent.getSubmittedTxId()))));
+                    intent,
+                    loadTransaction(transactionsById, intent.getSubmittedTxId()),
+                    appClock)));
     return results;
   }
 

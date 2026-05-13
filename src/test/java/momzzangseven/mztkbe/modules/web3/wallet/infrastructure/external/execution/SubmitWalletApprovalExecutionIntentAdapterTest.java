@@ -48,6 +48,7 @@ class SubmitWalletApprovalExecutionIntentAdapterTest {
                 "intent-1",
                 ExecutionIntentStatus.AWAITING_SIGNATURE,
                 expiresAt,
+                1L,
                 ExecutionMode.EIP7702,
                 2,
                 SignRequestBundle.forEip7702(

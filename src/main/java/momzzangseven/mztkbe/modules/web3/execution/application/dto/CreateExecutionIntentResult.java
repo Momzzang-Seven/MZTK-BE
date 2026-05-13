@@ -16,6 +16,7 @@ public record CreateExecutionIntentResult(
     String executionIntentId,
     ExecutionIntentStatus executionIntentStatus,
     LocalDateTime expiresAt,
+    long expiresAtEpochSeconds,
     ExecutionMode mode,
     int signCount,
     SignRequestBundle signRequest,
@@ -40,6 +41,9 @@ public record CreateExecutionIntentResult(
     }
     if (expiresAt == null) {
       throw new Web3InvalidInputException("expiresAt is required");
+    }
+    if (expiresAtEpochSeconds <= 0) {
+      throw new Web3InvalidInputException("expiresAtEpochSeconds must be positive");
     }
     if (mode == null) {
       throw new Web3InvalidInputException("mode is required");

@@ -121,9 +121,11 @@ class GetWalletRegistrationStatusServiceTest {
         INTENT_ID,
         executionStatus,
         NOW.plusMinutes(5),
+        1L,
         "EIP7702",
         2,
         signRequest,
+        null,
         null,
         transactionStatus,
         null);

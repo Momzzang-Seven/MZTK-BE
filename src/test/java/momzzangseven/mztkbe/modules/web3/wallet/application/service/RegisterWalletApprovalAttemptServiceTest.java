@@ -148,7 +148,7 @@ class RegisterWalletApprovalAttemptServiceTest {
             "WALLET_REGISTRATION", registrationId, "PENDING_EXECUTION"),
         "WALLET_ESCROW_APPROVE",
         new WalletApprovalExecutionIntentResult.ExecutionIntent(
-            "intent-1", "AWAITING_SIGNATURE", NOW.plusMinutes(5)),
+            "intent-1", "AWAITING_SIGNATURE", NOW.plusMinutes(5), 1L),
         new WalletApprovalExecutionIntentResult.Execution("EIP7702", 2),
         WalletApprovalSignRequestBundle.forEip7702(
             new WalletApprovalSignRequestBundle.AuthorizationSignRequest(

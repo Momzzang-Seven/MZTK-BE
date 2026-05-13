@@ -191,6 +191,7 @@ class SubmitQnaExecutionIntentAdapterTest {
         "intent-1",
         ExecutionIntentStatus.SIGNED,
         EXPIRES_AT,
+        1L,
         ExecutionMode.EIP7702,
         2,
         null,

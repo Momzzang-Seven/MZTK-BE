@@ -10,9 +10,11 @@ public record WalletApprovalExecutionStateView(
     String executionIntentId,
     String executionIntentStatus,
     LocalDateTime expiresAt,
+    long expiresAtEpochSeconds,
     String mode,
     int signCount,
     WalletApprovalSignRequestBundle signRequest,
+    String signRequestUnavailableReason,
     Long transactionId,
     String transactionStatus,
     String txHash) {}

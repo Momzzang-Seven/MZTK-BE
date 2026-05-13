@@ -10,6 +10,7 @@ public record GetExecutionIntentResponseDTO(
     ExecutionIntentDTO executionIntent,
     ExecutionDTO execution,
     SignRequestBundle signRequest,
+    String signRequestUnavailableReason,
     TransactionDTO transaction) {
 
   /** Maps application read result to stable API response shape. */
@@ -18,9 +19,15 @@ public record GetExecutionIntentResponseDTO(
         new ResourceDTO(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         new ExecutionIntentDTO(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new ExecutionDTO(result.mode().name(), result.signCount()),
         result.signRequest(),
+        result.signRequestUnavailableReason() == null
+            ? null
+            : result.signRequestUnavailableReason().name(),
         result.transactionId() == null
             ? null
             : new TransactionDTO(
@@ -31,7 +38,8 @@ public record GetExecutionIntentResponseDTO(
   public record ResourceDTO(String type, String id, String status) {}
 
   /** Execution intent section containing lifecycle state and expiration timestamp. */
-  public record ExecutionIntentDTO(String id, String status, LocalDateTime expiresAt) {}
+  public record ExecutionIntentDTO(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   /** Execution metadata section containing selected mode and required sign count. */
   public record ExecutionDTO(String mode, int signCount) {}

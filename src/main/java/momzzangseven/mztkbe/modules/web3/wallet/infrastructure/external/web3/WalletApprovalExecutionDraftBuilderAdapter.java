@@ -7,7 +7,6 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.wallet.WalletApprovalUnavailableException;
 import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionPayload;
@@ -20,11 +19,12 @@ import momzzangseven.mztkbe.modules.web3.wallet.domain.vo.WalletApprovalExecutio
 import momzzangseven.mztkbe.modules.web3.wallet.domain.vo.WalletApprovalExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.wallet.domain.vo.WalletApprovalRootIdempotencyKeyFactory;
 import momzzangseven.mztkbe.modules.web3.wallet.infrastructure.config.WalletApprovalProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class WalletApprovalExecutionDraftBuilderAdapter
     implements BuildWalletApprovalExecutionDraftPort {
 

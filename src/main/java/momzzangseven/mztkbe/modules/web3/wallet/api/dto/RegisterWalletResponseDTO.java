@@ -28,6 +28,7 @@ public record RegisterWalletResponseDTO(
       ExecutionIntent executionIntent,
       Execution execution,
       SignRequest signRequest,
+      String signRequestUnavailableReason,
       boolean existing) {
 
     static Web3 from(WalletApprovalExecutionWriteView view) {
@@ -40,16 +41,19 @@ public record RegisterWalletResponseDTO(
           new ExecutionIntent(
               view.executionIntent().id(),
               view.executionIntent().status(),
-              view.executionIntent().expiresAt()),
+              view.executionIntent().expiresAt(),
+              view.executionIntent().expiresAtEpochSeconds()),
           new Execution(view.execution().mode(), view.execution().signCount()),
           SignRequest.from(view.signRequest()),
+          view.signRequestUnavailableReason(),
           view.existing());
     }
   }
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, java.time.LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, java.time.LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

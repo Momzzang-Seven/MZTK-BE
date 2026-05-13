@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.ErrorCode;
+import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
 import momzzangseven.mztkbe.global.error.web3.Web3TransferException;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CreateExecutionIntentResult;
@@ -15,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExe
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionDigestPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
@@ -47,6 +49,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private final SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort;
   private final LoadExecutionChainIdPort loadExecutionChainIdPort;
   private final LoadSponsorPolicyPort loadSponsorPolicyPort;
+  private final LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort;
   private final LoadEip1559TtlPort loadEip1559TtlPort;
   private final BuildExecutionDigestPort buildExecutionDigestPort;
   private final BuildExecutionCallHashPort buildExecutionCallHashPort;
@@ -84,6 +87,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     if (preliminarySelection.mode() == ExecutionMode.EIP7702) {
       validateExecutionDraftPolicyPort.validate(
           command.draft().delegateTarget(), command.draft().calls());
+      validateEip7702ExpiresAt(command.draft().expiresAt(), now);
     }
     ModeDecision modeDecision = finalizeModeDecision(command, preliminarySelection);
     LocalDateTime expiresAt = selectedExpiresAt(command, modeDecision.mode(), now);
@@ -129,7 +133,7 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
   private CreateExecutionIntentResult tryReuseExisting(
       ExecutionIntent existing, CreateExecutionIntentCommand command, LocalDateTime now) {
     if (existing.getStatus() == ExecutionIntentStatus.AWAITING_SIGNATURE
-        && existing.getExpiresAt().isBefore(now)) {
+        && shouldExpireExistingBeforeReuse(existing, now)) {
       ExecutionIntent expired =
           executionIntentPersistencePort.update(
               existing.expire(
@@ -266,6 +270,19 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
     return now.plusSeconds(loadEip1559TtlPort.loadTtlSeconds());
   }
 
+  private void validateEip7702ExpiresAt(LocalDateTime expiresAt, LocalDateTime now) {
+    if (!expiresAt.isAfter(now)) {
+      throw new Web3InvalidInputException("EIP-7702 expiresAt must be in the future");
+    }
+    long minimumRemainingSeconds = loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds();
+    if (expiresAt.isBefore(now.plusSeconds(minimumRemainingSeconds))) {
+      throw new Web3InvalidInputException(
+          "EIP-7702 expiresAt must be at least "
+              + minimumRemainingSeconds
+              + " seconds in the future");
+    }
+  }
+
   private CreateExecutionIntentResult toResult(
       ExecutionIntent intent, ExecutionResourceStatus resourceStatus, boolean existing) {
     return new CreateExecutionIntentResult(
@@ -275,10 +292,20 @@ public class CreateExecutionIntentService implements CreateExecutionIntentUseCas
         intent.getPublicId(),
         intent.getStatus(),
         intent.getExpiresAt(),
+        ExecutionDeadlineEpoch.toEpochSecondsLong(intent.getExpiresAt(), appClock),
         intent.getMode(),
         intent.getMode().requiredSignCount(),
         buildSignRequest(intent),
         existing);
+  }
+
+  private boolean shouldExpireExistingBeforeReuse(ExecutionIntent existing, LocalDateTime now) {
+    if (!existing.getExpiresAt().isAfter(now)) {
+      return true;
+    }
+    return existing.getMode() == ExecutionMode.EIP7702
+        && !ExecutionSignRequestAvailability.hasMinimumRemainingTime(
+            existing, now, loadEip7702AuthorizationTtlPort.loadMinimumRemainingSeconds());
   }
 
   private ExecutionResourceType toModelResourceType(ExecutionResourceTypeCode resourceType) {

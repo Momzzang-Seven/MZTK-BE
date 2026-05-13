@@ -356,13 +356,14 @@ class WalletControllerTest {
             "WALLET_REGISTRATION", "registration-1", "PENDING_EXECUTION"),
         "WALLET_ESCROW_APPROVE",
         new WalletApprovalExecutionWriteView.ExecutionIntent(
-            "intent-1", "AWAITING_SIGNATURE", NOW.plusMinutes(5)),
+            "intent-1", "AWAITING_SIGNATURE", NOW.plusMinutes(5), 1L),
         new WalletApprovalExecutionWriteView.Execution("EIP7702", 2),
         new WalletApprovalExecutionWriteView.SignRequest(
             new WalletApprovalExecutionWriteView.Authorization(
                 10L, "0x" + "d".repeat(40), 7L, "0x" + "1".repeat(64)),
             new WalletApprovalExecutionWriteView.Submit("0x" + "2".repeat(64), 123L),
             null),
+        null,
         false);
   }
 }

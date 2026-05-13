@@ -23,6 +23,7 @@ class CreateTransferResponseDTOTest {
             "intent-1",
             TransferExecutionIntentStatus.AWAITING_SIGNATURE,
             LocalDateTime.now().plusMinutes(5),
+            1L,
             TransferExecutionMode.EIP1559,
             1,
             TransferSignRequestBundle.forEip1559(
@@ -46,5 +47,6 @@ class CreateTransferResponseDTOTest {
 
     assertThat(response.resource().id()).isEqualTo("web3:TRANSFER_SEND:7:req-1");
     assertThat(response.executionIntent().id()).isEqualTo("intent-1");
+    assertThat(response.executionIntent().expiresAtEpochSeconds()).isEqualTo(1L);
   }
 }

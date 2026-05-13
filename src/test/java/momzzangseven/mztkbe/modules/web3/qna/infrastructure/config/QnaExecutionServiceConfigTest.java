@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUp
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecutionResumeViewUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaQuestionUpdateReconciliationUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
@@ -47,6 +48,7 @@ class QnaExecutionServiceConfigTest {
           .withBean(
               LoadQnaExecutionIntentStatePort.class,
               () -> mock(LoadQnaExecutionIntentStatePort.class))
+          .withBean(BuildQnaEscrowCallDataPort.class, () -> mock(BuildQnaEscrowCallDataPort.class))
           .withBean(BuildQnaExecutionDraftPort.class, () -> mock(BuildQnaExecutionDraftPort.class))
           .withBean(
               SubmitQnaExecutionDraftPort.class, () -> mock(SubmitQnaExecutionDraftPort.class))

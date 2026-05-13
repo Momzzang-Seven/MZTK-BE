@@ -1,6 +1,7 @@
 package momzzangseven.mztkbe.modules.post.application.port.out;
 
 import java.util.Optional;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 
 public interface QuestionLifecycleExecutionPort {
 

@@ -412,12 +412,14 @@ class RegisterWalletServiceTest {
         "intent-1",
         "AWAITING_SIGNATURE",
         NOW.plusMinutes(5),
+        1L,
         "EIP7702",
         2,
         WalletApprovalSignRequestBundle.forEip7702(
             new WalletApprovalSignRequestBundle.AuthorizationSignRequest(
                 10L, "0x" + "d".repeat(40), 7L, "0x" + "1".repeat(64)),
             new WalletApprovalSignRequestBundle.SubmitSignRequest("0x" + "2".repeat(64), 123L)),
+        null,
         null,
         null,
         null);

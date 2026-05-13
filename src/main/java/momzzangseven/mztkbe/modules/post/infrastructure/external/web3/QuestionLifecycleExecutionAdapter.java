@@ -2,14 +2,13 @@ package momzzangseven.mztkbe.modules.post.infrastructure.external.web3;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
-import momzzangseven.mztkbe.modules.post.application.port.out.QuestionExecutionWriteView;
+import momzzangseven.mztkbe.modules.post.application.dto.QuestionExecutionWriteView;
 import momzzangseven.mztkbe.modules.post.application.port.out.QuestionLifecycleExecutionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.CancelExecutionIntentCommand;
 import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionIntentQuery;
@@ -17,6 +16,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.dto.GetExecutionI
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetExecutionIntentUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -25,12 +25,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpda
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaEscrowAbiEncoder;
-import momzzangseven.mztkbe.modules.web3.shared.domain.vo.EvmAddress;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.web3j.utils.Numeric;
@@ -44,8 +39,6 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   private final BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
   private final CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
   private final GetExecutionIntentUseCase getExecutionIntentUseCase;
-  private final LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
-  private final QnaEscrowAbiEncoder qnaEscrowAbiEncoder;
   private final ObjectMapper objectMapper;
 
   @Override
@@ -203,7 +196,8 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
         new QuestionExecutionWriteView.ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new QuestionExecutionWriteView.Execution(
             result.execution().mode(), result.execution().signCount()),
         toSignRequest(result.signRequest()),
@@ -216,7 +210,10 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         "QNA_QUESTION_CREATE",
         new QuestionExecutionWriteView.ExecutionIntent(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new QuestionExecutionWriteView.Execution(result.mode().name(), result.signCount()),
         toSignRequest(result.signRequest()),
         true);
@@ -230,30 +227,8 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
     try {
       QnaEscrowExecutionPayload payload =
           objectMapper.readValue(payloadSnapshotJson, QnaEscrowExecutionPayload.class);
-      LoadQnaRewardTokenConfigPort.RewardTokenConfig rewardTokenConfig =
-          loadQnaRewardTokenConfigPort.loadRewardTokenConfig();
-      String expectedQuestionHash = QnaContentHashFactory.hash(questionContent);
-      BigInteger expectedAmountWei =
-          QnaEscrowIdCodec.toAmountWei(rewardMztk, rewardTokenConfig.decimals());
-      String expectedTokenAddress = EvmAddress.of(rewardTokenConfig.tokenContractAddress()).value();
-      String payloadTokenAddress = EvmAddress.of(payload.tokenAddress()).value();
-      String expectedCallData =
-          qnaEscrowAbiEncoder.encode(
-              QnaExecutionActionType.QNA_QUESTION_CREATE,
-              QnaEscrowIdCodec.questionId(postId),
-              null,
-              expectedTokenAddress,
-              expectedAmountWei,
-              expectedQuestionHash,
-              null);
-      return payload.actionType() == QnaExecutionActionType.QNA_QUESTION_CREATE
-          && postId.equals(payload.postId())
-          && payload.answerId() == null
-          && expectedQuestionHash.equals(payload.questionHash())
-          && payload.contentHash() == null
-          && expectedAmountWei.equals(payload.amountWei())
-          && expectedTokenAddress.equals(payloadTokenAddress)
-          && expectedCallData.equals(payload.callData());
+      return questionEscrowExecutionUseCase.matchesQuestionCreatePayload(
+          new MatchQuestionCreatePayloadCommand(postId, questionContent, rewardMztk, payload));
     } catch (JsonProcessingException e) {
       throw new Web3InvalidInputException("invalid qna question create payload snapshot");
     }

@@ -12,7 +12,6 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceSt
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.ExecutionResourceTypeCode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.SignRequestBundle;
 import momzzangseven.mztkbe.modules.web3.execution.domain.vo.UnsignedTxSnapshot;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionDraft;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionDraftCall;
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalExecutionIntentResult;
@@ -20,11 +19,12 @@ import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletApprovalSi
 import momzzangseven.mztkbe.modules.web3.wallet.application.dto.WalletUnsignedTxSnapshot;
 import momzzangseven.mztkbe.modules.web3.wallet.application.port.out.SubmitWalletApprovalExecutionDraftPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 @ConditionalOnBean(CreateExecutionIntentUseCase.class)
 public class SubmitWalletApprovalExecutionIntentAdapter
     implements SubmitWalletApprovalExecutionDraftPort {
@@ -90,7 +90,10 @@ public class SubmitWalletApprovalExecutionIntentAdapter
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         actionType,
         new WalletApprovalExecutionIntentResult.ExecutionIntent(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new WalletApprovalExecutionIntentResult.Execution(result.mode().name(), result.signCount()),
         toSignRequest(result.signRequest()),
         result.existing());

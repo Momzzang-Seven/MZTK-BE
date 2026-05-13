@@ -250,6 +250,7 @@ web3:
 
     authorization:
       ttl-seconds: 300
+      min-remaining-ttl-seconds: 30
       eip1559-ttl-seconds: 90
       nonce-policy: ONCHAIN
       require-chain-id-match: true

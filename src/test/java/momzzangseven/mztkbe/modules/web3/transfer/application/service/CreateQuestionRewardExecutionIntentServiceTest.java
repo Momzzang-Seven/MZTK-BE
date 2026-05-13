@@ -84,6 +84,7 @@ class CreateQuestionRewardExecutionIntentServiceTest {
             "intent-1",
             TransferExecutionIntentStatus.AWAITING_SIGNATURE,
             LocalDateTime.now().plusMinutes(5),
+            1L,
             TransferExecutionMode.EIP7702,
             2,
             TransferSignRequestBundle.forEip7702(

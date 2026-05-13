@@ -63,9 +63,13 @@ public class WalletApprovalExecutionStateAdapter implements LoadWalletApprovalEx
         result.executionIntentId(),
         result.executionIntentStatus().name(),
         result.expiresAt(),
+        result.expiresAtEpochSeconds(),
         result.mode().name(),
         result.signCount(),
         toWalletSignRequest(result.signRequest()),
+        result.signRequestUnavailableReason() == null
+            ? null
+            : result.signRequestUnavailableReason().name(),
         result.transactionId(),
         result.transactionStatus() == null ? null : result.transactionStatus().name(),
         result.txHash());
@@ -80,8 +84,10 @@ public class WalletApprovalExecutionStateAdapter implements LoadWalletApprovalEx
         result.executionIntentId(),
         result.executionIntentStatus().name(),
         result.expiresAt(),
+        result.expiresAtEpochSeconds(),
         result.mode().name(),
         result.signCount(),
+        null,
         null,
         result.transactionId(),
         result.transactionStatus() == null ? null : result.transactionStatus().name(),

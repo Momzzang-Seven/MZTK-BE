@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.Collections;
 import java.util.List;
 import momzzangseven.mztkbe.global.error.web3.Web3InvalidInputException;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
 import org.springframework.stereotype.Component;
 import org.web3j.abi.FunctionEncoder;
@@ -15,8 +16,9 @@ import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.utils.Numeric;
 
 @Component
-public class QnaEscrowAbiEncoder {
+public class QnaEscrowAbiEncoder implements BuildQnaEscrowCallDataPort {
 
+  @Override
   public String encode(
       QnaExecutionActionType actionType,
       String questionId,

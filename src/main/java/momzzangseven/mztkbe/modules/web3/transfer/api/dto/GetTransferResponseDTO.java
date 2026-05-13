@@ -16,7 +16,10 @@ public record GetTransferResponseDTO(
         new ResourceDTO(
             result.resourceType().name(), result.resourceId(), result.resourceStatus().name()),
         new ExecutionIntentDTO(
-            result.executionIntentId(), result.executionIntentStatus().name(), result.expiresAt()),
+            result.executionIntentId(),
+            result.executionIntentStatus().name(),
+            result.expiresAt(),
+            result.expiresAtEpochSeconds()),
         new ExecutionDTO(result.mode().name(), result.signCount()),
         result.signRequest(),
         result.transactionId() == null
@@ -27,7 +30,8 @@ public record GetTransferResponseDTO(
 
   public record ResourceDTO(String type, String id, String status) {}
 
-  public record ExecutionIntentDTO(String id, String status, LocalDateTime expiresAt) {}
+  public record ExecutionIntentDTO(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record ExecutionDTO(String mode, int signCount) {}
 

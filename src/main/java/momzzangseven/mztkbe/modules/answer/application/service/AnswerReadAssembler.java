@@ -1,9 +1,9 @@
 package momzzangseven.mztkbe.modules.answer.application.service;
 
 import java.util.List;
+import momzzangseven.mztkbe.modules.answer.application.dto.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerImageResult;
 import momzzangseven.mztkbe.modules.answer.application.dto.AnswerResult;
-import momzzangseven.mztkbe.modules.answer.application.port.out.AnswerExecutionResumeView;
 import momzzangseven.mztkbe.modules.answer.application.port.out.LoadAnswerWriterPort;
 import momzzangseven.mztkbe.modules.answer.domain.model.Answer;
 import org.springframework.stereotype.Component;

@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.Optional;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.in.GetLatestExecutionIntentSummaryUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
@@ -21,6 +22,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaExecution
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.GetQnaQuestionPublicationEvidenceUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.RunQnaQuestionUpdateReconciliationUseCase;
+import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaEscrowCallDataPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.BuildQnaExecutionDraftPort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaExecutionIntentStatePort;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
@@ -35,14 +37,14 @@ import momzzangseven.mztkbe.modules.web3.qna.application.service.GetQnaExecution
 import momzzangseven.mztkbe.modules.web3.qna.application.service.GetQnaQuestionPublicationEvidenceService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QnaQuestionUpdateReconciliationService;
 import momzzangseven.mztkbe.modules.web3.qna.application.service.QuestionEscrowExecutionService;
-import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
-@ConditionalOnUserExecutionEnabled
+@ConditionalOnProperty(prefix = "web3.eip7702", name = "enabled", havingValue = "true")
 public class QnaExecutionServiceConfig {
 
   @Bean
@@ -52,6 +54,7 @@ public class QnaExecutionServiceConfig {
       QnaProjectionPersistencePort qnaProjectionPersistencePort,
       QnaQuestionUpdateStatePersistencePort qnaQuestionUpdateStatePersistencePort,
       LoadQnaExecutionIntentStatePort loadQnaExecutionIntentStatePort,
+      BuildQnaEscrowCallDataPort buildQnaEscrowCallDataPort,
       BuildQnaExecutionDraftPort buildQnaExecutionDraftPort,
       SubmitQnaExecutionDraftPort submitQnaExecutionDraftPort) {
     return new QuestionEscrowExecutionService(
@@ -60,6 +63,7 @@ public class QnaExecutionServiceConfig {
         qnaProjectionPersistencePort,
         qnaQuestionUpdateStatePersistencePort,
         loadQnaExecutionIntentStatePort,
+        buildQnaEscrowCallDataPort,
         buildQnaExecutionDraftPort,
         submitQnaExecutionDraftPort);
   }
@@ -141,6 +145,11 @@ public class QnaExecutionServiceConfig {
     @Override
     public void precheckQuestionCreate(PrecheckQuestionCreateCommand command) {
       transactionTemplate.executeWithoutResult(status -> delegate.precheckQuestionCreate(command));
+    }
+
+    @Override
+    public boolean matchesQuestionCreatePayload(MatchQuestionCreatePayloadCommand command) {
+      return transactionTemplate.execute(status -> delegate.matchesQuestionCreatePayload(command));
     }
 
     @Override

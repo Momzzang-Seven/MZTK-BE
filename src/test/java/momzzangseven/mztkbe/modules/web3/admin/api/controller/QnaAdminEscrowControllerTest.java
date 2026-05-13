@@ -50,6 +50,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.annotation.Transactional;
 
 @TestPropertySource(
     properties = {
@@ -60,6 +61,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
     })
 @SpringBootTest
 @AutoConfigureMockMvc
+@Transactional
 @DisplayName("QnaAdminEscrowController direct EIP-1559 계약 테스트 (MockMvc + H2)")
 class QnaAdminEscrowControllerTest {
 
@@ -265,7 +267,10 @@ class QnaAdminEscrowControllerTest {
         new QnaExecutionIntentResult.Resource("QUESTION", "101", "201"),
         actionType,
         new QnaExecutionIntentResult.ExecutionIntent(
-            "intent-1", "AWAITING_SIGNATURE", LocalDateTime.of(2026, 1, 2, 3, 4, 5)),
+            "intent-1",
+            "AWAITING_SIGNATURE",
+            LocalDateTime.of(2026, 1, 2, 3, 4, 5),
+            1_767_291_845L),
         new QnaExecutionIntentResult.Execution("EIP1559", 1),
         null,
         false);

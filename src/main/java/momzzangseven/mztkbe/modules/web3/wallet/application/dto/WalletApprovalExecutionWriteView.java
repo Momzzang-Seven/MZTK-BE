@@ -14,6 +14,7 @@ public record WalletApprovalExecutionWriteView(
     ExecutionIntent executionIntent,
     Execution execution,
     SignRequest signRequest,
+    String signRequestUnavailableReason,
     boolean existing) {
 
   public static WalletApprovalExecutionWriteView from(WalletApprovalExecutionIntentResult result) {
@@ -26,9 +27,11 @@ public record WalletApprovalExecutionWriteView(
         new ExecutionIntent(
             result.executionIntent().id(),
             result.executionIntent().status(),
-            result.executionIntent().expiresAt()),
+            result.executionIntent().expiresAt(),
+            result.executionIntent().expiresAtEpochSeconds()),
         new Execution(result.execution().mode(), result.execution().signCount()),
         SignRequest.from(result.signRequest()),
+        null,
         result.existing());
   }
 
@@ -40,15 +43,20 @@ public record WalletApprovalExecutionWriteView(
         new Resource(state.resourceType(), state.resourceId(), state.resourceStatus()),
         state.actionType(),
         new ExecutionIntent(
-            state.executionIntentId(), state.executionIntentStatus(), state.expiresAt()),
+            state.executionIntentId(),
+            state.executionIntentStatus(),
+            state.expiresAt(),
+            state.expiresAtEpochSeconds()),
         new Execution(state.mode(), state.signCount()),
         SignRequest.from(state.signRequest()),
+        state.signRequestUnavailableReason(),
         true);
   }
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

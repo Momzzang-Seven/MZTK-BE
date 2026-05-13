@@ -21,12 +21,14 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.out.Executio
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionTransactionGatewayPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionRetryPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionTransactionPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.PublishExecutionIntentTerminatedPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.RunAfterCommitPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.SponsorDailyUsagePersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ValidateExecutionDraftPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.VerifyTreasuryWalletForSignPort;
@@ -140,6 +142,17 @@ public class ExecutionIntentServiceConfig {
   }
 
   @Bean
+  @ConditionalOnMissingBean(LoadEip7702AuthorizationTtlPort.class)
+  @ConditionalOnProperty(
+      prefix = "web3.eip7702",
+      name = "enabled",
+      havingValue = "false",
+      matchIfMissing = true)
+  LoadEip7702AuthorizationTtlPort fallbackLoadEip7702AuthorizationTtlPort() {
+    return () -> 30L;
+  }
+
+  @Bean
   @ConditionalOnMissingBean(ValidateExecutionDraftPolicyPort.class)
   @ConditionalOnProperty(
       prefix = "web3.eip7702",
@@ -167,6 +180,7 @@ public class ExecutionIntentServiceConfig {
       SponsorDailyUsagePersistencePort sponsorDailyUsagePersistencePort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
       LoadSponsorPolicyPort loadSponsorPolicyPort,
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort,
       LoadEip1559TtlPort loadEip1559TtlPort,
       BuildExecutionDigestPort buildExecutionDigestPort,
       BuildExecutionCallHashPort buildExecutionCallHashPort,
@@ -179,6 +193,7 @@ public class ExecutionIntentServiceConfig {
         sponsorDailyUsagePersistencePort,
         loadExecutionChainIdPort,
         loadSponsorPolicyPort,
+        loadEip7702AuthorizationTtlPort,
         loadEip1559TtlPort,
         buildExecutionDigestPort,
         buildExecutionCallHashPort,
@@ -201,11 +216,13 @@ public class ExecutionIntentServiceConfig {
       ExecutionIntentPersistencePort executionIntentPersistencePort,
       LoadExecutionTransactionPort loadExecutionTransactionPort,
       LoadExecutionChainIdPort loadExecutionChainIdPort,
+      LoadEip7702AuthorizationTtlPort loadEip7702AuthorizationTtlPort,
       Clock appClock) {
     return new GetExecutionIntentService(
         executionIntentPersistencePort,
         loadExecutionTransactionPort,
         loadExecutionChainIdPort,
+        loadEip7702AuthorizationTtlPort,
         appClock);
   }
 
@@ -221,6 +238,7 @@ public class ExecutionIntentServiceConfig {
       LoadExecutionRetryPolicyPort loadExecutionRetryPolicyPort,
       List<ExecutionActionHandlerPort> executionActionHandlerPorts,
       PublishExecutionIntentTerminatedPort publishExecutionIntentTerminatedPort,
+      RunAfterCommitPort runAfterCommitPort,
       Clock appClock) {
     return new TransactionalExecuteExecutionIntentDelegate(
         executionIntentPersistencePort,
@@ -232,6 +250,7 @@ public class ExecutionIntentServiceConfig {
         loadExecutionRetryPolicyPort,
         executionActionHandlerPorts,
         publishExecutionIntentTerminatedPort,
+        runAfterCommitPort,
         appClock);
   }
 
@@ -262,9 +281,10 @@ public class ExecutionIntentServiceConfig {
   @ConditionalOnBean(LoadExecutionTransactionPort.class)
   GetLatestExecutionIntentSummaryUseCase getLatestExecutionIntentSummaryUseCase(
       ExecutionIntentPersistencePort executionIntentPersistencePort,
-      LoadExecutionTransactionPort loadExecutionTransactionPort) {
+      LoadExecutionTransactionPort loadExecutionTransactionPort,
+      Clock appClock) {
     return new GetLatestExecutionIntentSummaryService(
-        executionIntentPersistencePort, loadExecutionTransactionPort);
+        executionIntentPersistencePort, loadExecutionTransactionPort, appClock);
   }
 
   @Bean

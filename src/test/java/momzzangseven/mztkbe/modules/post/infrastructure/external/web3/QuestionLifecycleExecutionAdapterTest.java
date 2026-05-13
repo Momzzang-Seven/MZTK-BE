@@ -3,6 +3,7 @@ package momzzangseven.mztkbe.modules.post.infrastructure.external.web3;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionMode;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceStatus;
 import momzzangseven.mztkbe.modules.web3.execution.domain.model.ExecutionResourceType;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.BeginQuestionUpdateStateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -32,14 +34,12 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentR
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QuestionUpdateStatePreparationResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
-import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaContentHashFactory;
-import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaEscrowIdCodec;
 import momzzangseven.mztkbe.modules.web3.qna.domain.vo.QnaExecutionActionType;
-import momzzangseven.mztkbe.modules.web3.qna.infrastructure.external.web3.QnaEscrowAbiEncoder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -57,8 +57,6 @@ class QuestionLifecycleExecutionAdapterTest {
   @Mock private BeginQuestionUpdateStateUseCase beginQuestionUpdateStateUseCase;
   @Mock private CancelExecutionIntentUseCase cancelExecutionIntentUseCase;
   @Mock private GetExecutionIntentUseCase getExecutionIntentUseCase;
-  @Mock private LoadQnaRewardTokenConfigPort loadQnaRewardTokenConfigPort;
-  @Spy private QnaEscrowAbiEncoder qnaEscrowAbiEncoder = new QnaEscrowAbiEncoder();
   @Spy private ObjectMapper objectMapper = new ObjectMapper();
 
   @InjectMocks private QuestionLifecycleExecutionAdapter adapter;
@@ -104,7 +102,6 @@ class QuestionLifecycleExecutionAdapterTest {
   @Test
   @DisplayName("loadQuestionCreateIntent restores owner-bound execution intent")
   void loadQuestionCreateIntent_delegates() {
-    stubRewardTokenConfig();
     String payloadSnapshotJson = questionCreatePayload("질문 내용");
     given(getExecutionIntentUseCase.execute(any()))
         .willReturn(
@@ -118,12 +115,15 @@ class QuestionLifecycleExecutionAdapterTest {
                 "intent-create",
                 ExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.of(2026, 4, 14, 10, 0),
+                1_776_129_600L,
                 ExecutionMode.EIP7702,
                 2,
                 null,
                 null,
                 null,
+                null,
                 null));
+    given(questionEscrowExecutionUseCase.matchesQuestionCreatePayload(any())).willReturn(true);
 
     var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
 
@@ -131,6 +131,15 @@ class QuestionLifecycleExecutionAdapterTest {
     assertThat(result.orElseThrow().actionType()).isEqualTo("QNA_QUESTION_CREATE");
     assertThat(result.orElseThrow().executionIntent().id()).isEqualTo("intent-create");
     verify(getExecutionIntentUseCase).execute(new GetExecutionIntentQuery(7L, "intent-create"));
+    ArgumentCaptor<MatchQuestionCreatePayloadCommand> commandCaptor =
+        ArgumentCaptor.forClass(MatchQuestionCreatePayloadCommand.class);
+    verify(questionEscrowExecutionUseCase).matchesQuestionCreatePayload(commandCaptor.capture());
+    MatchQuestionCreatePayloadCommand command = commandCaptor.getValue();
+    assertThat(command.postId()).isEqualTo(10L);
+    assertThat(command.questionContent()).isEqualTo("질문 내용");
+    assertThat(command.rewardMztk()).isEqualTo(50L);
+    assertThat(command.payload().postId()).isEqualTo(10L);
+    assertThat(command.payload().tokenAddress()).isEqualTo(TOKEN_ADDRESS);
   }
 
   @Test
@@ -149,8 +158,10 @@ class QuestionLifecycleExecutionAdapterTest {
                 "intent-create",
                 ExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.of(2026, 4, 14, 10, 0),
+                1_776_129_600L,
                 ExecutionMode.EIP7702,
                 2,
+                null,
                 null,
                 null,
                 null,
@@ -159,6 +170,7 @@ class QuestionLifecycleExecutionAdapterTest {
     var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
 
     assertThat(result).isEmpty();
+    verify(questionEscrowExecutionUseCase, never()).matchesQuestionCreatePayload(any());
   }
 
   @Test
@@ -177,8 +189,10 @@ class QuestionLifecycleExecutionAdapterTest {
                 "intent-create",
                 ExecutionIntentStatus.AWAITING_SIGNATURE,
                 LocalDateTime.of(2026, 4, 14, 10, 0),
+                1_776_129_600L,
                 ExecutionMode.EIP7702,
                 2,
+                null,
                 null,
                 null,
                 null,
@@ -187,15 +201,16 @@ class QuestionLifecycleExecutionAdapterTest {
     var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
 
     assertThat(result).isEmpty();
+    verify(questionEscrowExecutionUseCase, never()).matchesQuestionCreatePayload(any());
   }
 
   @Test
   @DisplayName("loadQuestionCreateIntent rejects mismatched reward amount")
   void loadQuestionCreateIntentRejectsMismatchedRewardAmount() {
-    stubRewardTokenConfig();
     String payloadSnapshotJson = questionCreatePayload("질문 내용", 51L, TOKEN_ADDRESS, null);
     given(getExecutionIntentUseCase.execute(any()))
         .willReturn(questionCreateIntentResult(payloadSnapshotJson));
+    given(questionEscrowExecutionUseCase.matchesQuestionCreatePayload(any())).willReturn(false);
 
     var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
 
@@ -205,10 +220,10 @@ class QuestionLifecycleExecutionAdapterTest {
   @Test
   @DisplayName("loadQuestionCreateIntent rejects mismatched reward token")
   void loadQuestionCreateIntentRejectsMismatchedRewardToken() {
-    stubRewardTokenConfig();
     String payloadSnapshotJson = questionCreatePayload("질문 내용", 50L, OTHER_TOKEN_ADDRESS, null);
     given(getExecutionIntentUseCase.execute(any()))
         .willReturn(questionCreateIntentResult(payloadSnapshotJson));
+    given(questionEscrowExecutionUseCase.matchesQuestionCreatePayload(any())).willReturn(false);
 
     var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
 
@@ -218,10 +233,10 @@ class QuestionLifecycleExecutionAdapterTest {
   @Test
   @DisplayName("loadQuestionCreateIntent rejects mismatched call data")
   void loadQuestionCreateIntentRejectsMismatchedCallData() {
-    stubRewardTokenConfig();
     String payloadSnapshotJson = questionCreatePayload("질문 내용", 50L, TOKEN_ADDRESS, "0x1234");
     given(getExecutionIntentUseCase.execute(any()))
         .willReturn(questionCreateIntentResult(payloadSnapshotJson));
+    given(questionEscrowExecutionUseCase.matchesQuestionCreatePayload(any())).willReturn(false);
 
     var result = adapter.loadQuestionCreateIntent(10L, 7L, "intent-create", "질문 내용", 50L);
 
@@ -291,7 +306,7 @@ class QuestionLifecycleExecutionAdapterTest {
         new QnaExecutionIntentResult.Resource("QUESTION", "10", "PENDING_EXECUTION"),
         actionType,
         new QnaExecutionIntentResult.ExecutionIntent(
-            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0)),
+            intentId, "AWAITING_SIGNATURE", LocalDateTime.of(2026, 4, 14, 10, 0), 1_776_129_600L),
         new QnaExecutionIntentResult.Execution("EIP7702", 2),
         null,
         false);
@@ -308,8 +323,10 @@ class QuestionLifecycleExecutionAdapterTest {
         "intent-create",
         ExecutionIntentStatus.AWAITING_SIGNATURE,
         LocalDateTime.of(2026, 4, 14, 10, 0),
+        1_776_129_600L,
         ExecutionMode.EIP7702,
         2,
+        null,
         null,
         null,
         null,
@@ -325,17 +342,7 @@ class QuestionLifecycleExecutionAdapterTest {
     try {
       String questionHash = QnaContentHashFactory.hash(questionContent);
       BigInteger amountWei = BigInteger.valueOf(rewardMztk);
-      String callData =
-          callDataOverride == null
-              ? qnaEscrowAbiEncoder.encode(
-                  QnaExecutionActionType.QNA_QUESTION_CREATE,
-                  QnaEscrowIdCodec.questionId(10L),
-                  null,
-                  tokenAddress,
-                  amountWei,
-                  questionHash,
-                  null)
-              : callDataOverride;
+      String callData = callDataOverride == null ? "0x" + "4".repeat(8) : callDataOverride;
       return new ObjectMapper()
           .writeValueAsString(
               new QnaEscrowExecutionPayload(
@@ -352,11 +359,6 @@ class QuestionLifecycleExecutionAdapterTest {
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new IllegalStateException(e);
     }
-  }
-
-  private void stubRewardTokenConfig() {
-    given(loadQnaRewardTokenConfigPort.loadRewardTokenConfig())
-        .willReturn(new LoadQnaRewardTokenConfigPort.RewardTokenConfig(TOKEN_ADDRESS, 0));
   }
 
   private String payloadHash(String payloadSnapshotJson) {

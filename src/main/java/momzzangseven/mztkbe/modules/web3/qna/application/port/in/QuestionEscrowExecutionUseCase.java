@@ -1,5 +1,6 @@
 package momzzangseven.mztkbe.modules.web3.qna.application.port.in;
 
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.MatchQuestionCreatePayloadCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrecheckQuestionCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerAcceptCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCreateCommand;
@@ -12,6 +13,8 @@ public interface QuestionEscrowExecutionUseCase {
   boolean hasActiveQuestionIntent(Long postId);
 
   void precheckQuestionCreate(PrecheckQuestionCreateCommand command);
+
+  boolean matchesQuestionCreatePayload(MatchQuestionCreatePayloadCommand command);
 
   QnaExecutionIntentResult prepareQuestionCreate(PrepareQuestionCreateCommand command);
 

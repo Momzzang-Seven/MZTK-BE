@@ -1,4 +1,4 @@
-package momzzangseven.mztkbe.modules.answer.application.port.out;
+package momzzangseven.mztkbe.modules.answer.application.dto;
 
 import java.time.LocalDateTime;
 
@@ -18,7 +18,8 @@ public record AnswerExecutionWriteView(
 
   public record Resource(String type, String id, String status) {}
 
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {}
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {}
 
   public record Execution(String mode, int signCount) {}
 

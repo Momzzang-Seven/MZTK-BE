@@ -41,7 +41,8 @@ public record WalletApprovalExecutionIntentResult(
     }
   }
 
-  public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
+  public record ExecutionIntent(
+      String id, String status, LocalDateTime expiresAt, long expiresAtEpochSeconds) {
 
     public ExecutionIntent {
       if (id == null || id.isBlank()) {
@@ -52,6 +53,9 @@ public record WalletApprovalExecutionIntentResult(
       }
       if (expiresAt == null) {
         throw new Web3InvalidInputException("executionIntent.expiresAt is required");
+      }
+      if (expiresAtEpochSeconds <= 0) {
+        throw new Web3InvalidInputException("executionIntent.expiresAtEpochSeconds is required");
       }
     }
   }

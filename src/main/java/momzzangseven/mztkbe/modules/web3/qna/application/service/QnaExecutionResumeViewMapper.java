@@ -19,7 +19,8 @@ final class QnaExecutionResumeViewMapper {
         new QnaExecutionResumeViewResult.ExecutionIntent(
             summary.executionIntentId(),
             summary.executionIntentStatus().name(),
-            summary.expiresAt()),
+            summary.expiresAt(),
+            summary.expiresAtEpochSeconds()),
         new QnaExecutionResumeViewResult.Execution(summary.mode().name(), summary.signCount()),
         summary.transactionId() == null
             ? null

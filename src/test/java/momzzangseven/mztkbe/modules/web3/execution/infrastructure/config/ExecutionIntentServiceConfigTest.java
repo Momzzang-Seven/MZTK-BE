@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.RunExecut
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.BuildExecutionCallHashPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.ExecutionIntentPersistencePort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip1559TtlPort;
+import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadEip7702AuthorizationTtlPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadExecutionChainIdPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorPolicyPort;
 import momzzangseven.mztkbe.modules.web3.execution.application.port.out.LoadSponsorTreasuryWalletPort;
@@ -66,6 +67,7 @@ class ExecutionIntentServiceConfigTest {
               assertThat(context.getBean("createExecutionIntentUseCase"))
                   .isInstanceOf(CreateExecutionIntentUseCase.class);
               assertThat(context).hasSingleBean(LoadSponsorPolicyPort.class);
+              assertThat(context).hasSingleBean(LoadEip7702AuthorizationTtlPort.class);
               assertThat(context).hasSingleBean(LoadEip1559TtlPort.class);
               assertThat(context).hasSingleBean(BuildExecutionCallHashPort.class);
               assertThat(context).hasSingleBean(ValidateExecutionDraftPolicyPort.class);
