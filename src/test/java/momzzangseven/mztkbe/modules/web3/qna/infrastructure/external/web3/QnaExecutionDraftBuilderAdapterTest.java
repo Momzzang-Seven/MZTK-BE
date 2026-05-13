@@ -34,7 +34,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.web3j.utils.Numeric;
 
@@ -177,6 +179,28 @@ class QnaExecutionDraftBuilderAdapterTest {
   // the encoder's 9-arg output (with server-sig appended) therefore covers the §B5 ×7702/1559
   // matrix in a single fixture.
 
+  /**
+   * Verifies the server-sig ordering invariant from §5-2 of the design doc:
+   *
+   * <pre>
+   *   sign  ─►  encode (server-sig appended)  ─►  prevalidate (eth_call on final calldata)
+   * </pre>
+   *
+   * <p>The encoder is a real instance and cannot be placed into a Mockito {@link InOrder} group,
+   * but it sits between sign and prevalidate by data-dependency: the encoder consumes {@code
+   * signedAt} / {@code signatureBytes} from {@code sign}, and its output is the exact argument
+   * passed to {@code prevalidateContractCall}. The mock-pair InOrder check therefore pins down the
+   * two endpoints (sign first, prevalidate last) and the calldata equality assertion in {@link
+   * #assertServerSigCalldata} pins down the encoder's position between them.
+   */
+  private void assertSignBeforePrevalidate() {
+    InOrder inOrder = Mockito.inOrder(signQnaServerSigPort, qnaContractCallSupport);
+    inOrder.verify(signQnaServerSigPort).sign(any(QnaServerSigPreimage.class));
+    inOrder
+        .verify(qnaContractCallSupport)
+        .prevalidateContractCall(anyString(), anyString(), anyString());
+  }
+
   private void assertServerSigCalldata(
       QnaExecutionDraft draft,
       QnaExecutionActionType actionType,
@@ -248,6 +272,7 @@ class QnaExecutionDraftBuilderAdapterTest {
         amount,
         questionHash,
         null);
+    assertSignBeforePrevalidate();
   }
 
   @Test
@@ -292,6 +317,7 @@ class QnaExecutionDraftBuilderAdapterTest {
         BigInteger.ZERO,
         questionHash,
         null);
+    assertSignBeforePrevalidate();
   }
 
   @Test
@@ -330,6 +356,7 @@ class QnaExecutionDraftBuilderAdapterTest {
         BigInteger.ZERO,
         null,
         null);
+    assertSignBeforePrevalidate();
   }
 
   @Test
@@ -370,6 +397,7 @@ class QnaExecutionDraftBuilderAdapterTest {
         BigInteger.ZERO,
         null,
         contentHash);
+    assertSignBeforePrevalidate();
   }
 
   @Test
@@ -410,6 +438,7 @@ class QnaExecutionDraftBuilderAdapterTest {
         BigInteger.ZERO,
         null,
         contentHash);
+    assertSignBeforePrevalidate();
   }
 
   @Test
@@ -448,6 +477,7 @@ class QnaExecutionDraftBuilderAdapterTest {
         BigInteger.ZERO,
         null,
         null);
+    assertSignBeforePrevalidate();
   }
 
   @Test
@@ -490,6 +520,7 @@ class QnaExecutionDraftBuilderAdapterTest {
         new BigInteger("50000000000000000000"),
         questionHash,
         contentHash);
+    assertSignBeforePrevalidate();
   }
 
   private QnaServerSigPreimage.CreateQuestionPreimage assertCreateQuestion(

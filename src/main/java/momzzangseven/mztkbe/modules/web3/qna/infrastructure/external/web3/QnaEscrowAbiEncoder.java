@@ -18,6 +18,25 @@ import org.web3j.utils.Numeric;
 @Component
 public class QnaEscrowAbiEncoder {
 
+  /**
+   * Legacy 7-arg encoder.
+   *
+   * <p>Used by:
+   *
+   * <ul>
+   *   <li>{@code QnaAdminExecutionDraftBuilderAdapter} — for {@code adminSettle} / {@code
+   *       adminRefund} (no server signature required on-chain).
+   *   <li>{@code QuestionLifecycleExecutionAdapter.matchesQuestionCreatePayload} — produces a
+   *       server-sig-free baseline calldata for idempotency comparison of stored snapshots. The
+   *       baseline must be reproducible from inputs alone (no {@code signedAt} / {@code
+   *       signatureBytes}, since those change every prepare).
+   * </ul>
+   *
+   * <p>The user-action branches (createQuestion / updateQuestion / deleteQuestion / submitAnswer /
+   * updateAnswer / deleteAnswer / acceptAnswer) intentionally do NOT append server-sig bytes here —
+   * production broadcast goes through the 9-arg overload, while this overload exists to regenerate
+   * the pre-signature byte sequence for comparison logic.
+   */
   public String encode(
       QnaExecutionActionType actionType,
       String questionId,

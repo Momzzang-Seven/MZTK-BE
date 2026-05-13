@@ -112,6 +112,9 @@ public class SignQnaServerSigAdapter implements SignQnaServerSigPort {
       throw new Web3InvalidInputException("server-sig preimage is required");
     }
 
+    // Invoked inside the outer prepare write transaction. The use case is annotated readOnly,
+    // but that hint is intentionally joined to the outer write context — we never call sign(...)
+    // outside the prepare transaction boundary.
     TreasuryWalletView signer =
         loadTreasuryWalletByRoleUseCase
             .execute(TreasuryRole.QNA_SIGNER)
@@ -215,6 +218,14 @@ public class SignQnaServerSigAdapter implements SignQnaServerSigPort {
     return Hash.sha3(buf);
   }
 
+  /**
+   * Resolves the EIP-712 domain separator with a lazily-populated cache.
+   *
+   * <p>{@link AtomicReference#compareAndSet} failure under concurrent first-call races is harmless:
+   * both racers compute the same value because the result is deterministic on {@code (chainId,
+   * verifyingContract, domainName, domainVersion)}. The "losing" thread simply returns its own
+   * computed copy and the cache still holds an equivalent value for subsequent calls.
+   */
   private byte[] resolveDomainSeparator() {
     long chainId = web3CoreProperties.getChainId();
     String verifyingContract = EvmAddress.of(qnaEscrowProperties.getQnaContractAddress()).value();

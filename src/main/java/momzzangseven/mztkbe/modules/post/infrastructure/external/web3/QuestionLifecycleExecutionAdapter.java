@@ -23,6 +23,7 @@ import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionCrea
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareQuestionUpdateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaEscrowExecutionPayload;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.BeginQuestionUpdateStateUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.QuestionEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.out.LoadQnaRewardTokenConfigPort;
@@ -212,8 +213,7 @@ public class QuestionLifecycleExecutionAdapter implements QuestionLifecycleExecu
   }
 
   private QuestionExecutionWriteView.SignatureMeta toSignatureMeta(
-      momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult.SignatureMeta
-          meta) {
+      QnaExecutionIntentResult.SignatureMeta meta) {
     if (meta == null) {
       return null;
     }

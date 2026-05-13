@@ -24,70 +24,6 @@ class QnaEscrowAbiEncoderTest {
   private final QnaEscrowAbiEncoder encoder = new QnaEscrowAbiEncoder();
 
   @Test
-  @DisplayName("encodes createQuestion with question hash payload")
-  void encodeCreateQuestion_matchesContractSignature() {
-    String questionId = "0x" + "0".repeat(63) + "1";
-    String token = "0x1111111111111111111111111111111111111111";
-    BigInteger amountWei = new BigInteger("50000000000000000000");
-    String questionHash = "0x" + "a".repeat(64);
-
-    String encoded =
-        encoder.encode(
-            QnaExecutionActionType.QNA_QUESTION_CREATE,
-            questionId,
-            null,
-            token,
-            amountWei,
-            questionHash,
-            null);
-
-    String expected =
-        FunctionEncoder.encode(
-            new Function(
-                "createQuestion",
-                List.of(
-                    new Bytes32(Numeric.hexStringToByteArray(questionId)),
-                    new Address(token),
-                    new Uint256(amountWei),
-                    new Bytes32(Numeric.hexStringToByteArray(questionHash))),
-                Collections.emptyList()));
-
-    assertThat(encoded).isEqualTo(expected);
-  }
-
-  @Test
-  @DisplayName("encodes acceptAnswer with questionHash and contentHash")
-  void encodeAcceptAnswer_matchesContractSignature() {
-    String questionId = "0x" + "0".repeat(63) + "1";
-    String answerId = "0x" + "0".repeat(63) + "2";
-    String questionHash = "0x" + "a".repeat(64);
-    String contentHash = "0x" + "b".repeat(64);
-
-    String encoded =
-        encoder.encode(
-            QnaExecutionActionType.QNA_ANSWER_ACCEPT,
-            questionId,
-            answerId,
-            null,
-            BigInteger.ZERO,
-            questionHash,
-            contentHash);
-
-    String expected =
-        FunctionEncoder.encode(
-            new Function(
-                "acceptAnswer",
-                List.of(
-                    new Bytes32(Numeric.hexStringToByteArray(questionId)),
-                    new Bytes32(Numeric.hexStringToByteArray(answerId)),
-                    new Bytes32(Numeric.hexStringToByteArray(questionHash)),
-                    new Bytes32(Numeric.hexStringToByteArray(contentHash))),
-                Collections.emptyList()));
-
-    assertThat(encoded).isEqualTo(expected);
-  }
-
-  @Test
   @DisplayName("encodes adminSettle with questionHash and contentHash")
   void encodeAdminSettle_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";
@@ -145,7 +81,71 @@ class QnaEscrowAbiEncoderTest {
   }
 
   @Test
-  @DisplayName("encodes submitAnswer with answer content hash")
+  @DisplayName("encodes createQuestion with question hash payload (server-sig-free baseline)")
+  void encodeCreateQuestion_matchesContractSignature() {
+    String questionId = "0x" + "0".repeat(63) + "1";
+    String token = "0x1111111111111111111111111111111111111111";
+    BigInteger amountWei = new BigInteger("50000000000000000000");
+    String questionHash = "0x" + "a".repeat(64);
+
+    String encoded =
+        encoder.encode(
+            QnaExecutionActionType.QNA_QUESTION_CREATE,
+            questionId,
+            null,
+            token,
+            amountWei,
+            questionHash,
+            null);
+
+    String expected =
+        FunctionEncoder.encode(
+            new Function(
+                "createQuestion",
+                List.of(
+                    new Bytes32(Numeric.hexStringToByteArray(questionId)),
+                    new Address(token),
+                    new Uint256(amountWei),
+                    new Bytes32(Numeric.hexStringToByteArray(questionHash))),
+                Collections.emptyList()));
+
+    assertThat(encoded).isEqualTo(expected);
+  }
+
+  @Test
+  @DisplayName("encodes acceptAnswer with questionHash and contentHash (baseline)")
+  void encodeAcceptAnswer_matchesContractSignature() {
+    String questionId = "0x" + "0".repeat(63) + "1";
+    String answerId = "0x" + "0".repeat(63) + "2";
+    String questionHash = "0x" + "a".repeat(64);
+    String contentHash = "0x" + "b".repeat(64);
+
+    String encoded =
+        encoder.encode(
+            QnaExecutionActionType.QNA_ANSWER_ACCEPT,
+            questionId,
+            answerId,
+            null,
+            BigInteger.ZERO,
+            questionHash,
+            contentHash);
+
+    String expected =
+        FunctionEncoder.encode(
+            new Function(
+                "acceptAnswer",
+                List.of(
+                    new Bytes32(Numeric.hexStringToByteArray(questionId)),
+                    new Bytes32(Numeric.hexStringToByteArray(answerId)),
+                    new Bytes32(Numeric.hexStringToByteArray(questionHash)),
+                    new Bytes32(Numeric.hexStringToByteArray(contentHash))),
+                Collections.emptyList()));
+
+    assertThat(encoded).isEqualTo(expected);
+  }
+
+  @Test
+  @DisplayName("encodes submitAnswer with answer content hash (baseline)")
   void encodeSubmitAnswer_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";
     String answerId = "0x" + "0".repeat(63) + "2";
@@ -175,7 +175,7 @@ class QnaEscrowAbiEncoderTest {
   }
 
   @Test
-  @DisplayName("encodes updateQuestion with new question hash")
+  @DisplayName("encodes updateQuestion with new question hash (baseline)")
   void encodeUpdateQuestion_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";
     String questionHash = "0x" + "a".repeat(64);
@@ -203,7 +203,7 @@ class QnaEscrowAbiEncoderTest {
   }
 
   @Test
-  @DisplayName("encodes deleteQuestion")
+  @DisplayName("encodes deleteQuestion (baseline)")
   void encodeDeleteQuestion_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";
 
@@ -228,7 +228,7 @@ class QnaEscrowAbiEncoderTest {
   }
 
   @Test
-  @DisplayName("encodes updateAnswer with new content hash")
+  @DisplayName("encodes updateAnswer with new content hash (baseline)")
   void encodeUpdateAnswer_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";
     String answerId = "0x" + "0".repeat(63) + "2";
@@ -258,7 +258,7 @@ class QnaEscrowAbiEncoderTest {
   }
 
   @Test
-  @DisplayName("encodes deleteAnswer")
+  @DisplayName("encodes deleteAnswer (baseline)")
   void encodeDeleteAnswer_matchesContractSignature() {
     String questionId = "0x" + "0".repeat(63) + "1";
     String answerId = "0x" + "0".repeat(63) + "2";

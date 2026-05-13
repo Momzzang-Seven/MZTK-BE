@@ -10,6 +10,7 @@ import momzzangseven.mztkbe.modules.web3.execution.application.port.in.CancelExe
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerCreateCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerDeleteCommand;
 import momzzangseven.mztkbe.modules.web3.qna.application.dto.PrepareAnswerUpdateCommand;
+import momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult;
 import momzzangseven.mztkbe.modules.web3.qna.application.port.in.AnswerEscrowExecutionUseCase;
 import momzzangseven.mztkbe.modules.web3.shared.infrastructure.config.ConditionalOnUserExecutionEnabled;
 import org.springframework.stereotype.Component;
@@ -210,8 +211,7 @@ public class AnswerLifecycleExecutionAdapter implements AnswerLifecycleExecution
   }
 
   private AnswerExecutionWriteView.SignatureMeta toSignatureMeta(
-      momzzangseven.mztkbe.modules.web3.qna.application.dto.QnaExecutionIntentResult.SignatureMeta
-          meta) {
+      QnaExecutionIntentResult.SignatureMeta meta) {
     if (meta == null) {
       return null;
     }

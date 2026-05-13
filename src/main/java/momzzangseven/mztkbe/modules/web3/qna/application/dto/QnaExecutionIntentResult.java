@@ -96,6 +96,16 @@ public record QnaExecutionIntentResult(
     }
   }
 
+  /**
+   * Execution intent metadata.
+   *
+   * <p>{@code expiresAt} is the BE-side deadline by which the user must submit their user-sign to
+   * the BE. Past this point {@link
+   * momzzangseven.mztkbe.modules.web3.execution.application.service.TransactionalExecuteExecutionIntentDelegate}
+   * refuses to broadcast and terminates the intent with {@code EXECUTION_INTENT_EXPIRED}. It is
+   * independent from {@link SignatureMeta#signatureExpiresAt()}, which applies at a different phase
+   * (on-chain mining).
+   */
   public record ExecutionIntent(String id, String status, LocalDateTime expiresAt) {
 
     public ExecutionIntent {
@@ -126,6 +136,13 @@ public record QnaExecutionIntentResult(
   /**
    * Server-sig metadata surfaced to the API client. Both fields must be either both null (admin /
    * absent) or both non-null (server-sig). Mixed states are rejected.
+   *
+   * <p>{@code signatureExpiresAt} is the on-chain mining deadline: the broadcast tx must be
+   * included in a block before this epoch second or {@code _verifyServerSig} reverts with {@code
+   * SignatureExpired}. It is independent from {@link ExecutionIntent#expiresAt()}, which applies
+   * earlier at user-sign submission. FE typically surfaces {@code ExecutionIntent.expiresAt} as the
+   * user-facing countdown and uses {@code signatureExpiresAt} only to detect mining-stage delays
+   * after broadcast.
    */
   public record SignatureMeta(Long signedAt, Long signatureExpiresAt) {
 
